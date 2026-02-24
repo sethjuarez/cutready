@@ -13,6 +13,13 @@
     "core:window:allow-toggle-maximize",
     "core:window:allow-start-dragging",
     "core:window:allow-is-maximized",
-    "shell:allow-open"
+    "shell:allow-open",
+    "fs:default",
+    "dialog:default",
+    "store:default",
+    "global-shortcut:default",
+    "window-state:default",
+    "log:default",
+    "process:default"
   ]
 }
