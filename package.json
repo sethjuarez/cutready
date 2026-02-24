@@ -10,6 +10,7 @@
     "tauri": "tauri"
   },
   "dependencies": {
+    "@fontsource/geist-sans": "^5.2.5",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-shell": "^2",
     "react": "^19.0.0",

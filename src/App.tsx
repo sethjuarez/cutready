@@ -6,7 +6,7 @@ function App() {
   const { theme, resolved, setTheme } = useTheme();
 
   return (
-    <div className="min-h-screen bg-white dark:bg-zinc-950">
+    <div className="min-h-screen bg-[var(--color-surface)] text-[var(--color-text)]">
       <TitleBar />
 
       {/* Main content area — offset by title bar height */}
@@ -20,13 +20,13 @@ function App() {
       >
         <div className="flex flex-col items-center gap-8 max-w-lg text-center">
           {/* Logo */}
-          <div className="flex items-center justify-center w-20 h-20 rounded-2xl bg-indigo-500/10 dark:bg-indigo-400/10">
+          <div className="flex items-center justify-center w-20 h-20 rounded-2xl bg-[var(--color-accent)]/10">
             <svg
               width="40"
               height="40"
               viewBox="0 0 24 24"
               fill="none"
-              className="text-indigo-500 dark:text-indigo-400"
+              className="text-[var(--color-accent)]"
             >
               <path
                 d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"
@@ -41,7 +41,7 @@ function App() {
           {/* Title & description */}
           <div className="space-y-3">
             <h1 className="text-3xl font-bold tracking-tight">CutReady</h1>
-            <p className="text-zinc-500 dark:text-zinc-400 text-base leading-relaxed">
+            <p className="text-[var(--color-text-secondary)] text-base leading-relaxed">
               From script to screen in one click. Record demos, refine with AI,
               and export edit-ready packages for DaVinci Resolve.
             </p>
@@ -73,12 +73,12 @@ function App() {
             ].map((step) => (
               <div
                 key={step.title}
-                className="flex items-start gap-3 p-3 rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-left"
+                className="flex items-start gap-3 p-3 rounded-xl bg-[var(--color-surface-alt)] border border-[var(--color-border)] text-left"
               >
                 <span className="text-lg mt-0.5">{step.icon}</span>
                 <div>
                   <div className="text-sm font-medium">{step.title}</div>
-                  <div className="text-xs text-zinc-500 dark:text-zinc-400">
+                  <div className="text-xs text-[var(--color-text-secondary)]">
                     {step.desc}
                   </div>
                 </div>

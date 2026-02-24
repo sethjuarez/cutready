@@ -14,6 +14,13 @@ export default {
           DEFAULT: "var(--color-accent)",
           hover: "var(--color-accent-hover)",
         },
+        border: {
+          DEFAULT: "var(--color-border)",
+          subtle: "var(--color-border-subtle)",
+        },
+      },
+      fontFamily: {
+        sans: ['"Geist Sans"', '-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'system-ui', 'sans-serif'],
       },
     },
   },

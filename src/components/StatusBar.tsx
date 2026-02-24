@@ -15,7 +15,7 @@ export function StatusBar({ theme, resolved, onSetTheme }: StatusBarProps) {
 
   return (
     <div
-      className="no-select fixed bottom-0 left-0 right-0 z-50 flex items-center justify-between bg-white/80 dark:bg-zinc-950/80 backdrop-blur-md border-t border-zinc-200 dark:border-zinc-800 px-3 text-xs text-zinc-500 dark:text-zinc-400"
+      className="no-select fixed bottom-0 left-0 right-0 z-50 flex items-center justify-between bg-[var(--color-surface)]/80 backdrop-blur-md border-t border-[var(--color-border)] px-3 text-xs text-[var(--color-text-secondary)]"
       style={{ height: "var(--statusbar-height)" }}
     >
       {/* Left: status items */}
@@ -30,7 +30,7 @@ export function StatusBar({ theme, resolved, onSetTheme }: StatusBarProps) {
       <div className="flex items-center gap-2">
         <button
           onClick={cycleTheme}
-          className="flex items-center gap-1.5 px-2 py-0.5 rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+          className="flex items-center gap-1.5 px-2 py-0.5 rounded-md hover:bg-[var(--color-surface-alt)] transition-colors"
           title={`Theme: ${theme} (click to cycle)`}
         >
           {resolved === "dark" ? (

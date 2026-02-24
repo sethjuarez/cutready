@@ -30,7 +30,7 @@ export function TitleBar() {
   return (
     <div
       data-tauri-drag-region
-      className="no-select fixed top-0 left-0 right-0 z-50 flex items-center justify-between bg-white/80 dark:bg-zinc-950/80 backdrop-blur-md border-b border-zinc-200 dark:border-zinc-800"
+      className="no-select fixed top-0 left-0 right-0 z-50 flex items-center justify-between bg-[var(--color-surface)]/80 backdrop-blur-md border-b border-[var(--color-border)]"
       style={{ height: "var(--titlebar-height)" }}
     >
       {/* Left: App branding */}
@@ -62,7 +62,7 @@ export function TitleBar() {
       <div className="flex items-center h-full">
         <button
           onClick={handleMinimize}
-          className="inline-flex items-center justify-center w-11 h-full hover:bg-zinc-200 dark:hover:bg-zinc-800 transition-colors"
+          className="inline-flex items-center justify-center w-11 h-full hover:bg-[var(--color-surface-alt)] transition-colors"
           aria-label="Minimize"
         >
           <svg width="10" height="1" viewBox="0 0 10 1" fill="currentColor">
@@ -71,7 +71,7 @@ export function TitleBar() {
         </button>
         <button
           onClick={handleMaximize}
-          className="inline-flex items-center justify-center w-11 h-full hover:bg-zinc-200 dark:hover:bg-zinc-800 transition-colors"
+          className="inline-flex items-center justify-center w-11 h-full hover:bg-[var(--color-surface-alt)] transition-colors"
           aria-label="Maximize"
         >
           {maximized ? (
