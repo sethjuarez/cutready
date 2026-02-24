@@ -38,17 +38,18 @@ export function TitleBar() {
         <svg
           width="18"
           height="18"
-          viewBox="0 0 24 24"
+          viewBox="0 0 128 128"
           fill="none"
-          className="text-accent shrink-0"
+          className="shrink-0"
         >
-          <path
-            d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
+          {/* Board */}
+          <rect x="14" y="52" width="100" height="64" rx="4" fill="#574bb8" />
+          {/* Arm hinged at left, rotated open */}
+          <rect x="14" y="26" width="100" height="16" rx="3" fill="#7c6fdb" transform="rotate(-14 14 42)" />
+          {/* Hinge dot */}
+          <circle cx="14" cy="48" r="5" fill="var(--color-accent)" />
+          {/* Play */}
+          <path d="M48 68 L88 84 L48 100Z" fill="var(--color-accent)" />
         </svg>
         <span
           data-tauri-drag-region
