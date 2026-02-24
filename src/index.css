@@ -3,37 +3,40 @@
 @tailwind utilities;
 
 :root {
-  --color-surface: #ffffff;
-  --color-surface-alt: #f4f4f5;
-  --color-accent: #6366f1;
-  --color-accent-hover: #4f46e5;
+  --color-surface: #faf9f7;
+  --color-surface-alt: #f0eeeb;
+  --color-accent: #6b5ce7;
+  --color-accent-hover: #5a4bd6;
+  --color-border: #e8e5e0;
+  --color-border-subtle: #f0eeeb;
+  --color-text: #2c2925;
+  --color-text-secondary: #8a857d;
   --titlebar-height: 40px;
   --statusbar-height: 28px;
 
   font-family:
-    Inter,
+    "Geist Sans",
     -apple-system,
     BlinkMacSystemFont,
     "Segoe UI",
-    Roboto,
-    Oxygen,
-    Ubuntu,
-    Cantarell,
-    "Fira Sans",
-    "Droid Sans",
-    "Helvetica Neue",
+    system-ui,
     sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  letter-spacing: -0.011em;
 }
 
 .dark {
-  --color-surface: #09090b;
-  --color-surface-alt: #18181b;
-  --color-accent: #818cf8;
-  --color-accent-hover: #6366f1;
+  --color-surface: #2b2926;
+  --color-surface-alt: #353230;
+  --color-accent: #a49afa;
+  --color-accent-hover: #8b7ff5;
+  --color-border: #3e3b38;
+  --color-border-subtle: #353230;
+  --color-text: #e8e4df;
+  --color-text-secondary: #9b968e;
 }
 
 /* Prevent text selection on UI chrome (title bar, buttons) */
@@ -60,19 +63,19 @@ html {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #a1a1aa;
+  background: #c8c3bb;
   border-radius: 4px;
 }
 
 .dark ::-webkit-scrollbar-thumb {
-  background: #3f3f46;
+  background: #4a4744;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #71717a;
+  background: #a9a49c;
 }
 
 .dark ::-webkit-scrollbar-thumb:hover {
-  background: #52525b;
+  background: #5c5956;
 }
 
