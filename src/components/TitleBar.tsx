@@ -45,7 +45,15 @@ export function TitleBar() {
           {/* Board */}
           <rect x="14" y="52" width="100" height="64" rx="4" fill="#574bb8" />
           {/* Arm hinged at left, rotated open */}
-          <rect x="14" y="26" width="100" height="16" rx="3" fill="#7c6fdb" transform="rotate(-14 14 42)" />
+          <rect
+            x="14"
+            y="26"
+            width="100"
+            height="16"
+            rx="3"
+            fill="#7c6fdb"
+            transform="rotate(-14 14 42)"
+          />
           {/* Hinge dot */}
           <circle cx="14" cy="48" r="5" fill="var(--color-accent)" />
           {/* Play */}
