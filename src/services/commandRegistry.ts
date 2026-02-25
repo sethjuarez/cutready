@@ -13,14 +13,15 @@ type Unsubscribe = () => void;
 class CommandRegistry {
   private commands = new Map<string, Command>();
   private listeners = new Set<() => void>();
+  private cachedAll: Command[] = [];
 
   /** Register a single command. Returns unsubscribe function. */
   register(command: Command): Unsubscribe {
     this.commands.set(command.id, command);
-    this.notify();
+    this.updateCache();
     return () => {
       this.commands.delete(command.id);
-      this.notify();
+      this.updateCache();
     };
   }
 
@@ -29,12 +30,12 @@ class CommandRegistry {
     for (const cmd of commands) {
       this.commands.set(cmd.id, cmd);
     }
-    this.notify();
+    this.updateCache();
     return () => {
       for (const cmd of commands) {
         this.commands.delete(cmd.id);
       }
-      this.notify();
+      this.updateCache();
     };
   }
 
@@ -46,9 +47,9 @@ class CommandRegistry {
     }
   }
 
-  /** Get all registered commands. */
+  /** Get all registered commands (cached reference). */
   getAll(): Command[] {
-    return Array.from(this.commands.values());
+    return this.cachedAll;
   }
 
   /** Subscribe to registry changes. */
@@ -57,7 +58,8 @@ class CommandRegistry {
     return () => this.listeners.delete(listener);
   }
 
-  private notify() {
+  private updateCache() {
+    this.cachedAll = Array.from(this.commands.values());
     for (const fn of this.listeners) fn();
   }
 }
