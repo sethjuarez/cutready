@@ -35,6 +35,14 @@ interface AppStoreState {
   error: string | null;
   /** Sidebar display mode: categorized list or file tree. */
   sidebarMode: SidebarMode;
+  /** Width of the sidebar panel in pixels. */
+  sidebarWidth: number;
+  /** Whether the sidebar panel is visible. */
+  sidebarVisible: boolean;
+  /** Whether the output/activity panel is visible. */
+  outputVisible: boolean;
+  /** Height of the output panel in pixels. */
+  outputHeight: number;
 
   // ── Sketch state ───────────────────────────────────────
 
@@ -94,6 +102,14 @@ interface AppStoreState {
   setView: (view: AppView) => void;
   /** Toggle sidebar between list and tree modes. */
   setSidebarMode: (mode: SidebarMode) => void;
+  /** Set sidebar width. */
+  setSidebarWidth: (width: number) => void;
+  /** Toggle sidebar visibility. */
+  toggleSidebar: () => void;
+  /** Toggle output panel visibility. */
+  toggleOutput: () => void;
+  /** Set output panel height. */
+  setOutputHeight: (height: number) => void;
 
   // ── Project actions ───────────────────────────────────────
 
@@ -184,6 +200,10 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   loading: false,
   error: null,
   sidebarMode: "list",
+  sidebarWidth: 240,
+  sidebarVisible: true,
+  outputVisible: false,
+  outputHeight: 200,
 
   sketches: [],
   activeSketchPath: null,
@@ -211,6 +231,10 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   clearError: () => set({ error: null }),
   setView: (view) => set({ view }),
   setSidebarMode: (mode) => set({ sidebarMode: mode }),
+  setSidebarWidth: (width) => set({ sidebarWidth: Math.min(400, Math.max(180, width)) }),
+  toggleSidebar: () => set((s) => ({ sidebarVisible: !s.sidebarVisible })),
+  toggleOutput: () => set((s) => ({ outputVisible: !s.outputVisible })),
+  setOutputHeight: (height) => set({ outputHeight: Math.min(500, Math.max(80, height)) }),
 
   // ── Project actions ───────────────────────────────────────
 

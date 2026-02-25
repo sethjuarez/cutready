@@ -1,13 +1,15 @@
+import { useCallback } from "react";
 import { useAppStore } from "../stores/appStore";
 import { StoryboardList } from "./StoryboardList";
 import { StoryboardView } from "./StoryboardView";
 import { SketchForm } from "./SketchForm";
 import { VersionHistory } from "./VersionHistory";
+import { ResizeHandle } from "./ResizeHandle";
 
 /**
  * StoryboardPanel — main layout for the sketch/storyboard workflow.
  *
- * Left:   StoryboardList (sidebar)
+ * Left:   StoryboardList (resizable sidebar, visibility from store)
  * Center: StoryboardView or SketchForm (depending on activeSketch)
  * Right:  VersionHistory (toggleable)
  */
@@ -16,11 +18,24 @@ export function StoryboardPanel() {
   const activeSketch = useAppStore((s) => s.activeSketch);
   const showVersionHistory = useAppStore((s) => s.showVersionHistory);
   const toggleVersionHistory = useAppStore((s) => s.toggleVersionHistory);
+  const sidebarVisible = useAppStore((s) => s.sidebarVisible);
+  const sidebarWidth = useAppStore((s) => s.sidebarWidth);
+  const setSidebarWidth = useAppStore((s) => s.setSidebarWidth);
+
+  const handleSidebarResize = useCallback(
+    (delta: number) => setSidebarWidth(sidebarWidth + delta),
+    [sidebarWidth, setSidebarWidth],
+  );
 
   return (
     <div className="flex h-full">
-      {/* Left: Storyboard list */}
-      <StoryboardList />
+      {/* Left: Storyboard list (resizable) */}
+      {sidebarVisible && (
+        <>
+          <StoryboardList />
+          <ResizeHandle direction="horizontal" onResize={handleSidebarResize} />
+        </>
+      )}
 
       {/* Center: Content area */}
       <div className="flex-1 flex flex-col min-w-0">
