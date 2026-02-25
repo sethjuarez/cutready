@@ -1,0 +1,10 @@
+{
+  "name": "cutready-playwright-sidecar",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "index.js",
+  "dependencies": {
+    "playwright": "^1.49.0"
+  }
+}
