@@ -23,6 +23,25 @@ const navItems: { id: AppView; label: string; icon: ReactNode }[] = [
     ),
   },
   {
+    id: "recording",
+    label: "Record",
+    icon: (
+      <svg
+        width="16"
+        height="16"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <circle cx="12" cy="12" r="10" />
+        <circle cx="12" cy="12" r="4" fill="currentColor" />
+      </svg>
+    ),
+  },
+  {
     id: "editor",
     label: "Script",
     icon: (
@@ -69,12 +88,14 @@ export function Sidebar() {
   const view = useAppStore((s) => s.view);
   const setView = useAppStore((s) => s.setView);
   const currentProject = useAppStore((s) => s.currentProject);
+  const isRecording = useAppStore((s) => s.isRecording);
 
   return (
     <nav className="no-select flex flex-col w-12 bg-[var(--color-surface-alt)] border-r border-[var(--color-border)] items-center py-3 gap-1">
       {navItems.map((item) => {
         const isActive = view === item.id;
-        const isDisabled = item.id === "editor" && !currentProject;
+        const requiresProject = item.id === "editor" || item.id === "recording";
+        const isDisabled = requiresProject && !currentProject;
 
         return (
           <button
@@ -82,7 +103,7 @@ export function Sidebar() {
             onClick={() => !isDisabled && setView(item.id)}
             disabled={isDisabled}
             className={`
-              flex items-center justify-center w-9 h-9 rounded-lg transition-colors
+              flex items-center justify-center w-9 h-9 rounded-lg transition-colors relative
               ${
                 isActive
                   ? "bg-[var(--color-accent)]/15 text-[var(--color-accent)]"
@@ -94,6 +115,10 @@ export function Sidebar() {
             title={item.label}
           >
             {item.icon}
+            {/* Recording indicator dot */}
+            {item.id === "recording" && isRecording && (
+              <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-red-500 animate-pulse" />
+            )}
           </button>
         );
       })}

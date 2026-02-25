@@ -1,7 +1,11 @@
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
+
+use tauri::Emitter;
 
 use models::script::Project;
+use models::session::CapturedAction;
+use util::sidecar::SidecarManager;
 
 mod commands;
 mod engine;
@@ -9,12 +13,48 @@ mod llm;
 mod models;
 mod util;
 
+/// Inner state shared between the forwarding task and command handlers.
+pub struct RecordingInner {
+    /// Whether we're currently recording (forwarding events to frontend).
+    pub active: bool,
+    /// The frontend channel to forward captured events to.
+    pub channel: Option<tauri::ipc::Channel<CapturedAction>>,
+    /// Actions accumulated during the current recording take.
+    pub actions: Vec<CapturedAction>,
+    /// The current recording session.
+    pub session: Option<models::session::RecordedSession>,
+}
+
+/// A browser that has been prepared for recording.
+///
+/// The browser stays open across multiple recording takes.
+/// Dropped when the user disconnects.
+pub struct BrowserConnection {
+    /// The Playwright sidecar managing the browser.
+    pub sidecar: SidecarManager,
+    /// Which browser channel was used ("chrome", "msedge", "chromium").
+    pub browser_channel: String,
+    /// Shared recording state — mutated by both the forwarding task and commands.
+    pub recording: Arc<tokio::sync::Mutex<RecordingInner>>,
+    /// Background task that reads sidecar events and forwards them.
+    _forwarding_handle: tokio::task::JoinHandle<()>,
+}
+
+impl Drop for BrowserConnection {
+    fn drop(&mut self) {
+        self._forwarding_handle.abort();
+    }
+}
+
 /// Global application state shared across Tauri commands.
 pub struct AppState {
     /// Directory where `.cutready` project files are stored.
     pub projects_dir: PathBuf,
     /// The currently open project (if any).
     pub current_project: Mutex<Option<Project>>,
+    /// The prepared browser connection (if any).
+    /// Uses `tokio::sync::Mutex` because it's held across await points.
+    pub browser: Arc<tokio::sync::Mutex<Option<BrowserConnection>>>,
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -22,6 +62,7 @@ pub fn run() {
     let app_state = AppState {
         projects_dir: default_projects_dir(),
         current_project: Mutex::new(None),
+        browser: Arc::new(tokio::sync::Mutex::new(None)),
     };
 
     tauri::Builder::default()
@@ -39,6 +80,22 @@ pub fn run() {
         )
         .plugin(tauri_plugin_single_instance::init(|_app, _args, _cwd| {}))
         .plugin(tauri_plugin_process::init())
+        .setup(|app| {
+            use tauri_plugin_global_shortcut::{
+                Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState,
+            };
+
+            let shortcut = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::KeyR);
+
+            app.global_shortcut()
+                .on_shortcut(shortcut, |app_handle, _shortcut, event| {
+                    if event.state == ShortcutState::Pressed {
+                        let _ = app_handle.emit("toggle-recording", ());
+                    }
+                })?;
+
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             commands::project::create_project,
             commands::project::open_project,
@@ -46,6 +103,13 @@ pub fn run() {
             commands::project::list_projects,
             commands::project::get_current_project,
             commands::project::delete_project,
+            commands::interaction::detect_browser_profiles,
+            commands::interaction::check_browsers_running,
+            commands::interaction::prepare_browser,
+            commands::interaction::disconnect_browser,
+            commands::interaction::start_recording_session,
+            commands::interaction::stop_recording_session,
+            commands::interaction::get_session_actions,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
