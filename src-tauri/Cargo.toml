@@ -24,6 +24,7 @@ tracing = "0.1"
 log = "0.4"
 dirs = "6"
 tokio = { version = "1", features = ["process", "io-util", "sync", "time"] }
+gix = { version = "0.70", default-features = false, features = ["basic", "index"] }
 
 # Tauri plugins
 tauri-plugin-shell = "2"

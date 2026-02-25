@@ -6,6 +6,7 @@ use uuid::Uuid;
 
 use super::action::Action;
 use super::animation::Animation;
+use super::document::Document;
 use super::recording::Recording;
 
 /// Quality setting for screen recording.
@@ -43,6 +44,8 @@ pub struct Project {
     pub name: String,
     pub settings: ProjectSettings,
     pub script: Script,
+    #[serde(default)]
+    pub documents: Vec<Document>,
     pub recordings: Vec<Recording>,
     pub animations: Vec<Animation>,
     pub created_at: DateTime<Utc>,
@@ -58,6 +61,7 @@ impl Project {
             name: name.into(),
             settings: ProjectSettings::default(),
             script: Script::default(),
+            documents: Vec::new(),
             recordings: Vec::new(),
             animations: Vec::new(),
             created_at: now,

@@ -23,6 +23,25 @@ const navItems: { id: AppView; label: string; icon: ReactNode }[] = [
     ),
   },
   {
+    id: "sketch",
+    label: "Sketch",
+    icon: (
+      <svg
+        width="16"
+        height="16"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M12 20h9" />
+        <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+      </svg>
+    ),
+  },
+  {
     id: "recording",
     label: "Record",
     icon: (
@@ -94,7 +113,7 @@ export function Sidebar() {
     <nav className="no-select flex flex-col w-12 bg-[var(--color-surface-alt)] border-r border-[var(--color-border)] items-center py-3 gap-1">
       {navItems.map((item) => {
         const isActive = view === item.id;
-        const requiresProject = item.id === "editor" || item.id === "recording";
+        const requiresProject = item.id === "sketch" || item.id === "editor" || item.id === "recording";
         const isDisabled = requiresProject && !currentProject;
 
         return (
