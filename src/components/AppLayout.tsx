@@ -144,12 +144,12 @@ export function AppLayout() {
           {/* Main content area + output panel */}
           <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
             {/* Upper: main content */}
-            <div className="flex-1 overflow-hidden">
-              {view === "home" && <HomePanel />}
+            <div className="flex-1 min-h-0">
+              {view === "home" && <div className="h-full overflow-y-auto"><HomePanel /></div>}
               {view === "sketch" && <StoryboardPanel />}
-              {view === "editor" && <ScriptEditorPanel />}
-              {view === "recording" && <RecordingPanel />}
-              {view === "settings" && <SettingsPanel />}
+              {view === "editor" && <div className="h-full overflow-y-auto"><ScriptEditorPanel /></div>}
+              {view === "recording" && <div className="h-full overflow-y-auto"><RecordingPanel /></div>}
+              {view === "settings" && <div className="h-full overflow-y-auto"><SettingsPanel /></div>}
             </div>
 
             {/* Lower: output panel */}
