@@ -2,46 +2,73 @@ import { useCallback, useEffect, useState } from "react";
 import { useAppStore } from "../stores/appStore";
 
 /**
- * StoryboardList — sidebar listing all storyboards in the current project.
- * Includes inline creation and delete.
+ * StoryboardList — sidebar with two sections:
+ * 1. Storyboards (aggregate sequences)
+ * 2. Sketch Library (all standalone sketches)
  */
 export function StoryboardList() {
   const storyboards = useAppStore((s) => s.storyboards);
+  const sketches = useAppStore((s) => s.sketches);
   const activeStoryboardId = useAppStore((s) => s.activeStoryboardId);
+  const activeSketchId = useAppStore((s) => s.activeSketchId);
   const loadStoryboards = useAppStore((s) => s.loadStoryboards);
   const loadSketches = useAppStore((s) => s.loadSketches);
   const createStoryboard = useAppStore((s) => s.createStoryboard);
   const openStoryboard = useAppStore((s) => s.openStoryboard);
   const deleteStoryboard = useAppStore((s) => s.deleteStoryboard);
+  const createSketch = useAppStore((s) => s.createSketch);
+  const openSketch = useAppStore((s) => s.openSketch);
+  const deleteSketch = useAppStore((s) => s.deleteSketch);
+  const closeStoryboard = useAppStore((s) => s.closeStoryboard);
 
-  const [isCreating, setIsCreating] = useState(false);
-  const [newTitle, setNewTitle] = useState("");
+  const [isCreatingSb, setIsCreatingSb] = useState(false);
+  const [newSbTitle, setNewSbTitle] = useState("");
+  const [isCreatingSk, setIsCreatingSk] = useState(false);
+  const [newSkTitle, setNewSkTitle] = useState("");
 
   useEffect(() => {
     loadStoryboards();
     loadSketches();
   }, [loadStoryboards, loadSketches]);
 
-  const handleCreate = useCallback(async () => {
-    const title = newTitle.trim();
+  const handleCreateSb = useCallback(async () => {
+    const title = newSbTitle.trim();
     if (!title) return;
     await createStoryboard(title);
-    setNewTitle("");
-    setIsCreating(false);
-  }, [newTitle, createStoryboard]);
+    setNewSbTitle("");
+    setIsCreatingSb(false);
+  }, [newSbTitle, createStoryboard]);
+
+  const handleCreateSk = useCallback(async () => {
+    const title = newSkTitle.trim();
+    if (!title) return;
+    // Clear storyboard context so we edit the sketch standalone
+    closeStoryboard();
+    await createSketch(title);
+    setNewSkTitle("");
+    setIsCreatingSk(false);
+  }, [newSkTitle, createSketch, closeStoryboard]);
+
+  const handleOpenSketchStandalone = useCallback(
+    async (sketchId: string) => {
+      closeStoryboard();
+      await openSketch(sketchId);
+    },
+    [closeStoryboard, openSketch],
+  );
 
   return (
     <div
       className="flex flex-col h-full border-r border-[var(--color-border)]"
       style={{ width: 240 }}
     >
-      {/* Header */}
+      {/* ── Storyboards section ────────────────────────── */}
       <div className="flex items-center justify-between px-3 py-3 border-b border-[var(--color-border)]">
         <span className="text-xs font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">
           Storyboards
         </span>
         <button
-          onClick={() => setIsCreating(true)}
+          onClick={() => setIsCreatingSb(true)}
           className="p-1 rounded-md text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 transition-colors"
           title="New storyboard"
         >
@@ -52,16 +79,15 @@ export function StoryboardList() {
         </button>
       </div>
 
-      {/* Inline creation */}
-      {isCreating && (
+      {isCreatingSb && (
         <div className="px-3 py-2 border-b border-[var(--color-border)]">
           <input
             type="text"
-            value={newTitle}
-            onChange={(e) => setNewTitle(e.target.value)}
+            value={newSbTitle}
+            onChange={(e) => setNewSbTitle(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter") handleCreate();
-              if (e.key === "Escape") { setIsCreating(false); setNewTitle(""); }
+              if (e.key === "Enter") handleCreateSb();
+              if (e.key === "Escape") { setIsCreatingSb(false); setNewSbTitle(""); }
             }}
             placeholder="Storyboard name..."
             autoFocus
@@ -70,20 +96,14 @@ export function StoryboardList() {
         </div>
       )}
 
-      {/* List */}
-      <div className="flex-1 overflow-y-auto py-1">
-        {storyboards.length === 0 && !isCreating ? (
-          <div className="px-3 py-6 text-center">
-            <p className="text-xs text-[var(--color-text-secondary)] mb-3">
-              No storyboards yet
-            </p>
-            <button
-              onClick={() => setIsCreating(true)}
-              className="text-xs text-[var(--color-accent)] hover:underline"
-            >
-              Create your first storyboard
-            </button>
-          </div>
+      <div className="overflow-y-auto py-1" style={{ maxHeight: "40%" }}>
+        {storyboards.length === 0 && !isCreatingSb ? (
+          <button
+            onClick={() => setIsCreatingSb(true)}
+            className="w-full px-3 py-4 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] transition-colors"
+          >
+            + New storyboard
+          </button>
         ) : (
           storyboards.map((sb) => (
             <button
@@ -114,6 +134,89 @@ export function StoryboardList() {
                 }}
                 className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-all"
                 title="Delete storyboard"
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="3 6 5 6 21 6" />
+                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                </svg>
+              </button>
+            </button>
+          ))
+        )}
+      </div>
+
+      {/* ── Sketches section ──────────────────────────── */}
+      <div className="flex items-center justify-between px-3 py-3 border-y border-[var(--color-border)]">
+        <span className="text-xs font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">
+          Sketches
+        </span>
+        <button
+          onClick={() => setIsCreatingSk(true)}
+          className="p-1 rounded-md text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 transition-colors"
+          title="New sketch"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19" />
+            <line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
+        </button>
+      </div>
+
+      {isCreatingSk && (
+        <div className="px-3 py-2 border-b border-[var(--color-border)]">
+          <input
+            type="text"
+            value={newSkTitle}
+            onChange={(e) => setNewSkTitle(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") handleCreateSk();
+              if (e.key === "Escape") { setIsCreatingSk(false); setNewSkTitle(""); }
+            }}
+            placeholder="Sketch name..."
+            autoFocus
+            className="w-full px-2 py-1.5 rounded-md bg-[var(--color-surface)] border border-[var(--color-border)] text-xs text-[var(--color-text)] placeholder:text-[var(--color-text-secondary)]/50 focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)]/40"
+          />
+        </div>
+      )}
+
+      <div className="flex-1 overflow-y-auto py-1">
+        {sketches.length === 0 && !isCreatingSk ? (
+          <button
+            onClick={() => setIsCreatingSk(true)}
+            className="w-full px-3 py-4 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] transition-colors"
+          >
+            + New sketch
+          </button>
+        ) : (
+          sketches.map((sk) => (
+            <button
+              key={sk.id}
+              onClick={() => handleOpenSketchStandalone(sk.id)}
+              className={`group w-full flex items-center gap-2 px-3 py-2 text-left transition-colors ${
+                sk.id === activeSketchId && !activeStoryboardId
+                  ? "bg-[var(--color-accent)]/10 text-[var(--color-accent)]"
+                  : "text-[var(--color-text)] hover:bg-[var(--color-surface-alt)]"
+              }`}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                <polyline points="14 2 14 8 20 8" />
+              </svg>
+              <div className="flex-1 min-w-0">
+                <div className="text-xs font-medium truncate">{sk.title}</div>
+                <div className="text-[10px] text-[var(--color-text-secondary)]">
+                  {sk.row_count} {sk.row_count === 1 ? "row" : "rows"}
+                </div>
+              </div>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (confirm(`Delete "${sk.title}"?`)) {
+                    deleteSketch(sk.id);
+                  }
+                }}
+                className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-all"
+                title="Delete sketch"
               >
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <polyline points="3 6 5 6 21 6" />

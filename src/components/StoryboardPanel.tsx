@@ -41,9 +41,11 @@ export function StoryboardPanel() {
                   </>
                 )}
               </>
+            ) : activeSketch ? (
+              <span>{activeSketch.title}</span>
             ) : (
               <span className="text-[var(--color-text-secondary)]">
-                Select a storyboard
+                Select a storyboard or sketch
               </span>
             )}
           </div>
@@ -75,7 +77,7 @@ export function StoryboardPanel() {
             <div className="text-center">
               <div className="text-4xl mb-4">🎬</div>
               <p className="text-sm text-[var(--color-text-secondary)]">
-                Select a storyboard or create a new one
+                Create a sketch or storyboard to get started
               </p>
             </div>
           </div>
