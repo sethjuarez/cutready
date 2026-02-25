@@ -1,9 +1,8 @@
-use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use tauri::Emitter;
 
-use models::script::Project;
+use models::script::ProjectView;
 use models::session::CapturedAction;
 use util::sidecar::SidecarManager;
 
@@ -48,10 +47,8 @@ impl Drop for BrowserConnection {
 
 /// Global application state shared across Tauri commands.
 pub struct AppState {
-    /// Directory where `.cutready` project files are stored.
-    pub projects_dir: PathBuf,
-    /// The currently open project (if any).
-    pub current_project: Mutex<Option<Project>>,
+    /// The currently open project folder (if any).
+    pub current_project: Mutex<Option<ProjectView>>,
     /// The prepared browser connection (if any).
     /// Uses `tokio::sync::Mutex` because it's held across await points.
     pub browser: Arc<tokio::sync::Mutex<Option<BrowserConnection>>>,
@@ -60,7 +57,6 @@ pub struct AppState {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let app_state = AppState {
-        projects_dir: default_projects_dir(),
         current_project: Mutex::new(None),
         browser: Arc::new(tokio::sync::Mutex::new(None)),
     };
@@ -97,18 +93,20 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            commands::project::create_project,
-            commands::project::open_project,
-            commands::project::save_project,
-            commands::project::list_projects,
+            commands::project::create_project_folder,
+            commands::project::open_project_folder,
             commands::project::get_current_project,
-            commands::project::delete_project,
+            commands::project::close_project,
+            commands::project::get_recent_projects,
+            commands::project::add_recent_project,
+            commands::project::get_last_parent_folder,
             commands::sketch::create_sketch,
             commands::sketch::update_sketch,
             commands::sketch::update_sketch_title,
             commands::sketch::delete_sketch,
             commands::sketch::list_sketches,
             commands::sketch::get_sketch,
+            commands::sketch::rename_sketch,
             commands::storyboard::create_storyboard,
             commands::storyboard::get_storyboard,
             commands::storyboard::update_storyboard,
@@ -132,12 +130,4 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
-}
-
-/// Resolve the default projects directory (~/.cutready/projects).
-fn default_projects_dir() -> PathBuf {
-    dirs::document_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("CutReady")
-        .join("projects")
 }

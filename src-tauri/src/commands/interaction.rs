@@ -137,10 +137,10 @@ pub async fn start_recording_session(
     state: State<'_, AppState>,
 ) -> Result<String, String> {
     // Require an open project
-    let (project_id, projects_dir) = {
+    let project_root = {
         let current = state.current_project.lock().map_err(|e| e.to_string())?;
         match current.as_ref() {
-            Some(p) => (p.id.to_string(), state.projects_dir.clone()),
+            Some(p) => p.root.clone(),
             None => return Err("No project is currently open".to_string()),
         }
     };
@@ -161,7 +161,7 @@ pub async fn start_recording_session(
     let session_id = session.id.to_string();
 
     let screenshots_dir =
-        interaction::resolve_screenshots_dir(&projects_dir, &project_id, &session_id);
+        interaction::resolve_screenshots_dir(&project_root, "", &session_id);
     std::fs::create_dir_all(&screenshots_dir).map_err(|e| e.to_string())?;
 
     // Tell the sidecar to start observing
@@ -209,15 +209,15 @@ pub async fn stop_recording_session(state: State<'_, AppState>) -> Result<Record
     };
 
     // Save to disk (browser lock is released)
-    let project_id = {
+    let project_root = {
         let current = state.current_project.lock().map_err(|e| e.to_string())?;
         current
             .as_ref()
-            .map(|p| p.id.to_string())
+            .map(|p| p.root.clone())
             .ok_or("No project open")?
     };
 
-    let _ = interaction::save_session(&session, &state.projects_dir, &project_id)
+    let _ = interaction::save_session(&session, &project_root, "")
         .map_err(|e| e.to_string())?;
 
     Ok(session)

@@ -1,314 +1,247 @@
-//! Project storage engine — create, load, save, and list project directories.
+//! Project storage engine — folder-based projects with .sk/.sb files.
 //!
-//! Projects are stored as git-backed directories:
-//!   projects/{uuid}/
-//!     ├── project.json     (Project config, storyboards, recordings)
-//!     ├── sketches/        (per-sketch JSON files: {sketch_uuid}.json)
-//!     ├── screenshots/     (captured screenshots)
-//!     └── .git/            (version history via gix)
+//! A project is any folder containing `.sk` (sketch) and/or `.sb` (storyboard)
+//! files. There is no central registry — projects are opened by path.
 //!
-//! Legacy `.cutready` flat files are auto-migrated on first scan.
+//!   My Demo/
+//!     ├── intro.sk             (sketch JSON)
+//!     ├── flows/
+//!     │   └── login.sk         (sketches in subfolders)
+//!     ├── full-demo.sb         (storyboard, references .sk by path)
+//!     ├── assets/              (screenshots, images)
+//!     └── .git/                (version history via gix)
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use crate::engine::versioning;
-use crate::models::script::{Project, ProjectSummary};
-use crate::models::sketch::{Sketch, SketchSummary};
+use crate::models::script::ProjectView;
+use crate::models::sketch::{
+    Sketch, SketchSummary, Storyboard, StoryboardSummary,
+};
 
-/// Create a new project directory with git versioning.
-pub fn create_project(name: &str, projects_dir: &Path) -> Result<Project, ProjectError> {
-    let project = Project::new(name);
-    let project_dir = project_dir_path(projects_dir, &project.id.to_string());
+// ── Project folder operations ──────────────────────────────────────
 
-    // Create directory structure
-    std::fs::create_dir_all(&project_dir).map_err(|e| ProjectError::Io(e.to_string()))?;
-    std::fs::create_dir_all(project_dir.join("sketches"))
-        .map_err(|e| ProjectError::Io(e.to_string()))?;
-    std::fs::create_dir_all(project_dir.join("screenshots"))
-        .map_err(|e| ProjectError::Io(e.to_string()))?;
+/// Initialize a new project in the given folder.
+///
+/// Creates the folder if it doesn't exist, inits git, and returns a ProjectView.
+pub fn init_project_folder(root: &Path) -> Result<ProjectView, ProjectError> {
+    std::fs::create_dir_all(root).map_err(|e| ProjectError::Io(e.to_string()))?;
 
-    // Write project.json
-    write_project_json(&project, &project_dir)?;
+    // Init git if not already a repo
+    if !root.join(".git").exists() {
+        versioning::init_project_repo(root).map_err(|e| ProjectError::Io(e.to_string()))?;
+        let _ = versioning::commit_snapshot(root, "Initialize project");
+    }
 
-    // Initialize git repo and make initial commit
-    versioning::init_project_repo(&project_dir)
-        .map_err(|e| ProjectError::Io(e.to_string()))?;
-    versioning::commit_snapshot(&project_dir, "Initial project creation")
-        .map_err(|e| ProjectError::Io(e.to_string()))?;
-
-    Ok(project)
+    Ok(ProjectView::new(root.to_path_buf()))
 }
 
-/// Load a project from its directory by ID.
-pub fn load_project(project_id: &str, projects_dir: &Path) -> Result<Project, ProjectError> {
-    // Try directory-based format first
-    let project_dir = project_dir_path(projects_dir, project_id);
-    let project_json = project_dir.join("project.json");
-
-    if project_json.exists() {
-        let data =
-            std::fs::read_to_string(&project_json).map_err(|e| ProjectError::Io(e.to_string()))?;
-        let mut project: Project =
-            serde_json::from_str(&data).map_err(|e| ProjectError::Deserialize(e.to_string()))?;
-
-        // Auto-migrate inline sketches to individual files
-        migrate_inline_sketches(&mut project, &project_dir)?;
-
-        return Ok(project);
+/// Open an existing project folder by scanning for .sk/.sb files.
+pub fn open_project_folder(root: &Path) -> Result<ProjectView, ProjectError> {
+    if !root.exists() || !root.is_dir() {
+        return Err(ProjectError::NotFound(
+            root.to_string_lossy().into_owned(),
+        ));
     }
-
-    // Fall back to legacy flat file format
-    let legacy_path = projects_dir.join(format!("{}.cutready", project_id));
-    if legacy_path.exists() {
-        let data =
-            std::fs::read_to_string(&legacy_path).map_err(|e| ProjectError::Io(e.to_string()))?;
-        let project: Project =
-            serde_json::from_str(&data).map_err(|e| ProjectError::Deserialize(e.to_string()))?;
-
-        // Auto-migrate to directory format
-        migrate_legacy_project(&project, &legacy_path, projects_dir)?;
-
-        return Ok(project);
-    }
-
-    Err(ProjectError::NotFound(project_id.to_string()))
+    Ok(ProjectView::new(root.to_path_buf()))
 }
 
-/// Save an existing project (overwrites project.json and auto-commits).
-pub fn save_project(project: &Project, projects_dir: &Path) -> Result<(), ProjectError> {
-    let project_dir = project_dir_path(projects_dir, &project.id.to_string());
-    std::fs::create_dir_all(&project_dir).map_err(|e| ProjectError::Io(e.to_string()))?;
+// ── Sketch file I/O (.sk) ─────────────────────────────────────────
+//
+// Sketches are stored as `.sk` files anywhere in the project tree.
+// The relative path from project root is the sketch's identity.
 
-    write_project_json(project, &project_dir)?;
-
-    // Auto-commit if the project has a git repo
-    if project_dir.join(".git").exists() {
-        let _ = versioning::commit_snapshot(&project_dir, "Auto-save");
+/// Write a sketch to a `.sk` file and auto-commit.
+pub fn write_sketch(sketch: &Sketch, path: &Path, project_root: &Path) -> Result<(), ProjectError> {
+    // Ensure parent directory exists
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| ProjectError::Io(e.to_string()))?;
     }
 
+    let json = serde_json::to_string_pretty(sketch)
+        .map_err(|e| ProjectError::Serialize(e.to_string()))?;
+    std::fs::write(path, json).map_err(|e| ProjectError::Io(e.to_string()))?;
+
+    // Auto-commit
+    if project_root.join(".git").exists() {
+        let _ = versioning::commit_snapshot(project_root, "Auto-save sketch");
+    }
     Ok(())
 }
 
-/// Save with a user-provided label (for named versions).
-pub fn save_with_label(
-    project: &Project,
-    label: &str,
-    projects_dir: &Path,
-) -> Result<String, ProjectError> {
-    let project_dir = project_dir_path(projects_dir, &project.id.to_string());
-    write_project_json(project, &project_dir)?;
+/// Read a sketch from a `.sk` file.
+pub fn read_sketch(path: &Path) -> Result<Sketch, ProjectError> {
+    if !path.exists() {
+        return Err(ProjectError::NotFound(
+            path.to_string_lossy().into_owned(),
+        ));
+    }
+    let data = std::fs::read_to_string(path).map_err(|e| ProjectError::Io(e.to_string()))?;
+    serde_json::from_str(&data).map_err(|e| ProjectError::Deserialize(e.to_string()))
+}
 
-    if project_dir.join(".git").exists() {
-        versioning::commit_snapshot(&project_dir, label)
+/// Delete a sketch file and auto-commit.
+pub fn delete_sketch(path: &Path, project_root: &Path) -> Result<(), ProjectError> {
+    if path.exists() {
+        std::fs::remove_file(path).map_err(|e| ProjectError::Io(e.to_string()))?;
+    }
+    if project_root.join(".git").exists() {
+        let _ = versioning::commit_snapshot(project_root, "Delete sketch");
+    }
+    Ok(())
+}
+
+/// Rename/move a sketch file and auto-commit.
+pub fn rename_sketch(
+    old_path: &Path,
+    new_path: &Path,
+    project_root: &Path,
+) -> Result<(), ProjectError> {
+    if !old_path.exists() {
+        return Err(ProjectError::NotFound(
+            old_path.to_string_lossy().into_owned(),
+        ));
+    }
+    if let Some(parent) = new_path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| ProjectError::Io(e.to_string()))?;
+    }
+    std::fs::rename(old_path, new_path).map_err(|e| ProjectError::Io(e.to_string()))?;
+
+    if project_root.join(".git").exists() {
+        let _ = versioning::commit_snapshot(project_root, "Rename sketch");
+    }
+    Ok(())
+}
+
+// ── Storyboard file I/O (.sb) ─────────────────────────────────────
+
+/// Write a storyboard to a `.sb` file and auto-commit.
+pub fn write_storyboard(
+    sb: &Storyboard,
+    path: &Path,
+    project_root: &Path,
+) -> Result<(), ProjectError> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| ProjectError::Io(e.to_string()))?;
+    }
+
+    let json = serde_json::to_string_pretty(sb)
+        .map_err(|e| ProjectError::Serialize(e.to_string()))?;
+    std::fs::write(path, json).map_err(|e| ProjectError::Io(e.to_string()))?;
+
+    if project_root.join(".git").exists() {
+        let _ = versioning::commit_snapshot(project_root, "Auto-save storyboard");
+    }
+    Ok(())
+}
+
+/// Read a storyboard from a `.sb` file.
+pub fn read_storyboard(path: &Path) -> Result<Storyboard, ProjectError> {
+    if !path.exists() {
+        return Err(ProjectError::NotFound(
+            path.to_string_lossy().into_owned(),
+        ));
+    }
+    let data = std::fs::read_to_string(path).map_err(|e| ProjectError::Io(e.to_string()))?;
+    serde_json::from_str(&data).map_err(|e| ProjectError::Deserialize(e.to_string()))
+}
+
+/// Delete a storyboard file and auto-commit.
+pub fn delete_storyboard(path: &Path, project_root: &Path) -> Result<(), ProjectError> {
+    if path.exists() {
+        std::fs::remove_file(path).map_err(|e| ProjectError::Io(e.to_string()))?;
+    }
+    if project_root.join(".git").exists() {
+        let _ = versioning::commit_snapshot(project_root, "Delete storyboard");
+    }
+    Ok(())
+}
+
+// ── Folder scanning ────────────────────────────────────────────────
+
+/// Recursively scan a project folder for all `.sk` files.
+/// Returns summaries with relative paths from project root.
+pub fn scan_sketches(project_root: &Path) -> Result<Vec<SketchSummary>, ProjectError> {
+    let mut summaries = Vec::new();
+    scan_files_recursive(project_root, project_root, "sk", &mut |rel_path, abs_path| {
+        if let Ok(data) = std::fs::read_to_string(abs_path) {
+            if let Ok(sketch) = serde_json::from_str::<Sketch>(&data) {
+                summaries.push(SketchSummary::from_sketch(&sketch, rel_path));
+            }
+        }
+    })?;
+    summaries.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+    Ok(summaries)
+}
+
+/// Recursively scan a project folder for all `.sb` files.
+/// Returns summaries with relative paths from project root.
+pub fn scan_storyboards(project_root: &Path) -> Result<Vec<StoryboardSummary>, ProjectError> {
+    let mut summaries = Vec::new();
+    scan_files_recursive(project_root, project_root, "sb", &mut |rel_path, abs_path| {
+        if let Ok(data) = std::fs::read_to_string(abs_path) {
+            if let Ok(sb) = serde_json::from_str::<Storyboard>(&data) {
+                summaries.push(StoryboardSummary::from_storyboard(&sb, rel_path));
+            }
+        }
+    })?;
+    summaries.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+    Ok(summaries)
+}
+
+/// Check if a sketch file exists given a relative path from project root.
+pub fn sketch_file_exists(relative_path: &str, project_root: &Path) -> bool {
+    project_root.join(relative_path).exists()
+}
+
+// ── Versioning helpers ─────────────────────────────────────────────
+
+/// Save with a user-provided label (for named versions).
+pub fn save_with_label(project_root: &Path, label: &str) -> Result<String, ProjectError> {
+    if project_root.join(".git").exists() {
+        versioning::commit_snapshot(project_root, label)
             .map_err(|e| ProjectError::Io(e.to_string()))
     } else {
         Ok(String::new())
     }
 }
 
-/// List all projects in the projects directory.
-pub fn list_projects(projects_dir: &Path) -> Result<Vec<ProjectSummary>, ProjectError> {
-    if !projects_dir.exists() {
-        return Ok(Vec::new());
-    }
-
-    let mut summaries = Vec::new();
-    let entries = std::fs::read_dir(projects_dir).map_err(|e| ProjectError::Io(e.to_string()))?;
-
-    for entry in entries {
-        let entry = entry.map_err(|e| ProjectError::Io(e.to_string()))?;
-        let path = entry.path();
-
-        // Directory-based projects
-        if path.is_dir() {
-            let project_json = path.join("project.json");
-            if project_json.exists() {
-                if let Ok(data) = std::fs::read_to_string(&project_json) {
-                    if let Ok(project) = serde_json::from_str::<Project>(&data) {
-                        summaries.push(ProjectSummary::from(&project));
-                    }
-                }
-            }
-        }
-
-        // Legacy flat files
-        if path.is_file() && path.extension().is_some_and(|ext| ext == "cutready") {
-            if let Ok(data) = std::fs::read_to_string(&path) {
-                if let Ok(project) = serde_json::from_str::<Project>(&data) {
-                    summaries.push(ProjectSummary::from(&project));
-                }
-            }
-        }
-    }
-
-    summaries.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
-    Ok(summaries)
-}
-
-/// Delete a project (directory or legacy file).
-pub fn delete_project(project_id: &str, projects_dir: &Path) -> Result<(), ProjectError> {
-    // Try directory first
-    let project_dir = project_dir_path(projects_dir, project_id);
-    if project_dir.exists() && project_dir.is_dir() {
-        std::fs::remove_dir_all(&project_dir).map_err(|e| ProjectError::Io(e.to_string()))?;
-        return Ok(());
-    }
-
-    // Try legacy flat file
-    let legacy_path = projects_dir.join(format!("{}.cutready", project_id));
-    if legacy_path.exists() {
-        std::fs::remove_file(&legacy_path).map_err(|e| ProjectError::Io(e.to_string()))?;
-        return Ok(());
-    }
-
-    Err(ProjectError::NotFound(project_id.to_string()))
-}
-
-/// Get the project directory path for a given project ID.
-pub fn project_dir_path(projects_dir: &Path, project_id: &str) -> PathBuf {
-    projects_dir.join(project_id)
-}
-
-// ── Sketch file I/O ────────────────────────────────────────────────
-//
-// Each sketch is stored as `sketches/{uuid}.json` within the project dir.
-// Filenames are stable UUIDs; titles are internal metadata.
-
-/// Save a sketch to its individual file and auto-commit.
-pub fn save_sketch(sketch: &Sketch, project_dir: &Path) -> Result<(), ProjectError> {
-    let sketches_dir = project_dir.join("sketches");
-    std::fs::create_dir_all(&sketches_dir).map_err(|e| ProjectError::Io(e.to_string()))?;
-
-    let json = serde_json::to_string_pretty(sketch)
-        .map_err(|e| ProjectError::Serialize(e.to_string()))?;
-    std::fs::write(sketches_dir.join(format!("{}.json", sketch.id)), json)
-        .map_err(|e| ProjectError::Io(e.to_string()))?;
-
-    // Auto-commit
-    if project_dir.join(".git").exists() {
-        let _ = versioning::commit_snapshot(project_dir, "Auto-save sketch");
-    }
-    Ok(())
-}
-
-/// Load a sketch from its individual file.
-pub fn load_sketch(sketch_id: &str, project_dir: &Path) -> Result<Sketch, ProjectError> {
-    let path = project_dir.join("sketches").join(format!("{}.json", sketch_id));
-    if !path.exists() {
-        return Err(ProjectError::NotFound(format!("Sketch {}", sketch_id)));
-    }
-    let data = std::fs::read_to_string(&path).map_err(|e| ProjectError::Io(e.to_string()))?;
-    serde_json::from_str(&data).map_err(|e| ProjectError::Deserialize(e.to_string()))
-}
-
-/// Delete a sketch file.
-pub fn delete_sketch_file(sketch_id: &str, project_dir: &Path) -> Result<(), ProjectError> {
-    let path = project_dir.join("sketches").join(format!("{}.json", sketch_id));
-    if path.exists() {
-        std::fs::remove_file(&path).map_err(|e| ProjectError::Io(e.to_string()))?;
-    }
-    if project_dir.join(".git").exists() {
-        let _ = versioning::commit_snapshot(project_dir, "Delete sketch");
-    }
-    Ok(())
-}
-
-/// List all sketch summaries by scanning the sketches/ directory.
-pub fn list_sketches(project_dir: &Path) -> Result<Vec<SketchSummary>, ProjectError> {
-    let sketches_dir = project_dir.join("sketches");
-    if !sketches_dir.exists() {
-        return Ok(Vec::new());
-    }
-
-    let mut summaries = Vec::new();
-    let entries =
-        std::fs::read_dir(&sketches_dir).map_err(|e| ProjectError::Io(e.to_string()))?;
-
-    for entry in entries {
-        let entry = entry.map_err(|e| ProjectError::Io(e.to_string()))?;
-        let path = entry.path();
-        if path.extension().is_some_and(|ext| ext == "json") {
-            if let Ok(data) = std::fs::read_to_string(&path) {
-                if let Ok(sketch) = serde_json::from_str::<Sketch>(&data) {
-                    summaries.push(SketchSummary::from(&sketch));
-                }
-            }
-        }
-    }
-
-    summaries.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
-    Ok(summaries)
-}
-
-/// Check if a sketch file exists.
-pub fn sketch_exists(sketch_id: &str, project_dir: &Path) -> bool {
-    project_dir
-        .join("sketches")
-        .join(format!("{}.json", sketch_id))
-        .exists()
-}
-
-/// Migrate inline sketches from project.json to individual files.
-/// Called after loading a project that still has sketches embedded.
-pub fn migrate_inline_sketches(project: &mut Project, project_dir: &Path) -> Result<bool, ProjectError> {
-    if project.sketches.is_empty() {
-        return Ok(false);
-    }
-
-    let sketches_dir = project_dir.join("sketches");
-    std::fs::create_dir_all(&sketches_dir).map_err(|e| ProjectError::Io(e.to_string()))?;
-
-    for sketch in &project.sketches {
-        let path = sketches_dir.join(format!("{}.json", sketch.id));
-        if !path.exists() {
-            let json = serde_json::to_string_pretty(sketch)
-                .map_err(|e| ProjectError::Serialize(e.to_string()))?;
-            std::fs::write(&path, json).map_err(|e| ProjectError::Io(e.to_string()))?;
-        }
-    }
-
-    // Clear inline sketches and re-save project.json
-    project.sketches.clear();
-    write_project_json(project, project_dir)?;
-
-    Ok(true)
-}
-
 // ── Internal helpers ────────────────────────────────────────────────
 
-fn write_project_json(project: &Project, project_dir: &Path) -> Result<(), ProjectError> {
-    let json = serde_json::to_string_pretty(project)
-        .map_err(|e| ProjectError::Serialize(e.to_string()))?;
-    std::fs::write(project_dir.join("project.json"), json)
-        .map_err(|e| ProjectError::Io(e.to_string()))?;
-    Ok(())
-}
-
-/// Migrate a legacy `.cutready` flat file to directory format.
-fn migrate_legacy_project(
-    project: &Project,
-    legacy_path: &Path,
-    projects_dir: &Path,
+/// Recursively find files with a given extension, skipping `.git` and hidden dirs.
+fn scan_files_recursive(
+    dir: &Path,
+    project_root: &Path,
+    extension: &str,
+    callback: &mut dyn FnMut(&str, &Path),
 ) -> Result<(), ProjectError> {
-    let project_dir = project_dir_path(projects_dir, &project.id.to_string());
-
-    // Create directory structure
-    std::fs::create_dir_all(&project_dir).map_err(|e| ProjectError::Io(e.to_string()))?;
-    std::fs::create_dir_all(project_dir.join("sketches"))
-        .map_err(|e| ProjectError::Io(e.to_string()))?;
-    std::fs::create_dir_all(project_dir.join("screenshots"))
-        .map_err(|e| ProjectError::Io(e.to_string()))?;
-
-    // Write project.json
-    write_project_json(project, &project_dir)?;
-
-    // Initialize git and commit
-    if versioning::init_project_repo(&project_dir).is_ok() {
-        let _ = versioning::commit_snapshot(&project_dir, "Migrated from legacy format");
+    if !dir.exists() {
+        return Ok(());
     }
 
-    // Remove legacy file
-    let _ = std::fs::remove_file(legacy_path);
+    let entries = std::fs::read_dir(dir).map_err(|e| ProjectError::Io(e.to_string()))?;
+
+    for entry in entries {
+        let entry = entry.map_err(|e| ProjectError::Io(e.to_string()))?;
+        let path = entry.path();
+        let file_name = entry.file_name();
+        let name = file_name.to_string_lossy();
+
+        // Skip hidden directories and .git
+        if name.starts_with('.') {
+            continue;
+        }
+
+        if path.is_dir() {
+            scan_files_recursive(&path, project_root, extension, callback)?;
+        } else if path.extension().is_some_and(|ext| ext == extension) {
+            // Compute relative path using forward slashes for portability
+            if let Ok(rel) = path.strip_prefix(project_root) {
+                let rel_str = rel.to_string_lossy().replace('\\', "/");
+                callback(&rel_str, &path);
+            }
+        }
+    }
 
     Ok(())
 }
@@ -332,244 +265,185 @@ mod tests {
     use tempfile::TempDir;
 
     #[test]
-    fn create_and_load_project() {
+    fn init_project_folder_creates_git() {
         let tmp = TempDir::new().unwrap();
-        let dir = tmp.path();
+        let root = tmp.path().join("My Demo");
 
-        let project = create_project("My Demo", dir).unwrap();
-        assert_eq!(project.name, "My Demo");
-
-        // Verify directory structure
-        let project_dir = dir.join(project.id.to_string());
-        assert!(project_dir.join("project.json").exists());
-        assert!(project_dir.join("sketches").exists());
-        assert!(project_dir.join("screenshots").exists());
-        assert!(project_dir.join(".git").exists());
-
-        let loaded = load_project(&project.id.to_string(), dir).unwrap();
-        assert_eq!(loaded.id, project.id);
-        assert_eq!(loaded.name, "My Demo");
+        let view = init_project_folder(&root).unwrap();
+        assert_eq!(view.name, "My Demo");
+        assert!(root.join(".git").exists());
     }
 
     #[test]
-    fn save_and_reload_project() {
+    fn open_project_folder_returns_view() {
         let tmp = TempDir::new().unwrap();
-        let dir = tmp.path();
+        let root = tmp.path().join("Test Project");
+        std::fs::create_dir_all(&root).unwrap();
 
-        let mut project = create_project("Test", dir).unwrap();
-        project.name = "Updated Name".into();
-        save_project(&project, dir).unwrap();
-
-        let loaded = load_project(&project.id.to_string(), dir).unwrap();
-        assert_eq!(loaded.name, "Updated Name");
+        let view = open_project_folder(&root).unwrap();
+        assert_eq!(view.name, "Test Project");
     }
 
     #[test]
-    fn list_projects_empty_dir() {
-        let tmp = TempDir::new().unwrap();
-        let result = list_projects(tmp.path()).unwrap();
-        assert!(result.is_empty());
-    }
-
-    #[test]
-    fn list_projects_nonexistent_dir() {
-        let result = list_projects(Path::new("/nonexistent/path")).unwrap();
-        assert!(result.is_empty());
-    }
-
-    #[test]
-    fn list_projects_finds_all() {
-        let tmp = TempDir::new().unwrap();
-        let dir = tmp.path();
-
-        create_project("Alpha", dir).unwrap();
-        create_project("Beta", dir).unwrap();
-        create_project("Gamma", dir).unwrap();
-
-        let summaries = list_projects(dir).unwrap();
-        assert_eq!(summaries.len(), 3);
-    }
-
-    #[test]
-    fn delete_project_removes_directory() {
-        let tmp = TempDir::new().unwrap();
-        let dir = tmp.path();
-
-        let project = create_project("To Delete", dir).unwrap();
-        let id = project.id.to_string();
-
-        assert!(load_project(&id, dir).is_ok());
-        delete_project(&id, dir).unwrap();
-        assert!(load_project(&id, dir).is_err());
-    }
-
-    #[test]
-    fn load_nonexistent_project_errors() {
-        let tmp = TempDir::new().unwrap();
-        let result = load_project("nonexistent-id", tmp.path());
+    fn open_nonexistent_folder_errors() {
+        let result = open_project_folder(Path::new("/nonexistent/path"));
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn write_and_read_sketch() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        let sketch = Sketch::new("My Sketch");
+        let path = root.join("intro.sk");
+
+        write_sketch(&sketch, &path, root).unwrap();
+        assert!(path.exists());
+
+        let loaded = read_sketch(&path).unwrap();
+        assert_eq!(loaded.title, "My Sketch");
+    }
+
+    #[test]
+    fn write_sketch_creates_subdirs() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        let sketch = Sketch::new("Nested");
+        let path = root.join("flows").join("login.sk");
+
+        write_sketch(&sketch, &path, root).unwrap();
+        assert!(path.exists());
+    }
+
+    #[test]
+    fn delete_sketch_removes_file() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        let sketch = Sketch::new("Delete Me");
+        let path = root.join("temp.sk");
+
+        write_sketch(&sketch, &path, root).unwrap();
+        assert!(path.exists());
+
+        delete_sketch(&path, root).unwrap();
+        assert!(!path.exists());
+    }
+
+    #[test]
+    fn rename_sketch_moves_file() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        let sketch = Sketch::new("Rename Me");
+        let old_path = root.join("old.sk");
+        let new_path = root.join("new.sk");
+
+        write_sketch(&sketch, &old_path, root).unwrap();
+        rename_sketch(&old_path, &new_path, root).unwrap();
+
+        assert!(!old_path.exists());
+        assert!(new_path.exists());
+        let loaded = read_sketch(&new_path).unwrap();
+        assert_eq!(loaded.title, "Rename Me");
+    }
+
+    #[test]
+    fn read_nonexistent_sketch_errors() {
+        let result = read_sketch(Path::new("/nonexistent/sketch.sk"));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn scan_sketches_finds_all() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+
+        write_sketch(&Sketch::new("A"), &root.join("a.sk"), root).unwrap();
+        write_sketch(&Sketch::new("B"), &root.join("b.sk"), root).unwrap();
+        write_sketch(
+            &Sketch::new("C"),
+            &root.join("sub").join("c.sk"),
+            root,
+        )
+        .unwrap();
+
+        let summaries = scan_sketches(root).unwrap();
+        assert_eq!(summaries.len(), 3);
+
+        let paths: Vec<&str> = summaries.iter().map(|s| s.path.as_str()).collect();
+        assert!(paths.contains(&"a.sk"));
+        assert!(paths.contains(&"b.sk"));
+        assert!(paths.contains(&"sub/c.sk"));
+    }
+
+    #[test]
+    fn scan_sketches_skips_hidden_dirs() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+
+        write_sketch(&Sketch::new("Visible"), &root.join("visible.sk"), root).unwrap();
+        // Put a sketch in .git — should be skipped
+        let hidden = root.join(".git").join("hidden.sk");
+        std::fs::create_dir_all(hidden.parent().unwrap()).unwrap();
+        std::fs::write(&hidden, r#"{"title":"Hidden","state":"draft","created_at":"2025-01-01T00:00:00Z","updated_at":"2025-01-01T00:00:00Z"}"#).unwrap();
+
+        let summaries = scan_sketches(root).unwrap();
+        assert_eq!(summaries.len(), 1);
+        assert_eq!(summaries[0].title, "Visible");
+    }
+
+    #[test]
+    fn scan_sketches_empty_dir() {
+        let tmp = TempDir::new().unwrap();
+        let summaries = scan_sketches(tmp.path()).unwrap();
+        assert!(summaries.is_empty());
+    }
+
+    #[test]
+    fn write_and_read_storyboard() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        let sb = Storyboard::new("Full Demo");
+        let path = root.join("demo.sb");
+
+        write_storyboard(&sb, &path, root).unwrap();
+        let loaded = read_storyboard(&path).unwrap();
+        assert_eq!(loaded.title, "Full Demo");
+    }
+
+    #[test]
+    fn scan_storyboards_finds_all() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+
+        write_storyboard(&Storyboard::new("A"), &root.join("a.sb"), root).unwrap();
+        write_storyboard(&Storyboard::new("B"), &root.join("b.sb"), root).unwrap();
+
+        let summaries = scan_storyboards(root).unwrap();
+        assert_eq!(summaries.len(), 2);
+    }
+
+    #[test]
+    fn sketch_file_exists_checks_correctly() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+
+        assert!(!sketch_file_exists("intro.sk", root));
+        write_sketch(&Sketch::new("Intro"), &root.join("intro.sk"), root).unwrap();
+        assert!(sketch_file_exists("intro.sk", root));
     }
 
     #[test]
     fn save_with_label_creates_named_version() {
         let tmp = TempDir::new().unwrap();
-        let dir = tmp.path();
+        let root = tmp.path();
 
-        let project = create_project("Labeled", dir).unwrap();
-        let commit_id = save_with_label(&project, "v1.0 release", dir).unwrap();
+        init_project_folder(root).unwrap();
+        write_sketch(&Sketch::new("Test"), &root.join("test.sk"), root).unwrap();
+
+        let commit_id = save_with_label(root, "v1.0 release").unwrap();
         assert!(!commit_id.is_empty());
 
-        let project_dir = project_dir_path(dir, &project.id.to_string());
-        let versions = versioning::list_versions(&project_dir).unwrap();
+        let versions = versioning::list_versions(root).unwrap();
         assert!(versions.iter().any(|v| v.message == "v1.0 release"));
-    }
-
-    #[test]
-    fn legacy_migration_on_load() {
-        let tmp = TempDir::new().unwrap();
-        let dir = tmp.path();
-
-        // Create a legacy flat file
-        let project = Project::new("Legacy Project");
-        let legacy_path = dir.join(format!("{}.cutready", project.id));
-        std::fs::create_dir_all(dir).unwrap();
-        let json = serde_json::to_string_pretty(&project).unwrap();
-        std::fs::write(&legacy_path, json).unwrap();
-
-        // Loading should auto-migrate
-        let loaded = load_project(&project.id.to_string(), dir).unwrap();
-        assert_eq!(loaded.name, "Legacy Project");
-
-        // Legacy file should be removed
-        assert!(!legacy_path.exists());
-
-        // Directory format should exist
-        let project_dir = dir.join(project.id.to_string());
-        assert!(project_dir.join("project.json").exists());
-        assert!(project_dir.join(".git").exists());
-    }
-
-    // ── Sketch file I/O tests ───────────────────────────────────────
-
-    #[test]
-    fn save_and_load_sketch_file() {
-        let tmp = TempDir::new().unwrap();
-        let dir = tmp.path();
-        let project = create_project("Sketch Test", dir).unwrap();
-        let project_dir = project_dir_path(dir, &project.id.to_string());
-
-        let sketch = Sketch::new("My Sketch".to_string());
-        save_sketch(&sketch, &project_dir).unwrap();
-
-        let loaded = load_sketch(&sketch.id.to_string(), &project_dir).unwrap();
-        assert_eq!(loaded.id, sketch.id);
-        assert_eq!(loaded.title, "My Sketch");
-    }
-
-    #[test]
-    fn delete_sketch_file_removes_file() {
-        let tmp = TempDir::new().unwrap();
-        let dir = tmp.path();
-        let project = create_project("Delete Sketch", dir).unwrap();
-        let project_dir = project_dir_path(dir, &project.id.to_string());
-
-        let sketch = Sketch::new("To Delete".to_string());
-        save_sketch(&sketch, &project_dir).unwrap();
-        assert!(sketch_exists(&sketch.id.to_string(), &project_dir));
-
-        delete_sketch_file(&sketch.id.to_string(), &project_dir).unwrap();
-        assert!(!sketch_exists(&sketch.id.to_string(), &project_dir));
-    }
-
-    #[test]
-    fn list_sketches_returns_all() {
-        let tmp = TempDir::new().unwrap();
-        let dir = tmp.path();
-        let project = create_project("List Sketches", dir).unwrap();
-        let project_dir = project_dir_path(dir, &project.id.to_string());
-
-        save_sketch(&Sketch::new("A".to_string()), &project_dir).unwrap();
-        save_sketch(&Sketch::new("B".to_string()), &project_dir).unwrap();
-        save_sketch(&Sketch::new("C".to_string()), &project_dir).unwrap();
-
-        let summaries = list_sketches(&project_dir).unwrap();
-        assert_eq!(summaries.len(), 3);
-    }
-
-    #[test]
-    fn list_sketches_empty_dir() {
-        let tmp = TempDir::new().unwrap();
-        let dir = tmp.path();
-        let project = create_project("Empty", dir).unwrap();
-        let project_dir = project_dir_path(dir, &project.id.to_string());
-
-        let summaries = list_sketches(&project_dir).unwrap();
-        assert!(summaries.is_empty());
-    }
-
-    #[test]
-    fn sketch_exists_returns_correct_values() {
-        let tmp = TempDir::new().unwrap();
-        let dir = tmp.path();
-        let project = create_project("Exists Test", dir).unwrap();
-        let project_dir = project_dir_path(dir, &project.id.to_string());
-
-        let sketch = Sketch::new("Test".to_string());
-        assert!(!sketch_exists(&sketch.id.to_string(), &project_dir));
-
-        save_sketch(&sketch, &project_dir).unwrap();
-        assert!(sketch_exists(&sketch.id.to_string(), &project_dir));
-    }
-
-    #[test]
-    fn load_nonexistent_sketch_errors() {
-        let tmp = TempDir::new().unwrap();
-        let dir = tmp.path();
-        let project = create_project("No Sketch", dir).unwrap();
-        let project_dir = project_dir_path(dir, &project.id.to_string());
-
-        let result = load_sketch("nonexistent-id", &project_dir);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn migrate_inline_sketches_moves_to_files() {
-        let tmp = TempDir::new().unwrap();
-        let dir = tmp.path();
-        let mut project = create_project("Migrate Test", dir).unwrap();
-        let project_dir = project_dir_path(dir, &project.id.to_string());
-
-        // Add inline sketches to project
-        let s1 = Sketch::new("Sketch One".to_string());
-        let s2 = Sketch::new("Sketch Two".to_string());
-        let s1_id = s1.id.to_string();
-        let s2_id = s2.id.to_string();
-        project.sketches.push(s1);
-        project.sketches.push(s2);
-        write_project_json(&project, &project_dir).unwrap();
-
-        // Migrate
-        let migrated = migrate_inline_sketches(&mut project, &project_dir).unwrap();
-        assert!(migrated);
-        assert!(project.sketches.is_empty());
-
-        // Sketch files should exist
-        assert!(sketch_exists(&s1_id, &project_dir));
-        assert!(sketch_exists(&s2_id, &project_dir));
-
-        // Summaries should list both
-        let summaries = list_sketches(&project_dir).unwrap();
-        assert_eq!(summaries.len(), 2);
-    }
-
-    #[test]
-    fn migrate_inline_sketches_noop_when_empty() {
-        let tmp = TempDir::new().unwrap();
-        let dir = tmp.path();
-        let mut project = create_project("No Migrate", dir).unwrap();
-        let project_dir = project_dir_path(dir, &project.id.to_string());
-
-        let migrated = migrate_inline_sketches(&mut project, &project_dir).unwrap();
-        assert!(!migrated);
     }
 }

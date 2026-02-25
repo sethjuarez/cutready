@@ -1,11 +1,13 @@
 //! Core data models for Sketches and Storyboards.
 //!
 //! A **Sketch** is a focused scene: title + description + planning table.
+//! Sketches are stored as `.sk` files; their file path is their identity.
+//!
 //! A **Storyboard** sequences multiple Sketches with optional named sections.
+//! Storyboards are stored as `.sb` files; they reference sketches by relative path.
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
 /// Lifecycle state of a sketch.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -20,9 +22,10 @@ pub enum SketchState {
 }
 
 /// A row in the sketch planning table (4 columns).
+///
+/// Row identity is its array index — no UUID needed.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PlanningRow {
-    pub id: Uuid,
     /// Approximate duration (e.g., "~30s", "1:00", "2m").
     pub time: String,
     /// Narrative bullet points for this step.
@@ -36,7 +39,6 @@ pub struct PlanningRow {
 impl PlanningRow {
     pub fn new() -> Self {
         Self {
-            id: Uuid::new_v4(),
             time: String::new(),
             narrative: String::new(),
             demo_actions: String::new(),
@@ -53,12 +55,12 @@ impl Default for PlanningRow {
 
 /// A sketch — a focused scene in a demo storyboard.
 ///
-/// Contains a title, rich-text description (Lexical JSON), and a planning table.
+/// Stored as a `.sk` file. The file path is the identity (no internal ID).
+/// Contains a title, description (JSON value), and a planning table.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Sketch {
-    pub id: Uuid,
     pub title: String,
-    /// Rich-text description — Lexical editor state JSON. Null if empty.
+    /// Rich-text description — stored as JSON value. Null if empty.
     #[serde(default)]
     pub description: serde_json::Value,
     /// Planning table rows.
@@ -73,7 +75,6 @@ impl Sketch {
     pub fn new(title: impl Into<String>) -> Self {
         let now = Utc::now();
         Self {
-            id: Uuid::new_v4(),
             title: title.into(),
             description: serde_json::Value::Null,
             rows: Vec::new(),
@@ -87,7 +88,8 @@ impl Sketch {
 /// Lightweight summary for listing sketches without loading full content.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SketchSummary {
-    pub id: Uuid,
+    /// Relative path from project root (e.g., "intro.sk" or "flows/login.sk").
+    pub path: String,
     pub title: String,
     pub state: SketchState,
     pub row_count: usize,
@@ -95,23 +97,25 @@ pub struct SketchSummary {
     pub updated_at: DateTime<Utc>,
 }
 
-impl From<&Sketch> for SketchSummary {
-    fn from(s: &Sketch) -> Self {
+impl SketchSummary {
+    /// Create a summary from a sketch and its relative path.
+    pub fn from_sketch(sketch: &Sketch, path: impl Into<String>) -> Self {
         Self {
-            id: s.id,
-            title: s.title.clone(),
-            state: s.state.clone(),
-            row_count: s.rows.len(),
-            created_at: s.created_at,
-            updated_at: s.updated_at,
+            path: path.into(),
+            title: sketch.title.clone(),
+            state: sketch.state.clone(),
+            row_count: sketch.rows.len(),
+            created_at: sketch.created_at,
+            updated_at: sketch.updated_at,
         }
     }
 }
 
 /// A storyboard — an ordered sequence of sketches with optional sections.
+///
+/// Stored as a `.sb` file. The file path is the identity (no internal ID).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Storyboard {
-    pub id: Uuid,
     pub title: String,
     pub description: String,
     /// Ordered items: loose sketch refs and/or named sections.
@@ -124,7 +128,6 @@ impl Storyboard {
     pub fn new(title: impl Into<String>) -> Self {
         let now = Utc::now();
         Self {
-            id: Uuid::new_v4(),
             title: title.into(),
             description: String::new(),
             items: Vec::new(),
@@ -138,38 +141,43 @@ impl Storyboard {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum StoryboardItem {
-    /// A reference to a sketch (by ID).
-    SketchRef { sketch_id: Uuid },
-    /// A named section grouping multiple sketches.
+    /// A reference to a sketch by relative path (e.g., "intro.sk").
+    SketchRef { path: String },
+    /// A named section grouping multiple sketch paths.
     Section {
-        id: Uuid,
         title: String,
-        sketch_ids: Vec<Uuid>,
+        sketches: Vec<String>,
     },
 }
 
 /// Lightweight summary for listing storyboards.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StoryboardSummary {
-    pub id: Uuid,
+    /// Relative path from project root (e.g., "full-demo.sb").
+    pub path: String,
     pub title: String,
     pub sketch_count: usize,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
 
-impl From<&Storyboard> for StoryboardSummary {
-    fn from(s: &Storyboard) -> Self {
-        let sketch_count = s.items.iter().map(|item| match item {
-            StoryboardItem::SketchRef { .. } => 1,
-            StoryboardItem::Section { sketch_ids, .. } => sketch_ids.len(),
-        }).sum();
+impl StoryboardSummary {
+    /// Create a summary from a storyboard and its relative path.
+    pub fn from_storyboard(sb: &Storyboard, path: impl Into<String>) -> Self {
+        let sketch_count = sb
+            .items
+            .iter()
+            .map(|item| match item {
+                StoryboardItem::SketchRef { .. } => 1,
+                StoryboardItem::Section { sketches, .. } => sketches.len(),
+            })
+            .sum();
         Self {
-            id: s.id,
-            title: s.title.clone(),
+            path: path.into(),
+            title: sb.title.clone(),
             sketch_count,
-            created_at: s.created_at,
-            updated_at: s.updated_at,
+            created_at: sb.created_at,
+            updated_at: sb.updated_at,
         }
     }
 }
@@ -200,7 +208,6 @@ mod tests {
     fn sketch_roundtrip() {
         let mut sketch = Sketch::new("Test Sketch");
         sketch.rows.push(PlanningRow {
-            id: Uuid::new_v4(),
             time: "~30s".into(),
             narrative: "Click the button".into(),
             demo_actions: "Navigate, click CTA".into(),
@@ -210,24 +217,37 @@ mod tests {
 
         let json = serde_json::to_string_pretty(&sketch).unwrap();
         let parsed: Sketch = serde_json::from_str(&json).unwrap();
-        assert_eq!(sketch.id, parsed.id);
         assert_eq!(sketch.title, parsed.title);
         assert_eq!(parsed.rows.len(), 1);
         assert_eq!(parsed.rows[0].time, "~30s");
-        assert_eq!(parsed.description, serde_json::json!({"root": {"children": []}}));
+        assert_eq!(
+            parsed.description,
+            serde_json::json!({"root": {"children": []}})
+        );
     }
 
     #[test]
     fn sketch_state_serde_values() {
-        assert_eq!(serde_json::to_string(&SketchState::Draft).unwrap(), "\"draft\"");
-        assert_eq!(serde_json::to_string(&SketchState::RecordingEnriched).unwrap(), "\"recording_enriched\"");
-        assert_eq!(serde_json::to_string(&SketchState::Refined).unwrap(), "\"refined\"");
-        assert_eq!(serde_json::to_string(&SketchState::Final).unwrap(), "\"final\"");
+        assert_eq!(
+            serde_json::to_string(&SketchState::Draft).unwrap(),
+            "\"draft\""
+        );
+        assert_eq!(
+            serde_json::to_string(&SketchState::RecordingEnriched).unwrap(),
+            "\"recording_enriched\""
+        );
+        assert_eq!(
+            serde_json::to_string(&SketchState::Refined).unwrap(),
+            "\"refined\""
+        );
+        assert_eq!(
+            serde_json::to_string(&SketchState::Final).unwrap(),
+            "\"final\""
+        );
     }
 
     #[test]
     fn sketch_state_legacy_alias() {
-        // Old "sketch" value should deserialize to Draft
         let parsed: SketchState = serde_json::from_str("\"sketch\"").unwrap();
         assert_eq!(parsed, SketchState::Draft);
     }
@@ -258,7 +278,6 @@ mod tests {
     #[test]
     fn planning_row_roundtrip() {
         let row = PlanningRow {
-            id: Uuid::new_v4(),
             time: "~30s".into(),
             narrative: "Click the sign-up button".into(),
             demo_actions: "Navigate to /signup, click CTA".into(),
@@ -266,7 +285,6 @@ mod tests {
         };
         let json = serde_json::to_string(&row).unwrap();
         let parsed: PlanningRow = serde_json::from_str(&json).unwrap();
-        assert_eq!(row.id, parsed.id);
         assert_eq!(parsed.time, "~30s");
         assert_eq!(parsed.screenshot, Some("screenshots/step1.png".into()));
     }
@@ -286,8 +304,8 @@ mod tests {
         let mut sketch = Sketch::new("Summary Test");
         sketch.rows.push(PlanningRow::new());
         sketch.rows.push(PlanningRow::new());
-        let summary = SketchSummary::from(&sketch);
-        assert_eq!(summary.id, sketch.id);
+        let summary = SketchSummary::from_sketch(&sketch, "test.sk");
+        assert_eq!(summary.path, "test.sk");
         assert_eq!(summary.title, sketch.title);
         assert_eq!(summary.state, SketchState::Draft);
         assert_eq!(summary.row_count, 2);
@@ -296,10 +314,10 @@ mod tests {
     #[test]
     fn sketch_summary_roundtrip() {
         let sketch = Sketch::new("Roundtrip");
-        let summary = SketchSummary::from(&sketch);
+        let summary = SketchSummary::from_sketch(&sketch, "roundtrip.sk");
         let json = serde_json::to_string(&summary).unwrap();
         let parsed: SketchSummary = serde_json::from_str(&json).unwrap();
-        assert_eq!(parsed.id, summary.id);
+        assert_eq!(parsed.path, "roundtrip.sk");
         assert_eq!(parsed.title, summary.title);
     }
 
@@ -313,18 +331,16 @@ mod tests {
 
     #[test]
     fn storyboard_with_items_roundtrip() {
-        let sketch_id = Uuid::new_v4();
-        let section_id = Uuid::new_v4();
         let sb = Storyboard {
-            id: Uuid::new_v4(),
             title: "Full Demo".into(),
             description: "End-to-end product demo".into(),
             items: vec![
-                StoryboardItem::SketchRef { sketch_id },
+                StoryboardItem::SketchRef {
+                    path: "intro.sk".into(),
+                },
                 StoryboardItem::Section {
-                    id: section_id,
                     title: "Getting Started".into(),
-                    sketch_ids: vec![Uuid::new_v4(), Uuid::new_v4()],
+                    sketches: vec!["setup.sk".into(), "first-run.sk".into()],
                 },
             ],
             created_at: Utc::now(),
@@ -333,18 +349,18 @@ mod tests {
 
         let json = serde_json::to_string_pretty(&sb).unwrap();
         let parsed: Storyboard = serde_json::from_str(&json).unwrap();
-        assert_eq!(parsed.id, sb.id);
+        assert_eq!(parsed.title, "Full Demo");
         assert_eq!(parsed.items.len(), 2);
 
         match &parsed.items[0] {
-            StoryboardItem::SketchRef { sketch_id: sid } => assert_eq!(*sid, sketch_id),
+            StoryboardItem::SketchRef { path } => assert_eq!(path, "intro.sk"),
             _ => panic!("Expected SketchRef"),
         }
         match &parsed.items[1] {
-            StoryboardItem::Section { id, title, sketch_ids } => {
-                assert_eq!(*id, section_id);
+            StoryboardItem::Section { title, sketches } => {
                 assert_eq!(title, "Getting Started");
-                assert_eq!(sketch_ids.len(), 2);
+                assert_eq!(sketches.len(), 2);
+                assert_eq!(sketches[0], "setup.sk");
             }
             _ => panic!("Expected Section"),
         }
@@ -352,14 +368,16 @@ mod tests {
 
     #[test]
     fn storyboard_item_tagged_serde() {
-        let item = StoryboardItem::SketchRef { sketch_id: Uuid::new_v4() };
+        let item = StoryboardItem::SketchRef {
+            path: "test.sk".into(),
+        };
         let json = serde_json::to_string(&item).unwrap();
         assert!(json.contains("\"type\":\"sketch_ref\""));
+        assert!(json.contains("\"path\":\"test.sk\""));
 
         let item = StoryboardItem::Section {
-            id: Uuid::new_v4(),
             title: "Intro".into(),
-            sketch_ids: vec![],
+            sketches: vec![],
         };
         let json = serde_json::to_string(&item).unwrap();
         assert!(json.contains("\"type\":\"section\""));
@@ -368,26 +386,27 @@ mod tests {
     #[test]
     fn storyboard_summary_from_storyboard() {
         let mut sb = Storyboard::new("Test");
-        sb.items.push(StoryboardItem::SketchRef { sketch_id: Uuid::new_v4() });
+        sb.items.push(StoryboardItem::SketchRef {
+            path: "a.sk".into(),
+        });
         sb.items.push(StoryboardItem::Section {
-            id: Uuid::new_v4(),
             title: "Core".into(),
-            sketch_ids: vec![Uuid::new_v4(), Uuid::new_v4()],
+            sketches: vec!["b.sk".into(), "c.sk".into()],
         });
 
-        let summary = StoryboardSummary::from(&sb);
-        assert_eq!(summary.id, sb.id);
+        let summary = StoryboardSummary::from_storyboard(&sb, "test.sb");
+        assert_eq!(summary.path, "test.sb");
         assert_eq!(summary.title, "Test");
-        assert_eq!(summary.sketch_count, 3); // 1 loose + 2 in section
+        assert_eq!(summary.sketch_count, 3);
     }
 
     #[test]
     fn storyboard_summary_roundtrip() {
         let sb = Storyboard::new("Roundtrip");
-        let summary = StoryboardSummary::from(&sb);
+        let summary = StoryboardSummary::from_storyboard(&sb, "roundtrip.sb");
         let json = serde_json::to_string(&summary).unwrap();
         let parsed: StoryboardSummary = serde_json::from_str(&json).unwrap();
-        assert_eq!(parsed.id, summary.id);
+        assert_eq!(parsed.path, "roundtrip.sb");
         assert_eq!(parsed.sketch_count, 0);
     }
 
@@ -407,9 +426,8 @@ mod tests {
 
     #[test]
     fn sketch_backward_compat_missing_fields() {
-        // Old document JSON with missing rows/description should deserialize
+        // Sketch JSON with missing rows/description should deserialize
         let json = r#"{
-            "id": "550e8400-e29b-41d4-a716-446655440000",
             "title": "Legacy Doc",
             "state": "sketch",
             "created_at": "2025-01-01T00:00:00Z",
@@ -417,28 +435,8 @@ mod tests {
         }"#;
         let sketch: Sketch = serde_json::from_str(json).unwrap();
         assert_eq!(sketch.title, "Legacy Doc");
-        assert_eq!(sketch.state, SketchState::Draft); // "sketch" → Draft via alias
+        assert_eq!(sketch.state, SketchState::Draft);
         assert!(sketch.rows.is_empty());
         assert_eq!(sketch.description, serde_json::Value::Null);
-    }
-
-    #[test]
-    fn sketch_ignores_old_document_fields() {
-        // Old document JSON had "content" and "sections" fields — should be silently ignored
-        let json = r#"{
-            "id": "550e8400-e29b-41d4-a716-446655440000",
-            "title": "Old Document",
-            "description": "plain text desc",
-            "content": {"root": {}},
-            "sections": [{"id": "550e8400-e29b-41d4-a716-446655440001", "title": "S1", "description": "", "rows": []}],
-            "state": "refined",
-            "created_at": "2025-01-01T00:00:00Z",
-            "updated_at": "2025-01-01T00:00:00Z"
-        }"#;
-        let sketch: Sketch = serde_json::from_str(json).unwrap();
-        assert_eq!(sketch.title, "Old Document");
-        assert_eq!(sketch.state, SketchState::Refined);
-        // "description" was a plain string — deserializes as Value::String
-        assert_eq!(sketch.description, serde_json::Value::String("plain text desc".into()));
     }
 }

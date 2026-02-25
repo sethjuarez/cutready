@@ -1,61 +1,58 @@
 //! Tauri commands for storyboard CRUD and sketch management.
+//!
+//! Storyboards are `.sb` files, identified by relative path from project root.
 
 use chrono::Utc;
 use tauri::State;
-use uuid::Uuid;
 
 use crate::engine::project;
 use crate::models::sketch::{Storyboard, StoryboardItem, StoryboardSummary};
 use crate::AppState;
 
+/// Helper: get the project root from current state.
+fn project_root(state: &AppState) -> Result<std::path::PathBuf, String> {
+    let current = state.current_project.lock().map_err(|e| e.to_string())?;
+    let view = current.as_ref().ok_or("No project is currently open")?;
+    Ok(view.root.clone())
+}
+
 #[tauri::command]
 pub async fn create_storyboard(
+    relative_path: String,
     title: String,
     state: State<'_, AppState>,
 ) -> Result<Storyboard, String> {
-    let mut current = state.current_project.lock().map_err(|e| e.to_string())?;
-    let project = current.as_mut().ok_or("No project is currently open")?;
+    let root = project_root(&state)?;
+    let abs_path = root.join(&relative_path);
 
     let storyboard = Storyboard::new(title);
-    project.storyboards.push(storyboard.clone());
-    project.updated_at = Utc::now();
-
-    let projects_dir = state.projects_dir.clone();
-    project::save_project(project, &projects_dir).map_err(|e| e.to_string())?;
+    project::write_storyboard(&storyboard, &abs_path, &root).map_err(|e| e.to_string())?;
 
     Ok(storyboard)
 }
 
 #[tauri::command]
-pub async fn get_storyboard(id: String, state: State<'_, AppState>) -> Result<Storyboard, String> {
-    let sb_id: Uuid = id.parse().map_err(|e: uuid::Error| e.to_string())?;
-    let current = state.current_project.lock().map_err(|e| e.to_string())?;
-    let project = current.as_ref().ok_or("No project is currently open")?;
+pub async fn get_storyboard(
+    relative_path: String,
+    state: State<'_, AppState>,
+) -> Result<Storyboard, String> {
+    let root = project_root(&state)?;
+    let abs_path = root.join(&relative_path);
 
-    project
-        .storyboards
-        .iter()
-        .find(|sb| sb.id == sb_id)
-        .cloned()
-        .ok_or_else(|| "Storyboard not found".into())
+    project::read_storyboard(&abs_path).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub async fn update_storyboard(
-    id: String,
+    relative_path: String,
     title: Option<String>,
     description: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let sb_id: Uuid = id.parse().map_err(|e: uuid::Error| e.to_string())?;
-    let mut current = state.current_project.lock().map_err(|e| e.to_string())?;
-    let project = current.as_mut().ok_or("No project is currently open")?;
+    let root = project_root(&state)?;
+    let abs_path = root.join(&relative_path);
 
-    let sb = project
-        .storyboards
-        .iter_mut()
-        .find(|sb| sb.id == sb_id)
-        .ok_or("Storyboard not found")?;
+    let mut sb = project::read_storyboard(&abs_path).map_err(|e| e.to_string())?;
 
     if let Some(t) = title {
         sb.title = t;
@@ -64,32 +61,20 @@ pub async fn update_storyboard(
         sb.description = d;
     }
     sb.updated_at = Utc::now();
-    project.updated_at = Utc::now();
 
-    let projects_dir = state.projects_dir.clone();
-    project::save_project(project, &projects_dir).map_err(|e| e.to_string())?;
-
+    project::write_storyboard(&sb, &abs_path, &root).map_err(|e| e.to_string())?;
     Ok(())
 }
 
 #[tauri::command]
-pub async fn delete_storyboard(id: String, state: State<'_, AppState>) -> Result<(), String> {
-    let sb_id: Uuid = id.parse().map_err(|e: uuid::Error| e.to_string())?;
-    let mut current = state.current_project.lock().map_err(|e| e.to_string())?;
-    let project = current.as_mut().ok_or("No project is currently open")?;
+pub async fn delete_storyboard(
+    relative_path: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let root = project_root(&state)?;
+    let abs_path = root.join(&relative_path);
 
-    let idx = project
-        .storyboards
-        .iter()
-        .position(|sb| sb.id == sb_id)
-        .ok_or("Storyboard not found")?;
-
-    project.storyboards.remove(idx);
-    project.updated_at = Utc::now();
-
-    let projects_dir = state.projects_dir.clone();
-    project::save_project(project, &projects_dir).map_err(|e| e.to_string())?;
-
+    project::delete_storyboard(&abs_path, &root).map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -97,75 +82,52 @@ pub async fn delete_storyboard(id: String, state: State<'_, AppState>) -> Result
 pub async fn list_storyboards(
     state: State<'_, AppState>,
 ) -> Result<Vec<StoryboardSummary>, String> {
-    let current = state.current_project.lock().map_err(|e| e.to_string())?;
-    let project = current.as_ref().ok_or("No project is currently open")?;
-
-    Ok(project
-        .storyboards
-        .iter()
-        .map(StoryboardSummary::from)
-        .collect())
+    let root = project_root(&state)?;
+    project::scan_storyboards(&root).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub async fn add_sketch_to_storyboard(
-    storyboard_id: String,
-    sketch_id: String,
+    storyboard_path: String,
+    sketch_path: String,
     position: Option<usize>,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let sb_id: Uuid = storyboard_id
-        .parse()
-        .map_err(|e: uuid::Error| e.to_string())?;
-    let sk_id: Uuid = sketch_id.parse().map_err(|e: uuid::Error| e.to_string())?;
-    let mut current = state.current_project.lock().map_err(|e| e.to_string())?;
-    let project = current.as_mut().ok_or("No project is currently open")?;
+    let root = project_root(&state)?;
+    let sb_abs = root.join(&storyboard_path);
 
-    // Verify sketch exists as individual file
-    let project_dir =
-        project::project_dir_path(&state.projects_dir, &project.id.to_string());
-    if !project::sketch_exists(&sk_id.to_string(), &project_dir) {
-        return Err("Sketch not found".into());
+    // Gracefully check if sketch exists (warn but don't block)
+    if !project::sketch_file_exists(&sketch_path, &root) {
+        // Still allow adding — graceful degradation
+        log::warn!("Sketch file not found: {}", sketch_path);
     }
 
-    let sb = project
-        .storyboards
-        .iter_mut()
-        .find(|sb| sb.id == sb_id)
-        .ok_or("Storyboard not found")?;
+    let mut sb = project::read_storyboard(&sb_abs).map_err(|e| e.to_string())?;
 
-    let item = StoryboardItem::SketchRef { sketch_id: sk_id };
+    let item = StoryboardItem::SketchRef {
+        path: sketch_path,
+    };
     match position {
         Some(pos) if pos < sb.items.len() => sb.items.insert(pos, item),
         _ => sb.items.push(item),
     }
 
     sb.updated_at = Utc::now();
-    project.updated_at = Utc::now();
-
-    let projects_dir = state.projects_dir.clone();
-    project::save_project(project, &projects_dir).map_err(|e| e.to_string())?;
+    project::write_storyboard(&sb, &sb_abs, &root).map_err(|e| e.to_string())?;
 
     Ok(())
 }
 
 #[tauri::command]
 pub async fn remove_sketch_from_storyboard(
-    storyboard_id: String,
+    storyboard_path: String,
     position: usize,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let sb_id: Uuid = storyboard_id
-        .parse()
-        .map_err(|e: uuid::Error| e.to_string())?;
-    let mut current = state.current_project.lock().map_err(|e| e.to_string())?;
-    let project = current.as_mut().ok_or("No project is currently open")?;
+    let root = project_root(&state)?;
+    let sb_abs = root.join(&storyboard_path);
 
-    let sb = project
-        .storyboards
-        .iter_mut()
-        .find(|sb| sb.id == sb_id)
-        .ok_or("Storyboard not found")?;
+    let mut sb = project::read_storyboard(&sb_abs).map_err(|e| e.to_string())?;
 
     if position >= sb.items.len() {
         return Err("Position out of range".into());
@@ -173,38 +135,26 @@ pub async fn remove_sketch_from_storyboard(
 
     sb.items.remove(position);
     sb.updated_at = Utc::now();
-    project.updated_at = Utc::now();
 
-    let projects_dir = state.projects_dir.clone();
-    project::save_project(project, &projects_dir).map_err(|e| e.to_string())?;
-
+    project::write_storyboard(&sb, &sb_abs, &root).map_err(|e| e.to_string())?;
     Ok(())
 }
 
 #[tauri::command]
 pub async fn add_section_to_storyboard(
-    storyboard_id: String,
+    storyboard_path: String,
     title: String,
     position: Option<usize>,
     state: State<'_, AppState>,
-) -> Result<String, String> {
-    let sb_id: Uuid = storyboard_id
-        .parse()
-        .map_err(|e: uuid::Error| e.to_string())?;
-    let mut current = state.current_project.lock().map_err(|e| e.to_string())?;
-    let project = current.as_mut().ok_or("No project is currently open")?;
+) -> Result<(), String> {
+    let root = project_root(&state)?;
+    let sb_abs = root.join(&storyboard_path);
 
-    let sb = project
-        .storyboards
-        .iter_mut()
-        .find(|sb| sb.id == sb_id)
-        .ok_or("Storyboard not found")?;
+    let mut sb = project::read_storyboard(&sb_abs).map_err(|e| e.to_string())?;
 
-    let section_id = Uuid::new_v4();
     let item = StoryboardItem::Section {
-        id: section_id,
         title,
-        sketch_ids: Vec::new(),
+        sketches: Vec::new(),
     };
 
     match position {
@@ -213,38 +163,24 @@ pub async fn add_section_to_storyboard(
     }
 
     sb.updated_at = Utc::now();
-    project.updated_at = Utc::now();
+    project::write_storyboard(&sb, &sb_abs, &root).map_err(|e| e.to_string())?;
 
-    let projects_dir = state.projects_dir.clone();
-    project::save_project(project, &projects_dir).map_err(|e| e.to_string())?;
-
-    Ok(section_id.to_string())
+    Ok(())
 }
 
 #[tauri::command]
 pub async fn reorder_storyboard_items(
-    storyboard_id: String,
+    storyboard_path: String,
     items: Vec<StoryboardItem>,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let sb_id: Uuid = storyboard_id
-        .parse()
-        .map_err(|e: uuid::Error| e.to_string())?;
-    let mut current = state.current_project.lock().map_err(|e| e.to_string())?;
-    let project = current.as_mut().ok_or("No project is currently open")?;
+    let root = project_root(&state)?;
+    let sb_abs = root.join(&storyboard_path);
 
-    let sb = project
-        .storyboards
-        .iter_mut()
-        .find(|sb| sb.id == sb_id)
-        .ok_or("Storyboard not found")?;
-
+    let mut sb = project::read_storyboard(&sb_abs).map_err(|e| e.to_string())?;
     sb.items = items;
     sb.updated_at = Utc::now();
-    project.updated_at = Utc::now();
 
-    let projects_dir = state.projects_dir.clone();
-    project::save_project(project, &projects_dir).map_err(|e| e.to_string())?;
-
+    project::write_storyboard(&sb, &sb_abs, &root).map_err(|e| e.to_string())?;
     Ok(())
 }

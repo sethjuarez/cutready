@@ -5,9 +5,6 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use super::action::Action;
-use super::animation::Animation;
-use super::recording::Recording;
-use super::sketch::{Sketch, Storyboard};
 
 /// Quality setting for screen recording.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -37,40 +34,35 @@ impl Default for ProjectSettings {
     }
 }
 
-/// The top-level project, serialized as a `.cutready` JSON file.
+/// A lightweight view of an open project folder.
+///
+/// Projects are folders on disk — there is no central registry.
+/// Sketches (`.sk`) and storyboards (`.sb`) are discovered by scanning the folder.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Project {
-    pub id: Uuid,
+pub struct ProjectView {
+    /// Absolute path to the project folder.
+    pub root: PathBuf,
+    /// Display name (derived from folder name).
     pub name: String,
-    pub settings: ProjectSettings,
-    pub script: Script,
-    #[serde(default, alias = "documents")]
-    pub sketches: Vec<Sketch>,
-    #[serde(default)]
-    pub storyboards: Vec<Storyboard>,
-    pub recordings: Vec<Recording>,
-    pub animations: Vec<Animation>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
 }
 
-impl Project {
-    /// Create a new empty project with the given name.
-    pub fn new(name: impl Into<String>) -> Self {
-        let now = Utc::now();
-        Self {
-            id: Uuid::new_v4(),
-            name: name.into(),
-            settings: ProjectSettings::default(),
-            script: Script::default(),
-            sketches: Vec::new(),
-            storyboards: Vec::new(),
-            recordings: Vec::new(),
-            animations: Vec::new(),
-            created_at: now,
-            updated_at: now,
-        }
+impl ProjectView {
+    pub fn new(root: PathBuf) -> Self {
+        let name = root
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_else(|| "Untitled".into());
+        Self { root, name }
     }
+}
+
+/// Entry in the recent projects list.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RecentProject {
+    /// Absolute path to the project folder.
+    pub path: String,
+    /// When the project was last opened.
+    pub last_opened: DateTime<Utc>,
 }
 
 /// The script — an ordered list of rows that describe the demo.
@@ -140,48 +132,34 @@ pub enum RowSource {
     Agent,
 }
 
-/// Summary info for listing projects (without loading the full project).
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ProjectSummary {
-    pub id: Uuid,
-    pub name: String,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-}
-
-impl From<&Project> for ProjectSummary {
-    fn from(p: &Project) -> Self {
-        Self {
-            id: p.id,
-            name: p.name.clone(),
-            created_at: p.created_at,
-            updated_at: p.updated_at,
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn project_new_has_defaults() {
-        let project = Project::new("My Demo");
-        assert_eq!(project.name, "My Demo");
-        assert!(project.script.rows.is_empty());
-        assert!(project.recordings.is_empty());
-        assert!(project.animations.is_empty());
-        assert_eq!(project.settings.frame_rate, 30);
-        assert_eq!(project.settings.recording_quality, RecordingQuality::High);
+    fn project_view_from_path() {
+        let view = ProjectView::new(PathBuf::from("/home/user/My Demo"));
+        assert_eq!(view.name, "My Demo");
+        assert_eq!(view.root, PathBuf::from("/home/user/My Demo"));
     }
 
     #[test]
-    fn project_roundtrip() {
-        let project = Project::new("Test Project");
-        let json = serde_json::to_string_pretty(&project).unwrap();
-        let parsed: Project = serde_json::from_str(&json).unwrap();
-        assert_eq!(project.id, parsed.id);
-        assert_eq!(project.name, parsed.name);
+    fn project_view_roundtrip() {
+        let view = ProjectView::new(PathBuf::from("/projects/demo"));
+        let json = serde_json::to_string(&view).unwrap();
+        let parsed: ProjectView = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.name, "demo");
+    }
+
+    #[test]
+    fn recent_project_roundtrip() {
+        let rp = RecentProject {
+            path: "/home/user/demo".into(),
+            last_opened: Utc::now(),
+        };
+        let json = serde_json::to_string(&rp).unwrap();
+        let parsed: RecentProject = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.path, rp.path);
     }
 
     #[test]
@@ -205,16 +183,6 @@ mod tests {
     }
 
     #[test]
-    fn project_summary_from_project() {
-        let project = Project::new("Demo");
-        let summary = ProjectSummary::from(&project);
-        assert_eq!(summary.id, project.id);
-        assert_eq!(summary.name, project.name);
-        assert_eq!(summary.created_at, project.created_at);
-        assert_eq!(summary.updated_at, project.updated_at);
-    }
-
-    #[test]
     fn script_row_new_defaults() {
         let row = ScriptRow::new();
         assert_eq!(row.time_ms, 0);
@@ -229,7 +197,6 @@ mod tests {
     fn script_row_default_matches_new() {
         let from_new = ScriptRow::new();
         let from_default = ScriptRow::default();
-        // Both should produce equivalent structures (different UUIDs though)
         assert_eq!(from_new.time_ms, from_default.time_ms);
         assert_eq!(from_new.narrative, from_default.narrative);
         assert_eq!(from_new.metadata.source, from_default.metadata.source);
@@ -265,7 +232,6 @@ mod tests {
 
     #[test]
     fn row_source_serde_values() {
-        // Verify snake_case serialization
         let json = serde_json::to_string(&RowSource::Recorded).unwrap();
         assert_eq!(json, "\"recorded\"");
         let json = serde_json::to_string(&RowSource::Manual).unwrap();
@@ -292,7 +258,6 @@ mod tests {
         let json = serde_json::to_string(&script).unwrap();
         let parsed: Script = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed.rows.len(), 3);
-        // Each row should have a unique ID
         let ids: Vec<_> = parsed.rows.iter().map(|r| r.id).collect();
         assert_ne!(ids[0], ids[1]);
         assert_ne!(ids[1], ids[2]);
@@ -325,40 +290,5 @@ mod tests {
         assert_eq!(parsed.actions.len(), 2);
         assert_eq!(parsed.metadata.source, RowSource::Agent);
         assert!(parsed.metadata.refined);
-    }
-
-    #[test]
-    fn project_with_nested_data_roundtrip() {
-        let mut project = Project::new("Full Test");
-        project.script.rows.push(ScriptRow::new());
-        project.settings.recording_quality = RecordingQuality::Lossless;
-        project.settings.frame_rate = 60;
-        project.settings.output_directory = Some("output".into());
-
-        let json = serde_json::to_string_pretty(&project).unwrap();
-        let parsed: Project = serde_json::from_str(&json).unwrap();
-        assert_eq!(parsed.id, project.id);
-        assert_eq!(parsed.script.rows.len(), 1);
-        assert_eq!(
-            parsed.settings.recording_quality,
-            RecordingQuality::Lossless
-        );
-        assert_eq!(parsed.settings.frame_rate, 60);
-    }
-
-    #[test]
-    fn project_summary_roundtrip() {
-        let project = Project::new("Summary Test");
-        let summary = ProjectSummary::from(&project);
-        let json = serde_json::to_string(&summary).unwrap();
-        let parsed: ProjectSummary = serde_json::from_str(&json).unwrap();
-        assert_eq!(parsed.id, summary.id);
-        assert_eq!(parsed.name, summary.name);
-    }
-
-    #[test]
-    fn project_created_at_equals_updated_at_on_new() {
-        let project = Project::new("Timestamp Test");
-        assert_eq!(project.created_at, project.updated_at);
     }
 }

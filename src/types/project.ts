@@ -1,34 +1,16 @@
 /** TypeScript types mirroring the Rust data models for IPC. */
 
-import type { Sketch, Storyboard } from "./sketch";
-
-export interface ProjectSummary {
-  id: string;
+/** A project is a folder on disk — this is the view returned by the backend. */
+export interface ProjectView {
+  root: string;
   name: string;
-  created_at: string;
-  updated_at: string;
 }
 
-export interface Project {
-  id: string;
-  name: string;
-  settings: ProjectSettings;
-  script: Script;
-  sketches: Sketch[];
-  storyboards: Storyboard[];
-  recordings: Recording[];
-  animations: Animation[];
-  created_at: string;
-  updated_at: string;
+/** A recently opened project (stored in app data). */
+export interface RecentProject {
+  path: string;
+  last_opened: string;
 }
-
-export interface ProjectSettings {
-  output_directory: string | null;
-  recording_quality: RecordingQuality;
-  frame_rate: number;
-}
-
-export type RecordingQuality = "low" | "medium" | "high" | "lossless";
 
 export interface Script {
   rows: ScriptRow[];
@@ -78,7 +60,6 @@ export interface Animation {
 }
 
 // Action is a tagged union — this covers the main variants for display purposes.
-// Full action type details will be expanded as features are implemented.
 export type Action =
   | { type: "BrowserNavigate"; url: string }
   | { type: "BrowserClick"; selectors: SelectorStrategy[] }
