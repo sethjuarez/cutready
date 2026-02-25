@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import type { PlanningRow } from "../types/document";
+import type { PlanningRow } from "../types/sketch";
 
 /** Generates a simple unique ID for planning rows. */
 function rowId(): string {

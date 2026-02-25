@@ -9,9 +9,9 @@ use super::action::{Action, ActionMetadata};
 pub struct RecordedSession {
     pub id: Uuid,
     pub mode: RecordingMode,
-    /// Optional link to a sketch document this recording is associated with.
-    #[serde(default)]
-    pub document_id: Option<Uuid>,
+    /// Optional link to a sketch this recording is associated with.
+    #[serde(default, alias = "document_id")]
+    pub sketch_id: Option<Uuid>,
     pub started_at: DateTime<Utc>,
     pub ended_at: Option<DateTime<Utc>>,
     pub actions: Vec<CapturedAction>,
@@ -23,7 +23,7 @@ impl RecordedSession {
         Self {
             id: Uuid::new_v4(),
             mode,
-            document_id: None,
+            sketch_id: None,
             started_at: Utc::now(),
             ended_at: None,
             actions: Vec::new(),

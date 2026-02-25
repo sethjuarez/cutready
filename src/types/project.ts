@@ -1,6 +1,6 @@
 /** TypeScript types mirroring the Rust data models for IPC. */
 
-import type { Document } from "./document";
+import type { Sketch, Storyboard } from "./sketch";
 
 export interface ProjectSummary {
   id: string;
@@ -14,7 +14,8 @@ export interface Project {
   name: string;
   settings: ProjectSettings;
   script: Script;
-  documents: Document[];
+  sketches: Sketch[];
+  storyboards: Storyboard[];
   recordings: Recording[];
   animations: Animation[];
   created_at: string;
