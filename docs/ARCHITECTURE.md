@@ -13,13 +13,17 @@
 │  │              Frontend (React + TypeScript)         │  │
 │  │                                                   │  │
 │  │  ┌──────────┐ ┌────────────┐ ┌────────────────┐  │  │
-│  │  │  Script   │ │Teleprompter│ │    Preview     │  │  │
-│  │  │  Editor   │ │   Panel    │ │    Panel       │  │  │
+│  │  │  Sketch   │ │  Script    │ │  Teleprompter  │  │  │
+│  │  │  Editor   │ │  Editor    │ │    Panel       │  │  │
 │  │  └──────────┘ └────────────┘ └────────────────┘  │  │
 │  │  ┌──────────┐ ┌────────────┐ ┌────────────────┐  │  │
 │  │  │ Timeline  │ │  Settings  │ │  Diff / Review │  │  │
 │  │  │Visualizer │ │   Panel    │ │     Panel      │  │  │
 │  │  └──────────┘ └────────────┘ └────────────────┘  │  │
+│  │  ┌──────────┐                                    │  │
+│  │  │ Preview  │                                    │  │
+│  │  │  Panel   │                                    │  │
+│  │  └──────────┘                                    │  │
 │  └───────────────────┬───────────────────────────────┘  │
 │                      │ Tauri IPC (Commands, Channels,   │
 │                      │           Events)                │
@@ -34,6 +38,10 @@
 │  │  │  Agent   │ │Animation │ │  Export          │  │  │
 │  │  │  Engine  │ │ Engine   │ │  Engine          │  │  │
 │  │  └──────────┘ └──────────┘ └──────────────────┘  │  │
+│  │  ┌──────────┐ ┌──────────┐                       │  │
+│  │  │Versioning│ │ Project  │                       │  │
+│  │  │ Engine   │ │ Engine   │                       │  │
+│  │  └──────────┘ └──────────┘                       │  │
 │  └───────────────────────────────────────────────────┘  │
 └──────────┬───────────┬───────────┬──────────────────────┘
            │           │           │
@@ -58,8 +66,7 @@ The UI is a single-window Tauri application with dockable/collapsible panels.
 ### Panels
 
 | Panel | Purpose |
-| ------- | --------- |
-| **Script Editor** | Table-based UI for authoring/viewing the script. Columns: Time, Narrative (rich text), Demo (action list), Screenshot. Supports drag-and-drop reordering, split/merge rows, inline action editing. |
+| ------- | --------- || **Sketch Editor** | Notion-style block editor (Lexical) for authoring demo plans before recording. Structured documents with titled sections containing 4-column planning tables (Time, Narrative Bullets, Demo Action Bullets, Screenshot). Slash commands, floating toolbar, version history via git. Multiple documents per project with lifecycle states (Sketch → RecordingEnriched → Refined → Final). || **Script Editor** | Table-based UI for authoring/viewing the script. Columns: Time, Narrative (rich text), Demo (action list), Screenshot. Supports drag-and-drop reordering, split/merge rows, inline action editing. |
 | **Teleprompter** | Large-text display of the current segment's narrative during recording. Auto-advances with automation. Configurable font size, scroll speed, position. |
 | **Preview** | Inline video player for recorded footage and rendered animations. Supports frame-by-frame scrubbing. |
 | **Timeline Visualizer** | Read-only visual representation of the output package: segments on a timeline with video, audio, and animation tracks. Maps to the FCPXML structure. |
@@ -102,6 +109,9 @@ await invoke('start_recording', {
 | `@tauri-apps/api` | Core Tauri JS API (invoke, events, channels) |
 | `@tauri-apps/plugin-*` | JS bindings for Tauri plugins (fs, dialog, shell, store, etc.) |
 | React 19 + TypeScript | UI framework |
+| `lexical` + `@lexical/react` | Block-based rich text editor (sketch documents, script editing) |
+| `@lexical/rich-text` / `@lexical/list` / `@lexical/table` | Core Lexical plugins (rich text, lists, tables) |
+| `@lexical/markdown` / `@lexical/history` | Markdown shortcuts, undo/redo history |
 | TanStack Table | Script table with sorting, filtering, reordering |
 | Monaco Editor / CodeMirror | Inline code editor for ManimCE code and raw JSON action editing |
 | Zustand or Jotai | Lightweight state management |
@@ -125,7 +135,9 @@ src-tauri/
 │   │   ├── interaction.rs
 │   │   ├── agent.rs
 │   │   ├── animation.rs
-│   │   └── export.rs
+│   │   ├── export.rs
+│   │   ├── document.rs              # CRUD for sketch documents
+│   │   └── versioning.rs            # Git commit, log, diff, restore
 │   ├── engine/
 │   │   ├── recording.rs           # FFmpeg process management
 │   │   ├── automation.rs          # Action execution (browser + native)
@@ -138,10 +150,12 @@ src-tauri/
 │   │   │   ├── animations.rs      # Animation suggestion + code gen
 │   │   │   └── healing.rs         # Runtime self-heal during replay
 │   │   ├── animation.rs           # ManimCE subprocess management
+│   │   ├── versioning.rs          # Git operations via gix (init, commit, log, diff, restore)
 │   │   └── export.rs              # FCPXML generation, folder assembly
 │   ├── models/                    # Core data types
 │   │   ├── action.rs              # Action enum, SelectorStrategy
 │   │   ├── script.rs              # Project, Script, ScriptRow
+│   │   ├── document.rs            # Document, DocumentSection, DocumentState
 │   │   ├── recording.rs           # Recording metadata
 │   │   ├── animation.rs           # Animation spec + render state
 │   │   └── session.rs             # RecordedSession, CapturedAction
@@ -277,7 +291,83 @@ struct ScriptRow {
     screenshot: Option<PathBuf>,
     metadata: RowMetadata,    // Source (recorded/manual/agent), refinement state
 }
+```
 
+### Document Model
+
+Documents are the primary authoring artifact in CutReady. Each project contains multiple documents that progress through lifecycle states. Document content is stored as Lexical editor JSON state, and all changes are versioned via git (gix).
+
+```rust
+/// A sketch/planning document within a project.
+struct Document {
+    id: Uuid,
+    title: String,
+    description: String,
+    sections: Vec<DocumentSection>,
+    content: serde_json::Value,  // Lexical editor JSON state
+    state: DocumentState,
+    created_at: DateTime<Utc>,
+    updated_at: DateTime<Utc>,
+}
+
+/// A named section within a document, containing planning tables.
+struct DocumentSection {
+    id: Uuid,
+    title: String,
+    table: Option<PlanningTable>,
+}
+
+/// The 4-column planning table used in sketch documents.
+struct PlanningTable {
+    rows: Vec<PlanningRow>,
+}
+
+struct PlanningRow {
+    id: Uuid,
+    time: Option<String>,           // Estimated duration
+    narrative_bullets: Vec<String>,  // Voiceover talking points
+    demo_action_bullets: Vec<String>,// What to demonstrate
+    screenshot: Option<PathBuf>,     // Reference screenshot
+}
+
+/// Document lifecycle states.
+enum DocumentState {
+    Sketch,              // Initial authoring — user-written plan
+    RecordingEnriched,   // After recording enriches with captured data
+    Refined,             // After agent refinement pass
+    Final,               // Locked for production
+}
+
+/// Lightweight summary for listing documents without loading full content.
+struct DocumentSummary {
+    id: Uuid,
+    title: String,
+    state: DocumentState,
+    updated_at: DateTime<Utc>,
+}
+```
+
+### Project Storage
+
+Projects are stored as git-backed directories. Each project lives in `projects/{uuid}/` with the following structure:
+
+```text
+projects/{uuid}/
+├── project.json              # Project metadata, settings
+├── documents/
+│   ├── {doc-uuid-1}.json     # Document content (Lexical JSON state)
+│   └── {doc-uuid-2}.json
+├── screenshots/
+│   ├── {uuid}.png
+│   └── ...
+├── recordings/               # Recording metadata + media paths
+├── animations/               # Rendered animation files
+└── .git/                     # gix-managed version history
+```
+
+All changes (document edits, screenshot additions, setting changes) are committed automatically. Users can browse the commit timeline, preview any version, diff between versions, and restore previous states.
+
+```rust
 struct Recording {
     id: Uuid,
     video_path: PathBuf,
@@ -618,6 +708,75 @@ fn generate_fcpxml(project: &Project, output_dir: &Path) -> Result<String> {
 }
 ```
 
+### 7. Versioning Engine
+
+Manages document version history via git, using the `gix` (gitoxide) crate for pure-Rust git operations with no C/cmake dependencies.
+
+**Core operations**:
+
+```rust
+use gix::Repository;
+
+/// Initialize a git repository for a new project.
+fn init_project_repo(project_dir: &Path) -> Result<()> {
+    gix::init(project_dir)?;
+    Ok(())
+}
+
+/// Commit all current changes with an auto-generated message.
+fn commit_snapshot(
+    repo: &Repository,
+    message: &str,
+) -> Result<gix::ObjectId> {
+    // Stage all changes (documents, screenshots, settings)
+    // Create commit with timestamp
+    // Return commit hash
+}
+
+/// List all commits in reverse chronological order.
+fn list_versions(repo: &Repository) -> Result<Vec<VersionEntry>> {
+    // Walk the commit graph
+    // Return commit hash, message, timestamp, changed files
+}
+
+/// Get the content of a specific file at a given commit.
+fn get_version(
+    repo: &Repository,
+    commit_id: &gix::ObjectId,
+    file_path: &str,
+) -> Result<Vec<u8>> {
+    // Resolve tree → blob for the given path
+}
+
+/// Diff two commits for a specific file.
+fn diff_versions(
+    repo: &Repository,
+    from: &gix::ObjectId,
+    to: &gix::ObjectId,
+    file_path: &str,
+) -> Result<String> {
+    // Compute unified diff between two blob versions
+}
+
+/// Restore a file to a previous version by checking out from a commit.
+fn restore_version(
+    repo: &Repository,
+    commit_id: &gix::ObjectId,
+    file_path: &str,
+    working_dir: &Path,
+) -> Result<()> {
+    // Read blob at commit, write to working directory
+    // Auto-commit the restore as a new version
+}
+```
+
+**Design notes**:
+
+- Commits are created automatically on every document save, not manually by the user.
+- Commit messages are auto-generated with context: _"Update document 'API Walkthrough' — edited section 'Setup'"_.
+- The version history UI presents commits as a navigable timeline, not a raw git log.
+- `gix` is chosen over `git2-rs` (libgit2 bindings) to avoid cmake and C toolchain dependencies on Windows.
+
 ---
 
 ## Technology Stack
@@ -626,14 +785,16 @@ fn generate_fcpxml(project: &Project, output_dir: &Path) -> Result<String> {
 | ------- | ----------- | --------- | ----------- |
 | Desktop framework | Tauri | v2 | Small binary, Rust backend, web UI, native OS access |
 | Frontend | React + TypeScript | React 19 | Largest ecosystem, rich component libraries |
-| Backend | Rust | 2024 edition | Memory safety, async, native Windows API access |
+| Backend | Rust | 2021 edition | Memory safety, async, native Windows API access |
 | Screen recording | FFmpeg (FFV1 / MKV) | 7.x | Lossless, industry standard, multi-track |
 | Browser automation | Playwright (Node.js sidecar) | Latest | Cross-browser, headful mode, mature API, CDP access |
 | Native automation | windows-rs + UIAutomation | 0.62 | Zero external deps, direct OS integration |
 | Motion graphics | ManimCE (Python) | Latest | Programmatic animation, headless Cairo renderer, active community |
 | LLM | Azure OpenAI API (pluggable) | 2024-10-21 | Fast to start, enterprise-grade, structured output, swappable |
+| Rich text editor | Lexical (Meta) | 0.40+ | Immutable state model, extensible node system, React 19 compatible, MIT license |
+| Document versioning | gix (gitoxide) | Latest | Pure-Rust git implementation, no C/cmake deps, commit/log/diff/restore |
 | Timeline export | FCPXML 1.9 | — | Multi-track, markers, native DaVinci Resolve 17+ import |
-| Project storage | JSON files (local) | — | Simple, version-controllable, no DB dependency |
+| Project storage | Git-backed directories (gix) | — | Version-controlled, browsable history, diffable, no DB dependency |
 
 ### Key Rust Crates
 
@@ -647,6 +808,7 @@ fn generate_fcpxml(project: &Project, output_dir: &Path) -> Result<String> {
 | `uuid` | Unique IDs for projects, rows, recordings |
 | `chrono` | Timestamps |
 | `windows` | Native Windows API access (UI Automation, input hooks, GDI) |
+| `gix` | Git operations (versioning, commit history, diff, restore) |
 | `anyhow` / `thiserror` | Error handling |
 | `tracing` | Structured logging |
 
@@ -713,5 +875,6 @@ Tauri bundler produces a Windows NSIS installer (`.exe`) or MSI:
 
 - **Copilot SDK integration**: The `LlmProvider` trait is designed to accommodate a GitHub Copilot SDK backend alongside Azure OpenAI. Auth flow differences are encapsulated in the provider implementation.
 - **macOS support**: Tauri is cross-platform. The native automation layer would swap `windows-rs` for macOS Accessibility APIs (`accessibility` frameworks via `objc2` crate). FFmpeg and Playwright work unchanged.
-- **Collaborative editing**: If needed, the project JSON format can be adapted for CRDT-based merging (e.g., Automerge) or a real-time sync protocol.
+- **Collaborative editing**: If needed, Lexical’s immutable state model pairs well with CRDT-based merging (e.g., Automerge/Yjs) or a real-time sync protocol. The git-backed storage could layer on top of CRDTs for offline support.
 - **Plugin architecture**: The engine module structure supports extracting engines into Tauri plugins for modularity and third-party extension.
+- **Document versioning extensions**: The gix-based versioning engine could support branching (e.g., “alternative script take”) and merging, leveraging git’s native capabilities. Semantic diffing of Lexical JSON state (rather than raw text diff) is a future enhancement.

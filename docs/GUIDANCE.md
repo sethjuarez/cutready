@@ -6,16 +6,69 @@
 
 ## Overview
 
-CutReady follows a **record-first** philosophy. The primary entry point is performing the demo yourself — the app captures your interactions and an AI agent refines them into a production-ready script. Manual script authoring is an alternative path, not the default.
+CutReady supports two entry points into the demo production workflow. The **sketch-first** path — authoring a structured plan before recording — is the promoted primary workflow. The **record-first** path — jumping straight into a demo walkthrough — remains fully supported for quick iterations or when the user already knows exactly what to demonstrate.
 
 The workflow phases are:
 
+0. [Sketch](#phase-0-sketch)
 1. [Record](#phase-1-record)
 2. [Refine (Agent)](#phase-2-refine-agent)
 3. [Review & Edit](#phase-3-review--edit)
 4. [Produce (Replay + Recording)](#phase-4-produce-replay--recording)
 5. [Motion Animations](#phase-5-motion-animations)
 6. [Export & Packaging](#phase-6-export--packaging)
+
+---
+
+## Phase 0: Sketch
+
+Before recording, the user authors a structured plan for the demo in a Notion-style block editor powered by Lexical (Meta). This is the recommended starting point — it ensures the demo has clear structure, pacing, and narrative direction before any recording begins.
+
+### The Sketch Editor
+
+A rich block editor that supports:
+
+- **Headings, paragraphs, bullet lists** — standard document blocks with slash commands (type `/` to insert) and a floating formatting toolbar.
+- **Planning tables** — a custom 4-column table block designed for demo planning:
+
+  | Column | Content |
+  | ------ | ------- |
+  | **Time** | Estimated segment duration |
+  | **Narrative Bullets** | Talking points for the voiceover |
+  | **Demo Action Bullets** | What to click, type, navigate — a human-readable description of the demo steps |
+  | **Screenshot** | Reference image — can be captured directly from a Playwright-controlled browser or pasted manually |
+
+- **Screenshot capture** — with the Playwright sidecar running, the user can capture a screenshot of the current browser state directly into a table cell. This provides visual reference for what the demo should look like at each step.
+
+### Documents & Projects
+
+- Each project can contain **multiple documents** — e.g., one for the main demo, one for an alternate flow, one for a short version.
+- Documents have lifecycle states:
+  - **Sketch** — initial user-authored plan.
+  - **RecordingEnriched** — after recording populates the plan with captured data (actual screenshots, concrete selectors, precise timing).
+  - **Refined** — after the AI agent's refinement pass.
+  - **Final** — locked for production.
+- Each document has a title, optional description, and one or more titled sections with planning tables.
+
+### Version History
+
+Every document save is automatically versioned via git (gix). The user never interacts with git directly — instead, they see:
+
+- **Commit timeline** — a visual list of all saved versions with timestamps and auto-generated descriptions (e.g., _"Updated section 'API Setup'"_).
+- **Version preview** — click any version to see the document as it was at that point.
+- **Diff view** — compare any two versions side-by-side, with changes highlighted.
+- **Restore** — revert the document to a previous version (creates a new version, preserving history).
+
+### Sketch-to-Recording Bridge
+
+When the user is satisfied with the plan:
+
+1. Click **Record from Sketch** on a document.
+2. The sketch's planning table rows pre-populate the recording queue — the user sees what to demonstrate at each step, with narrative reminders and reference screenshots.
+3. During recording, CutReady matches captured interactions back to sketch rows, enriching them with actual selectors, precise timing, and live screenshots.
+4. The document transitions from **Sketch** → **RecordingEnriched**.
+
+This bridge ensures the recording is guided by the plan rather than ad-hoc.
 
 ---
 
@@ -240,14 +293,14 @@ project-name/
 
 ---
 
-## Alternative Entry Point: Manual Script Authoring
+## Alternative Entry Point: Record-First
 
-For users who prefer to plan before recording, CutReady supports creating the script table from scratch:
+For users who prefer to skip the planning phase and jump straight into recording:
 
-- Add rows manually with narrative text and demo action descriptions.
-- Use the LLM to expand brief action descriptions into full `Action` sequences (e.g., _"navigate to Azure portal, create a resource group"_ → concrete browser actions with URLs and selectors).
-- Attach reference screenshots manually or generate them via a dry-run.
-- Proceed to Phase 4 (Produce) with the hand-authored script.
+- Start a new project and click **Record Steps** directly — no sketch document required.
+- CutReady captures interactions into a new script table, just as in Phase 1.
+- After recording, the user can optionally generate a sketch document from the recorded session (reverse of the sketch-first flow) for documentation or iteration purposes.
+- The refinement, review, produce, and export phases work identically regardless of entry point.
 
 ---
 
