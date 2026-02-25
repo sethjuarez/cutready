@@ -179,10 +179,9 @@ pub fn resolve_sidecar_dir() -> PathBuf {
 }
 
 /// Resolve the screenshots directory for a recording session.
-pub fn resolve_screenshots_dir(projects_dir: &Path, project_id: &str, session_id: &str) -> PathBuf {
-    projects_dir
-        .join(format!("{project_id}_data"))
-        .join("sessions")
+pub fn resolve_screenshots_dir(project_root: &Path, _project_id: &str, session_id: &str) -> PathBuf {
+    project_root
+        .join(".sessions")
         .join(session_id)
         .join("screenshots")
 }
@@ -272,12 +271,10 @@ pub async fn disconnect_browser(sidecar: &SidecarManager) -> anyhow::Result<()> 
 /// Save a recorded session to disk as a JSON file.
 pub fn save_session(
     session: &crate::models::session::RecordedSession,
-    projects_dir: &Path,
-    project_id: &str,
+    project_root: &Path,
+    _project_id: &str,
 ) -> anyhow::Result<PathBuf> {
-    let session_dir = projects_dir
-        .join(format!("{project_id}_data"))
-        .join("sessions");
+    let session_dir = project_root.join(".sessions");
     std::fs::create_dir_all(&session_dir)?;
 
     let path = session_dir.join(format!("{}.session.json", session.id));
@@ -302,9 +299,8 @@ mod tests {
 
     #[test]
     fn resolve_screenshots_dir_format() {
-        let dir = resolve_screenshots_dir(Path::new("/projects"), "abc-123", "session-456");
-        assert!(dir.to_string_lossy().contains("abc-123_data"));
-        assert!(dir.to_string_lossy().contains("sessions"));
+        let dir = resolve_screenshots_dir(Path::new("/my-project"), "", "session-456");
+        assert!(dir.to_string_lossy().contains(".sessions"));
         assert!(dir.to_string_lossy().contains("session-456"));
         assert!(dir.to_string_lossy().contains("screenshots"));
     }

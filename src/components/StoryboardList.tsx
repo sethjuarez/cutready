@@ -9,8 +9,8 @@ import { useAppStore } from "../stores/appStore";
 export function StoryboardList() {
   const storyboards = useAppStore((s) => s.storyboards);
   const sketches = useAppStore((s) => s.sketches);
-  const activeStoryboardId = useAppStore((s) => s.activeStoryboardId);
-  const activeSketchId = useAppStore((s) => s.activeSketchId);
+  const activeStoryboardPath = useAppStore((s) => s.activeStoryboardPath);
+  const activeSketchPath = useAppStore((s) => s.activeSketchPath);
   const loadStoryboards = useAppStore((s) => s.loadStoryboards);
   const loadSketches = useAppStore((s) => s.loadSketches);
   const createStoryboard = useAppStore((s) => s.createStoryboard);
@@ -50,9 +50,9 @@ export function StoryboardList() {
   }, [newSkTitle, createSketch, closeStoryboard]);
 
   const handleOpenSketchStandalone = useCallback(
-    async (sketchId: string) => {
+    async (sketchPath: string) => {
       closeStoryboard();
-      await openSketch(sketchId);
+      await openSketch(sketchPath);
     },
     [closeStoryboard, openSketch],
   );
@@ -107,10 +107,10 @@ export function StoryboardList() {
         ) : (
           storyboards.map((sb) => (
             <button
-              key={sb.id}
-              onClick={() => openStoryboard(sb.id)}
+              key={sb.path}
+              onClick={() => openStoryboard(sb.path)}
               className={`group w-full flex items-center gap-2 px-3 py-2 text-left transition-colors ${
-                sb.id === activeStoryboardId
+                sb.path === activeStoryboardPath
                   ? "bg-[var(--color-accent)]/10 text-[var(--color-accent)]"
                   : "text-[var(--color-text)] hover:bg-[var(--color-surface-alt)]"
               }`}
@@ -129,7 +129,7 @@ export function StoryboardList() {
                 onClick={(e) => {
                   e.stopPropagation();
                   if (confirm(`Delete "${sb.title}"?`)) {
-                    deleteStoryboard(sb.id);
+                    deleteStoryboard(sb.path);
                   }
                 }}
                 className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-all"
@@ -190,10 +190,10 @@ export function StoryboardList() {
         ) : (
           sketches.map((sk) => (
             <button
-              key={sk.id}
-              onClick={() => handleOpenSketchStandalone(sk.id)}
+              key={sk.path}
+              onClick={() => handleOpenSketchStandalone(sk.path)}
               className={`group w-full flex items-center gap-2 px-3 py-2 text-left transition-colors ${
-                sk.id === activeSketchId && !activeStoryboardId
+                sk.path === activeSketchPath && !activeStoryboardPath
                   ? "bg-[var(--color-accent)]/10 text-[var(--color-accent)]"
                   : "text-[var(--color-text)] hover:bg-[var(--color-surface-alt)]"
               }`}
@@ -212,7 +212,7 @@ export function StoryboardList() {
                 onClick={(e) => {
                   e.stopPropagation();
                   if (confirm(`Delete "${sk.title}"?`)) {
-                    deleteSketch(sk.id);
+                    deleteSketch(sk.path);
                   }
                 }}
                 className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-all"

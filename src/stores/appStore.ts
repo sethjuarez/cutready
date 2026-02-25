@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { invoke, Channel } from "@tauri-apps/api/core";
-import type { Project, ProjectSummary } from "../types/project";
+import type { ProjectView, RecentProject } from "../types/project";
 import type {
   BrowserProfile,
   BrowserRunningStatus,
@@ -23,9 +23,9 @@ interface AppStoreState {
   /** Current active view. */
   view: AppView;
   /** Currently open project (null if none). */
-  currentProject: Project | null;
-  /** List of project summaries for the home screen. */
-  projects: ProjectSummary[];
+  currentProject: ProjectView | null;
+  /** Recent projects for the home screen. */
+  recentProjects: RecentProject[];
   /** Whether an operation is in progress. */
   loading: boolean;
   /** Last error message to display in the UI. */
@@ -33,11 +33,10 @@ interface AppStoreState {
 
   // ── Sketch state ───────────────────────────────────────
 
-
   /** Sketch summaries for the current project. */
   sketches: SketchSummary[];
-  /** The currently active sketch ID. */
-  activeSketchId: string | null;
+  /** The currently active sketch path (relative). */
+  activeSketchPath: string | null;
   /** The full active sketch (loaded when editing). */
   activeSketch: Sketch | null;
 
@@ -45,8 +44,8 @@ interface AppStoreState {
 
   /** Storyboard summaries for the current project. */
   storyboards: StoryboardSummary[];
-  /** The currently active storyboard ID. */
-  activeStoryboardId: string | null;
+  /** The currently active storyboard path (relative). */
+  activeStoryboardPath: string | null;
   /** The full active storyboard (loaded when viewing). */
   activeStoryboard: Storyboard | null;
 
@@ -91,11 +90,9 @@ interface AppStoreState {
 
   // ── Project actions ───────────────────────────────────────
 
-  loadProjects: () => Promise<void>;
-  createProject: (name: string) => Promise<void>;
-  openProject: (projectId: string) => Promise<void>;
-  saveProject: () => Promise<void>;
-  deleteProject: (projectId: string) => Promise<void>;
+  loadRecentProjects: () => Promise<void>;
+  createProject: (path: string) => Promise<void>;
+  openProject: (path: string) => Promise<void>;
   closeProject: () => void;
 
   // ── Sketch actions ─────────────────────────────────────
@@ -104,14 +101,14 @@ interface AppStoreState {
   loadSketches: () => Promise<void>;
   /** Create a new sketch and open it. */
   createSketch: (title: string) => Promise<void>;
-  /** Open a sketch for editing. */
-  openSketch: (sketchId: string) => Promise<void>;
+  /** Open a sketch for editing by path. */
+  openSketch: (sketchPath: string) => Promise<void>;
   /** Update the active sketch (description and/or rows). */
   updateSketch: (update: { description?: unknown; rows?: import("../types/sketch").PlanningRow[] }) => Promise<void>;
   /** Update a sketch's title. */
-  updateSketchTitle: (sketchId: string, title: string) => Promise<void>;
+  updateSketchTitle: (sketchPath: string, title: string) => Promise<void>;
   /** Delete a sketch. */
-  deleteSketch: (sketchId: string) => Promise<void>;
+  deleteSketch: (sketchPath: string) => Promise<void>;
   /** Close the active sketch (return to storyboard). */
   closeSketch: () => void;
 
@@ -121,14 +118,14 @@ interface AppStoreState {
   loadStoryboards: () => Promise<void>;
   /** Create a new storyboard and open it. */
   createStoryboard: (title: string) => Promise<void>;
-  /** Open a storyboard for viewing. */
-  openStoryboard: (storyboardId: string) => Promise<void>;
+  /** Open a storyboard for viewing by path. */
+  openStoryboard: (storyboardPath: string) => Promise<void>;
   /** Update storyboard title/description. */
   updateStoryboard: (update: { title?: string; description?: string }) => Promise<void>;
   /** Delete a storyboard. */
-  deleteStoryboard: (storyboardId: string) => Promise<void>;
+  deleteStoryboard: (storyboardPath: string) => Promise<void>;
   /** Add a sketch to the active storyboard. */
-  addSketchToStoryboard: (sketchId: string, position?: number) => Promise<void>;
+  addSketchToStoryboard: (sketchPath: string, position?: number) => Promise<void>;
   /** Remove an item from the active storyboard. */
   removeFromStoryboard: (position: number) => Promise<void>;
   /** Add a section to the active storyboard. */
@@ -176,15 +173,15 @@ interface AppStoreState {
 export const useAppStore = create<AppStoreState>((set, get) => ({
   view: "home",
   currentProject: null,
-  projects: [],
+  recentProjects: [],
   loading: false,
   error: null,
 
   sketches: [],
-  activeSketchId: null,
+  activeSketchPath: null,
   activeSketch: null,
   storyboards: [],
-  activeStoryboardId: null,
+  activeStoryboardPath: null,
   activeStoryboard: null,
   versions: [],
   showVersionHistory: false,
@@ -208,73 +205,56 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
 
   // ── Project actions ───────────────────────────────────────
 
-  loadProjects: async () => {
-    set({ loading: true });
+  loadRecentProjects: async () => {
     try {
-      const projects = await invoke<ProjectSummary[]>("list_projects");
-      set({ projects });
+      const recentProjects = await invoke<RecentProject[]>("get_recent_projects");
+      set({ recentProjects });
     } catch (err) {
-      console.error("Failed to load projects:", err);
-    } finally {
-      set({ loading: false });
+      console.error("Failed to load recent projects:", err);
     }
   },
 
-  createProject: async (name) => {
+  createProject: async (path) => {
     set({ loading: true });
     try {
-      const project = await invoke<Project>("create_project", { name });
+      const project = await invoke<ProjectView>("create_project_folder", { path });
       set({ currentProject: project, view: "sketch" });
-      await get().loadProjects();
+      await get().loadRecentProjects();
+      await get().loadSketches();
+      await get().loadStoryboards();
     } catch (err) {
       console.error("Failed to create project:", err);
+      set({ error: String(err) });
     } finally {
       set({ loading: false });
     }
   },
 
-  openProject: async (projectId) => {
+  openProject: async (path) => {
     set({ loading: true });
     try {
-      const project = await invoke<Project>("open_project", { projectId });
+      const project = await invoke<ProjectView>("open_project_folder", { path });
       set({ currentProject: project, view: "sketch" });
+      await get().loadSketches();
+      await get().loadStoryboards();
     } catch (err) {
       console.error("Failed to open project:", err);
+      set({ error: String(err) });
     } finally {
       set({ loading: false });
-    }
-  },
-
-  saveProject: async () => {
-    try {
-      await invoke("save_project");
-    } catch (err) {
-      console.error("Failed to save project:", err);
-    }
-  },
-
-  deleteProject: async (projectId) => {
-    try {
-      await invoke("delete_project", { projectId });
-      const { currentProject } = get();
-      if (currentProject?.id === projectId) {
-        set({ currentProject: null, view: "home" });
-      }
-      await get().loadProjects();
-    } catch (err) {
-      console.error("Failed to delete project:", err);
     }
   },
 
   closeProject: () => {
+    invoke("close_project").catch(console.error);
     set({
       currentProject: null,
       view: "home",
       sketches: [],
-      activeSketchId: null,
+      activeSketchPath: null,
       activeSketch: null,
       storyboards: [],
-      activeStoryboardId: null,
+      activeStoryboardPath: null,
       activeStoryboard: null,
       versions: [],
     });
@@ -293,9 +273,11 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
 
   createSketch: async (title) => {
     try {
-      const sketch = await invoke<Sketch>("create_sketch", { title });
+      // Generate a filename from the title
+      const relativePath = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") + ".sk";
+      const sketch = await invoke<Sketch>("create_sketch", { relativePath, title });
       set({
-        activeSketchId: sketch.id,
+        activeSketchPath: relativePath,
         activeSketch: sketch,
       });
       await get().loadSketches();
@@ -304,11 +286,11 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     }
   },
 
-  openSketch: async (sketchId) => {
+  openSketch: async (sketchPath) => {
     try {
-      const sketch = await invoke<Sketch>("get_sketch", { id: sketchId });
+      const sketch = await invoke<Sketch>("get_sketch", { relativePath: sketchPath });
       set({
-        activeSketchId: sketch.id,
+        activeSketchPath: sketchPath,
         activeSketch: sketch,
       });
     } catch (err) {
@@ -317,21 +299,21 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   },
 
   updateSketch: async (update) => {
-    const { activeSketchId } = get();
-    if (!activeSketchId) return;
+    const { activeSketchPath } = get();
+    if (!activeSketchPath) return;
     try {
-      await invoke("update_sketch", { id: activeSketchId, ...update });
+      await invoke("update_sketch", { relativePath: activeSketchPath, ...update });
     } catch (err) {
       console.error("Failed to update sketch:", err);
     }
   },
 
-  updateSketchTitle: async (sketchId, title) => {
+  updateSketchTitle: async (sketchPath, title) => {
     try {
-      await invoke("update_sketch_title", { id: sketchId, title });
+      await invoke("update_sketch_title", { relativePath: sketchPath, title });
       await get().loadSketches();
-      const { activeSketch } = get();
-      if (activeSketch?.id === sketchId) {
+      const { activeSketch, activeSketchPath } = get();
+      if (activeSketch && activeSketchPath === sketchPath) {
         set({ activeSketch: { ...activeSketch, title } });
       }
     } catch (err) {
@@ -339,12 +321,12 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     }
   },
 
-  deleteSketch: async (sketchId) => {
+  deleteSketch: async (sketchPath) => {
     try {
-      await invoke("delete_sketch", { id: sketchId });
-      const { activeSketchId } = get();
-      if (activeSketchId === sketchId) {
-        set({ activeSketchId: null, activeSketch: null });
+      await invoke("delete_sketch", { relativePath: sketchPath });
+      const { activeSketchPath } = get();
+      if (activeSketchPath === sketchPath) {
+        set({ activeSketchPath: null, activeSketch: null });
       }
       await get().loadSketches();
     } catch (err) {
@@ -353,7 +335,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   },
 
   closeSketch: () => {
-    set({ activeSketchId: null, activeSketch: null });
+    set({ activeSketchPath: null, activeSketch: null });
   },
 
   // ── Storyboard actions ───────────────────────────────
@@ -369,9 +351,10 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
 
   createStoryboard: async (title) => {
     try {
-      const storyboard = await invoke<Storyboard>("create_storyboard", { title });
+      const relativePath = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") + ".sb";
+      const storyboard = await invoke<Storyboard>("create_storyboard", { relativePath, title });
       set({
-        activeStoryboardId: storyboard.id,
+        activeStoryboardPath: relativePath,
         activeStoryboard: storyboard,
       });
       await get().loadStoryboards();
@@ -380,13 +363,13 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     }
   },
 
-  openStoryboard: async (storyboardId) => {
+  openStoryboard: async (storyboardPath) => {
     try {
-      const storyboard = await invoke<Storyboard>("get_storyboard", { id: storyboardId });
+      const storyboard = await invoke<Storyboard>("get_storyboard", { relativePath: storyboardPath });
       set({
-        activeStoryboardId: storyboard.id,
+        activeStoryboardPath: storyboardPath,
         activeStoryboard: storyboard,
-        activeSketchId: null,
+        activeSketchPath: null,
         activeSketch: null,
       });
     } catch (err) {
@@ -395,12 +378,11 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   },
 
   updateStoryboard: async (update) => {
-    const { activeStoryboardId } = get();
-    if (!activeStoryboardId) return;
+    const { activeStoryboardPath } = get();
+    if (!activeStoryboardPath) return;
     try {
-      await invoke("update_storyboard", { id: activeStoryboardId, ...update });
-      // Reload to get updated data
-      const storyboard = await invoke<Storyboard>("get_storyboard", { id: activeStoryboardId });
+      await invoke("update_storyboard", { relativePath: activeStoryboardPath, ...update });
+      const storyboard = await invoke<Storyboard>("get_storyboard", { relativePath: activeStoryboardPath });
       set({ activeStoryboard: storyboard });
       await get().loadStoryboards();
     } catch (err) {
@@ -408,12 +390,12 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     }
   },
 
-  deleteStoryboard: async (storyboardId) => {
+  deleteStoryboard: async (storyboardPath) => {
     try {
-      await invoke("delete_storyboard", { id: storyboardId });
-      const { activeStoryboardId } = get();
-      if (activeStoryboardId === storyboardId) {
-        set({ activeStoryboardId: null, activeStoryboard: null });
+      await invoke("delete_storyboard", { relativePath: storyboardPath });
+      const { activeStoryboardPath } = get();
+      if (activeStoryboardPath === storyboardPath) {
+        set({ activeStoryboardPath: null, activeStoryboard: null });
       }
       await get().loadStoryboards();
     } catch (err) {
@@ -421,16 +403,16 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     }
   },
 
-  addSketchToStoryboard: async (sketchId, position) => {
-    const { activeStoryboardId } = get();
-    if (!activeStoryboardId) return;
+  addSketchToStoryboard: async (sketchPath, position) => {
+    const { activeStoryboardPath } = get();
+    if (!activeStoryboardPath) return;
     try {
       await invoke("add_sketch_to_storyboard", {
-        storyboardId: activeStoryboardId,
-        sketchId,
+        storyboardPath: activeStoryboardPath,
+        sketchPath,
         position: position ?? null,
       });
-      const storyboard = await invoke<Storyboard>("get_storyboard", { id: activeStoryboardId });
+      const storyboard = await invoke<Storyboard>("get_storyboard", { relativePath: activeStoryboardPath });
       set({ activeStoryboard: storyboard });
       await get().loadStoryboards();
     } catch (err) {
@@ -439,14 +421,14 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   },
 
   removeFromStoryboard: async (position) => {
-    const { activeStoryboardId } = get();
-    if (!activeStoryboardId) return;
+    const { activeStoryboardPath } = get();
+    if (!activeStoryboardPath) return;
     try {
       await invoke("remove_sketch_from_storyboard", {
-        storyboardId: activeStoryboardId,
+        storyboardPath: activeStoryboardPath,
         position,
       });
-      const storyboard = await invoke<Storyboard>("get_storyboard", { id: activeStoryboardId });
+      const storyboard = await invoke<Storyboard>("get_storyboard", { relativePath: activeStoryboardPath });
       set({ activeStoryboard: storyboard });
       await get().loadStoryboards();
     } catch (err) {
@@ -455,15 +437,15 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   },
 
   addSectionToStoryboard: async (title, position) => {
-    const { activeStoryboardId } = get();
-    if (!activeStoryboardId) return;
+    const { activeStoryboardPath } = get();
+    if (!activeStoryboardPath) return;
     try {
       await invoke("add_section_to_storyboard", {
-        storyboardId: activeStoryboardId,
+        storyboardPath: activeStoryboardPath,
         title,
         position: position ?? null,
       });
-      const storyboard = await invoke<Storyboard>("get_storyboard", { id: activeStoryboardId });
+      const storyboard = await invoke<Storyboard>("get_storyboard", { relativePath: activeStoryboardPath });
       set({ activeStoryboard: storyboard });
     } catch (err) {
       console.error("Failed to add section:", err);
@@ -471,14 +453,14 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   },
 
   reorderStoryboardItems: async (items) => {
-    const { activeStoryboardId } = get();
-    if (!activeStoryboardId) return;
+    const { activeStoryboardPath } = get();
+    if (!activeStoryboardPath) return;
     try {
       await invoke("reorder_storyboard_items", {
-        storyboardId: activeStoryboardId,
+        storyboardPath: activeStoryboardPath,
         items,
       });
-      const storyboard = await invoke<Storyboard>("get_storyboard", { id: activeStoryboardId });
+      const storyboard = await invoke<Storyboard>("get_storyboard", { relativePath: activeStoryboardPath });
       set({ activeStoryboard: storyboard });
     } catch (err) {
       console.error("Failed to reorder items:", err);
@@ -486,7 +468,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   },
 
   closeStoryboard: () => {
-    set({ activeStoryboardId: null, activeStoryboard: null, activeSketchId: null, activeSketch: null });
+    set({ activeStoryboardPath: null, activeStoryboard: null, activeSketchPath: null, activeSketch: null });
   },
 
   // ── Versioning actions ───────────────────────────────────
@@ -516,9 +498,9 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await get().loadSketches();
       await get().loadStoryboards();
       await get().loadVersions();
-      const { activeSketchId } = get();
-      if (activeSketchId) {
-        await get().openSketch(activeSketchId);
+      const { activeSketchPath } = get();
+      if (activeSketchPath) {
+        await get().openSketch(activeSketchPath);
       }
     } catch (err) {
       console.error("Failed to restore version:", err);
@@ -537,7 +519,6 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         "detect_browser_profiles"
       );
       const { selectedProfile } = get();
-      // Auto-select the first profile if none selected yet
       const newSelected =
         selectedProfile ??
         (profiles.length > 0 ? profiles[0] : null);

@@ -22,16 +22,16 @@ export function StoryboardView() {
   const [showSectionInput, setShowSectionInput] = useState<number | null>(null);
   const [sectionTitle, setSectionTitle] = useState("");
 
-  const sketchMap = new Map(sketches.map((s) => [s.id, s]));
+  const sketchMap = new Map(sketches.map((s) => [s.path, s]));
 
   const handleAddNewSketch = useCallback(
     async (position?: number) => {
       const title = `Sketch ${sketches.length + 1}`;
       await createSketch(title);
-      // The created sketch is now active; get its ID from the store
-      const { activeSketch } = useAppStore.getState();
-      if (activeSketch) {
-        await addSketchToStoryboard(activeSketch.id, position);
+      // The created sketch is now active; get its path from the store
+      const { activeSketchPath } = useAppStore.getState();
+      if (activeSketchPath) {
+        await addSketchToStoryboard(activeSketchPath, position);
         await loadSketches();
       }
     },
@@ -39,8 +39,8 @@ export function StoryboardView() {
   );
 
   const handlePickExisting = useCallback(
-    async (sketchId: string, position?: number) => {
-      await addSketchToStoryboard(sketchId, position);
+    async (sketchPath: string, position?: number) => {
+      await addSketchToStoryboard(sketchPath, position);
       setShowPicker(null);
       setPickerSearch("");
     },
@@ -104,14 +104,14 @@ export function StoryboardView() {
               <div key={idx}>
                 {item.type === "sketch_ref" ? (
                   <SketchCard
-                    sketch={sketchMap.get(item.sketch_id) ?? makePlaceholder(item.sketch_id)}
-                    onOpen={() => openSketch(item.sketch_id)}
+                    sketch={sketchMap.get(item.path) ?? makePlaceholder(item.path)}
+                    onOpen={() => openSketch(item.path)}
                     onRemove={() => removeFromStoryboard(idx)}
                   />
                 ) : (
                   <SectionHeader
                     title={item.title}
-                    sketchIds={item.sketch_ids}
+                    sketchPaths={item.sketches}
                     sketchMap={sketchMap}
                     onOpenSketch={openSketch}
                   />
@@ -144,7 +144,7 @@ export function StoryboardView() {
             sketches={filteredSketches}
             search={pickerSearch}
             onSearchChange={setPickerSearch}
-            onSelect={(id) => handlePickExisting(id, showPicker)}
+            onSelect={(path) => handlePickExisting(path, showPicker)}
             onClose={() => { setShowPicker(null); setPickerSearch(""); }}
           />
         )}
@@ -208,14 +208,14 @@ function EmptyState({
 
 function SectionHeader({
   title,
-  sketchIds,
+  sketchPaths,
   sketchMap,
   onOpenSketch,
 }: {
   title: string;
-  sketchIds: string[];
+  sketchPaths: string[];
   sketchMap: Map<string, import("../types/sketch").SketchSummary>;
-  onOpenSketch: (id: string) => void;
+  onOpenSketch: (path: string) => void;
 }) {
   return (
     <div className="mt-4 mb-2">
@@ -226,16 +226,16 @@ function SectionHeader({
         </span>
         <div className="h-px flex-1 bg-[var(--color-border)]" />
       </div>
-      {sketchIds.length > 0 && (
+      {sketchPaths.length > 0 && (
         <div className="space-y-2 ml-4">
-          {sketchIds.map((sid) => {
-            const sketch = sketchMap.get(sid);
+          {sketchPaths.map((sp) => {
+            const sketch = sketchMap.get(sp);
             if (!sketch) return null;
             return (
               <SketchCard
-                key={sid}
+                key={sp}
                 sketch={sketch}
-                onOpen={() => onOpenSketch(sid)}
+                onOpen={() => onOpenSketch(sp)}
               />
             );
           })}
@@ -269,7 +269,7 @@ function AddItemButton({
   filteredSketches: import("../types/sketch").SketchSummary[];
   pickerSearch: string;
   setPickerSearch: (v: string) => void;
-  onPickExisting: (id: string, pos: number) => void;
+  onPickExisting: (path: string, pos: number) => void;
   sectionTitle: string;
   setSectionTitle: (v: string) => void;
   onAddSection: (pos: number) => void;
@@ -306,7 +306,7 @@ function AddItemButton({
             sketches={filteredSketches}
             search={pickerSearch}
             onSearchChange={setPickerSearch}
-            onSelect={(id) => onPickExisting(id, position)}
+            onSelect={(path) => onPickExisting(path, position)}
             onClose={() => { setShowPicker(null); setPickerSearch(""); }}
           />
         </div>
@@ -336,7 +336,7 @@ function SketchPicker({
   sketches: import("../types/sketch").SketchSummary[];
   search: string;
   onSearchChange: (v: string) => void;
-  onSelect: (id: string) => void;
+  onSelect: (path: string) => void;
   onClose: () => void;
 }) {
   return (
@@ -359,7 +359,7 @@ function SketchPicker({
           </p>
         ) : (
           sketches.map((s) => (
-            <SketchPickerItem key={s.id} sketch={s} onSelect={() => onSelect(s.id)} />
+            <SketchPickerItem key={s.path} sketch={s} onSelect={() => onSelect(s.path)} />
           ))
         )}
       </div>
@@ -410,9 +410,9 @@ function SectionInput({
   );
 }
 
-function makePlaceholder(id: string): import("../types/sketch").SketchSummary {
+function makePlaceholder(path: string): import("../types/sketch").SketchSummary {
   return {
-    id,
+    path,
     title: "(Missing sketch)",
     state: "draft",
     row_count: 0,

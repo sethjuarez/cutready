@@ -9,7 +9,6 @@ export type SketchState =
 
 /** A row in the sketch planning table (4 columns). */
 export interface PlanningRow {
-  id: string;
   time: string;
   narrative: string;
   demo_actions: string;
@@ -18,7 +17,6 @@ export interface PlanningRow {
 
 /** A sketch — a focused scene in a demo storyboard. */
 export interface Sketch {
-  id: string;
   title: string;
   /** Rich-text description — Lexical editor state JSON. */
   description: unknown;
@@ -31,7 +29,7 @@ export interface Sketch {
 
 /** Lightweight summary for listing sketches. */
 export interface SketchSummary {
-  id: string;
+  path: string;
   title: string;
   state: SketchState;
   row_count: number;
@@ -41,7 +39,6 @@ export interface SketchSummary {
 
 /** A storyboard — an ordered sequence of sketches with optional sections. */
 export interface Storyboard {
-  id: string;
   title: string;
   description: string;
   items: StoryboardItem[];
@@ -51,12 +48,12 @@ export interface Storyboard {
 
 /** An item in a storyboard's sequence. */
 export type StoryboardItem =
-  | { type: "sketch_ref"; sketch_id: string }
-  | { type: "section"; id: string; title: string; sketch_ids: string[] };
+  | { type: "sketch_ref"; path: string }
+  | { type: "section"; title: string; sketches: string[] };
 
 /** Lightweight summary for listing storyboards. */
 export interface StoryboardSummary {
-  id: string;
+  path: string;
   title: string;
   sketch_count: number;
   created_at: string;

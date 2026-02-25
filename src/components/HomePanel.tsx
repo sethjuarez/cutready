@@ -1,30 +1,67 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAppStore } from "../stores/appStore";
+import { open } from "@tauri-apps/plugin-dialog";
+import { invoke } from "@tauri-apps/api/core";
 
 export function HomePanel() {
-  const projects = useAppStore((s) => s.projects);
+  const recentProjects = useAppStore((s) => s.recentProjects);
   const loading = useAppStore((s) => s.loading);
-  const loadProjects = useAppStore((s) => s.loadProjects);
+  const loadRecentProjects = useAppStore((s) => s.loadRecentProjects);
   const createProject = useAppStore((s) => s.createProject);
   const openProject = useAppStore((s) => s.openProject);
-  const deleteProject = useAppStore((s) => s.deleteProject);
-  const loadStoryboards = useAppStore((s) => s.loadStoryboards);
-  const loadSketches = useAppStore((s) => s.loadSketches);
 
   const [newName, setNewName] = useState("");
   const [showCreate, setShowCreate] = useState(false);
 
   useEffect(() => {
-    loadProjects();
-  }, [loadProjects]);
+    loadRecentProjects();
+  }, [loadRecentProjects]);
 
   const handleCreate = useCallback(async () => {
     const name = newName.trim();
     if (!name) return;
-    await createProject(name);
+
+    // Get the last parent folder to start from
+    let defaultPath: string | undefined;
+    try {
+      const last = await invoke<string | null>("get_last_parent_folder");
+      if (last) defaultPath = last;
+    } catch { /* ignore */ }
+
+    // Show folder picker
+    const selected = await open({
+      directory: true,
+      multiple: false,
+      defaultPath,
+      title: "Choose location for new project",
+    });
+
+    if (!selected) return;
+
+    // Create the project inside the selected folder
+    const projectPath = `${selected}/${name}`;
+    await createProject(projectPath);
     setNewName("");
     setShowCreate(false);
   }, [newName, createProject]);
+
+  const handleOpen = useCallback(async () => {
+    let defaultPath: string | undefined;
+    try {
+      const last = await invoke<string | null>("get_last_parent_folder");
+      if (last) defaultPath = last;
+    } catch { /* ignore */ }
+
+    const selected = await open({
+      directory: true,
+      multiple: false,
+      defaultPath,
+      title: "Open project folder",
+    });
+
+    if (!selected) return;
+    await openProject(selected);
+  }, [openProject]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -44,15 +81,23 @@ export function HomePanel() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Projects</h1>
           <p className="text-sm text-[var(--color-text-secondary)] mt-1">
-            Select a project or create a new one to get started.
+            Open a project folder or create a new one.
           </p>
         </div>
-        <button
-          onClick={() => setShowCreate(true)}
-          className="px-4 py-2 rounded-lg bg-[var(--color-accent)] text-white text-sm font-medium hover:bg-[var(--color-accent-hover)] transition-colors"
-        >
-          New Project
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={handleOpen}
+            className="px-4 py-2 rounded-lg border border-[var(--color-border)] text-sm font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:border-[var(--color-accent)]/40 transition-colors"
+          >
+            Open Folder
+          </button>
+          <button
+            onClick={() => setShowCreate(true)}
+            className="px-4 py-2 rounded-lg bg-[var(--color-accent)] text-white text-sm font-medium hover:bg-[var(--color-accent-hover)] transition-colors"
+          >
+            New Project
+          </button>
+        </div>
       </div>
 
       {/* Create project inline form */}
@@ -74,7 +119,7 @@ export function HomePanel() {
               disabled={!newName.trim()}
               className="px-4 py-2 rounded-lg bg-[var(--color-accent)] text-white text-sm font-medium hover:bg-[var(--color-accent-hover)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              Create
+              Choose Folder
             </button>
             <button
               onClick={() => {
@@ -89,63 +134,45 @@ export function HomePanel() {
         </div>
       )}
 
-      {/* Project list */}
-      {loading && projects.length === 0 ? (
+      {/* Recent projects list */}
+      {loading && recentProjects.length === 0 ? (
         <div className="text-center text-[var(--color-text-secondary)] py-12">
-          Loading projects...
+          Loading...
         </div>
-      ) : projects.length === 0 ? (
+      ) : recentProjects.length === 0 ? (
         <div className="text-center py-16">
           <div className="text-4xl mb-4">📁</div>
           <p className="text-[var(--color-text-secondary)]">
-            No projects yet. Create one to get started.
+            No recent projects. Open or create a project folder to get started.
           </p>
         </div>
       ) : (
-        <div className="flex flex-col gap-2">
-          {projects.map((p) => (
-            <div
-              key={p.id}
-              className="group flex items-center justify-between p-4 rounded-xl bg-[var(--color-surface-alt)] border border-[var(--color-border)] hover:border-[var(--color-accent)]/40 transition-colors cursor-pointer"
-              onClick={async () => {
-                await openProject(p.id);
-                await loadStoryboards();
-                await loadSketches();
-              }}
-            >
-              <div>
-                <div className="text-sm font-medium">{p.name}</div>
-                <div className="text-xs text-[var(--color-text-secondary)] mt-0.5">
-                  Updated {formatRelativeDate(p.updated_at)}
+        <>
+          <h2 className="text-xs font-medium text-[var(--color-text-secondary)] uppercase tracking-wider mb-3">
+            Recent Projects
+          </h2>
+          <div className="flex flex-col gap-2">
+            {recentProjects.map((p) => (
+              <div
+                key={p.path}
+                className="group flex items-center justify-between p-4 rounded-xl bg-[var(--color-surface-alt)] border border-[var(--color-border)] hover:border-[var(--color-accent)]/40 transition-colors cursor-pointer"
+                onClick={() => openProject(p.path)}
+              >
+                <div className="min-w-0">
+                  <div className="text-sm font-medium truncate">
+                    {p.path.split(/[/\\]/).pop()}
+                  </div>
+                  <div className="text-xs text-[var(--color-text-secondary)] mt-0.5 truncate">
+                    {p.path}
+                  </div>
+                </div>
+                <div className="text-xs text-[var(--color-text-secondary)] ml-4 shrink-0">
+                  {formatRelativeDate(p.last_opened)}
                 </div>
               </div>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (confirm(`Delete "${p.name}"?`)) {
-                    deleteProject(p.id);
-                  }
-                }}
-                className="opacity-0 group-hover:opacity-100 p-1.5 rounded-md text-[var(--color-text-secondary)] hover:text-red-500 hover:bg-red-500/10 transition-all"
-                title="Delete project"
-              >
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <polyline points="3 6 5 6 21 6" />
-                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                </svg>
-              </button>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        </>
       )}
     </div>
   );

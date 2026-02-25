@@ -1,13 +1,8 @@
 import { useCallback, useState } from "react";
 import type { PlanningRow } from "../types/sketch";
 
-/** Generates a simple unique ID for planning rows. */
-function rowId(): string {
-  return crypto.randomUUID();
-}
-
 function emptyRow(): PlanningRow {
-  return { id: rowId(), time: "", narrative: "", demo_actions: "", screenshot: null };
+  return { time: "", narrative: "", demo_actions: "", screenshot: null };
 }
 
 interface ScriptTableProps {
@@ -64,7 +59,7 @@ export function ScriptTable({ rows, onChange, readOnly = false }: ScriptTablePro
         </thead>
         <tbody>
           {displayRows.map((row, idx) => (
-            <tr key={row.id} className="group border-t border-[var(--color-border)]">
+            <tr key={idx} className="group border-t border-[var(--color-border)]">
               <td className="script-table-td align-top">
                 <CellInput
                   value={row.time}

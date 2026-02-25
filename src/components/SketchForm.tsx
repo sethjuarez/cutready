@@ -9,6 +9,7 @@ import type { PlanningRow } from "../types/sketch";
  */
 export function SketchForm() {
   const activeSketch = useAppStore((s) => s.activeSketch);
+  const activeSketchPath = useAppStore((s) => s.activeSketchPath);
   const activeStoryboard = useAppStore((s) => s.activeStoryboard);
   const updateSketch = useAppStore((s) => s.updateSketch);
   const updateSketchTitle = useAppStore((s) => s.updateSketchTitle);
@@ -24,7 +25,7 @@ export function SketchForm() {
       if (!activeSketch) return;
       if (titleTimeoutRef.current) clearTimeout(titleTimeoutRef.current);
       titleTimeoutRef.current = setTimeout(() => {
-        updateSketchTitle(activeSketch.id, value);
+        if (activeSketchPath) updateSketchTitle(activeSketchPath, value);
       }, 500);
     },
     [activeSketch, updateSketchTitle],
@@ -97,7 +98,6 @@ export function SketchForm() {
           <button
             onClick={() => {
               const newRow: PlanningRow = {
-                id: crypto.randomUUID(),
                 time: "",
                 narrative: "",
                 demo_actions: "",
