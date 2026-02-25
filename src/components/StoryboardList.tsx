@@ -66,8 +66,8 @@ export function StoryboardList() {
       style={{ width: 240 }}
     >
       {/* ── Mode toggle ──────────────────────────────── */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-[var(--color-border)]">
-        <span className="text-[10px] font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">
+      <div className="flex items-center justify-between px-3 py-2.5 border-b border-[var(--color-border)]">
+        <span className="text-[11px] font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">
           Explorer
         </span>
         <div className="flex items-center gap-0.5 bg-[var(--color-surface)] rounded-md p-0.5">
@@ -110,8 +110,8 @@ export function StoryboardList() {
       ) : (
       <>
       {/* ── Storyboards section ────────────────────────── */}
-      <div className="flex items-center justify-between px-3 py-3 border-b border-[var(--color-border)]">
-        <span className="text-xs font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">
+      <div className="flex items-center justify-between px-3 py-2.5 border-b border-[var(--color-border)]">
+        <span className="text-[11px] font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">
           Storyboards
         </span>
         <button
@@ -193,8 +193,8 @@ export function StoryboardList() {
       </div>
 
       {/* ── Sketches section ──────────────────────────── */}
-      <div className="flex items-center justify-between px-3 py-3 border-y border-[var(--color-border)]">
-        <span className="text-xs font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">
+      <div className="flex items-center justify-between px-3 py-2.5 border-y border-[var(--color-border)]">
+        <span className="text-[11px] font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">
           Sketches
         </span>
         <button
