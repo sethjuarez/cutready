@@ -4,6 +4,7 @@ import { RecordingPanel } from "./RecordingPanel";
 import { ScriptEditorPanel } from "./ScriptEditorPanel";
 import { SettingsPanel } from "./SettingsPanel";
 import { Sidebar } from "./Sidebar";
+import { SketchPanel } from "./SketchPanel";
 
 export function AppLayout() {
   const view = useAppStore((s) => s.view);
@@ -20,6 +21,7 @@ export function AppLayout() {
       <Sidebar />
       <main className="flex-1 overflow-y-auto">
         {view === "home" && <HomePanel />}
+        {view === "sketch" && <SketchPanel />}
         {view === "editor" && <ScriptEditorPanel />}
         {view === "recording" && <RecordingPanel />}
         {view === "settings" && <SettingsPanel />}

@@ -1,7 +1,9 @@
 pub mod agent;
 pub mod animation;
 pub mod automation;
+pub mod document;
 pub mod export;
 pub mod interaction;
 pub mod project;
 pub mod recording;
+pub mod versioning;
