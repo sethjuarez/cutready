@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAppStore } from "../stores/appStore";
+import { FileTreeView } from "./FileTreeView";
 
 /**
- * StoryboardList — sidebar with two sections:
- * 1. Storyboards (aggregate sequences)
- * 2. Sketch Library (all standalone sketches)
+ * StoryboardList — sidebar with two modes:
+ * 1. List mode: Storyboards + Sketch Library (categorized)
+ * 2. Tree mode: File hierarchy view
  */
 export function StoryboardList() {
+  const sidebarMode = useAppStore((s) => s.sidebarMode);
+  const setSidebarMode = useAppStore((s) => s.setSidebarMode);
   const storyboards = useAppStore((s) => s.storyboards);
   const sketches = useAppStore((s) => s.sketches);
   const activeStoryboardPath = useAppStore((s) => s.activeStoryboardPath);
@@ -62,6 +65,50 @@ export function StoryboardList() {
       className="flex flex-col h-full border-r border-[var(--color-border)]"
       style={{ width: 240 }}
     >
+      {/* ── Mode toggle ──────────────────────────────── */}
+      <div className="flex items-center justify-between px-3 py-2 border-b border-[var(--color-border)]">
+        <span className="text-[10px] font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">
+          Explorer
+        </span>
+        <div className="flex items-center gap-0.5 bg-[var(--color-surface)] rounded-md p-0.5">
+          <button
+            onClick={() => setSidebarMode("list")}
+            className={`p-1 rounded transition-colors ${
+              sidebarMode === "list"
+                ? "bg-[var(--color-accent)]/15 text-[var(--color-accent)]"
+                : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"
+            }`}
+            title="Categorized list"
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="8" y1="6" x2="21" y2="6" />
+              <line x1="8" y1="12" x2="21" y2="12" />
+              <line x1="8" y1="18" x2="21" y2="18" />
+              <line x1="3" y1="6" x2="3.01" y2="6" />
+              <line x1="3" y1="12" x2="3.01" y2="12" />
+              <line x1="3" y1="18" x2="3.01" y2="18" />
+            </svg>
+          </button>
+          <button
+            onClick={() => setSidebarMode("tree")}
+            className={`p-1 rounded transition-colors ${
+              sidebarMode === "tree"
+                ? "bg-[var(--color-accent)]/15 text-[var(--color-accent)]"
+                : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"
+            }`}
+            title="File tree"
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      {sidebarMode === "tree" ? (
+        <FileTreeView />
+      ) : (
+      <>
       {/* ── Storyboards section ────────────────────────── */}
       <div className="flex items-center justify-between px-3 py-3 border-b border-[var(--color-border)]">
         <span className="text-xs font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">
@@ -227,6 +274,8 @@ export function StoryboardList() {
           ))
         )}
       </div>
+      </>
+      )}
     </div>
   );
 }

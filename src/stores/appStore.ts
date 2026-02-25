@@ -19,6 +19,9 @@ import type {
 /** The panels / views available in the app. */
 export type AppView = "home" | "sketch" | "editor" | "recording" | "settings";
 
+/** Sidebar display mode for the sketch panel. */
+export type SidebarMode = "list" | "tree";
+
 interface AppStoreState {
   /** Current active view. */
   view: AppView;
@@ -30,6 +33,8 @@ interface AppStoreState {
   loading: boolean;
   /** Last error message to display in the UI. */
   error: string | null;
+  /** Sidebar display mode: categorized list or file tree. */
+  sidebarMode: SidebarMode;
 
   // ── Sketch state ───────────────────────────────────────
 
@@ -87,6 +92,8 @@ interface AppStoreState {
   clearError: () => void;
   /** Switch to a different view. */
   setView: (view: AppView) => void;
+  /** Toggle sidebar between list and tree modes. */
+  setSidebarMode: (mode: SidebarMode) => void;
 
   // ── Project actions ───────────────────────────────────────
 
@@ -176,6 +183,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   recentProjects: [],
   loading: false,
   error: null,
+  sidebarMode: "list",
 
   sketches: [],
   activeSketchPath: null,
@@ -202,6 +210,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
 
   clearError: () => set({ error: null }),
   setView: (view) => set({ view }),
+  setSidebarMode: (mode) => set({ sidebarMode: mode }),
 
   // ── Project actions ───────────────────────────────────────
 
