@@ -38,7 +38,7 @@ export type RecordingMode = "free_form" | "step_by_step";
 export interface RecordedSession {
   id: string;
   mode: RecordingMode;
-  document_id: string | null;
+  sketch_id: string | null;
   started_at: string;
   ended_at: string | null;
   actions: CapturedAction[];

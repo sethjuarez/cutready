@@ -3,7 +3,7 @@
 use tauri::State;
 
 use crate::engine::{project, versioning};
-use crate::models::document::VersionEntry;
+use crate::models::sketch::VersionEntry;
 use crate::AppState;
 
 #[tauri::command]

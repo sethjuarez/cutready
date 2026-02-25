@@ -8,7 +8,8 @@ export function HomePanel() {
   const createProject = useAppStore((s) => s.createProject);
   const openProject = useAppStore((s) => s.openProject);
   const deleteProject = useAppStore((s) => s.deleteProject);
-  const loadDocuments = useAppStore((s) => s.loadDocuments);
+  const loadStoryboards = useAppStore((s) => s.loadStoryboards);
+  const loadSketches = useAppStore((s) => s.loadSketches);
 
   const [newName, setNewName] = useState("");
   const [showCreate, setShowCreate] = useState(false);
@@ -108,7 +109,8 @@ export function HomePanel() {
               className="group flex items-center justify-between p-4 rounded-xl bg-[var(--color-surface-alt)] border border-[var(--color-border)] hover:border-[var(--color-accent)]/40 transition-colors cursor-pointer"
               onClick={async () => {
                 await openProject(p.id);
-                await loadDocuments();
+                await loadStoryboards();
+                await loadSketches();
               }}
             >
               <div>

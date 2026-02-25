@@ -7,7 +7,14 @@ import type {
   CapturedAction,
   RecordedSession,
 } from "../types/recording";
-import type { Document, DocumentSummary, VersionEntry } from "../types/document";
+import type {
+  Sketch,
+  SketchSummary,
+  Storyboard,
+  StoryboardSummary,
+  StoryboardItem,
+  VersionEntry,
+} from "../types/sketch";
 
 /** The panels / views available in the app. */
 export type AppView = "home" | "sketch" | "editor" | "recording" | "settings";
@@ -24,15 +31,25 @@ interface AppStoreState {
   /** Last error message to display in the UI. */
   error: string | null;
 
-  // ── Document / sketch state ───────────────────────────────
+  // ── Sketch state ───────────────────────────────────────
 
 
-  /** Document summaries for the current project. */
-  documents: DocumentSummary[];
-  /** The currently active document ID. */
-  activeDocumentId: string | null;
-  /** The full active document (loaded when editing). */
-  activeDocument: Document | null;
+  /** Sketch summaries for the current project. */
+  sketches: SketchSummary[];
+  /** The currently active sketch ID. */
+  activeSketchId: string | null;
+  /** The full active sketch (loaded when editing). */
+  activeSketch: Sketch | null;
+
+  // ── Storyboard state ─────────────────────────────────
+
+  /** Storyboard summaries for the current project. */
+  storyboards: StoryboardSummary[];
+  /** The currently active storyboard ID. */
+  activeStoryboardId: string | null;
+  /** The full active storyboard (loaded when viewing). */
+  activeStoryboard: Storyboard | null;
+
   /** Version history for the current project. */
   versions: VersionEntry[];
   /** Whether the version history sidebar is visible. */
@@ -81,20 +98,45 @@ interface AppStoreState {
   deleteProject: (projectId: string) => Promise<void>;
   closeProject: () => void;
 
-  // ── Document actions ─────────────────────────────────────
+  // ── Sketch actions ─────────────────────────────────────
 
-  /** Load document list for current project. */
-  loadDocuments: () => Promise<void>;
-  /** Create a new document and open it. */
-  createDocument: (title: string) => Promise<void>;
-  /** Open a document for editing. */
-  openDocument: (docId: string) => Promise<void>;
-  /** Update the active document's Lexical content. */
-  updateDocumentContent: (content: unknown) => Promise<void>;
-  /** Update a document's title. */
-  updateDocumentTitle: (docId: string, title: string) => Promise<void>;
-  /** Delete a document. */
-  deleteDocument: (docId: string) => Promise<void>;
+  /** Load sketch list for current project. */
+  loadSketches: () => Promise<void>;
+  /** Create a new sketch and open it. */
+  createSketch: (title: string) => Promise<void>;
+  /** Open a sketch for editing. */
+  openSketch: (sketchId: string) => Promise<void>;
+  /** Update the active sketch (description and/or rows). */
+  updateSketch: (update: { description?: unknown; rows?: import("../types/sketch").PlanningRow[] }) => Promise<void>;
+  /** Update a sketch's title. */
+  updateSketchTitle: (sketchId: string, title: string) => Promise<void>;
+  /** Delete a sketch. */
+  deleteSketch: (sketchId: string) => Promise<void>;
+  /** Close the active sketch (return to storyboard). */
+  closeSketch: () => void;
+
+  // ── Storyboard actions ───────────────────────────────
+
+  /** Load storyboard list for current project. */
+  loadStoryboards: () => Promise<void>;
+  /** Create a new storyboard and open it. */
+  createStoryboard: (title: string) => Promise<void>;
+  /** Open a storyboard for viewing. */
+  openStoryboard: (storyboardId: string) => Promise<void>;
+  /** Update storyboard title/description. */
+  updateStoryboard: (update: { title?: string; description?: string }) => Promise<void>;
+  /** Delete a storyboard. */
+  deleteStoryboard: (storyboardId: string) => Promise<void>;
+  /** Add a sketch to the active storyboard. */
+  addSketchToStoryboard: (sketchId: string, position?: number) => Promise<void>;
+  /** Remove an item from the active storyboard. */
+  removeFromStoryboard: (position: number) => Promise<void>;
+  /** Add a section to the active storyboard. */
+  addSectionToStoryboard: (title: string, position?: number) => Promise<void>;
+  /** Reorder storyboard items. */
+  reorderStoryboardItems: (items: StoryboardItem[]) => Promise<void>;
+  /** Close the active storyboard (return to list). */
+  closeStoryboard: () => void;
 
   // ── Versioning actions ───────────────────────────────────
 
@@ -138,9 +180,12 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   loading: false,
   error: null,
 
-  documents: [],
-  activeDocumentId: null,
-  activeDocument: null,
+  sketches: [],
+  activeSketchId: null,
+  activeSketch: null,
+  storyboards: [],
+  activeStoryboardId: null,
+  activeStoryboard: null,
   versions: [],
   showVersionHistory: false,
 
@@ -225,83 +270,223 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     set({
       currentProject: null,
       view: "home",
-      documents: [],
-      activeDocumentId: null,
-      activeDocument: null,
+      sketches: [],
+      activeSketchId: null,
+      activeSketch: null,
+      storyboards: [],
+      activeStoryboardId: null,
+      activeStoryboard: null,
       versions: [],
     });
   },
 
-  // ── Document actions ─────────────────────────────────────
+  // ── Sketch actions ─────────────────────────────────────
 
-  loadDocuments: async () => {
+  loadSketches: async () => {
     try {
-      const documents = await invoke<DocumentSummary[]>("list_documents");
-      set({ documents });
+      const sketches = await invoke<SketchSummary[]>("list_sketches");
+      set({ sketches });
     } catch (err) {
-      console.error("Failed to load documents:", err);
+      console.error("Failed to load sketches:", err);
     }
   },
 
-  createDocument: async (title) => {
+  createSketch: async (title) => {
     try {
-      const doc = await invoke<Document>("create_document", { title });
+      const sketch = await invoke<Sketch>("create_sketch", { title });
       set({
-        activeDocumentId: doc.id,
-        activeDocument: doc,
+        activeSketchId: sketch.id,
+        activeSketch: sketch,
       });
-      await get().loadDocuments();
+      await get().loadSketches();
     } catch (err) {
-      console.error("Failed to create document:", err);
+      console.error("Failed to create sketch:", err);
     }
   },
 
-  openDocument: async (docId) => {
+  openSketch: async (sketchId) => {
     try {
-      const doc = await invoke<Document>("get_document", { id: docId });
+      const sketch = await invoke<Sketch>("get_sketch", { id: sketchId });
       set({
-        activeDocumentId: doc.id,
-        activeDocument: doc,
+        activeSketchId: sketch.id,
+        activeSketch: sketch,
       });
     } catch (err) {
-      console.error("Failed to open document:", err);
+      console.error("Failed to open sketch:", err);
     }
   },
 
-  updateDocumentContent: async (content) => {
-    const { activeDocumentId } = get();
-    if (!activeDocumentId) return;
+  updateSketch: async (update) => {
+    const { activeSketchId } = get();
+    if (!activeSketchId) return;
     try {
-      await invoke("update_document", { id: activeDocumentId, content });
+      await invoke("update_sketch", { id: activeSketchId, ...update });
     } catch (err) {
-      console.error("Failed to update document:", err);
+      console.error("Failed to update sketch:", err);
     }
   },
 
-  updateDocumentTitle: async (docId, title) => {
+  updateSketchTitle: async (sketchId, title) => {
     try {
-      await invoke("update_document_title", { id: docId, title });
-      await get().loadDocuments();
-      const { activeDocument } = get();
-      if (activeDocument?.id === docId) {
-        set({ activeDocument: { ...activeDocument, title } });
+      await invoke("update_sketch_title", { id: sketchId, title });
+      await get().loadSketches();
+      const { activeSketch } = get();
+      if (activeSketch?.id === sketchId) {
+        set({ activeSketch: { ...activeSketch, title } });
       }
     } catch (err) {
-      console.error("Failed to update document title:", err);
+      console.error("Failed to update sketch title:", err);
     }
   },
 
-  deleteDocument: async (docId) => {
+  deleteSketch: async (sketchId) => {
     try {
-      await invoke("delete_document", { id: docId });
-      const { activeDocumentId } = get();
-      if (activeDocumentId === docId) {
-        set({ activeDocumentId: null, activeDocument: null });
+      await invoke("delete_sketch", { id: sketchId });
+      const { activeSketchId } = get();
+      if (activeSketchId === sketchId) {
+        set({ activeSketchId: null, activeSketch: null });
       }
-      await get().loadDocuments();
+      await get().loadSketches();
     } catch (err) {
-      console.error("Failed to delete document:", err);
+      console.error("Failed to delete sketch:", err);
     }
+  },
+
+  closeSketch: () => {
+    set({ activeSketchId: null, activeSketch: null });
+  },
+
+  // ── Storyboard actions ───────────────────────────────
+
+  loadStoryboards: async () => {
+    try {
+      const storyboards = await invoke<StoryboardSummary[]>("list_storyboards");
+      set({ storyboards });
+    } catch (err) {
+      console.error("Failed to load storyboards:", err);
+    }
+  },
+
+  createStoryboard: async (title) => {
+    try {
+      const storyboard = await invoke<Storyboard>("create_storyboard", { title });
+      set({
+        activeStoryboardId: storyboard.id,
+        activeStoryboard: storyboard,
+      });
+      await get().loadStoryboards();
+    } catch (err) {
+      console.error("Failed to create storyboard:", err);
+    }
+  },
+
+  openStoryboard: async (storyboardId) => {
+    try {
+      const storyboard = await invoke<Storyboard>("get_storyboard", { id: storyboardId });
+      set({
+        activeStoryboardId: storyboard.id,
+        activeStoryboard: storyboard,
+        activeSketchId: null,
+        activeSketch: null,
+      });
+    } catch (err) {
+      console.error("Failed to open storyboard:", err);
+    }
+  },
+
+  updateStoryboard: async (update) => {
+    const { activeStoryboardId } = get();
+    if (!activeStoryboardId) return;
+    try {
+      await invoke("update_storyboard", { id: activeStoryboardId, ...update });
+      // Reload to get updated data
+      const storyboard = await invoke<Storyboard>("get_storyboard", { id: activeStoryboardId });
+      set({ activeStoryboard: storyboard });
+      await get().loadStoryboards();
+    } catch (err) {
+      console.error("Failed to update storyboard:", err);
+    }
+  },
+
+  deleteStoryboard: async (storyboardId) => {
+    try {
+      await invoke("delete_storyboard", { id: storyboardId });
+      const { activeStoryboardId } = get();
+      if (activeStoryboardId === storyboardId) {
+        set({ activeStoryboardId: null, activeStoryboard: null });
+      }
+      await get().loadStoryboards();
+    } catch (err) {
+      console.error("Failed to delete storyboard:", err);
+    }
+  },
+
+  addSketchToStoryboard: async (sketchId, position) => {
+    const { activeStoryboardId } = get();
+    if (!activeStoryboardId) return;
+    try {
+      await invoke("add_sketch_to_storyboard", {
+        storyboardId: activeStoryboardId,
+        sketchId,
+        position: position ?? null,
+      });
+      const storyboard = await invoke<Storyboard>("get_storyboard", { id: activeStoryboardId });
+      set({ activeStoryboard: storyboard });
+      await get().loadStoryboards();
+    } catch (err) {
+      console.error("Failed to add sketch to storyboard:", err);
+    }
+  },
+
+  removeFromStoryboard: async (position) => {
+    const { activeStoryboardId } = get();
+    if (!activeStoryboardId) return;
+    try {
+      await invoke("remove_sketch_from_storyboard", {
+        storyboardId: activeStoryboardId,
+        position,
+      });
+      const storyboard = await invoke<Storyboard>("get_storyboard", { id: activeStoryboardId });
+      set({ activeStoryboard: storyboard });
+      await get().loadStoryboards();
+    } catch (err) {
+      console.error("Failed to remove from storyboard:", err);
+    }
+  },
+
+  addSectionToStoryboard: async (title, position) => {
+    const { activeStoryboardId } = get();
+    if (!activeStoryboardId) return;
+    try {
+      await invoke("add_section_to_storyboard", {
+        storyboardId: activeStoryboardId,
+        title,
+        position: position ?? null,
+      });
+      const storyboard = await invoke<Storyboard>("get_storyboard", { id: activeStoryboardId });
+      set({ activeStoryboard: storyboard });
+    } catch (err) {
+      console.error("Failed to add section:", err);
+    }
+  },
+
+  reorderStoryboardItems: async (items) => {
+    const { activeStoryboardId } = get();
+    if (!activeStoryboardId) return;
+    try {
+      await invoke("reorder_storyboard_items", {
+        storyboardId: activeStoryboardId,
+        items,
+      });
+      const storyboard = await invoke<Storyboard>("get_storyboard", { id: activeStoryboardId });
+      set({ activeStoryboard: storyboard });
+    } catch (err) {
+      console.error("Failed to reorder items:", err);
+    }
+  },
+
+  closeStoryboard: () => {
+    set({ activeStoryboardId: null, activeStoryboard: null, activeSketchId: null, activeSketch: null });
   },
 
   // ── Versioning actions ───────────────────────────────────
@@ -328,11 +513,12 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     try {
       await invoke("restore_version", { commitId });
       // Reload everything after restore
-      await get().loadDocuments();
+      await get().loadSketches();
+      await get().loadStoryboards();
       await get().loadVersions();
-      const { activeDocumentId } = get();
-      if (activeDocumentId) {
-        await get().openDocument(activeDocumentId);
+      const { activeSketchId } = get();
+      if (activeSketchId) {
+        await get().openSketch(activeSketchId);
       }
     } catch (err) {
       console.error("Failed to restore version:", err);

@@ -3,7 +3,7 @@
 //! Projects are stored as git-backed directories:
 //!   projects/{uuid}/
 //!     ├── project.json     (Project data)
-//!     ├── documents/       (future: per-document JSON files)
+//!     ├── sketches/        (future: per-sketch JSON files)
 //!     ├── screenshots/     (captured screenshots)
 //!     └── .git/            (version history via gix)
 //!
@@ -21,7 +21,7 @@ pub fn create_project(name: &str, projects_dir: &Path) -> Result<Project, Projec
 
     // Create directory structure
     std::fs::create_dir_all(&project_dir).map_err(|e| ProjectError::Io(e.to_string()))?;
-    std::fs::create_dir_all(project_dir.join("documents"))
+    std::fs::create_dir_all(project_dir.join("sketches"))
         .map_err(|e| ProjectError::Io(e.to_string()))?;
     std::fs::create_dir_all(project_dir.join("screenshots"))
         .map_err(|e| ProjectError::Io(e.to_string()))?;
@@ -184,7 +184,7 @@ fn migrate_legacy_project(
 
     // Create directory structure
     std::fs::create_dir_all(&project_dir).map_err(|e| ProjectError::Io(e.to_string()))?;
-    std::fs::create_dir_all(project_dir.join("documents"))
+    std::fs::create_dir_all(project_dir.join("sketches"))
         .map_err(|e| ProjectError::Io(e.to_string()))?;
     std::fs::create_dir_all(project_dir.join("screenshots"))
         .map_err(|e| ProjectError::Io(e.to_string()))?;
@@ -232,7 +232,7 @@ mod tests {
         // Verify directory structure
         let project_dir = dir.join(project.id.to_string());
         assert!(project_dir.join("project.json").exists());
-        assert!(project_dir.join("documents").exists());
+        assert!(project_dir.join("sketches").exists());
         assert!(project_dir.join("screenshots").exists());
         assert!(project_dir.join(".git").exists());
 

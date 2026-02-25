@@ -8,7 +8,7 @@ use std::path::Path;
 
 use chrono::{DateTime, TimeZone, Utc};
 
-use crate::models::document::VersionEntry;
+use crate::models::sketch::VersionEntry;
 
 /// Errors that can occur during versioning operations.
 #[derive(Debug, thiserror::Error)]
