@@ -23,7 +23,11 @@ pub async fn create_storyboard(
     state: State<'_, AppState>,
 ) -> Result<Storyboard, String> {
     let root = project_root(&state)?;
-    let abs_path = root.join(&relative_path);
+    let abs_path = project::safe_resolve(&root, &relative_path).map_err(|e| e.to_string())?;
+
+    if abs_path.exists() {
+        return Err(format!("File already exists: {relative_path}"));
+    }
 
     let storyboard = Storyboard::new(title);
     project::write_storyboard(&storyboard, &abs_path, &root).map_err(|e| e.to_string())?;
@@ -37,7 +41,7 @@ pub async fn get_storyboard(
     state: State<'_, AppState>,
 ) -> Result<Storyboard, String> {
     let root = project_root(&state)?;
-    let abs_path = root.join(&relative_path);
+    let abs_path = project::safe_resolve(&root, &relative_path).map_err(|e| e.to_string())?;
 
     project::read_storyboard(&abs_path).map_err(|e| e.to_string())
 }
@@ -50,7 +54,7 @@ pub async fn update_storyboard(
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let root = project_root(&state)?;
-    let abs_path = root.join(&relative_path);
+    let abs_path = project::safe_resolve(&root, &relative_path).map_err(|e| e.to_string())?;
 
     let mut sb = project::read_storyboard(&abs_path).map_err(|e| e.to_string())?;
 
@@ -72,7 +76,7 @@ pub async fn delete_storyboard(
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let root = project_root(&state)?;
-    let abs_path = root.join(&relative_path);
+    let abs_path = project::safe_resolve(&root, &relative_path).map_err(|e| e.to_string())?;
 
     project::delete_storyboard(&abs_path, &root).map_err(|e| e.to_string())?;
     Ok(())
@@ -94,11 +98,12 @@ pub async fn add_sketch_to_storyboard(
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let root = project_root(&state)?;
-    let sb_abs = root.join(&storyboard_path);
+    let sb_abs = project::safe_resolve(&root, &storyboard_path).map_err(|e| e.to_string())?;
+    // Validate sketch_path too (even though it's stored as a reference)
+    project::safe_resolve(&root, &sketch_path).map_err(|e| e.to_string())?;
 
     // Gracefully check if sketch exists (warn but don't block)
     if !project::sketch_file_exists(&sketch_path, &root) {
-        // Still allow adding — graceful degradation
         log::warn!("Sketch file not found: {}", sketch_path);
     }
 
@@ -125,7 +130,7 @@ pub async fn remove_sketch_from_storyboard(
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let root = project_root(&state)?;
-    let sb_abs = root.join(&storyboard_path);
+    let sb_abs = project::safe_resolve(&root, &storyboard_path).map_err(|e| e.to_string())?;
 
     let mut sb = project::read_storyboard(&sb_abs).map_err(|e| e.to_string())?;
 
@@ -148,7 +153,7 @@ pub async fn add_section_to_storyboard(
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let root = project_root(&state)?;
-    let sb_abs = root.join(&storyboard_path);
+    let sb_abs = project::safe_resolve(&root, &storyboard_path).map_err(|e| e.to_string())?;
 
     let mut sb = project::read_storyboard(&sb_abs).map_err(|e| e.to_string())?;
 
@@ -175,7 +180,7 @@ pub async fn reorder_storyboard_items(
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let root = project_root(&state)?;
-    let sb_abs = root.join(&storyboard_path);
+    let sb_abs = project::safe_resolve(&root, &storyboard_path).map_err(|e| e.to_string())?;
 
     let mut sb = project::read_storyboard(&sb_abs).map_err(|e| e.to_string())?;
     sb.items = items;

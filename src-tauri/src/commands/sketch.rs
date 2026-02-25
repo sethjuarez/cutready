@@ -22,7 +22,11 @@ pub async fn create_sketch(
     state: State<'_, AppState>,
 ) -> Result<Sketch, String> {
     let root = project_root(&state)?;
-    let abs_path = root.join(&relative_path);
+    let abs_path = project::safe_resolve(&root, &relative_path).map_err(|e| e.to_string())?;
+
+    if abs_path.exists() {
+        return Err(format!("File already exists: {relative_path}"));
+    }
 
     let sketch = Sketch::new(title);
     project::write_sketch(&sketch, &abs_path, &root).map_err(|e| e.to_string())?;
@@ -38,7 +42,7 @@ pub async fn update_sketch(
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let root = project_root(&state)?;
-    let abs_path = root.join(&relative_path);
+    let abs_path = project::safe_resolve(&root, &relative_path).map_err(|e| e.to_string())?;
 
     let mut sketch = project::read_sketch(&abs_path).map_err(|e| e.to_string())?;
 
@@ -61,7 +65,7 @@ pub async fn update_sketch_title(
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let root = project_root(&state)?;
-    let abs_path = root.join(&relative_path);
+    let abs_path = project::safe_resolve(&root, &relative_path).map_err(|e| e.to_string())?;
 
     let mut sketch = project::read_sketch(&abs_path).map_err(|e| e.to_string())?;
     sketch.title = title;
@@ -77,7 +81,7 @@ pub async fn delete_sketch(
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let root = project_root(&state)?;
-    let abs_path = root.join(&relative_path);
+    let abs_path = project::safe_resolve(&root, &relative_path).map_err(|e| e.to_string())?;
 
     project::delete_sketch(&abs_path, &root).map_err(|e| e.to_string())?;
     Ok(())
@@ -95,7 +99,7 @@ pub async fn get_sketch(
     state: State<'_, AppState>,
 ) -> Result<Sketch, String> {
     let root = project_root(&state)?;
-    let abs_path = root.join(&relative_path);
+    let abs_path = project::safe_resolve(&root, &relative_path).map_err(|e| e.to_string())?;
 
     project::read_sketch(&abs_path).map_err(|e| e.to_string())
 }
@@ -107,8 +111,8 @@ pub async fn rename_sketch(
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let root = project_root(&state)?;
-    let old_abs = root.join(&old_path);
-    let new_abs = root.join(&new_path);
+    let old_abs = project::safe_resolve(&root, &old_path).map_err(|e| e.to_string())?;
+    let new_abs = project::safe_resolve(&root, &new_path).map_err(|e| e.to_string())?;
 
     project::rename_sketch(&old_abs, &new_abs, &root).map_err(|e| e.to_string())?;
     Ok(())

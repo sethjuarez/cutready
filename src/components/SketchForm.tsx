@@ -28,7 +28,7 @@ export function SketchForm() {
         if (activeSketchPath) updateSketchTitle(activeSketchPath, value);
       }, 500);
     },
-    [activeSketch, updateSketchTitle],
+    [activeSketch, activeSketchPath, updateSketchTitle],
   );
 
   const handleRowsChange = useCallback(

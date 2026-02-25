@@ -273,8 +273,10 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
 
   createSketch: async (title) => {
     try {
-      // Generate a filename from the title
-      const relativePath = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") + ".sk";
+      // Generate a filename from the title, fallback to timestamp if slug is empty
+      let slug = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+      if (!slug) slug = `untitled-${Date.now()}`;
+      const relativePath = slug + ".sk";
       const sketch = await invoke<Sketch>("create_sketch", { relativePath, title });
       set({
         activeSketchPath: relativePath,
@@ -351,7 +353,9 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
 
   createStoryboard: async (title) => {
     try {
-      const relativePath = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") + ".sb";
+      let slug = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+      if (!slug) slug = `untitled-${Date.now()}`;
+      const relativePath = slug + ".sb";
       const storyboard = await invoke<Storyboard>("create_storyboard", { relativePath, title });
       set({
         activeStoryboardPath: relativePath,

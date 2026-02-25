@@ -11,13 +11,61 @@
 //!     ├── assets/              (screenshots, images)
 //!     └── .git/                (version history via gix)
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::engine::versioning;
 use crate::models::script::ProjectView;
 use crate::models::sketch::{
     Sketch, SketchSummary, Storyboard, StoryboardSummary,
 };
+
+// ── Path safety ────────────────────────────────────────────────────
+
+/// Resolve a user-provided relative path against a project root,
+/// ensuring the result stays within the project directory.
+///
+/// Rejects absolute paths, `..` traversal, and any result that escapes root.
+pub fn safe_resolve(root: &Path, relative_path: &str) -> Result<PathBuf, ProjectError> {
+    let rel = Path::new(relative_path);
+
+    // Reject absolute paths
+    if rel.is_absolute() {
+        return Err(ProjectError::PathTraversal(relative_path.to_string()));
+    }
+
+    // Reject any component that is ".." or has a prefix (e.g., C:)
+    for component in rel.components() {
+        match component {
+            std::path::Component::ParentDir | std::path::Component::Prefix(_) => {
+                return Err(ProjectError::PathTraversal(relative_path.to_string()));
+            }
+            _ => {}
+        }
+    }
+
+    let resolved = root.join(rel);
+
+    // Belt-and-suspenders: when the file or its parent exists on disk,
+    // canonicalize and verify containment within root.
+    if let Ok(canonical_root) = root.canonicalize() {
+        let check = if resolved.exists() {
+            resolved.canonicalize().ok()
+        } else if let Some(parent) = resolved.parent() {
+            parent.canonicalize().ok().map(|p| p.join(resolved.file_name().unwrap_or_default()))
+        } else {
+            None
+        };
+
+        if let Some(canonical_resolved) = check {
+            if !canonical_resolved.starts_with(&canonical_root) {
+                return Err(ProjectError::PathTraversal(relative_path.to_string()));
+            }
+        }
+        // If neither file nor parent exist, we rely on the component check above
+    }
+
+    Ok(resolved)
+}
 
 // ── Project folder operations ──────────────────────────────────────
 
@@ -257,6 +305,10 @@ pub enum ProjectError {
     Deserialize(String),
     #[error("Project not found: {0}")]
     NotFound(String),
+    #[error("Path traversal rejected: {0}")]
+    PathTraversal(String),
+    #[error("File already exists: {0}")]
+    AlreadyExists(String),
 }
 
 #[cfg(test)]
@@ -445,5 +497,41 @@ mod tests {
 
         let versions = versioning::list_versions(root).unwrap();
         assert!(versions.iter().any(|v| v.message == "v1.0 release"));
+    }
+
+    // ── safe_resolve tests ─────────────────────────────────
+
+    #[test]
+    fn safe_resolve_accepts_normal_paths() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+
+        let result = safe_resolve(root, "intro.sk").unwrap();
+        assert_eq!(result, root.join("intro.sk"));
+
+        let result = safe_resolve(root, "flows/login.sk").unwrap();
+        assert_eq!(result, root.join("flows/login.sk"));
+    }
+
+    #[test]
+    fn safe_resolve_rejects_parent_traversal() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+
+        assert!(safe_resolve(root, "../escape.sk").is_err());
+        assert!(safe_resolve(root, "sub/../../escape.sk").is_err());
+        assert!(safe_resolve(root, "..").is_err());
+    }
+
+    #[test]
+    fn safe_resolve_rejects_absolute_paths() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+
+        #[cfg(target_os = "windows")]
+        assert!(safe_resolve(root, "C:\\Windows\\System32\\cmd.exe").is_err());
+
+        #[cfg(not(target_os = "windows"))]
+        assert!(safe_resolve(root, "/etc/passwd").is_err());
     }
 }
