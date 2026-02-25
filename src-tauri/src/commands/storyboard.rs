@@ -121,8 +121,10 @@ pub async fn add_sketch_to_storyboard(
     let mut current = state.current_project.lock().map_err(|e| e.to_string())?;
     let project = current.as_mut().ok_or("No project is currently open")?;
 
-    // Verify sketch exists
-    if !project.sketches.iter().any(|s| s.id == sk_id) {
+    // Verify sketch exists as individual file
+    let project_dir =
+        project::project_dir_path(&state.projects_dir, &project.id.to_string());
+    if !project::sketch_exists(&sk_id.to_string(), &project_dir) {
         return Err("Sketch not found".into());
     }
 

@@ -1,8 +1,8 @@
 //! Tauri commands for sketch CRUD operations.
+//!
+//! Sketches are stored as individual files: `sketches/{uuid}.json`.
 
-use chrono::Utc;
 use tauri::State;
-use uuid::Uuid;
 
 use crate::engine::project;
 use crate::models::sketch::{Sketch, SketchSummary};
@@ -10,15 +10,12 @@ use crate::AppState;
 
 #[tauri::command]
 pub async fn create_sketch(title: String, state: State<'_, AppState>) -> Result<Sketch, String> {
-    let mut current = state.current_project.lock().map_err(|e| e.to_string())?;
-    let project = current.as_mut().ok_or("No project is currently open")?;
+    let current = state.current_project.lock().map_err(|e| e.to_string())?;
+    let proj = current.as_ref().ok_or("No project is currently open")?;
+    let project_dir = project::project_dir_path(&state.projects_dir, &proj.id.to_string());
 
     let sketch = Sketch::new(title);
-    project.sketches.push(sketch.clone());
-    project.updated_at = Utc::now();
-
-    let projects_dir = state.projects_dir.clone();
-    project::save_project(project, &projects_dir).map_err(|e| e.to_string())?;
+    project::save_sketch(&sketch, &project_dir).map_err(|e| e.to_string())?;
 
     Ok(sketch)
 }
@@ -30,15 +27,11 @@ pub async fn update_sketch(
     rows: Option<Vec<crate::models::sketch::PlanningRow>>,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let sketch_id: Uuid = id.parse().map_err(|e: uuid::Error| e.to_string())?;
-    let mut current = state.current_project.lock().map_err(|e| e.to_string())?;
-    let project = current.as_mut().ok_or("No project is currently open")?;
+    let current = state.current_project.lock().map_err(|e| e.to_string())?;
+    let proj = current.as_ref().ok_or("No project is currently open")?;
+    let project_dir = project::project_dir_path(&state.projects_dir, &proj.id.to_string());
 
-    let sketch = project
-        .sketches
-        .iter_mut()
-        .find(|s| s.id == sketch_id)
-        .ok_or("Sketch not found")?;
+    let mut sketch = project::load_sketch(&id, &project_dir).map_err(|e| e.to_string())?;
 
     if let Some(desc) = description {
         sketch.description = desc;
@@ -46,12 +39,9 @@ pub async fn update_sketch(
     if let Some(r) = rows {
         sketch.rows = r;
     }
-    sketch.updated_at = Utc::now();
-    project.updated_at = Utc::now();
+    sketch.updated_at = chrono::Utc::now();
 
-    let projects_dir = state.projects_dir.clone();
-    project::save_project(project, &projects_dir).map_err(|e| e.to_string())?;
-
+    project::save_sketch(&sketch, &project_dir).map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -61,65 +51,42 @@ pub async fn update_sketch_title(
     title: String,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let sketch_id: Uuid = id.parse().map_err(|e: uuid::Error| e.to_string())?;
-    let mut current = state.current_project.lock().map_err(|e| e.to_string())?;
-    let project = current.as_mut().ok_or("No project is currently open")?;
+    let current = state.current_project.lock().map_err(|e| e.to_string())?;
+    let proj = current.as_ref().ok_or("No project is currently open")?;
+    let project_dir = project::project_dir_path(&state.projects_dir, &proj.id.to_string());
 
-    let sketch = project
-        .sketches
-        .iter_mut()
-        .find(|s| s.id == sketch_id)
-        .ok_or("Sketch not found")?;
-
+    let mut sketch = project::load_sketch(&id, &project_dir).map_err(|e| e.to_string())?;
     sketch.title = title;
-    sketch.updated_at = Utc::now();
-    project.updated_at = Utc::now();
+    sketch.updated_at = chrono::Utc::now();
 
-    let projects_dir = state.projects_dir.clone();
-    project::save_project(project, &projects_dir).map_err(|e| e.to_string())?;
-
+    project::save_sketch(&sketch, &project_dir).map_err(|e| e.to_string())?;
     Ok(())
 }
 
 #[tauri::command]
 pub async fn delete_sketch(id: String, state: State<'_, AppState>) -> Result<(), String> {
-    let sketch_id: Uuid = id.parse().map_err(|e: uuid::Error| e.to_string())?;
-    let mut current = state.current_project.lock().map_err(|e| e.to_string())?;
-    let project = current.as_mut().ok_or("No project is currently open")?;
+    let current = state.current_project.lock().map_err(|e| e.to_string())?;
+    let proj = current.as_ref().ok_or("No project is currently open")?;
+    let project_dir = project::project_dir_path(&state.projects_dir, &proj.id.to_string());
 
-    let idx = project
-        .sketches
-        .iter()
-        .position(|s| s.id == sketch_id)
-        .ok_or("Sketch not found")?;
-
-    project.sketches.remove(idx);
-    project.updated_at = Utc::now();
-
-    let projects_dir = state.projects_dir.clone();
-    project::save_project(project, &projects_dir).map_err(|e| e.to_string())?;
-
+    project::delete_sketch_file(&id, &project_dir).map_err(|e| e.to_string())?;
     Ok(())
 }
 
 #[tauri::command]
 pub async fn list_sketches(state: State<'_, AppState>) -> Result<Vec<SketchSummary>, String> {
     let current = state.current_project.lock().map_err(|e| e.to_string())?;
-    let project = current.as_ref().ok_or("No project is currently open")?;
+    let proj = current.as_ref().ok_or("No project is currently open")?;
+    let project_dir = project::project_dir_path(&state.projects_dir, &proj.id.to_string());
 
-    Ok(project.sketches.iter().map(SketchSummary::from).collect())
+    project::list_sketches(&project_dir).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub async fn get_sketch(id: String, state: State<'_, AppState>) -> Result<Sketch, String> {
-    let sketch_id: Uuid = id.parse().map_err(|e: uuid::Error| e.to_string())?;
     let current = state.current_project.lock().map_err(|e| e.to_string())?;
-    let project = current.as_ref().ok_or("No project is currently open")?;
+    let proj = current.as_ref().ok_or("No project is currently open")?;
+    let project_dir = project::project_dir_path(&state.projects_dir, &proj.id.to_string());
 
-    project
-        .sketches
-        .iter()
-        .find(|s| s.id == sketch_id)
-        .cloned()
-        .ok_or_else(|| "Sketch not found".into())
+    project::load_sketch(&id, &project_dir).map_err(|e| e.to_string())
 }

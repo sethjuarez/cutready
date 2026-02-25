@@ -2,8 +2,8 @@
 //!
 //! Projects are stored as git-backed directories:
 //!   projects/{uuid}/
-//!     ├── project.json     (Project data)
-//!     ├── sketches/        (future: per-sketch JSON files)
+//!     ├── project.json     (Project config, storyboards, recordings)
+//!     ├── sketches/        (per-sketch JSON files: {sketch_uuid}.json)
 //!     ├── screenshots/     (captured screenshots)
 //!     └── .git/            (version history via gix)
 //!
@@ -13,6 +13,7 @@ use std::path::{Path, PathBuf};
 
 use crate::engine::versioning;
 use crate::models::script::{Project, ProjectSummary};
+use crate::models::sketch::{Sketch, SketchSummary};
 
 /// Create a new project directory with git versioning.
 pub fn create_project(name: &str, projects_dir: &Path) -> Result<Project, ProjectError> {
@@ -47,8 +48,12 @@ pub fn load_project(project_id: &str, projects_dir: &Path) -> Result<Project, Pr
     if project_json.exists() {
         let data =
             std::fs::read_to_string(&project_json).map_err(|e| ProjectError::Io(e.to_string()))?;
-        let project: Project =
+        let mut project: Project =
             serde_json::from_str(&data).map_err(|e| ProjectError::Deserialize(e.to_string()))?;
+
+        // Auto-migrate inline sketches to individual files
+        migrate_inline_sketches(&mut project, &project_dir)?;
+
         return Ok(project);
     }
 
@@ -162,6 +167,111 @@ pub fn delete_project(project_id: &str, projects_dir: &Path) -> Result<(), Proje
 /// Get the project directory path for a given project ID.
 pub fn project_dir_path(projects_dir: &Path, project_id: &str) -> PathBuf {
     projects_dir.join(project_id)
+}
+
+// ── Sketch file I/O ────────────────────────────────────────────────
+//
+// Each sketch is stored as `sketches/{uuid}.json` within the project dir.
+// Filenames are stable UUIDs; titles are internal metadata.
+
+/// Save a sketch to its individual file and auto-commit.
+pub fn save_sketch(sketch: &Sketch, project_dir: &Path) -> Result<(), ProjectError> {
+    let sketches_dir = project_dir.join("sketches");
+    std::fs::create_dir_all(&sketches_dir).map_err(|e| ProjectError::Io(e.to_string()))?;
+
+    let json = serde_json::to_string_pretty(sketch)
+        .map_err(|e| ProjectError::Serialize(e.to_string()))?;
+    std::fs::write(sketches_dir.join(format!("{}.json", sketch.id)), json)
+        .map_err(|e| ProjectError::Io(e.to_string()))?;
+
+    // Auto-commit
+    if project_dir.join(".git").exists() {
+        let _ = versioning::commit_snapshot(project_dir, "Auto-save sketch");
+    }
+    Ok(())
+}
+
+/// Load a sketch from its individual file.
+pub fn load_sketch(sketch_id: &str, project_dir: &Path) -> Result<Sketch, ProjectError> {
+    let path = project_dir.join("sketches").join(format!("{}.json", sketch_id));
+    if !path.exists() {
+        return Err(ProjectError::NotFound(format!("Sketch {}", sketch_id)));
+    }
+    let data = std::fs::read_to_string(&path).map_err(|e| ProjectError::Io(e.to_string()))?;
+    serde_json::from_str(&data).map_err(|e| ProjectError::Deserialize(e.to_string()))
+}
+
+/// Delete a sketch file.
+pub fn delete_sketch_file(sketch_id: &str, project_dir: &Path) -> Result<(), ProjectError> {
+    let path = project_dir.join("sketches").join(format!("{}.json", sketch_id));
+    if path.exists() {
+        std::fs::remove_file(&path).map_err(|e| ProjectError::Io(e.to_string()))?;
+    }
+    if project_dir.join(".git").exists() {
+        let _ = versioning::commit_snapshot(project_dir, "Delete sketch");
+    }
+    Ok(())
+}
+
+/// List all sketch summaries by scanning the sketches/ directory.
+pub fn list_sketches(project_dir: &Path) -> Result<Vec<SketchSummary>, ProjectError> {
+    let sketches_dir = project_dir.join("sketches");
+    if !sketches_dir.exists() {
+        return Ok(Vec::new());
+    }
+
+    let mut summaries = Vec::new();
+    let entries =
+        std::fs::read_dir(&sketches_dir).map_err(|e| ProjectError::Io(e.to_string()))?;
+
+    for entry in entries {
+        let entry = entry.map_err(|e| ProjectError::Io(e.to_string()))?;
+        let path = entry.path();
+        if path.extension().is_some_and(|ext| ext == "json") {
+            if let Ok(data) = std::fs::read_to_string(&path) {
+                if let Ok(sketch) = serde_json::from_str::<Sketch>(&data) {
+                    summaries.push(SketchSummary::from(&sketch));
+                }
+            }
+        }
+    }
+
+    summaries.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+    Ok(summaries)
+}
+
+/// Check if a sketch file exists.
+pub fn sketch_exists(sketch_id: &str, project_dir: &Path) -> bool {
+    project_dir
+        .join("sketches")
+        .join(format!("{}.json", sketch_id))
+        .exists()
+}
+
+/// Migrate inline sketches from project.json to individual files.
+/// Called after loading a project that still has sketches embedded.
+pub fn migrate_inline_sketches(project: &mut Project, project_dir: &Path) -> Result<bool, ProjectError> {
+    if project.sketches.is_empty() {
+        return Ok(false);
+    }
+
+    let sketches_dir = project_dir.join("sketches");
+    std::fs::create_dir_all(&sketches_dir).map_err(|e| ProjectError::Io(e.to_string()))?;
+
+    for sketch in &project.sketches {
+        let path = sketches_dir.join(format!("{}.json", sketch.id));
+        if !path.exists() {
+            let json = serde_json::to_string_pretty(sketch)
+                .map_err(|e| ProjectError::Serialize(e.to_string()))?;
+            std::fs::write(&path, json).map_err(|e| ProjectError::Io(e.to_string()))?;
+        }
+    }
+
+    // Clear inline sketches and re-save project.json
+    project.sketches.clear();
+    write_project_json(project, project_dir)?;
+
+    Ok(true)
 }
 
 // ── Internal helpers ────────────────────────────────────────────────
@@ -337,5 +447,129 @@ mod tests {
         let project_dir = dir.join(project.id.to_string());
         assert!(project_dir.join("project.json").exists());
         assert!(project_dir.join(".git").exists());
+    }
+
+    // ── Sketch file I/O tests ───────────────────────────────────────
+
+    #[test]
+    fn save_and_load_sketch_file() {
+        let tmp = TempDir::new().unwrap();
+        let dir = tmp.path();
+        let project = create_project("Sketch Test", dir).unwrap();
+        let project_dir = project_dir_path(dir, &project.id.to_string());
+
+        let sketch = Sketch::new("My Sketch".to_string());
+        save_sketch(&sketch, &project_dir).unwrap();
+
+        let loaded = load_sketch(&sketch.id.to_string(), &project_dir).unwrap();
+        assert_eq!(loaded.id, sketch.id);
+        assert_eq!(loaded.title, "My Sketch");
+    }
+
+    #[test]
+    fn delete_sketch_file_removes_file() {
+        let tmp = TempDir::new().unwrap();
+        let dir = tmp.path();
+        let project = create_project("Delete Sketch", dir).unwrap();
+        let project_dir = project_dir_path(dir, &project.id.to_string());
+
+        let sketch = Sketch::new("To Delete".to_string());
+        save_sketch(&sketch, &project_dir).unwrap();
+        assert!(sketch_exists(&sketch.id.to_string(), &project_dir));
+
+        delete_sketch_file(&sketch.id.to_string(), &project_dir).unwrap();
+        assert!(!sketch_exists(&sketch.id.to_string(), &project_dir));
+    }
+
+    #[test]
+    fn list_sketches_returns_all() {
+        let tmp = TempDir::new().unwrap();
+        let dir = tmp.path();
+        let project = create_project("List Sketches", dir).unwrap();
+        let project_dir = project_dir_path(dir, &project.id.to_string());
+
+        save_sketch(&Sketch::new("A".to_string()), &project_dir).unwrap();
+        save_sketch(&Sketch::new("B".to_string()), &project_dir).unwrap();
+        save_sketch(&Sketch::new("C".to_string()), &project_dir).unwrap();
+
+        let summaries = list_sketches(&project_dir).unwrap();
+        assert_eq!(summaries.len(), 3);
+    }
+
+    #[test]
+    fn list_sketches_empty_dir() {
+        let tmp = TempDir::new().unwrap();
+        let dir = tmp.path();
+        let project = create_project("Empty", dir).unwrap();
+        let project_dir = project_dir_path(dir, &project.id.to_string());
+
+        let summaries = list_sketches(&project_dir).unwrap();
+        assert!(summaries.is_empty());
+    }
+
+    #[test]
+    fn sketch_exists_returns_correct_values() {
+        let tmp = TempDir::new().unwrap();
+        let dir = tmp.path();
+        let project = create_project("Exists Test", dir).unwrap();
+        let project_dir = project_dir_path(dir, &project.id.to_string());
+
+        let sketch = Sketch::new("Test".to_string());
+        assert!(!sketch_exists(&sketch.id.to_string(), &project_dir));
+
+        save_sketch(&sketch, &project_dir).unwrap();
+        assert!(sketch_exists(&sketch.id.to_string(), &project_dir));
+    }
+
+    #[test]
+    fn load_nonexistent_sketch_errors() {
+        let tmp = TempDir::new().unwrap();
+        let dir = tmp.path();
+        let project = create_project("No Sketch", dir).unwrap();
+        let project_dir = project_dir_path(dir, &project.id.to_string());
+
+        let result = load_sketch("nonexistent-id", &project_dir);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn migrate_inline_sketches_moves_to_files() {
+        let tmp = TempDir::new().unwrap();
+        let dir = tmp.path();
+        let mut project = create_project("Migrate Test", dir).unwrap();
+        let project_dir = project_dir_path(dir, &project.id.to_string());
+
+        // Add inline sketches to project
+        let s1 = Sketch::new("Sketch One".to_string());
+        let s2 = Sketch::new("Sketch Two".to_string());
+        let s1_id = s1.id.to_string();
+        let s2_id = s2.id.to_string();
+        project.sketches.push(s1);
+        project.sketches.push(s2);
+        write_project_json(&project, &project_dir).unwrap();
+
+        // Migrate
+        let migrated = migrate_inline_sketches(&mut project, &project_dir).unwrap();
+        assert!(migrated);
+        assert!(project.sketches.is_empty());
+
+        // Sketch files should exist
+        assert!(sketch_exists(&s1_id, &project_dir));
+        assert!(sketch_exists(&s2_id, &project_dir));
+
+        // Summaries should list both
+        let summaries = list_sketches(&project_dir).unwrap();
+        assert_eq!(summaries.len(), 2);
+    }
+
+    #[test]
+    fn migrate_inline_sketches_noop_when_empty() {
+        let tmp = TempDir::new().unwrap();
+        let dir = tmp.path();
+        let mut project = create_project("No Migrate", dir).unwrap();
+        let project_dir = project_dir_path(dir, &project.id.to_string());
+
+        let migrated = migrate_inline_sketches(&mut project, &project_dir).unwrap();
+        assert!(!migrated);
     }
 }
