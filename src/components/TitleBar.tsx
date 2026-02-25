@@ -16,10 +16,13 @@ export function TitleBar({
   onToggleOutput,
   onCommandPaletteOpen,
 }: TitleBarProps) {
-  const appWindow = getCurrentWindow();
+  const appWindow = (() => {
+    try { return getCurrentWindow(); } catch { return null; }
+  })();
   const [maximized, setMaximized] = useState(false);
 
   useEffect(() => {
+    if (!appWindow) return;
     const checkMaximized = async () => {
       setMaximized(await appWindow.isMaximized());
     };
@@ -34,12 +37,12 @@ export function TitleBar({
     };
   }, [appWindow]);
 
-  const handleMinimize = useCallback(() => appWindow.minimize(), [appWindow]);
+  const handleMinimize = useCallback(() => appWindow?.minimize(), [appWindow]);
   const handleMaximize = useCallback(
-    () => appWindow.toggleMaximize(),
+    () => appWindow?.toggleMaximize(),
     [appWindow],
   );
-  const handleClose = useCallback(() => appWindow.close(), [appWindow]);
+  const handleClose = useCallback(() => appWindow?.close(), [appWindow]);
 
   return (
     <div
