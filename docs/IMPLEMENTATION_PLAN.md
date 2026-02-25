@@ -141,24 +141,121 @@ Created the full directory structure from ARCHITECTURE.md with type definitions 
 
 ---
 
-## Phase 2 — Script Table & Editing
+## Phase 2 — Script Sketch Editor & Document Versioning
 
-> Goal: Transform captured actions into an editable script table.
+> Goal: A Notion-style block editor for authoring structured demo plans before (or instead of) recording, backed by git-based document versioning. Users can start here to sketch out what a recording _might_ look like — time estimates, narrative bullets, demo action bullets, and captured screenshots — then iterate with feedback before committing to a recording session.
+>
+> Each project can hold **multiple documents**, each representing a segment, take, or alternative approach. Documents evolve through states: Sketch → RecordingEnriched → Refined → Final.
 
-### 2.1 Session-to-Script Conversion
+### 2.1 Data Model — Documents
 
 | Task | Details | Test |
 | --- | --- | --- |
-| Implement `engine/interaction.rs` — `session_to_script()` | Takes `RecordedSession`, groups actions into `ScriptRow` segments (one row per logical step). Basic heuristic: one row per action, with timing from timestamps | Unit test: 5 raw actions → 5 script rows with correct timing |
+| Create `models/document.rs` | `Document` struct: `id: Uuid`, `title: String`, `description: String`, `sections: Vec<DocumentSection>`, `content: serde_json::Value` (Lexical editor state JSON), `state: DocumentState`, `created_at`, `updated_at`. `DocumentSection` struct wrapping section title, description, and the script planning table rows. `DocumentState` enum: `Sketch`, `RecordingEnriched`, `Refined`, `Final`. `DocumentSummary` for listing | Serde round-trip tests for all types |
+| Update `Project` model | Add `documents: Vec<Document>` alongside existing `script: Script`. Keep `Script`/`ScriptRow` as the derived execution plan for replay phases. Add optional `document_id: Option<Uuid>` link on `RecordedSession` | Backward-compatible deserialization test |
+| Mirror in TypeScript | `Document`, `DocumentSection`, `DocumentState`, `DocumentSummary` types in `types/document.ts`. Update `Project` type in `types/project.ts` | TypeScript compiles |
+| Register in `models/mod.rs` | Add `pub mod document;` | `cargo build` succeeds |
+
+**Deliverable**: Multi-document project model where each document has its own lifecycle state.
+
+### 2.2 Project Storage with Git Versioning
+
+| Task | Details | Test |
+| --- | --- | --- |
+| Add `gix` dependency | `gix` crate (pure Rust git implementation, no C/cmake deps) with minimal features for init, add, commit, log, diff. Pin version for stability | `cargo build` succeeds on Windows without cmake |
+| Create `engine/versioning.rs` | `init_project_repo(project_dir)` — git init. `commit_snapshot(project_dir, message)` — stage all, commit. `list_versions(project_dir)` — walk commit log, return `Vec<VersionEntry>` with id, message, timestamp, summary. `get_version(project_dir, commit_id)` — read content at commit. `diff_versions(project_dir, from, to)` — generate diff between two commits. `restore_version(project_dir, commit_id)` — checkout historical state, commit as new version | Unit tests with temp repos: init → commit → log → diff → restore round-trip |
+| Migrate project storage format | Move from flat `{uuid}.cutready` JSON files to directory-per-project: `projects/{uuid}/` containing `project.json`, `documents/`, `screenshots/`, `.git/`. Auto-migrate old flat files on first open | Migration test: old `.cutready` file opens correctly in new format |
+| Update `engine/project.rs` | `create_project` creates directory + calls `init_project_repo` + initial commit. `save_project` writes JSON + auto-commits with generated message. `load_project` reads from working directory. `save_with_label` commits with user-provided message | CRUD round-trip test with git history verification |
+
+**Deliverable**: Projects stored as git-backed directories with automatic versioning on every save.
+
+### 2.3 Versioning & Document Commands
+
+| Task | Details | Test |
+| --- | --- | --- |
+| Create `commands/versioning.rs` | Tauri commands: `save_with_label(label)`, `list_versions()`, `preview_version(commit_id)`, `restore_version(commit_id)`, `diff_versions(from, to)` | Integration tests: call each command, verify responses |
+| Create `commands/document.rs` | Tauri commands: `create_document(title)`, `update_document(id, content)`, `delete_document(id)`, `list_documents()`, `capture_screenshot_for_document()` | Integration tests: CRUD cycle + screenshot capture |
+| Register commands in `lib.rs` | Add all new commands to `tauri::generate_handler![]` | App compiles and commands are callable from frontend |
+
+**Deliverable**: Frontend can manage documents and navigate version history via Tauri IPC.
+
+### 2.4 Lexical Editor Integration
+
+| Task | Details | Test |
+| --- | --- | --- |
+| Install Lexical packages | `lexical`, `@lexical/react`, `@lexical/rich-text`, `@lexical/list`, `@lexical/table`, `@lexical/markdown`, `@lexical/history`, `@lexical/selection`, `@lexical/utils` | `npm run dev` builds |
+| Create `SketchEditor` component | Mount `LexicalComposer` with `RichTextPlugin`, `ListPlugin`, `TablePlugin`, `HistoryPlugin`, `MarkdownShortcutPlugin`. Load document content from Lexical JSON state. Auto-save via debounced `update_document` command (500ms). Serialize editor state as JSON for persistence | Editor renders, typing works, content round-trips through save/load |
+| Apply CutReady theme | Override Lexical's default node styles with CSS variables (`--color-surface`, `--color-text`, `--color-border`, `--color-accent`). Warm palette, Geist Sans font, `-0.011em` letter spacing. Use `bg-[var(--color-surface)]` pattern per frontend conventions | Visual: editor matches app aesthetic in both light and dark modes |
+| Slash command plugin | Custom `LexicalTypeaheadMenuPlugin` that shows a command palette on `/` keystroke: insert heading (H1/H2/H3), bullet list, numbered list, script table, divider, image. Styled with warm accent colors, `rounded-xl`, `backdrop-blur-md` | Type `/` → menu appears → select block type → block inserted |
+| Floating toolbar plugin | `FloatingComposer` toolbar on text selection: bold, italic, underline, strikethrough, code, link. Uses `@lexical/selection` to track selection state | Select text → toolbar appears → formatting applies |
+
+**Deliverable**: Notion-style Lexical block editor with slash commands and floating toolbar, themed to CutReady's warm design system.
+
+### 2.5 Custom Script Table Node
+
+| Task | Details | Test |
+| --- | --- | --- |
+| Create `ScriptTableNode` | Custom Lexical `DecoratorNode` that renders a 4-column planning table: Time, Narrative Bullets, Demo Action Bullets, Screenshot. Each cell is editable inline. Time column accepts approximate durations (`~30s`, `1:00`, `2m`). Narrative and Demo columns support multi-line bullet editing. Node serializes to/from Lexical JSON | Insert via slash command → table appears → edit cells → save → reload → content preserved |
+| Screenshot capture button | Each row's screenshot cell shows a "Capture" button. Click flow: (1) prepare browser if needed (reuse `prepareBrowser` from interaction engine), (2) user navigates browser to desired state, (3) click "Take Screenshot", (4) backend captures via Playwright CDP + saves PNG to `projects/{uuid}/screenshots/`, (5) path returned → image rendered in cell via `convertFileSrc` | End-to-end: capture screenshot → appears in table cell |
+| Row operations | Buttons to add row above/below, delete row, drag-reorder rows within the script table | Row ops work; serialization is stable |
+
+**Deliverable**: Custom script planning table embedded as a Lexical block, with live screenshot capture from the browser.
+
+### 2.6 Version History UI
+
+| Task | Details | Test |
+| --- | --- | --- |
+| Create `VersionHistory` panel | Slide-out right sidebar showing commit timeline. Each entry: label/message, timestamp (relative date), author. Visual vertical timeline with dots + connecting lines in accent color. "Save Version" button at top for labeled commits | Visual: timeline renders with version entries |
+| Version preview | Click a version → editor switches to read-only mode showing that version's content. "Back to current" button to return | Preview loads, editor is non-editable, return works |
+| Version restore | "Restore this version" button on historical entries → calls `restore_version` → creates new commit with restored content → editor shows restored state | Restore works, new version appears in history |
+| Version diff | Select two versions (checkboxes or click-to-compare) → modal/panel shows side-by-side diff with block-level and text-level change highlighting | Diff renders with clear visual additions/removals |
+
+**Deliverable**: User-friendly version history with preview, restore, and diff — no git knowledge required.
+
+### 2.7 Navigation & Store Updates
+
+| Task | Details | Test |
+| --- | --- | --- |
+| Add `"sketch"` to `AppView` | New view variant in Zustand store. New state fields: `activeDocumentId: string \| null`, `documents: DocumentSummary[]`, `versions: VersionEntry[]` | TypeScript compiles |
+| Add document store actions | `createDocument`, `openDocument`, `updateDocumentContent`, `deleteDocument`, `loadDocuments` | Actions mutate state correctly, call backend commands |
+| Add versioning store actions | `loadVersions`, `saveVersion`, `previewVersion`, `restoreVersion` | Actions call backend, update `versions` state |
+| Update `Sidebar` | Add "Sketch" nav item (pencil/notepad icon) between Home and Record. Requires project open. Badge showing document count when > 0 | Visual: nav item appears in correct position, badge works |
+| Create `SketchPanel` | Three-column layout: document list (left, 240px) + sketch editor (center, flex) + version history (right, toggled, 280px). Document list shows cards with title, state badge (`Sketch`/`Recording`/`Refined`/`Final`), relative date. "New Document" button at top | Visual: panel renders with all three sub-panels |
+| Update `HomePanel` | After creating a project, show prominent choice: "Start with a Sketch" (→ sketch view) or "Record a Demo" (→ recording view). When opening existing project: auto-navigate to sketch view if documents exist | Navigation flow works correctly |
+| Update `AppLayout` | Add `"sketch"` case rendering `SketchPanel` | Panel renders when view switches to sketch |
+
+**Deliverable**: Complete sketch workflow accessible from sidebar — create documents, edit in Lexical, manage versions, navigate between documents.
+
+### 2.8 Sketch-to-Recording Bridge
+
+| Task | Details | Test |
+| --- | --- | --- |
+| Pre-recording document selection | Before starting a recording session, optionally select target document/section from a dropdown. Default: "New (unlinked)" | UI: dropdown populated from open project's documents |
+| Post-recording linkage | After recording, `RecordedSession.document_id` is set to the selected document. Session appears linked in document's context | Session JSON contains document reference |
+| Document state advancement | When a sketch document has linked recordings, its state can advance `Sketch` → `RecordingEnriched`. UI badge updates automatically | State transition works, reflected in document list |
+
+**Deliverable**: Sketch documents feed into the recording phase with full traceability.
+
+---
+
+## Phase 3 — Script Table & Editing
+
+> Goal: Transform captured actions into an editable script table, using sketch documents as scaffolding when available.
+
+### 3.1 Session-to-Script Conversion
+
+| Task | Details | Test |
+| --- | --- | --- |
+| Implement `engine/interaction.rs` — `session_to_script()` | Takes `RecordedSession`, groups actions into `ScriptRow` segments (one row per logical step). Basic heuristic: one row per action, with timing from timestamps. If a sketch document is linked (`document_id`), use its section structure and narrative bullets as scaffolding for the generated rows | Unit test: 5 raw actions → 5 script rows with correct timing. Test with sketch: rows inherit sketch narrative |
 | Wire command: `convert_session_to_script` | Returns a `Script` from a session ID | Integration test |
 
-**Deliverable**: Raw recordings become structured script tables.
+**Deliverable**: Raw recordings become structured script tables, pre-populated from sketch outlines when available.
 
-### 2.2 Script Editor Panel
+### 3.2 Script Editor Panel
 
 | Task | Details | Test |
 | --- | --- | --- |
-| Install TanStack Table | For the script table | `npm run dev` builds |
+| Install TanStack Table | For the precise script execution table | `npm run dev` builds |
 | Create `ScriptEditor` component | Table with columns: #, Time, Narrative, Actions, Screenshot. Renders `ScriptRow` data | Visual: table renders with mock data |
 | Editable cells | Time: duration picker. Narrative: inline text editor. Actions: read-only summary (for now) | Can edit time and narrative, changes reflect in state |
 | Row operations | Add row, delete row, drag-and-drop reorder | Visual + state: reorder persists |
@@ -166,7 +263,7 @@ Created the full directory structure from ARCHITECTURE.md with type definitions 
 
 **Deliverable**: Full script table editor connected to project storage.
 
-### 2.3 Action Detail Editor
+### 3.3 Action Detail Editor
 
 | Task | Details | Test |
 | --- | --- | --- |
@@ -178,11 +275,11 @@ Created the full directory structure from ARCHITECTURE.md with type definitions 
 
 ---
 
-## Phase 3 — LLM Integration & Agent Refinement
+## Phase 4 — LLM Integration & Agent Refinement
 
 > Goal: AI cleans up recordings and generates narration.
 
-### 3.1 LLM Provider Implementation
+### 4.1 LLM Provider Implementation
 
 | Task | Details | Test |
 | --- | --- | --- |
@@ -192,7 +289,7 @@ Created the full directory structure from ARCHITECTURE.md with type definitions 
 
 **Deliverable**: Working LLM provider with mock alternative for testing.
 
-### 3.2 Action Cleanup Pipeline
+### 4.2 Action Cleanup Pipeline
 
 | Task | Details | Test |
 | --- | --- | --- |
@@ -202,7 +299,7 @@ Created the full directory structure from ARCHITECTURE.md with type definitions 
 
 **Deliverable**: AI removes accidental/redundant actions from recordings.
 
-### 3.3 Selector Stabilization
+### 4.3 Selector Stabilization
 
 | Task | Details | Test |
 | --- | --- | --- |
@@ -211,7 +308,7 @@ Created the full directory structure from ARCHITECTURE.md with type definitions 
 
 **Deliverable**: Selectors upgraded from fragile positional to robust semantic.
 
-### 3.4 Narrative Generation
+### 4.4 Narrative Generation
 
 | Task | Details | Test |
 | --- | --- | --- |
@@ -220,7 +317,7 @@ Created the full directory structure from ARCHITECTURE.md with type definitions 
 
 **Deliverable**: AI-generated narration text and timing for every script row.
 
-### 3.5 Full Refinement Pipeline
+### 4.5 Full Refinement Pipeline
 
 | Task | Details | Test |
 | --- | --- | --- |
@@ -230,7 +327,7 @@ Created the full directory structure from ARCHITECTURE.md with type definitions 
 
 **Deliverable**: One-click refinement from raw recording to polished script.
 
-### 3.6 Diff / Review Panel
+### 4.6 Diff / Review Panel
 
 | Task | Details | Test |
 | --- | --- | --- |
@@ -241,11 +338,11 @@ Created the full directory structure from ARCHITECTURE.md with type definitions 
 
 ---
 
-## Phase 4 — Automation Replay
+## Phase 5 — Automation Replay
 
 > Goal: Execute a script's actions automatically in a browser.
 
-### 4.1 Browser Action Execution
+### 5.1 Browser Action Execution
 
 | Task | Details | Test |
 | --- | --- | --- |
@@ -255,7 +352,7 @@ Created the full directory structure from ARCHITECTURE.md with type definitions 
 
 **Deliverable**: Scripts replay automatically in a real browser.
 
-### 4.2 Self-Healing on Failure
+### 5.2 Self-Healing on Failure
 
 | Task | Details | Test |
 | --- | --- | --- |
@@ -265,7 +362,7 @@ Created the full directory structure from ARCHITECTURE.md with type definitions 
 
 **Deliverable**: Replay recovers gracefully from UI changes.
 
-### 4.3 Replay Controls UI
+### 5.3 Replay Controls UI
 
 | Task | Details | Test |
 | --- | --- | --- |
@@ -277,11 +374,11 @@ Created the full directory structure from ARCHITECTURE.md with type definitions 
 
 ---
 
-## Phase 5 — Recording Engine (FFmpeg)
+## Phase 6 — Recording Engine (FFmpeg)
 
 > Goal: Capture lossless screen video + audio during replay.
 
-### 5.1 FFmpeg Integration
+### 6.1 FFmpeg Integration
 
 | Task | Details | Test |
 | --- | --- | --- |
@@ -289,7 +386,7 @@ Created the full directory structure from ARCHITECTURE.md with type definitions 
 | Implement `util/ffmpeg.rs` — command builder | `FfmpegCommandBuilder` — fluent API to construct FFmpeg args for various capture scenarios | Unit test: builder produces correct arg arrays |
 | Implement `util/audio.rs` — device enumeration | List audio input devices via FFmpeg `list_devices` or Win32 API | Returns at least one device on dev machine |
 
-### 5.2 Screen + Audio Recording
+### 6.2 Screen + Audio Recording
 
 | Task | Details | Test |
 | --- | --- | --- |
@@ -300,7 +397,7 @@ Created the full directory structure from ARCHITECTURE.md with type definitions 
 
 **Deliverable**: Lossless screen + audio recording with progress feedback.
 
-### 5.3 Recording Controls
+### 6.3 Recording Controls
 
 | Task | Details | Test |
 | --- | --- | --- |
@@ -310,7 +407,7 @@ Created the full directory structure from ARCHITECTURE.md with type definitions 
 
 **Deliverable**: Hands-free recording with audio monitoring.
 
-### 5.4 Coordinated Produce Mode
+### 6.4 Coordinated Produce Mode
 
 | Task | Details | Test |
 | --- | --- | --- |
@@ -321,11 +418,11 @@ Created the full directory structure from ARCHITECTURE.md with type definitions 
 
 ---
 
-## Phase 6 — Teleprompter
+## Phase 7 — Teleprompter
 
 > Goal: Display narration text synchronized with replay.
 
-### 6.1 Teleprompter Panel
+### 7.1 Teleprompter Panel
 
 | Task | Details | Test |
 | --- | --- | --- |
@@ -333,7 +430,7 @@ Created the full directory structure from ARCHITECTURE.md with type definitions 
 | Sync with replay | Listen for replay progress events, advance to current segment's narrative | Text advances as replay progresses |
 | Configurable display | Font size slider, scroll speed, line spacing. Settings persisted | Settings apply immediately |
 
-### 6.2 Detachable Teleprompter Window
+### 7.2 Detachable Teleprompter Window
 
 | Task | Details | Test |
 | --- | --- | --- |
@@ -344,11 +441,11 @@ Created the full directory structure from ARCHITECTURE.md with type definitions 
 
 ---
 
-## Phase 7 — Native App Recording & Replay
+## Phase 8 — Native App Recording & Replay
 
 > Goal: Extend recording and replay to Windows native applications.
 
-### 7.1 Native Interaction Capture
+### 8.1 Native Interaction Capture
 
 | Task | Details | Test |
 | --- | --- | --- |
@@ -357,7 +454,7 @@ Created the full directory structure from ARCHITECTURE.md with type definitions 
 | Correlate inputs with UIA elements | On click/key, query UIA tree for the focused element. Build `SelectorStrategy` entries | `NativeClick` action has correct AutomationId/Name |
 | Map to `Action` variants | Raw events → `NativeClick`, `NativeType`, `NativeSelect`, `NativeInvoke` | Unit test for all native action types |
 
-### 7.2 Native Action Replay
+### 8.2 Native Action Replay
 
 | Task | Details | Test |
 | --- | --- | --- |
@@ -370,11 +467,11 @@ Created the full directory structure from ARCHITECTURE.md with type definitions 
 
 ---
 
-## Phase 8 — Motion Animations (ManimCE)
+## Phase 9 — Motion Animations (ManimCE)
 
 > Goal: Generate and render concept animations from natural language.
 
-### 8.1 ManimCE Integration
+### 9.1 ManimCE Integration
 
 | Task | Details | Test |
 | --- | --- | --- |
@@ -382,14 +479,14 @@ Created the full directory structure from ARCHITECTURE.md with type definitions 
 | AST validation | Parse Python AST, reject dangerous imports (`os`, `subprocess`, `sys`, etc.) | Unit test: safe code passes, unsafe code rejected |
 | Resource limits | Render timeout (5 min default), memory limit via subprocess constraints | Test: infinite loop scene times out |
 
-### 8.2 LLM Animation Code Generation
+### 9.2 LLM Animation Code Generation
 
 | Task | Details | Test |
 | --- | --- | --- |
 | Implement `engine/agent/animations.rs` | Natural language → ManimCE code via LLM. Validate → render → return | Unit test with mock: description → valid ManimCE code |
 | Animation suggestion during refinement | Agent identifies steps that could benefit from animations, generates descriptions | Suggestions appear in refined script |
 
-### 8.3 Animation UI
+### 9.3 Animation UI
 
 | Task | Details | Test |
 | --- | --- | --- |
@@ -400,11 +497,11 @@ Created the full directory structure from ARCHITECTURE.md with type definitions 
 
 ---
 
-## Phase 9 — Export Engine
+## Phase 10 — Export Engine
 
 > Goal: Produce the final output package with FCPXML timeline.
 
-### 9.1 Output Folder Assembly
+### 10.1 Output Folder Assembly
 
 | Task | Details | Test |
 | --- | --- | --- |
@@ -412,7 +509,7 @@ Created the full directory structure from ARCHITECTURE.md with type definitions 
 | Generate `script.json` | Serialize the `Script` to formatted JSON | Valid JSON, matches schema |
 | Generate `script.md` | Render script as Markdown table | Readable Markdown |
 
-### 9.2 FCPXML Generation
+### 10.2 FCPXML Generation
 
 | Task | Details | Test |
 | --- | --- | --- |
@@ -423,7 +520,7 @@ Created the full directory structure from ARCHITECTURE.md with type definitions 
 | Segment markers | Marker at each `ScriptRow` boundary with the row's title/narrative preview | Markers appear in DaVinci Resolve |
 | Import test | Open in DaVinci Resolve, verify timeline structure | Manual: timeline looks correct |
 
-### 9.3 Export UI
+### 10.3 Export UI
 
 | Task | Details | Test |
 | --- | --- | --- |
@@ -434,29 +531,29 @@ Created the full directory structure from ARCHITECTURE.md with type definitions 
 
 ---
 
-## Phase 10 — Polish & Advanced Features
+## Phase 11 — Polish & Advanced Features
 
 > Goal: Production readiness and quality-of-life improvements.
 
-### 10.1 Step-by-Step Capture Mode
+### 11.1 Step-by-Step Capture Mode
 
 | Task | Details | Test |
 | --- | --- | --- |
 | Implement step-by-step recording | Capture one action at a time with confirmation popup between steps | Each step produces an annotated `ScriptRow` |
 
-### 10.2 Partial Re-record
+### 11.2 Partial Re-record
 
 | Task | Details | Test |
 | --- | --- | --- |
 | Re-record individual script rows | Select a row → "Re-record" → capture new actions for just that segment | Only the selected row's actions change |
 
-### 10.3 Preview / Dry-Run
+### 11.3 Preview / Dry-Run
 
 | Task | Details | Test |
 | --- | --- | --- |
 | Dry-run a segment | Execute one row's actions without recording | Actions execute, no video file produced |
 
-### 10.4 Error Recovery & Resilience
+### 11.4 Error Recovery & Resilience
 
 | Task | Details | Test |
 | --- | --- | --- |
@@ -464,7 +561,7 @@ Created the full directory structure from ARCHITECTURE.md with type definitions 
 | Sidecar crash recovery | Detect Playwright sidecar exit, restart, resume from last action | Replay resumes after sidecar restart |
 | Autosave | Save project every 30s and on significant state changes | Crash → restart → project recovered |
 
-### 10.5 Packaging & Distribution
+### 11.5 Packaging & Distribution
 
 | Task | Details | Test |
 | --- | --- | --- |
@@ -480,36 +577,47 @@ Created the full directory structure from ARCHITECTURE.md with type definitions 
 ```text
 Phase 0 (Foundation)
   │
-  ├─► Phase 1 (Browser Recording) ─► Phase 2 (Script Editor)
+  ├─► Phase 1 (Browser Recording) ─► Phase 2 (Sketch Editor + Versioning)
   │                                       │
-  │                                       ├─► Phase 3 (Agent/LLM)
+  │                                       ├─► Phase 3 (Script Table)
   │                                       │       │
-  │                                       │       ▼
-  │                                       ├─► Phase 4 (Automation Replay)
-  │                                       │       │
-  │                                       │       ▼
-  │                                       ├─► Phase 5 (FFmpeg Recording)
-  │                                       │       │
-  │                                       │       ▼
-  │                                       └─► Phase 6 (Teleprompter)
+  │                                       │       ├─► Phase 4 (Agent/LLM)
+  │                                       │       │       │
+  │                                       │       │       ▼
+  │                                       │       ├─► Phase 5 (Automation Replay)
+  │                                       │       │       │
+  │                                       │       │       ▼
+  │                                       │       ├─► Phase 6 (FFmpeg Recording)
+  │                                       │       │       │
+  │                                       │       │       ▼
+  │                                       │       └─► Phase 7 (Teleprompter)
+  │                                       │
+  │                                       └─► (Sketch can also feed directly into Phase 5 for recording)
   │
-  ├─► Phase 7 (Native Recording) ─── can start after Phase 1
+  ├─► Phase 8 (Native Recording) ─── can start after Phase 1
   │
-  ├─► Phase 8 (Animations) ────────── can start after Phase 3.1
+  ├─► Phase 9 (Animations) ────────── can start after Phase 4.1
   │
-  └─► Phase 9 (Export) ────────────── needs Phases 5 + 8
+  └─► Phase 10 (Export) ───────────── needs Phases 6 + 9
 
-Phase 10 (Polish) ─── runs continuously alongside later phases
+Phase 11 (Polish) ─── runs continuously alongside later phases
 ```
+
+### Key Dependencies
+
+- **Phase 2 doesn't block on Phase 1** — users can sketch without recording first. Phase 2 uses Phase 1's browser automation only for the optional screenshot capture feature.
+- **Phase 3 uses Phase 2** — sketch documents provide scaffolding for session-to-script conversion.
+- **Phase 2 → Phase 5 shortcut** — a sketch document alone (without Phase 3's script table) can serve as the basis for a manual replay session.
 
 ### Parallelization Opportunities
 
 These phases can be worked on simultaneously:
 
-- **Phase 1** (Browser Recording) + **Phase 0.4** (Frontend Shell) — different people
-- **Phase 3** (Agent) + **Phase 5** (FFmpeg) — independent engines
-- **Phase 7** (Native) + **Phase 8** (Animations) — independent engines
-- **Phase 6** (Teleprompter) is purely frontend and decoupled from backend work
+- **Phase 2** (Sketch Editor) + **Phase 8** (Native Recording) — independent feature tracks
+- **Phase 4** (Agent) + **Phase 6** (FFmpeg) — independent engines
+- **Phase 8** (Native) + **Phase 9** (Animations) — independent engines
+- **Phase 7** (Teleprompter) is purely frontend and decoupled from backend work
+- **Phase 2.2** (git versioning backend) can be developed in parallel with **Phase 2.4** (Lexical editor frontend)
 
 ---
 
@@ -519,15 +627,16 @@ These phases can be worked on simultaneously:
 | --- | --- | --- |
 | 0 — Foundation | Scaffold + CRUD + plugins + shell | Small |
 | 1 — Browser Recording | Sidecar + CDP + session mgmt | Medium-Large |
-| 2 — Script Editor | Table UI + editing + persistence | Medium |
-| 3 — Agent/LLM | Provider + 4 pipeline stages + diff UI | Large |
-| 4 — Automation Replay | Sidecar execution + healing + controls | Medium |
-| 5 — FFmpeg Recording | Process mgmt + audio + progress | Medium |
-| 6 — Teleprompter | UI panel + sync + detachable window | Small |
-| 7 — Native Recording | Win32 hooks + UIA + replay | Large |
-| 8 — Animations | ManimCE subprocess + LLM codegen + UI | Medium |
-| 9 — Export | Folder assembly + FCPXML generation | Medium |
-| 10 — Polish | Re-record, recovery, packaging | Medium |
+| 2 — Sketch Editor + Versioning | Lexical editor + custom blocks + gix versioning + document model + version UI | Large |
+| 3 — Script Table | Session-to-script + TanStack Table + action editor | Medium |
+| 4 — Agent/LLM | Provider + 4 pipeline stages + diff UI | Large |
+| 5 — Automation Replay | Sidecar execution + healing + controls | Medium |
+| 6 — FFmpeg Recording | Process mgmt + audio + progress | Medium |
+| 7 — Teleprompter | UI panel + sync + detachable window | Small |
+| 8 — Native Recording | Win32 hooks + UIA + replay | Large |
+| 9 — Animations | ManimCE subprocess + LLM codegen + UI | Medium |
+| 10 — Export | Folder assembly + FCPXML generation | Medium |
+| 11 — Polish | Re-record, recovery, packaging | Medium |
 
 ---
 
@@ -535,17 +644,18 @@ These phases can be worked on simultaneously:
 
 **Recommended starting order for a single developer:**
 
-1. **Phase 0** — ~2-3 days. Get the foundation solid.
-2. **Phase 1** — ~1 week. This is the app's entry point ("record first").
-3. **Phase 2** — ~1 week. Now captured data is visible and editable.
-4. **Phase 3.1** — ~2 days. LLM provider working (needed for everything AI).
-5. **Phase 4** — ~1 week. Replay is the payoff — you can see the pipeline work.
-6. **Phase 5** — ~1 week. Add actual video capture during replay.
-7. **Phase 3.2–3.6** — ~1 week. Full agent refinement pipeline.
-8. **Phase 6** — ~2-3 days. Teleprompter completes the produce experience.
-9. **Phase 9** — ~1 week. Export makes output usable in DaVinci Resolve.
-10. **Phase 7** — ~1-2 weeks. Native app support (can defer if browser-only is enough initially).
-11. **Phase 8** — ~1 week. Animations are impressive but not on the critical path.
-12. **Phase 10** — Ongoing throughout and at the end.
+1. **Phase 0** — ~2-3 days. Get the foundation solid. ✅
+2. **Phase 1** — ~1 week. Browser recording is the app's core capability. ✅
+3. **Phase 2** — ~2-3 weeks. Sketch editor + versioning. This is the new primary entry point — users sketch before they record.
+4. **Phase 3** — ~1 week. Script table lets recorded data become visible and editable, using sketch structure as scaffolding.
+5. **Phase 4.1** — ~2 days. LLM provider working (needed for everything AI).
+6. **Phase 5** — ~1 week. Replay is the payoff — you can see the pipeline work.
+7. **Phase 6** — ~1 week. Add actual video capture during replay.
+8. **Phase 4.2–4.6** — ~1 week. Full agent refinement pipeline.
+9. **Phase 7** — ~2-3 days. Teleprompter completes the produce experience.
+10. **Phase 10** — ~1 week. Export makes output usable in DaVinci Resolve.
+11. **Phase 8** — ~1-2 weeks. Native app support (defer if browser-only is enough initially).
+12. **Phase 9** — ~1 week. Animations are impressive but not on the critical path.
+13. **Phase 11** — Ongoing throughout and at the end.
 
-**First demo-able milestone**: After Phases 0–2, you can record a browser demo and see it as an editable script. After Phase 4, it replays automatically. That's the "wow" moment.
+**First demo-able milestone**: After Phases 0–2, you can create a project, sketch a structured demo plan with narrative and screenshots, and version your work. After Phase 3, recorded sessions populate the script table using your sketch as scaffolding. After Phase 5, it replays automatically. That's the "wow" moment.
