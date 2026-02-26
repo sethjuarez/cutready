@@ -217,6 +217,97 @@ pub fn pop_stash(project_dir: &Path) -> Result<bool, VersioningError> {
     Ok(true)
 }
 
+/// Check whether a stash exists.
+pub fn has_stash(project_dir: &Path) -> bool {
+    project_dir.join(".git").join("cutready-stash").exists()
+}
+
+/// Navigate to any snapshot on the current timeline.
+///
+/// If the target is an ancestor of HEAD (navigating backward), the commits
+/// between target and HEAD are auto-forked into a new visible timeline so
+/// nothing is lost. The current branch is then reset to the target commit.
+///
+/// If the target IS the current HEAD, this is a no-op.
+pub fn navigate_to_snapshot(
+    project_dir: &Path,
+    commit_id: &str,
+) -> Result<(), VersioningError> {
+    let repo = open_repo(project_dir)?;
+
+    let target_oid: gix::ObjectId = commit_id
+        .parse()
+        .map_err(|e: gix::hash::decode::Error| VersioningError::Git(e.to_string()))?;
+
+    // Get current HEAD commit
+    let head_commit = repo
+        .head_commit()
+        .map_err(|e| VersioningError::Git(e.to_string()))?;
+    let head_oid = head_commit.id().detach();
+
+    // If target == HEAD, just checkout (handles dirty→clean refresh)
+    if target_oid == head_oid {
+        return checkout_version(project_dir, commit_id);
+    }
+
+    // Check if target is an ancestor of HEAD (navigating backward)
+    let going_backward = is_ancestor(&repo, target_oid, head_oid)?;
+
+    if going_backward {
+        // Auto-fork: preserve the commits from target+1..HEAD in a new timeline
+        let current_branch = get_current_branch_name(&repo);
+        let current_label = current_branch
+            .as_deref()
+            .map(|b| {
+                // Get human label if it's a timeline branch
+                let slug = b.strip_prefix("timeline/").unwrap_or(b);
+                let labels = load_timeline_labels(project_dir);
+                labels.get(slug).cloned().unwrap_or_else(|| {
+                    if slug == MAIN_BRANCH { "Main".to_string() } else { slug.to_string() }
+                })
+            })
+            .unwrap_or_else(|| "Main".to_string());
+
+        // Generate a unique slug for the auto-forked timeline
+        let timestamp = chrono::Utc::now().format("%H%M%S").to_string();
+        let fork_slug = format!("prev-{}", timestamp);
+        let fork_label = format!("{} (before rewind)", current_label);
+        let fork_ref = format!("{}{}", TIMELINE_PREFIX, fork_slug);
+
+        // Create the fork branch pointing at current HEAD
+        repo.reference(
+            fork_ref.as_str(),
+            head_oid,
+            gix::refs::transaction::PreviousValue::MustNotExist,
+            format!("Auto-fork before navigating back: {}", fork_label),
+        )
+        .map_err(|e| VersioningError::Git(e.to_string()))?;
+
+        save_timeline_label(project_dir, &fork_slug, &fork_label)?;
+
+        // Reset current branch to target commit
+        let branch_ref = current_branch
+            .map(|b| format!("refs/heads/{}", b))
+            .unwrap_or_else(|| "refs/heads/main".to_string());
+
+        // Update the branch ref to point at the target commit
+        // Build path by joining each component (handles OS path separators)
+        let mut ref_path = repo.git_dir().to_path_buf();
+        for component in branch_ref.split('/') {
+            ref_path = ref_path.join(component);
+        }
+        if let Some(parent) = ref_path.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| VersioningError::Io(e.to_string()))?;
+        }
+        std::fs::write(&ref_path, format!("{}\n", target_oid))
+            .map_err(|e| VersioningError::Io(e.to_string()))?;
+    }
+    // else: navigating forward/laterally — no fork needed, just checkout
+
+    checkout_version(project_dir, commit_id)
+}
+
 // ── Timeline (branch) management ────────────────────────────────────
 
 /// Prefix for CutReady timeline branches.
@@ -484,6 +575,25 @@ fn set_head_to_branch(repo: &gix::Repository, ref_name: &str) -> Result<(), Vers
     let head_path = repo.git_dir().join("HEAD");
     let content = format!("ref: {}\n", ref_name);
     std::fs::write(&head_path, content).map_err(|e| VersioningError::Io(e.to_string()))
+}
+
+/// Check whether `ancestor` is an ancestor of `descendant` by walking the commit chain.
+fn is_ancestor(
+    repo: &gix::Repository,
+    ancestor: gix::ObjectId,
+    descendant: gix::ObjectId,
+) -> Result<bool, VersioningError> {
+    let mut current = Some(descendant);
+    while let Some(oid) = current {
+        if oid == ancestor {
+            return Ok(true);
+        }
+        let commit = repo
+            .find_commit(oid)
+            .map_err(|e| VersioningError::Git(e.to_string()))?;
+        current = commit.parent_ids().next().map(|p| p.detach());
+    }
+    Ok(false)
 }
 
 fn get_current_branch_name(repo: &gix::Repository) -> Option<String> {
@@ -926,5 +1036,61 @@ mod tests {
         assert!(messages.contains(&"v1"));
         assert!(messages.contains(&"v2"));
         assert!(messages.contains(&"v3 on exploration"));
+    }
+
+    #[test]
+    fn navigate_backward_auto_forks() {
+        let tmp = setup_project_dir();
+        init_project_repo(tmp.path()).unwrap();
+
+        let id1 = commit_snapshot(tmp.path(), "v1").unwrap();
+        std::fs::write(tmp.path().join("project.json"), r#"{"version":2}"#).unwrap();
+        let id2 = commit_snapshot(tmp.path(), "v2").unwrap();
+        std::fs::write(tmp.path().join("project.json"), r#"{"version":3}"#).unwrap();
+        let _id3 = commit_snapshot(tmp.path(), "v3").unwrap();
+
+        // Navigate backward to v1
+        navigate_to_snapshot(tmp.path(), &id1).unwrap();
+
+        // HEAD should now point at v1
+        let versions = list_versions(tmp.path()).unwrap();
+        assert_eq!(versions.len(), 1);
+        assert_eq!(versions[0].id, id1);
+
+        // A fork timeline should have been auto-created with v2 and v3
+        let timelines = list_timelines(tmp.path()).unwrap();
+        assert!(timelines.len() >= 2, "Expected at least 2 timelines, got {}", timelines.len());
+        let fork = timelines.iter().find(|t| t.label.contains("before rewind"));
+        assert!(fork.is_some(), "Expected a 'before rewind' timeline");
+        assert!(fork.unwrap().snapshot_count >= 3, "Fork should preserve full history");
+    }
+
+    #[test]
+    fn navigate_to_current_head_is_noop() {
+        let tmp = setup_project_dir();
+        init_project_repo(tmp.path()).unwrap();
+
+        let id1 = commit_snapshot(tmp.path(), "v1").unwrap();
+
+        // Navigate to HEAD — should not create any forks
+        navigate_to_snapshot(tmp.path(), &id1).unwrap();
+
+        let timelines = list_timelines(tmp.path()).unwrap();
+        assert_eq!(timelines.len(), 1, "Should still have only main timeline");
+    }
+
+    #[test]
+    fn has_stash_check() {
+        let tmp = setup_project_dir();
+        init_project_repo(tmp.path()).unwrap();
+        commit_snapshot(tmp.path(), "v1").unwrap();
+
+        assert!(!has_stash(tmp.path()));
+
+        stash_working_tree(tmp.path()).unwrap();
+        assert!(has_stash(tmp.path()));
+
+        pop_stash(tmp.path()).unwrap();
+        assert!(!has_stash(tmp.path()));
     }
 }
