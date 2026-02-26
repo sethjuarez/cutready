@@ -99,6 +99,7 @@ pub fn run() {
             commands::project::close_project,
             commands::project::get_recent_projects,
             commands::project::add_recent_project,
+            commands::project::remove_recent_project,
             commands::project::get_last_parent_folder,
             commands::sketch::create_sketch,
             commands::sketch::update_sketch,

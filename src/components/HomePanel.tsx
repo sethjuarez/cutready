@@ -7,6 +7,7 @@ export function HomePanel() {
   const recentProjects = useAppStore((s) => s.recentProjects);
   const loading = useAppStore((s) => s.loading);
   const loadRecentProjects = useAppStore((s) => s.loadRecentProjects);
+  const removeRecentProject = useAppStore((s) => s.removeRecentProject);
   const createProject = useAppStore((s) => s.createProject);
   const openProject = useAppStore((s) => s.openProject);
 
@@ -166,8 +167,23 @@ export function HomePanel() {
                     {p.path}
                   </div>
                 </div>
-                <div className="text-xs text-[var(--color-text-secondary)] ml-4 shrink-0">
-                  {formatRelativeDate(p.last_opened)}
+                <div className="flex items-center gap-2 ml-4 shrink-0">
+                  <span className="text-xs text-[var(--color-text-secondary)]">
+                    {formatRelativeDate(p.last_opened)}
+                  </span>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      removeRecentProject(p.path);
+                    }}
+                    className="p-1 rounded opacity-0 group-hover:opacity-100 text-[var(--color-text-secondary)] hover:text-red-500 transition-all"
+                    title="Remove from recent"
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="18" y1="6" x2="6" y2="18" />
+                      <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg>
+                  </button>
                 </div>
               </div>
             ))}

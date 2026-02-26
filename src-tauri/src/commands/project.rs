@@ -91,6 +91,29 @@ pub async fn add_recent_project(
     add_to_recent_projects(&app, &path).map_err(|e| e.to_string())
 }
 
+/// Remove a project from the recent projects list.
+#[tauri::command]
+pub async fn remove_recent_project(
+    path: String,
+    app: tauri::AppHandle,
+) -> Result<(), String> {
+    let store = app.store(STORE_FILE).map_err(|e| e.to_string())?;
+
+    let mut recent: Vec<RecentProject> = store
+        .get("recent_projects")
+        .and_then(|v| serde_json::from_value(v).ok())
+        .unwrap_or_default();
+
+    recent.retain(|r| r.path != path);
+
+    store.set(
+        "recent_projects",
+        serde_json::to_value(&recent).unwrap_or_default(),
+    );
+
+    Ok(())
+}
+
 /// Get the last parent folder used (for file dialogs).
 #[tauri::command]
 pub async fn get_last_parent_folder(
