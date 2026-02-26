@@ -179,3 +179,30 @@ pub async fn has_stash(state: State<'_, AppState>) -> Result<bool, String> {
     let root = project_root(&state)?;
     Ok(versioning::has_stash(&root))
 }
+
+#[tauri::command]
+pub async fn save_editor_state(
+    commit_id: String,
+    editor_state: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let root = project_root(&state)?;
+    let dir = root.join(".git").join("cutready-editor-state");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    std::fs::write(dir.join(format!("{}.json", commit_id)), editor_state)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn load_editor_state(
+    commit_id: String,
+    state: State<'_, AppState>,
+) -> Result<Option<String>, String> {
+    let root = project_root(&state)?;
+    let path = root.join(".git").join("cutready-editor-state").join(format!("{}.json", commit_id));
+    if path.exists() {
+        std::fs::read_to_string(&path).map(Some).map_err(|e| e.to_string())
+    } else {
+        Ok(None)
+    }
+}

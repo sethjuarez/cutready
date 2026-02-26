@@ -739,8 +739,12 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
 
   saveVersion: async (label) => {
     try {
-      await invoke<string>("save_with_label", { label });
+      const commitId = await invoke<string>("save_with_label", { label });
       set({ isDirty: false });
+      // Persist editor state for this snapshot
+      const { openTabs, activeTabId } = get();
+      const editorState = JSON.stringify({ openTabs, activeTabId });
+      await invoke("save_editor_state", { commitId, editorState }).catch(() => {});
       await get().loadVersions();
       await get().loadTimelines();
       await get().loadGraphData();
@@ -786,20 +790,35 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
 
   navigateToSnapshot: async (commitId) => {
     try {
-      // Clear active sketch FIRST to trigger React re-render which cancels
-      // pending debounced saves in SketchForm — prevents stale writes during checkout
-      const prevSketchPath = get().activeSketchPath;
-      set({ activeSketch: null, activeSketchPath: null, isDirty: false });
+      // Clear active editors FIRST to cancel pending debounced saves
+      set({ activeSketch: null, activeSketchPath: null, activeStoryboard: null, activeStoryboardPath: null, isDirty: false });
       await invoke("navigate_to_snapshot", { commitId });
-      // Reload sketches and try to re-open the previously active sketch
+      // Reload file lists
       await get().loadSketches();
       await get().loadStoryboards();
-      if (prevSketchPath) {
-        const { sketches } = get();
-        const stillExists = sketches.some((s) => s.path === prevSketchPath);
-        if (stillExists) {
-          await get().openSketch(prevSketchPath);
-        }
+      // Restore editor state saved with this snapshot
+      const raw = await invoke<string | null>("load_editor_state", { commitId });
+      if (raw) {
+        try {
+          const saved = JSON.parse(raw) as { openTabs?: EditorTab[]; activeTabId?: string | null };
+          const { sketches, storyboards } = get();
+          // Only restore tabs whose files still exist in this snapshot
+          const validTabs = (saved.openTabs ?? []).filter((t) =>
+            t.type === "sketch"
+              ? sketches.some((s) => s.path === t.path)
+              : storyboards.some((s) => s.path === t.path),
+          );
+          set({ openTabs: validTabs, activeTabId: saved.activeTabId ?? null });
+          // Open the active tab's content
+          const active = validTabs.find((t) => t.id === saved.activeTabId);
+          if (active) {
+            if (active.type === "sketch") await get().openSketch(active.path);
+            else await get().openStoryboard(active.path);
+          }
+        } catch { /* ignore parse errors */ }
+      } else {
+        // No saved state — clear tabs
+        set({ openTabs: [], activeTabId: null });
       }
       await get().loadVersions();
       await get().loadTimelines();
