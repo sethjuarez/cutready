@@ -150,15 +150,17 @@ export function SnapshotGraph({
   }
 
   // HEAD → ghost branch-off curve (ghost is ABOVE head, branching upward)
+  // Stored separately so it renders on top of nodes (above box-shadow)
   const ghostR = rows.find(r => r.kind === "ghost");
   const headR  = headIdx >= 0 ? nodeRow.get(headIdx) : undefined;
+  let ghostEdge: Edge | null = null;
   if (ghostR && headR) {
     const dx = ghostR.cx - headR.cx;
     const dy = ghostR.cy - headR.cy;  // negative (ghost is above)
-    edges.push({
+    ghostEdge = {
       d: `M ${headR.cx + HEAD_R} ${headR.cy} C ${headR.cx + dx * 0.5} ${headR.cy}, ${ghostR.cx} ${ghostR.cy - dy * 0.5}, ${ghostR.cx} ${ghostR.cy + 4}`,
       color: lc(nodes[headIdx].lane), dashed: true, opacity: 0.35,
-    });
+    };
   }
 
   /* ── render ──────────────────────────────────── */
@@ -317,6 +319,26 @@ export function SnapshotGraph({
           </div>
         );
       })}
+
+      {/* Ghost branch edge — rendered ON TOP of nodes so it's not hidden by box-shadow */}
+      {ghostEdge && (
+        <svg
+          className="absolute top-0 left-0"
+          width={graphColW + 4}
+          height={totalH}
+          style={{ pointerEvents: "none", zIndex: 3 }}
+        >
+          <path
+            d={ghostEdge.d}
+            stroke={ghostEdge.color}
+            strokeWidth={1.5}
+            strokeOpacity={ghostEdge.opacity}
+            fill="none"
+            strokeDasharray="4 3"
+            strokeLinecap="round"
+          />
+        </svg>
+      )}
     </div>
   );
 }
