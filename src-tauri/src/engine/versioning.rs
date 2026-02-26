@@ -1603,4 +1603,248 @@ mod tests {
         let alias = id1_nodes.iter().find(|n| n.timeline == "fork-newbranch").unwrap();
         assert!(alias.is_branch_tip, "Alias node should have is_branch_tip=true");
     }
+
+    // ── Snapshot graph integration tests ──────────────────────────
+
+    #[test]
+    fn graph_shows_all_three_branches() {
+        // Reproduces the voice-demo scenario: main + fork + shared-tip branch
+        let tmp = setup_project_dir();
+        init_project_repo(tmp.path()).unwrap();
+
+        // Build: init → start → one → two → three (main)
+        std::fs::write(tmp.path().join("a.txt"), "s").unwrap();
+        let start = commit_snapshot(tmp.path(), "start", None).unwrap();
+
+        std::fs::write(tmp.path().join("a.txt"), "1").unwrap();
+        let one = commit_snapshot(tmp.path(), "one", None).unwrap();
+
+        std::fs::write(tmp.path().join("a.txt"), "2").unwrap();
+        let _two = commit_snapshot(tmp.path(), "two", None).unwrap();
+
+        std::fs::write(tmp.path().join("a.txt"), "3").unwrap();
+        let _three = commit_snapshot(tmp.path(), "three", None).unwrap();
+
+        // Fork from "one"
+        navigate_to_snapshot(tmp.path(), &one).unwrap();
+        std::fs::write(tmp.path().join("b.txt"), "x").unwrap();
+        let _inv1 = commit_snapshot(tmp.path(), "part 1", Some("investigation")).unwrap();
+
+        // At this point we have main + one fork. Get the fork's name.
+        let tls_before = list_timelines(tmp.path()).unwrap();
+        assert_eq!(tls_before.len(), 2, "Should have 2 timelines before adding third");
+
+        // Create a third branch at "start" (shared tip, no unique commits)
+        let repo = gix::open(tmp.path()).unwrap();
+        let start_oid = repo.rev_parse_single(start.as_str()).unwrap().detach();
+        repo.reference(
+            "refs/heads/timeline/fork-newbranch",
+            start_oid,
+            gix::refs::transaction::PreviousValue::Any,
+            "test",
+        ).unwrap();
+
+        let graph = get_timeline_graph(tmp.path()).unwrap();
+        let timelines_in_graph: std::collections::HashSet<&str> =
+            graph.iter().map(|n| n.timeline.as_str()).collect();
+
+        assert!(timelines_in_graph.contains("main"), "Graph missing main");
+        assert!(timelines_in_graph.contains("fork-newbranch"), "Graph missing shared-tip branch");
+        // The fork created by commit_snapshot has a timestamp-based name
+        assert!(timelines_in_graph.len() >= 3,
+            "Expected at least 3 timelines in graph, got: {:?}", timelines_in_graph);
+
+        // list_timelines should also return all 3
+        let tls = list_timelines(tmp.path()).unwrap();
+        assert_eq!(tls.len(), 3, "Expected 3 timelines, got {}: {:?}",
+            tls.len(), tls.iter().map(|t| &t.name).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn graph_navigate_does_not_corrupt_branches() {
+        // Clicking between branches should never move branch refs
+        let tmp = setup_project_dir();
+        init_project_repo(tmp.path()).unwrap();
+
+        std::fs::write(tmp.path().join("a.txt"), "1").unwrap();
+        let id1 = commit_snapshot(tmp.path(), "first", None).unwrap();
+
+        std::fs::write(tmp.path().join("a.txt"), "2").unwrap();
+        let id2 = commit_snapshot(tmp.path(), "second", None).unwrap();
+
+        // Fork from id1
+        navigate_to_snapshot(tmp.path(), &id1).unwrap();
+        std::fs::write(tmp.path().join("b.txt"), "x").unwrap();
+        let fork1 = commit_snapshot(tmp.path(), "fork work", Some("experiment")).unwrap();
+
+        // Find the fork's actual ref name (timestamp-based)
+        let tls = list_timelines(tmp.path()).unwrap();
+        let fork_tl = tls.iter().find(|t| t.name != "main").unwrap();
+        let fork_ref = format!("{}{}", TIMELINE_PREFIX, fork_tl.name);
+
+        // Record branch tips before navigation
+        let repo = gix::open(tmp.path()).unwrap();
+        let main_tip_before = repo.find_reference("refs/heads/main").unwrap().id().detach();
+        let fork_tip_before = repo.find_reference(&fork_ref).unwrap().id().detach();
+
+        // Navigate to various commits
+        navigate_to_snapshot(tmp.path(), &id1).unwrap();
+        navigate_to_snapshot(tmp.path(), &id2).unwrap();
+        navigate_to_snapshot(tmp.path(), &fork1).unwrap();
+        navigate_to_snapshot(tmp.path(), &id1).unwrap();
+
+        // Branch tips must not have moved
+        let repo = gix::open(tmp.path()).unwrap();
+        let main_tip_after = repo.find_reference("refs/heads/main").unwrap().id().detach();
+        let fork_tip_after = repo.find_reference(&fork_ref).unwrap().id().detach();
+
+        assert_eq!(main_tip_before, main_tip_after,
+            "main branch tip moved during navigation!");
+        assert_eq!(fork_tip_before, fork_tip_after,
+            "fork branch tip moved during navigation!");
+    }
+
+    #[test]
+    fn graph_head_attribution_after_navigation() {
+        // HEAD commit should be attributed to the active timeline
+        let tmp = setup_project_dir();
+        init_project_repo(tmp.path()).unwrap();
+
+        std::fs::write(tmp.path().join("a.txt"), "1").unwrap();
+        let id1 = commit_snapshot(tmp.path(), "first", None).unwrap();
+
+        std::fs::write(tmp.path().join("a.txt"), "2").unwrap();
+        let id2 = commit_snapshot(tmp.path(), "second", None).unwrap();
+
+        // Fork from id1
+        navigate_to_snapshot(tmp.path(), &id1).unwrap();
+        std::fs::write(tmp.path().join("b.txt"), "x").unwrap();
+        let fork1 = commit_snapshot(tmp.path(), "branch work", Some("mybranch")).unwrap();
+
+        // Find fork's actual timeline name
+        let tls = list_timelines(tmp.path()).unwrap();
+        let fork_name = tls.iter().find(|t| t.name != "main").unwrap().name.clone();
+
+        // Navigate to fork tip — HEAD should be on fork's timeline
+        navigate_to_snapshot(tmp.path(), &fork1).unwrap();
+        let graph = get_timeline_graph(tmp.path()).unwrap();
+        let head_node = graph.iter().find(|n| n.is_head).unwrap();
+        assert_eq!(head_node.id, fork1);
+        assert_eq!(head_node.timeline, fork_name,
+            "HEAD should be attributed to fork timeline, got '{}'", head_node.timeline);
+
+        // Navigate to main tip — HEAD should be on main
+        navigate_to_snapshot(tmp.path(), &id2).unwrap();
+        let graph = get_timeline_graph(tmp.path()).unwrap();
+        let head_node = graph.iter().find(|n| n.is_head).unwrap();
+        assert_eq!(head_node.id, id2);
+        assert_eq!(head_node.timeline, "main",
+            "HEAD should be attributed to main, got '{}'", head_node.timeline);
+    }
+
+    #[test]
+    fn graph_rebuild_after_every_action() {
+        // After navigate + commit, graph should reflect the new state
+        let tmp = setup_project_dir();
+        init_project_repo(tmp.path()).unwrap();
+
+        std::fs::write(tmp.path().join("a.txt"), "1").unwrap();
+        let id1 = commit_snapshot(tmp.path(), "first", None).unwrap();
+
+        std::fs::write(tmp.path().join("a.txt"), "2").unwrap();
+        let id2 = commit_snapshot(tmp.path(), "second", None).unwrap();
+
+        // Navigate back, commit a fork
+        navigate_to_snapshot(tmp.path(), &id1).unwrap();
+        std::fs::write(tmp.path().join("c.txt"), "fork").unwrap();
+        let fork_id = commit_snapshot(tmp.path(), "forked", Some("alt")).unwrap();
+
+        // Graph should show both branches and HEAD on fork
+        let graph = get_timeline_graph(tmp.path()).unwrap();
+        let head_node = graph.iter().find(|n| n.is_head).unwrap();
+        assert_eq!(head_node.id, fork_id);
+
+        // Main should still have id2 at its tip
+        let main_nodes: Vec<_> = graph.iter().filter(|n| n.timeline == "main").collect();
+        assert!(main_nodes.iter().any(|n| n.id == id2),
+            "main should still contain 'second' commit");
+
+        // Navigate to id2 (main tip) — graph should update HEAD
+        navigate_to_snapshot(tmp.path(), &id2).unwrap();
+        let graph = get_timeline_graph(tmp.path()).unwrap();
+        let head_node = graph.iter().find(|n| n.is_head).unwrap();
+        assert_eq!(head_node.id, id2);
+    }
+
+    #[test]
+    fn graph_branch_tips_marked_correctly() {
+        let tmp = setup_project_dir();
+        init_project_repo(tmp.path()).unwrap();
+
+        std::fs::write(tmp.path().join("a.txt"), "1").unwrap();
+        let id1 = commit_snapshot(tmp.path(), "first", None).unwrap();
+
+        std::fs::write(tmp.path().join("a.txt"), "2").unwrap();
+        let id2 = commit_snapshot(tmp.path(), "second", None).unwrap();
+
+        // Fork
+        navigate_to_snapshot(tmp.path(), &id1).unwrap();
+        std::fs::write(tmp.path().join("b.txt"), "x").unwrap();
+        let fork_tip = commit_snapshot(tmp.path(), "fork tip", Some("branch1")).unwrap();
+
+        let graph = get_timeline_graph(tmp.path()).unwrap();
+
+        // Branch tips should be marked
+        let main_tip_node = graph.iter().find(|n| n.id == id2 && n.timeline == "main").unwrap();
+        assert!(main_tip_node.is_branch_tip, "main tip should have is_branch_tip=true");
+
+        let fork_tip_node = graph.iter().find(|n| n.id == fork_tip).unwrap();
+        assert!(fork_tip_node.is_branch_tip, "fork tip should have is_branch_tip=true");
+
+        // Non-tip nodes should not be marked
+        let first_node = graph.iter().find(|n| n.id == id1 && n.timeline == "main").unwrap();
+        assert!(!first_node.is_branch_tip, "non-tip commit should have is_branch_tip=false");
+    }
+
+    #[test]
+    fn graph_detached_head_at_shared_ancestor() {
+        // When HEAD is at a shared ancestor, graph should still show all branches
+        let tmp = setup_project_dir();
+        init_project_repo(tmp.path()).unwrap();
+
+        std::fs::write(tmp.path().join("a.txt"), "1").unwrap();
+        let id1 = commit_snapshot(tmp.path(), "first", None).unwrap();
+
+        std::fs::write(tmp.path().join("a.txt"), "2").unwrap();
+        let _id2 = commit_snapshot(tmp.path(), "second", None).unwrap();
+
+        // Fork from id1
+        navigate_to_snapshot(tmp.path(), &id1).unwrap();
+        std::fs::write(tmp.path().join("b.txt"), "x").unwrap();
+        let _fork = commit_snapshot(tmp.path(), "fork work", Some("branch1")).unwrap();
+
+        // Get the fork's actual timeline name
+        let tls = list_timelines(tmp.path()).unwrap();
+        let fork_name = tls.iter().find(|t| t.name != "main").unwrap().name.clone();
+
+        // Navigate to id1 (shared ancestor — detached HEAD)
+        navigate_to_snapshot(tmp.path(), &id1).unwrap();
+
+        let graph = get_timeline_graph(tmp.path()).unwrap();
+        let head_node = graph.iter().find(|n| n.is_head).unwrap();
+        assert_eq!(head_node.id, id1, "HEAD should be at the shared ancestor");
+
+        // Both branches should have nodes in the graph
+        let timelines: std::collections::HashSet<&str> =
+            graph.iter().map(|n| n.timeline.as_str()).collect();
+        assert!(timelines.contains("main"), "Graph missing main when HEAD at shared ancestor");
+        assert!(timelines.contains(fork_name.as_str()),
+            "Graph missing fork '{}' when HEAD at shared ancestor. Timelines: {:?}",
+            fork_name, timelines);
+
+        // list_timelines should mark one as active
+        let tls = list_timelines(tmp.path()).unwrap();
+        assert!(tls.iter().any(|t| t.is_active),
+            "At least one timeline should be active even with detached HEAD");
+    }
 }
