@@ -29,7 +29,7 @@ export function VersionHistory() {
   return (
     <div className={`flex flex-col h-full ${borderClass} border-[var(--color-border)]`}>
       {/* Header */}
-      <div className="flex items-center justify-between px-3 py-3 border-b border-[var(--color-border)]">
+      <div className="flex items-center justify-between px-3 h-9 shrink-0 border-b border-[var(--color-border)]">
         <span className="text-xs font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">
           Version History
         </span>

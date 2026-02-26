@@ -25,7 +25,7 @@ export function OutputPanel({ outputs, onClear, onCollapse }: OutputPanelProps) 
   return (
     <div className="flex flex-col h-full bg-[var(--color-surface)] border-t border-[var(--color-border)]">
       {/* Header */}
-      <div className="no-select flex items-center justify-between px-3 h-8 shrink-0 border-b border-[var(--color-border)]">
+      <div className="no-select flex items-center justify-between px-3 h-9 shrink-0 border-b border-[var(--color-border)]">
         <div className="flex items-center gap-1">
           <TabButton
             active={activeTab === "activity"}
