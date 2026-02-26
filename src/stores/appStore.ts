@@ -241,6 +241,34 @@ interface AppStoreState {
   stopRecording: () => Promise<void>;
 }
 
+// ── Layout persistence helpers ─────────────────────────────────
+const LAYOUT_KEY = "cutready:layout";
+
+function loadLayout(): Partial<{
+  sidebarWidth: number;
+  sidebarVisible: boolean;
+  sidebarPosition: "left" | "right";
+  outputVisible: boolean;
+  outputHeight: number;
+  showVersionHistory: boolean;
+}> {
+  try {
+    const raw = localStorage.getItem(LAYOUT_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveLayout(partial: Record<string, unknown>) {
+  try {
+    const current = loadLayout();
+    localStorage.setItem(LAYOUT_KEY, JSON.stringify({ ...current, ...partial }));
+  } catch { /* ignore */ }
+}
+
+const savedLayout = loadLayout();
+
 export const useAppStore = create<AppStoreState>((set, get) => ({
   view: "home",
   currentProject: null,
@@ -248,11 +276,11 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   loading: false,
   error: null,
   sidebarMode: "list",
-  sidebarWidth: 240,
-  sidebarVisible: true,
-  outputVisible: false,
-  outputHeight: 200,
-  sidebarPosition: "left",
+  sidebarWidth: savedLayout.sidebarWidth ?? 240,
+  sidebarVisible: savedLayout.sidebarVisible ?? true,
+  outputVisible: savedLayout.outputVisible ?? false,
+  outputHeight: savedLayout.outputHeight ?? 200,
+  sidebarPosition: savedLayout.sidebarPosition ?? "left",
 
   openTabs: [],
   activeTabId: null,
@@ -264,7 +292,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   activeStoryboardPath: null,
   activeStoryboard: null,
   versions: [],
-  showVersionHistory: false,
+  showVersionHistory: savedLayout.showVersionHistory ?? false,
   snapshotPromptOpen: false,
   viewingSnapshotId: null,
   isDirty: false,
@@ -286,11 +314,29 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   clearError: () => set({ error: null }),
   setView: (view) => set({ view }),
   setSidebarMode: (mode) => set({ sidebarMode: mode }),
-  setSidebarWidth: (width) => set({ sidebarWidth: Math.min(400, Math.max(180, width)) }),
-  toggleSidebar: () => set((s) => ({ sidebarVisible: !s.sidebarVisible })),
-  toggleOutput: () => set((s) => ({ outputVisible: !s.outputVisible })),
-  setOutputHeight: (height) => set({ outputHeight: Math.min(500, Math.max(80, height)) }),
-  toggleSidebarPosition: () => set((s) => ({ sidebarPosition: s.sidebarPosition === "left" ? "right" : "left" })),
+  setSidebarWidth: (width) => {
+    const w = Math.min(400, Math.max(180, width));
+    set({ sidebarWidth: w });
+    saveLayout({ sidebarWidth: w });
+  },
+  toggleSidebar: () => set((s) => {
+    saveLayout({ sidebarVisible: !s.sidebarVisible });
+    return { sidebarVisible: !s.sidebarVisible };
+  }),
+  toggleOutput: () => set((s) => {
+    saveLayout({ outputVisible: !s.outputVisible });
+    return { outputVisible: !s.outputVisible };
+  }),
+  setOutputHeight: (height) => {
+    const h = Math.min(500, Math.max(80, height));
+    set({ outputHeight: h });
+    saveLayout({ outputHeight: h });
+  },
+  toggleSidebarPosition: () => set((s) => {
+    const pos = s.sidebarPosition === "left" ? "right" : "left";
+    saveLayout({ sidebarPosition: pos });
+    return { sidebarPosition: pos };
+  }),
 
   openTab: (tab) => {
     const { openTabs } = get();
@@ -378,6 +424,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     try {
       const project = await invoke<ProjectView>("create_project_folder", { path });
       set({ currentProject: project, view: "sketch" });
+      localStorage.setItem("cutready:lastProject", path);
       await get().loadRecentProjects();
       await get().loadSketches();
       await get().loadStoryboards();
@@ -394,6 +441,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     try {
       const project = await invoke<ProjectView>("open_project_folder", { path });
       set({ currentProject: project, view: "sketch" });
+      localStorage.setItem("cutready:lastProject", path);
       await get().loadSketches();
       await get().loadStoryboards();
     } catch (err) {
@@ -406,6 +454,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
 
   closeProject: () => {
     invoke("close_project").catch(console.error);
+    localStorage.removeItem("cutready:lastProject");
     set({
       currentProject: null,
       view: "home",
@@ -725,11 +774,15 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   },
 
   toggleVersionHistory: () => {
-    set((state) => ({ showVersionHistory: !state.showVersionHistory }));
+    set((state) => {
+      saveLayout({ showVersionHistory: !state.showVersionHistory });
+      return { showVersionHistory: !state.showVersionHistory };
+    });
   },
 
   promptSnapshot: () => {
     set({ showVersionHistory: true, snapshotPromptOpen: true });
+    saveLayout({ showVersionHistory: true });
   },
 
   // ── Profile actions ───────────────────────────────────────
