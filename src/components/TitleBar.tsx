@@ -109,24 +109,24 @@ export function TitleBar({
 
       {/* Right: Layout toggles + window controls */}
       <div className="flex items-center h-full shrink-0">
-        {/* Layout toggles — ordered to match spatial positions */}
+        {/* Layout toggles — icons match spatial positions, actions swap with sidebar position */}
         <div className="flex items-center gap-0.5 px-2" style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}>
-          {/* Primary sidebar toggle (always shows on its spatial side) */}
+          {/* Left panel icon — toggles whichever panel is on the left */}
           <button
             className={`flex items-center justify-center w-7 h-[22px] rounded transition-colors ${
-              sidebarVisible
+              (sidebarPosition === "left" ? sidebarVisible : secondaryVisible)
                 ? "text-[var(--color-accent)]"
                 : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"
             } hover:bg-[var(--color-surface-alt)]`}
-            onClick={onToggleSidebar}
-            title="Toggle Sidebar (Ctrl+B)"
+            onClick={sidebarPosition === "left" ? onToggleSidebar : onToggleSecondary}
+            title={sidebarPosition === "left" ? "Toggle Sidebar (Ctrl+B)" : "Toggle Secondary Panel"}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <rect x="3" y="3" width="18" height="18" rx="2" />
               <line x1="9" y1="3" x2="9" y2="21" />
             </svg>
           </button>
-          {/* Output panel toggle */}
+          {/* Bottom panel icon */}
           <button
             className={`flex items-center justify-center w-7 h-[22px] rounded transition-colors ${
               outputVisible
@@ -141,15 +141,15 @@ export function TitleBar({
               <line x1="3" y1="15" x2="21" y2="15" />
             </svg>
           </button>
-          {/* Secondary panel toggle (always right-panel icon) */}
+          {/* Right panel icon — toggles whichever panel is on the right */}
           <button
             className={`flex items-center justify-center w-7 h-[22px] rounded transition-colors ${
-              secondaryVisible
+              (sidebarPosition === "right" ? sidebarVisible : secondaryVisible)
                 ? "text-[var(--color-accent)]"
                 : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"
             } hover:bg-[var(--color-surface-alt)]`}
-            onClick={onToggleSecondary}
-            title="Toggle Secondary Panel"
+            onClick={sidebarPosition === "right" ? onToggleSidebar : onToggleSecondary}
+            title={sidebarPosition === "right" ? "Toggle Sidebar (Ctrl+B)" : "Toggle Secondary Panel"}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <rect x="3" y="3" width="18" height="18" rx="2" />
