@@ -93,12 +93,13 @@ export function SnapshotGraph({
   }
 
   for (let i = 0; i < nodes.length; i++) {
-    rows.push({ kind: "node", nodeIdx: i, cx: PAD_L + nodes[i].lane * LANE_W, cy: y + ROW_H / 2, h: ROW_H, top: y });
-    y += ROW_H;
+    // ghost row goes ABOVE HEAD (new direction points forward/up in time)
     if (nodes[i].is_head && showGhost) {
       rows.push({ kind: "ghost", cx: PAD_L + ghostLane * LANE_W, cy: y + GHOST_H / 2, h: GHOST_H, top: y });
       y += GHOST_H;
     }
+    rows.push({ kind: "node", nodeIdx: i, cx: PAD_L + nodes[i].lane * LANE_W, cy: y + ROW_H / 2, h: ROW_H, top: y });
+    y += ROW_H;
   }
 
   const totalH = y + PAD_B;
@@ -148,14 +149,14 @@ export function SnapshotGraph({
     });
   }
 
-  // HEAD → ghost branch-off curve
+  // HEAD → ghost branch-off curve (ghost is ABOVE head, branching upward)
   const ghostR = rows.find(r => r.kind === "ghost");
   const headR  = headIdx >= 0 ? nodeRow.get(headIdx) : undefined;
   if (ghostR && headR) {
     const dx = ghostR.cx - headR.cx;
-    const dy = ghostR.cy - headR.cy;
+    const dy = ghostR.cy - headR.cy;  // negative (ghost is above)
     edges.push({
-      d: `M ${headR.cx + HEAD_R} ${headR.cy} C ${headR.cx + dx * 0.5} ${headR.cy}, ${ghostR.cx} ${ghostR.cy - dy * 0.5}, ${ghostR.cx} ${ghostR.cy - 4}`,
+      d: `M ${headR.cx + HEAD_R} ${headR.cy} C ${headR.cx + dx * 0.5} ${headR.cy}, ${ghostR.cx} ${ghostR.cy - dy * 0.5}, ${ghostR.cx} ${ghostR.cy + 4}`,
       color: lc(nodes[headIdx].lane), dashed: true, opacity: 0.35,
     });
   }
