@@ -33,6 +33,10 @@ export function ScriptTable({ rows, onChange, readOnly = false }: ScriptTablePro
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
   );
 
+  // Always-current ref to avoid stale closure issues in callbacks
+  const rowsRef = useRef(rows);
+  rowsRef.current = rows;
+
   // Stable IDs for each row (index-based, reset when row count changes)
   const rowIds = useMemo(
     () => rows.map((_, i) => `row-${i}`),
@@ -41,30 +45,30 @@ export function ScriptTable({ rows, onChange, readOnly = false }: ScriptTablePro
 
   const updateRow = useCallback(
     (index: number, field: keyof PlanningRow, value: string) => {
-      const updated = rows.map((r, i) =>
+      const updated = rowsRef.current.map((r, i) =>
         i === index ? { ...r, [field]: value } : r,
       );
       onChange(updated);
     },
-    [rows, onChange],
+    [onChange],
   );
 
   const addRow = useCallback(
     (afterIndex: number) => {
-      const updated = [...rows];
+      const updated = [...rowsRef.current];
       updated.splice(afterIndex + 1, 0, emptyRow());
       onChange(updated);
     },
-    [rows, onChange],
+    [onChange],
   );
 
   const deleteRow = useCallback(
     (index: number) => {
-      if (rows.length <= 1) return;
-      const updated = rows.filter((_, i) => i !== index);
+      if (rowsRef.current.length <= 1) return;
+      const updated = rowsRef.current.filter((_, i) => i !== index);
       onChange(updated);
     },
-    [rows, onChange],
+    [onChange],
   );
 
   const handleDragEnd = useCallback(
@@ -75,12 +79,12 @@ export function ScriptTable({ rows, onChange, readOnly = false }: ScriptTablePro
       const oldIndex = rowIds.indexOf(active.id as string);
       const newIndex = rowIds.indexOf(over.id as string);
       if (oldIndex === -1 || newIndex === -1) return;
-      const updated = [...rows];
+      const updated = [...rowsRef.current];
       const [moved] = updated.splice(oldIndex, 1);
       updated.splice(newIndex, 0, moved);
       onChange(updated);
     },
-    [rows, onChange, rowIds],
+    [onChange, rowIds],
   );
 
   const displayRows = rows.length === 0 ? [emptyRow()] : rows;
