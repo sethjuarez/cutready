@@ -199,9 +199,9 @@ function SortableRow({
       className={`group border-t border-[var(--color-border)] ${isSorting ? "" : "transition-colors"}`}
     >
       {!readOnly && (
-        <td className="p-1 align-top">
+        <td className="p-0 align-middle">
           <div
-            className="cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-100 transition-opacity text-[var(--color-text-secondary)] hover:text-[var(--color-text)] flex items-center justify-center"
+            className="cursor-grab active:cursor-grabbing opacity-30 group-hover:opacity-100 transition-opacity text-[var(--color-text-secondary)] hover:text-[var(--color-text)] flex items-center justify-center h-full"
             {...attributes}
             {...listeners}
           >
