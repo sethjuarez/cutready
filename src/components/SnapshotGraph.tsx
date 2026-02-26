@@ -3,16 +3,16 @@ import { hierarchy, tree as d3Tree } from "d3-hierarchy";
 import type { GraphNode } from "../types/sketch";
 
 /* ── Layout constants ─────────────────────────────────────────────── */
-const NODE_DX = 40;      // D3: horizontal spacing between siblings
-const ROW_H = 44;        // px per commit row
-const DIRTY_H = 30;      // px for dirty-indicator row
-const GHOST_H = 30;      // px for ghost-branch row
-const PAD_L = 24;        // minimum left padding
-const PAD_T = 8;         // top padding
-const PAD_B = 8;         // bottom padding
-const NODE_R = 4;        // regular dot radius
-const HEAD_R = 5.5;      // HEAD dot radius
-const LABEL_GAP = 16;    // rightmost node centre → label text start
+const NODE_DX = 20;      // D3: horizontal spacing between siblings
+const ROW_H = 38;        // px per commit row
+const DIRTY_H = 26;      // px for dirty-indicator row
+const GHOST_H = 26;      // px for ghost-branch row
+const PAD_L = 16;        // minimum left padding
+const PAD_T = 6;         // top padding
+const PAD_B = 6;         // bottom padding
+const NODE_R = 3.5;      // regular dot radius
+const HEAD_R = 5;        // HEAD dot radius
+const LABEL_GAP = 10;    // rightmost node centre → label text start
 
 const LANE_COLORS = [
   "var(--color-accent)",      // purple — main
