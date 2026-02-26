@@ -5,7 +5,8 @@
 :root {
   --color-surface: #faf9f7;
   --color-surface-alt: #f0eeeb;
-  --color-surface-inset: #e9e6e1;
+  --color-surface-inset: #eae7e2;
+  --color-surface-toolbar: #e0ddd7;
   --color-accent: #6b5ce7;
   --color-accent-hover: #5a4bd6;
   --color-border: #e8e5e0;
@@ -33,6 +34,7 @@
   --color-surface: #2b2926;
   --color-surface-alt: #353230;
   --color-surface-inset: #252220;
+  --color-surface-toolbar: #1e1c1a;
   --color-accent: #a49afa;
   --color-accent-hover: #8b7ff5;
   --color-border: #3e3b38;
