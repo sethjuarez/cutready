@@ -83,6 +83,13 @@ html {
   background: #5c5956;
 }
 
+/* ── Animations ──────────────────────────────────────────── */
+
+@keyframes fadeSlideIn {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
 /* ── Script Planning Table ───────────────────────────────── */
 
 .script-table-th {
