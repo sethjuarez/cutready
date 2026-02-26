@@ -17,6 +17,7 @@ export function SketchForm() {
   const closeSketch = useAppStore((s) => s.closeSketch);
 
   const [localTitle, setLocalTitle] = useState(activeSketch?.title ?? "");
+  const [localRows, setLocalRows] = useState<PlanningRow[]>(activeSketch?.rows ?? []);
   const titleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const rowsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -24,6 +25,12 @@ export function SketchForm() {
   const pendingRowsRef = useRef<PlanningRow[] | null>(null);
   const pendingTitleRef = useRef<string | null>(null);
   const pendingPathRef = useRef<string | null>(null);
+
+  // Reset local state when switching to a different sketch
+  useEffect(() => {
+    setLocalTitle(activeSketch?.title ?? "");
+    setLocalRows(activeSketch?.rows ?? []);
+  }, [activeSketchPath]);
 
   const handleTitleChange = useCallback(
     (value: string) => {
@@ -42,6 +49,7 @@ export function SketchForm() {
 
   const handleRowsChange = useCallback(
     (rows: PlanningRow[]) => {
+      setLocalRows(rows);
       pendingRowsRef.current = rows;
       pendingPathRef.current = activeSketchPath;
       if (rowsTimeoutRef.current) clearTimeout(rowsTimeoutRef.current);
@@ -122,7 +130,7 @@ export function SketchForm() {
             </h3>
           </div>
           <ScriptTable
-            rows={activeSketch.rows}
+            rows={localRows}
             onChange={handleRowsChange}
           />
           {/* Always-visible add row button */}
@@ -134,7 +142,7 @@ export function SketchForm() {
                 demo_actions: "",
                 screenshot: null,
               };
-              const updated = [...activeSketch.rows, newRow];
+              const updated = [...localRows, newRow];
               handleRowsChange(updated);
             }}
             className="flex items-center gap-1.5 mt-3 px-3 py-2 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] border border-dashed border-[var(--color-border)] hover:border-[var(--color-accent)]/40 rounded-lg transition-colors w-full justify-center"
