@@ -122,7 +122,7 @@ export function VersionHistory() {
                       className={`relative z-10 shrink-0 rounded-full ${
                         isLatest
                           ? "w-2.5 h-2.5 bg-[var(--color-accent)]"
-                          : "w-1.5 h-1.5 bg-[var(--color-text-secondary)]/50"
+                          : "w-2 h-2 bg-[var(--color-text-secondary)]/50"
                       }`}
                       style={{ boxShadow: "0 0 0 3px var(--color-surface)" }}
                     />
