@@ -101,3 +101,45 @@ html {
   font-size: 0.8125rem;
 }
 
+/* ── Markdown Cell (Planning Table) ──────────────────────── */
+
+.md-cell-preview {
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--color-text);
+}
+
+.md-cell-p {
+  margin: 0;
+}
+
+.md-cell-p + .md-cell-p,
+.md-cell-p + .md-cell-ul,
+.md-cell-p + .md-cell-ol,
+.md-cell-ul + .md-cell-p,
+.md-cell-ol + .md-cell-p,
+.md-cell-ul + .md-cell-ul,
+.md-cell-ol + .md-cell-ol {
+  margin-top: 0.25rem;
+}
+
+.md-cell-ul,
+.md-cell-ol {
+  margin: 0;
+  padding-left: 1.25rem;
+}
+
+.md-cell-ul {
+  list-style-type: disc;
+}
+
+.md-cell-ol {
+  list-style-type: decimal;
+}
+
+.md-cell-ul li,
+.md-cell-ol li {
+  padding: 0.0625rem 0;
+  font-size: 0.8125rem;
+}
+

@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import type { PlanningRow } from "../types/sketch";
 
 function emptyRow(): PlanningRow {
@@ -12,7 +12,6 @@ interface ScriptTableProps {
 }
 
 export function ScriptTable({ rows, onChange, readOnly = false }: ScriptTableProps) {
-  const [focusedCell, setFocusedCell] = useState<{ row: number; col: string } | null>(null);
 
   const updateRow = useCallback(
     (index: number, field: keyof PlanningRow, value: string) => {
@@ -61,36 +60,29 @@ export function ScriptTable({ rows, onChange, readOnly = false }: ScriptTablePro
           {displayRows.map((row, idx) => (
             <tr key={idx} className="group border-t border-[var(--color-border)]">
               <td className="script-table-td align-top">
-                <CellInput
+                <input
+                  type="text"
                   value={row.time}
-                  onChange={(v) => updateRow(idx, "time", v)}
+                  onChange={(e) => updateRow(idx, "time", e.target.value)}
                   placeholder="~30s"
                   readOnly={readOnly}
-                  focused={focusedCell?.row === idx && focusedCell?.col === "time"}
-                  onFocus={() => setFocusedCell({ row: idx, col: "time" })}
-                  onBlur={() => setFocusedCell(null)}
+                  className="w-full bg-transparent text-xs px-1 py-0.5 rounded outline-none transition-colors focus:ring-1 focus:ring-[var(--color-accent)]/40 placeholder:text-[var(--color-text-secondary)]/40"
                 />
               </td>
               <td className="script-table-td align-top">
-                <CellTextarea
+                <MarkdownCell
                   value={row.narrative}
                   onChange={(v) => updateRow(idx, "narrative", v)}
                   placeholder="What to say..."
                   readOnly={readOnly}
-                  focused={focusedCell?.row === idx && focusedCell?.col === "narrative"}
-                  onFocus={() => setFocusedCell({ row: idx, col: "narrative" })}
-                  onBlur={() => setFocusedCell(null)}
                 />
               </td>
               <td className="script-table-td align-top">
-                <CellTextarea
+                <MarkdownCell
                   value={row.demo_actions}
                   onChange={(v) => updateRow(idx, "demo_actions", v)}
                   placeholder="What to do..."
                   readOnly={readOnly}
-                  focused={focusedCell?.row === idx && focusedCell?.col === "demo_actions"}
-                  onFocus={() => setFocusedCell({ row: idx, col: "demo_actions" })}
-                  onBlur={() => setFocusedCell(null)}
                 />
               </td>
               <td className="script-table-td align-top text-center">
@@ -136,68 +128,221 @@ export function ScriptTable({ rows, onChange, readOnly = false }: ScriptTablePro
   );
 }
 
-function CellInput({
-  value,
-  onChange,
-  placeholder,
-  readOnly,
-  focused,
-  onFocus,
-  onBlur,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  placeholder: string;
-  readOnly: boolean;
-  focused: boolean;
-  onFocus: () => void;
-  onBlur: () => void;
-}) {
-  return (
-    <input
-      type="text"
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      placeholder={placeholder}
-      readOnly={readOnly}
-      onFocus={onFocus}
-      onBlur={onBlur}
-      className={`w-full bg-transparent text-xs px-1 py-0.5 rounded outline-none transition-colors ${
-        focused ? "ring-1 ring-[var(--color-accent)]/40" : ""
-      } placeholder:text-[var(--color-text-secondary)]/40`}
-    />
-  );
+/* ── Inline formatting: **bold** and *italic* ──────────────── */
+
+function formatInline(text: string): ReactNode {
+  const parts: ReactNode[] = [];
+  const regex = /(\*\*(.+?)\*\*|\*(.+?)\*)/g;
+  let lastIndex = 0;
+  let match;
+  let key = 0;
+
+  while ((match = regex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(text.slice(lastIndex, match.index));
+    }
+    if (match[2]) {
+      parts.push(<strong key={key++}>{match[2]}</strong>);
+    } else if (match[3]) {
+      parts.push(<em key={key++}>{match[3]}</em>);
+    }
+    lastIndex = regex.lastIndex;
+  }
+
+  if (lastIndex === 0) return text;
+  if (lastIndex < text.length) parts.push(text.slice(lastIndex));
+  return <>{parts}</>;
 }
 
-function CellTextarea({
+/* ── Markdown block renderer ───────────────────────────────── */
+
+function renderMarkdown(text: string): ReactNode {
+  if (!text.trim()) return null;
+
+  const lines = text.split("\n");
+  const blocks: ReactNode[] = [];
+  let i = 0;
+  let bk = 0;
+
+  while (i < lines.length) {
+    const line = lines[i];
+
+    // Bullet list (- or *)
+    if (/^[-*]\s/.test(line)) {
+      const items: string[] = [];
+      while (i < lines.length && /^[-*]\s/.test(lines[i])) {
+        items.push(lines[i].replace(/^[-*]\s/, ""));
+        i++;
+      }
+      blocks.push(
+        <ul key={bk++} className="md-cell-ul">
+          {items.map((item, j) => (
+            <li key={j}>{formatInline(item)}</li>
+          ))}
+        </ul>,
+      );
+      continue;
+    }
+
+    // Numbered list
+    if (/^\d+\.\s/.test(line)) {
+      const items: string[] = [];
+      while (i < lines.length && /^\d+\.\s/.test(lines[i])) {
+        items.push(lines[i].replace(/^\d+\.\s/, ""));
+        i++;
+      }
+      blocks.push(
+        <ol key={bk++} className="md-cell-ol">
+          {items.map((item, j) => (
+            <li key={j}>{formatInline(item)}</li>
+          ))}
+        </ol>,
+      );
+      continue;
+    }
+
+    // Empty line
+    if (!line.trim()) {
+      i++;
+      continue;
+    }
+
+    // Paragraph
+    blocks.push(
+      <p key={bk++} className="md-cell-p">
+        {formatInline(line)}
+      </p>,
+    );
+    i++;
+  }
+
+  return <>{blocks}</>;
+}
+
+/* ── Markdown Cell: edit raw markdown, preview formatted ───── */
+
+function MarkdownCell({
   value,
   onChange,
   placeholder,
   readOnly,
-  focused,
-  onFocus,
-  onBlur,
 }: {
   value: string;
   onChange: (v: string) => void;
   placeholder: string;
   readOnly: boolean;
-  focused: boolean;
-  onFocus: () => void;
-  onBlur: () => void;
 }) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [localValue, setLocalValue] = useState(value);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const cursorRef = useRef<number | null>(null);
+
+  // Sync from parent when not editing
+  useEffect(() => {
+    if (!isEditing) setLocalValue(value);
+  }, [value, isEditing]);
+
+  // Auto-resize textarea
+  useEffect(() => {
+    if (isEditing && textareaRef.current) {
+      const el = textareaRef.current;
+      el.style.height = "auto";
+      el.style.height = el.scrollHeight + "px";
+    }
+  }, [localValue, isEditing]);
+
+  // Restore cursor after programmatic value changes
+  useEffect(() => {
+    if (cursorRef.current !== null && textareaRef.current) {
+      textareaRef.current.selectionStart = textareaRef.current.selectionEnd =
+        cursorRef.current;
+      cursorRef.current = null;
+    }
+  }, [localValue]);
+
+  // Focus when entering edit mode
+  useEffect(() => {
+    if (isEditing && textareaRef.current) {
+      textareaRef.current.focus();
+      const len = textareaRef.current.value.length;
+      textareaRef.current.selectionStart = textareaRef.current.selectionEnd = len;
+    }
+  }, [isEditing]);
+
+  const handleChange = (newValue: string) => {
+    setLocalValue(newValue);
+    onChange(newValue);
+  };
+
+  // Preview mode
+  if (readOnly || !isEditing) {
+    const rendered = renderMarkdown(value);
+    return (
+      <div
+        className={`md-cell-preview min-h-[1.5rem] ${!readOnly ? "cursor-text" : ""}`}
+        onClick={() => {
+          if (!readOnly) setIsEditing(true);
+        }}
+      >
+        {rendered || (
+          <span className="text-xs text-[var(--color-text-secondary)] opacity-40">
+            {placeholder}
+          </span>
+        )}
+      </div>
+    );
+  }
+
+  // Edit mode
   return (
     <textarea
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
+      ref={textareaRef}
+      value={localValue}
+      onChange={(e) => handleChange(e.target.value)}
+      onBlur={() => setIsEditing(false)}
       placeholder={placeholder}
-      readOnly={readOnly}
-      onFocus={onFocus}
-      onBlur={onBlur}
-      rows={2}
-      className={`w-full bg-transparent text-xs px-1 py-0.5 rounded outline-none resize-none transition-colors ${
-        focused ? "ring-1 ring-[var(--color-accent)]/40" : ""
-      } placeholder:text-[var(--color-text-secondary)]/40`}
+      className="w-full bg-transparent text-xs px-1 py-0.5 rounded outline-none resize-none ring-1 ring-[var(--color-accent)]/40 placeholder:text-[var(--color-text-secondary)]/40"
+      onKeyDown={(e) => {
+        if (e.key !== "Enter") return;
+        const pos = e.currentTarget.selectionStart;
+        const before = localValue.slice(0, pos);
+        const after = localValue.slice(pos);
+        const lastLine = before.split("\n").pop() || "";
+
+        // Auto-continue bullet lists
+        const bulletMatch = lastLine.match(/^([-*])\s(.*)/);
+        if (bulletMatch) {
+          e.preventDefault();
+          if (!bulletMatch[2].trim()) {
+            // Empty bullet → end the list
+            const lineStart = before.lastIndexOf("\n") + 1;
+            handleChange(localValue.slice(0, lineStart) + after);
+            cursorRef.current = lineStart;
+            return;
+          }
+          const prefix = bulletMatch[1] + " ";
+          handleChange(before + "\n" + prefix + after);
+          cursorRef.current = pos + 1 + prefix.length;
+          return;
+        }
+
+        // Auto-continue numbered lists
+        const numMatch = lastLine.match(/^(\d+)\.\s(.*)/);
+        if (numMatch) {
+          e.preventDefault();
+          if (!numMatch[2].trim()) {
+            // Empty numbered item → end the list
+            const lineStart = before.lastIndexOf("\n") + 1;
+            handleChange(localValue.slice(0, lineStart) + after);
+            cursorRef.current = lineStart;
+            return;
+          }
+          const prefix = parseInt(numMatch[1]) + 1 + ". ";
+          handleChange(before + "\n" + prefix + after);
+          cursorRef.current = pos + 1 + prefix.length;
+          return;
+        }
+      }}
     />
   );
 }
