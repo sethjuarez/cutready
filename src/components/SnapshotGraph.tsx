@@ -57,6 +57,8 @@ function computeXPositions(nodes: GraphNode[]): Map<string, number> {
   if (nodes.length === 0) return new Map();
 
   const byId = new Map(nodes.map(n => [n.id, n]));
+  const headNode = nodes.find(n => n.is_head);
+  const activeLane = headNode?.lane ?? 0;
 
   // Build parent → children map (reverse of node.parents)
   const childrenOf = new Map<string, GraphNode[]>();
@@ -74,13 +76,17 @@ function computeXPositions(nodes: GraphNode[]): Map<string, number> {
     n.parents.length === 0 || !n.parents.some(p => byId.has(p))
   ) || nodes[nodes.length - 1];
 
-  // Build tree for D3 (main-lane children first → D3 keeps main straight)
+  // Build tree for D3 (active-lane children first → D3 keeps active branch leftmost)
   const visited = new Set<string>();
   function build(gn: GraphNode): TreeDatum {
     visited.add(gn.id);
     const kids = (childrenOf.get(gn.id) || [])
       .filter(k => !visited.has(k.id))
-      .sort((a, b) => a.lane - b.lane);
+      .sort((a, b) => {
+        const aActive = a.lane === activeLane ? 0 : 1;
+        const bActive = b.lane === activeLane ? 0 : 1;
+        return aActive - bActive || a.lane - b.lane;
+      });
     return { id: gn.id, graphNode: gn, children: kids.map(k => build(k)) };
   }
 
@@ -99,28 +105,34 @@ function computeXPositions(nodes: GraphNode[]): Map<string, number> {
   return xMap;
 }
 
-/* ── Display sort (main trunk continuous, branches at fork point) ── */
+/* ── Display sort (active branch as trunk, others at fork points) ── */
 function sortForDisplay(nodes: GraphNode[]): GraphNode[] {
   if (nodes.length === 0) return nodes;
 
-  const main = nodes
-    .filter(n => n.lane === 0)
+  const headNode = nodes.find(n => n.is_head);
+  const activeLane = headNode?.lane ?? 0;
+
+  // Active branch = trunk (continuous line), sorted newest-first
+  const trunk = nodes
+    .filter(n => n.lane === activeLane)
     .sort((a, b) => +new Date(b.timestamp) - +new Date(a.timestamp));
 
+  // Group other branches by lane
   const lanes = new Map<number, GraphNode[]>();
   for (const n of nodes) {
-    if (n.lane === 0) continue;
+    if (n.lane === activeLane) continue;
     if (!lanes.has(n.lane)) lanes.set(n.lane, []);
     lanes.get(n.lane)!.push(n);
   }
   for (const arr of lanes.values())
     arr.sort((a, b) => +new Date(b.timestamp) - +new Date(a.timestamp));
 
-  const mainIds = new Set(main.map(n => n.id));
+  // Find fork-point (trunk parent) for each branch
+  const trunkIds = new Set(trunk.map(n => n.id));
   const branchAtFork = new Map<string, GraphNode[][]>();
   for (const [, arr] of lanes) {
     const oldest = arr[arr.length - 1];
-    const forkId = oldest.parents.find(p => mainIds.has(p));
+    const forkId = oldest.parents.find(p => trunkIds.has(p));
     if (forkId) {
       if (!branchAtFork.has(forkId)) branchAtFork.set(forkId, []);
       branchAtFork.get(forkId)!.push(arr);
@@ -129,14 +141,14 @@ function sortForDisplay(nodes: GraphNode[]): GraphNode[] {
 
   const result: GraphNode[] = [];
   const placed = new Set<string>();
-  for (const mn of main) {
-    const branches = branchAtFork.get(mn.id);
+  for (const tn of trunk) {
+    const branches = branchAtFork.get(tn.id);
     if (branches) {
       for (const br of branches)
         for (const n of br)
           if (!placed.has(n.id)) { result.push(n); placed.add(n.id); }
     }
-    if (!placed.has(mn.id)) { result.push(mn); placed.add(mn.id); }
+    if (!placed.has(tn.id)) { result.push(tn); placed.add(tn.id); }
   }
   for (const n of nodes) if (!placed.has(n.id)) result.push(n);
   return result;
