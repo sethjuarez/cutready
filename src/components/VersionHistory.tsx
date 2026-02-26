@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAppStore } from "../stores/appStore";
 
 export function VersionHistory() {
@@ -6,6 +6,7 @@ export function VersionHistory() {
   const isDirty = useAppStore((s) => s.isDirty);
   const loadVersions = useAppStore((s) => s.loadVersions);
   const saveVersion = useAppStore((s) => s.saveVersion);
+  const stashChanges = useAppStore((s) => s.stashChanges);
   const checkoutSnapshot = useAppStore((s) => s.checkoutSnapshot);
   const returnToLatest = useAppStore((s) => s.returnToLatest);
   const viewingSnapshotId = useAppStore((s) => s.viewingSnapshotId);
@@ -15,6 +16,8 @@ export function VersionHistory() {
   const [labelInput, setLabelInput] = useState("");
   const [showLabelInput, setShowLabelInput] = useState(false);
   const [saving, setSaving] = useState(false);
+  // Navigation prompt: when dirty and clicking an older snapshot
+  const [pendingNavTarget, setPendingNavTarget] = useState<string | null>(null);
 
   useEffect(() => {
     loadVersions();
@@ -36,7 +39,13 @@ export function VersionHistory() {
     setLabelInput("");
     setShowLabelInput(false);
     setSaving(false);
-  }, [labelInput, saveVersion]);
+    // If we were saving before navigating to an older snapshot, go there now
+    const navTarget = pendingNavRef.current;
+    if (navTarget) {
+      pendingNavRef.current = null;
+      await checkoutSnapshot(navTarget);
+    }
+  }, [labelInput, saveVersion, checkoutSnapshot]);
 
   const handleCircleClick = useCallback(async (commitId: string, idx: number) => {
     const isViewing = useAppStore.getState().viewingSnapshotId !== null;
@@ -50,13 +59,35 @@ export function VersionHistory() {
     // Clicking an older snapshot: ask to stash if dirty
     const dirty = useAppStore.getState().isDirty;
     if (dirty && !isViewing) {
-      const stash = confirm("You have unsaved changes. Save a snapshot before navigating?");
-      if (stash) {
-        await saveVersion("Auto-save before browsing");
-      }
+      // Show inline navigation prompt instead of auto-committing
+      setPendingNavTarget(commitId);
+      return;
     }
     await checkoutSnapshot(commitId);
-  }, [checkoutSnapshot, returnToLatest, saveVersion]);
+  }, [checkoutSnapshot, returnToLatest]);
+
+  // Navigation prompt: "Save Snapshot" — save first, then navigate
+  const handleNavSave = useCallback(async () => {
+    const target = pendingNavTarget;
+    if (!target) return;
+    setPendingNavTarget(null);
+    // Show the label input; after saving, navigate
+    setShowLabelInput(true);
+    // Store the target so handleSave can navigate after
+    pendingNavRef.current = target;
+  }, [pendingNavTarget]);
+
+  // Navigation prompt: "Stash & Browse" — stash dirty tree, then navigate
+  const handleNavStash = useCallback(async () => {
+    const target = pendingNavTarget;
+    if (!target) return;
+    setPendingNavTarget(null);
+    await stashChanges();
+    await checkoutSnapshot(target);
+  }, [pendingNavTarget, stashChanges, checkoutSnapshot]);
+
+  // Ref to hold pending nav target while label input is open
+  const pendingNavRef = useRef<string | null>(null);
 
   const handleKeep = useCallback(async () => {
     if (!viewingSnapshotId) return;
@@ -104,7 +135,11 @@ export function VersionHistory() {
               onChange={(e) => setLabelInput(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter") handleSave();
-                if (e.key === "Escape") { setShowLabelInput(false); setLabelInput(""); }
+                if (e.key === "Escape") {
+                  setShowLabelInput(false);
+                  setLabelInput("");
+                  pendingNavRef.current = null;
+                }
               }}
               placeholder="Snapshot name..."
               autoFocus
@@ -116,6 +151,35 @@ export function VersionHistory() {
               className="px-2 py-1 rounded-md text-xs font-medium bg-[var(--color-accent)] text-white hover:bg-[var(--color-accent-hover)] disabled:opacity-40 transition-colors"
             >
               {saving ? "..." : "Save"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Navigation prompt: dirty + clicking older snapshot */}
+      {pendingNavTarget && (
+        <div className="px-3 py-2 border-b border-amber-500/20 bg-amber-500/5">
+          <div className="text-[10px] font-medium text-amber-600 dark:text-amber-400 mb-1.5">
+            You have unsaved changes
+          </div>
+          <div className="flex gap-1.5">
+            <button
+              onClick={handleNavSave}
+              className="flex-1 px-2 py-1 rounded-md text-[10px] font-medium bg-[var(--color-accent)] text-white hover:bg-[var(--color-accent-hover)] transition-colors"
+            >
+              Save snapshot
+            </button>
+            <button
+              onClick={handleNavStash}
+              className="flex-1 px-2 py-1 rounded-md text-[10px] font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-text)] border border-[var(--color-border)] hover:border-[var(--color-text-secondary)] transition-colors"
+            >
+              Stash &amp; browse
+            </button>
+            <button
+              onClick={() => setPendingNavTarget(null)}
+              className="px-2 py-1 rounded-md text-[10px] text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors"
+            >
+              Cancel
             </button>
           </div>
         </div>

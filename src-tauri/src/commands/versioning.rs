@@ -91,3 +91,15 @@ pub async fn has_unsaved_changes(state: State<'_, AppState>) -> Result<bool, Str
     }
     versioning::has_unsaved_changes(&root).map_err(|e| e.to_string())
 }
+
+#[tauri::command]
+pub async fn stash_changes(state: State<'_, AppState>) -> Result<(), String> {
+    let root = project_root(&state)?;
+    versioning::stash_working_tree(&root).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn pop_stash(state: State<'_, AppState>) -> Result<bool, String> {
+    let root = project_root(&state)?;
+    versioning::pop_stash(&root).map_err(|e| e.to_string())
+}
