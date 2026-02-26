@@ -115,15 +115,9 @@ export function AppLayout() {
       }
       if ((e.ctrlKey || e.metaKey) && e.key === "s") {
         e.preventDefault();
-        const { currentProject, saveVersion } = useAppStore.getState();
+        const { currentProject, promptSnapshot } = useAppStore.getState();
         if (currentProject) {
-          const now = new Date();
-          const label = now.toLocaleString("en-US", {
-            month: "short", day: "numeric",
-            hour: "numeric", minute: "2-digit",
-            hour12: true,
-          });
-          saveVersion(label);
+          promptSnapshot();
         }
       }
     };

@@ -86,6 +86,8 @@ interface AppStoreState {
   versions: VersionEntry[];
   /** Whether the version history sidebar is visible. */
   showVersionHistory: boolean;
+  /** Whether the snapshot name prompt should be shown (triggered by Ctrl+S). */
+  snapshotPromptOpen: boolean;
 
   // ── Profile detection ─────────────────────────────────────
 
@@ -201,6 +203,8 @@ interface AppStoreState {
   restoreVersion: (commitId: string) => Promise<void>;
   /** Toggle version history sidebar. */
   toggleVersionHistory: () => void;
+  /** Open snapshot name prompt (and ensure panel is visible). */
+  promptSnapshot: () => void;
 
   // ── Profile actions ───────────────────────────────────────
 
@@ -250,6 +254,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   activeStoryboard: null,
   versions: [],
   showVersionHistory: false,
+  snapshotPromptOpen: false,
 
   profiles: [],
 
@@ -389,6 +394,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       activeStoryboardPath: null,
       activeStoryboard: null,
       versions: [],
+      snapshotPromptOpen: false,
       openTabs: [],
       activeTabId: null,
     });
@@ -652,6 +658,10 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
 
   toggleVersionHistory: () => {
     set((state) => ({ showVersionHistory: !state.showVersionHistory }));
+  },
+
+  promptSnapshot: () => {
+    set({ showVersionHistory: true, snapshotPromptOpen: true });
   },
 
   // ── Profile actions ───────────────────────────────────────
