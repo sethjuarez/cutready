@@ -102,32 +102,34 @@ export function VersionHistory() {
             {versions.map((version, idx) => {
               const isLatest = idx === 0;
               const isLast = idx === versions.length - 1;
+              const isSingle = versions.length === 1;
               return (
-                <div key={version.id} className="group relative flex">
+                <div key={version.id} className="group relative flex" style={{ minHeight: isLatest ? 44 : 36 }}>
                   {/* Graph column */}
-                  <div className="w-8 shrink-0 flex flex-col items-center">
-                    {/* Line above dot */}
-                    {!isLatest && (
-                      <div className="w-px flex-1 bg-[var(--color-border)]" />
+                  <div className="w-8 shrink-0 relative flex items-center justify-center">
+                    {/* Continuous vertical line */}
+                    {!isSingle && (
+                      <div
+                        className="absolute left-1/2 -translate-x-1/2 w-px bg-[var(--color-border)]"
+                        style={{
+                          top: isLatest ? "50%" : 0,
+                          bottom: isLast ? "50%" : 0,
+                        }}
+                      />
                     )}
-                    {isLatest && <div className="flex-1" />}
-                    {/* Commit dot */}
+                    {/* Dot with surface-colored halo to cleanly cut through the line */}
                     <div
-                      className={`shrink-0 rounded-full ${
+                      className={`relative z-10 shrink-0 rounded-full ${
                         isLatest
-                          ? "w-3 h-3 bg-[var(--color-accent)] ring-2 ring-[var(--color-accent)]/20"
-                          : "w-2 h-2 bg-[var(--color-text-secondary)]/40"
+                          ? "w-2.5 h-2.5 bg-[var(--color-accent)]"
+                          : "w-1.5 h-1.5 bg-[var(--color-text-secondary)]/50"
                       }`}
+                      style={{ boxShadow: "0 0 0 3px var(--color-surface)" }}
                     />
-                    {/* Line below dot */}
-                    {!isLast && (
-                      <div className="w-px flex-1 bg-[var(--color-border)]" />
-                    )}
-                    {isLast && <div className="flex-1" />}
                   </div>
 
                   {/* Content */}
-                  <div className={`flex-1 min-w-0 pr-3 ${isLatest ? "py-2" : "py-1.5"}`}>
+                  <div className={`flex-1 min-w-0 pr-3 flex flex-col justify-center ${isLatest ? "py-2" : "py-1.5"}`}>
                     <div className={`text-xs truncate ${isLatest ? "font-medium text-[var(--color-text)]" : "text-[var(--color-text-secondary)]"}`}>
                       {version.message}
                     </div>
