@@ -236,11 +236,13 @@ function MarkdownCell({
   const [localValue, setLocalValue] = useState(value);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const cursorRef = useRef<number | null>(null);
+  const isEditingRef = useRef(false);
+  isEditingRef.current = isEditing;
 
-  // Sync from parent when not editing
+  // Sync from parent when value changes externally (not while editing)
   useEffect(() => {
-    if (!isEditing) setLocalValue(value);
-  }, [value, isEditing]);
+    if (!isEditingRef.current) setLocalValue(value);
+  }, [value]);
 
   // Auto-resize textarea
   useEffect(() => {
@@ -274,9 +276,9 @@ function MarkdownCell({
     onChange(newValue);
   };
 
-  // Preview mode
+  // Preview mode — use localValue to preserve edits before debounce saves
   if (readOnly || !isEditing) {
-    const rendered = renderMarkdown(value);
+    const rendered = renderMarkdown(localValue);
     return (
       <div
         className={`md-cell-preview min-h-[1.5rem] ${!readOnly ? "cursor-text" : ""}`}
