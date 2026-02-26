@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAppStore } from "../stores/appStore";
-import type { TimelineInfo } from "../types/sketch";
 
 /** Palette of lane colours for timelines. */
 const LANE_COLORS = [
@@ -19,40 +18,38 @@ function laneColor(index: number) {
 }
 
 export function VersionHistory() {
-  const versions = useAppStore((s) => s.versions);
+  const graphNodes = useAppStore((s) => s.graphNodes);
   const isDirty = useAppStore((s) => s.isDirty);
   const hasStash = useAppStore((s) => s.hasStash);
-  const loadVersions = useAppStore((s) => s.loadVersions);
   const saveVersion = useAppStore((s) => s.saveVersion);
   const stashChanges = useAppStore((s) => s.stashChanges);
   const popStash = useAppStore((s) => s.popStash);
   const checkStash = useAppStore((s) => s.checkStash);
   const navigateToSnapshot = useAppStore((s) => s.navigateToSnapshot);
+  const loadGraphData = useAppStore((s) => s.loadGraphData);
   const sidebarPosition = useAppStore((s) => s.sidebarPosition);
   const snapshotPromptOpen = useAppStore((s) => s.snapshotPromptOpen);
   const timelines = useAppStore((s) => s.timelines);
   const loadTimelines = useAppStore((s) => s.loadTimelines);
-  const switchTimeline = useAppStore((s) => s.switchTimeline);
-  const deleteTimeline = useAppStore((s) => s.deleteTimeline);
 
   const [labelInput, setLabelInput] = useState("");
   const [showLabelInput, setShowLabelInput] = useState(false);
   const [saving, setSaving] = useState(false);
-  // Navigation prompt: when dirty and clicking a different snapshot
   const [pendingNavTarget, setPendingNavTarget] = useState<string | null>(null);
-  // Show timeline list expanded
-  const [showTimelines, setShowTimelines] = useState(false);
 
-  // Ref to hold pending nav target while label input is open
   const pendingNavRef = useRef<string | null>(null);
 
+  // Build a label map: timeline name → { label, color_index }
+  const timelineMap = new Map(
+    timelines.map((t) => [t.name, { label: t.label, colorIndex: t.color_index }])
+  );
+
   useEffect(() => {
-    loadVersions();
+    loadGraphData();
     loadTimelines();
     checkStash();
-  }, [loadVersions, loadTimelines, checkStash]);
+  }, [loadGraphData, loadTimelines, checkStash]);
 
-  // React to Ctrl+S prompt trigger
   useEffect(() => {
     if (snapshotPromptOpen) {
       setShowLabelInput(true);
@@ -68,7 +65,6 @@ export function VersionHistory() {
     setLabelInput("");
     setShowLabelInput(false);
     setSaving(false);
-    // If we were saving before navigating, go there now
     const navTarget = pendingNavRef.current;
     if (navTarget) {
       pendingNavRef.current = null;
@@ -76,21 +72,16 @@ export function VersionHistory() {
     }
   }, [labelInput, saveVersion, navigateToSnapshot]);
 
-  const handleCircleClick = useCallback(async (commitId: string, isHead: boolean) => {
-    // Clicking HEAD node — no-op (already there)
+  const handleNodeClick = useCallback(async (commitId: string, isHead: boolean) => {
     if (isHead) return;
-
-    // If dirty, ask to stash/save first
     const dirty = useAppStore.getState().isDirty;
     if (dirty) {
       setPendingNavTarget(commitId);
       return;
     }
-
     await navigateToSnapshot(commitId);
   }, [navigateToSnapshot]);
 
-  // Navigation prompt: "Save Snapshot" — save first, then navigate
   const handleNavSave = useCallback(async () => {
     const target = pendingNavTarget;
     if (!target) return;
@@ -99,7 +90,6 @@ export function VersionHistory() {
     pendingNavRef.current = target;
   }, [pendingNavTarget]);
 
-  // Navigation prompt: "Stash & Browse" — stash dirty tree, then navigate
   const handleNavStash = useCallback(async () => {
     const target = pendingNavTarget;
     if (!target) return;
@@ -108,7 +98,6 @@ export function VersionHistory() {
     await navigateToSnapshot(target);
   }, [pendingNavTarget, stashChanges, navigateToSnapshot]);
 
-  // Navigation prompt: "Discard & Browse" — just navigate, losing changes
   const handleNavDiscard = useCallback(async () => {
     const target = pendingNavTarget;
     if (!target) return;
@@ -116,46 +105,16 @@ export function VersionHistory() {
     await navigateToSnapshot(target);
   }, [pendingNavTarget, navigateToSnapshot]);
 
-  const showDirtyNode = isDirty;
-  const activeTimeline = timelines.find((t) => t.is_active);
-  const hasMultipleTimelines = timelines.length > 1;
-
-  // Border on the side facing the editor
   const borderClass = sidebarPosition === "left" ? "border-l" : "border-r";
 
   return (
     <div className={`flex flex-col h-full ${borderClass} border-[var(--color-border)]`}>
       {/* Header */}
       <div className="flex items-center justify-between px-3 h-9 shrink-0 border-b border-[var(--color-border)]">
-        <div className="flex items-center gap-1.5">
-          <span className="text-xs font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">
-            Snapshots
-          </span>
-          {/* Active timeline pill */}
-          {activeTimeline && hasMultipleTimelines && (
-            <button
-              onClick={() => setShowTimelines(!showTimelines)}
-              className="flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium transition-colors hover:opacity-80"
-              style={{
-                backgroundColor: `${laneColor(activeTimeline.color_index)}20`,
-                color: laneColor(activeTimeline.color_index),
-              }}
-            >
-              <span
-                className="w-1.5 h-1.5 rounded-full"
-                style={{ backgroundColor: laneColor(activeTimeline.color_index) }}
-              />
-              {activeTimeline.label}
-              <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"
-                className={`transition-transform ${showTimelines ? "rotate-180" : ""}`}
-              >
-                <polyline points="6 9 12 15 18 9" />
-              </svg>
-            </button>
-          )}
-        </div>
+        <span className="text-xs font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">
+          Snapshots
+        </span>
         <div className="flex items-center gap-1">
-          {/* Stash indicator */}
           {hasStash && (
             <button
               onClick={popStash}
@@ -189,24 +148,7 @@ export function VersionHistory() {
         </div>
       </div>
 
-      {/* Timeline switcher */}
-      {showTimelines && hasMultipleTimelines && (
-        <div className="px-2 py-1.5 border-b border-[var(--color-border)] space-y-0.5">
-          {timelines.map((tl) => (
-            <TimelinePill
-              key={tl.name}
-              timeline={tl}
-              onSwitch={() => {
-                switchTimeline(tl.name);
-                setShowTimelines(false);
-              }}
-              onDelete={tl.is_active ? undefined : () => deleteTimeline(tl.name)}
-            />
-          ))}
-        </div>
-      )}
-
-      {/* Snapshot name input (shown when saving) */}
+      {/* Snapshot name input */}
       {showLabelInput && (
         <div className="px-3 py-2 border-b border-[var(--color-border)]">
           <div className="flex gap-1.5">
@@ -259,7 +201,6 @@ export function VersionHistory() {
             <button
               onClick={handleNavDiscard}
               className="px-2 py-1 rounded-md text-[10px] text-[var(--color-text-secondary)] hover:text-red-400 transition-colors"
-              title="Discard unsaved changes and navigate"
             >
               Discard
             </button>
@@ -273,9 +214,9 @@ export function VersionHistory() {
         </div>
       )}
 
-      {/* Commit graph */}
+      {/* Unified graph — all timelines */}
       <div className="flex-1 overflow-y-auto">
-        {versions.length === 0 && !showDirtyNode ? (
+        {graphNodes.length === 0 && !isDirty ? (
           <div className="px-3 py-8 text-center">
             <div className="text-[var(--color-text-secondary)] text-xs">No snapshots yet</div>
             <div className="text-[var(--color-text-secondary)]/60 text-[10px] mt-1">
@@ -285,10 +226,10 @@ export function VersionHistory() {
         ) : (
           <div className="py-1">
             {/* Dirty / unsaved changes node */}
-            {showDirtyNode && (
+            {isDirty && (
               <div className="group relative flex" style={{ minHeight: 36 }}>
                 <div className="w-8 shrink-0 relative flex items-center justify-center">
-                  {versions.length > 0 && (
+                  {graphNodes.length > 0 && (
                     <div
                       className="absolute left-1/2 -translate-x-1/2 w-px border-l border-dashed border-[var(--color-text-secondary)]/30"
                       style={{ top: "50%", bottom: 0 }}
@@ -307,68 +248,78 @@ export function VersionHistory() {
               </div>
             )}
 
-            {/* Committed snapshots */}
-            {versions.map((version, idx) => {
-              const isHead = idx === 0;
-              const isLast = idx === versions.length - 1;
-              const isSingle = versions.length === 1 && !showDirtyNode;
-              // HEAD is always the active one (no "viewing" concept)
-              const isActive = isHead && !showDirtyNode;
-              const dotColor = activeTimeline
-                ? laneColor(activeTimeline.color_index)
-                : "var(--color-accent)";
+            {/* All graph nodes */}
+            {graphNodes.map((node, idx) => {
+              const isFirst = idx === 0;
+              const isLast = idx === graphNodes.length - 1;
+              const isSingle = graphNodes.length === 1 && !isDirty;
+              const dotColor = laneColor(node.lane);
+              const tlInfo = timelineMap.get(node.timeline);
+              const tlLabel = tlInfo?.label ?? node.timeline;
+              const hasMultipleTimelines = timelines.length > 1;
               return (
-                <div key={version.id} className="group relative flex" style={{ minHeight: isHead ? 44 : 36 }}>
+                <div key={node.id} className="group relative flex" style={{ minHeight: node.is_head ? 44 : 36 }}>
                   {/* Graph column */}
                   <div className="w-8 shrink-0 relative flex items-center justify-center">
-                    {/* Continuous vertical line */}
                     {!isSingle && (
                       <div
                         className="absolute left-1/2 -translate-x-1/2 w-px"
                         style={{
-                          top: (isHead && !showDirtyNode) ? "50%" : 0,
+                          top: (isFirst && !isDirty) ? "50%" : 0,
                           bottom: isLast ? "50%" : 0,
                           backgroundColor: dotColor,
                           opacity: 0.3,
                         }}
                       />
                     )}
-                    {/* Dot — click to navigate */}
                     <button
-                      onClick={() => handleCircleClick(version.id, isHead)}
+                      onClick={() => handleNodeClick(node.id, node.is_head)}
                       className={`relative z-10 shrink-0 rounded-full border-2 transition-colors ${
-                        isHead ? "cursor-default" : "cursor-pointer"
+                        node.is_head ? "cursor-default" : "cursor-pointer"
                       }`}
                       style={{
-                        width: isActive ? 12 : 10,
-                        height: isActive ? 12 : 10,
-                        backgroundColor: isActive ? dotColor : "var(--color-surface)",
-                        borderColor: isActive ? dotColor : "var(--color-text-secondary)",
-                        boxShadow: "0 0 0 2px var(--color-surface)",
+                        width: node.is_head ? 12 : 10,
+                        height: node.is_head ? 12 : 10,
+                        backgroundColor: node.is_head ? dotColor : "var(--color-surface)",
+                        borderColor: node.is_head ? dotColor : dotColor,
+                        boxShadow: node.is_head
+                          ? `0 0 0 2px var(--color-surface), 0 0 0 4px ${dotColor}40`
+                          : "0 0 0 2px var(--color-surface)",
                       }}
                       onMouseEnter={(e) => {
-                        if (!isHead) {
+                        if (!node.is_head) {
                           e.currentTarget.style.backgroundColor = dotColor;
-                          e.currentTarget.style.borderColor = dotColor;
                         }
                       }}
                       onMouseLeave={(e) => {
-                        if (!isActive) {
+                        if (!node.is_head) {
                           e.currentTarget.style.backgroundColor = "var(--color-surface)";
-                          e.currentTarget.style.borderColor = "var(--color-text-secondary)";
                         }
                       }}
-                      title={isHead ? "Current snapshot" : "Navigate to this snapshot"}
+                      title={node.is_head ? "Current snapshot (HEAD)" : `Navigate to: ${node.message}`}
                     />
                   </div>
 
                   {/* Content */}
-                  <div className={`flex-1 min-w-0 pr-3 flex flex-col justify-center ${isHead ? "py-2" : "py-1.5"}`}>
-                    <div className={`text-xs truncate ${isActive ? "font-medium text-[var(--color-text)]" : "text-[var(--color-text-secondary)]"}`}>
-                      {version.message}
+                  <div className={`flex-1 min-w-0 pr-3 flex flex-col justify-center ${node.is_head ? "py-2" : "py-1.5"}`}>
+                    <div className={`text-xs truncate ${node.is_head ? "font-medium text-[var(--color-text)]" : "text-[var(--color-text-secondary)]"}`}>
+                      {node.message}
                     </div>
-                    <div className="text-[10px] text-[var(--color-text-secondary)]/70 mt-0.5">
-                      {formatRelativeDate(version.timestamp)}
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <span className="text-[10px] text-[var(--color-text-secondary)]/70">
+                        {formatRelativeDate(node.timestamp)}
+                      </span>
+                      {hasMultipleTimelines && (
+                        <span
+                          className="text-[9px] px-1 py-px rounded-sm"
+                          style={{
+                            color: dotColor,
+                            backgroundColor: `${dotColor}15`,
+                          }}
+                        >
+                          {tlLabel}
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -377,54 +328,6 @@ export function VersionHistory() {
           </div>
         )}
       </div>
-    </div>
-  );
-}
-
-/** A single timeline pill in the switcher. */
-function TimelinePill({
-  timeline,
-  onSwitch,
-  onDelete,
-}: {
-  timeline: TimelineInfo;
-  onSwitch: () => void;
-  onDelete?: () => void;
-}) {
-  const color = laneColor(timeline.color_index);
-  return (
-    <div
-      className={`flex items-center gap-1.5 px-2 py-1 rounded-md transition-colors cursor-pointer group ${
-        timeline.is_active
-          ? "bg-[var(--color-surface-active)]"
-          : "hover:bg-[var(--color-surface-hover)]"
-      }`}
-      onClick={!timeline.is_active ? onSwitch : undefined}
-    >
-      <span
-        className="w-2 h-2 rounded-full shrink-0"
-        style={{ backgroundColor: color }}
-      />
-      <span className={`text-[11px] truncate flex-1 ${
-        timeline.is_active ? "font-medium text-[var(--color-text)]" : "text-[var(--color-text-secondary)]"
-      }`}>
-        {timeline.label}
-      </span>
-      <span className="text-[9px] text-[var(--color-text-secondary)]/60 tabular-nums">
-        {timeline.snapshot_count}
-      </span>
-      {onDelete && (
-        <button
-          onClick={(e) => { e.stopPropagation(); onDelete(); }}
-          className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-[var(--color-text-secondary)] hover:text-red-400 transition-all"
-          title="Delete timeline"
-        >
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="18" y1="6" x2="6" y2="18" />
-            <line x1="6" y1="6" x2="18" y2="18" />
-          </svg>
-        </button>
-      )}
     </div>
   );
 }

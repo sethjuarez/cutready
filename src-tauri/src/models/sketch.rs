@@ -218,6 +218,8 @@ pub struct GraphNode {
     pub parents: Vec<String>,
     /// Lane index for rendering.
     pub lane: usize,
+    /// Whether this commit is the current HEAD.
+    pub is_head: bool,
 }
 
 #[cfg(test)]
