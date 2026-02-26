@@ -7,6 +7,7 @@ const NODE_DX = 20;      // D3: horizontal spacing between siblings
 const ROW_H = 38;        // px per commit row
 const DIRTY_H = 26;      // px for dirty-indicator row
 const GHOST_H = 26;      // px for ghost-branch row
+const ALIAS_H = 28;      // px for branch-marker (alias) row
 const PAD_L = 16;        // minimum left padding
 const PAD_T = 6;         // top padding
 const PAD_B = 6;         // bottom padding
@@ -36,9 +37,15 @@ interface TreeDatum {
   children: TreeDatum[];
 }
 
+interface AliasInfo {
+  timeline: string;
+  lane: number;
+}
+
 interface VisualRow {
-  kind: "dirty" | "node" | "ghost";
+  kind: "dirty" | "node" | "ghost" | "alias";
   nodeIdx?: number;
+  alias?: AliasInfo;
   cx: number;
   cy: number;
   h: number;
@@ -210,7 +217,20 @@ export function SnapshotGraph({
   const showGhost = isDirty && isRewound && headIdx >= 0;
   const ghostX    = showGhost ? nx(nodes[headIdx]) + NODE_DX : 0;
 
-  const maxX      = Math.max(...nodes.map(nx), showGhost ? ghostX : 0);
+  // Compute x positions for alias branches (offset from their shared commit)
+  const aliasXMap = new Map<string, number>(); // key: "commitId:timeline"
+  for (const [commitId, aliases] of aliasBadges) {
+    const baseX = xPos.get(commitId) ?? PAD_L;
+    for (let ai = 0; ai < aliases.length; ai++) {
+      aliasXMap.set(`${commitId}:${aliases[ai].timeline}`, baseX + NODE_DX * (ai + 1));
+    }
+  }
+
+  const maxX      = Math.max(
+    ...nodes.map(nx),
+    showGhost ? ghostX : 0,
+    ...aliasXMap.values(),
+  );
   const graphColW = maxX + LABEL_GAP;
 
   /* ── build visual rows ───────────────────────── */
@@ -230,6 +250,18 @@ export function SnapshotGraph({
     }
     rows.push({ kind: "node", nodeIdx: i, cx: nx(nodes[i]), cy: y + ROW_H / 2, h: ROW_H, top: y });
     y += ROW_H;
+
+    // Insert alias (branch marker) rows right after the shared commit
+    const aliases = aliasBadges.get(nodes[i].id);
+    if (aliases) {
+      for (const ab of aliases) {
+        const abX = aliasXMap.get(`${nodes[i].id}:${ab.timeline}`) ?? nx(nodes[i]) + NODE_DX;
+        rows.push({
+          kind: "alias", alias: ab, cx: abX, cy: y + ALIAS_H / 2, h: ALIAS_H, top: y,
+        });
+        y += ALIAS_H;
+      }
+    }
   }
 
   const totalH = y + PAD_B;
@@ -287,6 +319,22 @@ export function SnapshotGraph({
     };
   }
 
+  // Alias → shared commit dashed connectors
+  const aliasEdges: Edge[] = [];
+  for (const row of rows) {
+    if (row.kind !== "alias" || !row.alias) continue;
+    // Find the node row just above this alias
+    const parentNodeRow = rows.filter(r => r.kind === "node" && r.top < row.top).pop();
+    if (parentNodeRow) {
+      const color = lc(row.alias.lane);
+      const dy = row.cy - parentNodeRow.cy;
+      aliasEdges.push({
+        d: `M ${parentNodeRow.cx + NODE_R} ${parentNodeRow.cy} C ${parentNodeRow.cx + (row.cx - parentNodeRow.cx) * 0.5} ${parentNodeRow.cy}, ${row.cx} ${row.cy - dy * 0.5}, ${row.cx} ${row.cy - NODE_R}`,
+        color, dashed: true, opacity: 0.35,
+      });
+    }
+  }
+
   /* ── render ──────────────────────────────────── */
   return (
     <div className="relative" style={{ minHeight: totalH, paddingTop: PAD_T, paddingBottom: PAD_B }}>
@@ -300,6 +348,10 @@ export function SnapshotGraph({
         {edges.map((e, i) => (
           <path key={i} d={e.d} stroke={e.color} strokeWidth={1.5} strokeOpacity={e.opacity}
             fill="none" strokeDasharray={e.dashed ? "4 3" : undefined} strokeLinecap="round" />
+        ))}
+        {aliasEdges.map((e, i) => (
+          <path key={`alias-${i}`} d={e.d} stroke={e.color} strokeWidth={1.5} strokeOpacity={e.opacity}
+            fill="none" strokeDasharray="4 3" strokeLinecap="round" />
         ))}
       </svg>
 
@@ -336,6 +388,29 @@ export function SnapshotGraph({
               <div className="flex-1 min-w-0 pr-3 flex items-center gap-1.5" style={{ paddingLeft: row.cx - PAD_L }}>
                 <span className="text-[11px] italic text-[var(--color-text-secondary)]">New direction</span>
                 <span className="text-[9px] px-1 py-px rounded-sm bg-amber-500/10 text-amber-500">branching</span>
+              </div>
+            </div>
+          );
+        }
+
+        if (row.kind === "alias" && row.alias) {
+          const abColor = lc(row.alias.lane);
+          const abInfo = timelineMap.get(row.alias.timeline);
+          const abLabel = abInfo?.label ?? row.alias.timeline;
+          return (
+            <div key={`alias-${row.alias.timeline}`} className="flex items-center" style={{ height: row.h }}>
+              <div className="shrink-0 relative flex items-center" style={{ width: graphColW }}>
+                <div className="absolute rounded-full" style={{
+                  left: row.cx - NODE_R, top: "50%", transform: "translateY(-50%)",
+                  width: NODE_R * 2, height: NODE_R * 2,
+                  backgroundColor: abColor, opacity: 0.6,
+                  boxShadow: "0 0 0 2px var(--color-surface)", zIndex: 1,
+                }} />
+              </div>
+              <div className="flex-1 min-w-0 pr-3 flex items-center gap-1.5" style={{ paddingLeft: Math.max(0, row.cx - PAD_L) }}>
+                <span className="text-[9px] px-1 py-px rounded-sm"
+                  style={{ color: abColor, backgroundColor: `${abColor}15` }}>{abLabel}</span>
+                <span className="text-[10px] italic text-[var(--color-text-secondary)]/60">no unique snapshots</span>
               </div>
             </div>
           );
@@ -383,16 +458,6 @@ export function SnapshotGraph({
                   <span className="text-[9px] px-1 py-px rounded-sm"
                     style={{ color, backgroundColor: `${color}15` }}>{tlLabel}</span>
                 )}
-                {/* Show badges for other branches that also point at this commit */}
-                {aliasBadges.get(node.id)?.map((ab) => {
-                  const abColor = lc(ab.lane);
-                  const abInfo = timelineMap.get(ab.timeline);
-                  const abLabel = abInfo?.label ?? ab.timeline;
-                  return (
-                    <span key={ab.timeline} className="text-[9px] px-1 py-px rounded-sm"
-                      style={{ color: abColor, backgroundColor: `${abColor}15` }}>{abLabel}</span>
-                  );
-                })}
               </div>
             </div>
           </div>
