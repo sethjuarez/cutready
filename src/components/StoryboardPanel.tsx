@@ -16,9 +16,23 @@ export function StoryboardPanel() {
   const activeSketch = useAppStore((s) => s.activeSketch);
   const showVersionHistory = useAppStore((s) => s.showVersionHistory);
   const toggleVersionHistory = useAppStore((s) => s.toggleVersionHistory);
+  const sidebarPosition = useAppStore((s) => s.sidebarPosition);
+
+  // Secondary panel goes on the opposite side of the primary sidebar
+  const secondaryOnLeft = sidebarPosition === "right";
+  const secondaryPanel = showVersionHistory ? (
+    <>
+      {!secondaryOnLeft && <ResizeHandle direction="horizontal" onResize={() => {}} />}
+      <VersionHistory />
+      {secondaryOnLeft && <ResizeHandle direction="horizontal" onResize={() => {}} />}
+    </>
+  ) : null;
 
   return (
     <div className="flex h-full">
+      {/* Secondary panel on left when sidebar is right */}
+      {secondaryOnLeft && secondaryPanel}
+
       {/* Editor area */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Tab bar */}
@@ -84,13 +98,8 @@ export function StoryboardPanel() {
         )}
       </div>
 
-      {/* Secondary panel: Version history */}
-      {showVersionHistory && (
-        <>
-          <ResizeHandle direction="horizontal" onResize={() => {}} />
-          <VersionHistory />
-        </>
-      )}
+      {/* Secondary panel on right when sidebar is left */}
+      {!secondaryOnLeft && secondaryPanel}
     </div>
   );
 }
