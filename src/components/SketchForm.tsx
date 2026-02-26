@@ -1,4 +1,5 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { useAppStore } from "../stores/appStore";
 import { ScriptTable } from "./ScriptTable";
 import type { PlanningRow } from "../types/sketch";
@@ -19,13 +20,21 @@ export function SketchForm() {
   const titleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const rowsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Pending data + path captured at edit time for flush-on-unmount
+  const pendingRowsRef = useRef<PlanningRow[] | null>(null);
+  const pendingTitleRef = useRef<string | null>(null);
+  const pendingPathRef = useRef<string | null>(null);
+
   const handleTitleChange = useCallback(
     (value: string) => {
       setLocalTitle(value);
-      if (!activeSketch) return;
+      if (!activeSketch || !activeSketchPath) return;
+      pendingTitleRef.current = value;
+      pendingPathRef.current = activeSketchPath;
       if (titleTimeoutRef.current) clearTimeout(titleTimeoutRef.current);
       titleTimeoutRef.current = setTimeout(() => {
-        if (activeSketchPath) updateSketchTitle(activeSketchPath, value);
+        pendingTitleRef.current = null;
+        updateSketchTitle(activeSketchPath, value);
       }, 500);
     },
     [activeSketch, activeSketchPath, updateSketchTitle],
@@ -33,13 +42,35 @@ export function SketchForm() {
 
   const handleRowsChange = useCallback(
     (rows: PlanningRow[]) => {
+      pendingRowsRef.current = rows;
+      pendingPathRef.current = activeSketchPath;
       if (rowsTimeoutRef.current) clearTimeout(rowsTimeoutRef.current);
       rowsTimeoutRef.current = setTimeout(() => {
+        pendingRowsRef.current = null;
         updateSketch({ rows });
       }, 500);
     },
-    [updateSketch],
+    [updateSketch, activeSketchPath],
   );
+
+  // Flush pending debounced saves on unmount (e.g., tab close)
+  useEffect(() => {
+    return () => {
+      const path = pendingPathRef.current;
+      if (titleTimeoutRef.current) {
+        clearTimeout(titleTimeoutRef.current);
+        if (pendingTitleRef.current !== null && path) {
+          invoke("update_sketch_title", { relativePath: path, title: pendingTitleRef.current }).catch(() => {});
+        }
+      }
+      if (rowsTimeoutRef.current) {
+        clearTimeout(rowsTimeoutRef.current);
+        if (pendingRowsRef.current !== null && path) {
+          invoke("update_sketch", { relativePath: path, rows: pendingRowsRef.current }).catch(() => {});
+        }
+      }
+    };
+  }, []);
 
   if (!activeSketch) return null;
 
