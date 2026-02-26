@@ -757,6 +757,8 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await get().loadVersions();
       await get().loadTimelines();
       await get().loadGraphData();
+      await get().checkDirty();
+      await get().checkRewound();
     } catch (err) {
       console.error("Failed to save version:", err);
     }
@@ -841,6 +843,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await get().loadVersions();
       await get().loadTimelines();
       await get().loadGraphData();
+      await get().checkDirty();
       await get().checkRewound();
     } catch (err) {
       console.error("Failed to navigate to snapshot:", err);
