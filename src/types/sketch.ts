@@ -67,3 +67,22 @@ export interface VersionEntry {
   timestamp: string;
   summary: string;
 }
+
+/** A timeline (branch) in the project. */
+export interface TimelineInfo {
+  name: string;
+  label: string;
+  is_active: boolean;
+  snapshot_count: number;
+  color_index: number;
+}
+
+/** A node in the timeline graph. */
+export interface GraphNode {
+  id: string;
+  message: string;
+  timestamp: string;
+  timeline: string;
+  parents: string[];
+  lane: number;
+}

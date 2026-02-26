@@ -103,3 +103,58 @@ pub async fn pop_stash(state: State<'_, AppState>) -> Result<bool, String> {
     let root = project_root(&state)?;
     versioning::pop_stash(&root).map_err(|e| e.to_string())
 }
+
+#[tauri::command]
+pub async fn create_timeline(
+    from_commit_id: String,
+    name: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let root = project_root(&state)?;
+    versioning::create_timeline(&root, &from_commit_id, &name).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn list_timelines(
+    state: State<'_, AppState>,
+) -> Result<Vec<crate::models::sketch::TimelineInfo>, String> {
+    let root = project_root(&state)?;
+    if !root.join(".git").exists() {
+        return Ok(Vec::new());
+    }
+    versioning::list_timelines(&root).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn switch_timeline(
+    name: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let root = project_root(&state)?;
+    versioning::switch_timeline(&root, &name).map_err(|e| e.to_string())?;
+    // Re-scan project
+    let view = crate::models::script::ProjectView::new(root);
+    let mut current = state.current_project.lock().map_err(|e| e.to_string())?;
+    *current = Some(view);
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn delete_timeline(
+    name: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let root = project_root(&state)?;
+    versioning::delete_timeline(&root, &name).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn get_timeline_graph(
+    state: State<'_, AppState>,
+) -> Result<Vec<crate::models::sketch::GraphNode>, String> {
+    let root = project_root(&state)?;
+    if !root.join(".git").exists() {
+        return Ok(Vec::new());
+    }
+    versioning::get_timeline_graph(&root).map_err(|e| e.to_string())
+}

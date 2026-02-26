@@ -8,7 +8,7 @@ use std::path::Path;
 
 use chrono::{DateTime, TimeZone, Utc};
 
-use crate::models::sketch::VersionEntry;
+use crate::models::sketch::{GraphNode, TimelineInfo, VersionEntry};
 
 /// Errors that can occur during versioning operations.
 #[derive(Debug, thiserror::Error)]
@@ -23,7 +23,11 @@ pub enum VersioningError {
 
 /// Initialize a git repository in the given project directory.
 pub fn init_project_repo(project_dir: &Path) -> Result<(), VersioningError> {
-    gix::init(project_dir).map_err(|e| VersioningError::Git(e.to_string()))?;
+    let repo = gix::init(project_dir).map_err(|e| VersioningError::Git(e.to_string()))?;
+    // Ensure HEAD points to refs/heads/main (not master)
+    let head_path = repo.git_dir().join("HEAD");
+    std::fs::write(&head_path, "ref: refs/heads/main\n")
+        .map_err(|e| VersioningError::Io(e.to_string()))?;
     Ok(())
 }
 
@@ -213,10 +217,347 @@ pub fn pop_stash(project_dir: &Path) -> Result<bool, VersioningError> {
     Ok(true)
 }
 
+// ── Timeline (branch) management ────────────────────────────────────
+
+/// Prefix for CutReady timeline branches.
+const TIMELINE_PREFIX: &str = "refs/heads/timeline/";
+/// The main (default) branch name.
+const MAIN_BRANCH: &str = "main";
+
+/// Create a new timeline branching from the given commit.
+/// Switches the working directory to the new timeline.
+pub fn create_timeline(
+    project_dir: &Path,
+    from_commit_id: &str,
+    name: &str,
+) -> Result<(), VersioningError> {
+    let repo = open_repo(project_dir)?;
+
+    let oid: gix::ObjectId = from_commit_id
+        .parse()
+        .map_err(|e: gix::hash::decode::Error| VersioningError::Git(e.to_string()))?;
+
+    // Ensure the source commit exists
+    repo.find_commit(oid)
+        .map_err(|e| VersioningError::Git(e.to_string()))?;
+
+    // Slugify the name for the branch ref
+    let slug = slugify_timeline_name(name);
+    let ref_name = format!("{}{}", TIMELINE_PREFIX, slug);
+
+    // Create the branch ref pointing at the commit
+    repo.reference(
+        ref_name.as_str(),
+        oid,
+        gix::refs::transaction::PreviousValue::MustNotExist,
+        format!("Create timeline: {}", name),
+    )
+    .map_err(|e| VersioningError::Git(e.to_string()))?;
+
+    // Store the human-readable label in .git/cutready-timeline-labels
+    save_timeline_label(project_dir, &slug, name)?;
+
+    // Switch HEAD to the new branch
+    set_head_to_branch(&repo, &ref_name)?;
+
+    // Checkout the commit's tree
+    checkout_version(project_dir, from_commit_id)?;
+
+    Ok(())
+}
+
+/// List all timelines (branches) in the project.
+pub fn list_timelines(project_dir: &Path) -> Result<Vec<TimelineInfo>, VersioningError> {
+    let repo = open_repo(project_dir)?;
+    let labels = load_timeline_labels(project_dir);
+
+    // Find active branch name
+    let active_branch = get_current_branch_name(&repo);
+
+    let mut timelines = Vec::new();
+    let mut color_idx = 0;
+
+    // Check if "main" branch exists
+    let main_ref = format!("refs/heads/{}", MAIN_BRANCH);
+    if repo.find_reference(&main_ref).is_ok() {
+        let count = count_commits_on_ref(&repo, &main_ref)?;
+        timelines.push(TimelineInfo {
+            name: MAIN_BRANCH.to_string(),
+            label: "Main".to_string(),
+            is_active: active_branch.as_deref() == Some(MAIN_BRANCH),
+            snapshot_count: count,
+            color_index: color_idx,
+        });
+        color_idx += 1;
+    }
+
+    // List timeline/* branches
+    if let Ok(refs) = repo.references() {
+        if let Ok(prefixed) = refs.prefixed(TIMELINE_PREFIX) {
+            for reference in prefixed {
+                if let Ok(r) = reference {
+                    let full_name = r.name().as_bstr().to_string();
+                    let slug = full_name
+                        .strip_prefix(TIMELINE_PREFIX)
+                        .unwrap_or(&full_name)
+                        .to_string();
+                    let label = labels
+                        .get(&slug)
+                        .cloned()
+                        .unwrap_or_else(|| slug.clone());
+                    let is_active = active_branch.as_deref() == Some(&full_name)
+                        || active_branch.as_deref() == Some(&format!("timeline/{}", slug));
+                    let count = count_commits_on_ref(&repo, &full_name)?;
+                    timelines.push(TimelineInfo {
+                        name: slug,
+                        label,
+                        is_active,
+                        snapshot_count: count,
+                        color_index: color_idx,
+                    });
+                    color_idx += 1;
+                }
+            }
+        }
+    }
+
+    // If no branches found but HEAD exists (legacy repos without branches), show "Main"
+    if timelines.is_empty() {
+        if let Ok(_commit) = repo.head_commit() {
+            let count = count_commits_on_ref(&repo, "HEAD")?;
+            timelines.push(TimelineInfo {
+                name: MAIN_BRANCH.to_string(),
+                label: "Main".to_string(),
+                is_active: true,
+                snapshot_count: count,
+                color_index: 0,
+            });
+        }
+    }
+
+    Ok(timelines)
+}
+
+/// Switch to a different timeline.
+pub fn switch_timeline(project_dir: &Path, name: &str) -> Result<(), VersioningError> {
+    let repo = open_repo(project_dir)?;
+
+    let ref_name = if name == MAIN_BRANCH {
+        format!("refs/heads/{}", MAIN_BRANCH)
+    } else {
+        format!("{}{}", TIMELINE_PREFIX, name)
+    };
+
+    // Find the branch's tip commit
+    let reference = repo
+        .find_reference(&ref_name)
+        .map_err(|e| VersioningError::Git(format!("Timeline not found: {}", e)))?;
+
+    let commit_id = reference
+        .id()
+        .detach();
+
+    // Switch HEAD to the branch
+    set_head_to_branch(&repo, &ref_name)?;
+
+    // Checkout the tree
+    let commit = repo
+        .find_commit(commit_id)
+        .map_err(|e| VersioningError::Git(e.to_string()))?;
+    let tree = commit
+        .tree()
+        .map_err(|e| VersioningError::Git(e.to_string()))?;
+
+    clean_working_dir(project_dir)?;
+    write_tree_to_dir(&repo, tree.id, project_dir)
+}
+
+/// Delete a non-active timeline.
+pub fn delete_timeline(project_dir: &Path, name: &str) -> Result<(), VersioningError> {
+    if name == MAIN_BRANCH {
+        return Err(VersioningError::Git("Cannot delete the main timeline".into()));
+    }
+
+    let repo = open_repo(project_dir)?;
+    let ref_name = format!("{}{}", TIMELINE_PREFIX, name);
+
+    // Ensure not deleting the active branch
+    let active = get_current_branch_name(&repo);
+    if active.as_deref() == Some(&ref_name)
+        || active.as_deref() == Some(&format!("timeline/{}", name))
+    {
+        return Err(VersioningError::Git("Cannot delete the active timeline".into()));
+    }
+
+    // Delete the ref
+    let reference = repo
+        .find_reference(&ref_name)
+        .map_err(|e| VersioningError::Git(format!("Timeline not found: {}", e)))?;
+    reference
+        .delete()
+        .map_err(|e| VersioningError::Git(e.to_string()))?;
+
+    // Remove label
+    remove_timeline_label(project_dir, name);
+
+    Ok(())
+}
+
+/// Get the full timeline graph — all commits across all timelines.
+pub fn get_timeline_graph(project_dir: &Path) -> Result<Vec<GraphNode>, VersioningError> {
+    let repo = open_repo(project_dir)?;
+    let timelines = list_timelines(project_dir)?;
+
+    let mut nodes: Vec<GraphNode> = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+
+    for timeline in &timelines {
+        let ref_name = if timeline.name == MAIN_BRANCH {
+            format!("refs/heads/{}", MAIN_BRANCH)
+        } else {
+            format!("{}{}", TIMELINE_PREFIX, timeline.name)
+        };
+
+        // Walk commits from this branch's tip
+        let head_oid = match repo.find_reference(&ref_name) {
+            Ok(r) => r.id().detach(),
+            Err(_) => {
+                // Fallback: try HEAD directly (legacy repos)
+                match repo.head_commit() {
+                    Ok(c) => c.id().detach(),
+                    Err(_) => continue,
+                }
+            }
+        };
+
+        let mut current = Some(head_oid);
+        while let Some(oid) = current {
+            if !seen.insert(oid) {
+                break; // Already visited (shared ancestor)
+            }
+
+            let commit = repo
+                .find_commit(oid)
+                .map_err(|e| VersioningError::Git(e.to_string()))?;
+
+            let message = commit.message_raw_sloppy().to_string();
+            let time = commit
+                .time()
+                .map_err(|e| VersioningError::Git(e.to_string()))?;
+            let timestamp = gix_time_to_chrono(time);
+            let parents: Vec<String> = commit.parent_ids().map(|id| id.to_string()).collect();
+
+            nodes.push(GraphNode {
+                id: oid.to_string(),
+                message: message.trim().to_string(),
+                timestamp,
+                timeline: timeline.name.clone(),
+                parents,
+                lane: timeline.color_index,
+            });
+
+            current = commit.parent_ids().next().map(|id| id.detach());
+        }
+    }
+
+    // Sort by timestamp descending (newest first)
+    nodes.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+
+    Ok(nodes)
+}
+
 // ── Internal helpers ────────────────────────────────────────────────
 
 fn open_repo(project_dir: &Path) -> Result<gix::Repository, VersioningError> {
     gix::open(project_dir).map_err(|e| VersioningError::Git(e.to_string()))
+}
+
+fn slugify_timeline_name(name: &str) -> String {
+    name.trim()
+        .to_lowercase()
+        .replace(|c: char| !c.is_alphanumeric() && c != '-', "-")
+        .trim_matches('-')
+        .to_string()
+}
+
+fn set_head_to_branch(repo: &gix::Repository, ref_name: &str) -> Result<(), VersioningError> {
+    let head_path = repo.git_dir().join("HEAD");
+    let content = format!("ref: {}\n", ref_name);
+    std::fs::write(&head_path, content).map_err(|e| VersioningError::Io(e.to_string()))
+}
+
+fn get_current_branch_name(repo: &gix::Repository) -> Option<String> {
+    let head_path = repo.git_dir().join("HEAD");
+    let content = std::fs::read_to_string(&head_path).ok()?;
+    if content.starts_with("ref: ") {
+        let ref_name = content.trim().strip_prefix("ref: ")?;
+        // Return just the branch name part after refs/heads/
+        Some(ref_name.strip_prefix("refs/heads/").unwrap_or(ref_name).to_string())
+    } else {
+        None // Detached HEAD
+    }
+}
+
+fn count_commits_on_ref(repo: &gix::Repository, ref_name: &str) -> Result<usize, VersioningError> {
+    let oid = if ref_name == "HEAD" {
+        match repo.head_commit() {
+            Ok(c) => c.id().detach(),
+            Err(_) => return Ok(0),
+        }
+    } else {
+        match repo.find_reference(ref_name) {
+            Ok(r) => r.id().detach(),
+            Err(_) => return Ok(0),
+        }
+    };
+
+    let mut count = 0;
+    let mut current = Some(oid);
+    while let Some(id) = current {
+        count += 1;
+        let commit = repo.find_commit(id).map_err(|e| VersioningError::Git(e.to_string()))?;
+        current = commit.parent_ids().next().map(|p| p.detach());
+    }
+    Ok(count)
+}
+
+/// Timeline label storage — simple file in .git/cutready-timeline-labels (key=value lines)
+fn labels_path(project_dir: &Path) -> std::path::PathBuf {
+    project_dir.join(".git").join("cutready-timeline-labels")
+}
+
+fn load_timeline_labels(project_dir: &Path) -> std::collections::HashMap<String, String> {
+    let path = labels_path(project_dir);
+    let mut map = std::collections::HashMap::new();
+    if let Ok(content) = std::fs::read_to_string(&path) {
+        for line in content.lines() {
+            if let Some((key, value)) = line.split_once('=') {
+                map.insert(key.to_string(), value.to_string());
+            }
+        }
+    }
+    map
+}
+
+fn save_timeline_label(project_dir: &Path, slug: &str, label: &str) -> Result<(), VersioningError> {
+    let mut labels = load_timeline_labels(project_dir);
+    labels.insert(slug.to_string(), label.to_string());
+    write_timeline_labels(project_dir, &labels)
+}
+
+fn remove_timeline_label(project_dir: &Path, slug: &str) {
+    let mut labels = load_timeline_labels(project_dir);
+    labels.remove(slug);
+    let _ = write_timeline_labels(project_dir, &labels);
+}
+
+fn write_timeline_labels(
+    project_dir: &Path,
+    labels: &std::collections::HashMap<String, String>,
+) -> Result<(), VersioningError> {
+    let path = labels_path(project_dir);
+    let content: String = labels.iter().map(|(k, v)| format!("{}={}", k, v)).collect::<Vec<_>>().join("\n");
+    std::fs::write(&path, content).map_err(|e| VersioningError::Io(e.to_string()))
 }
 
 /// Build a git tree object from a directory on disk (recursive).
@@ -506,5 +847,84 @@ mod tests {
 
         // Pop again — no stash
         assert!(!pop_stash(tmp.path()).unwrap());
+    }
+
+    #[test]
+    fn create_and_list_timelines() {
+        let tmp = setup_project_dir();
+        init_project_repo(tmp.path()).unwrap();
+
+        let id1 = commit_snapshot(tmp.path(), "v1").unwrap();
+        commit_snapshot(tmp.path(), "v2").unwrap();
+
+        // Initially just "Main" timeline
+        let timelines = list_timelines(tmp.path()).unwrap();
+        assert_eq!(timelines.len(), 1);
+        assert_eq!(timelines[0].label, "Main");
+        assert!(timelines[0].is_active);
+        assert_eq!(timelines[0].snapshot_count, 2);
+
+        // Create a new timeline from v1
+        create_timeline(tmp.path(), &id1, "Exploration").unwrap();
+
+        let timelines = list_timelines(tmp.path()).unwrap();
+        assert_eq!(timelines.len(), 2);
+
+        // New timeline should be active
+        let active: Vec<_> = timelines.iter().filter(|t| t.is_active).collect();
+        assert_eq!(active.len(), 1);
+        assert_eq!(active[0].label, "Exploration");
+    }
+
+    #[test]
+    fn switch_and_delete_timeline() {
+        let tmp = setup_project_dir();
+        init_project_repo(tmp.path()).unwrap();
+
+        let id1 = commit_snapshot(tmp.path(), "v1").unwrap();
+        std::fs::write(tmp.path().join("project.json"), r#"{"name":"test","version":2}"#).unwrap();
+        commit_snapshot(tmp.path(), "v2").unwrap();
+
+        // Create exploration from v1
+        create_timeline(tmp.path(), &id1, "Exploration").unwrap();
+
+        // We're on the exploration timeline; project.json should be v1 content
+        let content = std::fs::read_to_string(tmp.path().join("project.json")).unwrap();
+        assert!(content.contains("\"version\": 1"));
+
+        // Switch back to main
+        switch_timeline(tmp.path(), "main").unwrap();
+        let content = std::fs::read_to_string(tmp.path().join("project.json")).unwrap();
+        assert!(content.contains("\"version\":2") || content.contains("\"version\": 2"));
+
+        // Delete exploration
+        delete_timeline(tmp.path(), "exploration").unwrap();
+        let timelines = list_timelines(tmp.path()).unwrap();
+        assert_eq!(timelines.len(), 1);
+        assert_eq!(timelines[0].label, "Main");
+    }
+
+    #[test]
+    fn timeline_graph_shows_all_branches() {
+        let tmp = setup_project_dir();
+        init_project_repo(tmp.path()).unwrap();
+
+        let id1 = commit_snapshot(tmp.path(), "v1").unwrap();
+        std::fs::write(tmp.path().join("project.json"), r#"{"name":"test","version":2}"#).unwrap();
+        commit_snapshot(tmp.path(), "v2").unwrap();
+
+        // Create exploration from v1 and add a commit there
+        create_timeline(tmp.path(), &id1, "Exploration").unwrap();
+        std::fs::write(tmp.path().join("project.json"), r#"{"name":"test","version":3}"#).unwrap();
+        commit_snapshot(tmp.path(), "v3 on exploration").unwrap();
+
+        let graph = get_timeline_graph(tmp.path()).unwrap();
+        // Should have: v1 (shared), v2 (main), v3 (exploration)
+        assert!(graph.len() >= 3);
+
+        let messages: Vec<&str> = graph.iter().map(|n| n.message.as_str()).collect();
+        assert!(messages.contains(&"v1"));
+        assert!(messages.contains(&"v2"));
+        assert!(messages.contains(&"v3 on exploration"));
     }
 }
