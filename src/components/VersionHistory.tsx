@@ -49,7 +49,6 @@ export function VersionHistory() {
   const handleSave = useCallback(async () => {
     const label = labelInput.trim();
     if (!label) return;
-    // If forking, require a timeline name
     const forkLabel = isRewound ? forkLabelInput.trim() || undefined : undefined;
     if (isRewound && !forkLabel) return;
     setSaving(true);
@@ -58,12 +57,17 @@ export function VersionHistory() {
     setForkLabelInput("");
     setShowLabelInput(false);
     setSaving(false);
+    // Force full refresh
+    await loadGraphData();
+    await loadTimelines();
     const navTarget = pendingNavRef.current;
     if (navTarget) {
       pendingNavRef.current = null;
       await navigateToSnapshot(navTarget);
+      await loadGraphData();
+      await loadTimelines();
     }
-  }, [labelInput, forkLabelInput, isRewound, saveVersion, navigateToSnapshot]);
+  }, [labelInput, forkLabelInput, isRewound, saveVersion, navigateToSnapshot, loadGraphData, loadTimelines]);
 
   const handleNodeClick = useCallback(async (commitId: string, isHead: boolean) => {
     if (isHead) return;
@@ -73,7 +77,10 @@ export function VersionHistory() {
       return;
     }
     await navigateToSnapshot(commitId);
-  }, [navigateToSnapshot]);
+    // Force full refresh after navigation
+    await loadGraphData();
+    await loadTimelines();
+  }, [navigateToSnapshot, loadGraphData, loadTimelines]);
 
   const handleNavSave = useCallback(async () => {
     const target = pendingNavTarget;
@@ -88,7 +95,9 @@ export function VersionHistory() {
     if (!target) return;
     setPendingNavTarget(null);
     await navigateToSnapshot(target);
-  }, [pendingNavTarget, navigateToSnapshot]);
+    await loadGraphData();
+    await loadTimelines();
+  }, [pendingNavTarget, navigateToSnapshot, loadGraphData, loadTimelines]);
 
   const borderClass = sidebarPosition === "left" ? "border-l" : "border-r";
 
