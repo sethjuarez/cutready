@@ -2,17 +2,10 @@ import type { Theme } from "../hooks/useTheme";
 
 interface StatusBarProps {
   theme: Theme;
-  resolved: "light" | "dark";
-  onSetTheme: (theme: Theme) => void;
+  onToggleTheme: () => void;
 }
 
-export function StatusBar({ theme, resolved, onSetTheme }: StatusBarProps) {
-  const cycleTheme = () => {
-    const order: Theme[] = ["system", "light", "dark"];
-    const idx = order.indexOf(theme);
-    onSetTheme(order[(idx + 1) % order.length]);
-  };
-
+export function StatusBar({ theme, onToggleTheme }: StatusBarProps) {
   return (
     <div
       className="no-select fixed bottom-0 left-0 right-0 z-50 flex items-center justify-between bg-[var(--color-surface)]/80 backdrop-blur-md border-t border-[var(--color-border)] px-3 text-xs text-[var(--color-text-secondary)]"
@@ -26,37 +19,19 @@ export function StatusBar({ theme, resolved, onSetTheme }: StatusBarProps) {
         </span>
       </div>
 
-      {/* Right: theme + utilities */}
+      {/* Right: theme toggle */}
       <div className="flex items-center gap-2">
         <button
-          onClick={cycleTheme}
+          onClick={onToggleTheme}
           className="flex items-center gap-1.5 px-2 py-0.5 rounded-md hover:bg-[var(--color-surface-alt)] transition-colors"
-          title={`Theme: ${theme} (click to cycle)`}
+          title={`Theme: ${theme} (click to toggle)`}
         >
-          {resolved === "dark" ? (
-            <svg
-              width="12"
-              height="12"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
+          {theme === "dark" ? (
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
             </svg>
           ) : (
-            <svg
-              width="12"
-              height="12"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="5" />
               <line x1="12" y1="1" x2="12" y2="3" />
               <line x1="12" y1="21" x2="12" y2="23" />
