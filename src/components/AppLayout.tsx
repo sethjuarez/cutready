@@ -18,6 +18,8 @@ export function AppLayout() {
   const setView = useAppStore((s) => s.setView);
   const sidebarVisible = useAppStore((s) => s.sidebarVisible);
   const toggleSidebar = useAppStore((s) => s.toggleSidebar);
+  const toggleSidebarPosition = useAppStore((s) => s.toggleSidebarPosition);
+  const sidebarPosition = useAppStore((s) => s.sidebarPosition);
   const outputVisible = useAppStore((s) => s.outputVisible);
   const outputHeight = useAppStore((s) => s.outputHeight);
   const setOutputHeight = useAppStore((s) => s.setOutputHeight);
@@ -55,6 +57,12 @@ export function AppLayout() {
         handler: () => toggleOutput(),
       },
       {
+        id: "view.toggleSidebarPosition",
+        title: "Move Sidebar to Other Side",
+        category: "View",
+        handler: () => toggleSidebarPosition(),
+      },
+      {
         id: "nav.home",
         title: "Go to Home",
         category: "Navigate",
@@ -85,7 +93,7 @@ export function AppLayout() {
         handler: () => setView("settings"),
       },
     ]);
-  }, [setView, toggleSidebar, toggleOutput]);
+  }, [setView, toggleSidebar, toggleSidebarPosition, toggleOutput]);
 
   // Global keyboard shortcuts
   useEffect(() => {
@@ -124,8 +132,10 @@ export function AppLayout() {
     <>
       <TitleBar
         sidebarVisible={sidebarVisible}
+        sidebarPosition={sidebarPosition}
         outputVisible={outputVisible}
         onToggleSidebar={toggleSidebar}
+        onToggleSidebarPosition={toggleSidebarPosition}
         onToggleOutput={toggleOutput}
         onCommandPaletteOpen={() => setCommandPaletteOpen(true)}
       />

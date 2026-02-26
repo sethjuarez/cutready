@@ -3,16 +3,20 @@ import { useCallback, useEffect, useState } from "react";
 
 interface TitleBarProps {
   sidebarVisible?: boolean;
+  sidebarPosition?: "left" | "right";
   outputVisible?: boolean;
   onToggleSidebar?: () => void;
+  onToggleSidebarPosition?: () => void;
   onToggleOutput?: () => void;
   onCommandPaletteOpen?: () => void;
 }
 
 export function TitleBar({
   sidebarVisible = true,
+  sidebarPosition = "left",
   outputVisible = false,
   onToggleSidebar,
+  onToggleSidebarPosition,
   onToggleOutput,
   onCommandPaletteOpen,
 }: TitleBarProps) {
@@ -116,6 +120,23 @@ export function TitleBar({
               <rect x="3" y="3" width="18" height="18" rx="2" />
               <line x1="9" y1="3" x2="9" y2="21" />
             </svg>
+          </button>
+          <button
+            className="flex items-center justify-center w-7 h-[22px] rounded transition-colors text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-alt)]"
+            onClick={onToggleSidebarPosition}
+            title={`Move Sidebar to ${sidebarPosition === "left" ? "Right" : "Left"}`}
+          >
+            {sidebarPosition === "left" ? (
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="2" />
+                <line x1="15" y1="3" x2="15" y2="21" />
+              </svg>
+            ) : (
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="2" />
+                <line x1="9" y1="3" x2="9" y2="21" />
+              </svg>
+            )}
           </button>
           <button
             className={`flex items-center justify-center w-7 h-[22px] rounded transition-colors ${

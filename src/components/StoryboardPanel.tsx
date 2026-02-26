@@ -5,13 +5,14 @@ import { StoryboardView } from "./StoryboardView";
 import { SketchForm } from "./SketchForm";
 import { VersionHistory } from "./VersionHistory";
 import { ResizeHandle } from "./ResizeHandle";
+import { TabBar } from "./TabBar";
 
 /**
  * StoryboardPanel — main layout for the sketch/storyboard workflow.
  *
- * Left:   StoryboardList (resizable sidebar, visibility from store)
- * Center: StoryboardView or SketchForm (depending on activeSketch)
- * Right:  VersionHistory (toggleable)
+ * Sidebar:  StoryboardList (resizable, can be left or right)
+ * Center:   TabBar + StoryboardView or SketchForm
+ * Right:    VersionHistory (toggleable)
  */
 export function StoryboardPanel() {
   const activeStoryboard = useAppStore((s) => s.activeStoryboard);
@@ -21,24 +22,39 @@ export function StoryboardPanel() {
   const sidebarVisible = useAppStore((s) => s.sidebarVisible);
   const sidebarWidth = useAppStore((s) => s.sidebarWidth);
   const setSidebarWidth = useAppStore((s) => s.setSidebarWidth);
+  const sidebarPosition = useAppStore((s) => s.sidebarPosition);
 
   const handleSidebarResize = useCallback(
-    (delta: number) => setSidebarWidth(sidebarWidth + delta),
-    [sidebarWidth, setSidebarWidth],
+    (delta: number) => {
+      // When sidebar is on the right, dragging left (negative delta) should increase width
+      const adjustedDelta = sidebarPosition === "right" ? -delta : delta;
+      setSidebarWidth(sidebarWidth + adjustedDelta);
+    },
+    [sidebarWidth, setSidebarWidth, sidebarPosition],
   );
+
+  const sidebar = sidebarVisible ? (
+    <>
+      {sidebarPosition === "right" && (
+        <ResizeHandle direction="horizontal" onResize={handleSidebarResize} />
+      )}
+      <StoryboardList />
+      {sidebarPosition === "left" && (
+        <ResizeHandle direction="horizontal" onResize={handleSidebarResize} />
+      )}
+    </>
+  ) : null;
 
   return (
     <div className="flex h-full">
-      {/* Left: Storyboard list (resizable) */}
-      {sidebarVisible && (
-        <>
-          <StoryboardList />
-          <ResizeHandle direction="horizontal" onResize={handleSidebarResize} />
-        </>
-      )}
+      {/* Sidebar on left */}
+      {sidebarPosition === "left" && sidebar}
 
       {/* Center: Content area */}
       <div className="flex-1 flex flex-col min-w-0">
+        {/* Tab bar */}
+        <TabBar />
+
         {/* Toolbar */}
         <div className="flex items-center justify-between px-4 py-2 border-b border-[var(--color-border)]">
           <div className="flex items-center gap-2 text-sm font-medium truncate">
@@ -99,7 +115,10 @@ export function StoryboardPanel() {
         )}
       </div>
 
-      {/* Right: Version history */}
+      {/* Sidebar on right */}
+      {sidebarPosition === "right" && sidebar}
+
+      {/* Version history */}
       {showVersionHistory && <VersionHistory />}
     </div>
   );

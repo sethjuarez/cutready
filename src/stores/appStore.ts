@@ -22,6 +22,17 @@ export type AppView = "home" | "sketch" | "editor" | "recording" | "settings";
 /** Sidebar display mode for the sketch panel. */
 export type SidebarMode = "list" | "tree";
 
+/** Sidebar position. */
+export type SidebarPosition = "left" | "right";
+
+/** An open tab in the editor area. */
+export interface EditorTab {
+  id: string;
+  type: "sketch" | "storyboard";
+  path: string;
+  title: string;
+}
+
 interface AppStoreState {
   /** Current active view. */
   view: AppView;
@@ -43,6 +54,15 @@ interface AppStoreState {
   outputVisible: boolean;
   /** Height of the output panel in pixels. */
   outputHeight: number;
+  /** Sidebar position: left or right. */
+  sidebarPosition: SidebarPosition;
+
+  // ── Tabs ───────────────────────────────────────────────
+
+  /** Open editor tabs. */
+  openTabs: EditorTab[];
+  /** Currently active tab id. */
+  activeTabId: string | null;
 
   // ── Sketch state ───────────────────────────────────────
 
@@ -110,6 +130,19 @@ interface AppStoreState {
   toggleOutput: () => void;
   /** Set output panel height. */
   setOutputHeight: (height: number) => void;
+  /** Toggle sidebar position (left/right). */
+  toggleSidebarPosition: () => void;
+
+  // ── Tab actions ────────────────────────────────────────
+
+  /** Open a tab (or focus if already open). */
+  openTab: (tab: Omit<EditorTab, "id">) => void;
+  /** Close a tab by id. */
+  closeTab: (tabId: string) => void;
+  /** Set the active tab. */
+  setActiveTab: (tabId: string) => void;
+  /** Reorder tabs. */
+  reorderTabs: (tabIds: string[]) => void;
 
   // ── Project actions ───────────────────────────────────────
 
@@ -204,6 +237,10 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   sidebarVisible: true,
   outputVisible: false,
   outputHeight: 200,
+  sidebarPosition: "left",
+
+  openTabs: [],
+  activeTabId: null,
 
   sketches: [],
   activeSketchPath: null,
@@ -235,6 +272,68 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   toggleSidebar: () => set((s) => ({ sidebarVisible: !s.sidebarVisible })),
   toggleOutput: () => set((s) => ({ outputVisible: !s.outputVisible })),
   setOutputHeight: (height) => set({ outputHeight: Math.min(500, Math.max(80, height)) }),
+  toggleSidebarPosition: () => set((s) => ({ sidebarPosition: s.sidebarPosition === "left" ? "right" : "left" })),
+
+  openTab: (tab) => {
+    const { openTabs } = get();
+    const existing = openTabs.find((t) => t.path === tab.path && t.type === tab.type);
+    if (existing) {
+      set({ activeTabId: existing.id });
+    } else {
+      const id = `${tab.type}-${tab.path}`;
+      const newTab: EditorTab = { ...tab, id };
+      set({ openTabs: [...openTabs, newTab], activeTabId: id });
+    }
+  },
+  closeTab: (tabId) => {
+    const { openTabs, activeTabId } = get();
+    const idx = openTabs.findIndex((t) => t.id === tabId);
+    if (idx === -1) return;
+    const next = openTabs.filter((t) => t.id !== tabId);
+    let nextActive = activeTabId;
+    if (activeTabId === tabId) {
+      // Activate adjacent tab
+      if (next.length === 0) {
+        nextActive = null;
+      } else if (idx < next.length) {
+        nextActive = next[idx].id;
+      } else {
+        nextActive = next[next.length - 1].id;
+      }
+    }
+    set({ openTabs: next, activeTabId: nextActive });
+    // Load the new active tab's content
+    if (nextActive) {
+      const nextTab = next.find((t) => t.id === nextActive);
+      if (nextTab?.type === "sketch") {
+        get().openSketch(nextTab.path);
+      } else if (nextTab?.type === "storyboard") {
+        get().openStoryboard(nextTab.path);
+      }
+    } else {
+      set({ activeSketchPath: null, activeSketch: null, activeStoryboardPath: null, activeStoryboard: null });
+    }
+  },
+  setActiveTab: (tabId) => {
+    const { openTabs } = get();
+    const tab = openTabs.find((t) => t.id === tabId);
+    if (!tab) return;
+    set({ activeTabId: tabId });
+    if (tab.type === "sketch") {
+      set({ activeStoryboardPath: null, activeStoryboard: null });
+      get().openSketch(tab.path);
+    } else if (tab.type === "storyboard") {
+      set({ activeSketchPath: null, activeSketch: null });
+      get().openStoryboard(tab.path);
+    }
+  },
+  reorderTabs: (tabIds) => {
+    const { openTabs } = get();
+    const reordered = tabIds
+      .map((id) => openTabs.find((t) => t.id === id))
+      .filter(Boolean) as EditorTab[];
+    set({ openTabs: reordered });
+  },
 
   // ── Project actions ───────────────────────────────────────
 
@@ -290,6 +389,8 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       activeStoryboardPath: null,
       activeStoryboard: null,
       versions: [],
+      openTabs: [],
+      activeTabId: null,
     });
   },
 
@@ -306,7 +407,6 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
 
   createSketch: async (title) => {
     try {
-      // Generate a filename from the title, fallback to timestamp if slug is empty
       let slug = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
       if (!slug) slug = `untitled-${Date.now()}`;
       const relativePath = slug + ".sk";
@@ -315,6 +415,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         activeSketchPath: relativePath,
         activeSketch: sketch,
       });
+      get().openTab({ type: "sketch", path: relativePath, title });
       await get().loadSketches();
     } catch (err) {
       console.error("Failed to create sketch:", err);
@@ -328,6 +429,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         activeSketchPath: sketchPath,
         activeSketch: sketch,
       });
+      get().openTab({ type: "sketch", path: sketchPath, title: sketch.title });
     } catch (err) {
       console.error("Failed to open sketch:", err);
     }
@@ -394,6 +496,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         activeStoryboardPath: relativePath,
         activeStoryboard: storyboard,
       });
+      get().openTab({ type: "storyboard", path: relativePath, title });
       await get().loadStoryboards();
     } catch (err) {
       console.error("Failed to create storyboard:", err);
@@ -409,6 +512,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         activeSketchPath: null,
         activeSketch: null,
       });
+      get().openTab({ type: "storyboard", path: storyboardPath, title: storyboard.title });
     } catch (err) {
       console.error("Failed to open storyboard:", err);
     }
