@@ -158,3 +158,24 @@ pub async fn get_timeline_graph(
     }
     versioning::get_timeline_graph(&root).map_err(|e| e.to_string())
 }
+
+#[tauri::command]
+pub async fn navigate_to_snapshot(
+    commit_id: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let root = project_root(&state)?;
+    versioning::navigate_to_snapshot(&root, &commit_id).map_err(|e| e.to_string())?;
+
+    // Re-scan the project folder
+    let view = ProjectView::new(root);
+    let mut current = state.current_project.lock().map_err(|e| e.to_string())?;
+    *current = Some(view);
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn has_stash(state: State<'_, AppState>) -> Result<bool, String> {
+    let root = project_root(&state)?;
+    Ok(versioning::has_stash(&root))
+}

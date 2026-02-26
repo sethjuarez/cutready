@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import { useAppStore } from "../stores/appStore";
 import type { TimelineInfo } from "../types/sketch";
 
@@ -22,36 +21,36 @@ function laneColor(index: number) {
 export function VersionHistory() {
   const versions = useAppStore((s) => s.versions);
   const isDirty = useAppStore((s) => s.isDirty);
+  const hasStash = useAppStore((s) => s.hasStash);
   const loadVersions = useAppStore((s) => s.loadVersions);
   const saveVersion = useAppStore((s) => s.saveVersion);
   const stashChanges = useAppStore((s) => s.stashChanges);
-  const checkoutSnapshot = useAppStore((s) => s.checkoutSnapshot);
-  const returnToLatest = useAppStore((s) => s.returnToLatest);
-  const restoreVersion = useAppStore((s) => s.restoreVersion);
-  const viewingSnapshotId = useAppStore((s) => s.viewingSnapshotId);
+  const popStash = useAppStore((s) => s.popStash);
+  const checkStash = useAppStore((s) => s.checkStash);
+  const navigateToSnapshot = useAppStore((s) => s.navigateToSnapshot);
   const sidebarPosition = useAppStore((s) => s.sidebarPosition);
   const snapshotPromptOpen = useAppStore((s) => s.snapshotPromptOpen);
   const timelines = useAppStore((s) => s.timelines);
   const loadTimelines = useAppStore((s) => s.loadTimelines);
-  const createTimeline = useAppStore((s) => s.createTimeline);
   const switchTimeline = useAppStore((s) => s.switchTimeline);
   const deleteTimeline = useAppStore((s) => s.deleteTimeline);
 
   const [labelInput, setLabelInput] = useState("");
   const [showLabelInput, setShowLabelInput] = useState(false);
   const [saving, setSaving] = useState(false);
-  // Navigation prompt: when dirty and clicking an older snapshot
+  // Navigation prompt: when dirty and clicking a different snapshot
   const [pendingNavTarget, setPendingNavTarget] = useState<string | null>(null);
-  // "Keep this version" fork prompt
-  const [showForkPrompt, setShowForkPrompt] = useState(false);
-  const [forkName, setForkName] = useState("");
   // Show timeline list expanded
   const [showTimelines, setShowTimelines] = useState(false);
+
+  // Ref to hold pending nav target while label input is open
+  const pendingNavRef = useRef<string | null>(null);
 
   useEffect(() => {
     loadVersions();
     loadTimelines();
-  }, [loadVersions, loadTimelines]);
+    checkStash();
+  }, [loadVersions, loadTimelines, checkStash]);
 
   // React to Ctrl+S prompt trigger
   useEffect(() => {
@@ -69,41 +68,34 @@ export function VersionHistory() {
     setLabelInput("");
     setShowLabelInput(false);
     setSaving(false);
-    // If we were saving before navigating to an older snapshot, go there now
+    // If we were saving before navigating, go there now
     const navTarget = pendingNavRef.current;
     if (navTarget) {
       pendingNavRef.current = null;
-      await checkoutSnapshot(navTarget);
+      await navigateToSnapshot(navTarget);
     }
-  }, [labelInput, saveVersion, checkoutSnapshot]);
+  }, [labelInput, saveVersion, navigateToSnapshot]);
 
-  const handleCircleClick = useCallback(async (commitId: string, idx: number) => {
-    const isViewing = useAppStore.getState().viewingSnapshotId !== null;
+  const handleCircleClick = useCallback(async (commitId: string, isHead: boolean) => {
+    // Clicking HEAD node — no-op (already there)
+    if (isHead) return;
 
-    // Clicking the latest: return to latest
-    if (idx === 0) {
-      if (isViewing) await returnToLatest();
-      return;
-    }
-
-    // Clicking an older snapshot: ask to stash if dirty
+    // If dirty, ask to stash/save first
     const dirty = useAppStore.getState().isDirty;
-    if (dirty && !isViewing) {
-      // Show inline navigation prompt instead of auto-committing
+    if (dirty) {
       setPendingNavTarget(commitId);
       return;
     }
-    await checkoutSnapshot(commitId);
-  }, [checkoutSnapshot, returnToLatest]);
+
+    await navigateToSnapshot(commitId);
+  }, [navigateToSnapshot]);
 
   // Navigation prompt: "Save Snapshot" — save first, then navigate
   const handleNavSave = useCallback(async () => {
     const target = pendingNavTarget;
     if (!target) return;
     setPendingNavTarget(null);
-    // Show the label input; after saving, navigate
     setShowLabelInput(true);
-    // Store the target so handleSave can navigate after
     pendingNavRef.current = target;
   }, [pendingNavTarget]);
 
@@ -113,47 +105,18 @@ export function VersionHistory() {
     if (!target) return;
     setPendingNavTarget(null);
     await stashChanges();
-    await checkoutSnapshot(target);
-  }, [pendingNavTarget, stashChanges, checkoutSnapshot]);
+    await navigateToSnapshot(target);
+  }, [pendingNavTarget, stashChanges, navigateToSnapshot]);
 
-  // Ref to hold pending nav target while label input is open
-  const pendingNavRef = useRef<string | null>(null);
+  // Navigation prompt: "Discard & Browse" — just navigate, losing changes
+  const handleNavDiscard = useCallback(async () => {
+    const target = pendingNavTarget;
+    if (!target) return;
+    setPendingNavTarget(null);
+    await navigateToSnapshot(target);
+  }, [pendingNavTarget, navigateToSnapshot]);
 
-  // "Keep this version" → show fork prompt (create new timeline)
-  const handleKeep = useCallback(async () => {
-    if (!viewingSnapshotId) return;
-    // If there's only one timeline (main), just restore inline — no fork needed
-    if (timelines.length <= 1) {
-      await restoreVersion(viewingSnapshotId);
-      try { await invoke("pop_stash"); } catch { /* no stash = fine */ }
-      return;
-    }
-    // Multiple timelines: ask if they want to fork or restore on current
-    setShowForkPrompt(true);
-  }, [viewingSnapshotId, timelines, restoreVersion]);
-
-  // Fork: create a new timeline from the viewed snapshot
-  const handleFork = useCallback(async () => {
-    if (!viewingSnapshotId) return;
-    const name = forkName.trim();
-    if (!name) return;
-    await createTimeline(viewingSnapshotId, name);
-    try { await invoke("pop_stash"); } catch { /* no stash = fine */ }
-    setShowForkPrompt(false);
-    setForkName("");
-  }, [viewingSnapshotId, forkName, createTimeline]);
-
-  // Keep on current timeline (restore version, no fork)
-  const handleKeepOnCurrent = useCallback(async () => {
-    if (!viewingSnapshotId) return;
-    await restoreVersion(viewingSnapshotId);
-    try { await invoke("pop_stash"); } catch { /* no stash = fine */ }
-    setShowForkPrompt(false);
-    setForkName("");
-  }, [viewingSnapshotId, restoreVersion]);
-
-  const isViewing = viewingSnapshotId !== null;
-  const showDirtyNode = isDirty && !isViewing;
+  const showDirtyNode = isDirty;
   const activeTimeline = timelines.find((t) => t.is_active);
   const hasMultipleTimelines = timelines.length > 1;
 
@@ -191,20 +154,39 @@ export function VersionHistory() {
             </button>
           )}
         </div>
-        <button
-          onClick={() => setShowLabelInput(true)}
-          className="group/btn flex items-center gap-1 p-1 rounded text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] transition-colors"
-          title="Save Project Snapshot (Ctrl+S)"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
-            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
-            <polyline points="17 21 17 13 7 13 7 21" />
-            <polyline points="7 3 7 8 15 8" />
-          </svg>
-          <span className="max-w-0 overflow-hidden group-hover/btn:max-w-[10rem] transition-all duration-200 whitespace-nowrap text-[10px]">
-            Save
-          </span>
-        </button>
+        <div className="flex items-center gap-1">
+          {/* Stash indicator */}
+          {hasStash && (
+            <button
+              onClick={popStash}
+              className="group/stash flex items-center gap-0.5 p-1 rounded text-amber-500 hover:text-amber-400 transition-colors"
+              title="You have stashed work — click to restore"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+                <path d="M21 8V21H3V8" />
+                <rect x="1" y="3" width="22" height="5" />
+                <line x1="10" y1="12" x2="14" y2="12" />
+              </svg>
+              <span className="max-w-0 overflow-hidden group-hover/stash:max-w-[6rem] transition-all duration-200 whitespace-nowrap text-[10px]">
+                Restore
+              </span>
+            </button>
+          )}
+          <button
+            onClick={() => setShowLabelInput(true)}
+            className="group/btn flex items-center gap-1 p-1 rounded text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] transition-colors"
+            title="Save Project Snapshot (Ctrl+S)"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+              <polyline points="17 21 17 13 7 13 7 21" />
+              <polyline points="7 3 7 8 15 8" />
+            </svg>
+            <span className="max-w-0 overflow-hidden group-hover/btn:max-w-[10rem] transition-all duration-200 whitespace-nowrap text-[10px]">
+              Save
+            </span>
+          </button>
+        </div>
       </div>
 
       {/* Timeline switcher */}
@@ -255,7 +237,7 @@ export function VersionHistory() {
         </div>
       )}
 
-      {/* Navigation prompt: dirty + clicking older snapshot */}
+      {/* Navigation prompt: dirty + clicking a different snapshot */}
       {pendingNavTarget && (
         <div className="px-3 py-2 border-b border-amber-500/20 bg-amber-500/5">
           <div className="text-[10px] font-medium text-amber-600 dark:text-amber-400 mb-1.5">
@@ -272,84 +254,20 @@ export function VersionHistory() {
               onClick={handleNavStash}
               className="flex-1 px-2 py-1 rounded-md text-[10px] font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-text)] border border-[var(--color-border)] hover:border-[var(--color-text-secondary)] transition-colors"
             >
-              Stash &amp; browse
+              Stash &amp; go
+            </button>
+            <button
+              onClick={handleNavDiscard}
+              className="px-2 py-1 rounded-md text-[10px] text-[var(--color-text-secondary)] hover:text-red-400 transition-colors"
+              title="Discard unsaved changes and navigate"
+            >
+              Discard
             </button>
             <button
               onClick={() => setPendingNavTarget(null)}
               className="px-2 py-1 rounded-md text-[10px] text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors"
             >
               Cancel
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Fork prompt: when "Keep this version" with multiple timelines */}
-      {showForkPrompt && (
-        <div className="px-3 py-2 border-b border-[var(--color-accent)]/20 bg-[var(--color-accent)]/5">
-          <div className="text-[10px] text-[var(--color-accent)] font-medium mb-1.5">
-            Continue from this snapshot
-          </div>
-          <div className="space-y-1.5">
-            <button
-              onClick={handleKeepOnCurrent}
-              className="w-full px-2 py-1 rounded-md text-[10px] font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-text)] border border-[var(--color-border)] hover:border-[var(--color-text-secondary)] transition-colors text-left"
-            >
-              Rewind current timeline here
-            </button>
-            <div className="text-[10px] text-[var(--color-text-secondary)] mt-1">or start a new timeline:</div>
-            <div className="flex gap-1.5">
-              <input
-                type="text"
-                value={forkName}
-                onChange={(e) => setForkName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") handleFork();
-                  if (e.key === "Escape") {
-                    setShowForkPrompt(false);
-                    setForkName("");
-                  }
-                }}
-                placeholder="Timeline name..."
-                autoFocus
-                className="flex-1 min-w-0 px-2 py-1 rounded-md bg-[var(--color-surface)] border border-[var(--color-border)] text-xs text-[var(--color-text)] placeholder:text-[var(--color-text-secondary)]/50 focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)]/40"
-              />
-              <button
-                onClick={handleFork}
-                disabled={!forkName.trim()}
-                className="px-2 py-1 rounded-md text-xs font-medium bg-[var(--color-accent)] text-white hover:bg-[var(--color-accent-hover)] disabled:opacity-40 transition-colors"
-              >
-                Fork
-              </button>
-            </div>
-            <button
-              onClick={() => { setShowForkPrompt(false); setForkName(""); }}
-              className="text-[10px] text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Viewing older snapshot banner */}
-      {isViewing && !showForkPrompt && (
-        <div className="px-3 py-2 border-b border-[var(--color-accent)]/20 bg-[var(--color-accent)]/5">
-          <div className="text-[10px] text-[var(--color-accent)] font-medium mb-1.5">
-            Viewing older snapshot
-          </div>
-          <div className="flex gap-1.5">
-            <button
-              onClick={handleKeep}
-              className="flex-1 px-2 py-1 rounded-md text-[10px] font-medium bg-[var(--color-accent)] text-white hover:bg-[var(--color-accent-hover)] transition-colors"
-            >
-              Keep this version
-            </button>
-            <button
-              onClick={returnToLatest}
-              className="flex-1 px-2 py-1 rounded-md text-[10px] font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-text)] border border-[var(--color-border)] hover:border-[var(--color-text-secondary)] transition-colors"
-            >
-              Back to latest
             </button>
           </div>
         </div>
@@ -391,17 +309,16 @@ export function VersionHistory() {
 
             {/* Committed snapshots */}
             {versions.map((version, idx) => {
-              const isFirst = idx === 0;
+              const isHead = idx === 0;
               const isLast = idx === versions.length - 1;
               const isSingle = versions.length === 1 && !showDirtyNode;
-              const isActive = isViewing
-                ? version.id === viewingSnapshotId
-                : isFirst && !showDirtyNode;
+              // HEAD is always the active one (no "viewing" concept)
+              const isActive = isHead && !showDirtyNode;
               const dotColor = activeTimeline
                 ? laneColor(activeTimeline.color_index)
                 : "var(--color-accent)";
               return (
-                <div key={version.id} className="group relative flex" style={{ minHeight: isFirst ? 44 : 36 }}>
+                <div key={version.id} className="group relative flex" style={{ minHeight: isHead ? 44 : 36 }}>
                   {/* Graph column */}
                   <div className="w-8 shrink-0 relative flex items-center justify-center">
                     {/* Continuous vertical line */}
@@ -409,7 +326,7 @@ export function VersionHistory() {
                       <div
                         className="absolute left-1/2 -translate-x-1/2 w-px"
                         style={{
-                          top: (isFirst && !showDirtyNode) ? "50%" : 0,
+                          top: (isHead && !showDirtyNode) ? "50%" : 0,
                           bottom: isLast ? "50%" : 0,
                           backgroundColor: dotColor,
                           opacity: 0.3,
@@ -418,8 +335,10 @@ export function VersionHistory() {
                     )}
                     {/* Dot — click to navigate */}
                     <button
-                      onClick={() => handleCircleClick(version.id, idx)}
-                      className="relative z-10 shrink-0 rounded-full border-2 transition-colors cursor-pointer"
+                      onClick={() => handleCircleClick(version.id, isHead)}
+                      className={`relative z-10 shrink-0 rounded-full border-2 transition-colors ${
+                        isHead ? "cursor-default" : "cursor-pointer"
+                      }`}
                       style={{
                         width: isActive ? 12 : 10,
                         height: isActive ? 12 : 10,
@@ -428,7 +347,7 @@ export function VersionHistory() {
                         boxShadow: "0 0 0 2px var(--color-surface)",
                       }}
                       onMouseEnter={(e) => {
-                        if (!isActive) {
+                        if (!isHead) {
                           e.currentTarget.style.backgroundColor = dotColor;
                           e.currentTarget.style.borderColor = dotColor;
                         }
@@ -439,12 +358,12 @@ export function VersionHistory() {
                           e.currentTarget.style.borderColor = "var(--color-text-secondary)";
                         }
                       }}
-                      title={isActive ? "Currently viewing" : isFirst ? "Back to latest" : "View this snapshot"}
+                      title={isHead ? "Current snapshot" : "Navigate to this snapshot"}
                     />
                   </div>
 
                   {/* Content */}
-                  <div className={`flex-1 min-w-0 pr-3 flex flex-col justify-center ${isFirst ? "py-2" : "py-1.5"}`}>
+                  <div className={`flex-1 min-w-0 pr-3 flex flex-col justify-center ${isHead ? "py-2" : "py-1.5"}`}>
                     <div className={`text-xs truncate ${isActive ? "font-medium text-[var(--color-text)]" : "text-[var(--color-text-secondary)]"}`}>
                       {version.message}
                     </div>

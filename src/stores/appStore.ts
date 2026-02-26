@@ -94,10 +94,10 @@ interface AppStoreState {
   showVersionHistory: boolean;
   /** Whether the snapshot name prompt should be shown (triggered by Ctrl+S). */
   snapshotPromptOpen: boolean;
-  /** Which snapshot is currently checked out for viewing (null = latest). */
-  viewingSnapshotId: string | null;
   /** Whether there are unsaved changes since the last snapshot. */
   isDirty: boolean;
+  /** Whether a stash (temporarily saved work) exists. */
+  hasStash: boolean;
 
   // ── Profile detection ─────────────────────────────────────
 
@@ -214,12 +214,12 @@ interface AppStoreState {
   saveVersion: (label: string) => Promise<void>;
   /** Stash dirty working tree before browsing snapshots. */
   stashChanges: () => Promise<void>;
-  /** Browse to a snapshot (checkout files without committing). */
-  checkoutSnapshot: (commitId: string) => Promise<void>;
-  /** Return to the latest snapshot (and pop stash if present). */
-  returnToLatest: () => Promise<void>;
-  /** Permanently restore a historical version (creates a commit). */
-  restoreVersion: (commitId: string) => Promise<void>;
+  /** Pop stash (restore stashed work). */
+  popStash: () => Promise<void>;
+  /** Check whether a stash exists. */
+  checkStash: () => Promise<void>;
+  /** Navigate to any snapshot. Auto-forks if going backward. */
+  navigateToSnapshot: (commitId: string) => Promise<void>;
   /** Create a new timeline from a snapshot. */
   createTimeline: (fromCommitId: string, name: string) => Promise<void>;
   /** Load all timelines. */
@@ -314,8 +314,8 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   graphNodes: [],
   showVersionHistory: savedLayout.showVersionHistory ?? false,
   snapshotPromptOpen: false,
-  viewingSnapshotId: null,
   isDirty: false,
+  hasStash: false,
 
   profiles: [],
 
@@ -488,8 +488,8 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       timelines: [],
       graphNodes: [],
       snapshotPromptOpen: false,
-      viewingSnapshotId: null,
       isDirty: false,
+      hasStash: false,
       openTabs: [],
       activeTabId: null,
     });
@@ -738,7 +738,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   saveVersion: async (label) => {
     try {
       await invoke<string>("save_with_label", { label });
-      set({ viewingSnapshotId: null, isDirty: false });
+      set({ isDirty: false });
       await get().loadVersions();
       await get().loadTimelines();
       await get().loadGraphData();
@@ -750,61 +750,53 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   stashChanges: async () => {
     try {
       await invoke("stash_changes");
+      set({ hasStash: true });
     } catch (err) {
       console.error("Failed to stash changes:", err);
     }
   },
 
-  checkoutSnapshot: async (commitId) => {
+  popStash: async () => {
     try {
-      await invoke("checkout_version", { commitId });
-      set({ viewingSnapshotId: commitId, isDirty: false });
-      // Reload file lists to reflect checked-out state
-      await get().loadSketches();
-      await get().loadStoryboards();
-      const { activeSketchPath } = get();
-      if (activeSketchPath) {
-        await get().openSketch(activeSketchPath);
-      }
-    } catch (err) {
-      console.error("Failed to checkout snapshot:", err);
-    }
-  },
-
-  returnToLatest: async () => {
-    try {
-      const { versions } = get();
-      if (versions.length > 0) {
-        await invoke("checkout_version", { commitId: versions[0].id });
-      }
-      // Restore stashed working tree if one exists
       const hadStash = await invoke<boolean>("pop_stash");
-      set({ viewingSnapshotId: null, isDirty: hadStash });
-      await get().loadSketches();
-      await get().loadStoryboards();
-      const { activeSketchPath } = get();
-      if (activeSketchPath) {
-        await get().openSketch(activeSketchPath);
+      set({ hasStash: false, isDirty: hadStash });
+      if (hadStash) {
+        await get().loadSketches();
+        await get().loadStoryboards();
+        const { activeSketchPath } = get();
+        if (activeSketchPath) {
+          await get().openSketch(activeSketchPath);
+        }
       }
     } catch (err) {
-      console.error("Failed to return to latest:", err);
+      console.error("Failed to pop stash:", err);
     }
   },
 
-  restoreVersion: async (commitId) => {
+  checkStash: async () => {
     try {
-      await invoke("restore_version", { commitId });
-      set({ viewingSnapshotId: null });
-      await get().loadSketches();
-      await get().loadStoryboards();
+      const hasStash = await invoke<boolean>("has_stash");
+      set({ hasStash });
+    } catch (err) {
+      console.error("Failed to check stash:", err);
+    }
+  },
+
+  navigateToSnapshot: async (commitId) => {
+    try {
+      await invoke("navigate_to_snapshot", { commitId });
+      set({ isDirty: false });
       await get().loadVersions();
       await get().loadTimelines();
+      await get().loadGraphData();
+      await get().loadSketches();
+      await get().loadStoryboards();
       const { activeSketchPath } = get();
       if (activeSketchPath) {
         await get().openSketch(activeSketchPath);
       }
     } catch (err) {
-      console.error("Failed to restore version:", err);
+      console.error("Failed to navigate to snapshot:", err);
     }
   },
 
@@ -816,7 +808,6 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await get().loadGraphData();
       await get().loadSketches();
       await get().loadStoryboards();
-      set({ viewingSnapshotId: null });
       const { activeSketchPath } = get();
       if (activeSketchPath) {
         await get().openSketch(activeSketchPath);
@@ -843,7 +834,6 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await get().loadGraphData();
       await get().loadSketches();
       await get().loadStoryboards();
-      set({ viewingSnapshotId: null });
       const { activeSketchPath } = get();
       if (activeSketchPath) {
         await get().openSketch(activeSketchPath);
