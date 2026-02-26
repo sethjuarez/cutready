@@ -25,6 +25,7 @@ export function VersionHistory() {
   const stashChanges = useAppStore((s) => s.stashChanges);
   const popStash = useAppStore((s) => s.popStash);
   const checkStash = useAppStore((s) => s.checkStash);
+  const checkDirty = useAppStore((s) => s.checkDirty);
   const navigateToSnapshot = useAppStore((s) => s.navigateToSnapshot);
   const loadGraphData = useAppStore((s) => s.loadGraphData);
   const sidebarPosition = useAppStore((s) => s.sidebarPosition);
@@ -48,7 +49,8 @@ export function VersionHistory() {
     loadGraphData();
     loadTimelines();
     checkStash();
-  }, [loadGraphData, loadTimelines, checkStash]);
+    checkDirty();
+  }, [loadGraphData, loadTimelines, checkStash, checkDirty]);
 
   useEffect(() => {
     if (snapshotPromptOpen) {

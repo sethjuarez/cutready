@@ -548,6 +548,8 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   },
 
   updateSketchTitle: async (sketchPath, title) => {
+    // Guard: skip if navigation has cleared the active sketch
+    if (!get().activeSketchPath) return;
     try {
       await invoke("update_sketch_title", { relativePath: sketchPath, title });
       await get().loadSketches();
@@ -784,15 +786,20 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
 
   navigateToSnapshot: async (commitId) => {
     try {
+      // Clear active sketch FIRST to trigger React re-render which cancels
+      // pending debounced saves in SketchForm — prevents stale writes during checkout
+      const prevSketchPath = get().activeSketchPath;
+      set({ activeSketch: null, activeSketchPath: null, isDirty: false });
       await invoke("navigate_to_snapshot", { commitId });
-      set({ isDirty: false });
-      // Reload sketches and open active sketch FIRST to cancel any pending
-      // debounced saves in SketchForm before checkDirty runs
+      // Reload sketches and try to re-open the previously active sketch
       await get().loadSketches();
       await get().loadStoryboards();
-      const { activeSketchPath } = get();
-      if (activeSketchPath) {
-        await get().openSketch(activeSketchPath);
+      if (prevSketchPath) {
+        const { sketches } = get();
+        const stillExists = sketches.some((s) => s.path === prevSketchPath);
+        if (stillExists) {
+          await get().openSketch(prevSketchPath);
+        }
       }
       await get().loadVersions();
       await get().loadTimelines();
@@ -807,9 +814,14 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await invoke("create_timeline", { fromCommitId, name });
       await get().loadSketches();
       await get().loadStoryboards();
-      const { activeSketchPath } = get();
+      const { activeSketchPath, sketches } = get();
       if (activeSketchPath) {
-        await get().openSketch(activeSketchPath);
+        const stillExists = sketches.some((s) => s.path === activeSketchPath);
+        if (stillExists) {
+          await get().openSketch(activeSketchPath);
+        } else {
+          set({ activeSketch: null, activeSketchPath: null });
+        }
       }
       await get().loadTimelines();
       await get().loadVersions();
@@ -833,9 +845,14 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await invoke("switch_timeline", { name });
       await get().loadSketches();
       await get().loadStoryboards();
-      const { activeSketchPath } = get();
+      const { activeSketchPath, sketches } = get();
       if (activeSketchPath) {
-        await get().openSketch(activeSketchPath);
+        const stillExists = sketches.some((s) => s.path === activeSketchPath);
+        if (stillExists) {
+          await get().openSketch(activeSketchPath);
+        } else {
+          set({ activeSketch: null, activeSketchPath: null });
+        }
       }
       await get().loadTimelines();
       await get().loadVersions();

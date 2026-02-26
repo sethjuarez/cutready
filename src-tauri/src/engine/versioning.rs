@@ -1130,4 +1130,135 @@ mod tests {
         pop_stash(tmp.path()).unwrap();
         assert!(!has_stash(tmp.path()));
     }
+
+    /// Full end-to-end workflow test simulating real user behaviour:
+    /// 1. Create project with a sketch file
+    /// 2. Save 3 snapshots with different content
+    /// 3. Navigate backward — verify files, dirty state, auto-fork
+    /// 4. Make edits and save new snapshot — verify it goes on current branch
+    /// 5. Navigate to a commit on the forked timeline — cross-timeline nav
+    /// 6. Verify graph shows everything
+    #[test]
+    fn full_workflow_navigate_edit_crossbranch() {
+        let tmp = setup_project_dir();
+        init_project_repo(tmp.path()).unwrap();
+
+        // Simulate sketch file like the real app
+        let sketch = r#"{"title":"Start","rows":[{"text":"row1"}]}"#;
+        std::fs::write(tmp.path().join("start.sk"), sketch).unwrap();
+        let id1 = commit_snapshot(tmp.path(), "row one").unwrap();
+
+        let sketch2 = r#"{"title":"Start","rows":[{"text":"row1"},{"text":"row2"}]}"#;
+        std::fs::write(tmp.path().join("start.sk"), sketch2).unwrap();
+        let id2 = commit_snapshot(tmp.path(), "row two").unwrap();
+
+        let sketch3 = r#"{"title":"Start","rows":[{"text":"row1"},{"text":"row2"},{"text":"row3"}]}"#;
+        std::fs::write(tmp.path().join("start.sk"), sketch3).unwrap();
+        let id3 = commit_snapshot(tmp.path(), "row three").unwrap();
+
+        // Verify: HEAD is at id3, 3 versions, file has 3 rows
+        assert_eq!(list_versions(tmp.path()).unwrap().len(), 3);
+        assert!(!has_unsaved_changes(tmp.path()).unwrap(), "Should be clean after commit");
+
+        // === Navigate backward to id1 ===
+        navigate_to_snapshot(tmp.path(), &id1).unwrap();
+
+        // File on disk should match id1's content
+        let disk = std::fs::read_to_string(tmp.path().join("start.sk")).unwrap();
+        assert!(disk.contains("row1"), "File should contain row1");
+        assert!(!disk.contains("row2"), "File should NOT contain row2 after navigating to id1");
+        assert!(!disk.contains("row3"), "File should NOT contain row3 after navigating to id1");
+
+        // Should NOT be dirty (file matches HEAD)
+        assert!(!has_unsaved_changes(tmp.path()).unwrap(),
+            "Should be clean right after navigating — file matches HEAD");
+
+        // list_versions should show only id1 (that's where main points now)
+        let versions = list_versions(tmp.path()).unwrap();
+        assert_eq!(versions.len(), 1, "Main should have 1 commit after rewind");
+        assert_eq!(versions[0].id, id1);
+
+        // Auto-fork should exist with the old commits
+        let timelines = list_timelines(tmp.path()).unwrap();
+        assert_eq!(timelines.len(), 2, "Should have main + fork");
+        let fork = timelines.iter().find(|t| !t.is_active).unwrap();
+        assert!(fork.snapshot_count >= 3, "Fork should have all 3 commits");
+
+        // Graph should show all commits
+        let graph = get_timeline_graph(tmp.path()).unwrap();
+        assert!(graph.len() >= 3, "Graph should have at least 3 nodes");
+        let head_nodes: Vec<_> = graph.iter().filter(|n| n.is_head).collect();
+        assert_eq!(head_nodes.len(), 1, "Exactly one HEAD node");
+        assert_eq!(head_nodes[0].id, id1, "HEAD should be id1");
+
+        // === Edit and save new work from id1 ===
+        let sketch_new = r#"{"title":"Start","rows":[{"text":"row1"},{"text":"new direction"}]}"#;
+        std::fs::write(tmp.path().join("start.sk"), sketch_new).unwrap();
+        assert!(has_unsaved_changes(tmp.path()).unwrap(), "Should be dirty after editing");
+
+        let id4 = commit_snapshot(tmp.path(), "new direction").unwrap();
+        assert!(!has_unsaved_changes(tmp.path()).unwrap(), "Should be clean after saving");
+
+        // Main should now have 2 commits: id1 → id4
+        let versions = list_versions(tmp.path()).unwrap();
+        assert_eq!(versions.len(), 2);
+        assert_eq!(versions[0].id, id4, "Latest should be id4");
+        assert_eq!(versions[1].id, id1, "Parent should be id1");
+
+        // === Navigate to id3 (on the fork) — cross-timeline ===
+        navigate_to_snapshot(tmp.path(), &id3).unwrap();
+
+        // File should have 3 rows again
+        let disk = std::fs::read_to_string(tmp.path().join("start.sk")).unwrap();
+        assert!(disk.contains("row3"), "After cross-timeline nav, file should have row3");
+
+        // Should NOT be dirty
+        assert!(!has_unsaved_changes(tmp.path()).unwrap(),
+            "Should be clean after cross-timeline navigation");
+
+        // Graph should still show everything
+        let graph = get_timeline_graph(tmp.path()).unwrap();
+        let head_nodes: Vec<_> = graph.iter().filter(|n| n.is_head).collect();
+        assert_eq!(head_nodes.len(), 1, "Still exactly one HEAD");
+
+        // id2 should also be navigable
+        navigate_to_snapshot(tmp.path(), &id2).unwrap();
+        let disk = std::fs::read_to_string(tmp.path().join("start.sk")).unwrap();
+        assert!(disk.contains("row2"), "Should have row2");
+        assert!(!disk.contains("row3"), "Should NOT have row3");
+        assert!(!has_unsaved_changes(tmp.path()).unwrap(), "Clean after nav to id2");
+    }
+
+    /// Navigate back to initial (empty) commit — working dir should be clean and match commit tree.
+    #[test]
+    fn navigate_to_empty_initial_commit() {
+        let tmp = setup_project_dir();
+        init_project_repo(tmp.path()).unwrap();
+
+        // Initial commit includes project.json from setup_project_dir
+        let init_id = commit_snapshot(tmp.path(), "Init").unwrap();
+
+        // Create a sketch file and commit
+        std::fs::write(tmp.path().join("sketch.sk"), r#"{"title":"Test"}"#).unwrap();
+        let _id2 = commit_snapshot(tmp.path(), "Added sketch").unwrap();
+
+        // Navigate back to the initial commit
+        navigate_to_snapshot(tmp.path(), &init_id).unwrap();
+
+        // Working dir should NOT contain sketch.sk (only project.json from init)
+        let files: Vec<String> = std::fs::read_dir(tmp.path())
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .filter(|n| !n.starts_with('.'))
+            .collect();
+        assert!(!files.contains(&"sketch.sk".to_string()),
+            "sketch.sk should not exist after navigating to initial commit");
+        assert!(files.contains(&"project.json".to_string()),
+            "project.json should still exist from initial commit");
+
+        // Should NOT be dirty
+        assert!(!has_unsaved_changes(tmp.path()).unwrap(),
+            "Should be clean after navigating to initial commit");
+    }
 }
