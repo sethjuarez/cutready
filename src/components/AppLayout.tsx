@@ -113,6 +113,19 @@ export function AppLayout() {
         e.preventDefault();
         toggleOutput();
       }
+      if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+        e.preventDefault();
+        const { currentProject, saveVersion } = useAppStore.getState();
+        if (currentProject) {
+          const now = new Date();
+          const label = now.toLocaleString("en-US", {
+            month: "short", day: "numeric",
+            hour: "numeric", minute: "2-digit",
+            hour12: true,
+          });
+          saveVersion(label);
+        }
+      }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
