@@ -41,6 +41,17 @@ export function ScriptTable({ rows, onChange, readOnly = false }: ScriptTablePro
     [rows, onChange],
   );
 
+  const moveRow = useCallback(
+    (index: number, direction: -1 | 1) => {
+      const target = index + direction;
+      if (target < 0 || target >= rows.length) return;
+      const updated = [...rows];
+      [updated[index], updated[target]] = [updated[target], updated[index]];
+      onChange(updated);
+    },
+    [rows, onChange],
+  );
+
   // Ensure at least one row
   const displayRows = rows.length === 0 ? [emptyRow()] : rows;
 
@@ -95,6 +106,26 @@ export function ScriptTable({ rows, onChange, readOnly = false }: ScriptTablePro
               {!readOnly && (
                 <td className="script-table-td align-top">
                   <div className="flex flex-col gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      onClick={() => moveRow(idx, -1)}
+                      disabled={idx === 0}
+                      className="p-0.5 rounded text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] disabled:opacity-20 disabled:cursor-default transition-colors"
+                      title="Move row up"
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="18 15 12 9 6 15" />
+                      </svg>
+                    </button>
+                    <button
+                      onClick={() => moveRow(idx, 1)}
+                      disabled={idx === displayRows.length - 1}
+                      className="p-0.5 rounded text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] disabled:opacity-20 disabled:cursor-default transition-colors"
+                      title="Move row down"
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="6 9 12 15 18 9" />
+                      </svg>
+                    </button>
                     <button
                       onClick={() => addRow(idx)}
                       className="p-0.5 rounded text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] transition-colors"
