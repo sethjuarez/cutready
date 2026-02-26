@@ -1,3 +1,4 @@
+import { useCallback, useState } from "react";
 import { useAppStore } from "../stores/appStore";
 import { StoryboardView } from "./StoryboardView";
 import { SketchForm } from "./SketchForm";
@@ -18,13 +19,24 @@ export function StoryboardPanel() {
   const toggleVersionHistory = useAppStore((s) => s.toggleVersionHistory);
   const sidebarPosition = useAppStore((s) => s.sidebarPosition);
 
-  // Secondary panel goes on the opposite side of the primary sidebar
+  const [secondaryWidth, setSecondaryWidth] = useState(280);
   const secondaryOnLeft = sidebarPosition === "right";
+
+  const handleSecondaryResize = useCallback(
+    (delta: number) => {
+      const adjusted = secondaryOnLeft ? delta : -delta;
+      setSecondaryWidth((w) => Math.min(500, Math.max(180, w + adjusted)));
+    },
+    [secondaryOnLeft],
+  );
+
   const secondaryPanel = showVersionHistory ? (
     <>
-      {!secondaryOnLeft && <ResizeHandle direction="horizontal" onResize={() => {}} />}
-      <VersionHistory />
-      {secondaryOnLeft && <ResizeHandle direction="horizontal" onResize={() => {}} />}
+      {!secondaryOnLeft && <ResizeHandle direction="horizontal" onResize={handleSecondaryResize} />}
+      <div className="shrink-0 h-full" style={{ width: secondaryWidth }}>
+        <VersionHistory />
+      </div>
+      {secondaryOnLeft && <ResizeHandle direction="horizontal" onResize={handleSecondaryResize} />}
     </>
   ) : null;
 
