@@ -298,82 +298,48 @@ pub fn navigate_to_snapshot(
         return checkout_version(project_dir, commit_id);
     }
 
-    let branch_name = get_current_branch_name(&repo)
-        .unwrap_or_else(|| MAIN_BRANCH.to_string());
+    // Figure out if we need to save a prev-tip for the current branch
+    let going_backward_on_current = is_ancestor(&repo, target_oid, head_oid)?;
 
-    // Check if target is reachable from the prev-tip (navigating within rewound range)
-    // BUT only if the target is actually on the CURRENT branch's chain, not on a different timeline
-    if let Some(prev_tip) = load_prev_tip(project_dir) {
-        // Only use prev-tip navigation if target is an ancestor of head or between head and prev-tip
-        let target_is_on_current_chain = is_ancestor(&repo, target_oid, head_oid)?
-            || is_ancestor(&repo, head_oid, target_oid)?
-            || target_oid == head_oid;
-        if target_is_on_current_chain
-            && (target_oid == prev_tip || is_ancestor(&repo, target_oid, prev_tip)?)
-        {
-            // Target is within the original chain — just move branch ref there
-            reset_branch_ref(&repo, &branch_name, target_oid)?;
-            // If we reached the original tip, clear prev-tip (fully navigated forward)
-            if target_oid == prev_tip {
-                clear_prev_tip(project_dir);
-            }
-            return checkout_version(project_dir, commit_id);
-        }
-    }
-
-    // Check if target is an ancestor of HEAD (navigating backward)
-    let going_backward = is_ancestor(&repo, target_oid, head_oid)?;
-
-    if going_backward {
-        // Save current tip so we can still see "future" commits in the graph.
+    if going_backward_on_current {
+        // Save current tip so "future" commits remain visible in the graph.
         // If prev-tip is already set (deeper rewind), keep the original.
         let tip_to_save = load_prev_tip(project_dir).unwrap_or(head_oid);
         save_prev_tip(project_dir, tip_to_save)?;
-
-        reset_branch_ref(&repo, &branch_name, target_oid)?;
-        return checkout_version(project_dir, commit_id);
     }
 
-    // Check if target is a descendant of HEAD (navigating forward on same chain)
-    let going_forward = is_ancestor(&repo, head_oid, target_oid)?;
-    if going_forward {
-        reset_branch_ref(&repo, &branch_name, target_oid)?;
-        // If prev-tip exists and we reached it, clear it
-        if let Some(prev_tip) = load_prev_tip(project_dir) {
-            if target_oid == prev_tip {
-                clear_prev_tip(project_dir);
-            }
+    // Going forward and reaching prev-tip — clear it
+    if let Some(prev_tip) = load_prev_tip(project_dir) {
+        if target_oid == prev_tip {
+            clear_prev_tip(project_dir);
         }
-        return checkout_version(project_dir, commit_id);
     }
 
-    // Target is on a different timeline entirely — find which one and switch
+    // If target matches a branch tip, re-attach HEAD to that branch.
+    // Otherwise detach HEAD to the target commit — branches stay where they are.
+    let head_path = project_dir.join(".git").join("HEAD");
     let timelines = list_timelines(project_dir)?;
+    let mut attached = false;
     for tl in &timelines {
-        if tl.is_active {
-            continue; // Already checked current timeline
-        }
         let ref_name = if tl.name == MAIN_BRANCH {
             format!("refs/heads/{}", MAIN_BRANCH)
         } else {
             format!("{}{}", TIMELINE_PREFIX, tl.name)
         };
         if let Ok(r) = repo.find_reference(&ref_name) {
-            let tip = r.id().detach();
-            if is_ancestor(&repo, target_oid, tip)? || target_oid == tip {
-                // Target is on this timeline — switch to it
-                switch_timeline(project_dir, &tl.name)?;
-
-                // If target is not the tip, navigate within the new timeline
-                if target_oid != tip {
-                    return navigate_to_snapshot(project_dir, commit_id);
-                }
-                return Ok(());
+            if r.id().detach() == target_oid {
+                std::fs::write(&head_path, format!("ref: {}\n", ref_name))
+                    .map_err(|e| VersioningError::Io(e.to_string()))?;
+                attached = true;
+                break;
             }
         }
     }
+    if !attached {
+        std::fs::write(&head_path, format!("{}\n", target_oid))
+            .map_err(|e| VersioningError::Io(e.to_string()))?;
+    }
 
-    // Fallback: just checkout the commit (orphaned/unknown)
     checkout_version(project_dir, commit_id)
 }
 
@@ -492,6 +458,48 @@ pub fn list_timelines(project_dir: &Path) -> Result<Vec<TimelineInfo>, Versionin
                 snapshot_count: count,
                 color_index: 0,
             });
+        }
+    }
+
+    // If HEAD is detached (no active branch), find which timeline contains HEAD
+    // and mark it active so the graph renders correctly
+    if active_branch.is_none() && !timelines.iter().any(|t| t.is_active) {
+        if let Ok(head_commit) = repo.head_commit() {
+            let head_oid = head_commit.id().detach();
+            // First check if HEAD matches any tip exactly
+            let mut found = false;
+            for tl in timelines.iter_mut() {
+                let ref_name = if tl.name == MAIN_BRANCH {
+                    format!("refs/heads/{}", MAIN_BRANCH)
+                } else {
+                    format!("{}{}", TIMELINE_PREFIX, tl.name)
+                };
+                if let Ok(r) = repo.find_reference(&ref_name) {
+                    let tip = r.id().detach();
+                    if tip == head_oid {
+                        tl.is_active = true;
+                        found = true;
+                        break;
+                    }
+                }
+            }
+            // If no exact match, find which timeline HEAD is an ancestor of
+            if !found {
+                for tl in timelines.iter_mut() {
+                    let ref_name = if tl.name == MAIN_BRANCH {
+                        format!("refs/heads/{}", MAIN_BRANCH)
+                    } else {
+                        format!("{}{}", TIMELINE_PREFIX, tl.name)
+                    };
+                    if let Ok(r) = repo.find_reference(&ref_name) {
+                        let tip = r.id().detach();
+                        if is_ancestor(&repo, head_oid, tip).unwrap_or(false) {
+                            tl.is_active = true;
+                            break;
+                        }
+                    }
+                }
+            }
         }
     }
 
