@@ -6,7 +6,6 @@ interface TitleBarProps {
   sidebarPosition?: "left" | "right";
   outputVisible?: boolean;
   onToggleSidebar?: () => void;
-  onToggleSidebarPosition?: () => void;
   onToggleOutput?: () => void;
   onCommandPaletteOpen?: () => void;
 }
@@ -16,7 +15,6 @@ export function TitleBar({
   sidebarPosition = "left",
   outputVisible = false,
   onToggleSidebar,
-  onToggleSidebarPosition,
   onToggleOutput,
   onCommandPaletteOpen,
 }: TitleBarProps) {
@@ -106,9 +104,9 @@ export function TitleBar({
       {/* Right: Layout toggles + window controls */}
       <div className="flex items-center h-full shrink-0">
         {/* Layout toggles */}
-        <div className="flex items-center gap-0.5 px-2" style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}>
+        <div className="flex items-center gap-1 px-2" style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}>
           <button
-            className={`flex items-center justify-center w-7 h-[22px] rounded transition-colors ${
+            className={`flex items-center gap-1 h-[22px] px-1.5 rounded transition-colors text-[11px] ${
               sidebarVisible
                 ? "text-[var(--color-accent)]"
                 : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"
@@ -118,28 +116,12 @@ export function TitleBar({
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <rect x="3" y="3" width="18" height="18" rx="2" />
-              <line x1="9" y1="3" x2="9" y2="21" />
+              <line x1={sidebarPosition === "left" ? "9" : "15"} y1="3" x2={sidebarPosition === "left" ? "9" : "15"} y2="21" />
             </svg>
+            <span>Sidebar</span>
           </button>
           <button
-            className="flex items-center justify-center w-7 h-[22px] rounded transition-colors text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-alt)]"
-            onClick={onToggleSidebarPosition}
-            title={`Move Sidebar to ${sidebarPosition === "left" ? "Right" : "Left"}`}
-          >
-            {sidebarPosition === "left" ? (
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="3" width="18" height="18" rx="2" />
-                <line x1="15" y1="3" x2="15" y2="21" />
-              </svg>
-            ) : (
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="3" width="18" height="18" rx="2" />
-                <line x1="9" y1="3" x2="9" y2="21" />
-              </svg>
-            )}
-          </button>
-          <button
-            className={`flex items-center justify-center w-7 h-[22px] rounded transition-colors ${
+            className={`flex items-center gap-1 h-[22px] px-1.5 rounded transition-colors text-[11px] ${
               outputVisible
                 ? "text-[var(--color-accent)]"
                 : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"
@@ -151,6 +133,7 @@ export function TitleBar({
               <rect x="3" y="3" width="18" height="18" rx="2" />
               <line x1="3" y1="15" x2="21" y2="15" />
             </svg>
+            <span>Panel</span>
           </button>
         </div>
 
