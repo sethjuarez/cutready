@@ -585,6 +585,9 @@ pub fn get_timeline_graph(project_dir: &Path) -> Result<Vec<GraphNode>, Versioni
     // Find the active timeline for attributing prev-tip nodes
     let active_timeline = timelines.iter().find(|t| t.is_active);
 
+    // Track branch tips so we can detect shared-tip branches
+    let mut branch_tips: Vec<(gix::ObjectId, String, usize)> = Vec::new();
+
     for timeline in &timelines {
         let ref_name = if timeline.name == MAIN_BRANCH {
             format!("refs/heads/{}", MAIN_BRANCH)
@@ -603,6 +606,9 @@ pub fn get_timeline_graph(project_dir: &Path) -> Result<Vec<GraphNode>, Versioni
             }
         };
 
+        branch_tips.push((tip_oid, timeline.name.clone(), timeline.color_index));
+
+        let mut is_tip = true;
         let mut current = Some(tip_oid);
         while let Some(oid) = current {
             if !seen.insert(oid) {
@@ -628,9 +634,33 @@ pub fn get_timeline_graph(project_dir: &Path) -> Result<Vec<GraphNode>, Versioni
                 parents,
                 lane: timeline.color_index,
                 is_head: head_oid.map_or(false, |h| h == oid),
+                is_branch_tip: is_tip,
             });
+            is_tip = false;
 
             current = commit.parent_ids().next().map(|id| id.detach());
+        }
+    }
+
+    // Add alias nodes for branches whose tip was already claimed by another branch.
+    // This makes shared-tip branches visible in the graph.
+    for (tip_oid, name, lane) in &branch_tips {
+        let tip_str = tip_oid.to_string();
+        let has_own_node = nodes.iter().any(|n| n.id == tip_str && n.timeline == *name);
+        if !has_own_node {
+            // Find the existing node for this commit to copy its data
+            if let Some(existing) = nodes.iter().find(|n| n.id == tip_str).cloned() {
+                nodes.push(GraphNode {
+                    id: existing.id,
+                    message: existing.message,
+                    timestamp: existing.timestamp,
+                    timeline: name.clone(),
+                    parents: existing.parents,
+                    lane: *lane,
+                    is_head: false,
+                    is_branch_tip: true,
+                });
+            }
         }
     }
 
@@ -666,6 +696,7 @@ pub fn get_timeline_graph(project_dir: &Path) -> Result<Vec<GraphNode>, Versioni
                 parents,
                 lane: active_lane,
                 is_head: false,
+                is_branch_tip: false,
             });
 
             current = commit.parent_ids().next().map(|id| id.detach());
