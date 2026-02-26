@@ -786,15 +786,17 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     try {
       await invoke("navigate_to_snapshot", { commitId });
       set({ isDirty: false });
-      await get().loadVersions();
-      await get().loadTimelines();
-      await get().loadGraphData();
+      // Reload sketches and open active sketch FIRST to cancel any pending
+      // debounced saves in SketchForm before checkDirty runs
       await get().loadSketches();
       await get().loadStoryboards();
       const { activeSketchPath } = get();
       if (activeSketchPath) {
         await get().openSketch(activeSketchPath);
       }
+      await get().loadVersions();
+      await get().loadTimelines();
+      await get().loadGraphData();
     } catch (err) {
       console.error("Failed to navigate to snapshot:", err);
     }
@@ -803,15 +805,15 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   createTimeline: async (fromCommitId, name) => {
     try {
       await invoke("create_timeline", { fromCommitId, name });
-      await get().loadTimelines();
-      await get().loadVersions();
-      await get().loadGraphData();
       await get().loadSketches();
       await get().loadStoryboards();
       const { activeSketchPath } = get();
       if (activeSketchPath) {
         await get().openSketch(activeSketchPath);
       }
+      await get().loadTimelines();
+      await get().loadVersions();
+      await get().loadGraphData();
     } catch (err) {
       console.error("Failed to create timeline:", err);
     }
@@ -829,15 +831,15 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   switchTimeline: async (name) => {
     try {
       await invoke("switch_timeline", { name });
-      await get().loadTimelines();
-      await get().loadVersions();
-      await get().loadGraphData();
       await get().loadSketches();
       await get().loadStoryboards();
       const { activeSketchPath } = get();
       if (activeSketchPath) {
         await get().openSketch(activeSketchPath);
       }
+      await get().loadTimelines();
+      await get().loadVersions();
+      await get().loadGraphData();
     } catch (err) {
       console.error("Failed to switch timeline:", err);
     }
