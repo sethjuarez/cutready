@@ -163,6 +163,19 @@ function LocalInput({
   );
 }
 
+/** Move focus to the next (or previous) editable cell in the table. */
+function focusAdjacentCell(from: HTMLElement, reverse = false) {
+  const table = from.closest("table");
+  if (!table) return;
+  const cells = Array.from(
+    table.querySelectorAll<HTMLElement>("input:not([readonly]), [data-cell]"),
+  );
+  const td = from.closest("td");
+  const idx = cells.findIndex((el) => td?.contains(el));
+  const next = cells[reverse ? idx - 1 : idx + 1];
+  if (next) next.focus();
+}
+
 /* ── Inline formatting: **bold** and *italic* ──────────────── */
 
 function formatInline(text: string): ReactNode {
@@ -316,9 +329,20 @@ function MarkdownCell({
     const rendered = renderMarkdown(localValue);
     return (
       <div
-        className={`md-cell-preview min-h-[1.5rem] ${!readOnly ? "cursor-text" : ""}`}
+        data-cell
+        tabIndex={readOnly ? undefined : 0}
+        className={`md-cell-preview min-h-[1.5rem] rounded outline-none transition-colors ${!readOnly ? "cursor-text focus:ring-1 focus:ring-[var(--color-accent)]/40" : ""}`}
         onClick={() => {
           if (!readOnly) setIsEditing(true);
+        }}
+        onFocus={() => {
+          if (!readOnly) setIsEditing(true);
+        }}
+        onKeyDown={(e) => {
+          if (!readOnly && e.key === "Enter") {
+            e.preventDefault();
+            setIsEditing(true);
+          }
         }}
       >
         {rendered || (
@@ -340,6 +364,21 @@ function MarkdownCell({
       placeholder={placeholder}
       className="w-full bg-transparent text-xs px-1 py-0.5 rounded outline-none resize-none ring-1 ring-[var(--color-accent)]/40 placeholder:text-[var(--color-text-secondary)]/40"
       onKeyDown={(e) => {
+        // Tab / Shift+Tab → move to adjacent cell
+        if (e.key === "Tab") {
+          e.preventDefault();
+          setIsEditing(false);
+          requestAnimationFrame(() =>
+            focusAdjacentCell(e.target as HTMLElement, e.shiftKey),
+          );
+          return;
+        }
+        // Escape → exit edit mode
+        if (e.key === "Escape") {
+          e.preventDefault();
+          setIsEditing(false);
+          return;
+        }
         if (e.key !== "Enter") return;
         const pos = e.currentTarget.selectionStart;
         const before = localValue.slice(0, pos);
