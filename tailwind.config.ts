@@ -10,6 +10,7 @@ export default {
           DEFAULT: "var(--color-surface)",
           alt: "var(--color-surface-alt)",
           inset: "var(--color-surface-inset)",
+          toolbar: "var(--color-surface-toolbar)",
         },
         accent: {
           DEFAULT: "var(--color-accent)",

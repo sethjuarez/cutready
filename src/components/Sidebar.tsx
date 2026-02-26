@@ -144,7 +144,7 @@ export function Sidebar() {
   return (
     <>
       <nav
-        className={`no-select flex flex-col w-12 bg-[var(--color-surface-inset)] items-center py-3 gap-1 ${
+        className={`no-select flex flex-col w-12 bg-[var(--color-surface-toolbar)] items-center py-3 gap-1 ${
           isRight ? "border-l border-[var(--color-border)]" : "border-r border-[var(--color-border)]"
         }`}
         onContextMenu={handleContextMenu}
