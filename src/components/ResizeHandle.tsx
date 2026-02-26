@@ -59,23 +59,16 @@ export function ResizeHandle({ direction, onResize, onResizeEnd }: ResizeHandleP
 
   return (
     <div
-      className={`group relative shrink-0 ${
-        isHorizontal ? "w-[7px] cursor-col-resize" : "h-[7px] cursor-row-resize"
+      className={`shrink-0 transition-colors duration-150 ${
+        isHorizontal
+          ? "w-px cursor-col-resize"
+          : "h-px cursor-row-resize"
+      } ${
+        isDragging
+          ? "bg-[var(--color-accent)]"
+          : "bg-[var(--color-border)] hover:bg-[var(--color-accent)]/50"
       }`}
       onMouseDown={handleMouseDown}
-    >
-      {/* Visible center line — appears on hover and during drag */}
-      <div
-        className={`absolute transition-all duration-200 ${
-          isDragging
-            ? "opacity-100 bg-[var(--color-accent)]"
-            : "opacity-0 group-hover:opacity-100 bg-[var(--color-accent)]/40"
-        } ${
-          isHorizontal
-            ? "top-0 bottom-0 left-1/2 -translate-x-1/2 w-[2px] rounded-full"
-            : "left-0 right-0 top-1/2 -translate-y-1/2 h-[2px] rounded-full"
-        }`}
-      />
-    </div>
+    />
   );
 }
