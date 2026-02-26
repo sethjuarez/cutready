@@ -74,8 +74,11 @@ export function SketchForm() {
   );
 
   // Flush pending debounced saves on unmount (e.g., tab close)
+  // Skip flush if navigation cleared the active sketch (path is null in store)
   useEffect(() => {
     return () => {
+      // If navigation cleared the active sketch, don't flush stale data
+      if (!useAppStore.getState().activeSketchPath) return;
       const path = pendingPathRef.current;
       if (titleTimeoutRef.current) {
         clearTimeout(titleTimeoutRef.current);
