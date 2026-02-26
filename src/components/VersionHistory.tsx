@@ -7,6 +7,7 @@ export function VersionHistory() {
   const saveVersion = useAppStore((s) => s.saveVersion);
   const restoreVersion = useAppStore((s) => s.restoreVersion);
   const sidebarPosition = useAppStore((s) => s.sidebarPosition);
+  const snapshotPromptOpen = useAppStore((s) => s.snapshotPromptOpen);
 
   const [labelInput, setLabelInput] = useState("");
   const [showLabelInput, setShowLabelInput] = useState(false);
@@ -15,6 +16,14 @@ export function VersionHistory() {
   useEffect(() => {
     loadVersions();
   }, [loadVersions]);
+
+  // React to Ctrl+S prompt trigger
+  useEffect(() => {
+    if (snapshotPromptOpen) {
+      setShowLabelInput(true);
+      useAppStore.setState({ snapshotPromptOpen: false });
+    }
+  }, [snapshotPromptOpen]);
 
   const handleSave = useCallback(async () => {
     const label = labelInput.trim();
