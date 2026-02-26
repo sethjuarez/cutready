@@ -1557,4 +1557,50 @@ mod tests {
         assert_ne!(branch_node.timeline, "main",
             "Branch commit should NOT be on main");
     }
+
+    #[test]
+    fn shared_tip_branch_emits_alias_node() {
+        let tmp = setup_project_dir();
+        init_project_repo(tmp.path()).unwrap();
+
+        // Create two commits on main
+        std::fs::write(tmp.path().join("a.txt"), "one").unwrap();
+        let id1 = commit_snapshot(tmp.path(), "first", None).unwrap();
+
+        std::fs::write(tmp.path().join("a.txt"), "two").unwrap();
+        let _id2 = commit_snapshot(tmp.path(), "second", None).unwrap();
+
+        // Navigate back to id1 and create a fork (new branch)
+        navigate_to_snapshot(tmp.path(), &id1).unwrap();
+        std::fs::write(tmp.path().join("b.txt"), "branch work").unwrap();
+        let _fork_id = commit_snapshot(tmp.path(), "fork commit", Some("investigation")).unwrap();
+
+        // Create a second branch whose tip is at id1 (shared ancestor, no unique commits)
+        let repo = gix::open(tmp.path()).unwrap();
+        let oid = repo.rev_parse_single(id1.as_str()).unwrap().detach();
+        repo.reference(
+            "refs/heads/timeline/fork-newbranch",
+            oid,
+            gix::refs::transaction::PreviousValue::Any,
+            "test: create shared-tip branch",
+        ).unwrap();
+
+        // Get graph
+        let graph = get_timeline_graph(tmp.path()).unwrap();
+
+        // There should be alias node(s): same commit id1, different timelines
+        let id1_nodes: Vec<_> = graph.iter().filter(|n| n.id == id1).collect();
+        assert!(id1_nodes.len() >= 2,
+            "Expected at least 2 graph nodes for shared commit {}, got {}. Timelines: {:?}",
+            id1, id1_nodes.len(), id1_nodes.iter().map(|n| &n.timeline).collect::<Vec<_>>());
+
+        // One should be on main, one on fork-newbranch
+        let timelines: Vec<&str> = id1_nodes.iter().map(|n| n.timeline.as_str()).collect();
+        assert!(timelines.contains(&"fork-newbranch"),
+            "Expected fork-newbranch in timelines for shared commit, got {:?}", timelines);
+
+        // The alias node should be marked as a branch tip
+        let alias = id1_nodes.iter().find(|n| n.timeline == "fork-newbranch").unwrap();
+        assert!(alias.is_branch_tip, "Alias node should have is_branch_tip=true");
+    }
 }
