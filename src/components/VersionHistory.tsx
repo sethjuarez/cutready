@@ -6,6 +6,7 @@ export function VersionHistory() {
   const loadVersions = useAppStore((s) => s.loadVersions);
   const saveVersion = useAppStore((s) => s.saveVersion);
   const restoreVersion = useAppStore((s) => s.restoreVersion);
+  const sidebarPosition = useAppStore((s) => s.sidebarPosition);
 
   const [labelInput, setLabelInput] = useState("");
   const [showLabelInput, setShowLabelInput] = useState(false);
@@ -22,8 +23,11 @@ export function VersionHistory() {
     setShowLabelInput(false);
   }, [labelInput, saveVersion]);
 
+  // Border on the side facing the editor
+  const borderClass = sidebarPosition === "left" ? "border-l" : "border-r";
+
   return (
-    <div className="flex flex-col h-full border-l border-[var(--color-border)]" style={{ width: 280 }}>
+    <div className={`flex flex-col h-full ${borderClass} border-[var(--color-border)]`} style={{ width: 280 }}>
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-3 border-b border-[var(--color-border)]">
         <span className="text-xs font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">
@@ -31,9 +35,14 @@ export function VersionHistory() {
         </span>
         <button
           onClick={() => setShowLabelInput(true)}
-          className="text-xs px-2 py-1 rounded-md bg-[var(--color-accent)] text-white hover:bg-[var(--color-accent-hover)] transition-colors"
+          className="p-1.5 rounded-md text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 transition-colors"
+          title="Save Version"
         >
-          Save Version
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+            <polyline points="17 21 17 13 7 13 7 21" />
+            <polyline points="7 3 7 8 15 8" />
+          </svg>
         </button>
       </div>
 
