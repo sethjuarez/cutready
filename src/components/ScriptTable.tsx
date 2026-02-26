@@ -102,7 +102,7 @@ export function ScriptTable({ rows, onChange, readOnly = false }: ScriptTablePro
             {!readOnly && <th className="script-table-th" />}
             <th className="script-table-th">Time</th>
             <th className="script-table-th">Narrative</th>
-            <th className="script-table-th">Demo Actions</th>
+            <th className="script-table-th">Actions</th>
             <th className="script-table-th">Screenshot</th>
             {!readOnly && <th className="script-table-th" />}
           </tr>
@@ -520,10 +520,12 @@ function MarkdownCell({
         // Tab / Shift+Tab → move to adjacent cell
         if (e.key === "Tab") {
           e.preventDefault();
+          // Capture td before setIsEditing removes textarea from DOM
+          const td = (e.target as HTMLElement).closest("td");
           setIsEditing(false);
-          requestAnimationFrame(() =>
-            focusAdjacentCell(e.target as HTMLElement, e.shiftKey),
-          );
+          requestAnimationFrame(() => {
+            if (td) focusAdjacentCell(td, e.shiftKey);
+          });
           return;
         }
         // Escape → exit edit mode
