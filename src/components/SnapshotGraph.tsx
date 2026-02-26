@@ -231,7 +231,7 @@ export function SnapshotGraph({
                   }}
                 />
               </div>
-              <div className="flex-1 min-w-0 pr-3 flex items-center gap-1.5">
+              <div className="flex-1 min-w-0 pr-3 flex items-center gap-1.5" style={{ paddingLeft: ghostLane * LANE_W }}>
                 <span className="text-[11px] italic text-[var(--color-text-secondary)]">
                   New direction
                 </span>
@@ -292,6 +292,7 @@ export function SnapshotGraph({
             {/* label */}
             <div
               className={`flex-1 min-w-0 pr-3 flex flex-col justify-center ${!node.is_head ? "cursor-pointer" : ""}`}
+              style={{ paddingLeft: node.lane * LANE_W }}
               onClick={() => !node.is_head && onNodeClick(node.id, node.is_head)}
             >
               <div className={`text-xs truncate transition-colors ${
