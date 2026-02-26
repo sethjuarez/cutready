@@ -8,7 +8,6 @@ export function VersionHistory() {
   const saveVersion = useAppStore((s) => s.saveVersion);
   const checkoutSnapshot = useAppStore((s) => s.checkoutSnapshot);
   const returnToLatest = useAppStore((s) => s.returnToLatest);
-  const restoreVersion = useAppStore((s) => s.restoreVersion);
   const viewingSnapshotId = useAppStore((s) => s.viewingSnapshotId);
   const sidebarPosition = useAppStore((s) => s.sidebarPosition);
   const snapshotPromptOpen = useAppStore((s) => s.snapshotPromptOpen);
@@ -61,8 +60,10 @@ export function VersionHistory() {
 
   const handleKeep = useCallback(async () => {
     if (!viewingSnapshotId) return;
-    await restoreVersion(viewingSnapshotId);
-  }, [viewingSnapshotId, restoreVersion]);
+    // Files are already checked out — just clear the "viewing" state.
+    // The user can save a snapshot when they're ready.
+    useAppStore.setState({ viewingSnapshotId: null, isDirty: true });
+  }, [viewingSnapshotId]);
 
   const isViewing = viewingSnapshotId !== null;
   const showDirtyNode = isDirty && !isViewing;
