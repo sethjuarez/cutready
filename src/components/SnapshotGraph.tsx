@@ -187,16 +187,16 @@ export function SnapshotGraph({
   const rows: VisualRow[] = [];
   let y = PAD_T;
 
-  if (isDirty && !isRewound && nodes.length > 0) {
-    const cx = headIdx >= 0 ? nx(nodes[headIdx]) : nx(nodes[0]);
-    rows.push({ kind: "dirty", cx, cy: y + DIRTY_H / 2, h: DIRTY_H, top: y });
-    y += DIRTY_H;
-  }
-
   for (let i = 0; i < nodes.length; i++) {
+    // Ghost row above HEAD (rewound + dirty)
     if (nodes[i].is_head && showGhost) {
       rows.push({ kind: "ghost", cx: ghostX, cy: y + GHOST_H / 2, h: GHOST_H, top: y });
       y += GHOST_H;
+    }
+    // Dirty indicator above HEAD (non-rewound + dirty)
+    if (nodes[i].is_head && isDirty && !isRewound) {
+      rows.push({ kind: "dirty", cx: nx(nodes[i]), cy: y + DIRTY_H / 2, h: DIRTY_H, top: y });
+      y += DIRTY_H;
     }
     rows.push({ kind: "node", nodeIdx: i, cx: nx(nodes[i]), cy: y + ROW_H / 2, h: ROW_H, top: y });
     y += ROW_H;
@@ -234,12 +234,12 @@ export function SnapshotGraph({
     }
   }
 
-  // dirty → first-node
+  // dirty → HEAD dashed connector
   const dirtyRow = rows.find(r => r.kind === "dirty");
-  const firstNR  = nodeRow.get(0);
-  if (dirtyRow && firstNR) {
+  const headNR   = headIdx >= 0 ? nodeRow.get(headIdx) : null;
+  if (dirtyRow && headNR) {
     edges.push({
-      d: `M ${dirtyRow.cx} ${dirtyRow.cy + 4} L ${firstNR.cx} ${firstNR.cy - NODE_R}`,
+      d: `M ${dirtyRow.cx} ${dirtyRow.cy + 4} L ${headNR.cx} ${headNR.cy - (nodes[headIdx].is_head ? HEAD_R : NODE_R)}`,
       color: "var(--color-text-secondary)", dashed: true, opacity: 0.25,
     });
   }
