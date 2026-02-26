@@ -56,15 +56,21 @@ describe("ScriptTable tab order", () => {
     const onChange = vi.fn();
     render(<ScriptTable rows={rows} onChange={onChange} />);
 
-    // Focus the Actions cell of row 0 (data-tab-cell=2)
-    // It's a MarkdownCell in preview mode with data-cell
+    // Focus the Actions cell of row 0 — onFocus enters edit mode (textarea)
     const actionsCell = getTabCells()[2];
     const focusable = actionsCell.querySelector<HTMLElement>("[data-cell]") ??
       actionsCell.querySelector<HTMLElement>("input");
     focusable!.focus();
 
-    // Tab should move to next row's Time (data-tab-cell=3)
+    // Wait for edit mode to render the textarea
+    await new Promise((r) => setTimeout(r, 50));
+
+    // Now Tab from the textarea — should move to next row's Time
     await user.tab();
+
+    // Wait for requestAnimationFrame in Tab handler
+    await new Promise((r) => setTimeout(r, 50));
+
     const nextTimeCell = getTabCells()[3];
     expect(nextTimeCell.contains(document.activeElement)).toBe(true);
   });
@@ -81,8 +87,14 @@ describe("ScriptTable tab order", () => {
       actionsCell.querySelector<HTMLElement>("input");
     focusable!.focus();
 
+    // Wait for edit mode
+    await new Promise((r) => setTimeout(r, 50));
+
     // Tab past the last cell — should trigger addRow via onChange
     await user.tab();
+
+    // Wait for requestAnimationFrame in Tab handler
+    await new Promise((r) => setTimeout(r, 50));
 
     // onChange should have been called with 2 rows (original + new empty)
     expect(onChange).toHaveBeenCalled();
