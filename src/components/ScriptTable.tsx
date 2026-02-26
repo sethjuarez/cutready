@@ -92,7 +92,7 @@ export function ScriptTable({ rows, onChange, readOnly = false }: ScriptTablePro
         <thead>
           <tr className="bg-[var(--color-surface-alt)]">
             {!readOnly && <th className="script-table-th" style={{ width: "28px" }} />}
-            <th className="script-table-th" style={{ width: "80px" }}>Time</th>
+            <th className="script-table-th" style={{ width: "50px" }}>Time</th>
             <th className="script-table-th">Narrative</th>
             <th className="script-table-th">Demo Actions</th>
             <th className="script-table-th" style={{ width: "100px" }}>Screenshot</th>
