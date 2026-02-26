@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react";
 import { useAppStore } from "../stores/appStore";
 import type { SketchSummary, StoryboardSummary } from "../types/sketch";
+import { SketchIcon, StoryboardIcon } from "./Icons";
 
 interface TreeNode {
   name: string;
@@ -221,35 +222,9 @@ function TreeNodeRow({
       {/* Spacer to align with chevron above */}
       <span className="w-3 shrink-0" />
       {node.type === "sketch" ? (
-        <svg
-          width="14"
-          height="14"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          className="shrink-0"
-        >
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-          <polyline points="14 2 14 8 20 8" />
-        </svg>
+        <SketchIcon className="shrink-0" />
       ) : (
-        <svg
-          width="14"
-          height="14"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          className="shrink-0"
-        >
-          <rect x="2" y="3" width="20" height="18" rx="2" />
-          <line x1="8" y1="3" x2="8" y2="21" />
-        </svg>
+        <StoryboardIcon className="shrink-0" />
       )}
       <div className="flex-1 min-w-0">
         <div className="text-xs truncate">{node.name}</div>

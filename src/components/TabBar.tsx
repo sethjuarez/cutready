@@ -1,5 +1,6 @@
 import { useAppStore } from "../stores/appStore";
 import type { EditorTab } from "../stores/appStore";
+import { SketchIcon, StoryboardIcon } from "./Icons";
 
 /**
  * TabBar — horizontal row of open document tabs.
@@ -67,15 +68,15 @@ function Tab({
         isActive ? "bg-transparent" : "bg-[var(--color-border)]"
       }`} />
 
-      {/* Type badge */}
-      <span className={`shrink-0 text-[9px] font-semibold uppercase tracking-wider px-1 py-px rounded ${
+      {/* Type icon */}
+      <span className={`shrink-0 ${
         isActive
           ? tab.type === "sketch"
-            ? "bg-[var(--color-accent)]/15 text-[var(--color-accent)]"
-            : "bg-emerald-500/15 text-emerald-500"
-          : "bg-[var(--color-border)]/50 text-[var(--color-text-secondary)]"
+            ? "text-[var(--color-accent)]"
+            : "text-emerald-500"
+          : "text-[var(--color-text-secondary)] opacity-60"
       }`}>
-        {tab.type === "sketch" ? "SK" : "SB"}
+        {tab.type === "sketch" ? <SketchIcon size={13} /> : <StoryboardIcon size={13} />}
       </span>
 
       {/* Title */}
