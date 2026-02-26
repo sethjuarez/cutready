@@ -57,9 +57,12 @@ interface Props {
 
 /* ── Component ────────────────────────────────────────────────────── */
 export function SnapshotGraph({
-  nodes, isDirty, isRewound, timelineMap, hasMultipleTimelines, onNodeClick,
+  nodes: rawNodes, isDirty, isRewound, timelineMap, hasMultipleTimelines, onNodeClick,
 }: Props) {
   const [hovered, setHovered] = useState<string | null>(null);
+
+  // Sort: main trunk stays continuous, branches inserted at their fork point
+  const nodes = sortForDisplay(rawNodes);
 
   /* ── empty state ─────────────────────────────── */
   if (nodes.length === 0 && !isDirty) {
@@ -345,6 +348,70 @@ export function SnapshotGraph({
 }
 
 /* ── helpers ───────────────────────────────────────────────────────── */
+
+/**
+ * Sort nodes so the main trunk (lane 0) is continuous and branch commits
+ * appear right before their fork point (divergence is visually clear).
+ *
+ * Result for: main=[three,two,one,start], branch=[part1] (parent=one)
+ *   → [three, two, part1, one, start]
+ */
+function sortForDisplay(nodes: GraphNode[]): GraphNode[] {
+  if (nodes.length === 0) return nodes;
+
+  // Main lane sorted newest-first
+  const main = nodes
+    .filter(n => n.lane === 0)
+    .sort((a, b) => +new Date(b.timestamp) - +new Date(a.timestamp));
+
+  // Group branch nodes by lane, newest-first within each lane
+  const lanes = new Map<number, GraphNode[]>();
+  for (const n of nodes) {
+    if (n.lane === 0) continue;
+    if (!lanes.has(n.lane)) lanes.set(n.lane, []);
+    lanes.get(n.lane)!.push(n);
+  }
+  for (const arr of lanes.values()) {
+    arr.sort((a, b) => +new Date(b.timestamp) - +new Date(a.timestamp));
+  }
+
+  // Find fork-point (main-lane parent) for each branch
+  const mainIds = new Set(main.map(n => n.id));
+  const branchAtFork = new Map<string, GraphNode[][]>(); // forkParentId → [branchNodes[]]
+  for (const [, arr] of lanes) {
+    const oldest = arr[arr.length - 1];
+    const forkId = oldest.parents.find(p => mainIds.has(p));
+    if (forkId) {
+      if (!branchAtFork.has(forkId)) branchAtFork.set(forkId, []);
+      branchAtFork.get(forkId)!.push(arr);
+    }
+  }
+
+  // Build result: main trunk with branches inserted before their fork point
+  const result: GraphNode[] = [];
+  const placed = new Set<string>();
+
+  for (const mn of main) {
+    // Insert branches that fork from this node (before the fork point)
+    const branches = branchAtFork.get(mn.id);
+    if (branches) {
+      for (const br of branches) {
+        for (const n of br) {
+          if (!placed.has(n.id)) { result.push(n); placed.add(n.id); }
+        }
+      }
+    }
+    if (!placed.has(mn.id)) { result.push(mn); placed.add(mn.id); }
+  }
+
+  // Any remaining nodes (shouldn't happen, but be safe)
+  for (const n of nodes) {
+    if (!placed.has(n.id)) result.push(n);
+  }
+
+  return result;
+}
+
 function fmtDate(iso: string): string {
   const d = new Date(iso);
   const ms = Date.now() - d.getTime();
