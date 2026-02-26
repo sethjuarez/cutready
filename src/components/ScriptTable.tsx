@@ -91,7 +91,7 @@ export function ScriptTable({ rows, onChange, readOnly = false }: ScriptTablePro
       <table className="w-full border-collapse" style={{ tableLayout: "fixed" }}>
         <colgroup>
           {!readOnly && <col style={{ width: 28 }} />}
-          <col style={{ width: 50 }} />
+          <col style={{ width: 54 }} />
           <col />
           <col />
           <col style={{ width: 80 }} />
@@ -216,7 +216,7 @@ function SortableRow({
           </div>
         </td>
       )}
-      <td className="script-table-td align-top">
+      <td className="py-2 px-1.5 align-top text-[0.8125rem]">
         <LocalInput
           value={row.time}
           onChange={(v) => updateRow(idx, "time", v)}
