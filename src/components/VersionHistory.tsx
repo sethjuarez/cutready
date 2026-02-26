@@ -119,12 +119,12 @@ export function VersionHistory() {
                     )}
                     {/* Dot with surface-colored halo to cleanly cut through the line */}
                     <div
-                      className={`relative z-10 shrink-0 rounded-full ${
+                      className={`relative z-10 shrink-0 rounded-full border-2 ${
                         isLatest
-                          ? "w-2.5 h-2.5 bg-[var(--color-accent)]"
-                          : "w-2 h-2 bg-[var(--color-text-secondary)]/50"
+                          ? "w-3 h-3 bg-[var(--color-accent)] border-[var(--color-accent)]"
+                          : "w-2.5 h-2.5 bg-[var(--color-surface)] border-[var(--color-text-secondary)]"
                       }`}
-                      style={{ boxShadow: "0 0 0 3px var(--color-surface)" }}
+                      style={{ boxShadow: "0 0 0 2px var(--color-surface)" }}
                     />
                   </div>
 
