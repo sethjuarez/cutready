@@ -136,6 +136,16 @@ pub fn get_file_at_version(
 /// Restore the project to a historical version by checking out that commit's
 /// full tree and creating a new "Restored from..." commit.
 pub fn restore_version(project_dir: &Path, commit_id: &str) -> Result<String, VersioningError> {
+    checkout_version(project_dir, commit_id)?;
+
+    let short_id = &commit_id[..8.min(commit_id.len())];
+    let message = format!("Restored from {}", short_id);
+    commit_snapshot(project_dir, &message)
+}
+
+/// Check out a snapshot's files to the working directory WITHOUT committing.
+/// Used for browsing/previewing historical snapshots.
+pub fn checkout_version(project_dir: &Path, commit_id: &str) -> Result<(), VersioningError> {
     let repo = open_repo(project_dir)?;
 
     let oid: gix::ObjectId = commit_id
@@ -150,13 +160,8 @@ pub fn restore_version(project_dir: &Path, commit_id: &str) -> Result<String, Ve
         .tree()
         .map_err(|e| VersioningError::Git(e.to_string()))?;
 
-    // Remove all non-hidden files, then write the tree's contents
     clean_working_dir(project_dir)?;
-    write_tree_to_dir(&repo, tree.id, project_dir)?;
-
-    let short_id = &commit_id[..8.min(commit_id.len())];
-    let message = format!("Restored from {}", short_id);
-    commit_snapshot(project_dir, &message)
+    write_tree_to_dir(&repo, tree.id, project_dir)
 }
 
 // ── Internal helpers ────────────────────────────────────────────────

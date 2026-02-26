@@ -5,7 +5,10 @@ export function VersionHistory() {
   const versions = useAppStore((s) => s.versions);
   const loadVersions = useAppStore((s) => s.loadVersions);
   const saveVersion = useAppStore((s) => s.saveVersion);
+  const checkoutSnapshot = useAppStore((s) => s.checkoutSnapshot);
+  const returnToLatest = useAppStore((s) => s.returnToLatest);
   const restoreVersion = useAppStore((s) => s.restoreVersion);
+  const viewingSnapshotId = useAppStore((s) => s.viewingSnapshotId);
   const sidebarPosition = useAppStore((s) => s.sidebarPosition);
   const snapshotPromptOpen = useAppStore((s) => s.snapshotPromptOpen);
 
@@ -35,15 +38,26 @@ export function VersionHistory() {
     setSaving(false);
   }, [labelInput, saveVersion]);
 
-  const handleRestore = useCallback(async (commitId: string) => {
-    const doRestore = confirm("Restore the entire project to this snapshot?");
-    if (!doRestore) return;
-    const autoSave = confirm("Save a snapshot of your current state first?");
+  const handleCircleClick = useCallback(async (commitId: string, isLatest: boolean) => {
+    if (isLatest) {
+      if (viewingSnapshotId) await returnToLatest();
+      return;
+    }
+    await checkoutSnapshot(commitId);
+  }, [viewingSnapshotId, checkoutSnapshot, returnToLatest]);
+
+  const handleKeep = useCallback(async () => {
+    if (!viewingSnapshotId) return;
+    const autoSave = confirm("Save your previous state as a snapshot first?");
     if (autoSave) {
+      // Return to latest, save it, then restore the viewed one
+      await returnToLatest();
       await saveVersion("Auto-save before restore");
     }
-    await restoreVersion(commitId);
-  }, [saveVersion, restoreVersion]);
+    await restoreVersion(viewingSnapshotId);
+  }, [viewingSnapshotId, returnToLatest, saveVersion, restoreVersion]);
+
+  const isViewing = viewingSnapshotId !== null;
 
   // Border on the side facing the editor
   const borderClass = sidebarPosition === "left" ? "border-l" : "border-r";
@@ -98,6 +112,29 @@ export function VersionHistory() {
         </div>
       )}
 
+      {/* Viewing banner */}
+      {isViewing && (
+        <div className="px-3 py-2 border-b border-[var(--color-accent)]/20 bg-[var(--color-accent)]/5">
+          <div className="text-[10px] text-[var(--color-accent)] font-medium mb-1.5">
+            Viewing older snapshot
+          </div>
+          <div className="flex gap-1.5">
+            <button
+              onClick={handleKeep}
+              className="flex-1 px-2 py-1 rounded-md text-[10px] font-medium bg-[var(--color-accent)] text-white hover:bg-[var(--color-accent-hover)] transition-colors"
+            >
+              Keep this version
+            </button>
+            <button
+              onClick={returnToLatest}
+              className="flex-1 px-2 py-1 rounded-md text-[10px] font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-text)] border border-[var(--color-border)] hover:border-[var(--color-text-secondary)] transition-colors"
+            >
+              Back to latest
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Commit graph */}
       <div className="flex-1 overflow-y-auto">
         {versions.length === 0 ? (
@@ -113,7 +150,9 @@ export function VersionHistory() {
               const isLatest = idx === 0;
               const isLast = idx === versions.length - 1;
               const isSingle = versions.length === 1;
-              const canRestore = idx > 0;
+              const isActive = isViewing
+                ? version.id === viewingSnapshotId
+                : isLatest;
               return (
                 <div key={version.id} className="group relative flex" style={{ minHeight: isLatest ? 44 : 36 }}>
                   {/* Graph column */}
@@ -128,23 +167,22 @@ export function VersionHistory() {
                         }}
                       />
                     )}
-                    {/* Dot — clickable for restore on non-latest snapshots */}
+                    {/* Dot — click to navigate */}
                     <button
-                      disabled={!canRestore}
-                      onClick={() => canRestore && handleRestore(version.id)}
-                      className={`relative z-10 shrink-0 rounded-full border-2 transition-colors ${
-                        isLatest
+                      onClick={() => handleCircleClick(version.id, isLatest)}
+                      className={`relative z-10 shrink-0 rounded-full border-2 transition-colors cursor-pointer ${
+                        isActive
                           ? "w-3 h-3 bg-[var(--color-accent)] border-[var(--color-accent)]"
-                          : "w-2.5 h-2.5 bg-[var(--color-surface)] border-[var(--color-text-secondary)] hover:bg-[var(--color-accent)] hover:border-[var(--color-accent)] cursor-pointer"
+                          : "w-2.5 h-2.5 bg-[var(--color-surface)] border-[var(--color-text-secondary)] hover:bg-[var(--color-accent)] hover:border-[var(--color-accent)]"
                       }`}
                       style={{ boxShadow: "0 0 0 2px var(--color-surface)" }}
-                      title={canRestore ? "Restore to this snapshot" : "Current snapshot"}
+                      title={isActive ? "Currently viewing" : isLatest ? "Back to latest" : "View this snapshot"}
                     />
                   </div>
 
                   {/* Content */}
                   <div className={`flex-1 min-w-0 pr-3 flex flex-col justify-center ${isLatest ? "py-2" : "py-1.5"}`}>
-                    <div className={`text-xs truncate ${isLatest ? "font-medium text-[var(--color-text)]" : "text-[var(--color-text-secondary)]"}`}>
+                    <div className={`text-xs truncate ${isActive ? "font-medium text-[var(--color-text)]" : "text-[var(--color-text-secondary)]"}`}>
                       {version.message}
                     </div>
                     <div className="text-[10px] text-[var(--color-text-secondary)]/70 mt-0.5">

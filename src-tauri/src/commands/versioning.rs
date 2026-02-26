@@ -66,3 +66,19 @@ pub async fn restore_version(
 
     Ok(())
 }
+
+#[tauri::command]
+pub async fn checkout_version(
+    commit_id: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let root = project_root(&state)?;
+    versioning::checkout_version(&root, &commit_id).map_err(|e| e.to_string())?;
+
+    // Re-scan the project folder after checkout
+    let view = ProjectView::new(root);
+    let mut current = state.current_project.lock().map_err(|e| e.to_string())?;
+    *current = Some(view);
+
+    Ok(())
+}
