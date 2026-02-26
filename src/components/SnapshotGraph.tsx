@@ -165,7 +165,7 @@ export function SnapshotGraph({
 
   /* ── render ──────────────────────────────────── */
   return (
-    <div className="relative" style={{ minHeight: totalH }}>
+    <div className="relative" style={{ minHeight: totalH, paddingTop: PAD_T, paddingBottom: PAD_B }}>
       {/* SVG edge layer (behind everything) */}
       <svg
         className="absolute top-0 left-0"
