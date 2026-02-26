@@ -148,8 +148,8 @@ export function AppLayout() {
         }}
       >
         <div className="flex flex-1 overflow-hidden" ref={mainRef}>
-          {/* Activity bar (icon sidebar) */}
-          <Sidebar />
+          {/* Activity bar on left when sidebar is left */}
+          {sidebarPosition === "left" && <Sidebar />}
 
           {/* Main content area + output panel */}
           <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
@@ -176,6 +176,9 @@ export function AppLayout() {
               </>
             )}
           </div>
+
+          {/* Activity bar on right when sidebar is right */}
+          {sidebarPosition === "right" && <Sidebar />}
         </div>
       </div>
 
