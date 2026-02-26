@@ -191,6 +191,35 @@ pub struct VersionEntry {
     pub summary: String,
 }
 
+/// A timeline (git branch) in the project.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TimelineInfo {
+    /// Branch name (slug).
+    pub name: String,
+    /// Display label chosen by user.
+    pub label: String,
+    /// Whether this is the currently active timeline.
+    pub is_active: bool,
+    /// Number of snapshots on this timeline.
+    pub snapshot_count: usize,
+    /// Index used for assigning lane color (0-based).
+    pub color_index: usize,
+}
+
+/// A node in the timeline graph (commit with parent + lane info).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GraphNode {
+    pub id: String,
+    pub message: String,
+    pub timestamp: DateTime<Utc>,
+    /// The timeline (branch) this node belongs to.
+    pub timeline: String,
+    /// Parent commit IDs.
+    pub parents: Vec<String>,
+    /// Lane index for rendering.
+    pub lane: usize,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

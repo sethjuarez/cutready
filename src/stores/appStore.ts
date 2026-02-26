@@ -14,6 +14,8 @@ import type {
   StoryboardSummary,
   StoryboardItem,
   VersionEntry,
+  TimelineInfo,
+  GraphNode,
 } from "../types/sketch";
 
 /** The panels / views available in the app. */
@@ -84,6 +86,10 @@ interface AppStoreState {
 
   /** Version history for the current project. */
   versions: VersionEntry[];
+  /** All timelines (branches) in the project. */
+  timelines: TimelineInfo[];
+  /** Full graph data for SVG rendering. */
+  graphNodes: GraphNode[];
   /** Whether the version history sidebar is visible. */
   showVersionHistory: boolean;
   /** Whether the snapshot name prompt should be shown (triggered by Ctrl+S). */
@@ -214,6 +220,16 @@ interface AppStoreState {
   returnToLatest: () => Promise<void>;
   /** Permanently restore a historical version (creates a commit). */
   restoreVersion: (commitId: string) => Promise<void>;
+  /** Create a new timeline from a snapshot. */
+  createTimeline: (fromCommitId: string, name: string) => Promise<void>;
+  /** Load all timelines. */
+  loadTimelines: () => Promise<void>;
+  /** Switch to a different timeline. */
+  switchTimeline: (name: string) => Promise<void>;
+  /** Delete a non-active timeline. */
+  deleteTimeline: (name: string) => Promise<void>;
+  /** Load full graph data for SVG rendering. */
+  loadGraphData: () => Promise<void>;
   /** Toggle version history sidebar. */
   toggleVersionHistory: () => void;
   /** Open snapshot name prompt (and ensure panel is visible). */
@@ -294,6 +310,8 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   activeStoryboardPath: null,
   activeStoryboard: null,
   versions: [],
+  timelines: [],
+  graphNodes: [],
   showVersionHistory: savedLayout.showVersionHistory ?? false,
   snapshotPromptOpen: false,
   viewingSnapshotId: null,
@@ -467,6 +485,8 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       activeStoryboardPath: null,
       activeStoryboard: null,
       versions: [],
+      timelines: [],
+      graphNodes: [],
       snapshotPromptOpen: false,
       viewingSnapshotId: null,
       isDirty: false,
@@ -720,6 +740,8 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await invoke<string>("save_with_label", { label });
       set({ viewingSnapshotId: null, isDirty: false });
       await get().loadVersions();
+      await get().loadTimelines();
+      await get().loadGraphData();
     } catch (err) {
       console.error("Failed to save version:", err);
     }
@@ -776,12 +798,77 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await get().loadSketches();
       await get().loadStoryboards();
       await get().loadVersions();
+      await get().loadTimelines();
       const { activeSketchPath } = get();
       if (activeSketchPath) {
         await get().openSketch(activeSketchPath);
       }
     } catch (err) {
       console.error("Failed to restore version:", err);
+    }
+  },
+
+  createTimeline: async (fromCommitId, name) => {
+    try {
+      await invoke("create_timeline", { fromCommitId, name });
+      await get().loadTimelines();
+      await get().loadVersions();
+      await get().loadGraphData();
+      await get().loadSketches();
+      await get().loadStoryboards();
+      set({ viewingSnapshotId: null });
+      const { activeSketchPath } = get();
+      if (activeSketchPath) {
+        await get().openSketch(activeSketchPath);
+      }
+    } catch (err) {
+      console.error("Failed to create timeline:", err);
+    }
+  },
+
+  loadTimelines: async () => {
+    try {
+      const timelines = await invoke<TimelineInfo[]>("list_timelines");
+      set({ timelines });
+    } catch (err) {
+      console.error("Failed to load timelines:", err);
+    }
+  },
+
+  switchTimeline: async (name) => {
+    try {
+      await invoke("switch_timeline", { name });
+      await get().loadTimelines();
+      await get().loadVersions();
+      await get().loadGraphData();
+      await get().loadSketches();
+      await get().loadStoryboards();
+      set({ viewingSnapshotId: null });
+      const { activeSketchPath } = get();
+      if (activeSketchPath) {
+        await get().openSketch(activeSketchPath);
+      }
+    } catch (err) {
+      console.error("Failed to switch timeline:", err);
+    }
+  },
+
+  deleteTimeline: async (name) => {
+    try {
+      await invoke("delete_timeline", { name });
+      await get().loadTimelines();
+      await get().loadGraphData();
+    } catch (err) {
+      console.error("Failed to delete timeline:", err);
+    }
+  },
+
+  loadGraphData: async () => {
+    try {
+      const graphNodes = await invoke<GraphNode[]>("get_timeline_graph");
+      set({ graphNodes });
+    } catch (err) {
+      console.error("Failed to load graph data:", err);
     }
   },
 
