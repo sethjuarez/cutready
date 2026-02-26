@@ -156,7 +156,7 @@ export function SnapshotGraph({
     const dx = ghostR.cx - headR.cx;
     const dy = ghostR.cy - headR.cy;  // negative (ghost is above)
     edges.push({
-      d: `M ${headR.cx} ${headR.cy} C ${headR.cx + dx * 0.5} ${headR.cy}, ${ghostR.cx} ${ghostR.cy - dy * 0.5}, ${ghostR.cx} ${ghostR.cy + 4}`,
+      d: `M ${headR.cx + HEAD_R} ${headR.cy} C ${headR.cx + dx * 0.5} ${headR.cy}, ${ghostR.cx} ${ghostR.cy - dy * 0.5}, ${ghostR.cx} ${ghostR.cy + 4}`,
       color: lc(nodes[headIdx].lane), dashed: true, opacity: 0.35,
     });
   }
