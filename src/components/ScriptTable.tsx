@@ -139,6 +139,7 @@ export function ScriptTable({ rows, onChange, readOnly = false }: ScriptTablePro
                   addRow={addRow}
                   deleteRow={deleteRow}
                   isDragging={activeIdx === idx}
+                  isLastRow={idx === rows.length - 1}
                 />
               ))}
             </tbody>
@@ -180,6 +181,7 @@ function SortableRow({
   addRow,
   deleteRow,
   isDragging,
+  isLastRow,
 }: {
   id: string;
   row: PlanningRow;
@@ -189,7 +191,8 @@ function SortableRow({
   addRow: (afterIndex: number) => void;
   deleteRow: (index: number) => void;
   isDragging: boolean;
-}) {
+  isLastRow: boolean;
+}){
   const {
     attributes,
     listeners,
@@ -210,6 +213,30 @@ function SortableRow({
       ref={setNodeRef}
       style={style}
       className={`group border-t border-[var(--color-border)] ${isSorting ? "" : "transition-colors"}`}
+      onKeyDown={(e) => {
+        if (readOnly) return;
+        // Ctrl+Enter → add row below
+        if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+          e.preventDefault();
+          e.stopPropagation();
+          addRow(idx);
+          // Focus first editable cell in new row on next tick
+          requestAnimationFrame(() => {
+            const tr = (e.target as HTMLElement).closest("tr");
+            const nextRow = tr?.nextElementSibling;
+            const cell = nextRow?.querySelector<HTMLElement>("input:not([readonly]), [data-cell]");
+            cell?.focus();
+          });
+          return;
+        }
+        // Ctrl+Backspace → delete current row
+        if (e.key === "Backspace" && (e.ctrlKey || e.metaKey)) {
+          e.preventDefault();
+          e.stopPropagation();
+          deleteRow(idx);
+          return;
+        }
+      }}
     >
       {!readOnly && (
         <td className="p-0 align-middle">
@@ -235,6 +262,7 @@ function SortableRow({
           onChange={(v) => updateRow(idx, "time", v)}
           placeholder="~30s"
           readOnly={readOnly}
+          onAddRow={isLastRow && !readOnly ? () => addRow(idx) : undefined}
         />
       </td>
       <td className="script-table-td align-top overflow-hidden">
@@ -243,6 +271,7 @@ function SortableRow({
           onChange={(v) => updateRow(idx, "narrative", v)}
           placeholder="What to say..."
           readOnly={readOnly}
+          onAddRow={isLastRow && !readOnly ? () => addRow(idx) : undefined}
         />
       </td>
       <td className="script-table-td align-top overflow-hidden">
@@ -251,6 +280,7 @@ function SortableRow({
           onChange={(v) => updateRow(idx, "demo_actions", v)}
           placeholder="What to do..."
           readOnly={readOnly}
+          onAddRow={isLastRow && !readOnly ? () => addRow(idx) : undefined}
         />
       </td>
       <td className="script-table-td align-top text-center">
@@ -299,11 +329,13 @@ function LocalInput({
   onChange,
   placeholder,
   readOnly,
+  onAddRow,
 }: {
   value: string;
   onChange: (v: string) => void;
   placeholder: string;
   readOnly: boolean;
+  onAddRow?: () => void;
 }) {
   const [local, setLocal] = useState(value);
   const isFocusedRef = useRef(false);
@@ -322,6 +354,15 @@ function LocalInput({
       }}
       onFocus={() => { isFocusedRef.current = true; }}
       onBlur={() => { isFocusedRef.current = false; }}
+      onKeyDown={(e) => {
+        if (e.key === "Tab" && !e.shiftKey && onAddRow) {
+          const moved = focusAdjacentCell(e.currentTarget, false);
+          if (!moved) {
+            e.preventDefault();
+            onAddRow();
+          }
+        }
+      }}
       placeholder={placeholder}
       readOnly={readOnly}
       className="w-full bg-transparent text-xs px-1 py-0.5 rounded outline-none transition-colors focus:ring-1 focus:ring-[var(--color-accent)]/40 placeholder:text-[var(--color-text-secondary)]/40"
@@ -329,17 +370,19 @@ function LocalInput({
   );
 }
 
-/** Move focus to the next (or previous) editable cell in the table. */
-function focusAdjacentCell(from: HTMLElement, reverse = false) {
+/** Move focus to the next (or previous) editable cell in the table.
+ *  Returns true if focus moved, false if there was no cell to move to. */
+function focusAdjacentCell(from: HTMLElement, reverse = false): boolean {
   const table = from.closest("table");
-  if (!table) return;
+  if (!table) return false;
   const cells = Array.from(
     table.querySelectorAll<HTMLElement>("input:not([readonly]), [data-cell]"),
   );
   const td = from.closest("td");
   const idx = cells.findIndex((el) => td?.contains(el));
   const next = cells[reverse ? idx - 1 : idx + 1];
-  if (next) next.focus();
+  if (next) { next.focus(); return true; }
+  return false;
 }
 
 /* ── Inline formatting: **bold** and *italic* ──────────────── */
@@ -440,12 +483,14 @@ function MarkdownCell({
   onChange,
   placeholder,
   readOnly,
+  onAddRow,
 }: {
   value: string;
   onChange: (v: string) => void;
   placeholder: string;
   readOnly: boolean;
-}) {
+  onAddRow?: () => void;
+}){
   const [isEditing, setIsEditing] = useState(false);
   const [localValue, setLocalValue] = useState(value);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -537,7 +582,10 @@ function MarkdownCell({
           const td = (e.target as HTMLElement).closest("td");
           setIsEditing(false);
           requestAnimationFrame(() => {
-            if (td) focusAdjacentCell(td, e.shiftKey);
+            if (td) {
+              const moved = focusAdjacentCell(td, e.shiftKey);
+              if (!moved && !e.shiftKey && onAddRow) onAddRow();
+            }
           });
           return;
         }
