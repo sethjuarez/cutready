@@ -60,13 +60,11 @@ export function ScriptTable({ rows, onChange, readOnly = false }: ScriptTablePro
           {displayRows.map((row, idx) => (
             <tr key={idx} className="group border-t border-[var(--color-border)]">
               <td className="script-table-td align-top">
-                <input
-                  type="text"
+                <LocalInput
                   value={row.time}
-                  onChange={(e) => updateRow(idx, "time", e.target.value)}
+                  onChange={(v) => updateRow(idx, "time", v)}
                   placeholder="~30s"
                   readOnly={readOnly}
-                  className="w-full bg-transparent text-xs px-1 py-0.5 rounded outline-none transition-colors focus:ring-1 focus:ring-[var(--color-accent)]/40 placeholder:text-[var(--color-text-secondary)]/40"
                 />
               </td>
               <td className="script-table-td align-top">
@@ -125,6 +123,43 @@ export function ScriptTable({ rows, onChange, readOnly = false }: ScriptTablePro
         </tbody>
       </table>
     </div>
+  );
+}
+
+/* ── Local-state input (immune to debounced prop lag) ──────── */
+
+function LocalInput({
+  value,
+  onChange,
+  placeholder,
+  readOnly,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder: string;
+  readOnly: boolean;
+}) {
+  const [local, setLocal] = useState(value);
+  const isFocusedRef = useRef(false);
+
+  useEffect(() => {
+    if (!isFocusedRef.current) setLocal(value);
+  }, [value]);
+
+  return (
+    <input
+      type="text"
+      value={local}
+      onChange={(e) => {
+        setLocal(e.target.value);
+        onChange(e.target.value);
+      }}
+      onFocus={() => { isFocusedRef.current = true; }}
+      onBlur={() => { isFocusedRef.current = false; }}
+      placeholder={placeholder}
+      readOnly={readOnly}
+      className="w-full bg-transparent text-xs px-1 py-0.5 rounded outline-none transition-colors focus:ring-1 focus:ring-[var(--color-accent)]/40 placeholder:text-[var(--color-text-secondary)]/40"
+    />
   );
 }
 
