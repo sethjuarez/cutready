@@ -82,3 +82,12 @@ pub async fn checkout_version(
 
     Ok(())
 }
+
+#[tauri::command]
+pub async fn has_unsaved_changes(state: State<'_, AppState>) -> Result<bool, String> {
+    let root = project_root(&state)?;
+    if !root.join(".git").exists() {
+        return Ok(false);
+    }
+    versioning::has_unsaved_changes(&root).map_err(|e| e.to_string())
+}

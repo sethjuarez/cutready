@@ -121,6 +121,7 @@ pub fn run() {
             commands::versioning::preview_version,
             commands::versioning::restore_version,
             commands::versioning::checkout_version,
+            commands::versioning::has_unsaved_changes,
             commands::interaction::detect_browser_profiles,
             commands::interaction::check_browsers_running,
             commands::interaction::prepare_browser,

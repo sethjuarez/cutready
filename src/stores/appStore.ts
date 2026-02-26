@@ -90,6 +90,8 @@ interface AppStoreState {
   snapshotPromptOpen: boolean;
   /** Which snapshot is currently checked out for viewing (null = latest). */
   viewingSnapshotId: string | null;
+  /** Whether there are unsaved changes since the last snapshot. */
+  isDirty: boolean;
 
   // ── Profile detection ─────────────────────────────────────
 
@@ -199,6 +201,8 @@ interface AppStoreState {
 
   /** Load version history. */
   loadVersions: () => Promise<void>;
+  /** Check if working directory has unsaved changes. */
+  checkDirty: () => Promise<void>;
   /** Save a labeled version. */
   saveVersion: (label: string) => Promise<void>;
   /** Browse to a snapshot (checkout files without committing). */
@@ -262,6 +266,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   showVersionHistory: false,
   snapshotPromptOpen: false,
   viewingSnapshotId: null,
+  isDirty: false,
 
   profiles: [],
 
@@ -403,6 +408,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       versions: [],
       snapshotPromptOpen: false,
       viewingSnapshotId: null,
+      isDirty: false,
       openTabs: [],
       activeTabId: null,
     });
@@ -454,6 +460,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     if (!activeSketchPath) return;
     try {
       await invoke("update_sketch", { relativePath: activeSketchPath, ...update });
+      set({ isDirty: true });
     } catch (err) {
       console.error("Failed to update sketch:", err);
     }
@@ -632,15 +639,25 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     try {
       const versions = await invoke<VersionEntry[]>("list_versions");
       set({ versions });
+      await get().checkDirty();
     } catch (err) {
       console.error("Failed to load versions:", err);
+    }
+  },
+
+  checkDirty: async () => {
+    try {
+      const isDirty = await invoke<boolean>("has_unsaved_changes");
+      set({ isDirty });
+    } catch {
+      set({ isDirty: false });
     }
   },
 
   saveVersion: async (label) => {
     try {
       await invoke<string>("save_with_label", { label });
-      set({ viewingSnapshotId: null });
+      set({ viewingSnapshotId: null, isDirty: false });
       await get().loadVersions();
     } catch (err) {
       console.error("Failed to save version:", err);
