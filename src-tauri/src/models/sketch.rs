@@ -220,6 +220,9 @@ pub struct GraphNode {
     pub lane: usize,
     /// Whether this commit is the current HEAD.
     pub is_head: bool,
+    /// Whether this is a branch tip (for showing branch markers on shared commits).
+    #[serde(default)]
+    pub is_branch_tip: bool,
 }
 
 #[cfg(test)]

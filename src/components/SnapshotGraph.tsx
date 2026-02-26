@@ -170,8 +170,26 @@ export function SnapshotGraph({
 }: Props) {
   const [hovered, setHovered] = useState<string | null>(null);
 
-  const nodes = useMemo(() => sortForDisplay(rawNodes), [rawNodes]);
-  const xPos  = useMemo(() => computeXPositions(rawNodes), [rawNodes]);
+  // Separate primary nodes from alias nodes (same commit, different branch tip)
+  const { primaryNodes, aliasBadges } = useMemo(() => {
+    const seen = new Set<string>();
+    const primary: GraphNode[] = [];
+    const badges = new Map<string, { timeline: string; lane: number }[]>();
+    for (const n of rawNodes) {
+      if (seen.has(n.id)) {
+        // This is an alias — another branch tip pointing at same commit
+        if (!badges.has(n.id)) badges.set(n.id, []);
+        badges.get(n.id)!.push({ timeline: n.timeline, lane: n.lane });
+      } else {
+        seen.add(n.id);
+        primary.push(n);
+      }
+    }
+    return { primaryNodes: primary, aliasBadges: badges };
+  }, [rawNodes]);
+
+  const nodes = useMemo(() => sortForDisplay(primaryNodes), [primaryNodes]);
+  const xPos  = useMemo(() => computeXPositions(primaryNodes), [primaryNodes]);
 
   /* ── empty state ─────────────────────────────── */
   if (nodes.length === 0 && !isDirty) {
@@ -365,6 +383,16 @@ export function SnapshotGraph({
                   <span className="text-[9px] px-1 py-px rounded-sm"
                     style={{ color, backgroundColor: `${color}15` }}>{tlLabel}</span>
                 )}
+                {/* Show badges for other branches that also point at this commit */}
+                {aliasBadges.get(node.id)?.map((ab) => {
+                  const abColor = lc(ab.lane);
+                  const abInfo = timelineMap.get(ab.timeline);
+                  const abLabel = abInfo?.label ?? ab.timeline;
+                  return (
+                    <span key={ab.timeline} className="text-[9px] px-1 py-px rounded-sm"
+                      style={{ color: abColor, backgroundColor: `${abColor}15` }}>{abLabel}</span>
+                  );
+                })}
               </div>
             </div>
           </div>

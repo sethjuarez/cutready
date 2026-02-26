@@ -86,4 +86,5 @@ export interface GraphNode {
   parents: string[];
   lane: number;
   is_head: boolean;
+  is_branch_tip?: boolean;
 }
