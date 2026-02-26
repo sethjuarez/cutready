@@ -10,6 +10,7 @@ export function VersionHistory() {
 
   const [labelInput, setLabelInput] = useState("");
   const [showLabelInput, setShowLabelInput] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     loadVersions();
@@ -18,9 +19,11 @@ export function VersionHistory() {
   const handleSave = useCallback(async () => {
     const label = labelInput.trim();
     if (!label) return;
+    setSaving(true);
     await saveVersion(label);
     setLabelInput("");
     setShowLabelInput(false);
+    setSaving(false);
   }, [labelInput, saveVersion]);
 
   // Border on the side facing the editor
@@ -31,83 +34,111 @@ export function VersionHistory() {
       {/* Header */}
       <div className="flex items-center justify-between px-3 h-9 shrink-0 border-b border-[var(--color-border)]">
         <span className="text-xs font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">
-          Version History
+          Snapshots
         </span>
-        <button
-          onClick={() => setShowLabelInput(true)}
-          className="p-1.5 rounded-md text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 transition-colors"
-          title="Save Version"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
-            <polyline points="17 21 17 13 7 13 7 21" />
-            <polyline points="7 3 7 8 15 8" />
-          </svg>
-        </button>
       </div>
 
-      {/* Save label input */}
-      {showLabelInput && (
-        <div className="px-3 py-2 border-b border-[var(--color-border)]">
-          <input
-            type="text"
-            value={labelInput}
-            onChange={(e) => setLabelInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") handleSave();
-              if (e.key === "Escape") { setShowLabelInput(false); setLabelInput(""); }
-            }}
-            placeholder="Version label (e.g., v1.0)"
-            autoFocus
-            className="w-full px-2 py-1.5 rounded-md bg-[var(--color-surface)] border border-[var(--color-border)] text-xs text-[var(--color-text)] placeholder:text-[var(--color-text-secondary)]/50 focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)]/40"
-          />
-        </div>
-      )}
-
-      {/* Timeline */}
-      <div className="flex-1 overflow-y-auto py-2">
-        {versions.length === 0 ? (
-          <div className="px-3 py-6 text-center text-xs text-[var(--color-text-secondary)]">
-            No versions yet
+      {/* Save snapshot area */}
+      <div className="px-3 py-2.5 border-b border-[var(--color-border)]">
+        {showLabelInput ? (
+          <div className="flex gap-1.5">
+            <input
+              type="text"
+              value={labelInput}
+              onChange={(e) => setLabelInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleSave();
+                if (e.key === "Escape") { setShowLabelInput(false); setLabelInput(""); }
+              }}
+              placeholder="Snapshot name..."
+              autoFocus
+              className="flex-1 min-w-0 px-2 py-1 rounded-md bg-[var(--color-surface)] border border-[var(--color-border)] text-xs text-[var(--color-text)] placeholder:text-[var(--color-text-secondary)]/50 focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)]/40"
+            />
+            <button
+              onClick={handleSave}
+              disabled={!labelInput.trim() || saving}
+              className="px-2 py-1 rounded-md text-xs font-medium bg-[var(--color-accent)] text-white hover:bg-[var(--color-accent-hover)] disabled:opacity-40 transition-colors"
+            >
+              {saving ? "..." : "Save"}
+            </button>
           </div>
         ) : (
-          <div className="relative pl-6 pr-3">
-            {/* Timeline line */}
-            <div className="absolute left-[15px] top-2 bottom-2 w-px bg-[var(--color-border)]" />
+          <button
+            onClick={() => setShowLabelInput(true)}
+            className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] border border-dashed border-[var(--color-border)] hover:border-[var(--color-accent)]/40 transition-colors"
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+              <polyline points="17 21 17 13 7 13 7 21" />
+              <polyline points="7 3 7 8 15 8" />
+            </svg>
+            Save Snapshot
+          </button>
+        )}
+      </div>
 
-            {versions.map((version, idx) => (
-              <div key={version.id} className="group relative pb-4">
-                {/* Timeline dot */}
-                <div
-                  className={`absolute left-[-15px] top-1 w-2.5 h-2.5 rounded-full border-2 ${
-                    idx === 0
-                      ? "border-[var(--color-accent)] bg-[var(--color-accent)]"
-                      : "border-[var(--color-border)] bg-[var(--color-surface-alt)]"
-                  }`}
-                />
-
-                <div className="ml-1">
-                  <div className="text-xs font-medium truncate">{version.message}</div>
-                  <div className="text-[10px] text-[var(--color-text-secondary)] mt-0.5">
-                    {formatRelativeDate(version.timestamp)}
+      {/* Commit graph */}
+      <div className="flex-1 overflow-y-auto">
+        {versions.length === 0 ? (
+          <div className="px-3 py-8 text-center">
+            <div className="text-[var(--color-text-secondary)] text-xs">No snapshots yet</div>
+            <div className="text-[var(--color-text-secondary)]/60 text-[10px] mt-1">
+              Save a snapshot to track your progress
+            </div>
+          </div>
+        ) : (
+          <div className="py-1">
+            {versions.map((version, idx) => {
+              const isLatest = idx === 0;
+              const isLast = idx === versions.length - 1;
+              return (
+                <div key={version.id} className="group relative flex">
+                  {/* Graph column */}
+                  <div className="w-8 shrink-0 flex flex-col items-center">
+                    {/* Line above dot */}
+                    {!isLatest && (
+                      <div className="w-px flex-1 bg-[var(--color-border)]" />
+                    )}
+                    {isLatest && <div className="flex-1" />}
+                    {/* Commit dot */}
+                    <div
+                      className={`shrink-0 rounded-full ${
+                        isLatest
+                          ? "w-3 h-3 bg-[var(--color-accent)] ring-2 ring-[var(--color-accent)]/20"
+                          : "w-2 h-2 bg-[var(--color-text-secondary)]/40"
+                      }`}
+                    />
+                    {/* Line below dot */}
+                    {!isLast && (
+                      <div className="w-px flex-1 bg-[var(--color-border)]" />
+                    )}
+                    {isLast && <div className="flex-1" />}
                   </div>
 
-                  {/* Restore button */}
-                  {idx > 0 && (
-                    <button
-                      onClick={() => {
-                        if (confirm("Restore this version? Current changes will be saved as a new version.")) {
-                          restoreVersion(version.id);
-                        }
-                      }}
-                      className="opacity-0 group-hover:opacity-100 mt-1 text-[10px] text-[var(--color-accent)] hover:underline transition-opacity"
-                    >
-                      Restore this version
-                    </button>
-                  )}
+                  {/* Content */}
+                  <div className={`flex-1 min-w-0 pr-3 ${isLatest ? "py-2" : "py-1.5"}`}>
+                    <div className={`text-xs truncate ${isLatest ? "font-medium text-[var(--color-text)]" : "text-[var(--color-text-secondary)]"}`}>
+                      {version.message}
+                    </div>
+                    <div className="text-[10px] text-[var(--color-text-secondary)]/70 mt-0.5">
+                      {formatRelativeDate(version.timestamp)}
+                    </div>
+                    {idx > 0 && (
+                      <button
+                        onClick={() => {
+                          if (confirm("Restore this snapshot? Current changes will be saved first.")) {
+                            restoreVersion(version.id);
+                          }
+                        }}
+                        className="hidden group-hover:block mt-0.5 text-[10px] text-[var(--color-accent)] hover:underline"
+                      >
+                        Restore
+                      </button>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
