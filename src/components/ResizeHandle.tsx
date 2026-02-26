@@ -1,4 +1,4 @@
-import { useCallback, useRef, useEffect } from "react";
+import { useCallback, useRef, useEffect, useState } from "react";
 
 interface ResizeHandleProps {
   direction: "horizontal" | "vertical";
@@ -8,16 +8,18 @@ interface ResizeHandleProps {
 
 /**
  * ResizeHandle — draggable sash for resizing panels.
- * Horizontal drags left/right, vertical drags up/down.
+ * Shows a subtle accent line on hover/drag so users know it's interactive.
  */
 export function ResizeHandle({ direction, onResize, onResizeEnd }: ResizeHandleProps) {
   const dragging = useRef(false);
   const lastPos = useRef(0);
+  const [isDragging, setIsDragging] = useState(false);
 
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
       e.preventDefault();
       dragging.current = true;
+      setIsDragging(true);
       lastPos.current = direction === "horizontal" ? e.clientX : e.clientY;
       document.body.style.cursor = direction === "horizontal" ? "col-resize" : "row-resize";
       document.body.style.userSelect = "none";
@@ -39,6 +41,7 @@ export function ResizeHandle({ direction, onResize, onResizeEnd }: ResizeHandleP
     const handleMouseUp = () => {
       if (!dragging.current) return;
       dragging.current = false;
+      setIsDragging(false);
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
       onResizeEnd?.();
@@ -52,14 +55,27 @@ export function ResizeHandle({ direction, onResize, onResizeEnd }: ResizeHandleP
     };
   }, [direction, onResize, onResizeEnd]);
 
+  const isHorizontal = direction === "horizontal";
+
   return (
     <div
-      className={`shrink-0 ${
-        direction === "horizontal"
-          ? "w-1 cursor-col-resize hover:bg-[var(--color-accent)]/30"
-          : "h-1 cursor-row-resize hover:bg-[var(--color-accent)]/30"
-      } transition-colors`}
+      className={`group relative shrink-0 ${
+        isHorizontal ? "w-[5px] cursor-col-resize" : "h-[5px] cursor-row-resize"
+      }`}
       onMouseDown={handleMouseDown}
-    />
+    >
+      {/* Visible center line — appears on hover and during drag */}
+      <div
+        className={`absolute transition-opacity duration-150 ${
+          isDragging
+            ? "opacity-100 bg-[var(--color-accent)]"
+            : "opacity-0 group-hover:opacity-100 bg-[var(--color-accent)]/50"
+        } ${
+          isHorizontal
+            ? "top-0 bottom-0 left-1/2 -translate-x-1/2 w-[2px] rounded-full"
+            : "left-0 right-0 top-1/2 -translate-y-1/2 h-[2px] rounded-full"
+        }`}
+      />
+    </div>
   );
 }
