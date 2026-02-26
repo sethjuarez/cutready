@@ -596,7 +596,6 @@ pub fn get_timeline_graph(project_dir: &Path) -> Result<Vec<GraphNode>, Versioni
         let tip_oid = match repo.find_reference(&ref_name) {
             Ok(r) => r.id().detach(),
             Err(_) => {
-                // Fallback: try HEAD directly (legacy repos)
                 match repo.head_commit() {
                     Ok(c) => c.id().detach(),
                     Err(_) => continue,
@@ -607,7 +606,7 @@ pub fn get_timeline_graph(project_dir: &Path) -> Result<Vec<GraphNode>, Versioni
         let mut current = Some(tip_oid);
         while let Some(oid) = current {
             if !seen.insert(oid) {
-                break; // Already visited (shared ancestor)
+                break;
             }
 
             let commit = repo
