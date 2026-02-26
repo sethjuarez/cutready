@@ -665,6 +665,18 @@ pub fn get_timeline_graph(project_dir: &Path) -> Result<Vec<GraphNode>, Versioni
         }
     }
 
+    // Ensure the HEAD commit is attributed to the active timeline
+    // (it may have been claimed by a different timeline that walked it first)
+    if let (Some(h_oid), Some(active)) = (head_oid, active_timeline) {
+        let h_str = h_oid.to_string();
+        if let Some(head_node) = nodes.iter_mut().find(|n| n.id == h_str) {
+            if head_node.timeline != active.name {
+                head_node.timeline = active.name.clone();
+                head_node.lane = active.color_index;
+            }
+        }
+    }
+
     // Sort by timestamp descending (newest first)
     nodes.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
 
