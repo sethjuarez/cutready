@@ -28,6 +28,7 @@ interface ScriptTableProps {
 
 export function ScriptTable({ rows, onChange, readOnly = false }: ScriptTableProps) {
   const [activeId, setActiveId] = useState<string | null>(null);
+  const focusCellAfterRender = useRef<number | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -39,6 +40,22 @@ export function ScriptTable({ rows, onChange, readOnly = false }: ScriptTablePro
       onChange([emptyRow()]);
     }
   }, [rows.length, readOnly, onChange]);
+
+  // Focus a cell after rows change (e.g. after addRow)
+  useEffect(() => {
+    if (focusCellAfterRender.current !== null) {
+      const cellIdx = focusCellAfterRender.current;
+      focusCellAfterRender.current = null;
+      requestAnimationFrame(() => {
+        const table = document.querySelector(".script-table-wrapper table");
+        if (!table) return;
+        const cell = table.querySelector<HTMLElement>(`[data-tab-cell="${cellIdx}"]`);
+        if (!cell) return;
+        const focusable = cell.querySelector<HTMLElement>("input, textarea, [tabindex='0'], [data-cell]");
+        if (focusable) focusable.focus();
+      });
+    }
+  }, [rows.length]);
 
   // Always-current ref to avoid stale closure issues in callbacks
   const rowsRef = useRef(rows);
@@ -64,6 +81,8 @@ export function ScriptTable({ rows, onChange, readOnly = false }: ScriptTablePro
     (afterIndex: number) => {
       const updated = [...rowsRef.current];
       updated.splice(afterIndex + 1, 0, emptyRow());
+      // Schedule focus on the new row's Time cell
+      focusCellAfterRender.current = (afterIndex + 1) * 3;
       onChange(updated);
     },
     [onChange],
