@@ -62,6 +62,22 @@ pub fn commit_snapshot(project_dir: &Path, message: &str) -> Result<String, Vers
     Ok(commit_id.to_string())
 }
 
+/// Check if working directory has changes not captured in a snapshot.
+pub fn has_unsaved_changes(project_dir: &Path) -> Result<bool, VersioningError> {
+    let repo = open_repo(project_dir)?;
+
+    let head_tree_id = match repo.head_commit() {
+        Ok(commit) => {
+            let tree = commit.tree().map_err(|e| VersioningError::Git(e.to_string()))?;
+            tree.id
+        }
+        Err(_) => return Ok(true), // No commits yet = everything is unsaved
+    };
+
+    let working_tree_id = build_tree_from_dir(&repo, project_dir, project_dir)?;
+    Ok(working_tree_id != head_tree_id)
+}
+
 /// List all versions (commits) in reverse chronological order.
 pub fn list_versions(project_dir: &Path) -> Result<Vec<VersionEntry>, VersioningError> {
     let repo = open_repo(project_dir)?;

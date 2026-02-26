@@ -3,6 +3,7 @@ import { useAppStore } from "../stores/appStore";
 
 export function VersionHistory() {
   const versions = useAppStore((s) => s.versions);
+  const isDirty = useAppStore((s) => s.isDirty);
   const loadVersions = useAppStore((s) => s.loadVersions);
   const saveVersion = useAppStore((s) => s.saveVersion);
   const checkoutSnapshot = useAppStore((s) => s.checkoutSnapshot);
@@ -38,26 +39,33 @@ export function VersionHistory() {
     setSaving(false);
   }, [labelInput, saveVersion]);
 
-  const handleCircleClick = useCallback(async (commitId: string, isLatest: boolean) => {
-    if (isLatest) {
-      if (viewingSnapshotId) await returnToLatest();
+  const handleCircleClick = useCallback(async (commitId: string, idx: number) => {
+    const isViewing = useAppStore.getState().viewingSnapshotId !== null;
+
+    // Clicking the latest: return to latest
+    if (idx === 0) {
+      if (isViewing) await returnToLatest();
       return;
     }
+
+    // Clicking an older snapshot: ask to stash if dirty
+    const dirty = useAppStore.getState().isDirty;
+    if (dirty && !isViewing) {
+      const stash = confirm("You have unsaved changes. Save a snapshot before navigating?");
+      if (stash) {
+        await saveVersion("Auto-save before browsing");
+      }
+    }
     await checkoutSnapshot(commitId);
-  }, [viewingSnapshotId, checkoutSnapshot, returnToLatest]);
+  }, [checkoutSnapshot, returnToLatest, saveVersion]);
 
   const handleKeep = useCallback(async () => {
     if (!viewingSnapshotId) return;
-    const autoSave = confirm("Save your previous state as a snapshot first?");
-    if (autoSave) {
-      // Return to latest, save it, then restore the viewed one
-      await returnToLatest();
-      await saveVersion("Auto-save before restore");
-    }
     await restoreVersion(viewingSnapshotId);
-  }, [viewingSnapshotId, returnToLatest, saveVersion, restoreVersion]);
+  }, [viewingSnapshotId, restoreVersion]);
 
   const isViewing = viewingSnapshotId !== null;
+  const showDirtyNode = isDirty && !isViewing;
 
   // Border on the side facing the editor
   const borderClass = sidebarPosition === "left" ? "border-l" : "border-r";
@@ -72,7 +80,7 @@ export function VersionHistory() {
         <button
           onClick={() => setShowLabelInput(true)}
           className="group/btn flex items-center gap-1 p-1 rounded text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] transition-colors"
-          title="Save Project Snapshot"
+          title="Save Project Snapshot (Ctrl+S)"
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
             <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
@@ -112,7 +120,7 @@ export function VersionHistory() {
         </div>
       )}
 
-      {/* Viewing banner */}
+      {/* Viewing older snapshot banner */}
       {isViewing && (
         <div className="px-3 py-2 border-b border-[var(--color-accent)]/20 bg-[var(--color-accent)]/5">
           <div className="text-[10px] text-[var(--color-accent)] font-medium mb-1.5">
@@ -137,7 +145,7 @@ export function VersionHistory() {
 
       {/* Commit graph */}
       <div className="flex-1 overflow-y-auto">
-        {versions.length === 0 ? (
+        {versions.length === 0 && !showDirtyNode ? (
           <div className="px-3 py-8 text-center">
             <div className="text-[var(--color-text-secondary)] text-xs">No snapshots yet</div>
             <div className="text-[var(--color-text-secondary)]/60 text-[10px] mt-1">
@@ -146,15 +154,39 @@ export function VersionHistory() {
           </div>
         ) : (
           <div className="py-1">
+            {/* Dirty / unsaved changes node */}
+            {showDirtyNode && (
+              <div className="group relative flex" style={{ minHeight: 36 }}>
+                <div className="w-8 shrink-0 relative flex items-center justify-center">
+                  {versions.length > 0 && (
+                    <div
+                      className="absolute left-1/2 -translate-x-1/2 w-px border-l border-dashed border-[var(--color-text-secondary)]/30"
+                      style={{ top: "50%", bottom: 0 }}
+                    />
+                  )}
+                  <div
+                    className="relative z-10 shrink-0 w-2.5 h-2.5 rounded-full border-2 border-dashed border-[var(--color-text-secondary)]/60 bg-[var(--color-surface)]"
+                    style={{ boxShadow: "0 0 0 2px var(--color-surface)" }}
+                  />
+                </div>
+                <div className="flex-1 min-w-0 pr-3 flex items-center py-1.5">
+                  <span className="text-xs italic text-[var(--color-text-secondary)]">
+                    Unsaved changes
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* Committed snapshots */}
             {versions.map((version, idx) => {
-              const isLatest = idx === 0;
+              const isFirst = idx === 0;
               const isLast = idx === versions.length - 1;
-              const isSingle = versions.length === 1;
+              const isSingle = versions.length === 1 && !showDirtyNode;
               const isActive = isViewing
                 ? version.id === viewingSnapshotId
-                : isLatest;
+                : isFirst && !showDirtyNode;
               return (
-                <div key={version.id} className="group relative flex" style={{ minHeight: isLatest ? 44 : 36 }}>
+                <div key={version.id} className="group relative flex" style={{ minHeight: isFirst ? 44 : 36 }}>
                   {/* Graph column */}
                   <div className="w-8 shrink-0 relative flex items-center justify-center">
                     {/* Continuous vertical line */}
@@ -162,26 +194,26 @@ export function VersionHistory() {
                       <div
                         className="absolute left-1/2 -translate-x-1/2 w-px bg-[var(--color-border)]"
                         style={{
-                          top: isLatest ? "50%" : 0,
+                          top: (isFirst && !showDirtyNode) ? "50%" : 0,
                           bottom: isLast ? "50%" : 0,
                         }}
                       />
                     )}
                     {/* Dot — click to navigate */}
                     <button
-                      onClick={() => handleCircleClick(version.id, isLatest)}
+                      onClick={() => handleCircleClick(version.id, idx)}
                       className={`relative z-10 shrink-0 rounded-full border-2 transition-colors cursor-pointer ${
                         isActive
                           ? "w-3 h-3 bg-[var(--color-accent)] border-[var(--color-accent)]"
                           : "w-2.5 h-2.5 bg-[var(--color-surface)] border-[var(--color-text-secondary)] hover:bg-[var(--color-accent)] hover:border-[var(--color-accent)]"
                       }`}
                       style={{ boxShadow: "0 0 0 2px var(--color-surface)" }}
-                      title={isActive ? "Currently viewing" : isLatest ? "Back to latest" : "View this snapshot"}
+                      title={isActive ? "Currently viewing" : isFirst ? "Back to latest" : "View this snapshot"}
                     />
                   </div>
 
                   {/* Content */}
-                  <div className={`flex-1 min-w-0 pr-3 flex flex-col justify-center ${isLatest ? "py-2" : "py-1.5"}`}>
+                  <div className={`flex-1 min-w-0 pr-3 flex flex-col justify-center ${isFirst ? "py-2" : "py-1.5"}`}>
                     <div className={`text-xs truncate ${isActive ? "font-medium text-[var(--color-text)]" : "text-[var(--color-text-secondary)]"}`}>
                       {version.message}
                     </div>
