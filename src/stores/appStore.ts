@@ -88,6 +88,8 @@ interface AppStoreState {
   showVersionHistory: boolean;
   /** Whether the snapshot name prompt should be shown (triggered by Ctrl+S). */
   snapshotPromptOpen: boolean;
+  /** Which snapshot is currently checked out for viewing (null = latest). */
+  viewingSnapshotId: string | null;
 
   // ── Profile detection ─────────────────────────────────────
 
@@ -199,7 +201,11 @@ interface AppStoreState {
   loadVersions: () => Promise<void>;
   /** Save a labeled version. */
   saveVersion: (label: string) => Promise<void>;
-  /** Restore a historical version. */
+  /** Browse to a snapshot (checkout files without committing). */
+  checkoutSnapshot: (commitId: string) => Promise<void>;
+  /** Return to the latest snapshot. */
+  returnToLatest: () => Promise<void>;
+  /** Permanently restore a historical version (creates a commit). */
   restoreVersion: (commitId: string) => Promise<void>;
   /** Toggle version history sidebar. */
   toggleVersionHistory: () => void;
@@ -255,6 +261,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   versions: [],
   showVersionHistory: false,
   snapshotPromptOpen: false,
+  viewingSnapshotId: null,
 
   profiles: [],
 
@@ -395,6 +402,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       activeStoryboard: null,
       versions: [],
       snapshotPromptOpen: false,
+      viewingSnapshotId: null,
       openTabs: [],
       activeTabId: null,
     });
@@ -632,16 +640,51 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   saveVersion: async (label) => {
     try {
       await invoke<string>("save_with_label", { label });
+      set({ viewingSnapshotId: null });
       await get().loadVersions();
     } catch (err) {
       console.error("Failed to save version:", err);
     }
   },
 
+  checkoutSnapshot: async (commitId) => {
+    try {
+      await invoke("checkout_version", { commitId });
+      set({ viewingSnapshotId: commitId });
+      // Reload file lists to reflect checked-out state
+      await get().loadSketches();
+      await get().loadStoryboards();
+      const { activeSketchPath } = get();
+      if (activeSketchPath) {
+        await get().openSketch(activeSketchPath);
+      }
+    } catch (err) {
+      console.error("Failed to checkout snapshot:", err);
+    }
+  },
+
+  returnToLatest: async () => {
+    try {
+      const { versions } = get();
+      if (versions.length > 0) {
+        await invoke("checkout_version", { commitId: versions[0].id });
+      }
+      set({ viewingSnapshotId: null });
+      await get().loadSketches();
+      await get().loadStoryboards();
+      const { activeSketchPath } = get();
+      if (activeSketchPath) {
+        await get().openSketch(activeSketchPath);
+      }
+    } catch (err) {
+      console.error("Failed to return to latest:", err);
+    }
+  },
+
   restoreVersion: async (commitId) => {
     try {
       await invoke("restore_version", { commitId });
-      // Reload everything after restore
+      set({ viewingSnapshotId: null });
       await get().loadSketches();
       await get().loadStoryboards();
       await get().loadVersions();
