@@ -27,10 +27,22 @@ export function SketchForm() {
   const pendingPathRef = useRef<string | null>(null);
 
   // Reset local state when switching to a different sketch
+  // Cancel any pending debounced saves so stale data isn't written over the new file
   useEffect(() => {
     setLocalTitle(activeSketch?.title ?? "");
     setLocalRows(activeSketch?.rows ?? []);
-  }, [activeSketchPath]);
+    // Cancel pending debounced writes — they belong to the previous sketch/version
+    if (titleTimeoutRef.current) {
+      clearTimeout(titleTimeoutRef.current);
+      titleTimeoutRef.current = null;
+    }
+    if (rowsTimeoutRef.current) {
+      clearTimeout(rowsTimeoutRef.current);
+      rowsTimeoutRef.current = null;
+    }
+    pendingRowsRef.current = null;
+    pendingTitleRef.current = null;
+  }, [activeSketchPath, activeSketch]);
 
   const handleTitleChange = useCallback(
     (value: string) => {
