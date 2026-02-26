@@ -88,15 +88,23 @@ export function ScriptTable({ rows, onChange, readOnly = false }: ScriptTablePro
 
   return (
     <div className="script-table-wrapper my-4 rounded-xl border border-[var(--color-border)] overflow-hidden">
-      <table className="w-full border-collapse" style={{ tableLayout: "fixed" }}>
+      <table className="w-full border-collapse">
+        <colgroup>
+          {!readOnly && <col style={{ width: "28px" }} />}
+          <col style={{ width: "50px" }} />
+          <col />
+          <col />
+          <col style={{ width: "80px" }} />
+          {!readOnly && <col style={{ width: "36px" }} />}
+        </colgroup>
         <thead>
           <tr className="bg-[var(--color-surface-alt)]">
-            {!readOnly && <th className="script-table-th" style={{ width: "28px" }} />}
-            <th className="script-table-th" style={{ width: "50px" }}>Time</th>
+            {!readOnly && <th className="script-table-th" />}
+            <th className="script-table-th">Time</th>
             <th className="script-table-th">Narrative</th>
             <th className="script-table-th">Demo Actions</th>
-            <th className="script-table-th" style={{ width: "100px" }}>Screenshot</th>
-            {!readOnly && <th className="script-table-th" style={{ width: "36px" }} />}
+            <th className="script-table-th">Screenshot</th>
+            {!readOnly && <th className="script-table-th" />}
           </tr>
         </thead>
         <DndContext
