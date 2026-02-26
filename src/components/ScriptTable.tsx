@@ -88,14 +88,14 @@ export function ScriptTable({ rows, onChange, readOnly = false }: ScriptTablePro
 
   return (
     <div className="script-table-wrapper my-4 rounded-xl border border-[var(--color-border)] overflow-hidden">
-      <table className="w-full border-collapse">
+      <table className="w-full border-collapse" style={{ tableLayout: "fixed" }}>
         <colgroup>
-          {!readOnly && <col style={{ width: "28px" }} />}
-          <col style={{ width: "50px" }} />
+          {!readOnly && <col style={{ width: 28 }} />}
+          <col style={{ width: 50 }} />
           <col />
           <col />
-          <col style={{ width: "80px" }} />
-          {!readOnly && <col style={{ width: "36px" }} />}
+          <col style={{ width: 80 }} />
+          {!readOnly && <col style={{ width: 36 }} />}
         </colgroup>
         <thead>
           <tr className="bg-[var(--color-surface-alt)]">
@@ -134,13 +134,13 @@ export function ScriptTable({ rows, onChange, readOnly = false }: ScriptTablePro
             {activeIdx >= 0 ? (
               <table className="w-full border-collapse">
                 <tbody>
-                  <tr className="bg-[var(--color-surface-alt)] border border-[var(--color-accent)] rounded shadow-lg">
-                    {!readOnly && <td className="script-table-td w-7" />}
-                    <td className="script-table-td text-xs">{displayRows[activeIdx].time}</td>
-                    <td className="script-table-td text-xs truncate max-w-[200px]">
+                  <tr className="bg-[var(--color-surface-alt)] border border-[var(--color-accent)] shadow-lg">
+                    {!readOnly && <td className="p-1 w-7" />}
+                    <td className="script-table-td text-xs" style={{ width: 50 }}>{displayRows[activeIdx].time}</td>
+                    <td className="script-table-td text-xs">
                       {displayRows[activeIdx].narrative || "—"}
                     </td>
-                    <td className="script-table-td text-xs truncate max-w-[200px]">
+                    <td className="script-table-td text-xs">
                       {displayRows[activeIdx].demo_actions || "—"}
                     </td>
                     <td className="script-table-td text-xs text-center">—</td>
@@ -199,7 +199,7 @@ function SortableRow({
       className={`group border-t border-[var(--color-border)] ${isSorting ? "" : "transition-colors"}`}
     >
       {!readOnly && (
-        <td className="script-table-td align-top w-7">
+        <td className="p-1 align-top">
           <div
             className="cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-100 transition-opacity text-[var(--color-text-secondary)] hover:text-[var(--color-text)] flex items-center justify-center"
             {...attributes}
@@ -224,7 +224,7 @@ function SortableRow({
           readOnly={readOnly}
         />
       </td>
-      <td className="script-table-td align-top">
+      <td className="script-table-td align-top overflow-hidden">
         <MarkdownCell
           value={row.narrative}
           onChange={(v) => updateRow(idx, "narrative", v)}
@@ -232,7 +232,7 @@ function SortableRow({
           readOnly={readOnly}
         />
       </td>
-      <td className="script-table-td align-top">
+      <td className="script-table-td align-top overflow-hidden">
         <MarkdownCell
           value={row.demo_actions}
           onChange={(v) => updateRow(idx, "demo_actions", v)}
@@ -250,7 +250,7 @@ function SortableRow({
         )}
       </td>
       {!readOnly && (
-        <td className="script-table-td align-top">
+        <td className="p-1 align-top">
           <div className="flex flex-col gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
             <button
               onClick={() => addRow(idx)}
