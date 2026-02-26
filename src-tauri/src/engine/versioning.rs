@@ -302,8 +302,15 @@ pub fn navigate_to_snapshot(
         .unwrap_or_else(|| MAIN_BRANCH.to_string());
 
     // Check if target is reachable from the prev-tip (navigating within rewound range)
+    // BUT only if the target is actually on the CURRENT branch's chain, not on a different timeline
     if let Some(prev_tip) = load_prev_tip(project_dir) {
-        if target_oid == prev_tip || is_ancestor(&repo, target_oid, prev_tip)? {
+        // Only use prev-tip navigation if target is an ancestor of head or between head and prev-tip
+        let target_is_on_current_chain = is_ancestor(&repo, target_oid, head_oid)?
+            || is_ancestor(&repo, head_oid, target_oid)?
+            || target_oid == head_oid;
+        if target_is_on_current_chain
+            && (target_oid == prev_tip || is_ancestor(&repo, target_oid, prev_tip)?)
+        {
             // Target is within the original chain — just move branch ref there
             reset_branch_ref(&repo, &branch_name, target_oid)?;
             // If we reached the original tip, clear prev-tip (fully navigated forward)
