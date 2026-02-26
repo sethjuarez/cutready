@@ -98,6 +98,8 @@ interface AppStoreState {
   isDirty: boolean;
   /** Whether a stash (temporarily saved work) exists. */
   hasStash: boolean;
+  /** Whether we are viewing a rewound snapshot (prev-tip exists). */
+  isRewound: boolean;
 
   // ── Profile detection ─────────────────────────────────────
 
@@ -210,15 +212,17 @@ interface AppStoreState {
   loadVersions: () => Promise<void>;
   /** Check if working directory has unsaved changes. */
   checkDirty: () => Promise<void>;
-  /** Save a labeled version. */
-  saveVersion: (label: string) => Promise<void>;
+  /** Save a labeled version. Optional forkLabel for naming the old timeline when forking. */
+  saveVersion: (label: string, forkLabel?: string) => Promise<void>;
   /** Stash dirty working tree before browsing snapshots. */
   stashChanges: () => Promise<void>;
   /** Pop stash (restore stashed work). */
   popStash: () => Promise<void>;
   /** Check whether a stash exists. */
   checkStash: () => Promise<void>;
-  /** Navigate to any snapshot. Auto-forks if going backward. */
+  /** Check whether we are in a rewound state (prev-tip exists). */
+  checkRewound: () => Promise<void>;
+  /** Navigate to any snapshot. Defers fork until commit. */
   navigateToSnapshot: (commitId: string) => Promise<void>;
   /** Create a new timeline from a snapshot. */
   createTimeline: (fromCommitId: string, name: string) => Promise<void>;
@@ -316,6 +320,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   snapshotPromptOpen: false,
   isDirty: false,
   hasStash: false,
+  isRewound: false,
 
   profiles: [],
 
@@ -490,6 +495,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       snapshotPromptOpen: false,
       isDirty: false,
       hasStash: false,
+      isRewound: false,
       openTabs: [],
       activeTabId: null,
     });
@@ -737,10 +743,13 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     }
   },
 
-  saveVersion: async (label) => {
+  saveVersion: async (label, forkLabel?) => {
     try {
-      const commitId = await invoke<string>("save_with_label", { label });
-      set({ isDirty: false });
+      const commitId = await invoke<string>("save_with_label", {
+        label,
+        forkLabel: forkLabel || null,
+      });
+      set({ isDirty: false, isRewound: false });
       // Persist editor state for this snapshot
       const { openTabs, activeTabId } = get();
       const editorState = JSON.stringify({ openTabs, activeTabId });
@@ -788,6 +797,15 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     }
   },
 
+  checkRewound: async () => {
+    try {
+      const isRewound = await invoke<boolean>("is_rewound");
+      set({ isRewound });
+    } catch (err) {
+      set({ isRewound: false });
+    }
+  },
+
   navigateToSnapshot: async (commitId) => {
     try {
       // Clear active editors FIRST to cancel pending debounced saves
@@ -823,6 +841,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await get().loadVersions();
       await get().loadTimelines();
       await get().loadGraphData();
+      await get().checkRewound();
     } catch (err) {
       console.error("Failed to navigate to snapshot:", err);
     }

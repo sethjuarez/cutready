@@ -15,9 +15,13 @@ fn project_root(state: &AppState) -> Result<std::path::PathBuf, String> {
 }
 
 #[tauri::command]
-pub async fn save_with_label(label: String, state: State<'_, AppState>) -> Result<String, String> {
+pub async fn save_with_label(
+    label: String,
+    fork_label: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
     let root = project_root(&state)?;
-    project::save_with_label(&root, &label).map_err(|e| e.to_string())
+    project::save_with_label(&root, &label, fork_label.as_deref()).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -205,4 +209,10 @@ pub async fn load_editor_state(
     } else {
         Ok(None)
     }
+}
+
+#[tauri::command]
+pub async fn is_rewound(state: State<'_, AppState>) -> Result<bool, String> {
+    let root = project_root(&state)?;
+    Ok(versioning::is_rewound(&root))
 }
