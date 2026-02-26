@@ -99,8 +99,8 @@ pub fn open_project_folder(root: &Path) -> Result<ProjectView, ProjectError> {
 // Sketches are stored as `.sk` files anywhere in the project tree.
 // The relative path from project root is the sketch's identity.
 
-/// Write a sketch to a `.sk` file and auto-commit.
-pub fn write_sketch(sketch: &Sketch, path: &Path, project_root: &Path) -> Result<(), ProjectError> {
+/// Write a sketch to a `.sk` file.
+pub fn write_sketch(sketch: &Sketch, path: &Path, _project_root: &Path) -> Result<(), ProjectError> {
     // Ensure parent directory exists
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| ProjectError::Io(e.to_string()))?;
@@ -110,10 +110,6 @@ pub fn write_sketch(sketch: &Sketch, path: &Path, project_root: &Path) -> Result
         .map_err(|e| ProjectError::Serialize(e.to_string()))?;
     std::fs::write(path, json).map_err(|e| ProjectError::Io(e.to_string()))?;
 
-    // Auto-commit
-    if project_root.join(".git").exists() {
-        let _ = versioning::commit_snapshot(project_root, "Auto-save sketch");
-    }
     Ok(())
 }
 
@@ -163,11 +159,11 @@ pub fn rename_sketch(
 
 // ── Storyboard file I/O (.sb) ─────────────────────────────────────
 
-/// Write a storyboard to a `.sb` file and auto-commit.
+/// Write a storyboard to a `.sb` file.
 pub fn write_storyboard(
     sb: &Storyboard,
     path: &Path,
-    project_root: &Path,
+    _project_root: &Path,
 ) -> Result<(), ProjectError> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| ProjectError::Io(e.to_string()))?;
@@ -177,9 +173,6 @@ pub fn write_storyboard(
         .map_err(|e| ProjectError::Serialize(e.to_string()))?;
     std::fs::write(path, json).map_err(|e| ProjectError::Io(e.to_string()))?;
 
-    if project_root.join(".git").exists() {
-        let _ = versioning::commit_snapshot(project_root, "Auto-save storyboard");
-    }
     Ok(())
 }
 
