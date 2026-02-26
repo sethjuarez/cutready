@@ -35,6 +35,16 @@ export function VersionHistory() {
     setSaving(false);
   }, [labelInput, saveVersion]);
 
+  const handleRestore = useCallback(async (commitId: string) => {
+    const doRestore = confirm("Restore the entire project to this snapshot?");
+    if (!doRestore) return;
+    const autoSave = confirm("Save a snapshot of your current state first?");
+    if (autoSave) {
+      await saveVersion("Auto-save before restore");
+    }
+    await restoreVersion(commitId);
+  }, [saveVersion, restoreVersion]);
+
   // Border on the side facing the editor
   const borderClass = sidebarPosition === "left" ? "border-l" : "border-r";
 
@@ -103,6 +113,7 @@ export function VersionHistory() {
               const isLatest = idx === 0;
               const isLast = idx === versions.length - 1;
               const isSingle = versions.length === 1;
+              const canRestore = idx > 0;
               return (
                 <div key={version.id} className="group relative flex" style={{ minHeight: isLatest ? 44 : 36 }}>
                   {/* Graph column */}
@@ -117,14 +128,17 @@ export function VersionHistory() {
                         }}
                       />
                     )}
-                    {/* Dot with surface-colored halo to cleanly cut through the line */}
-                    <div
-                      className={`relative z-10 shrink-0 rounded-full border-2 ${
+                    {/* Dot — clickable for restore on non-latest snapshots */}
+                    <button
+                      disabled={!canRestore}
+                      onClick={() => canRestore && handleRestore(version.id)}
+                      className={`relative z-10 shrink-0 rounded-full border-2 transition-colors ${
                         isLatest
                           ? "w-3 h-3 bg-[var(--color-accent)] border-[var(--color-accent)]"
-                          : "w-2.5 h-2.5 bg-[var(--color-surface)] border-[var(--color-text-secondary)]"
+                          : "w-2.5 h-2.5 bg-[var(--color-surface)] border-[var(--color-text-secondary)] hover:bg-[var(--color-accent)] hover:border-[var(--color-accent)] cursor-pointer"
                       }`}
                       style={{ boxShadow: "0 0 0 2px var(--color-surface)" }}
+                      title={canRestore ? "Restore to this snapshot" : "Current snapshot"}
                     />
                   </div>
 
@@ -136,18 +150,6 @@ export function VersionHistory() {
                     <div className="text-[10px] text-[var(--color-text-secondary)]/70 mt-0.5">
                       {formatRelativeDate(version.timestamp)}
                     </div>
-                    {idx > 0 && (
-                      <button
-                        onClick={() => {
-                          if (confirm("Restore the entire project to this snapshot? Your current state will be saved as a new snapshot first.")) {
-                            restoreVersion(version.id);
-                          }
-                        }}
-                        className="hidden group-hover:block mt-0.5 text-[10px] text-[var(--color-accent)] hover:underline"
-                      >
-                        Restore
-                      </button>
-                    )}
                   </div>
                 </div>
               );
