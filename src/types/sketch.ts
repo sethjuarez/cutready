@@ -85,4 +85,5 @@ export interface GraphNode {
   timeline: string;
   parents: string[];
   lane: number;
+  is_head: boolean;
 }

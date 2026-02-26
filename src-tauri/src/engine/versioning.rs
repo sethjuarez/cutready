@@ -229,6 +229,7 @@ pub fn has_stash(project_dir: &Path) -> bool {
 /// nothing is lost. The current branch is then reset to the target commit.
 ///
 /// If the target IS the current HEAD, this is a no-op.
+/// If the target is on a different timeline, switches to that timeline first.
 pub fn navigate_to_snapshot(
     project_dir: &Path,
     commit_id: &str,
@@ -250,7 +251,7 @@ pub fn navigate_to_snapshot(
         return checkout_version(project_dir, commit_id);
     }
 
-    // Check if target is an ancestor of HEAD (navigating backward)
+    // Check if target is an ancestor of HEAD (navigating backward on current timeline)
     let going_backward = is_ancestor(&repo, target_oid, head_oid)?;
 
     if going_backward {
@@ -259,7 +260,6 @@ pub fn navigate_to_snapshot(
         let current_label = current_branch
             .as_deref()
             .map(|b| {
-                // Get human label if it's a timeline branch
                 let slug = b.strip_prefix("timeline/").unwrap_or(b);
                 let labels = load_timeline_labels(project_dir);
                 labels.get(slug).cloned().unwrap_or_else(|| {
@@ -268,13 +268,11 @@ pub fn navigate_to_snapshot(
             })
             .unwrap_or_else(|| "Main".to_string());
 
-        // Generate a unique slug for the auto-forked timeline
         let timestamp = chrono::Utc::now().format("%H%M%S").to_string();
         let fork_slug = format!("prev-{}", timestamp);
         let fork_label = format!("{} (before rewind)", current_label);
         let fork_ref = format!("{}{}", TIMELINE_PREFIX, fork_slug);
 
-        // Create the fork branch pointing at current HEAD
         repo.reference(
             fork_ref.as_str(),
             head_oid,
@@ -290,8 +288,6 @@ pub fn navigate_to_snapshot(
             .map(|b| format!("refs/heads/{}", b))
             .unwrap_or_else(|| "refs/heads/main".to_string());
 
-        // Update the branch ref to point at the target commit
-        // Build path by joining each component (handles OS path separators)
         let mut ref_path = repo.git_dir().to_path_buf();
         for component in branch_ref.split('/') {
             ref_path = ref_path.join(component);
@@ -302,9 +298,46 @@ pub fn navigate_to_snapshot(
         }
         std::fs::write(&ref_path, format!("{}\n", target_oid))
             .map_err(|e| VersioningError::Io(e.to_string()))?;
-    }
-    // else: navigating forward/laterally — no fork needed, just checkout
 
+        return checkout_version(project_dir, commit_id);
+    }
+
+    // Check if target is a descendant of HEAD (navigating forward — shouldn't normally happen
+    // since we show only the current branch, but handle it gracefully)
+    let going_forward = is_ancestor(&repo, head_oid, target_oid)?;
+    if going_forward {
+        // Just checkout, the target is ahead of us on the same chain
+        return checkout_version(project_dir, commit_id);
+    }
+
+    // Target is on a different timeline entirely — find which one and switch
+    let timelines = list_timelines(project_dir)?;
+    for tl in &timelines {
+        if tl.is_active {
+            continue; // Already checked current timeline
+        }
+        let ref_name = if tl.name == MAIN_BRANCH {
+            format!("refs/heads/{}", MAIN_BRANCH)
+        } else {
+            format!("{}{}", TIMELINE_PREFIX, tl.name)
+        };
+        if let Ok(r) = repo.find_reference(&ref_name) {
+            let tip = r.id().detach();
+            if is_ancestor(&repo, target_oid, tip)? || target_oid == tip {
+                // Target is on this timeline — switch to it
+                switch_timeline(project_dir, &tl.name)?;
+
+                // If target is not the tip, navigate within the new timeline
+                if target_oid != tip {
+                    // Re-open repo after switch and do backward nav on new timeline
+                    return navigate_to_snapshot(project_dir, commit_id);
+                }
+                return Ok(());
+            }
+        }
+    }
+
+    // Fallback: just checkout the commit (orphaned/unknown)
     checkout_version(project_dir, commit_id)
 }
 
@@ -499,6 +532,9 @@ pub fn get_timeline_graph(project_dir: &Path) -> Result<Vec<GraphNode>, Versioni
     let repo = open_repo(project_dir)?;
     let timelines = list_timelines(project_dir)?;
 
+    // Get current HEAD commit for is_head marking
+    let head_oid = repo.head_commit().ok().map(|c| c.id().detach());
+
     let mut nodes: Vec<GraphNode> = Vec::new();
     let mut seen = std::collections::HashSet::new();
 
@@ -510,7 +546,7 @@ pub fn get_timeline_graph(project_dir: &Path) -> Result<Vec<GraphNode>, Versioni
         };
 
         // Walk commits from this branch's tip
-        let head_oid = match repo.find_reference(&ref_name) {
+        let tip_oid = match repo.find_reference(&ref_name) {
             Ok(r) => r.id().detach(),
             Err(_) => {
                 // Fallback: try HEAD directly (legacy repos)
@@ -521,7 +557,7 @@ pub fn get_timeline_graph(project_dir: &Path) -> Result<Vec<GraphNode>, Versioni
             }
         };
 
-        let mut current = Some(head_oid);
+        let mut current = Some(tip_oid);
         while let Some(oid) = current {
             if !seen.insert(oid) {
                 break; // Already visited (shared ancestor)
@@ -545,6 +581,7 @@ pub fn get_timeline_graph(project_dir: &Path) -> Result<Vec<GraphNode>, Versioni
                 timeline: timeline.name.clone(),
                 parents,
                 lane: timeline.color_index,
+                is_head: head_oid.map_or(false, |h| h == oid),
             });
 
             current = commit.parent_ids().next().map(|id| id.detach());
