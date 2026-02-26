@@ -13,20 +13,12 @@ function LogoMark() {
         className="absolute inset-0 rounded-2xl blur-xl opacity-40"
         style={{ background: "linear-gradient(135deg, var(--color-accent), #e879a8)" }}
       />
-      <div
-        className="relative w-16 h-16 rounded-2xl flex items-center justify-center"
-        style={{ background: "linear-gradient(135deg, var(--color-accent), #9b7af5)" }}
-      >
-        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-          {/* Film clapperboard */}
-          <path d="M4 20h16a1 1 0 001-1V7a1 1 0 00-1-1H4a1 1 0 00-1 1v12a1 1 0 001 1z" />
-          <path d="M3 6l3.5-3 3 3" />
-          <path d="M9.5 6l3.5-3 3 3" />
-          <path d="M16 6l3.5-3 1.5 1.5" />
-          <circle cx="12" cy="13" r="3" />
-          <path d="M12 10v0.01" />
-        </svg>
-      </div>
+      <img
+        src="/cutready.svg"
+        alt="CutReady"
+        className="relative w-16 h-16 drop-shadow-lg"
+        draggable={false}
+      />
     </div>
   );
 }
