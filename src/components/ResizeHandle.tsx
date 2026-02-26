@@ -60,16 +60,16 @@ export function ResizeHandle({ direction, onResize, onResizeEnd }: ResizeHandleP
   return (
     <div
       className={`group relative shrink-0 ${
-        isHorizontal ? "w-[5px] cursor-col-resize" : "h-[5px] cursor-row-resize"
+        isHorizontal ? "w-[7px] cursor-col-resize" : "h-[7px] cursor-row-resize"
       }`}
       onMouseDown={handleMouseDown}
     >
       {/* Visible center line — appears on hover and during drag */}
       <div
-        className={`absolute transition-opacity duration-150 ${
+        className={`absolute transition-all duration-200 ${
           isDragging
             ? "opacity-100 bg-[var(--color-accent)]"
-            : "opacity-0 group-hover:opacity-100 bg-[var(--color-accent)]/50"
+            : "opacity-0 group-hover:opacity-100 bg-[var(--color-accent)]/40"
         } ${
           isHorizontal
             ? "top-0 bottom-0 left-1/2 -translate-x-1/2 w-[2px] rounded-full"
