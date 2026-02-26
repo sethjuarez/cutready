@@ -66,7 +66,7 @@ export function StoryboardList() {
       className="flex flex-col h-full bg-[var(--color-surface-inset)]"
     >
       {/* ── Mode toggle ──────────────────────────────── */}
-      <div className="flex items-center justify-between px-3 py-2.5 border-b border-[var(--color-border)]">
+      <div className="flex items-center justify-between px-3 h-9 shrink-0 border-b border-[var(--color-border)]">
         <span className="text-[11px] font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">
           Explorer
         </span>
@@ -110,7 +110,7 @@ export function StoryboardList() {
       ) : (
       <>
       {/* ── Storyboards section ────────────────────────── */}
-      <div className="flex items-center justify-between px-3 py-2.5 border-b border-[var(--color-border)]">
+      <div className="flex items-center justify-between px-3 h-9 shrink-0 border-b border-[var(--color-border)]">
         <span className="text-[11px] font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">
           Storyboards
         </span>
@@ -190,7 +190,7 @@ export function StoryboardList() {
       </div>
 
       {/* ── Sketches section ──────────────────────────── */}
-      <div className="flex items-center justify-between px-3 py-2.5 border-y border-[var(--color-border)]">
+      <div className="flex items-center justify-between px-3 h-9 shrink-0 border-y border-[var(--color-border)]">
         <span className="text-[11px] font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">
           Sketches
         </span>
