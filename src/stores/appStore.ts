@@ -153,6 +153,7 @@ interface AppStoreState {
   // ── Project actions ───────────────────────────────────────
 
   loadRecentProjects: () => Promise<void>;
+  removeRecentProject: (path: string) => Promise<void>;
   createProject: (path: string) => Promise<void>;
   openProject: (path: string) => Promise<void>;
   closeProject: () => void;
@@ -360,6 +361,15 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       set({ recentProjects });
     } catch (err) {
       console.error("Failed to load recent projects:", err);
+    }
+  },
+
+  removeRecentProject: async (path) => {
+    try {
+      await invoke("remove_recent_project", { path });
+      await get().loadRecentProjects();
+    } catch (err) {
+      console.error("Failed to remove recent project:", err);
     }
   },
 
