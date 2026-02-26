@@ -584,11 +584,18 @@ function MarkdownCell({
         onClick={() => {
           if (!readOnly) setIsEditing(true);
         }}
-        onFocus={() => {
-          if (!readOnly) setIsEditing(true);
-        }}
         onKeyDown={(e) => {
-          if (!readOnly && e.key === "Enter") {
+          if (readOnly) return;
+          if (e.key === "Tab") {
+            e.preventDefault();
+            const td = (e.target as HTMLElement).closest("td");
+            if (td) {
+              const moved = focusAdjacentCell(td, e.shiftKey);
+              if (!moved && !e.shiftKey && onAddRow) onAddRow();
+            }
+            return;
+          }
+          if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();
             setIsEditing(true);
           }
