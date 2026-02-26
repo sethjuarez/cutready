@@ -206,9 +206,11 @@ interface AppStoreState {
   checkDirty: () => Promise<void>;
   /** Save a labeled version. */
   saveVersion: (label: string) => Promise<void>;
+  /** Stash dirty working tree before browsing snapshots. */
+  stashChanges: () => Promise<void>;
   /** Browse to a snapshot (checkout files without committing). */
   checkoutSnapshot: (commitId: string) => Promise<void>;
-  /** Return to the latest snapshot. */
+  /** Return to the latest snapshot (and pop stash if present). */
   returnToLatest: () => Promise<void>;
   /** Permanently restore a historical version (creates a commit). */
   restoreVersion: (commitId: string) => Promise<void>;
@@ -723,10 +725,18 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     }
   },
 
+  stashChanges: async () => {
+    try {
+      await invoke("stash_changes");
+    } catch (err) {
+      console.error("Failed to stash changes:", err);
+    }
+  },
+
   checkoutSnapshot: async (commitId) => {
     try {
       await invoke("checkout_version", { commitId });
-      set({ viewingSnapshotId: commitId });
+      set({ viewingSnapshotId: commitId, isDirty: false });
       // Reload file lists to reflect checked-out state
       await get().loadSketches();
       await get().loadStoryboards();
@@ -745,7 +755,9 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       if (versions.length > 0) {
         await invoke("checkout_version", { commitId: versions[0].id });
       }
-      set({ viewingSnapshotId: null });
+      // Restore stashed working tree if one exists
+      const hadStash = await invoke<boolean>("pop_stash");
+      set({ viewingSnapshotId: null, isDirty: hadStash });
       await get().loadSketches();
       await get().loadStoryboards();
       const { activeSketchPath } = get();

@@ -180,6 +180,39 @@ pub fn checkout_version(project_dir: &Path, commit_id: &str) -> Result<(), Versi
     write_tree_to_dir(&repo, tree.id, project_dir)
 }
 
+/// Stash the current working tree into a git tree object.
+/// Stores the tree OID in `.git/cutready-stash` for later retrieval.
+pub fn stash_working_tree(project_dir: &Path) -> Result<(), VersioningError> {
+    let repo = open_repo(project_dir)?;
+    let tree_id = build_tree_from_dir(&repo, project_dir, project_dir)?;
+    let stash_file = project_dir.join(".git").join("cutready-stash");
+    std::fs::write(&stash_file, tree_id.to_string())
+        .map_err(|e| VersioningError::Io(e.to_string()))?;
+    Ok(())
+}
+
+/// Pop the stashed working tree, restoring files to disk.
+/// Returns Ok(true) if a stash was restored, Ok(false) if no stash existed.
+pub fn pop_stash(project_dir: &Path) -> Result<bool, VersioningError> {
+    let stash_file = project_dir.join(".git").join("cutready-stash");
+    if !stash_file.exists() {
+        return Ok(false);
+    }
+    let oid_str = std::fs::read_to_string(&stash_file)
+        .map_err(|e| VersioningError::Io(e.to_string()))?;
+    let tree_id: gix::ObjectId = oid_str
+        .trim()
+        .parse()
+        .map_err(|e: gix::hash::decode::Error| VersioningError::Git(e.to_string()))?;
+
+    let repo = open_repo(project_dir)?;
+    clean_working_dir(project_dir)?;
+    write_tree_to_dir(&repo, tree_id, project_dir)?;
+
+    std::fs::remove_file(&stash_file).map_err(|e| VersioningError::Io(e.to_string()))?;
+    Ok(true)
+}
+
 // ── Internal helpers ────────────────────────────────────────────────
 
 fn open_repo(project_dir: &Path) -> Result<gix::Repository, VersioningError> {
@@ -437,5 +470,41 @@ mod tests {
 
         // outro.sk should NOT exist (wasn't in v1)
         assert!(!sketches_dir.join("outro.sk").exists());
+    }
+
+    #[test]
+    fn stash_and_pop_working_tree() {
+        let tmp = setup_project_dir();
+        init_project_repo(tmp.path()).unwrap();
+
+        // Commit baseline
+        commit_snapshot(tmp.path(), "baseline").unwrap();
+
+        // Make edits
+        std::fs::write(tmp.path().join("project.json"), r#"{"name":"dirty","version":99}"#).unwrap();
+        std::fs::write(tmp.path().join("notes.txt"), "some notes").unwrap();
+        assert!(has_unsaved_changes(tmp.path()).unwrap());
+
+        // Stash
+        stash_working_tree(tmp.path()).unwrap();
+        assert!(tmp.path().join(".git").join("cutready-stash").exists());
+
+        // Checkout baseline (wipes working tree to committed state)
+        let versions = list_versions(tmp.path()).unwrap();
+        checkout_version(tmp.path(), &versions[0].id).unwrap();
+        let content = std::fs::read_to_string(tmp.path().join("project.json")).unwrap();
+        assert!(content.contains("\"version\": 1")); // baseline content
+        assert!(!tmp.path().join("notes.txt").exists());
+
+        // Pop stash — restores dirty edits
+        let had_stash = pop_stash(tmp.path()).unwrap();
+        assert!(had_stash);
+        let content = std::fs::read_to_string(tmp.path().join("project.json")).unwrap();
+        assert!(content.contains("\"version\":99"));
+        assert!(tmp.path().join("notes.txt").exists());
+        assert!(!tmp.path().join(".git").join("cutready-stash").exists());
+
+        // Pop again — no stash
+        assert!(!pop_stash(tmp.path()).unwrap());
     }
 }

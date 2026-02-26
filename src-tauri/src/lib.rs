@@ -123,6 +123,8 @@ pub fn run() {
             commands::versioning::restore_version,
             commands::versioning::checkout_version,
             commands::versioning::has_unsaved_changes,
+            commands::versioning::stash_changes,
+            commands::versioning::pop_stash,
             commands::interaction::detect_browser_profiles,
             commands::interaction::check_browsers_running,
             commands::interaction::prepare_browser,
