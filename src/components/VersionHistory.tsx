@@ -72,7 +72,7 @@ export function VersionHistory() {
               <polyline points="17 21 17 13 7 13 7 21" />
               <polyline points="7 3 7 8 15 8" />
             </svg>
-            Save Snapshot
+            Save Project Snapshot
           </button>
         )}
       </div>
@@ -83,7 +83,7 @@ export function VersionHistory() {
           <div className="px-3 py-8 text-center">
             <div className="text-[var(--color-text-secondary)] text-xs">No snapshots yet</div>
             <div className="text-[var(--color-text-secondary)]/60 text-[10px] mt-1">
-              Save a snapshot to track your progress
+              Save a snapshot of the entire project
             </div>
           </div>
         ) : (
@@ -126,7 +126,7 @@ export function VersionHistory() {
                     {idx > 0 && (
                       <button
                         onClick={() => {
-                          if (confirm("Restore this snapshot? Current changes will be saved first.")) {
+                          if (confirm("Restore the entire project to this snapshot? Your current state will be saved as a new snapshot first.")) {
                             restoreVersion(version.id);
                           }
                         }}

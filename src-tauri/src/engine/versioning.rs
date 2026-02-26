@@ -134,15 +134,28 @@ pub fn get_file_at_version(
 }
 
 /// Restore the project to a historical version by checking out that commit's
-/// content and creating a new commit.
+/// full tree and creating a new "Restored from..." commit.
 pub fn restore_version(project_dir: &Path, commit_id: &str) -> Result<String, VersioningError> {
-    let data = get_file_at_version(project_dir, commit_id, "project.json")?;
+    let repo = open_repo(project_dir)?;
 
-    let project_json_path = project_dir.join("project.json");
-    std::fs::write(&project_json_path, &data).map_err(|e| VersioningError::Io(e.to_string()))?;
+    let oid: gix::ObjectId = commit_id
+        .parse()
+        .map_err(|e: gix::hash::decode::Error| VersioningError::Git(e.to_string()))?;
+
+    let commit = repo
+        .find_commit(oid)
+        .map_err(|e| VersioningError::Git(e.to_string()))?;
+
+    let tree = commit
+        .tree()
+        .map_err(|e| VersioningError::Git(e.to_string()))?;
+
+    // Remove all non-hidden files, then write the tree's contents
+    clean_working_dir(project_dir)?;
+    write_tree_to_dir(&repo, tree.id, project_dir)?;
 
     let short_id = &commit_id[..8.min(commit_id.len())];
-    let message = format!("Restored from version {}", short_id);
+    let message = format!("Restored from {}", short_id);
     commit_snapshot(project_dir, &message)
 }
 
@@ -209,6 +222,58 @@ fn gix_time_to_chrono(time: gix::date::Time) -> DateTime<Utc> {
     Utc.timestamp_opt(time.seconds, 0)
         .single()
         .unwrap_or_else(Utc::now)
+}
+
+/// Remove all non-hidden files/dirs from the project directory.
+fn clean_working_dir(project_dir: &Path) -> Result<(), VersioningError> {
+    for entry in std::fs::read_dir(project_dir).map_err(|e| VersioningError::Io(e.to_string()))? {
+        let entry = entry.map_err(|e| VersioningError::Io(e.to_string()))?;
+        let name = entry.file_name().to_string_lossy().to_string();
+        if name.starts_with('.') {
+            continue;
+        }
+        let path = entry.path();
+        if path.is_dir() {
+            std::fs::remove_dir_all(&path).map_err(|e| VersioningError::Io(e.to_string()))?;
+        } else {
+            std::fs::remove_file(&path).map_err(|e| VersioningError::Io(e.to_string()))?;
+        }
+    }
+    Ok(())
+}
+
+/// Write a git tree's contents to a directory on disk (recursive).
+fn write_tree_to_dir(
+    repo: &gix::Repository,
+    tree_id: gix::ObjectId,
+    dir: &Path,
+) -> Result<(), VersioningError> {
+    let object = repo
+        .find_object(tree_id)
+        .map_err(|e| VersioningError::Git(e.to_string()))?;
+
+    let tree = object
+        .try_into_tree()
+        .map_err(|e| VersioningError::Git(e.to_string()))?;
+
+    for entry_result in tree.iter() {
+        let entry = entry_result.map_err(|e| VersioningError::Git(e.to_string()))?;
+        let name = String::from_utf8_lossy(entry.filename()).to_string();
+        let path = dir.join(&name);
+        let oid = entry.oid().to_owned();
+        let mode = entry.mode();
+
+        if mode.is_tree() {
+            std::fs::create_dir_all(&path).map_err(|e| VersioningError::Io(e.to_string()))?;
+            write_tree_to_dir(repo, oid, &path)?;
+        } else if mode.is_blob() {
+            let blob = repo
+                .find_object(oid)
+                .map_err(|e| VersioningError::Git(e.to_string()))?;
+            std::fs::write(&path, &blob.data).map_err(|e| VersioningError::Io(e.to_string()))?;
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -321,5 +386,35 @@ mod tests {
         let data = super::get_file_at_version(tmp.path(), &id, "documents/doc1.json").unwrap();
         let content = String::from_utf8(data).unwrap();
         assert!(content.contains("Doc 1"));
+    }
+
+    #[test]
+    fn restore_version_restores_full_tree() {
+        let tmp = setup_project_dir();
+        init_project_repo(tmp.path()).unwrap();
+
+        // v1: project.json + a sketch file
+        let sketches_dir = tmp.path().join("sketches");
+        std::fs::create_dir_all(&sketches_dir).unwrap();
+        std::fs::write(sketches_dir.join("intro.sk"), r#"{"title":"Intro v1"}"#).unwrap();
+        let id1 = commit_snapshot(tmp.path(), "v1 with sketch").unwrap();
+
+        // v2: modify sketch and add another
+        std::fs::write(sketches_dir.join("intro.sk"), r#"{"title":"Intro v2"}"#).unwrap();
+        std::fs::write(sketches_dir.join("outro.sk"), r#"{"title":"Outro"}"#).unwrap();
+        commit_snapshot(tmp.path(), "v2 modified").unwrap();
+
+        // Verify v2 state
+        assert!(sketches_dir.join("outro.sk").exists());
+
+        // Restore to v1
+        restore_version(tmp.path(), &id1).unwrap();
+
+        // intro.sk should be v1 content
+        let intro = std::fs::read_to_string(sketches_dir.join("intro.sk")).unwrap();
+        assert!(intro.contains("Intro v1"));
+
+        // outro.sk should NOT exist (wasn't in v1)
+        assert!(!sketches_dir.join("outro.sk").exists());
     }
 }
