@@ -1847,4 +1847,96 @@ mod tests {
         assert!(tls.iter().any(|t| t.is_active),
             "At least one timeline should be active even with detached HEAD");
     }
+
+    #[test]
+    fn graph_quipy_demo_scenario() {
+        // Reproduces the quipy-demo repo structure:
+        //   * other1 (HEAD -> fork-B) other 1
+        //   | * take2 (fork-A, main) take 2
+        //   | * take1 take 1
+        //   |/
+        //   * gs Initial getting started
+        //   * init Initialize project
+        //
+        // Key issues to test:
+        // 1. fork-duplicate and main point at same commit
+        // 2. fork-B branches from shared ancestor
+        // 3. HEAD is on fork-B (attached)
+        let tmp = setup_project_dir();
+        init_project_repo(tmp.path()).unwrap();
+
+        // init → getting started → take 1 → take 2 (main)
+        std::fs::write(tmp.path().join("a.txt"), "gs").unwrap();
+        let gs = commit_snapshot(tmp.path(), "Initial getting started", None).unwrap();
+
+        std::fs::write(tmp.path().join("a.txt"), "t1").unwrap();
+        let _take1 = commit_snapshot(tmp.path(), "take 1", None).unwrap();
+
+        std::fs::write(tmp.path().join("a.txt"), "t2").unwrap();
+        let take2 = commit_snapshot(tmp.path(), "take 2", None).unwrap();
+
+        // Navigate back to "getting started" and fork "other 1"
+        navigate_to_snapshot(tmp.path(), &gs).unwrap();
+        std::fs::write(tmp.path().join("b.txt"), "other").unwrap();
+        let other1 = commit_snapshot(tmp.path(), "other 1", Some("Other direction")).unwrap();
+
+        // HEAD should now be on the fork branch (attached)
+        let tls = list_timelines(tmp.path()).unwrap();
+        let fork_b = tls.iter().find(|t| t.name != "main" && t.is_active).unwrap();
+        eprintln!("Active fork: {} (label: {})", fork_b.name, fork_b.label);
+
+        // Create another fork branch at same commit as main tip (duplicate)
+        let repo = gix::open(tmp.path()).unwrap();
+        let take2_oid = repo.rev_parse_single(take2.as_str()).unwrap().detach();
+        repo.reference(
+            "refs/heads/timeline/fork-duplicate",
+            take2_oid,
+            gix::refs::transaction::PreviousValue::Any,
+            "test: duplicate branch at main tip",
+        ).unwrap();
+
+        // Get graph
+        let graph = get_timeline_graph(tmp.path()).unwrap();
+
+        eprintln!("\n=== Graph nodes ===");
+        for n in &graph {
+            eprintln!("  {} | {:25} | lane={} | timeline={:20} | head={} | tip={}",
+                &n.id[..7], n.message, n.lane, n.timeline, n.is_head, n.is_branch_tip);
+        }
+
+        // All timelines present
+        let timelines_in_graph: std::collections::HashSet<&str> =
+            graph.iter().map(|n| n.timeline.as_str()).collect();
+        assert!(timelines_in_graph.contains("main"), "Missing main");
+        assert!(timelines_in_graph.contains(fork_b.name.as_str()),
+            "Missing active fork {}", fork_b.name);
+        assert!(timelines_in_graph.contains("fork-duplicate"),
+            "Missing duplicate branch. Timelines: {:?}", timelines_in_graph);
+
+        // HEAD on correct node
+        let head_node = graph.iter().find(|n| n.is_head).unwrap();
+        assert_eq!(head_node.id, other1, "HEAD should be at 'other 1'");
+        assert_eq!(head_node.timeline, fork_b.name,
+            "HEAD should be on active fork timeline");
+
+        // "take 2" on main
+        assert!(graph.iter().any(|n| n.id == take2 && n.timeline == "main"),
+            "take 2 should appear on main timeline");
+
+        // Duplicate branch shows as alias on "take 2"
+        assert!(graph.iter().any(|n| n.id == take2 && n.timeline == "fork-duplicate"),
+            "fork-duplicate should have an alias node on take 2");
+
+        // No duplicate (same id + same timeline) nodes
+        let mut seen = std::collections::HashSet::new();
+        for n in &graph {
+            let key = format!("{}:{}", n.id, n.timeline);
+            assert!(seen.insert(key.clone()), "Duplicate node in graph: {}", key);
+        }
+
+        // list_timelines returns all branches
+        let tls = list_timelines(tmp.path()).unwrap();
+        assert_eq!(tls.len(), 3, "Should have 3 timelines, got {:?}",
+            tls.iter().map(|t| &t.name).collect::<Vec<_>>());
+    }
 }
