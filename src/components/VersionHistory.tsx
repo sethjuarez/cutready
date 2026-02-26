@@ -1,21 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAppStore } from "../stores/appStore";
-
-/** Palette of lane colours for timelines. */
-const LANE_COLORS = [
-  "var(--color-accent)",      // purple — main
-  "#10b981",                  // emerald
-  "#f59e0b",                  // amber
-  "#ef4444",                  // red
-  "#3b82f6",                  // blue
-  "#ec4899",                  // pink
-  "#14b8a6",                  // teal
-  "#8b5cf6",                  // violet
-];
-
-function laneColor(index: number) {
-  return LANE_COLORS[index % LANE_COLORS.length];
-}
+import { SnapshotGraph } from "./SnapshotGraph";
 
 export function VersionHistory() {
   const graphNodes = useAppStore((s) => s.graphNodes);
@@ -223,166 +208,17 @@ export function VersionHistory() {
 
       {/* Unified graph — all timelines */}
       <div className="flex-1 overflow-y-auto">
-        {graphNodes.length === 0 && !isDirty ? (
-          <div className="px-3 py-8 text-center">
-            <div className="text-[var(--color-text-secondary)] text-xs">No snapshots yet</div>
-            <div className="text-[var(--color-text-secondary)]/60 text-[10px] mt-1">
-              Save a snapshot of the entire project
-            </div>
-          </div>
-        ) : (
-          <div className="py-1">
-            {/* Dirty indicator at top — only when NOT rewound (linear unsaved changes) */}
-            {isDirty && !isRewound && (
-              <div className="group relative flex" style={{ minHeight: 36 }}>
-                <div className="w-8 shrink-0 relative flex items-center justify-center">
-                  {graphNodes.length > 0 && (
-                    <div
-                      className="absolute left-1/2 -translate-x-1/2 w-px border-l border-dashed border-[var(--color-text-secondary)]/30"
-                      style={{ top: "50%", bottom: 0 }}
-                    />
-                  )}
-                  <div
-                    className="relative z-10 shrink-0 w-2.5 h-2.5 rounded-full border-2 border-dashed border-[var(--color-text-secondary)]/60 bg-[var(--color-surface)]"
-                    style={{ boxShadow: "0 0 0 2px var(--color-surface)" }}
-                  />
-                </div>
-                <div className="flex-1 min-w-0 pr-3 flex items-center py-1.5">
-                  <span className="text-xs italic text-[var(--color-text-secondary)]">
-                    Unsaved changes
-                  </span>
-                </div>
-              </div>
-            )}
-
-            {/* All graph nodes — ghost branch node inserted after HEAD when rewound + dirty */}
-            {graphNodes.flatMap((node, idx) => {
-              const isFirst = idx === 0;
-              const isLast = idx === graphNodes.length - 1;
-              const isSingle = graphNodes.length === 1 && !(isDirty && !isRewound);
-              const dotColor = laneColor(node.lane);
-              const tlInfo = timelineMap.get(node.timeline);
-              const tlLabel = tlInfo?.label ?? node.timeline;
-              const hasMultipleTimelines = timelines.length > 1;
-              const showGhostAfter = node.is_head && isRewound && isDirty;
-
-              const elements = [(
-                <div key={node.id} className="group relative flex" style={{ minHeight: node.is_head ? 44 : 36 }}>
-                  {/* Graph column */}
-                  <div className="w-8 shrink-0 relative flex items-center justify-center">
-                    {!isSingle && (
-                      <div
-                        className="absolute left-1/2 -translate-x-1/2 w-px"
-                        style={{
-                          top: (isFirst && !(isDirty && !isRewound)) ? "50%" : 0,
-                          bottom: isLast ? "50%" : 0,
-                          backgroundColor: dotColor,
-                          opacity: 0.3,
-                        }}
-                      />
-                    )}
-                    <button
-                      onClick={() => handleNodeClick(node.id, node.is_head)}
-                      className={`relative z-10 shrink-0 rounded-full border-2 transition-colors ${
-                        node.is_head ? "cursor-default" : "cursor-pointer"
-                      }`}
-                      style={{
-                        width: node.is_head ? 12 : 10,
-                        height: node.is_head ? 12 : 10,
-                        backgroundColor: node.is_head ? dotColor : "var(--color-surface)",
-                        borderColor: node.is_head ? dotColor : dotColor,
-                        boxShadow: node.is_head
-                          ? `0 0 0 2px var(--color-surface), 0 0 0 4px ${dotColor}40`
-                          : "0 0 0 2px var(--color-surface)",
-                      }}
-                      onMouseEnter={(e) => {
-                        if (!node.is_head) {
-                          e.currentTarget.style.backgroundColor = dotColor;
-                        }
-                      }}
-                      onMouseLeave={(e) => {
-                        if (!node.is_head) {
-                          e.currentTarget.style.backgroundColor = "var(--color-surface)";
-                        }
-                      }}
-                      title={node.is_head ? "Current snapshot (HEAD)" : `Navigate to: ${node.message}`}
-                    />
-                  </div>
-
-                  {/* Content */}
-                  <div className={`flex-1 min-w-0 pr-3 flex flex-col justify-center ${node.is_head ? "py-2" : "py-1.5"}`}>
-                    <div className={`text-xs truncate ${node.is_head ? "font-medium text-[var(--color-text)]" : "text-[var(--color-text-secondary)]"}`}>
-                      {node.message}
-                    </div>
-                    <div className="flex items-center gap-1.5 mt-0.5">
-                      <span className="text-[10px] text-[var(--color-text-secondary)]/70">
-                        {formatRelativeDate(node.timestamp)}
-                      </span>
-                      {hasMultipleTimelines && (
-                        <span
-                          className="text-[9px] px-1 py-px rounded-sm"
-                          style={{
-                            color: dotColor,
-                            backgroundColor: `${dotColor}15`,
-                          }}
-                        >
-                          {tlLabel}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )];
-
-              // Insert ghost branch node right after the HEAD node when rewound + dirty
-              if (showGhostAfter) {
-                elements.push(
-                  <div key="ghost-branch" className="group relative flex" style={{ minHeight: 32 }}>
-                    <div className="w-8 shrink-0 relative flex items-center justify-center">
-                      <div
-                        className="absolute left-1/2 -translate-x-1/2 w-px border-l border-dashed"
-                        style={{ top: 0, bottom: "50%", borderColor: `${dotColor}50` }}
-                      />
-                    </div>
-                    <div className="flex-1 min-w-0 pr-3 flex items-center py-1">
-                      <div
-                        className="shrink-0 w-2 h-2 rounded-full border-[1.5px] border-dashed mr-1.5"
-                        style={{ borderColor: dotColor, opacity: 0.6 }}
-                      />
-                      <span className="text-[11px] italic text-[var(--color-text-secondary)]">
-                        New direction
-                      </span>
-                      <span className="ml-1.5 text-[9px] px-1 py-px rounded-sm bg-amber-500/10 text-amber-500">
-                        branching
-                      </span>
-                    </div>
-                  </div>
-                );
-              }
-
-              return elements;
-            })}
-          </div>
-        )}
+        <div className="py-1">
+          <SnapshotGraph
+            nodes={graphNodes}
+            isDirty={isDirty}
+            isRewound={isRewound}
+            timelineMap={timelineMap}
+            hasMultipleTimelines={timelines.length > 1}
+            onNodeClick={handleNodeClick}
+          />
+        </div>
       </div>
     </div>
   );
-}
-
-function formatRelativeDate(isoString: string): string {
-  const date = new Date(isoString);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-
-  if (diffMins < 1) return "just now";
-  if (diffMins < 60) return `${diffMins}m ago`;
-
-  const diffHours = Math.floor(diffMins / 60);
-  if (diffHours < 24) return `${diffHours}h ago`;
-
-  const diffDays = Math.floor(diffHours / 24);
-  if (diffDays < 7) return `${diffDays}d ago`;
-
-  return date.toLocaleDateString();
 }
