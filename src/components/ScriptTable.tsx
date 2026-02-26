@@ -33,6 +33,13 @@ export function ScriptTable({ rows, onChange, readOnly = false }: ScriptTablePro
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
   );
 
+  // Ensure at least one row exists (materialize instead of phantom displayRows)
+  useEffect(() => {
+    if (rows.length === 0 && !readOnly) {
+      onChange([emptyRow()]);
+    }
+  }, [rows.length, readOnly, onChange]);
+
   // Always-current ref to avoid stale closure issues in callbacks
   const rowsRef = useRef(rows);
   rowsRef.current = rows;
@@ -87,8 +94,10 @@ export function ScriptTable({ rows, onChange, readOnly = false }: ScriptTablePro
     [onChange, rowIds],
   );
 
-  const displayRows = rows.length === 0 ? [emptyRow()] : rows;
   const activeIdx = activeId ? rowIds.indexOf(activeId) : -1;
+
+  // Brief guard while the useEffect materializes the first row
+  if (rows.length === 0) return null;
 
   return (
     <div className="script-table-wrapper my-4 rounded-xl border border-[var(--color-border)] overflow-hidden">
@@ -119,7 +128,7 @@ export function ScriptTable({ rows, onChange, readOnly = false }: ScriptTablePro
         >
           <SortableContext items={rowIds} strategy={verticalListSortingStrategy}>
             <tbody>
-              {displayRows.map((row, idx) => (
+              {rows.map((row, idx) => (
                 <SortableRow
                   key={rowIds[idx]}
                   id={rowIds[idx]}
@@ -140,12 +149,12 @@ export function ScriptTable({ rows, onChange, readOnly = false }: ScriptTablePro
                 <tbody>
                   <tr className="bg-[var(--color-surface-alt)] border border-[var(--color-accent)] shadow-lg">
                     {!readOnly && <td className="p-1 w-7" />}
-                    <td className="script-table-td text-xs" style={{ width: 50 }}>{displayRows[activeIdx].time}</td>
+                    <td className="script-table-td text-xs" style={{ width: 50 }}>{rows[activeIdx].time}</td>
                     <td className="script-table-td text-xs">
-                      {displayRows[activeIdx].narrative || "—"}
+                      {rows[activeIdx].narrative || "—"}
                     </td>
                     <td className="script-table-td text-xs">
-                      {displayRows[activeIdx].demo_actions || "—"}
+                      {rows[activeIdx].demo_actions || "—"}
                     </td>
                     <td className="script-table-td text-xs text-center">—</td>
                     {!readOnly && <td className="script-table-td" />}
