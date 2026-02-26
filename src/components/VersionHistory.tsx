@@ -232,8 +232,8 @@ export function VersionHistory() {
           </div>
         ) : (
           <div className="py-1">
-            {/* Dirty / unsaved changes node */}
-            {isDirty && (
+            {/* Dirty indicator at top — only when NOT rewound (linear unsaved changes) */}
+            {isDirty && !isRewound && (
               <div className="group relative flex" style={{ minHeight: 36 }}>
                 <div className="w-8 shrink-0 relative flex items-center justify-center">
                   {graphNodes.length > 0 && (
@@ -249,27 +249,24 @@ export function VersionHistory() {
                 </div>
                 <div className="flex-1 min-w-0 pr-3 flex items-center py-1.5">
                   <span className="text-xs italic text-[var(--color-text-secondary)]">
-                    {isRewound ? "New direction (unsaved)" : "Unsaved changes"}
+                    Unsaved changes
                   </span>
-                  {isRewound && (
-                    <span className="ml-1.5 text-[9px] px-1 py-px rounded-sm bg-amber-500/10 text-amber-500">
-                      branching
-                    </span>
-                  )}
                 </div>
               </div>
             )}
 
-            {/* All graph nodes */}
-            {graphNodes.map((node, idx) => {
+            {/* All graph nodes — ghost branch node inserted after HEAD when rewound + dirty */}
+            {graphNodes.flatMap((node, idx) => {
               const isFirst = idx === 0;
               const isLast = idx === graphNodes.length - 1;
-              const isSingle = graphNodes.length === 1 && !isDirty;
+              const isSingle = graphNodes.length === 1 && !(isDirty && !isRewound);
               const dotColor = laneColor(node.lane);
               const tlInfo = timelineMap.get(node.timeline);
               const tlLabel = tlInfo?.label ?? node.timeline;
               const hasMultipleTimelines = timelines.length > 1;
-              return (
+              const showGhostAfter = node.is_head && isRewound && isDirty;
+
+              const elements = [(
                 <div key={node.id} className="group relative flex" style={{ minHeight: node.is_head ? 44 : 36 }}>
                   {/* Graph column */}
                   <div className="w-8 shrink-0 relative flex items-center justify-center">
@@ -277,7 +274,7 @@ export function VersionHistory() {
                       <div
                         className="absolute left-1/2 -translate-x-1/2 w-px"
                         style={{
-                          top: (isFirst && !isDirty) ? "50%" : 0,
+                          top: (isFirst && !(isDirty && !isRewound)) ? "50%" : 0,
                           bottom: isLast ? "50%" : 0,
                           backgroundColor: dotColor,
                           opacity: 0.3,
@@ -335,7 +332,35 @@ export function VersionHistory() {
                     </div>
                   </div>
                 </div>
-              );
+              )];
+
+              // Insert ghost branch node right after the HEAD node when rewound + dirty
+              if (showGhostAfter) {
+                elements.push(
+                  <div key="ghost-branch" className="group relative flex" style={{ minHeight: 32 }}>
+                    <div className="w-8 shrink-0 relative flex items-center justify-center">
+                      <div
+                        className="absolute left-1/2 -translate-x-1/2 w-px border-l border-dashed"
+                        style={{ top: 0, bottom: "50%", borderColor: `${dotColor}50` }}
+                      />
+                    </div>
+                    <div className="flex-1 min-w-0 pr-3 flex items-center py-1">
+                      <div
+                        className="shrink-0 w-2 h-2 rounded-full border-[1.5px] border-dashed mr-1.5"
+                        style={{ borderColor: dotColor, opacity: 0.6 }}
+                      />
+                      <span className="text-[11px] italic text-[var(--color-text-secondary)]">
+                        New direction
+                      </span>
+                      <span className="ml-1.5 text-[9px] px-1 py-px rounded-sm bg-amber-500/10 text-amber-500">
+                        branching
+                      </span>
+                    </div>
+                  </div>
+                );
+              }
+
+              return elements;
             })}
           </div>
         )}
