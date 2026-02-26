@@ -9,6 +9,7 @@ export default {
         surface: {
           DEFAULT: "var(--color-surface)",
           alt: "var(--color-surface-alt)",
+          inset: "var(--color-surface-inset)",
         },
         accent: {
           DEFAULT: "var(--color-accent)",

@@ -64,7 +64,7 @@ export function StoryboardList() {
 
   return (
     <div
-      className="flex flex-col h-full shrink-0"
+      className="flex flex-col h-full shrink-0 bg-[var(--color-surface-inset)]"
       style={{ width: sidebarWidth }}
     >
       {/* ── Mode toggle ──────────────────────────────── */}
