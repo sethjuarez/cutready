@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { useAppStore } from "../stores/appStore";
 
 export function VersionHistory() {
@@ -9,6 +10,7 @@ export function VersionHistory() {
   const stashChanges = useAppStore((s) => s.stashChanges);
   const checkoutSnapshot = useAppStore((s) => s.checkoutSnapshot);
   const returnToLatest = useAppStore((s) => s.returnToLatest);
+  const restoreVersion = useAppStore((s) => s.restoreVersion);
   const viewingSnapshotId = useAppStore((s) => s.viewingSnapshotId);
   const sidebarPosition = useAppStore((s) => s.sidebarPosition);
   const snapshotPromptOpen = useAppStore((s) => s.snapshotPromptOpen);
@@ -91,10 +93,11 @@ export function VersionHistory() {
 
   const handleKeep = useCallback(async () => {
     if (!viewingSnapshotId) return;
-    // Files are already checked out — just clear the "viewing" state.
-    // The user can save a snapshot when they're ready.
-    useAppStore.setState({ viewingSnapshotId: null, isDirty: true });
-  }, [viewingSnapshotId]);
+    // Restore this version as the new HEAD (creates a commit) and discard any stash
+    await restoreVersion(viewingSnapshotId);
+    // Discard stash file if present (we chose this version, don't need old dirty state)
+    try { await invoke("pop_stash"); } catch { /* no stash = fine */ }
+  }, [viewingSnapshotId, restoreVersion]);
 
   const isViewing = viewingSnapshotId !== null;
   const showDirtyNode = isDirty && !isViewing;
