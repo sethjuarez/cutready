@@ -160,11 +160,11 @@ export function AppLayout() {
         }}
       >
         <div className="flex flex-1 overflow-hidden" ref={mainRef}>
-          {/* Activity bar on left */}
-          {sidebarPosition === "left" && <Sidebar />}
+          {/* Activity bar on left (hidden on home) */}
+          {view !== "home" && sidebarPosition === "left" && <Sidebar />}
 
-          {/* Primary sidebar (full height, outside output panel) */}
-          {sidebarVisible && sidebarPosition === "left" && <PrimarySidebar />}
+          {/* Primary sidebar (hidden on home) */}
+          {view !== "home" && sidebarVisible && sidebarPosition === "left" && <PrimarySidebar />}
 
           {/* Center column: content + output panel */}
           <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
@@ -177,8 +177,8 @@ export function AppLayout() {
               {view === "settings" && <div className="h-full overflow-y-auto"><SettingsPanel /></div>}
             </div>
 
-            {/* Lower: output panel (only covers center, not sidebar) */}
-            {outputVisible && (
+            {/* Lower: output panel (hidden on home) */}
+            {view !== "home" && outputVisible && (
               <>
                 <ResizeHandle direction="vertical" onResize={handleOutputResize} />
                 <div className="shrink-0 overflow-hidden" style={{ height: outputHeight }}>
@@ -192,11 +192,11 @@ export function AppLayout() {
             )}
           </div>
 
-          {/* Primary sidebar on right (full height, outside output panel) */}
-          {sidebarVisible && sidebarPosition === "right" && <PrimarySidebar />}
+          {/* Primary sidebar on right (hidden on home) */}
+          {view !== "home" && sidebarVisible && sidebarPosition === "right" && <PrimarySidebar />}
 
-          {/* Activity bar on right */}
-          {sidebarPosition === "right" && <Sidebar />}
+          {/* Activity bar on right (hidden on home) */}
+          {view !== "home" && sidebarPosition === "right" && <Sidebar />}
         </div>
       </div>
 
