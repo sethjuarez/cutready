@@ -3,7 +3,8 @@ import type { EditorTab } from "../stores/appStore";
 
 /**
  * TabBar — horizontal row of open document tabs.
- * Shows sketch/storyboard tabs with close buttons and active indicator.
+ * Active tab has a raised look with accent bottom border and primary background.
+ * Inactive tabs are visually recessed with muted colors.
  */
 export function TabBar() {
   const openTabs = useAppStore((s) => s.openTabs);
@@ -14,7 +15,8 @@ export function TabBar() {
   if (openTabs.length === 0) return null;
 
   return (
-    <div className="no-select flex items-end bg-[var(--color-surface-alt)] border-b border-[var(--color-border)] overflow-x-auto shrink-0"
+    <div
+      className="no-select flex items-stretch bg-[var(--color-surface-alt)] shrink-0 overflow-x-auto"
       style={{ scrollbarWidth: "none" }}
     >
       {openTabs.map((tab) => (
@@ -26,6 +28,8 @@ export function TabBar() {
           onClose={() => closeTab(tab.id)}
         />
       ))}
+      {/* Fill remaining space with border-bottom */}
+      <div className="flex-1 border-b border-[var(--color-border)]" />
     </div>
   );
 }
@@ -41,41 +45,57 @@ function Tab({
   onSelect: () => void;
   onClose: () => void;
 }) {
+  const typeLabel = tab.type === "sketch" ? "Sketch" : "Storyboard";
+
   return (
     <div
-      className={`group flex items-center gap-1.5 px-3 h-[34px] text-[12px] cursor-pointer shrink-0 select-none border-r border-[var(--color-border)] transition-colors ${
+      className={`group relative flex items-center gap-1.5 px-3 h-[36px] text-[12px] cursor-pointer shrink-0 select-none transition-colors ${
         isActive
-          ? "bg-[var(--color-surface)] text-[var(--color-text)] border-b-2 border-b-[var(--color-accent)]"
-          : "text-[var(--color-text-secondary)] hover:bg-[var(--color-surface)] hover:text-[var(--color-text)]"
+          ? "bg-[var(--color-surface)] text-[var(--color-text)]"
+          : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)] border-b border-[var(--color-border)]"
       }`}
       onClick={onSelect}
-      title={tab.path}
+      title={`${typeLabel}: ${tab.path}`}
     >
-      {/* Icon */}
-      {tab.type === "sketch" ? (
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={`shrink-0 ${isActive ? "text-[var(--color-accent)]" : "opacity-50"}`}>
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-          <polyline points="14 2 14 8 20 8" />
-        </svg>
-      ) : (
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={`shrink-0 ${isActive ? "text-[var(--color-accent)]" : "opacity-50"}`}>
-          <rect x="2" y="3" width="20" height="18" rx="2" />
-          <line x1="8" y1="3" x2="8" y2="21" />
-        </svg>
+      {/* Active tab: accent bar on top, no bottom border (connected to content) */}
+      {isActive && (
+        <span className="absolute top-0 left-0 right-0 h-[2px] bg-[var(--color-accent)]" />
       )}
 
+      {/* Separator between tabs */}
+      <span className={`absolute top-[6px] bottom-[6px] right-0 w-px ${
+        isActive ? "bg-transparent" : "bg-[var(--color-border)]"
+      }`} />
+
+      {/* Type badge */}
+      <span className={`shrink-0 text-[9px] font-semibold uppercase tracking-wider px-1 py-px rounded ${
+        isActive
+          ? tab.type === "sketch"
+            ? "bg-[var(--color-accent)]/15 text-[var(--color-accent)]"
+            : "bg-emerald-500/15 text-emerald-500"
+          : "bg-[var(--color-border)]/50 text-[var(--color-text-secondary)]"
+      }`}>
+        {tab.type === "sketch" ? "SK" : "SB"}
+      </span>
+
       {/* Title */}
-      <span className="truncate max-w-[120px]">{tab.title}</span>
+      <span className={`truncate max-w-[140px] ${isActive ? "font-medium" : ""}`}>
+        {tab.title}
+      </span>
 
       {/* Close button */}
       <button
-        className="flex items-center justify-center w-[18px] h-[18px] rounded opacity-0 group-hover:opacity-100 hover:bg-[var(--color-surface-alt)] transition-all shrink-0"
+        className={`flex items-center justify-center w-[18px] h-[18px] rounded transition-all shrink-0 ${
+          isActive
+            ? "opacity-60 hover:opacity-100 hover:bg-[var(--color-surface-alt)]"
+            : "opacity-0 group-hover:opacity-60 hover:!opacity-100 hover:bg-[var(--color-surface)]"
+        }`}
         onClick={(e) => {
           e.stopPropagation();
           onClose();
         }}
       >
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
           <line x1="18" y1="6" x2="6" y2="18" />
           <line x1="6" y1="6" x2="18" y2="18" />
         </svg>

@@ -108,9 +108,14 @@ export function Sidebar() {
   const setView = useAppStore((s) => s.setView);
   const currentProject = useAppStore((s) => s.currentProject);
   const isRecording = useAppStore((s) => s.isRecording);
+  const sidebarPosition = useAppStore((s) => s.sidebarPosition);
+
+  const isRight = sidebarPosition === "right";
 
   return (
-    <nav className="no-select flex flex-col w-12 bg-[var(--color-surface-alt)] border-r border-[var(--color-border)] items-center py-3 gap-1">
+    <nav className={`no-select flex flex-col w-12 bg-[var(--color-surface-alt)] items-center py-3 gap-1 ${
+      isRight ? "border-l border-[var(--color-border)]" : "border-r border-[var(--color-border)]"
+    }`}>
       {navItems.map((item) => {
         const isActive = view === item.id;
         const requiresProject = item.id === "sketch" || item.id === "editor" || item.id === "recording";
@@ -134,6 +139,12 @@ export function Sidebar() {
             title={item.label}
           >
             {item.icon}
+            {/* Active indicator bar */}
+            {isActive && (
+              <span className={`absolute top-1/4 h-1/2 w-[2px] rounded-full bg-[var(--color-accent)] ${
+                isRight ? "right-[-6px]" : "left-[-6px]"
+              }`} />
+            )}
             {/* Recording indicator dot */}
             {item.id === "recording" && isRecording && (
               <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-red-500 animate-pulse" />
