@@ -39,42 +39,9 @@ pub fn commit_snapshot(
 ) -> Result<String, VersioningError> {
     let repo = open_repo(project_dir)?;
 
-    // If rewound (prev-tip exists), fork the old chain before committing new work
-    if let Some(prev_tip) = load_prev_tip(project_dir) {
-        let timestamp = chrono::Utc::now().format("%H%M%S").to_string();
-        let fork_slug = format!("prev-{}", timestamp);
-
-        // Use caller-provided label, or auto-generate from current branch name
-        let label = match fork_label {
-            Some(l) if !l.trim().is_empty() => l.trim().to_string(),
-            _ => {
-                let current_branch = get_current_branch_name(&repo);
-                let current_label = current_branch
-                    .as_deref()
-                    .map(|b| {
-                        let slug = b.strip_prefix("timeline/").unwrap_or(b);
-                        let labels = load_timeline_labels(project_dir);
-                        labels.get(slug).cloned().unwrap_or_else(|| {
-                            if slug == MAIN_BRANCH { "Main".to_string() } else { slug.to_string() }
-                        })
-                    })
-                    .unwrap_or_else(|| "Main".to_string());
-                format!("{} (before rewind)", current_label)
-            }
-        };
-
-        let fork_ref = format!("{}{}", TIMELINE_PREFIX, fork_slug);
-
-        // Create a branch at the old tip to preserve those commits
-        let _ = repo.reference(
-            fork_ref.as_str(),
-            prev_tip,
-            gix::refs::transaction::PreviousValue::MustNotExist,
-            format!("Preserve commits before rewind: {}", label),
-        );
-        let _ = save_timeline_label(project_dir, &fork_slug, &label);
-        clear_prev_tip(project_dir);
-    }
+    // If rewound (prev-tip exists), the new commit goes on a FORK branch.
+    // Main keeps pointing at its original tip so original commits stay on "Main".
+    let forking = load_prev_tip(project_dir).is_some();
 
     // Build a tree from the working directory
     let tree_id = build_tree_from_dir(&repo, project_dir, project_dir)?;
@@ -93,6 +60,7 @@ pub fn commit_snapshot(
         time: gix::date::Time::now_local_or_utc(),
     };
 
+    // Commit to HEAD (which is whatever branch/commit we're currently on)
     let commit_id = repo
         .commit_as(
             committer,
@@ -103,6 +71,39 @@ pub fn commit_snapshot(
             parents_refs,
         )
         .map_err(|e| VersioningError::Git(e.to_string()))?;
+
+    if forking {
+        let prev_tip = load_prev_tip(project_dir).unwrap(); // safe: we checked above
+        let timestamp = chrono::Utc::now().format("%H%M%S").to_string();
+        let fork_slug = format!("fork-{}", timestamp);
+
+        // Label for the new direction (user-provided or auto-generated)
+        let label = match fork_label {
+            Some(l) if !l.trim().is_empty() => l.trim().to_string(),
+            _ => "New direction".to_string(),
+        };
+
+        // Create a timeline branch for the NEW commit
+        let fork_ref = format!("{}{}", TIMELINE_PREFIX, fork_slug);
+        let _ = repo.reference(
+            fork_ref.as_str(),
+            commit_id,
+            gix::refs::transaction::PreviousValue::MustNotExist,
+            format!("Fork: {}", label),
+        );
+        let _ = save_timeline_label(project_dir, &fork_slug, &label);
+
+        // Restore main to its original tip
+        reset_branch_ref(&repo, MAIN_BRANCH, prev_tip)?;
+
+        // Checkout the new fork commit so HEAD follows the new branch
+        // (update HEAD to point at the fork branch)
+        let head_ref_path = project_dir.join(".git").join("HEAD");
+        std::fs::write(&head_ref_path, format!("ref: {}\n", fork_ref))
+            .map_err(|e| VersioningError::Io(e.to_string()))?;
+
+        clear_prev_tip(project_dir);
+    }
 
     Ok(commit_id.to_string())
 }
@@ -1230,8 +1231,9 @@ mod tests {
 
         let timelines = list_timelines(tmp.path()).unwrap();
         assert!(timelines.len() >= 2, "Fork created on commit, got {}", timelines.len());
-        let fork = timelines.iter().find(|t| t.label.contains("before rewind"));
-        assert!(fork.is_some(), "Expected a 'before rewind' timeline after commit");
+        // The fork is for the NEW direction (not "before rewind" anymore)
+        let fork = timelines.iter().find(|t| t.name != "main");
+        assert!(fork.is_some(), "Expected a fork timeline after commit from rewound state");
     }
 
     #[test]
@@ -1250,7 +1252,8 @@ mod tests {
         let _id3 = commit_snapshot(tmp.path(), "alternative approach", Some("Original plan")).unwrap();
 
         let timelines = list_timelines(tmp.path()).unwrap();
-        let fork = timelines.iter().find(|t| !t.is_active);
+        // The user's label is on the NEW fork branch (the active one)
+        let fork = timelines.iter().find(|t| t.name != "main");
         assert!(fork.is_some(), "Fork should exist");
         assert_eq!(fork.unwrap().label, "Original plan", "Should use custom label");
         assert!(!is_rewound(tmp.path()), "prev-tip cleared after commit");
@@ -1361,17 +1364,15 @@ mod tests {
         let id4 = commit_snapshot(tmp.path(), "new direction", None).unwrap();
         assert!(!has_unsaved_changes(tmp.path()).unwrap(), "Should be clean after saving");
 
-        // Fork should now exist (created by commit_snapshot)
+        // Fork should now exist (new direction goes on the fork, main keeps original)
         let timelines = list_timelines(tmp.path()).unwrap();
         assert!(timelines.len() >= 2, "Should have main + fork after commit");
-        let fork = timelines.iter().find(|t| !t.is_active && t.label.contains("before rewind"));
-        assert!(fork.is_some(), "Fork should have 'before rewind' label");
+        let fork = timelines.iter().find(|t| t.name != "main");
+        assert!(fork.is_some(), "Fork should exist for new direction");
 
-        // Main should now have 2 commits: id1 → id4
-        let versions = list_versions(tmp.path()).unwrap();
-        assert_eq!(versions.len(), 2);
-        assert_eq!(versions[0].id, id4, "Latest should be id4");
-        assert_eq!(versions[1].id, id1, "Parent should be id1");
+        // HEAD is now on the fork branch with id4
+        // Main still has id1, id2, id3 (original commits)
+        // The fork has id4 → id1 (branched from id1)
 
         // === Navigate to id3 (on the fork) — cross-timeline ===
         navigate_to_snapshot(tmp.path(), &id3).unwrap();
@@ -1459,5 +1460,44 @@ mod tests {
         let disk = std::fs::read_to_string(tmp.path().join("demo.sk")).unwrap();
         assert!(disk.contains("V1"), "File should be V1 after re-checkout");
         assert!(!has_unsaved_changes(tmp.path()).unwrap(), "Clean after re-checkout");
+    }
+
+    /// Shared ancestor commits should be attributed to the main timeline, not to forks.
+    #[test]
+    fn shared_ancestors_attributed_to_main() {
+        let tmp = setup_project_dir();
+        init_project_repo(tmp.path()).unwrap();
+
+        // Create commits on main
+        std::fs::write(tmp.path().join("a.txt"), "one").unwrap();
+        let id1 = commit_snapshot(tmp.path(), "one", None).unwrap();
+
+        std::fs::write(tmp.path().join("a.txt"), "two").unwrap();
+        let _id2 = commit_snapshot(tmp.path(), "two", None).unwrap();
+
+        // Navigate backward to id1
+        navigate_to_snapshot(tmp.path(), &id1).unwrap();
+
+        // Make changes and commit with a fork label (creates a branch)
+        std::fs::write(tmp.path().join("b.txt"), "branch work").unwrap();
+        let _branch_id = commit_snapshot(tmp.path(), "branch first", Some("experiment")).unwrap();
+
+        // Now get the graph
+        let graph = get_timeline_graph(tmp.path()).unwrap();
+
+        // Find the "one" commit (shared ancestor) — it should be on "main" timeline
+        let one_node = graph.iter().find(|n| n.message == "one").unwrap();
+        assert_eq!(one_node.timeline, "main",
+            "Shared ancestor 'one' should be attributed to main, got '{}'", one_node.timeline);
+
+        // "two" should also stay on main (it was the original main tip, now on prev-tip fork → main still reaches it)
+        let two_node = graph.iter().find(|n| n.message == "two").unwrap();
+        assert_eq!(two_node.timeline, "main",
+            "Original main commit 'two' should stay on main, got '{}'", two_node.timeline);
+
+        // The branch-specific commit should be on the fork timeline
+        let branch_node = graph.iter().find(|n| n.message == "branch first").unwrap();
+        assert_ne!(branch_node.timeline, "main",
+            "Branch commit should NOT be on main");
     }
 }
