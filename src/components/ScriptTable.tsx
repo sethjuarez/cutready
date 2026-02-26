@@ -1,4 +1,19 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  DragOverlay,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import type { PlanningRow } from "../types/sketch";
 
 function emptyRow(): PlanningRow {
@@ -12,8 +27,17 @@ interface ScriptTableProps {
 }
 
 export function ScriptTable({ rows, onChange, readOnly = false }: ScriptTableProps) {
-  const [dragIdx, setDragIdx] = useState<number | null>(null);
-  const [overIdx, setOverIdx] = useState<number | null>(null);
+  const [activeId, setActiveId] = useState<string | null>(null);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+  );
+
+  // Stable IDs for each row (index-based, reset when row count changes)
+  const rowIds = useMemo(
+    () => rows.map((_, i) => `row-${i}`),
+    [rows.length],
+  );
 
   const updateRow = useCallback(
     (index: number, field: keyof PlanningRow, value: string) => {
@@ -43,19 +67,24 @@ export function ScriptTable({ rows, onChange, readOnly = false }: ScriptTablePro
     [rows, onChange],
   );
 
-  const handleDragEnd = useCallback(() => {
-    if (dragIdx !== null && overIdx !== null && dragIdx !== overIdx) {
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const { active, over } = event;
+      setActiveId(null);
+      if (!over || active.id === over.id) return;
+      const oldIndex = rowIds.indexOf(active.id as string);
+      const newIndex = rowIds.indexOf(over.id as string);
+      if (oldIndex === -1 || newIndex === -1) return;
       const updated = [...rows];
-      const [moved] = updated.splice(dragIdx, 1);
-      updated.splice(overIdx, 0, moved);
+      const [moved] = updated.splice(oldIndex, 1);
+      updated.splice(newIndex, 0, moved);
       onChange(updated);
-    }
-    setDragIdx(null);
-    setOverIdx(null);
-  }, [dragIdx, overIdx, rows, onChange]);
+    },
+    [rows, onChange, rowIds],
+  );
 
-  // Ensure at least one row
   const displayRows = rows.length === 0 ? [emptyRow()] : rows;
+  const activeIdx = activeId ? rowIds.indexOf(activeId) : -1;
 
   return (
     <div className="script-table-wrapper my-4 rounded-xl border border-[var(--color-border)] overflow-hidden">
@@ -70,104 +99,175 @@ export function ScriptTable({ rows, onChange, readOnly = false }: ScriptTablePro
             {!readOnly && <th className="script-table-th" style={{ width: "36px" }} />}
           </tr>
         </thead>
-        <tbody>
-          {displayRows.map((row, idx) => (
-            <tr
-              key={idx}
-              draggable={!readOnly && dragIdx === idx}
-              onDragOver={(e) => { e.preventDefault(); setOverIdx(idx); }}
-              onDrop={handleDragEnd}
-              className={`group border-t border-[var(--color-border)] transition-colors ${
-                dragIdx === idx ? "opacity-40" : ""
-              } ${overIdx === idx && dragIdx !== null && dragIdx !== idx ? "border-t-2 border-t-[var(--color-accent)]" : ""}`}
-            >
-              {!readOnly && (
-                <td className="script-table-td align-top w-7">
-                  <div
-                    className="cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-100 transition-opacity text-[var(--color-text-secondary)] hover:text-[var(--color-text)] flex items-center justify-center"
-                    onMouseDown={() => setDragIdx(idx)}
-                    draggable
-                    onDragStart={(e) => {
-                      setDragIdx(idx);
-                      e.dataTransfer.effectAllowed = "move";
-                    }}
-                    onDragEnd={handleDragEnd}
-                  >
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-                      <circle cx="9" cy="5" r="1.5" />
-                      <circle cx="15" cy="5" r="1.5" />
-                      <circle cx="9" cy="12" r="1.5" />
-                      <circle cx="15" cy="12" r="1.5" />
-                      <circle cx="9" cy="19" r="1.5" />
-                      <circle cx="15" cy="19" r="1.5" />
-                    </svg>
-                  </div>
-                </td>
-              )}
-              <td className="script-table-td align-top">
-                <LocalInput
-                  value={row.time}
-                  onChange={(v) => updateRow(idx, "time", v)}
-                  placeholder="~30s"
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragStart={(e) => setActiveId(e.active.id as string)}
+          onDragEnd={handleDragEnd}
+        >
+          <SortableContext items={rowIds} strategy={verticalListSortingStrategy}>
+            <tbody>
+              {displayRows.map((row, idx) => (
+                <SortableRow
+                  key={rowIds[idx]}
+                  id={rowIds[idx]}
+                  row={row}
+                  idx={idx}
                   readOnly={readOnly}
+                  updateRow={updateRow}
+                  addRow={addRow}
+                  deleteRow={deleteRow}
+                  isDragging={activeIdx === idx}
                 />
-              </td>
-              <td className="script-table-td align-top">
-                <MarkdownCell
-                  value={row.narrative}
-                  onChange={(v) => updateRow(idx, "narrative", v)}
-                  placeholder="What to say..."
-                  readOnly={readOnly}
-                />
-              </td>
-              <td className="script-table-td align-top">
-                <MarkdownCell
-                  value={row.demo_actions}
-                  onChange={(v) => updateRow(idx, "demo_actions", v)}
-                  placeholder="What to do..."
-                  readOnly={readOnly}
-                />
-              </td>
-              <td className="script-table-td align-top text-center">
-                {row.screenshot ? (
-                  <div className="w-16 h-12 rounded-md bg-[var(--color-surface-alt)] border border-[var(--color-border)] overflow-hidden">
-                    <img src={row.screenshot} alt="" className="w-full h-full object-cover" />
-                  </div>
-                ) : (
-                  <span className="text-[10px] text-[var(--color-text-secondary)]">—</span>
-                )}
-              </td>
-              {!readOnly && (
-                <td className="script-table-td align-top">
-                  <div className="flex flex-col gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button
-                      onClick={() => addRow(idx)}
-                      className="p-0.5 rounded text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] transition-colors"
-                      title="Add row below"
-                    >
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <line x1="12" y1="5" x2="12" y2="19" />
-                        <line x1="5" y1="12" x2="19" y2="12" />
-                      </svg>
-                    </button>
-                    <button
-                      onClick={() => deleteRow(idx)}
-                      className="p-0.5 rounded text-[var(--color-text-secondary)] hover:text-red-500 transition-colors"
-                      title="Delete row"
-                    >
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <line x1="18" y1="6" x2="6" y2="18" />
-                        <line x1="6" y1="6" x2="18" y2="18" />
-                      </svg>
-                    </button>
-                  </div>
-                </td>
-              )}
-            </tr>
-          ))}
-        </tbody>
+              ))}
+            </tbody>
+          </SortableContext>
+          <DragOverlay>
+            {activeIdx >= 0 ? (
+              <table className="w-full border-collapse">
+                <tbody>
+                  <tr className="bg-[var(--color-surface-alt)] border border-[var(--color-accent)] rounded shadow-lg">
+                    {!readOnly && <td className="script-table-td w-7" />}
+                    <td className="script-table-td text-xs">{displayRows[activeIdx].time}</td>
+                    <td className="script-table-td text-xs truncate max-w-[200px]">
+                      {displayRows[activeIdx].narrative || "—"}
+                    </td>
+                    <td className="script-table-td text-xs truncate max-w-[200px]">
+                      {displayRows[activeIdx].demo_actions || "—"}
+                    </td>
+                    <td className="script-table-td text-xs text-center">—</td>
+                    {!readOnly && <td className="script-table-td" />}
+                  </tr>
+                </tbody>
+              </table>
+            ) : null}
+          </DragOverlay>
+        </DndContext>
       </table>
     </div>
+  );
+}
+
+/* ── Sortable Row ──────────────────────────────────────────── */
+
+function SortableRow({
+  id,
+  row,
+  idx,
+  readOnly,
+  updateRow,
+  addRow,
+  deleteRow,
+  isDragging,
+}: {
+  id: string;
+  row: PlanningRow;
+  idx: number;
+  readOnly: boolean;
+  updateRow: (index: number, field: keyof PlanningRow, value: string) => void;
+  addRow: (afterIndex: number) => void;
+  deleteRow: (index: number) => void;
+  isDragging: boolean;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isSorting,
+  } = useSortable({ id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.3 : 1,
+  };
+
+  return (
+    <tr
+      ref={setNodeRef}
+      style={style}
+      className={`group border-t border-[var(--color-border)] ${isSorting ? "" : "transition-colors"}`}
+    >
+      {!readOnly && (
+        <td className="script-table-td align-top w-7">
+          <div
+            className="cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-100 transition-opacity text-[var(--color-text-secondary)] hover:text-[var(--color-text)] flex items-center justify-center"
+            {...attributes}
+            {...listeners}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+              <circle cx="9" cy="5" r="1.5" />
+              <circle cx="15" cy="5" r="1.5" />
+              <circle cx="9" cy="12" r="1.5" />
+              <circle cx="15" cy="12" r="1.5" />
+              <circle cx="9" cy="19" r="1.5" />
+              <circle cx="15" cy="19" r="1.5" />
+            </svg>
+          </div>
+        </td>
+      )}
+      <td className="script-table-td align-top">
+        <LocalInput
+          value={row.time}
+          onChange={(v) => updateRow(idx, "time", v)}
+          placeholder="~30s"
+          readOnly={readOnly}
+        />
+      </td>
+      <td className="script-table-td align-top">
+        <MarkdownCell
+          value={row.narrative}
+          onChange={(v) => updateRow(idx, "narrative", v)}
+          placeholder="What to say..."
+          readOnly={readOnly}
+        />
+      </td>
+      <td className="script-table-td align-top">
+        <MarkdownCell
+          value={row.demo_actions}
+          onChange={(v) => updateRow(idx, "demo_actions", v)}
+          placeholder="What to do..."
+          readOnly={readOnly}
+        />
+      </td>
+      <td className="script-table-td align-top text-center">
+        {row.screenshot ? (
+          <div className="w-16 h-12 rounded-md bg-[var(--color-surface-alt)] border border-[var(--color-border)] overflow-hidden">
+            <img src={row.screenshot} alt="" className="w-full h-full object-cover" />
+          </div>
+        ) : (
+          <span className="text-[10px] text-[var(--color-text-secondary)]">—</span>
+        )}
+      </td>
+      {!readOnly && (
+        <td className="script-table-td align-top">
+          <div className="flex flex-col gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+            <button
+              onClick={() => addRow(idx)}
+              className="p-0.5 rounded text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] transition-colors"
+              title="Add row below"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19" />
+                <line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+            </button>
+            <button
+              onClick={() => deleteRow(idx)}
+              className="p-0.5 rounded text-[var(--color-text-secondary)] hover:text-red-500 transition-colors"
+              title="Delete row"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+          </div>
+        </td>
+      )}
+    </tr>
   );
 }
 
