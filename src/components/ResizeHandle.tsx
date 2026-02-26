@@ -61,17 +61,25 @@ export function ResizeHandle({ direction, onResize, onResizeEnd }: ResizeHandleP
     <div
       className={`shrink-0 relative group ${
         isHorizontal
-          ? "w-[5px] cursor-col-resize"
-          : "h-[5px] cursor-row-resize"
+          ? "w-px cursor-col-resize"
+          : "h-px cursor-row-resize"
       }`}
       onMouseDown={handleMouseDown}
     >
-      {/* Visible 1px line centered in the grab area */}
+      {/* Invisible wider hit area overlapping adjacent panels */}
+      <div
+        className={`absolute z-10 ${
+          isHorizontal
+            ? "top-0 bottom-0 -left-[3px] w-[7px] cursor-col-resize"
+            : "left-0 right-0 -top-[3px] h-[7px] cursor-row-resize"
+        }`}
+      />
+      {/* Visible 1px line */}
       <div
         className={`absolute transition-colors duration-150 ${
           isHorizontal
-            ? "top-0 bottom-0 left-1/2 -translate-x-1/2 w-px"
-            : "left-0 right-0 top-1/2 -translate-y-1/2 h-px"
+            ? "top-0 bottom-0 left-0 w-px"
+            : "left-0 right-0 top-0 h-px"
         } ${
           isDragging
             ? "bg-[var(--color-accent)]"
