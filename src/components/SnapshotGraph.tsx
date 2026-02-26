@@ -1,17 +1,18 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
+import { hierarchy, tree as d3Tree } from "d3-hierarchy";
 import type { GraphNode } from "../types/sketch";
 
 /* ── Layout constants ─────────────────────────────────────────────── */
-const LANE_W = 24;       // px between lane centres
+const NODE_DX = 40;      // D3: horizontal spacing between siblings
 const ROW_H = 44;        // px per commit row
 const DIRTY_H = 30;      // px for dirty-indicator row
 const GHOST_H = 30;      // px for ghost-branch row
-const PAD_L = 18;        // left edge → lane-0 centre
+const PAD_L = 24;        // minimum left padding
 const PAD_T = 8;         // top padding
 const PAD_B = 8;         // bottom padding
 const NODE_R = 4;        // regular dot radius
 const HEAD_R = 5.5;      // HEAD dot radius
-const LABEL_GAP = 14;    // last lane centre → text start
+const LABEL_GAP = 16;    // rightmost node centre → label text start
 
 const LANE_COLORS = [
   "var(--color-accent)",      // purple — main
@@ -29,13 +30,19 @@ function lc(i: number) { return LANE_COLORS[i % LANE_COLORS.length]; }
 /* ── Types ────────────────────────────────────────────────────────── */
 interface TimelineInfo { label: string; colorIndex: number }
 
+interface TreeDatum {
+  id: string;
+  graphNode: GraphNode;
+  children: TreeDatum[];
+}
+
 interface VisualRow {
   kind: "dirty" | "node" | "ghost";
   nodeIdx?: number;
-  cx: number;     // circle centre X
-  cy: number;     // circle centre Y
-  h: number;      // row height
-  top: number;    // row top Y
+  cx: number;
+  cy: number;
+  h: number;
+  top: number;
 }
 
 interface Edge {
@@ -43,6 +50,96 @@ interface Edge {
   color: string;
   dashed?: boolean;
   opacity: number;
+}
+
+/* ── D3 tree layout → x positions ─────────────────────────────────── */
+function computeXPositions(nodes: GraphNode[]): Map<string, number> {
+  if (nodes.length === 0) return new Map();
+
+  const byId = new Map(nodes.map(n => [n.id, n]));
+
+  // Build parent → children map (reverse of node.parents)
+  const childrenOf = new Map<string, GraphNode[]>();
+  for (const node of nodes) {
+    for (const pid of node.parents) {
+      if (byId.has(pid)) {
+        if (!childrenOf.has(pid)) childrenOf.set(pid, []);
+        childrenOf.get(pid)!.push(node);
+      }
+    }
+  }
+
+  // Root = node with no parents in our set
+  const root = nodes.find(n =>
+    n.parents.length === 0 || !n.parents.some(p => byId.has(p))
+  ) || nodes[nodes.length - 1];
+
+  // Build tree for D3 (main-lane children first → D3 keeps main straight)
+  const visited = new Set<string>();
+  function build(gn: GraphNode): TreeDatum {
+    visited.add(gn.id);
+    const kids = (childrenOf.get(gn.id) || [])
+      .filter(k => !visited.has(k.id))
+      .sort((a, b) => a.lane - b.lane);
+    return { id: gn.id, graphNode: gn, children: kids.map(k => build(k)) };
+  }
+
+  const treeData = build(root);
+  const h = hierarchy(treeData, d => d.children);
+  d3Tree<TreeDatum>().nodeSize([NODE_DX, 1])(h);
+
+  // Extract x positions
+  const xMap = new Map<string, number>();
+  for (const d of h.descendants()) xMap.set(d.data.id, d.x ?? 0);
+
+  // Normalize: min x → PAD_L
+  const minX = Math.min(...xMap.values());
+  for (const [id, x] of xMap) xMap.set(id, x - minX + PAD_L);
+
+  return xMap;
+}
+
+/* ── Display sort (main trunk continuous, branches at fork point) ── */
+function sortForDisplay(nodes: GraphNode[]): GraphNode[] {
+  if (nodes.length === 0) return nodes;
+
+  const main = nodes
+    .filter(n => n.lane === 0)
+    .sort((a, b) => +new Date(b.timestamp) - +new Date(a.timestamp));
+
+  const lanes = new Map<number, GraphNode[]>();
+  for (const n of nodes) {
+    if (n.lane === 0) continue;
+    if (!lanes.has(n.lane)) lanes.set(n.lane, []);
+    lanes.get(n.lane)!.push(n);
+  }
+  for (const arr of lanes.values())
+    arr.sort((a, b) => +new Date(b.timestamp) - +new Date(a.timestamp));
+
+  const mainIds = new Set(main.map(n => n.id));
+  const branchAtFork = new Map<string, GraphNode[][]>();
+  for (const [, arr] of lanes) {
+    const oldest = arr[arr.length - 1];
+    const forkId = oldest.parents.find(p => mainIds.has(p));
+    if (forkId) {
+      if (!branchAtFork.has(forkId)) branchAtFork.set(forkId, []);
+      branchAtFork.get(forkId)!.push(arr);
+    }
+  }
+
+  const result: GraphNode[] = [];
+  const placed = new Set<string>();
+  for (const mn of main) {
+    const branches = branchAtFork.get(mn.id);
+    if (branches) {
+      for (const br of branches)
+        for (const n of br)
+          if (!placed.has(n.id)) { result.push(n); placed.add(n.id); }
+    }
+    if (!placed.has(mn.id)) { result.push(mn); placed.add(mn.id); }
+  }
+  for (const n of nodes) if (!placed.has(n.id)) result.push(n);
+  return result;
 }
 
 /* ── Props ────────────────────────────────────────────────────────── */
@@ -61,8 +158,8 @@ export function SnapshotGraph({
 }: Props) {
   const [hovered, setHovered] = useState<string | null>(null);
 
-  // Sort: main trunk stays continuous, branches inserted at their fork point
-  const nodes = sortForDisplay(rawNodes);
+  const nodes = useMemo(() => sortForDisplay(rawNodes), [rawNodes]);
+  const xPos  = useMemo(() => computeXPositions(rawNodes), [rawNodes]);
 
   /* ── empty state ─────────────────────────────── */
   if (nodes.length === 0 && !isDirty) {
@@ -76,32 +173,32 @@ export function SnapshotGraph({
     );
   }
 
-  /* ── lane metrics ────────────────────────────── */
-  const maxNodeLane = nodes.length > 0 ? Math.max(...nodes.map(n => n.lane)) : 0;
-  const headIdx     = nodes.findIndex(n => n.is_head);
-  const showGhost   = isDirty && isRewound && headIdx >= 0;
-  const ghostLane   = showGhost ? nodes[headIdx].lane + 1 : 0;
-  const maxLane     = Math.max(maxNodeLane, showGhost ? ghostLane : 0);
-  const graphColW   = PAD_L + maxLane * LANE_W + LABEL_GAP;
+  /* ── helpers: x from D3, fallback to lane-based ── */
+  function nx(node: GraphNode) { return xPos.get(node.id) ?? PAD_L; }
 
-  /* ── build visual rows (dirty / node / ghost) ── */
+  const headIdx   = nodes.findIndex(n => n.is_head);
+  const showGhost = isDirty && isRewound && headIdx >= 0;
+  const ghostX    = showGhost ? nx(nodes[headIdx]) + NODE_DX : 0;
+
+  const maxX      = Math.max(...nodes.map(nx), showGhost ? ghostX : 0);
+  const graphColW = maxX + LABEL_GAP;
+
+  /* ── build visual rows ───────────────────────── */
   const rows: VisualRow[] = [];
   let y = PAD_T;
 
-  // non-rewound dirty indicator at top
   if (isDirty && !isRewound && nodes.length > 0) {
-    const lane = headIdx >= 0 ? nodes[headIdx].lane : nodes[0].lane;
-    rows.push({ kind: "dirty", cx: PAD_L + lane * LANE_W, cy: y + DIRTY_H / 2, h: DIRTY_H, top: y });
+    const cx = headIdx >= 0 ? nx(nodes[headIdx]) : nx(nodes[0]);
+    rows.push({ kind: "dirty", cx, cy: y + DIRTY_H / 2, h: DIRTY_H, top: y });
     y += DIRTY_H;
   }
 
   for (let i = 0; i < nodes.length; i++) {
-    // ghost row goes ABOVE HEAD (new direction points forward/up in time)
     if (nodes[i].is_head && showGhost) {
-      rows.push({ kind: "ghost", cx: PAD_L + ghostLane * LANE_W, cy: y + GHOST_H / 2, h: GHOST_H, top: y });
+      rows.push({ kind: "ghost", cx: ghostX, cy: y + GHOST_H / 2, h: GHOST_H, top: y });
       y += GHOST_H;
     }
-    rows.push({ kind: "node", nodeIdx: i, cx: PAD_L + nodes[i].lane * LANE_W, cy: y + ROW_H / 2, h: ROW_H, top: y });
+    rows.push({ kind: "node", nodeIdx: i, cx: nx(nodes[i]), cy: y + ROW_H / 2, h: ROW_H, top: y });
     y += ROW_H;
   }
 
@@ -115,7 +212,6 @@ export function SnapshotGraph({
   const idIdx = new Map(nodes.map((n, i) => [n.id, i]));
   const edges: Edge[] = [];
 
-  // parent–child edges
   for (let i = 0; i < nodes.length; i++) {
     const cr = nodeRow.get(i);
     if (!cr) continue;
@@ -125,24 +221,20 @@ export function SnapshotGraph({
       const pr = nodeRow.get(pi);
       if (!pr) continue;
 
-      const childR = nodes[i].is_head ? HEAD_R : NODE_R;
-      const parR   = nodes[pi].is_head ? HEAD_R : NODE_R;
+      const cR = nodes[i].is_head ? HEAD_R : NODE_R;
+      const pR = nodes[pi].is_head ? HEAD_R : NODE_R;
       let d: string;
       if (Math.abs(cr.cx - pr.cx) < 1) {
-        // same lane → straight
-        d = `M ${cr.cx} ${cr.cy + childR} L ${pr.cx} ${pr.cy - parR}`;
+        d = `M ${cr.cx} ${cr.cy + cR} L ${pr.cx} ${pr.cy - pR}`;
       } else {
-        // cross-lane → cubic bezier (S-curve)
-        const dy  = pr.cy - cr.cy;
-        const cp1 = cr.cy + dy * 0.4;
-        const cp2 = pr.cy - dy * 0.4;
-        d = `M ${cr.cx} ${cr.cy + childR} C ${cr.cx} ${cp1}, ${pr.cx} ${cp2}, ${pr.cx} ${pr.cy - parR}`;
+        const dy = pr.cy - cr.cy;
+        d = `M ${cr.cx} ${cr.cy + cR} C ${cr.cx} ${cr.cy + dy * 0.4}, ${pr.cx} ${pr.cy - dy * 0.4}, ${pr.cx} ${pr.cy - pR}`;
       }
       edges.push({ d, color: lc(nodes[i].lane), opacity: 0.3 });
     }
   }
 
-  // dirty → first-node dashed connector
+  // dirty → first-node
   const dirtyRow = rows.find(r => r.kind === "dirty");
   const firstNR  = nodeRow.get(0);
   if (dirtyRow && firstNR) {
@@ -152,16 +244,15 @@ export function SnapshotGraph({
     });
   }
 
-  // HEAD → ghost branch-off curve (ghost is ABOVE head, branching upward)
-  // Stored separately so it renders on top of nodes (above box-shadow)
-  const ghostR = rows.find(r => r.kind === "ghost");
-  const headR  = headIdx >= 0 ? nodeRow.get(headIdx) : undefined;
+  // HEAD → ghost
+  const ghostRow = rows.find(r => r.kind === "ghost");
+  const headRow  = headIdx >= 0 ? nodeRow.get(headIdx) : undefined;
   let ghostEdge: Edge | null = null;
-  if (ghostR && headR) {
-    const dx = ghostR.cx - headR.cx;
-    const dy = ghostR.cy - headR.cy;  // negative (ghost is above)
+  if (ghostRow && headRow) {
+    const dx = ghostRow.cx - headRow.cx;
+    const dy = ghostRow.cy - headRow.cy;
     ghostEdge = {
-      d: `M ${headR.cx + HEAD_R} ${headR.cy} C ${headR.cx + dx * 0.5} ${headR.cy}, ${ghostR.cx} ${ghostR.cy - dy * 0.5}, ${ghostR.cx} ${ghostR.cy + 4}`,
+      d: `M ${headRow.cx + HEAD_R} ${headRow.cy} C ${headRow.cx + dx * 0.5} ${headRow.cy}, ${ghostRow.cx} ${ghostRow.cy - dy * 0.5}, ${ghostRow.cx} ${ghostRow.cy + 4}`,
       color: lc(nodes[headIdx].lane), dashed: true, opacity: 0.35,
     };
   }
@@ -169,7 +260,7 @@ export function SnapshotGraph({
   /* ── render ──────────────────────────────────── */
   return (
     <div className="relative" style={{ minHeight: totalH, paddingTop: PAD_T, paddingBottom: PAD_B }}>
-      {/* SVG edge layer (behind everything) */}
+      {/* Edge SVG layer */}
       <svg
         className="absolute top-0 left-0"
         width={graphColW + 4}
@@ -177,76 +268,49 @@ export function SnapshotGraph({
         style={{ pointerEvents: "none", zIndex: 0 }}
       >
         {edges.map((e, i) => (
-          <path
-            key={i}
-            d={e.d}
-            stroke={e.color}
-            strokeWidth={1.5}
-            strokeOpacity={e.opacity}
-            fill="none"
-            strokeDasharray={e.dashed ? "4 3" : undefined}
-            strokeLinecap="round"
-          />
+          <path key={i} d={e.d} stroke={e.color} strokeWidth={1.5} strokeOpacity={e.opacity}
+            fill="none" strokeDasharray={e.dashed ? "4 3" : undefined} strokeLinecap="round" />
         ))}
       </svg>
 
       {/* Visual rows */}
       {rows.map((row) => {
-        /* ── dirty indicator ─────────────────── */
         if (row.kind === "dirty") {
           return (
             <div key="dirty" className="flex items-center" style={{ height: row.h }}>
               <div className="shrink-0 relative flex items-center" style={{ width: graphColW }}>
-                <div
-                  className="absolute rounded-full border-[1.5px] border-dashed"
-                  style={{
-                    left: row.cx - 4, top: "50%", transform: "translateY(-50%)",
-                    width: 8, height: 8,
-                    borderColor: "var(--color-text-secondary)", opacity: 0.6,
-                    backgroundColor: "var(--color-surface)",
-                    boxShadow: "0 0 0 2px var(--color-surface)",
-                    zIndex: 1,
-                  }}
-                />
+                <div className="absolute rounded-full border-[1.5px] border-dashed" style={{
+                  left: row.cx - 4, top: "50%", transform: "translateY(-50%)",
+                  width: 8, height: 8, borderColor: "var(--color-text-secondary)", opacity: 0.6,
+                  backgroundColor: "var(--color-surface)", boxShadow: "0 0 0 2px var(--color-surface)", zIndex: 1,
+                }} />
               </div>
               <div className="flex-1 min-w-0 pr-3">
-                <span className="text-[11px] italic text-[var(--color-text-secondary)]">
-                  Unsaved changes
-                </span>
+                <span className="text-[11px] italic text-[var(--color-text-secondary)]">Unsaved changes</span>
               </div>
             </div>
           );
         }
 
-        /* ── ghost branch node ───────────────── */
         if (row.kind === "ghost") {
           const headColor = lc(nodes[headIdx]?.lane ?? 0);
           return (
             <div key="ghost" className="flex items-center" style={{ height: row.h }}>
               <div className="shrink-0 relative flex items-center" style={{ width: graphColW }}>
-                <div
-                  className="absolute rounded-full border-[1.5px] border-dashed"
-                  style={{
-                    left: row.cx - 3.5, top: "50%", transform: "translateY(-50%)",
-                    width: 7, height: 7,
-                    borderColor: headColor, opacity: 0.5,
-                    backgroundColor: "var(--color-surface)", zIndex: 1,
-                  }}
-                />
+                <div className="absolute rounded-full border-[1.5px] border-dashed" style={{
+                  left: row.cx - 3.5, top: "50%", transform: "translateY(-50%)",
+                  width: 7, height: 7, borderColor: headColor, opacity: 0.5,
+                  backgroundColor: "var(--color-surface)", zIndex: 1,
+                }} />
               </div>
-              <div className="flex-1 min-w-0 pr-3 flex items-center gap-1.5" style={{ paddingLeft: ghostLane * LANE_W }}>
-                <span className="text-[11px] italic text-[var(--color-text-secondary)]">
-                  New direction
-                </span>
-                <span className="text-[9px] px-1 py-px rounded-sm bg-amber-500/10 text-amber-500">
-                  branching
-                </span>
+              <div className="flex-1 min-w-0 pr-3 flex items-center gap-1.5" style={{ paddingLeft: row.cx - PAD_L }}>
+                <span className="text-[11px] italic text-[var(--color-text-secondary)]">New direction</span>
+                <span className="text-[9px] px-1 py-px rounded-sm bg-amber-500/10 text-amber-500">branching</span>
               </div>
             </div>
           );
         }
 
-        /* ── commit node ─────────────────────── */
         const node  = nodes[row.nodeIdx!];
         const color = lc(node.lane);
         const r     = node.is_head ? HEAD_R : NODE_R;
@@ -255,68 +319,39 @@ export function SnapshotGraph({
         const tlLabel = tlInfo?.label ?? node.timeline;
 
         return (
-          <div
-            key={node.id}
-            className="flex items-center group"
-            style={{ height: row.h }}
+          <div key={node.id} className="flex items-center group" style={{ height: row.h }}
             onMouseEnter={() => !node.is_head && setHovered(node.id)}
-            onMouseLeave={() => setHovered(null)}
-          >
-            {/* graph column */}
+            onMouseLeave={() => setHovered(null)}>
             <div className="shrink-0 relative flex items-center" style={{ width: graphColW }}>
-              {/* HEAD glow ring */}
               {node.is_head && (
-                <div
-                  className="absolute rounded-full"
-                  style={{
-                    left: row.cx - r - 3, top: "50%", transform: "translateY(-50%)",
-                    width: (r + 3) * 2, height: (r + 3) * 2,
-                    border: `1px solid ${color}`, opacity: 0.25, zIndex: 1,
-                  }}
-                />
+                <div className="absolute rounded-full" style={{
+                  left: row.cx - r - 3, top: "50%", transform: "translateY(-50%)",
+                  width: (r + 3) * 2, height: (r + 3) * 2,
+                  border: `1px solid ${color}`, opacity: 0.25, zIndex: 1,
+                }} />
               )}
-              {/* node dot */}
-              <button
-                className="absolute rounded-full transition-colors"
-                style={{
-                  left: row.cx - r, top: "50%", transform: "translateY(-50%)",
-                  width: r * 2, height: r * 2,
-                  backgroundColor: node.is_head || isHov ? color : "var(--color-surface)",
-                  border: `2px solid ${color}`,
-                  boxShadow: "0 0 0 2px var(--color-surface)",
-                  cursor: node.is_head ? "default" : "pointer",
-                  zIndex: 2, padding: 0,
-                }}
-                onClick={() => onNodeClick(node.id, node.is_head)}
-                title={node.is_head ? "Current snapshot (HEAD)" : `Navigate to: ${node.message}`}
-              />
+              <button className="absolute rounded-full transition-colors" style={{
+                left: row.cx - r, top: "50%", transform: "translateY(-50%)",
+                width: r * 2, height: r * 2,
+                backgroundColor: node.is_head || isHov ? color : "var(--color-surface)",
+                border: `2px solid ${color}`, boxShadow: "0 0 0 2px var(--color-surface)",
+                cursor: node.is_head ? "default" : "pointer", zIndex: 2, padding: 0,
+              }} onClick={() => onNodeClick(node.id, node.is_head)}
+                title={node.is_head ? "Current snapshot (HEAD)" : `Navigate to: ${node.message}`} />
             </div>
-
-            {/* label */}
-            <div
-              className={`flex-1 min-w-0 pr-3 flex flex-col justify-center ${!node.is_head ? "cursor-pointer" : ""}`}
-              style={{ paddingLeft: node.lane * LANE_W }}
-              onClick={() => !node.is_head && onNodeClick(node.id, node.is_head)}
-            >
+            <div className={`flex-1 min-w-0 pr-3 flex flex-col justify-center ${!node.is_head ? "cursor-pointer" : ""}`}
+              style={{ paddingLeft: Math.max(0, row.cx - PAD_L) }}
+              onClick={() => !node.is_head && onNodeClick(node.id, node.is_head)}>
               <div className={`text-xs truncate transition-colors ${
-                node.is_head
-                  ? "font-medium text-[var(--color-text)]"
+                node.is_head ? "font-medium text-[var(--color-text)]"
                   : isHov ? "text-[var(--color-text)]"
                   : "text-[var(--color-text-secondary)]"
-              }`}>
-                {node.message}
-              </div>
+              }`}>{node.message}</div>
               <div className="flex items-center gap-1.5 mt-0.5">
-                <span className="text-[10px] text-[var(--color-text-secondary)]/70">
-                  {fmtDate(node.timestamp)}
-                </span>
+                <span className="text-[10px] text-[var(--color-text-secondary)]/70">{fmtDate(node.timestamp)}</span>
                 {hasMultipleTimelines && (
-                  <span
-                    className="text-[9px] px-1 py-px rounded-sm"
-                    style={{ color, backgroundColor: `${color}15` }}
-                  >
-                    {tlLabel}
-                  </span>
+                  <span className="text-[9px] px-1 py-px rounded-sm"
+                    style={{ color, backgroundColor: `${color}15` }}>{tlLabel}</span>
                 )}
               </div>
             </div>
@@ -324,23 +359,12 @@ export function SnapshotGraph({
         );
       })}
 
-      {/* Ghost branch edge — rendered ON TOP of nodes so it's not hidden by box-shadow */}
+      {/* Ghost edge on top */}
       {ghostEdge && (
-        <svg
-          className="absolute top-0 left-0"
-          width={graphColW + 4}
-          height={totalH}
-          style={{ pointerEvents: "none", zIndex: 3 }}
-        >
-          <path
-            d={ghostEdge.d}
-            stroke={ghostEdge.color}
-            strokeWidth={1.5}
-            strokeOpacity={ghostEdge.opacity}
-            fill="none"
-            strokeDasharray="4 3"
-            strokeLinecap="round"
-          />
+        <svg className="absolute top-0 left-0" width={graphColW + 4} height={totalH}
+          style={{ pointerEvents: "none", zIndex: 3 }}>
+          <path d={ghostEdge.d} stroke={ghostEdge.color} strokeWidth={1.5} strokeOpacity={ghostEdge.opacity}
+            fill="none" strokeDasharray="4 3" strokeLinecap="round" />
         </svg>
       )}
     </div>
@@ -348,70 +372,6 @@ export function SnapshotGraph({
 }
 
 /* ── helpers ───────────────────────────────────────────────────────── */
-
-/**
- * Sort nodes so the main trunk (lane 0) is continuous and branch commits
- * appear right before their fork point (divergence is visually clear).
- *
- * Result for: main=[three,two,one,start], branch=[part1] (parent=one)
- *   → [three, two, part1, one, start]
- */
-function sortForDisplay(nodes: GraphNode[]): GraphNode[] {
-  if (nodes.length === 0) return nodes;
-
-  // Main lane sorted newest-first
-  const main = nodes
-    .filter(n => n.lane === 0)
-    .sort((a, b) => +new Date(b.timestamp) - +new Date(a.timestamp));
-
-  // Group branch nodes by lane, newest-first within each lane
-  const lanes = new Map<number, GraphNode[]>();
-  for (const n of nodes) {
-    if (n.lane === 0) continue;
-    if (!lanes.has(n.lane)) lanes.set(n.lane, []);
-    lanes.get(n.lane)!.push(n);
-  }
-  for (const arr of lanes.values()) {
-    arr.sort((a, b) => +new Date(b.timestamp) - +new Date(a.timestamp));
-  }
-
-  // Find fork-point (main-lane parent) for each branch
-  const mainIds = new Set(main.map(n => n.id));
-  const branchAtFork = new Map<string, GraphNode[][]>(); // forkParentId → [branchNodes[]]
-  for (const [, arr] of lanes) {
-    const oldest = arr[arr.length - 1];
-    const forkId = oldest.parents.find(p => mainIds.has(p));
-    if (forkId) {
-      if (!branchAtFork.has(forkId)) branchAtFork.set(forkId, []);
-      branchAtFork.get(forkId)!.push(arr);
-    }
-  }
-
-  // Build result: main trunk with branches inserted before their fork point
-  const result: GraphNode[] = [];
-  const placed = new Set<string>();
-
-  for (const mn of main) {
-    // Insert branches that fork from this node (before the fork point)
-    const branches = branchAtFork.get(mn.id);
-    if (branches) {
-      for (const br of branches) {
-        for (const n of br) {
-          if (!placed.has(n.id)) { result.push(n); placed.add(n.id); }
-        }
-      }
-    }
-    if (!placed.has(mn.id)) { result.push(mn); placed.add(mn.id); }
-  }
-
-  // Any remaining nodes (shouldn't happen, but be safe)
-  for (const n of nodes) {
-    if (!placed.has(n.id)) result.push(n);
-  }
-
-  return result;
-}
-
 function fmtDate(iso: string): string {
   const d = new Date(iso);
   const ms = Date.now() - d.getTime();
