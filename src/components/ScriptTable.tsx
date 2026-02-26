@@ -12,6 +12,8 @@ interface ScriptTableProps {
 }
 
 export function ScriptTable({ rows, onChange, readOnly = false }: ScriptTableProps) {
+  const [dragIdx, setDragIdx] = useState<number | null>(null);
+  const [overIdx, setOverIdx] = useState<number | null>(null);
 
   const updateRow = useCallback(
     (index: number, field: keyof PlanningRow, value: string) => {
@@ -41,16 +43,16 @@ export function ScriptTable({ rows, onChange, readOnly = false }: ScriptTablePro
     [rows, onChange],
   );
 
-  const moveRow = useCallback(
-    (index: number, direction: -1 | 1) => {
-      const target = index + direction;
-      if (target < 0 || target >= rows.length) return;
+  const handleDragEnd = useCallback(() => {
+    if (dragIdx !== null && overIdx !== null && dragIdx !== overIdx) {
       const updated = [...rows];
-      [updated[index], updated[target]] = [updated[target], updated[index]];
+      const [moved] = updated.splice(dragIdx, 1);
+      updated.splice(overIdx, 0, moved);
       onChange(updated);
-    },
-    [rows, onChange],
-  );
+    }
+    setDragIdx(null);
+    setOverIdx(null);
+  }, [dragIdx, overIdx, rows, onChange]);
 
   // Ensure at least one row
   const displayRows = rows.length === 0 ? [emptyRow()] : rows;
@@ -60,6 +62,7 @@ export function ScriptTable({ rows, onChange, readOnly = false }: ScriptTablePro
       <table className="w-full border-collapse">
         <thead>
           <tr className="bg-[var(--color-surface-alt)]">
+            {!readOnly && <th className="script-table-th" style={{ width: "28px" }} />}
             <th className="script-table-th" style={{ width: "80px" }}>Time</th>
             <th className="script-table-th">Narrative</th>
             <th className="script-table-th">Demo Actions</th>
@@ -69,7 +72,38 @@ export function ScriptTable({ rows, onChange, readOnly = false }: ScriptTablePro
         </thead>
         <tbody>
           {displayRows.map((row, idx) => (
-            <tr key={idx} className="group border-t border-[var(--color-border)]">
+            <tr
+              key={idx}
+              draggable={!readOnly && dragIdx === idx}
+              onDragOver={(e) => { e.preventDefault(); setOverIdx(idx); }}
+              onDrop={handleDragEnd}
+              className={`group border-t border-[var(--color-border)] transition-colors ${
+                dragIdx === idx ? "opacity-40" : ""
+              } ${overIdx === idx && dragIdx !== null && dragIdx !== idx ? "border-t-2 border-t-[var(--color-accent)]" : ""}`}
+            >
+              {!readOnly && (
+                <td className="script-table-td align-top w-7">
+                  <div
+                    className="cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-100 transition-opacity text-[var(--color-text-secondary)] hover:text-[var(--color-text)] flex items-center justify-center"
+                    onMouseDown={() => setDragIdx(idx)}
+                    draggable
+                    onDragStart={(e) => {
+                      setDragIdx(idx);
+                      e.dataTransfer.effectAllowed = "move";
+                    }}
+                    onDragEnd={handleDragEnd}
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                      <circle cx="9" cy="5" r="1.5" />
+                      <circle cx="15" cy="5" r="1.5" />
+                      <circle cx="9" cy="12" r="1.5" />
+                      <circle cx="15" cy="12" r="1.5" />
+                      <circle cx="9" cy="19" r="1.5" />
+                      <circle cx="15" cy="19" r="1.5" />
+                    </svg>
+                  </div>
+                </td>
+              )}
               <td className="script-table-td align-top">
                 <LocalInput
                   value={row.time}
@@ -106,26 +140,6 @@ export function ScriptTable({ rows, onChange, readOnly = false }: ScriptTablePro
               {!readOnly && (
                 <td className="script-table-td align-top">
                   <div className="flex flex-col gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button
-                      onClick={() => moveRow(idx, -1)}
-                      disabled={idx === 0}
-                      className="p-0.5 rounded text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] disabled:opacity-20 disabled:cursor-default transition-colors"
-                      title="Move row up"
-                    >
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <polyline points="18 15 12 9 6 15" />
-                      </svg>
-                    </button>
-                    <button
-                      onClick={() => moveRow(idx, 1)}
-                      disabled={idx === displayRows.length - 1}
-                      className="p-0.5 rounded text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] disabled:opacity-20 disabled:cursor-default transition-colors"
-                      title="Move row down"
-                    >
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <polyline points="6 9 12 15 18 9" />
-                      </svg>
-                    </button>
                     <button
                       onClick={() => addRow(idx)}
                       className="p-0.5 rounded text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] transition-colors"
