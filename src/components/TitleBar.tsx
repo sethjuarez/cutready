@@ -85,7 +85,7 @@ export function TitleBar({
       </div>
 
       {/* Center: Command center */}
-      <div className="flex-1 flex items-center justify-center min-w-0 px-4">
+      <div data-tauri-drag-region className="flex-1 flex items-center justify-center min-w-0 px-4">
         <button
           className="flex items-center gap-1.5 w-full max-w-[380px] h-[22px] px-2.5 bg-[var(--color-surface-alt)] border border-[var(--color-border)] rounded-md text-[var(--color-text-secondary)] text-[12px] cursor-pointer hover:border-[var(--color-text-secondary)] transition-colors"
           onClick={onCommandPaletteOpen}
