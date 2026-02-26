@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import type { AppView } from "../stores/appStore";
 import { useAppStore } from "../stores/appStore";
 
@@ -109,50 +109,107 @@ export function Sidebar() {
   const currentProject = useAppStore((s) => s.currentProject);
   const isRecording = useAppStore((s) => s.isRecording);
   const sidebarPosition = useAppStore((s) => s.sidebarPosition);
+  const toggleSidebarPosition = useAppStore((s) => s.toggleSidebarPosition);
 
   const isRight = sidebarPosition === "right";
 
-  return (
-    <nav className={`no-select flex flex-col w-12 bg-[var(--color-surface-inset)] items-center py-3 gap-1 ${
-      isRight ? "border-l border-[var(--color-border)]" : "border-r border-[var(--color-border)]"
-    }`}>
-      {navItems.map((item) => {
-        const isActive = view === item.id;
-        const requiresProject = item.id === "sketch" || item.id === "editor" || item.id === "recording";
-        const isDisabled = requiresProject && !currentProject;
+  // Context menu state
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
-        return (
+  const handleContextMenu = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setContextMenu({ x: e.clientX, y: e.clientY });
+  }, []);
+
+  // Close context menu on outside click or Escape
+  useEffect(() => {
+    if (!contextMenu) return;
+    const handleClose = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setContextMenu(null);
+      }
+    };
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setContextMenu(null);
+    };
+    window.addEventListener("mousedown", handleClose);
+    window.addEventListener("keydown", handleEsc);
+    return () => {
+      window.removeEventListener("mousedown", handleClose);
+      window.removeEventListener("keydown", handleEsc);
+    };
+  }, [contextMenu]);
+
+  return (
+    <>
+      <nav
+        className={`no-select flex flex-col w-12 bg-[var(--color-surface-inset)] items-center py-3 gap-1 ${
+          isRight ? "border-l border-[var(--color-border)]" : "border-r border-[var(--color-border)]"
+        }`}
+        onContextMenu={handleContextMenu}
+      >
+        {navItems.map((item) => {
+          const isActive = view === item.id;
+          const requiresProject = item.id === "sketch" || item.id === "editor" || item.id === "recording";
+          const isDisabled = requiresProject && !currentProject;
+
+          return (
+            <button
+              key={item.id}
+              onClick={() => !isDisabled && setView(item.id)}
+              disabled={isDisabled}
+              className={`
+                flex items-center justify-center w-9 h-9 rounded-lg transition-colors relative
+                ${
+                  isActive
+                    ? "bg-[var(--color-accent)]/15 text-[var(--color-accent)]"
+                    : isDisabled
+                      ? "text-[var(--color-text-secondary)]/40 cursor-not-allowed"
+                      : "text-[var(--color-text-secondary)] hover:bg-[var(--color-surface)] hover:text-[var(--color-text)]"
+                }
+              `}
+              title={item.label}
+            >
+              {item.icon}
+              {/* Active indicator bar */}
+              {isActive && (
+                <span className={`absolute top-1/4 h-1/2 w-[2px] rounded-full bg-[var(--color-accent)] ${
+                  isRight ? "right-[-6px]" : "left-[-6px]"
+                }`} />
+              )}
+              {/* Recording indicator dot */}
+              {item.id === "recording" && isRecording && (
+                <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-red-500 animate-pulse" />
+              )}
+            </button>
+          );
+        })}
+      </nav>
+
+      {/* Right-click context menu */}
+      {contextMenu && (
+        <div
+          ref={menuRef}
+          className="fixed z-[100] py-1 min-w-[200px] bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg shadow-lg"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+        >
           <button
-            key={item.id}
-            onClick={() => !isDisabled && setView(item.id)}
-            disabled={isDisabled}
-            className={`
-              flex items-center justify-center w-9 h-9 rounded-lg transition-colors relative
-              ${
-                isActive
-                  ? "bg-[var(--color-accent)]/15 text-[var(--color-accent)]"
-                  : isDisabled
-                    ? "text-[var(--color-text-secondary)]/40 cursor-not-allowed"
-                    : "text-[var(--color-text-secondary)] hover:bg-[var(--color-surface)] hover:text-[var(--color-text)]"
-              }
-            `}
-            title={item.label}
+            className="flex items-center gap-2 w-full px-3 py-1.5 text-[12px] text-left text-[var(--color-text)] hover:bg-[var(--color-accent)]/10 hover:text-[var(--color-accent)] transition-colors"
+            onClick={() => {
+              toggleSidebarPosition();
+              setContextMenu(null);
+            }}
           >
-            {item.icon}
-            {/* Active indicator bar */}
-            {isActive && (
-              <span className={`absolute top-1/4 h-1/2 w-[2px] rounded-full bg-[var(--color-accent)] ${
-                isRight ? "right-[-6px]" : "left-[-6px]"
-              }`} />
-            )}
-            {/* Recording indicator dot */}
-            {item.id === "recording" && isRecording && (
-              <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-red-500 animate-pulse" />
-            )}
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="2" />
+              <line x1={isRight ? "9" : "15"} y1="3" x2={isRight ? "9" : "15"} y2="21" />
+            </svg>
+            Move Sidebar to {isRight ? "Left" : "Right"}
           </button>
-        );
-      })}
-    </nav>
+        </div>
+      )}
+    </>
   );
 }
 
