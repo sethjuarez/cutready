@@ -88,7 +88,7 @@ export function ScriptTable({ rows, onChange, readOnly = false }: ScriptTablePro
 
   return (
     <div className="script-table-wrapper my-4 rounded-xl border border-[var(--color-border)] overflow-hidden">
-      <table className="w-full border-collapse">
+      <table className="w-full border-collapse" style={{ tableLayout: "fixed" }}>
         <thead>
           <tr className="bg-[var(--color-surface-alt)]">
             {!readOnly && <th className="script-table-th" style={{ width: "28px" }} />}
