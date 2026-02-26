@@ -257,31 +257,37 @@ function SortableRow({
         </td>
       )}
       <td className="py-2 px-1.5 align-top text-[0.8125rem]">
-        <LocalInput
-          value={row.time}
-          onChange={(v) => updateRow(idx, "time", v)}
-          placeholder="~30s"
-          readOnly={readOnly}
-          onAddRow={isLastRow && !readOnly ? () => addRow(idx) : undefined}
-        />
+        <div data-tab-cell={idx * 3}>
+          <LocalInput
+            value={row.time}
+            onChange={(v) => updateRow(idx, "time", v)}
+            placeholder="~30s"
+            readOnly={readOnly}
+            onAddRow={isLastRow && !readOnly ? () => addRow(idx) : undefined}
+          />
+        </div>
       </td>
       <td className="script-table-td align-top overflow-hidden">
-        <MarkdownCell
-          value={row.narrative}
-          onChange={(v) => updateRow(idx, "narrative", v)}
-          placeholder="What to say..."
-          readOnly={readOnly}
-          onAddRow={isLastRow && !readOnly ? () => addRow(idx) : undefined}
-        />
+        <div data-tab-cell={idx * 3 + 1}>
+          <MarkdownCell
+            value={row.narrative}
+            onChange={(v) => updateRow(idx, "narrative", v)}
+            placeholder="What to say..."
+            readOnly={readOnly}
+            onAddRow={isLastRow && !readOnly ? () => addRow(idx) : undefined}
+          />
+        </div>
       </td>
       <td className="script-table-td align-top overflow-hidden">
-        <MarkdownCell
-          value={row.demo_actions}
-          onChange={(v) => updateRow(idx, "demo_actions", v)}
-          placeholder="What to do..."
-          readOnly={readOnly}
-          onAddRow={isLastRow && !readOnly ? () => addRow(idx) : undefined}
-        />
+        <div data-tab-cell={idx * 3 + 2}>
+          <MarkdownCell
+            value={row.demo_actions}
+            onChange={(v) => updateRow(idx, "demo_actions", v)}
+            placeholder="What to do..."
+            readOnly={readOnly}
+            onAddRow={isLastRow && !readOnly ? () => addRow(idx) : undefined}
+          />
+        </div>
       </td>
       <td className="script-table-td align-top text-center">
         {row.screenshot ? (
@@ -355,12 +361,10 @@ function LocalInput({
       onFocus={() => { isFocusedRef.current = true; }}
       onBlur={() => { isFocusedRef.current = false; }}
       onKeyDown={(e) => {
-        if (e.key === "Tab" && !e.shiftKey && onAddRow) {
-          const moved = focusAdjacentCell(e.currentTarget, false);
-          if (!moved) {
-            e.preventDefault();
-            onAddRow();
-          }
+        if (e.key === "Tab") {
+          e.preventDefault();
+          const moved = focusAdjacentCell(e.currentTarget, e.shiftKey);
+          if (!moved && !e.shiftKey && onAddRow) onAddRow();
         }
       }}
       placeholder={placeholder}
@@ -375,13 +379,28 @@ function LocalInput({
 function focusAdjacentCell(from: HTMLElement, reverse = false): boolean {
   const table = from.closest("table");
   if (!table) return false;
+  // Use data-tab-order for explicit tab sequence
   const cells = Array.from(
-    table.querySelectorAll<HTMLElement>("input:not([readonly]), [data-cell]"),
+    table.querySelectorAll<HTMLElement>("[data-tab-cell]"),
   );
+  // Sort by data-tab-cell numeric value for correct order
+  cells.sort((a, b) => {
+    const ai = parseInt(a.getAttribute("data-tab-cell") || "0", 10);
+    const bi = parseInt(b.getAttribute("data-tab-cell") || "0", 10);
+    return ai - bi;
+  });
   const td = from.closest("td");
   const idx = cells.findIndex((el) => td?.contains(el));
+  if (idx === -1) return false;
   const next = cells[reverse ? idx - 1 : idx + 1];
-  if (next) { next.focus(); return true; }
+  if (next) {
+    // Find the first focusable element inside the wrapper
+    const focusable = next.querySelector<HTMLElement>(
+      "input, textarea, [tabindex='0'], [data-cell]"
+    );
+    if (focusable) { focusable.focus(); } else { next.focus(); }
+    return true;
+  }
   return false;
 }
 
