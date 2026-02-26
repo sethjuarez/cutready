@@ -60,12 +60,9 @@ export function StoryboardList() {
     [closeStoryboard, openSketch],
   );
 
-  const sidebarWidth = useAppStore((s) => s.sidebarWidth);
-
   return (
     <div
-      className="flex flex-col h-full shrink-0 bg-[var(--color-surface-inset)]"
-      style={{ width: sidebarWidth }}
+      className="flex flex-col h-full bg-[var(--color-surface-inset)]"
     >
       {/* ── Mode toggle ──────────────────────────────── */}
       <div className="flex items-center justify-between px-3 py-2.5 border-b border-[var(--color-border)]">

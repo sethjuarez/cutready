@@ -6,6 +6,7 @@ import { ScriptEditorPanel } from "./ScriptEditorPanel";
 import { SettingsPanel } from "./SettingsPanel";
 import { Sidebar } from "./Sidebar";
 import { StoryboardPanel } from "./StoryboardPanel";
+import { StoryboardList } from "./StoryboardList";
 import { ResizeHandle } from "./ResizeHandle";
 import { OutputPanel } from "./OutputPanel";
 import type { OutputEntry } from "./OutputPanel";
@@ -24,6 +25,8 @@ export function AppLayout() {
   const outputHeight = useAppStore((s) => s.outputHeight);
   const setOutputHeight = useAppStore((s) => s.setOutputHeight);
   const toggleOutput = useAppStore((s) => s.toggleOutput);
+  const showVersionHistory = useAppStore((s) => s.showVersionHistory);
+  const toggleVersionHistory = useAppStore((s) => s.toggleVersionHistory);
 
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [recentCommands, setRecentCommands] = useState<string[]>([]);
@@ -134,9 +137,11 @@ export function AppLayout() {
         sidebarVisible={sidebarVisible}
         sidebarPosition={sidebarPosition}
         outputVisible={outputVisible}
+        secondaryVisible={showVersionHistory}
         onToggleSidebar={toggleSidebar}
         onToggleSidebarPosition={toggleSidebarPosition}
         onToggleOutput={toggleOutput}
+        onToggleSecondary={toggleVersionHistory}
         onCommandPaletteOpen={() => setCommandPaletteOpen(true)}
       />
       <div
@@ -148,10 +153,13 @@ export function AppLayout() {
         }}
       >
         <div className="flex flex-1 overflow-hidden" ref={mainRef}>
-          {/* Activity bar on left when sidebar is left */}
+          {/* Activity bar on left */}
           {sidebarPosition === "left" && <Sidebar />}
 
-          {/* Main content area + output panel */}
+          {/* Primary sidebar (full height, outside output panel) */}
+          {sidebarVisible && sidebarPosition === "left" && <PrimarySidebar />}
+
+          {/* Center column: content + output panel */}
           <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
             {/* Upper: main content */}
             <div className="flex-1 min-h-0">
@@ -162,7 +170,7 @@ export function AppLayout() {
               {view === "settings" && <div className="h-full overflow-y-auto"><SettingsPanel /></div>}
             </div>
 
-            {/* Lower: output panel */}
+            {/* Lower: output panel (only covers center, not sidebar) */}
             {outputVisible && (
               <>
                 <ResizeHandle direction="vertical" onResize={handleOutputResize} />
@@ -177,7 +185,10 @@ export function AppLayout() {
             )}
           </div>
 
-          {/* Activity bar on right when sidebar is right */}
+          {/* Primary sidebar on right (full height, outside output panel) */}
+          {sidebarVisible && sidebarPosition === "right" && <PrimarySidebar />}
+
+          {/* Activity bar on right */}
           {sidebarPosition === "right" && <Sidebar />}
         </div>
       </div>
@@ -189,6 +200,31 @@ export function AppLayout() {
         onExecute={handleExecuteCommand}
         recentCommands={recentCommands}
       />
+    </>
+  );
+}
+
+/** Primary sidebar (StoryboardList) with resize handle. Rendered full-height. */
+function PrimarySidebar() {
+  const sidebarWidth = useAppStore((s) => s.sidebarWidth);
+  const setSidebarWidth = useAppStore((s) => s.setSidebarWidth);
+  const sidebarPosition = useAppStore((s) => s.sidebarPosition);
+
+  const handleResize = useCallback(
+    (delta: number) => {
+      const adjusted = sidebarPosition === "right" ? -delta : delta;
+      setSidebarWidth(sidebarWidth + adjusted);
+    },
+    [sidebarWidth, setSidebarWidth, sidebarPosition],
+  );
+
+  return (
+    <>
+      {sidebarPosition === "right" && <ResizeHandle direction="horizontal" onResize={handleResize} />}
+      <div className="h-full shrink-0" style={{ width: sidebarWidth }}>
+        <StoryboardList />
+      </div>
+      {sidebarPosition === "left" && <ResizeHandle direction="horizontal" onResize={handleResize} />}
     </>
   );
 }
