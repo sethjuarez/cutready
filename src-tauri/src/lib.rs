@@ -132,6 +132,8 @@ pub fn run() {
             commands::versioning::get_timeline_graph,
             commands::versioning::navigate_to_snapshot,
             commands::versioning::has_stash,
+            commands::versioning::save_editor_state,
+            commands::versioning::load_editor_state,
             commands::interaction::detect_browser_profiles,
             commands::interaction::check_browsers_running,
             commands::interaction::prepare_browser,
