@@ -85,12 +85,20 @@ pub fn init_project_folder(root: &Path) -> Result<ProjectView, ProjectError> {
 }
 
 /// Open an existing project folder by scanning for .sk/.sb files.
+/// Initializes git if not already a repo (needed for snapshots).
 pub fn open_project_folder(root: &Path) -> Result<ProjectView, ProjectError> {
     if !root.exists() || !root.is_dir() {
         return Err(ProjectError::NotFound(
             root.to_string_lossy().into_owned(),
         ));
     }
+
+    // Init git if not already a repo so snapshots work
+    if !root.join(".git").exists() {
+        versioning::init_project_repo(root).map_err(|e| ProjectError::Io(e.to_string()))?;
+        let _ = versioning::commit_snapshot(root, "Initialize project");
+    }
+
     Ok(ProjectView::new(root.to_path_buf()))
 }
 
@@ -239,12 +247,13 @@ pub fn sketch_file_exists(relative_path: &str, project_root: &Path) -> bool {
 
 /// Save with a user-provided label (for named versions).
 pub fn save_with_label(project_root: &Path, label: &str) -> Result<String, ProjectError> {
-    if project_root.join(".git").exists() {
-        versioning::commit_snapshot(project_root, label)
-            .map_err(|e| ProjectError::Io(e.to_string()))
-    } else {
-        Ok(String::new())
+    // Auto-init git if missing so snapshots always work
+    if !project_root.join(".git").exists() {
+        versioning::init_project_repo(project_root)
+            .map_err(|e| ProjectError::Io(e.to_string()))?;
     }
+    versioning::commit_snapshot(project_root, label)
+        .map_err(|e| ProjectError::Io(e.to_string()))
 }
 
 // ── Internal helpers ────────────────────────────────────────────────
