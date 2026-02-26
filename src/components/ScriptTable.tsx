@@ -584,6 +584,9 @@ function MarkdownCell({
         onClick={() => {
           if (!readOnly) setIsEditing(true);
         }}
+        onFocus={() => {
+          if (!readOnly) setIsEditing(true);
+        }}
         onKeyDown={(e) => {
           if (readOnly) return;
           if (e.key === "Tab") {
