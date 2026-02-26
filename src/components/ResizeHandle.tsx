@@ -59,16 +59,25 @@ export function ResizeHandle({ direction, onResize, onResizeEnd }: ResizeHandleP
 
   return (
     <div
-      className={`shrink-0 transition-colors duration-150 ${
+      className={`shrink-0 relative group ${
         isHorizontal
-          ? "w-px cursor-col-resize"
-          : "h-px cursor-row-resize"
-      } ${
-        isDragging
-          ? "bg-[var(--color-accent)]"
-          : "bg-[var(--color-border)] hover:bg-[var(--color-accent)]/50"
+          ? "w-[5px] cursor-col-resize"
+          : "h-[5px] cursor-row-resize"
       }`}
       onMouseDown={handleMouseDown}
-    />
+    >
+      {/* Visible 1px line centered in the grab area */}
+      <div
+        className={`absolute transition-colors duration-150 ${
+          isHorizontal
+            ? "top-0 bottom-0 left-1/2 -translate-x-1/2 w-px"
+            : "left-0 right-0 top-1/2 -translate-y-1/2 h-px"
+        } ${
+          isDragging
+            ? "bg-[var(--color-accent)]"
+            : "bg-[var(--color-border)] group-hover:bg-[var(--color-accent)]/50"
+        }`}
+      />
+    </div>
   );
 }
