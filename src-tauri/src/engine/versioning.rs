@@ -1261,4 +1261,35 @@ mod tests {
         assert!(!has_unsaved_changes(tmp.path()).unwrap(),
             "Should be clean after navigating to initial commit");
     }
+
+    /// Simulate the debounce race: navigate backward, then write stale data.
+    /// Verifies that has_unsaved_changes correctly detects the stale write.
+    #[test]
+    fn stale_write_after_navigation_detected_as_dirty() {
+        let tmp = setup_project_dir();
+        init_project_repo(tmp.path()).unwrap();
+
+        let sketch_v1 = r#"{"title":"V1","rows":[]}"#;
+        std::fs::write(tmp.path().join("demo.sk"), sketch_v1).unwrap();
+        let id1 = commit_snapshot(tmp.path(), "version 1").unwrap();
+
+        let sketch_v2 = r#"{"title":"V2","rows":[{"text":"added"}]}"#;
+        std::fs::write(tmp.path().join("demo.sk"), sketch_v2).unwrap();
+        let _id2 = commit_snapshot(tmp.path(), "version 2").unwrap();
+
+        // Navigate back to v1
+        navigate_to_snapshot(tmp.path(), &id1).unwrap();
+        assert!(!has_unsaved_changes(tmp.path()).unwrap(), "Clean after nav");
+
+        // Simulate debounce race: stale write puts V2 content back
+        std::fs::write(tmp.path().join("demo.sk"), sketch_v2).unwrap();
+        assert!(has_unsaved_changes(tmp.path()).unwrap(),
+            "Should be dirty after stale write — this is the bug the frontend fix prevents");
+
+        // Navigate to same commit again to re-checkout (like a refresh)
+        navigate_to_snapshot(tmp.path(), &id1).unwrap();
+        let disk = std::fs::read_to_string(tmp.path().join("demo.sk")).unwrap();
+        assert!(disk.contains("V1"), "File should be V1 after re-checkout");
+        assert!(!has_unsaved_changes(tmp.path()).unwrap(), "Clean after re-checkout");
+    }
 }
