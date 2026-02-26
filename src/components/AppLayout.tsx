@@ -135,6 +135,7 @@ export function AppLayout() {
         sidebarPosition={sidebarPosition}
         outputVisible={outputVisible}
         onToggleSidebar={toggleSidebar}
+        onToggleSidebarPosition={toggleSidebarPosition}
         onToggleOutput={toggleOutput}
         onCommandPaletteOpen={() => setCommandPaletteOpen(true)}
       />

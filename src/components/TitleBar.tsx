@@ -1,11 +1,12 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 interface TitleBarProps {
   sidebarVisible?: boolean;
   sidebarPosition?: "left" | "right";
   outputVisible?: boolean;
   onToggleSidebar?: () => void;
+  onToggleSidebarPosition?: () => void;
   onToggleOutput?: () => void;
   onCommandPaletteOpen?: () => void;
 }
@@ -15,6 +16,7 @@ export function TitleBar({
   sidebarPosition = "left",
   outputVisible = false,
   onToggleSidebar,
+  onToggleSidebarPosition,
   onToggleOutput,
   onCommandPaletteOpen,
 }: TitleBarProps) {
@@ -135,6 +137,10 @@ export function TitleBar({
             </svg>
             <span>Panel</span>
           </button>
+          <LayoutDropdown
+            sidebarPosition={sidebarPosition}
+            onToggleSidebarPosition={onToggleSidebarPosition}
+          />
         </div>
 
         {/* Window controls */}
@@ -174,6 +180,96 @@ export function TitleBar({
           </svg>
         </button>
       </div>
+    </div>
+  );
+}
+
+function LayoutDropdown({
+  sidebarPosition,
+  onToggleSidebarPosition,
+}: {
+  sidebarPosition: "left" | "right";
+  onToggleSidebarPosition?: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handleClose = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    window.addEventListener("mousedown", handleClose);
+    window.addEventListener("keydown", handleEsc);
+    return () => {
+      window.removeEventListener("mousedown", handleClose);
+      window.removeEventListener("keydown", handleEsc);
+    };
+  }, [open]);
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        className={`flex items-center justify-center w-7 h-[22px] rounded transition-colors text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-alt)] ${
+          open ? "bg-[var(--color-surface-alt)] text-[var(--color-text)]" : ""
+        }`}
+        onClick={() => setOpen(!open)}
+        title="Customize Layout"
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="3" y="3" width="7" height="7" rx="1" />
+          <rect x="14" y="3" width="7" height="7" rx="1" />
+          <rect x="3" y="14" width="7" height="7" rx="1" />
+          <rect x="14" y="14" width="7" height="7" rx="1" />
+        </svg>
+      </button>
+
+      {open && (
+        <div className="absolute right-0 top-full mt-1 z-[100] w-[200px] py-2 px-3 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg shadow-lg">
+          <div className="text-[10px] font-medium text-[var(--color-text-secondary)] uppercase tracking-wider mb-1.5">
+            Sidebar Position
+          </div>
+          <div className="flex gap-1">
+            <button
+              className={`flex-1 flex items-center justify-center gap-1 h-[26px] rounded text-[11px] transition-colors ${
+                sidebarPosition === "left"
+                  ? "bg-[var(--color-accent)]/15 text-[var(--color-accent)] font-medium"
+                  : "text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-alt)] hover:text-[var(--color-text)]"
+              }`}
+              onClick={() => {
+                if (sidebarPosition !== "left") onToggleSidebarPosition?.();
+                setOpen(false);
+              }}
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="2" />
+                <line x1="9" y1="3" x2="9" y2="21" />
+              </svg>
+              Left
+            </button>
+            <button
+              className={`flex-1 flex items-center justify-center gap-1 h-[26px] rounded text-[11px] transition-colors ${
+                sidebarPosition === "right"
+                  ? "bg-[var(--color-accent)]/15 text-[var(--color-accent)] font-medium"
+                  : "text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-alt)] hover:text-[var(--color-text)]"
+              }`}
+              onClick={() => {
+                if (sidebarPosition !== "right") onToggleSidebarPosition?.();
+                setOpen(false);
+              }}
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="2" />
+                <line x1="15" y1="3" x2="15" y2="21" />
+              </svg>
+              Right
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
