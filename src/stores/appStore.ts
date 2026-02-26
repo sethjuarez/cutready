@@ -634,6 +634,8 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
 
   restoreVersion: async (commitId) => {
     try {
+      // Auto-save current state before restoring
+      await invoke<string>("save_with_label", { label: "Auto-save before restore" });
       await invoke("restore_version", { commitId });
       // Reload everything after restore
       await get().loadSketches();
