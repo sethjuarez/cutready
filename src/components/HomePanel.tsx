@@ -14,13 +14,19 @@ export function HomePanel() {
   const [newName, setNewName] = useState("");
   const [showCreate, setShowCreate] = useState(false);
 
+  // Slug: lowercase, replace spaces/special chars with dashes
+  const slug = newName
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
   useEffect(() => {
     loadRecentProjects();
   }, [loadRecentProjects]);
 
   const handleCreate = useCallback(async () => {
-    const name = newName.trim();
-    if (!name) return;
+    if (!slug) return;
 
     // Get the last parent folder to start from
     let defaultPath: string | undefined;
@@ -39,12 +45,13 @@ export function HomePanel() {
 
     if (!selected) return;
 
-    // Create the project inside the selected folder
-    const projectPath = `${selected}/${name}`;
+    // Use OS-appropriate path separator
+    const sep = selected.includes("\\") ? "\\" : "/";
+    const projectPath = `${selected}${sep}${slug}`;
     await createProject(projectPath);
     setNewName("");
     setShowCreate(false);
-  }, [newName, createProject]);
+  }, [slug, createProject]);
 
   const handleOpen = useCallback(async () => {
     let defaultPath: string | undefined;
@@ -117,7 +124,7 @@ export function HomePanel() {
             />
             <button
               onClick={handleCreate}
-              disabled={!newName.trim()}
+              disabled={!slug}
               className="px-4 py-2 rounded-lg bg-[var(--color-accent)] text-white text-sm font-medium hover:bg-[var(--color-accent-hover)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
               Choose Folder
@@ -132,6 +139,11 @@ export function HomePanel() {
               Cancel
             </button>
           </div>
+          {slug && (
+            <div className="mt-2 text-xs text-[var(--color-text-secondary)]">
+              Folder: <span className="font-mono text-[var(--color-text)]">{slug}</span>
+            </div>
+          )}
         </div>
       )}
 
