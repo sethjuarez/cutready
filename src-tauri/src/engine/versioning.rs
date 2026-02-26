@@ -32,26 +32,37 @@ pub fn init_project_repo(project_dir: &Path) -> Result<(), VersioningError> {
 }
 
 /// Stage all files and commit a snapshot with the given message.
-pub fn commit_snapshot(project_dir: &Path, message: &str) -> Result<String, VersioningError> {
+pub fn commit_snapshot(
+    project_dir: &Path,
+    message: &str,
+    fork_label: Option<&str>,
+) -> Result<String, VersioningError> {
     let repo = open_repo(project_dir)?;
 
     // If rewound (prev-tip exists), fork the old chain before committing new work
     if let Some(prev_tip) = load_prev_tip(project_dir) {
-        let current_branch = get_current_branch_name(&repo);
-        let current_label = current_branch
-            .as_deref()
-            .map(|b| {
-                let slug = b.strip_prefix("timeline/").unwrap_or(b);
-                let labels = load_timeline_labels(project_dir);
-                labels.get(slug).cloned().unwrap_or_else(|| {
-                    if slug == MAIN_BRANCH { "Main".to_string() } else { slug.to_string() }
-                })
-            })
-            .unwrap_or_else(|| "Main".to_string());
-
         let timestamp = chrono::Utc::now().format("%H%M%S").to_string();
         let fork_slug = format!("prev-{}", timestamp);
-        let fork_label = format!("{} (before rewind)", current_label);
+
+        // Use caller-provided label, or auto-generate from current branch name
+        let label = match fork_label {
+            Some(l) if !l.trim().is_empty() => l.trim().to_string(),
+            _ => {
+                let current_branch = get_current_branch_name(&repo);
+                let current_label = current_branch
+                    .as_deref()
+                    .map(|b| {
+                        let slug = b.strip_prefix("timeline/").unwrap_or(b);
+                        let labels = load_timeline_labels(project_dir);
+                        labels.get(slug).cloned().unwrap_or_else(|| {
+                            if slug == MAIN_BRANCH { "Main".to_string() } else { slug.to_string() }
+                        })
+                    })
+                    .unwrap_or_else(|| "Main".to_string());
+                format!("{} (before rewind)", current_label)
+            }
+        };
+
         let fork_ref = format!("{}{}", TIMELINE_PREFIX, fork_slug);
 
         // Create a branch at the old tip to preserve those commits
@@ -59,9 +70,9 @@ pub fn commit_snapshot(project_dir: &Path, message: &str) -> Result<String, Vers
             fork_ref.as_str(),
             prev_tip,
             gix::refs::transaction::PreviousValue::MustNotExist,
-            format!("Preserve commits before rewind: {}", fork_label),
+            format!("Preserve commits before rewind: {}", label),
         );
-        let _ = save_timeline_label(project_dir, &fork_slug, &fork_label);
+        let _ = save_timeline_label(project_dir, &fork_slug, &label);
         clear_prev_tip(project_dir);
     }
 
@@ -94,6 +105,11 @@ pub fn commit_snapshot(project_dir: &Path, message: &str) -> Result<String, Vers
         .map_err(|e| VersioningError::Git(e.to_string()))?;
 
     Ok(commit_id.to_string())
+}
+
+/// Check if the project is in a rewound state (prev-tip exists).
+pub fn is_rewound(project_dir: &Path) -> bool {
+    prev_tip_path(project_dir).exists()
 }
 
 /// Check if working directory has changes not captured in a snapshot.
@@ -190,7 +206,7 @@ pub fn restore_version(project_dir: &Path, commit_id: &str) -> Result<String, Ve
 
     let short_id = &commit_id[..8.min(commit_id.len())];
     let message = format!("Restored from {}", short_id);
-    commit_snapshot(project_dir, &message)
+    commit_snapshot(project_dir, &message, None)
 }
 
 /// Check out a snapshot's files to the working directory WITHOUT committing.
@@ -946,7 +962,7 @@ mod tests {
         let tmp = setup_project_dir();
         init_project_repo(tmp.path()).unwrap();
 
-        let id1 = commit_snapshot(tmp.path(), "Initial commit").unwrap();
+        let id1 = commit_snapshot(tmp.path(), "Initial commit", None).unwrap();
         assert!(!id1.is_empty());
 
         std::fs::write(
@@ -954,7 +970,7 @@ mod tests {
             r#"{"name": "test", "version": 2}"#,
         )
         .unwrap();
-        let id2 = commit_snapshot(tmp.path(), "Update version").unwrap();
+        let id2 = commit_snapshot(tmp.path(), "Update version", None).unwrap();
         assert_ne!(id1, id2);
 
         let versions = list_versions(tmp.path()).unwrap();
@@ -976,14 +992,14 @@ mod tests {
         let tmp = setup_project_dir();
         init_project_repo(tmp.path()).unwrap();
 
-        let id1 = commit_snapshot(tmp.path(), "v1").unwrap();
+        let id1 = commit_snapshot(tmp.path(), "v1", None).unwrap();
 
         std::fs::write(
             tmp.path().join("project.json"),
             r#"{"name": "test", "version": 2}"#,
         )
         .unwrap();
-        let _id2 = commit_snapshot(tmp.path(), "v2").unwrap();
+        let _id2 = commit_snapshot(tmp.path(), "v2", None).unwrap();
 
         let data = super::get_file_at_version(tmp.path(), &id1, "project.json").unwrap();
         let content = String::from_utf8(data).unwrap();
@@ -995,14 +1011,14 @@ mod tests {
         let tmp = setup_project_dir();
         init_project_repo(tmp.path()).unwrap();
 
-        let id1 = commit_snapshot(tmp.path(), "v1").unwrap();
+        let id1 = commit_snapshot(tmp.path(), "v1", None).unwrap();
 
         std::fs::write(
             tmp.path().join("project.json"),
             r#"{"name": "test", "version": 2}"#,
         )
         .unwrap();
-        commit_snapshot(tmp.path(), "v2").unwrap();
+        commit_snapshot(tmp.path(), "v2", None).unwrap();
 
         restore_version(tmp.path(), &id1).unwrap();
 
@@ -1023,7 +1039,7 @@ mod tests {
         std::fs::create_dir_all(&docs_dir).unwrap();
         std::fs::write(docs_dir.join("doc1.json"), r#"{"title": "Doc 1"}"#).unwrap();
 
-        let id = commit_snapshot(tmp.path(), "With subdirs").unwrap();
+        let id = commit_snapshot(tmp.path(), "With subdirs", None).unwrap();
         assert!(!id.is_empty());
 
         let data = super::get_file_at_version(tmp.path(), &id, "documents/doc1.json").unwrap();
@@ -1040,12 +1056,12 @@ mod tests {
         let sketches_dir = tmp.path().join("sketches");
         std::fs::create_dir_all(&sketches_dir).unwrap();
         std::fs::write(sketches_dir.join("intro.sk"), r#"{"title":"Intro v1"}"#).unwrap();
-        let id1 = commit_snapshot(tmp.path(), "v1 with sketch").unwrap();
+        let id1 = commit_snapshot(tmp.path(), "v1 with sketch", None).unwrap();
 
         // v2: modify sketch and add another
         std::fs::write(sketches_dir.join("intro.sk"), r#"{"title":"Intro v2"}"#).unwrap();
         std::fs::write(sketches_dir.join("outro.sk"), r#"{"title":"Outro"}"#).unwrap();
-        commit_snapshot(tmp.path(), "v2 modified").unwrap();
+        commit_snapshot(tmp.path(), "v2 modified", None).unwrap();
 
         // Verify v2 state
         assert!(sketches_dir.join("outro.sk").exists());
@@ -1067,7 +1083,7 @@ mod tests {
         init_project_repo(tmp.path()).unwrap();
 
         // Commit baseline
-        commit_snapshot(tmp.path(), "baseline").unwrap();
+        commit_snapshot(tmp.path(), "baseline", None).unwrap();
 
         // Make edits
         std::fs::write(tmp.path().join("project.json"), r#"{"name":"dirty","version":99}"#).unwrap();
@@ -1102,8 +1118,8 @@ mod tests {
         let tmp = setup_project_dir();
         init_project_repo(tmp.path()).unwrap();
 
-        let id1 = commit_snapshot(tmp.path(), "v1").unwrap();
-        commit_snapshot(tmp.path(), "v2").unwrap();
+        let id1 = commit_snapshot(tmp.path(), "v1", None).unwrap();
+        commit_snapshot(tmp.path(), "v2", None).unwrap();
 
         // Initially just "Main" timeline
         let timelines = list_timelines(tmp.path()).unwrap();
@@ -1129,9 +1145,9 @@ mod tests {
         let tmp = setup_project_dir();
         init_project_repo(tmp.path()).unwrap();
 
-        let id1 = commit_snapshot(tmp.path(), "v1").unwrap();
+        let id1 = commit_snapshot(tmp.path(), "v1", None).unwrap();
         std::fs::write(tmp.path().join("project.json"), r#"{"name":"test","version":2}"#).unwrap();
-        commit_snapshot(tmp.path(), "v2").unwrap();
+        commit_snapshot(tmp.path(), "v2", None).unwrap();
 
         // Create exploration from v1
         create_timeline(tmp.path(), &id1, "Exploration").unwrap();
@@ -1157,14 +1173,14 @@ mod tests {
         let tmp = setup_project_dir();
         init_project_repo(tmp.path()).unwrap();
 
-        let id1 = commit_snapshot(tmp.path(), "v1").unwrap();
+        let id1 = commit_snapshot(tmp.path(), "v1", None).unwrap();
         std::fs::write(tmp.path().join("project.json"), r#"{"name":"test","version":2}"#).unwrap();
-        commit_snapshot(tmp.path(), "v2").unwrap();
+        commit_snapshot(tmp.path(), "v2", None).unwrap();
 
         // Create exploration from v1 and add a commit there
         create_timeline(tmp.path(), &id1, "Exploration").unwrap();
         std::fs::write(tmp.path().join("project.json"), r#"{"name":"test","version":3}"#).unwrap();
-        commit_snapshot(tmp.path(), "v3 on exploration").unwrap();
+        commit_snapshot(tmp.path(), "v3 on exploration", None).unwrap();
 
         let graph = get_timeline_graph(tmp.path()).unwrap();
         // Should have: v1 (shared), v2 (main), v3 (exploration)
@@ -1181,11 +1197,11 @@ mod tests {
         let tmp = setup_project_dir();
         init_project_repo(tmp.path()).unwrap();
 
-        let id1 = commit_snapshot(tmp.path(), "v1").unwrap();
+        let id1 = commit_snapshot(tmp.path(), "v1", None).unwrap();
         std::fs::write(tmp.path().join("project.json"), r#"{"version":2}"#).unwrap();
-        let id2 = commit_snapshot(tmp.path(), "v2").unwrap();
+        let id2 = commit_snapshot(tmp.path(), "v2", None).unwrap();
         std::fs::write(tmp.path().join("project.json"), r#"{"version":3}"#).unwrap();
-        let _id3 = commit_snapshot(tmp.path(), "v3").unwrap();
+        let _id3 = commit_snapshot(tmp.path(), "v3", None).unwrap();
 
         // Navigate backward to v1 — should NOT create a fork
         navigate_to_snapshot(tmp.path(), &id1).unwrap();
@@ -1210,7 +1226,7 @@ mod tests {
 
         // Now commit new work — THIS should create the fork
         std::fs::write(tmp.path().join("project.json"), r#"{"version":"new"}"#).unwrap();
-        let _new_id = commit_snapshot(tmp.path(), "new direction").unwrap();
+        let _new_id = commit_snapshot(tmp.path(), "new direction", None).unwrap();
 
         let timelines = list_timelines(tmp.path()).unwrap();
         assert!(timelines.len() >= 2, "Fork created on commit, got {}", timelines.len());
@@ -1219,11 +1235,33 @@ mod tests {
     }
 
     #[test]
+    fn commit_with_custom_fork_label() {
+        let tmp = setup_project_dir();
+        init_project_repo(tmp.path()).unwrap();
+
+        let id1 = commit_snapshot(tmp.path(), "v1", None).unwrap();
+        std::fs::write(tmp.path().join("project.json"), r#"{"v":2}"#).unwrap();
+        let _id2 = commit_snapshot(tmp.path(), "v2", None).unwrap();
+
+        navigate_to_snapshot(tmp.path(), &id1).unwrap();
+        assert!(is_rewound(tmp.path()), "Should be rewound after backward nav");
+
+        std::fs::write(tmp.path().join("project.json"), r#"{"v":"alt"}"#).unwrap();
+        let _id3 = commit_snapshot(tmp.path(), "alternative approach", Some("Original plan")).unwrap();
+
+        let timelines = list_timelines(tmp.path()).unwrap();
+        let fork = timelines.iter().find(|t| !t.is_active);
+        assert!(fork.is_some(), "Fork should exist");
+        assert_eq!(fork.unwrap().label, "Original plan", "Should use custom label");
+        assert!(!is_rewound(tmp.path()), "prev-tip cleared after commit");
+    }
+
+    #[test]
     fn navigate_to_current_head_is_noop() {
         let tmp = setup_project_dir();
         init_project_repo(tmp.path()).unwrap();
 
-        let id1 = commit_snapshot(tmp.path(), "v1").unwrap();
+        let id1 = commit_snapshot(tmp.path(), "v1", None).unwrap();
 
         // Navigate to HEAD — should not create any forks
         navigate_to_snapshot(tmp.path(), &id1).unwrap();
@@ -1236,7 +1274,7 @@ mod tests {
     fn has_stash_check() {
         let tmp = setup_project_dir();
         init_project_repo(tmp.path()).unwrap();
-        commit_snapshot(tmp.path(), "v1").unwrap();
+        commit_snapshot(tmp.path(), "v1", None).unwrap();
 
         assert!(!has_stash(tmp.path()));
 
@@ -1263,15 +1301,15 @@ mod tests {
         // Simulate sketch file like the real app
         let sketch = r#"{"title":"Start","rows":[{"text":"row1"}]}"#;
         std::fs::write(tmp.path().join("start.sk"), sketch).unwrap();
-        let id1 = commit_snapshot(tmp.path(), "row one").unwrap();
+        let id1 = commit_snapshot(tmp.path(), "row one", None).unwrap();
 
         let sketch2 = r#"{"title":"Start","rows":[{"text":"row1"},{"text":"row2"}]}"#;
         std::fs::write(tmp.path().join("start.sk"), sketch2).unwrap();
-        let id2 = commit_snapshot(tmp.path(), "row two").unwrap();
+        let id2 = commit_snapshot(tmp.path(), "row two", None).unwrap();
 
         let sketch3 = r#"{"title":"Start","rows":[{"text":"row1"},{"text":"row2"},{"text":"row3"}]}"#;
         std::fs::write(tmp.path().join("start.sk"), sketch3).unwrap();
-        let id3 = commit_snapshot(tmp.path(), "row three").unwrap();
+        let id3 = commit_snapshot(tmp.path(), "row three", None).unwrap();
 
         // Verify: HEAD is at id3, 3 versions, file has 3 rows
         assert_eq!(list_versions(tmp.path()).unwrap().len(), 3);
@@ -1320,7 +1358,7 @@ mod tests {
         std::fs::write(tmp.path().join("start.sk"), sketch_new).unwrap();
         assert!(has_unsaved_changes(tmp.path()).unwrap(), "Should be dirty after editing");
 
-        let id4 = commit_snapshot(tmp.path(), "new direction").unwrap();
+        let id4 = commit_snapshot(tmp.path(), "new direction", None).unwrap();
         assert!(!has_unsaved_changes(tmp.path()).unwrap(), "Should be clean after saving");
 
         // Fork should now exist (created by commit_snapshot)
@@ -1366,11 +1404,11 @@ mod tests {
         init_project_repo(tmp.path()).unwrap();
 
         // Initial commit includes project.json from setup_project_dir
-        let init_id = commit_snapshot(tmp.path(), "Init").unwrap();
+        let init_id = commit_snapshot(tmp.path(), "Init", None).unwrap();
 
         // Create a sketch file and commit
         std::fs::write(tmp.path().join("sketch.sk"), r#"{"title":"Test"}"#).unwrap();
-        let _id2 = commit_snapshot(tmp.path(), "Added sketch").unwrap();
+        let _id2 = commit_snapshot(tmp.path(), "Added sketch", None).unwrap();
 
         // Navigate back to the initial commit
         navigate_to_snapshot(tmp.path(), &init_id).unwrap();
@@ -1401,11 +1439,11 @@ mod tests {
 
         let sketch_v1 = r#"{"title":"V1","rows":[]}"#;
         std::fs::write(tmp.path().join("demo.sk"), sketch_v1).unwrap();
-        let id1 = commit_snapshot(tmp.path(), "version 1").unwrap();
+        let id1 = commit_snapshot(tmp.path(), "version 1", None).unwrap();
 
         let sketch_v2 = r#"{"title":"V2","rows":[{"text":"added"}]}"#;
         std::fs::write(tmp.path().join("demo.sk"), sketch_v2).unwrap();
-        let _id2 = commit_snapshot(tmp.path(), "version 2").unwrap();
+        let _id2 = commit_snapshot(tmp.path(), "version 2", None).unwrap();
 
         // Navigate back to v1
         navigate_to_snapshot(tmp.path(), &id1).unwrap();

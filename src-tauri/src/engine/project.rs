@@ -78,7 +78,7 @@ pub fn init_project_folder(root: &Path) -> Result<ProjectView, ProjectError> {
     // Init git if not already a repo
     if !root.join(".git").exists() {
         versioning::init_project_repo(root).map_err(|e| ProjectError::Io(e.to_string()))?;
-        let _ = versioning::commit_snapshot(root, "Initialize project");
+        let _ = versioning::commit_snapshot(root, "Initialize project", None);
     }
 
     Ok(ProjectView::new(root.to_path_buf()))
@@ -96,7 +96,7 @@ pub fn open_project_folder(root: &Path) -> Result<ProjectView, ProjectError> {
     // Init git if not already a repo so snapshots work
     if !root.join(".git").exists() {
         versioning::init_project_repo(root).map_err(|e| ProjectError::Io(e.to_string()))?;
-        let _ = versioning::commit_snapshot(root, "Initialize project");
+        let _ = versioning::commit_snapshot(root, "Initialize project", None);
     }
 
     Ok(ProjectView::new(root.to_path_buf()))
@@ -138,7 +138,7 @@ pub fn delete_sketch(path: &Path, project_root: &Path) -> Result<(), ProjectErro
         std::fs::remove_file(path).map_err(|e| ProjectError::Io(e.to_string()))?;
     }
     if project_root.join(".git").exists() {
-        let _ = versioning::commit_snapshot(project_root, "Delete sketch");
+        let _ = versioning::commit_snapshot(project_root, "Delete sketch", None);
     }
     Ok(())
 }
@@ -160,7 +160,7 @@ pub fn rename_sketch(
     std::fs::rename(old_path, new_path).map_err(|e| ProjectError::Io(e.to_string()))?;
 
     if project_root.join(".git").exists() {
-        let _ = versioning::commit_snapshot(project_root, "Rename sketch");
+        let _ = versioning::commit_snapshot(project_root, "Rename sketch", None);
     }
     Ok(())
 }
@@ -201,7 +201,7 @@ pub fn delete_storyboard(path: &Path, project_root: &Path) -> Result<(), Project
         std::fs::remove_file(path).map_err(|e| ProjectError::Io(e.to_string()))?;
     }
     if project_root.join(".git").exists() {
-        let _ = versioning::commit_snapshot(project_root, "Delete storyboard");
+        let _ = versioning::commit_snapshot(project_root, "Delete storyboard", None);
     }
     Ok(())
 }
@@ -246,13 +246,17 @@ pub fn sketch_file_exists(relative_path: &str, project_root: &Path) -> bool {
 // ── Versioning helpers ─────────────────────────────────────────────
 
 /// Save with a user-provided label (for named versions).
-pub fn save_with_label(project_root: &Path, label: &str) -> Result<String, ProjectError> {
+pub fn save_with_label(
+    project_root: &Path,
+    label: &str,
+    fork_label: Option<&str>,
+) -> Result<String, ProjectError> {
     // Auto-init git if missing so snapshots always work
     if !project_root.join(".git").exists() {
         versioning::init_project_repo(project_root)
             .map_err(|e| ProjectError::Io(e.to_string()))?;
     }
-    versioning::commit_snapshot(project_root, label)
+    versioning::commit_snapshot(project_root, label, fork_label)
         .map_err(|e| ProjectError::Io(e.to_string()))
 }
 
@@ -494,7 +498,7 @@ mod tests {
         init_project_folder(root).unwrap();
         write_sketch(&Sketch::new("Test"), &root.join("test.sk"), root).unwrap();
 
-        let commit_id = save_with_label(root, "v1.0 release").unwrap();
+        let commit_id = save_with_label(root, "v1.0 release", None).unwrap();
         assert!(!commit_id.is_empty());
 
         let versions = versioning::list_versions(root).unwrap();
