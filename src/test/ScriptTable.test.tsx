@@ -1,12 +1,8 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { render } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ScriptTable } from "../components/ScriptTable";
 import type { PlanningRow } from "../types/sketch";
-
-function emptyRow(): PlanningRow {
-  return { time: "", narrative: "", demo_actions: "", screenshot: null };
-}
 
 function filledRow(time: string, narrative: string, actions: string): PlanningRow {
   return { time, narrative, demo_actions: actions, screenshot: null };

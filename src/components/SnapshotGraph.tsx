@@ -1,22 +1,17 @@
 import { useState, useMemo } from "react";
-import { hierarchy, tree as d3Tree } from "d3-hierarchy";
 import type { GraphNode } from "../types/sketch";
 
 /* ── Layout constants ─────────────────────────────────────────────── */
-const NODE_DX = 20;      // D3: horizontal spacing between siblings
-const ROW_H = 38;        // px per commit row
-const DIRTY_H = 26;      // px for dirty-indicator row
-const GHOST_H = 26;      // px for ghost-branch row
-const ALIAS_H = 28;      // px for branch-marker (alias) row
-const PAD_L = 16;        // minimum left padding
-const PAD_T = 6;         // top padding
-const PAD_B = 6;         // bottom padding
-const NODE_R = 3.5;      // regular dot radius
-const HEAD_R = 5;        // HEAD dot radius
-const LABEL_GAP = 10;    // rightmost node centre → label text start
+const ROW_H = 40;         // px per commit row
+const DIRTY_ROW_H = 28;   // px for dirty/ghost/alias indicator rows
+const LANE_W = 16;        // px between lane centers
+const GRAPH_PAD = 14;     // left padding to first lane center
+const NODE_R = 5;         // regular dot radius
+const HEAD_R = 6.5;       // HEAD dot radius
+const STROKE_W = 1.5;     // rail line width
 
 const LANE_COLORS = [
-  "var(--color-accent)",      // purple — main
+  "var(--color-accent)",      // purple — main / active
   "#10b981",                  // emerald
   "#f59e0b",                  // amber
   "#ef4444",                  // red
@@ -25,106 +20,43 @@ const LANE_COLORS = [
   "#14b8a6",                  // teal
   "#8b5cf6",                  // violet
 ];
-
 function lc(i: number) { return LANE_COLORS[i % LANE_COLORS.length]; }
 
 /* ── Types ────────────────────────────────────────────────────────── */
 interface TimelineInfo { label: string; colorIndex: number }
 
-interface TreeDatum {
-  id: string;
-  graphNode: GraphNode;
-  children: TreeDatum[];
+type RowKind = "node" | "dirty" | "ghost" | "alias";
+interface DisplayRow {
+  kind: RowKind;
+  node?: GraphNode;           // for "node" rows
+  aliasTimeline?: string;     // for "alias" rows
+  aliasLane?: number;
+  laneIdx: number;            // which lane this row's dot is on
+  h: number;                  // row height
 }
 
-interface AliasInfo {
-  timeline: string;
-  lane: number;
+/* ── Assign lanes: active branch = 0, others by order ──────────── */
+function assignLanes(nodes: GraphNode[], activeLane: number): Map<number, number> {
+  // Map from backend lane (color_index) → display lane (0 = leftmost)
+  const backendLanes = new Set<number>();
+  for (const n of nodes) backendLanes.add(n.lane);
+
+  const sorted = [...backendLanes].sort((a, b) => {
+    if (a === activeLane) return -1;
+    if (b === activeLane) return 1;
+    return a - b;
+  });
+  return new Map(sorted.map((bl, i) => [bl, i]));
 }
 
-interface VisualRow {
-  kind: "dirty" | "node" | "ghost" | "alias";
-  nodeIdx?: number;
-  alias?: AliasInfo;
-  cx: number;
-  cy: number;
-  h: number;
-  top: number;
-}
+/* ── Sort nodes for display (active trunk first, branches at fork points) ── */
+function sortForDisplay(nodes: GraphNode[], activeLane: number): GraphNode[] {
+  if (nodes.length === 0) return [];
 
-interface Edge {
-  d: string;
-  color: string;
-  dashed?: boolean;
-  opacity: number;
-}
-
-/* ── D3 tree layout → x positions ─────────────────────────────────── */
-function computeXPositions(nodes: GraphNode[]): Map<string, number> {
-  if (nodes.length === 0) return new Map();
-
-  const byId = new Map(nodes.map(n => [n.id, n]));
-  const headNode = nodes.find(n => n.is_head);
-  const activeLane = headNode?.lane ?? 0;
-
-  // Build parent → children map (reverse of node.parents)
-  const childrenOf = new Map<string, GraphNode[]>();
-  for (const node of nodes) {
-    for (const pid of node.parents) {
-      if (byId.has(pid)) {
-        if (!childrenOf.has(pid)) childrenOf.set(pid, []);
-        childrenOf.get(pid)!.push(node);
-      }
-    }
-  }
-
-  // Root = node with no parents in our set
-  const root = nodes.find(n =>
-    n.parents.length === 0 || !n.parents.some(p => byId.has(p))
-  ) || nodes[nodes.length - 1];
-
-  // Build tree for D3 (active-lane children first → D3 keeps active branch leftmost)
-  const visited = new Set<string>();
-  function build(gn: GraphNode): TreeDatum {
-    visited.add(gn.id);
-    const kids = (childrenOf.get(gn.id) || [])
-      .filter(k => !visited.has(k.id))
-      .sort((a, b) => {
-        const aActive = a.lane === activeLane ? 0 : 1;
-        const bActive = b.lane === activeLane ? 0 : 1;
-        return aActive - bActive || a.lane - b.lane;
-      });
-    return { id: gn.id, graphNode: gn, children: kids.map(k => build(k)) };
-  }
-
-  const treeData = build(root);
-  const h = hierarchy(treeData, d => d.children);
-  d3Tree<TreeDatum>().nodeSize([NODE_DX, 1])(h);
-
-  // Extract x positions
-  const xMap = new Map<string, number>();
-  for (const d of h.descendants()) xMap.set(d.data.id, d.x ?? 0);
-
-  // Normalize: min x → PAD_L
-  const minX = Math.min(...xMap.values());
-  for (const [id, x] of xMap) xMap.set(id, x - minX + PAD_L);
-
-  return xMap;
-}
-
-/* ── Display sort (active branch as trunk, others at fork points) ── */
-function sortForDisplay(nodes: GraphNode[]): GraphNode[] {
-  if (nodes.length === 0) return nodes;
-
-  const headNode = nodes.find(n => n.is_head);
-  const activeLane = headNode?.lane ?? 0;
-
-  // Active branch = trunk (continuous line), sorted newest-first
   const trunk = nodes
     .filter(n => n.lane === activeLane)
     .sort((a, b) => +new Date(b.timestamp) - +new Date(a.timestamp));
 
-  // Group other branches by lane
   const lanes = new Map<number, GraphNode[]>();
   for (const n of nodes) {
     if (n.lane === activeLane) continue;
@@ -134,7 +66,6 @@ function sortForDisplay(nodes: GraphNode[]): GraphNode[] {
   for (const arr of lanes.values())
     arr.sort((a, b) => +new Date(b.timestamp) - +new Date(a.timestamp));
 
-  // Find fork-point (trunk parent) for each branch
   const trunkIds = new Set(trunk.map(n => n.id));
   const branchAtFork = new Map<string, GraphNode[][]>();
   for (const [, arr] of lanes) {
@@ -177,29 +108,66 @@ export function SnapshotGraph({
 }: Props) {
   const [hovered, setHovered] = useState<string | null>(null);
 
-  // Separate primary nodes from alias nodes (same commit, different branch tip)
-  const { primaryNodes, aliasBadges } = useMemo(() => {
+  /* ── Separate primary nodes from alias nodes ──── */
+  const { primaryNodes, aliases } = useMemo(() => {
     const seen = new Set<string>();
     const primary: GraphNode[] = [];
-    const badges = new Map<string, { timeline: string; lane: number }[]>();
+    const aliasMap = new Map<string, { timeline: string; lane: number }[]>();
     for (const n of rawNodes) {
       if (seen.has(n.id)) {
-        // This is an alias — another branch tip pointing at same commit
-        if (!badges.has(n.id)) badges.set(n.id, []);
-        badges.get(n.id)!.push({ timeline: n.timeline, lane: n.lane });
+        if (!aliasMap.has(n.id)) aliasMap.set(n.id, []);
+        aliasMap.get(n.id)!.push({ timeline: n.timeline, lane: n.lane });
       } else {
         seen.add(n.id);
         primary.push(n);
       }
     }
-    return { primaryNodes: primary, aliasBadges: badges };
+    return { primaryNodes: primary, aliases: aliasMap };
   }, [rawNodes]);
 
-  const nodes = useMemo(() => sortForDisplay(primaryNodes), [primaryNodes]);
-  const xPos  = useMemo(() => computeXPositions(primaryNodes), [primaryNodes]);
+  const headNode = primaryNodes.find(n => n.is_head);
+  const activeLane = headNode?.lane ?? 0;
+
+  const sorted = useMemo(() => sortForDisplay(primaryNodes, activeLane), [primaryNodes, activeLane]);
+  const laneMap = useMemo(() => assignLanes(primaryNodes, activeLane), [primaryNodes, activeLane]);
+
+  /* ── Build display rows ─────────────────────────── */
+  const rows: DisplayRow[] = useMemo(() => {
+    const result: DisplayRow[] = [];
+    for (let i = 0; i < sorted.length; i++) {
+      const n = sorted[i];
+      const dl = laneMap.get(n.lane) ?? 0;
+
+      // Ghost row above HEAD (rewound + dirty)
+      if (n.is_head && isDirty && isRewound) {
+        result.push({ kind: "ghost", laneIdx: dl + 1, h: DIRTY_ROW_H });
+      }
+      // Dirty row above HEAD (not rewound)
+      if (n.is_head && isDirty && !isRewound) {
+        result.push({ kind: "dirty", laneIdx: dl, h: DIRTY_ROW_H });
+      }
+
+      result.push({ kind: "node", node: n, laneIdx: dl, h: ROW_H });
+
+      // Alias rows after their shared commit
+      const nodeAliases = aliases.get(n.id);
+      if (nodeAliases) {
+        for (const a of nodeAliases) {
+          result.push({
+            kind: "alias", aliasTimeline: a.timeline, aliasLane: a.lane,
+            laneIdx: laneMap.get(a.lane) ?? (laneMap.size), h: DIRTY_ROW_H,
+          });
+        }
+      }
+    }
+    return result;
+  }, [sorted, laneMap, isDirty, isRewound, aliases]);
+
+  const numLanes = laneMap.size || 1;
+  const graphW = GRAPH_PAD + numLanes * LANE_W + 4;
 
   /* ── empty state ─────────────────────────────── */
-  if (nodes.length === 0 && !isDirty) {
+  if (sorted.length === 0 && !isDirty) {
     return (
       <div className="px-3 py-8 text-center">
         <div className="text-[var(--color-text-secondary)] text-xs">No snapshots yet</div>
@@ -210,252 +178,250 @@ export function SnapshotGraph({
     );
   }
 
-  /* ── helpers: x from D3, fallback to lane-based ── */
-  function nx(node: GraphNode) { return xPos.get(node.id) ?? PAD_L; }
+  /* ── Compute y midpoints for each row ──────── */
+  let totalH = 0;
+  const rowTops: number[] = [];
+  for (const r of rows) {
+    rowTops.push(totalH);
+    totalH += r.h;
+  }
+  function rowCy(i: number) { return rowTops[i] + rows[i].h / 2; }
+  function laneX(l: number) { return GRAPH_PAD + l * LANE_W; }
 
-  const headIdx   = nodes.findIndex(n => n.is_head);
-  const showGhost = isDirty && isRewound && headIdx >= 0;
-  const ghostX    = showGhost ? nx(nodes[headIdx]) + NODE_DX : 0;
-
-  // Compute x positions for alias branches (offset from their shared commit)
-  const aliasXMap = new Map<string, number>(); // key: "commitId:timeline"
-  for (const [commitId, aliases] of aliasBadges) {
-    const baseX = xPos.get(commitId) ?? PAD_L;
-    for (let ai = 0; ai < aliases.length; ai++) {
-      aliasXMap.set(`${commitId}:${aliases[ai].timeline}`, baseX + NODE_DX * (ai + 1));
+  /* ── Build SVG paths: rails + connectors ──────── */
+  // For each node row, we need:
+  // 1. A vertical rail from this node to its parent node (if on same lane)
+  // 2. A curved connector if parent is on a different lane
+  const nodeRowIdx = new Map<string, number>(); // node.id → row index
+  for (let i = 0; i < rows.length; i++) {
+    if (rows[i].kind === "node" && rows[i].node) {
+      nodeRowIdx.set(rows[i].node!.id, i);
     }
   }
 
-  const maxX      = Math.max(
-    ...nodes.map(nx),
-    showGhost ? ghostX : 0,
-    ...aliasXMap.values(),
-  );
-  const graphColW = maxX + LABEL_GAP;
+  type SvgPath = { d: string; color: string; opacity: number; dashed?: boolean };
+  const paths: SvgPath[] = [];
 
-  /* ── build visual rows ───────────────────────── */
-  const rows: VisualRow[] = [];
-  let y = PAD_T;
+  // Draw vertical rail segments + branch connectors
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    if (row.kind !== "node" || !row.node) continue;
 
-  for (let i = 0; i < nodes.length; i++) {
-    // Ghost row above HEAD (rewound + dirty)
-    if (nodes[i].is_head && showGhost) {
-      rows.push({ kind: "ghost", cx: ghostX, cy: y + GHOST_H / 2, h: GHOST_H, top: y });
-      y += GHOST_H;
-    }
-    // Dirty indicator above HEAD (non-rewound + dirty)
-    if (nodes[i].is_head && isDirty && !isRewound) {
-      rows.push({ kind: "dirty", cx: nx(nodes[i]), cy: y + DIRTY_H / 2, h: DIRTY_H, top: y });
-      y += DIRTY_H;
-    }
-    rows.push({ kind: "node", nodeIdx: i, cx: nx(nodes[i]), cy: y + ROW_H / 2, h: ROW_H, top: y });
-    y += ROW_H;
-
-    // Insert alias (branch marker) rows right after the shared commit
-    const aliases = aliasBadges.get(nodes[i].id);
-    if (aliases) {
-      for (const ab of aliases) {
-        const abX = aliasXMap.get(`${nodes[i].id}:${ab.timeline}`) ?? nx(nodes[i]) + NODE_DX;
-        rows.push({
-          kind: "alias", alias: ab, cx: abX, cy: y + ALIAS_H / 2, h: ALIAS_H, top: y,
-        });
-        y += ALIAS_H;
-      }
-    }
-  }
-
-  const totalH = y + PAD_B;
-
-  /* ── node-row lookup ─────────────────────────── */
-  const nodeRow = new Map<number, VisualRow>();
-  for (const r of rows) if (r.kind === "node" && r.nodeIdx !== undefined) nodeRow.set(r.nodeIdx, r);
-
-  /* ── edges ───────────────────────────────────── */
-  const idIdx = new Map(nodes.map((n, i) => [n.id, i]));
-  const edges: Edge[] = [];
-
-  for (let i = 0; i < nodes.length; i++) {
-    const cr = nodeRow.get(i);
-    if (!cr) continue;
-    for (const pid of nodes[i].parents) {
-      const pi = idIdx.get(pid);
+    for (const pid of row.node.parents) {
+      const pi = nodeRowIdx.get(pid);
       if (pi === undefined) continue;
-      const pr = nodeRow.get(pi);
-      if (!pr) continue;
 
-      const cR = nodes[i].is_head ? HEAD_R : NODE_R;
-      const pR = nodes[pi].is_head ? HEAD_R : NODE_R;
-      let d: string;
-      if (Math.abs(cr.cx - pr.cx) < 1) {
-        d = `M ${cr.cx} ${cr.cy + cR} L ${pr.cx} ${pr.cy - pR}`;
+      const parentRow = rows[pi];
+      const childLane = row.laneIdx;
+      const parentLane = parentRow.laneIdx;
+      const cx = laneX(childLane);
+      const px = laneX(parentLane);
+      const cy = rowCy(i);
+      const py = rowCy(pi);
+      const color = lc(childLane);
+
+      if (childLane === parentLane) {
+        // Same lane: straight vertical line
+        paths.push({
+          d: `M ${cx} ${cy + NODE_R} L ${px} ${py - NODE_R}`,
+          color, opacity: 0.4,
+        });
       } else {
-        const dy = pr.cy - cr.cy;
-        d = `M ${cr.cx} ${cr.cy + cR} C ${cr.cx} ${cr.cy + dy * 0.4}, ${pr.cx} ${pr.cy - dy * 0.4}, ${pr.cx} ${pr.cy - pR}`;
+        // Different lanes: curve from child to parent
+        // Go down from child, curve horizontally, then down to parent
+        const midY = cy + (py - cy) * 0.5;
+        paths.push({
+          d: `M ${cx} ${cy + NODE_R} L ${cx} ${midY - 6} Q ${cx} ${midY}, ${px} ${midY} L ${px} ${midY} Q ${px} ${midY}, ${px} ${midY + 6} L ${px} ${py - NODE_R}`,
+          color, opacity: 0.35,
+        });
       }
-      edges.push({ d, color: lc(nodes[i].lane), opacity: 0.3 });
     }
   }
 
-  // dirty → HEAD dashed connector
-  const dirtyRow = rows.find(r => r.kind === "dirty");
-  const headNR   = headIdx >= 0 ? nodeRow.get(headIdx) : null;
-  if (dirtyRow && headNR) {
-    edges.push({
-      d: `M ${dirtyRow.cx} ${dirtyRow.cy + 4} L ${headNR.cx} ${headNR.cy - (nodes[headIdx].is_head ? HEAD_R : NODE_R)}`,
-      color: "var(--color-text-secondary)", dashed: true, opacity: 0.25,
+  // Dirty → HEAD connector
+  const dirtyRowIdx = rows.findIndex(r => r.kind === "dirty");
+  const headRowIdx = rows.findIndex(r => r.kind === "node" && r.node?.is_head);
+  if (dirtyRowIdx >= 0 && headRowIdx >= 0) {
+    const dx = laneX(rows[dirtyRowIdx].laneIdx);
+    paths.push({
+      d: `M ${dx} ${rowCy(dirtyRowIdx) + 4} L ${dx} ${rowCy(headRowIdx) - HEAD_R}`,
+      color: "var(--color-text-secondary)", opacity: 0.25, dashed: true,
     });
   }
 
-  // HEAD → ghost
-  const ghostRow = rows.find(r => r.kind === "ghost");
-  const headRow  = headIdx >= 0 ? nodeRow.get(headIdx) : undefined;
-  let ghostEdge: Edge | null = null;
-  if (ghostRow && headRow) {
-    const dx = ghostRow.cx - headRow.cx;
-    const dy = ghostRow.cy - headRow.cy;
-    ghostEdge = {
-      d: `M ${headRow.cx + HEAD_R} ${headRow.cy} C ${headRow.cx + dx * 0.5} ${headRow.cy}, ${ghostRow.cx} ${ghostRow.cy - dy * 0.5}, ${ghostRow.cx} ${ghostRow.cy + 4}`,
-      color: lc(nodes[headIdx].lane), dashed: true, opacity: 0.35,
-    };
+  // Ghost → HEAD connector (curved, branching off)
+  const ghostRowIdx = rows.findIndex(r => r.kind === "ghost");
+  if (ghostRowIdx >= 0 && headRowIdx >= 0) {
+    const gx = laneX(rows[ghostRowIdx].laneIdx);
+    const hx = laneX(rows[headRowIdx].laneIdx);
+    const gy = rowCy(ghostRowIdx);
+    const hy = rowCy(headRowIdx);
+    paths.push({
+      d: `M ${hx + HEAD_R} ${hy} Q ${gx} ${hy}, ${gx} ${gy + 4}`,
+      color: lc(rows[headRowIdx].laneIdx), opacity: 0.35, dashed: true,
+    });
   }
 
-  // Alias → shared commit dashed connectors
-  const aliasEdges: Edge[] = [];
-  for (const row of rows) {
-    if (row.kind !== "alias" || !row.alias) continue;
-    // Find the node row just above this alias
-    const parentNodeRow = rows.filter(r => r.kind === "node" && r.top < row.top).pop();
-    if (parentNodeRow) {
-      const color = lc(row.alias.lane);
-      const dy = row.cy - parentNodeRow.cy;
-      aliasEdges.push({
-        d: `M ${parentNodeRow.cx + NODE_R} ${parentNodeRow.cy} C ${parentNodeRow.cx + (row.cx - parentNodeRow.cx) * 0.5} ${parentNodeRow.cy}, ${row.cx} ${row.cy - dy * 0.5}, ${row.cx} ${row.cy - NODE_R}`,
-        color, dashed: true, opacity: 0.35,
+  // Alias → parent connector
+  for (let i = 0; i < rows.length; i++) {
+    if (rows[i].kind !== "alias") continue;
+    // Find the node row just before this alias
+    let parentIdx = -1;
+    for (let j = i - 1; j >= 0; j--) {
+      if (rows[j].kind === "node") { parentIdx = j; break; }
+    }
+    if (parentIdx >= 0) {
+      const ax = laneX(rows[i].laneIdx);
+      const px = laneX(rows[parentIdx].laneIdx);
+      const ay = rowCy(i);
+      const py = rowCy(parentIdx);
+      paths.push({
+        d: `M ${px + NODE_R} ${py} Q ${ax} ${py}, ${ax} ${ay - 3}`,
+        color: lc(rows[i].laneIdx), opacity: 0.3, dashed: true,
       });
     }
   }
 
-  /* ── render ──────────────────────────────────── */
+  /* ── Render ──────────────────────────────────── */
   return (
-    <div className="relative" style={{ minHeight: totalH, paddingTop: PAD_T, paddingBottom: PAD_B }}>
-      {/* Edge SVG layer */}
+    <div className="relative" style={{ minHeight: totalH }}>
+      {/* SVG graph layer */}
       <svg
         className="absolute top-0 left-0"
-        width={graphColW + 4}
+        width={graphW}
         height={totalH}
-        style={{ pointerEvents: "none", zIndex: 0 }}
+        style={{ pointerEvents: "none", zIndex: 1 }}
       >
-        {edges.map((e, i) => (
-          <path key={i} d={e.d} stroke={e.color} strokeWidth={1.5} strokeOpacity={e.opacity}
-            fill="none" strokeDasharray={e.dashed ? "4 3" : undefined} strokeLinecap="round" />
-        ))}
-        {aliasEdges.map((e, i) => (
-          <path key={`alias-${i}`} d={e.d} stroke={e.color} strokeWidth={1.5} strokeOpacity={e.opacity}
-            fill="none" strokeDasharray="4 3" strokeLinecap="round" />
+        {paths.map((p, i) => (
+          <path key={i} d={p.d} stroke={p.color} strokeWidth={STROKE_W}
+            strokeOpacity={p.opacity} fill="none"
+            strokeDasharray={p.dashed ? "3 2" : undefined}
+            strokeLinecap="round" />
         ))}
       </svg>
 
-      {/* Visual rows */}
+      {/* Row content */}
       {rows.map((row) => {
         if (row.kind === "dirty") {
+          const x = laneX(row.laneIdx);
           return (
-            <div key="dirty" className="flex items-center" style={{ height: row.h }}>
-              <div className="shrink-0 relative flex items-center" style={{ width: graphColW }}>
-                <div className="absolute rounded-full border-[1.5px] border-dashed" style={{
-                  left: row.cx - 4, top: "50%", transform: "translateY(-50%)",
-                  width: 8, height: 8, borderColor: "var(--color-text-secondary)", opacity: 0.6,
-                  backgroundColor: "var(--color-surface)", boxShadow: "0 0 0 2px var(--color-surface)", zIndex: 1,
-                }} />
+            <div key="dirty" className="flex items-center overflow-hidden" style={{ height: row.h }}>
+              <div className="shrink-0 relative" style={{ width: graphW, height: row.h }}>
+                <div className="absolute rounded-full border-[1.5px] border-dashed"
+                  style={{
+                    left: x - 4, top: "50%", transform: "translateY(-50%)",
+                    width: 8, height: 8, borderColor: "var(--color-text-secondary)", opacity: 0.5,
+                    backgroundColor: "var(--color-surface)", zIndex: 2,
+                  }} />
               </div>
-              <div className="flex-1 min-w-0 pr-3">
-                <span className="text-[11px] italic text-[var(--color-text-secondary)]">Unsaved changes</span>
+              <div className="flex-1 min-w-0 pr-2">
+                <span className="text-[10px] italic text-[var(--color-text-secondary)]/70">Unsaved changes</span>
               </div>
             </div>
           );
         }
 
         if (row.kind === "ghost") {
-          const headColor = lc(nodes[headIdx]?.lane ?? 0);
+          const x = laneX(row.laneIdx);
+          const headColor = lc(laneMap.get(activeLane) ?? 0);
           return (
-            <div key="ghost" className="flex items-center" style={{ height: row.h }}>
-              <div className="shrink-0 relative flex items-center" style={{ width: graphColW }}>
-                <div className="absolute rounded-full border-[1.5px] border-dashed" style={{
-                  left: row.cx - 3.5, top: "50%", transform: "translateY(-50%)",
-                  width: 7, height: 7, borderColor: headColor, opacity: 0.5,
-                  backgroundColor: "var(--color-surface)", zIndex: 1,
-                }} />
+            <div key="ghost" className="flex items-center overflow-hidden" style={{ height: row.h }}>
+              <div className="shrink-0 relative" style={{ width: graphW, height: row.h }}>
+                <div className="absolute rounded-full border-[1.5px] border-dashed"
+                  style={{
+                    left: x - 3.5, top: "50%", transform: "translateY(-50%)",
+                    width: 7, height: 7, borderColor: headColor, opacity: 0.5,
+                    backgroundColor: "var(--color-surface)", zIndex: 2,
+                  }} />
               </div>
-              <div className="flex-1 min-w-0 pr-3 flex items-center gap-1.5" style={{ paddingLeft: row.cx - PAD_L }}>
-                <span className="text-[11px] italic text-[var(--color-text-secondary)]">New direction</span>
+              <div className="flex-1 min-w-0 pr-2 flex items-center gap-1">
+                <span className="text-[10px] italic text-[var(--color-text-secondary)]/70">New direction</span>
                 <span className="text-[9px] px-1 py-px rounded-sm bg-amber-500/10 text-amber-500">branching</span>
               </div>
             </div>
           );
         }
 
-        if (row.kind === "alias" && row.alias) {
-          const abColor = lc(row.alias.lane);
-          const abInfo = timelineMap.get(row.alias.timeline);
-          const abLabel = abInfo?.label ?? row.alias.timeline;
+        if (row.kind === "alias") {
+          const x = laneX(row.laneIdx);
+          const abColor = lc(row.laneIdx);
+          const abInfo = timelineMap.get(row.aliasTimeline ?? "");
+          const abLabel = abInfo?.label ?? row.aliasTimeline ?? "";
           return (
-            <div key={`alias-${row.alias.timeline}`} className="flex items-center" style={{ height: row.h }}>
-              <div className="shrink-0 relative flex items-center" style={{ width: graphColW }}>
-                <div className="absolute rounded-full" style={{
-                  left: row.cx - NODE_R, top: "50%", transform: "translateY(-50%)",
-                  width: NODE_R * 2, height: NODE_R * 2,
-                  backgroundColor: abColor, opacity: 0.6,
-                  boxShadow: "0 0 0 2px var(--color-surface)", zIndex: 1,
-                }} />
+            <div key={`alias-${row.aliasTimeline}`} className="flex items-center overflow-hidden" style={{ height: row.h }}>
+              <div className="shrink-0 relative" style={{ width: graphW, height: row.h }}>
+                <div className="absolute rounded-full"
+                  style={{
+                    left: x - 3, top: "50%", transform: "translateY(-50%)",
+                    width: 6, height: 6, backgroundColor: abColor, opacity: 0.5, zIndex: 2,
+                  }} />
               </div>
-              <div className="flex-1 min-w-0 pr-3 flex items-center gap-1.5" style={{ paddingLeft: Math.max(0, row.cx - PAD_L) }}>
+              <div className="flex-1 min-w-0 pr-2 flex items-center gap-1.5">
                 <span className="text-[9px] px-1 py-px rounded-sm"
                   style={{ color: abColor, backgroundColor: `${abColor}15` }}>{abLabel}</span>
-                <span className="text-[10px] italic text-[var(--color-text-secondary)]/60">no unique snapshots</span>
+                <span className="text-[9px] italic text-[var(--color-text-secondary)]/40">no unique snapshots</span>
               </div>
             </div>
           );
         }
 
-        const node  = nodes[row.nodeIdx!];
-        const color = lc(node.lane);
-        const r     = node.is_head ? HEAD_R : NODE_R;
+        // ── Node row ──
+        const node = row.node!;
+        const dl = row.laneIdx;
+        const x = laneX(dl);
+        const color = lc(dl);
+        const r = node.is_head ? HEAD_R : NODE_R;
         const isHov = hovered === node.id;
         const tlInfo = timelineMap.get(node.timeline);
         const tlLabel = tlInfo?.label ?? node.timeline;
 
         return (
-          <div key={node.id} className="flex items-center group" style={{ height: row.h }}
+          <div key={node.id}
+            className="flex items-center group overflow-hidden"
+            style={{ height: row.h }}
             onMouseEnter={() => !node.is_head && setHovered(node.id)}
-            onMouseLeave={() => setHovered(null)}>
-            <div className="shrink-0 relative flex items-center" style={{ width: graphColW }}>
+            onMouseLeave={() => setHovered(null)}
+          >
+            {/* Graph column: dot */}
+            <div className="shrink-0 relative" style={{ width: graphW, height: row.h }}>
+              {/* HEAD ring */}
               {node.is_head && (
-                <div className="absolute rounded-full" style={{
-                  left: row.cx - r - 3, top: "50%", transform: "translateY(-50%)",
-                  width: (r + 3) * 2, height: (r + 3) * 2,
-                  border: `1px solid ${color}`, opacity: 0.25, zIndex: 1,
-                }} />
+                <div className="absolute rounded-full"
+                  style={{
+                    left: x - r - 3, top: "50%", transform: "translateY(-50%)",
+                    width: (r + 3) * 2, height: (r + 3) * 2,
+                    border: `1px solid ${color}`, opacity: 0.3, zIndex: 2,
+                  }} />
               )}
-              <button className="absolute rounded-full transition-colors" style={{
-                left: row.cx - r, top: "50%", transform: "translateY(-50%)",
-                width: r * 2, height: r * 2,
-                backgroundColor: node.is_head || isHov ? color : "var(--color-surface)",
-                border: `2px solid ${color}`, boxShadow: "0 0 0 2px var(--color-surface)",
-                cursor: node.is_head ? "default" : "pointer", zIndex: 2, padding: 0,
-              }} onClick={() => onNodeClick(node.id, node.is_head)}
-                title={node.is_head ? "Current snapshot (HEAD)" : `Navigate to: ${node.message}`} />
+              {/* Dot */}
+              <button className="absolute rounded-full transition-colors"
+                style={{
+                  left: x - r, top: "50%", transform: "translateY(-50%)",
+                  width: r * 2, height: r * 2,
+                  backgroundColor: node.is_head || isHov ? color : "var(--color-surface)",
+                  border: `2px solid ${color}`,
+                  boxShadow: "0 0 0 2px var(--color-surface)",
+                  cursor: node.is_head ? "default" : "pointer",
+                  zIndex: 3, padding: 0,
+                }}
+                onClick={() => onNodeClick(node.id, node.is_head)}
+                title={node.is_head ? "Current snapshot (HEAD)" : `Navigate to: ${node.message}`}
+              />
             </div>
-            <div className={`flex-1 min-w-0 pr-3 flex flex-col justify-center ${!node.is_head ? "cursor-pointer" : ""}`}
-              style={{ paddingLeft: Math.max(0, row.cx - PAD_L) }}
-              onClick={() => !node.is_head && onNodeClick(node.id, node.is_head)}>
-              <div className={`text-xs truncate transition-colors ${
+            {/* Label column */}
+            <div
+              className={`flex-1 min-w-0 pr-2 flex flex-col justify-center ${!node.is_head ? "cursor-pointer" : ""}`}
+              onClick={() => !node.is_head && onNodeClick(node.id, node.is_head)}
+            >
+              <div className={`text-xs truncate leading-tight transition-colors ${
                 node.is_head ? "font-medium text-[var(--color-text)]"
                   : isHov ? "text-[var(--color-text)]"
                   : "text-[var(--color-text-secondary)]"
               }`}>{node.message}</div>
-              <div className="flex items-center gap-1.5 mt-0.5">
-                <span className="text-[10px] text-[var(--color-text-secondary)]/70">{fmtDate(node.timestamp)}</span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] text-[var(--color-text-secondary)]/50">{fmtDate(node.timestamp)}</span>
                 {hasMultipleTimelines && (
-                  <span className="text-[9px] px-1 py-px rounded-sm"
+                  <span className="text-[9px] px-1 py-px rounded-sm leading-tight"
                     style={{ color, backgroundColor: `${color}15` }}>{tlLabel}</span>
                 )}
               </div>
@@ -463,15 +429,6 @@ export function SnapshotGraph({
           </div>
         );
       })}
-
-      {/* Ghost edge on top */}
-      {ghostEdge && (
-        <svg className="absolute top-0 left-0" width={graphColW + 4} height={totalH}
-          style={{ pointerEvents: "none", zIndex: 3 }}>
-          <path d={ghostEdge.d} stroke={ghostEdge.color} strokeWidth={1.5} strokeOpacity={ghostEdge.opacity}
-            fill="none" strokeDasharray="4 3" strokeLinecap="round" />
-        </svg>
-      )}
     </div>
   );
 }
