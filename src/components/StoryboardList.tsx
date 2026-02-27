@@ -153,10 +153,13 @@ export function StoryboardList() {
           </button>
         ) : (
           storyboards.map((sb) => (
-            <button
+            <div
               key={sb.path}
+              role="button"
+              tabIndex={0}
               onClick={() => openStoryboard(sb.path)}
-              className={`group w-full flex items-center gap-2 px-3 py-2 text-left transition-colors ${
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") openStoryboard(sb.path); }}
+              className={`group w-full flex items-center gap-2 px-3 py-2 text-left transition-colors cursor-pointer ${
                 sb.path === activeStoryboardPath
                   ? "bg-[var(--color-accent)]/10 text-[var(--color-accent)]"
                   : "text-[var(--color-text)] hover:bg-[var(--color-surface-alt)]"
@@ -184,7 +187,7 @@ export function StoryboardList() {
                   <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
                 </svg>
               </button>
-            </button>
+            </div>
           ))
         )}
       </div>
@@ -233,10 +236,13 @@ export function StoryboardList() {
           </button>
         ) : (
           sketches.map((sk) => (
-            <button
+            <div
               key={sk.path}
+              role="button"
+              tabIndex={0}
               onClick={() => handleOpenSketchStandalone(sk.path)}
-              className={`group w-full flex items-center gap-2 px-3 py-2 text-left transition-colors ${
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") handleOpenSketchStandalone(sk.path); }}
+              className={`group w-full flex items-center gap-2 px-3 py-2 text-left transition-colors cursor-pointer ${
                 sk.path === activeSketchPath && !activeStoryboardPath
                   ? "bg-[var(--color-accent)]/10 text-[var(--color-accent)]"
                   : "text-[var(--color-text)] hover:bg-[var(--color-surface-alt)]"
@@ -264,7 +270,7 @@ export function StoryboardList() {
                   <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
                 </svg>
               </button>
-            </button>
+            </div>
           ))
         )}
       </div>
