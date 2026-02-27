@@ -46,6 +46,52 @@ const threeBranchNodes: GraphNode[] = [
   { id: "c1", message: "Initial setup",       timestamp: t(3), timeline: "main",           parents: [],     lane: 0, is_head: false, is_branch_tip: false },
 ];
 
+// ── 7) Deep branches: main(5) + fork-explore from c3(3, HEAD) + fork-alt from c2(2)
+// git log: see D:\cutready\test-deep-branches
+const deepBranchNodes: GraphNode[] = [
+  { id: "a3", message: "Refined exploration",  timestamp: t(0),  timeline: "fork-explore", parents: ["a2"], lane: 1, is_head: true,  is_branch_tip: true },
+  { id: "a2", message: "Develop exploration",  timestamp: t(1),  timeline: "fork-explore", parents: ["a1"], lane: 1, is_head: false, is_branch_tip: false },
+  { id: "a1", message: "Explore idea",         timestamp: t(2),  timeline: "fork-explore", parents: ["c3"], lane: 1, is_head: false, is_branch_tip: false },
+  { id: "m5", message: "Final main",           timestamp: t(1),  timeline: "main",         parents: ["m4"], lane: 0, is_head: false, is_branch_tip: true },
+  { id: "m4", message: "Polish main",          timestamp: t(2),  timeline: "main",         parents: ["c3"], lane: 0, is_head: false, is_branch_tip: false },
+  { id: "b2", message: "Refine alt",           timestamp: t(1),  timeline: "fork-alt",     parents: ["b1"], lane: 2, is_head: false, is_branch_tip: true },
+  { id: "b1", message: "Alt approach",         timestamp: t(2),  timeline: "fork-alt",     parents: ["c2"], lane: 2, is_head: false, is_branch_tip: false },
+  { id: "c3", message: "Core features",        timestamp: t(3),  timeline: "main",         parents: ["c2"], lane: 0, is_head: false, is_branch_tip: false },
+  { id: "c2", message: "Add structure",        timestamp: t(4),  timeline: "main",         parents: ["c1"], lane: 0, is_head: false, is_branch_tip: false },
+  { id: "c1", message: "Initial setup",        timestamp: t(5),  timeline: "main",         parents: [],     lane: 0, is_head: false, is_branch_tip: false },
+];
+
+// ── 8) Four branches, staggered forks: main(4) + explore from c2(3, HEAD) + late from c3(2) + early from c1(2)
+// git log: see D:\cutready\test-four-branch
+const fourBranchNodes: GraphNode[] = [
+  { id: "a3", message: "Explore complete",     timestamp: t(0),  timeline: "fork-explore", parents: ["a2"], lane: 1, is_head: true,  is_branch_tip: true },
+  { id: "a2", message: "Explore develop",      timestamp: t(1),  timeline: "fork-explore", parents: ["a1"], lane: 1, is_head: false, is_branch_tip: false },
+  { id: "a1", message: "Explore start",        timestamp: t(2),  timeline: "fork-explore", parents: ["c2"], lane: 1, is_head: false, is_branch_tip: false },
+  { id: "m4", message: "Main complete",        timestamp: t(1),  timeline: "main",         parents: ["c3"], lane: 0, is_head: false, is_branch_tip: true },
+  { id: "b2", message: "Late branch polish",   timestamp: t(1),  timeline: "fork-late",    parents: ["b1"], lane: 3, is_head: false, is_branch_tip: true },
+  { id: "b1", message: "Late branch start",    timestamp: t(2),  timeline: "fork-late",    parents: ["c3"], lane: 3, is_head: false, is_branch_tip: false },
+  { id: "d2", message: "Early refined",        timestamp: t(1),  timeline: "fork-early",   parents: ["d1"], lane: 2, is_head: false, is_branch_tip: true },
+  { id: "d1", message: "Early experiment",     timestamp: t(2),  timeline: "fork-early",   parents: ["c1"], lane: 2, is_head: false, is_branch_tip: false },
+  { id: "c3", message: "Build features",       timestamp: t(3),  timeline: "main",         parents: ["c2"], lane: 0, is_head: false, is_branch_tip: false },
+  { id: "c2", message: "Add framework",        timestamp: t(4),  timeline: "main",         parents: ["c1"], lane: 0, is_head: false, is_branch_tip: false },
+  { id: "c1", message: "Initial setup",        timestamp: t(5),  timeline: "main",         parents: [],     lane: 0, is_head: false, is_branch_tip: false },
+];
+
+// ── 9) Long parallel branches from same fork point: main(3) + alpha from c1(4, HEAD) + beta from c1(3)
+// git log: see D:\cutready\test-long-parallel
+const longParallelNodes: GraphNode[] = [
+  { id: "a4", message: "Alpha complete",  timestamp: t(0),  timeline: "fork-alpha", parents: ["a3"], lane: 1, is_head: true,  is_branch_tip: true },
+  { id: "a3", message: "Alpha refine",    timestamp: t(1),  timeline: "fork-alpha", parents: ["a2"], lane: 1, is_head: false, is_branch_tip: false },
+  { id: "a2", message: "Alpha develop",   timestamp: t(2),  timeline: "fork-alpha", parents: ["a1"], lane: 1, is_head: false, is_branch_tip: false },
+  { id: "a1", message: "Alpha start",     timestamp: t(3),  timeline: "fork-alpha", parents: ["c1"], lane: 1, is_head: false, is_branch_tip: false },
+  { id: "m3", message: "Main complete",   timestamp: t(1),  timeline: "main",       parents: ["m2"], lane: 0, is_head: false, is_branch_tip: true },
+  { id: "m2", message: "Main progress",   timestamp: t(2),  timeline: "main",       parents: ["c1"], lane: 0, is_head: false, is_branch_tip: false },
+  { id: "b3", message: "Beta polish",     timestamp: t(1),  timeline: "fork-beta",  parents: ["b2"], lane: 2, is_head: false, is_branch_tip: true },
+  { id: "b2", message: "Beta develop",    timestamp: t(2),  timeline: "fork-beta",  parents: ["b1"], lane: 2, is_head: false, is_branch_tip: false },
+  { id: "b1", message: "Beta start",      timestamp: t(3),  timeline: "fork-beta",  parents: ["c1"], lane: 2, is_head: false, is_branch_tip: false },
+  { id: "c1", message: "Initial setup",   timestamp: t(4),  timeline: "main",       parents: [],     lane: 0, is_head: false, is_branch_tip: false },
+];
+
 // ── Timeline maps ─────────────────────────────────────────────
 const mainOnly = new Map([["main", { label: "Main", colorIndex: 0 }]]);
 const twoTl = new Map([
@@ -56,6 +102,22 @@ const threeTl = new Map([
   ["main", { label: "Main", colorIndex: 0 }],
   ["fork-explore", { label: "Explore", colorIndex: 1 }],
   ["fork-alternate", { label: "Alternate", colorIndex: 2 }],
+]);
+const deepTl = new Map([
+  ["main", { label: "Main", colorIndex: 0 }],
+  ["fork-explore", { label: "Explore", colorIndex: 1 }],
+  ["fork-alt", { label: "Alt", colorIndex: 2 }],
+]);
+const fourTl = new Map([
+  ["main", { label: "Main", colorIndex: 0 }],
+  ["fork-explore", { label: "Explore", colorIndex: 1 }],
+  ["fork-early", { label: "Early", colorIndex: 2 }],
+  ["fork-late", { label: "Late", colorIndex: 3 }],
+]);
+const parallelTl = new Map([
+  ["main", { label: "Main", colorIndex: 0 }],
+  ["fork-alpha", { label: "Alpha", colorIndex: 1 }],
+  ["fork-beta", { label: "Beta", colorIndex: 2 }],
 ]);
 
 // ── Panel helper ──────────────────────────────────────────────
@@ -162,6 +224,57 @@ function TestApp() {
 (working tree dirty)`}
           nodes={threeBranchNodes} isDirty={true} isRewound={false}
           timelineMap={threeTl} multi={true} onNodeClick={setClicked} />
+
+        <Panel title="7) Deep branches (3×multi-commit)" gitGraph={
+`* fork-alt: Refine alt
+* fork-alt: Alt approach
+| * HEAD→fork-explore: Refined exploration
+| * fork-explore: Develop exploration
+| * fork-explore: Explore idea
+| | * main: Final main
+| | * main: Polish main
+| |/
+| * Core features
+|/
+* Add structure
+* Initial setup`}
+          nodes={deepBranchNodes} isDirty={false} isRewound={false}
+          timelineMap={deepTl} multi={true} onNodeClick={setClicked} />
+
+        <Panel title="8) Four branches, staggered forks" gitGraph={
+`* HEAD→fork-explore: Explore complete
+* fork-explore: Explore develop
+* fork-explore: Explore start
+| * main: Main complete
+| | * fork-early: Early refined
+| | * fork-early: Early experiment
+| | | * fork-late: Late branch polish
+| | | * fork-late: Late branch start
+| | |/
+| |/|
+| * | Build features
+|/ /
+* / Add framework
+|/
+* Initial setup`}
+          nodes={fourBranchNodes} isDirty={false} isRewound={false}
+          timelineMap={fourTl} multi={true} onNodeClick={setClicked} />
+
+        <Panel title="9) Long parallel (3 from same point)" gitGraph={
+`* HEAD→fork-alpha: Alpha complete
+* fork-alpha: Alpha refine
+* fork-alpha: Alpha develop
+* fork-alpha: Alpha start
+| * main: Main complete
+| * main: Main progress
+|/
+| * fork-beta: Beta polish
+| * fork-beta: Beta develop
+| * fork-beta: Beta start
+|/
+* Initial setup`}
+          nodes={longParallelNodes} isDirty={false} isRewound={false}
+          timelineMap={parallelTl} multi={true} onNodeClick={setClicked} />
       </div>
     </div>
   );
