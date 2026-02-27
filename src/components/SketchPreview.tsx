@@ -62,6 +62,18 @@ export function SketchPreview({ rows, projectRoot, title, onClose }: SketchPrevi
           <span className="text-xs text-[var(--color-text-secondary)]">
             {currentIdx + 1} / {total}
           </span>
+          {row.time && (
+            <>
+              <div className="w-px h-4 bg-[var(--color-border)]" />
+              <span className="text-xs text-[var(--color-text-secondary)]">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="inline -mt-px mr-1">
+                  <circle cx="12" cy="12" r="10" />
+                  <polyline points="12 6 12 12 16 14" />
+                </svg>
+                {row.time}
+              </span>
+            </>
+          )}
         </div>
         <button
           onClick={onClose}
@@ -102,13 +114,6 @@ export function SketchPreview({ rows, projectRoot, title, onClose }: SketchPrevi
         {/* Narrative & Actions card */}
         <div className="w-full max-w-3xl shrink-0 max-h-[30vh] overflow-y-auto bg-[var(--color-surface-alt)] rounded-xl border border-[var(--color-border)] px-6 py-4">
           <div className="flex gap-8">
-            {/* Time */}
-            {row.time && (
-              <div className="shrink-0">
-                <div className="text-[10px] font-medium text-[var(--color-text-secondary)] uppercase tracking-wider mb-1">Time</div>
-                <div className="text-sm text-[var(--color-text)] font-medium">{row.time}</div>
-              </div>
-            )}
             {/* Narrative */}
             <div className="flex-1 min-w-0">
               <div className="text-[10px] font-medium text-[var(--color-text-secondary)] uppercase tracking-wider mb-1">Narrative</div>
