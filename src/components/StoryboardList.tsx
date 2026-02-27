@@ -13,27 +13,36 @@ export function StoryboardList() {
   const setSidebarMode = useAppStore((s) => s.setSidebarMode);
   const storyboards = useAppStore((s) => s.storyboards);
   const sketches = useAppStore((s) => s.sketches);
+  const notes = useAppStore((s) => s.notes);
   const activeStoryboardPath = useAppStore((s) => s.activeStoryboardPath);
   const activeSketchPath = useAppStore((s) => s.activeSketchPath);
+  const activeNotePath = useAppStore((s) => s.activeNotePath);
   const loadStoryboards = useAppStore((s) => s.loadStoryboards);
   const loadSketches = useAppStore((s) => s.loadSketches);
+  const loadNotes = useAppStore((s) => s.loadNotes);
   const createStoryboard = useAppStore((s) => s.createStoryboard);
   const openStoryboard = useAppStore((s) => s.openStoryboard);
   const deleteStoryboard = useAppStore((s) => s.deleteStoryboard);
   const createSketch = useAppStore((s) => s.createSketch);
   const openSketch = useAppStore((s) => s.openSketch);
   const deleteSketch = useAppStore((s) => s.deleteSketch);
+  const createNote = useAppStore((s) => s.createNote);
+  const openNote = useAppStore((s) => s.openNote);
+  const deleteNote = useAppStore((s) => s.deleteNote);
   const closeStoryboard = useAppStore((s) => s.closeStoryboard);
 
   const [isCreatingSb, setIsCreatingSb] = useState(false);
   const [newSbTitle, setNewSbTitle] = useState("");
   const [isCreatingSk, setIsCreatingSk] = useState(false);
   const [newSkTitle, setNewSkTitle] = useState("");
+  const [isCreatingNote, setIsCreatingNote] = useState(false);
+  const [newNoteTitle, setNewNoteTitle] = useState("");
 
   useEffect(() => {
     loadStoryboards();
     loadSketches();
-  }, [loadStoryboards, loadSketches]);
+    loadNotes();
+  }, [loadStoryboards, loadSketches, loadNotes]);
 
   const handleCreateSb = useCallback(async () => {
     const title = newSbTitle.trim();
@@ -60,6 +69,14 @@ export function StoryboardList() {
     },
     [closeStoryboard, openSketch],
   );
+
+  const handleCreateNote = useCallback(async () => {
+    const title = newNoteTitle.trim();
+    if (!title) return;
+    await createNote(title);
+    setNewNoteTitle("");
+    setIsCreatingNote(false);
+  }, [newNoteTitle, createNote]);
 
   return (
     <div
@@ -264,6 +281,91 @@ export function StoryboardList() {
                 }}
                 className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-all"
                 title="Delete sketch"
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="3 6 5 6 21 6" />
+                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                </svg>
+              </button>
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* ── Notes section ─────────────────────────────── */}
+      <div className="flex items-center justify-between px-3 h-9 shrink-0 border-y border-[var(--color-border)]">
+        <span className="text-[11px] font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">
+          Notes
+        </span>
+        <button
+          onClick={() => setIsCreatingNote(true)}
+          className="p-1 rounded-md text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 transition-colors"
+          title="New note"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19" />
+            <line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
+        </button>
+      </div>
+
+      {isCreatingNote && (
+        <div className="px-3 py-2 border-b border-[var(--color-border)]">
+          <input
+            type="text"
+            value={newNoteTitle}
+            onChange={(e) => setNewNoteTitle(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") handleCreateNote();
+              if (e.key === "Escape") { setIsCreatingNote(false); setNewNoteTitle(""); }
+            }}
+            placeholder="Note name..."
+            autoFocus
+            className="w-full px-2 py-1.5 rounded-md bg-[var(--color-surface)] border border-[var(--color-border)] text-xs text-[var(--color-text)] placeholder:text-[var(--color-text-secondary)]/50 focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)]/40"
+          />
+        </div>
+      )}
+
+      <div className="flex-1 overflow-y-auto py-1">
+        {notes.length === 0 && !isCreatingNote ? (
+          <button
+            onClick={() => setIsCreatingNote(true)}
+            className="w-full px-3 py-4 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] transition-colors"
+          >
+            + New note
+          </button>
+        ) : (
+          notes.map((note) => (
+            <div
+              key={note.path}
+              role="button"
+              tabIndex={0}
+              onClick={() => openNote(note.path)}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") openNote(note.path); }}
+              className={`group w-full flex items-center gap-2 px-3 py-2 text-left transition-colors cursor-pointer ${
+                note.path === activeNotePath
+                  ? "bg-[var(--color-accent)]/10 text-[var(--color-accent)]"
+                  : "text-[var(--color-text)] hover:bg-[var(--color-surface-alt)]"
+              }`}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                <polyline points="14 2 14 8 20 8" />
+                <line x1="16" y1="13" x2="8" y2="13" />
+                <line x1="16" y1="17" x2="8" y2="17" />
+              </svg>
+              <div className="flex-1 min-w-0">
+                <div className="text-xs font-medium truncate">{note.title}</div>
+              </div>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (confirm(`Delete "${note.title}"?`)) {
+                    deleteNote(note.path);
+                  }
+                }}
+                className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-all"
+                title="Delete note"
               >
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <polyline points="3 6 5 6 21 6" />

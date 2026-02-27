@@ -3,6 +3,7 @@ pub mod animation;
 pub mod automation;
 pub mod export;
 pub mod interaction;
+pub mod note;
 pub mod project;
 pub mod recording;
 pub mod screenshot;

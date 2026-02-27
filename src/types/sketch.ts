@@ -88,3 +88,11 @@ export interface GraphNode {
   is_head: boolean;
   is_branch_tip?: boolean;
 }
+
+/** Lightweight summary for listing notes (.md files). */
+export interface NoteSummary {
+  path: string;
+  title: string;
+  size: number;
+  updated_at: string;
+}

@@ -2,6 +2,7 @@ import { useCallback, useState } from "react";
 import { useAppStore } from "../stores/appStore";
 import { StoryboardView } from "./StoryboardView";
 import { SketchForm } from "./SketchForm";
+import { NoteEditor } from "./NoteEditor";
 import { VersionHistory } from "./VersionHistory";
 import { ResizeHandle } from "./ResizeHandle";
 import { TabBar } from "./TabBar";
@@ -15,6 +16,7 @@ import { TabBar } from "./TabBar";
 export function StoryboardPanel() {
   const activeStoryboard = useAppStore((s) => s.activeStoryboard);
   const activeSketch = useAppStore((s) => s.activeSketch);
+  const activeNotePath = useAppStore((s) => s.activeNotePath);
   const showVersionHistory = useAppStore((s) => s.showVersionHistory);
   const sidebarPosition = useAppStore((s) => s.sidebarPosition);
 
@@ -54,6 +56,8 @@ export function StoryboardPanel() {
           <SketchForm />
         ) : activeStoryboard ? (
           <StoryboardView />
+        ) : activeNotePath ? (
+          <NoteEditor />
         ) : (
           <div className="flex-1 flex items-center justify-center">
             <div className="text-center">

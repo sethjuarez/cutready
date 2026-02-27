@@ -16,7 +16,7 @@ use std::path::{Path, PathBuf};
 use crate::engine::versioning;
 use crate::models::script::ProjectView;
 use crate::models::sketch::{
-    Sketch, SketchSummary, Storyboard, StoryboardSummary,
+    NoteSummary, Sketch, SketchSummary, Storyboard, StoryboardSummary,
 };
 
 // ── Path safety ────────────────────────────────────────────────────
@@ -236,6 +236,66 @@ pub fn scan_storyboards(project_root: &Path) -> Result<Vec<StoryboardSummary>, P
     })?;
     summaries.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
     Ok(summaries)
+}
+
+// ── Note file I/O (.md) ──────────────────────────────────────────
+//
+// Notes are plain markdown files anywhere in the project tree.
+
+/// Recursively scan a project folder for all `.md` files.
+pub fn scan_notes(project_root: &Path) -> Result<Vec<NoteSummary>, ProjectError> {
+    let mut summaries = Vec::new();
+    scan_files_recursive(project_root, project_root, "md", &mut |rel_path, abs_path| {
+        if let Ok(meta) = std::fs::metadata(abs_path) {
+            let updated_at = meta
+                .modified()
+                .ok()
+                .and_then(|t| {
+                    let duration = t.duration_since(std::time::UNIX_EPOCH).ok()?;
+                    chrono::DateTime::from_timestamp(duration.as_secs() as i64, 0)
+                })
+                .unwrap_or_else(chrono::Utc::now);
+            let title = Path::new(rel_path)
+                .file_stem()
+                .map(|s| s.to_string_lossy().into_owned())
+                .unwrap_or_else(|| rel_path.to_string());
+            summaries.push(NoteSummary {
+                path: rel_path.to_string(),
+                title,
+                size: meta.len(),
+                updated_at,
+            });
+        }
+    })?;
+    summaries.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+    Ok(summaries)
+}
+
+/// Read a note file as plain text.
+pub fn read_note(path: &Path) -> Result<String, ProjectError> {
+    if !path.exists() {
+        return Err(ProjectError::NotFound(path.to_string_lossy().into_owned()));
+    }
+    std::fs::read_to_string(path).map_err(|e| ProjectError::Io(e.to_string()))
+}
+
+/// Write a note file (plain text).
+pub fn write_note(path: &Path, content: &str) -> Result<(), ProjectError> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| ProjectError::Io(e.to_string()))?;
+    }
+    std::fs::write(path, content).map_err(|e| ProjectError::Io(e.to_string()))
+}
+
+/// Delete a note file and auto-commit.
+pub fn delete_note(path: &Path, project_root: &Path) -> Result<(), ProjectError> {
+    if path.exists() {
+        std::fs::remove_file(path).map_err(|e| ProjectError::Io(e.to_string()))?;
+    }
+    if project_root.join(".git").exists() {
+        let _ = versioning::commit_snapshot(project_root, "Delete note", None);
+    }
+    Ok(())
 }
 
 /// Check if a sketch file exists given a relative path from project root.

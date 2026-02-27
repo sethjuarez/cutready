@@ -225,6 +225,19 @@ pub struct GraphNode {
     pub is_branch_tip: bool,
 }
 
+/// Lightweight summary for listing notes (.md files) in the sidebar.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NoteSummary {
+    /// Relative path from project root (e.g., "notes/ideas.md").
+    pub path: String,
+    /// Display title derived from filename (e.g., "ideas").
+    pub title: String,
+    /// File size in bytes.
+    pub size: u64,
+    /// Last modified timestamp.
+    pub updated_at: DateTime<Utc>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
