@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useAppStore } from "../stores/appStore";
 import { ScriptTable } from "./ScriptTable";
 import { ScreenCaptureOverlay } from "./ScreenCaptureOverlay";
+import { SketchPreview } from "./SketchPreview";
 import type { PlanningRow } from "../types/sketch";
 
 /**
@@ -20,6 +21,7 @@ export function SketchForm() {
   const [localTitle, setLocalTitle] = useState(activeSketch?.title ?? "");
   const [localRows, setLocalRows] = useState<PlanningRow[]>(activeSketch?.rows ?? []);
   const [captureRowIdx, setCaptureRowIdx] = useState<number | null>(null);
+  const [showPreview, setShowPreview] = useState(false);
   const titleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const rowsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -137,14 +139,28 @@ export function SketchForm() {
           </button>
         )}
 
-        {/* Title */}
-        <input
-          type="text"
-          value={localTitle}
-          onChange={(e) => handleTitleChange(e.target.value)}
-          placeholder="Sketch title..."
-          className="w-full text-2xl font-semibold bg-transparent text-[var(--color-text)] placeholder:text-[var(--color-text-secondary)]/40 outline-none border-none mb-4"
-        />
+        {/* Title + Preview button */}
+        <div className="flex items-center gap-3 mb-4">
+          <input
+            type="text"
+            value={localTitle}
+            onChange={(e) => handleTitleChange(e.target.value)}
+            placeholder="Sketch title..."
+            className="flex-1 text-2xl font-semibold bg-transparent text-[var(--color-text)] placeholder:text-[var(--color-text-secondary)]/40 outline-none border-none"
+          />
+          {localRows.length > 0 && (
+            <button
+              onClick={() => setShowPreview(true)}
+              className="flex items-center gap-1.5 shrink-0 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] px-3 py-1.5 rounded-lg border border-[var(--color-border)] hover:border-[var(--color-accent)]/40 hover:bg-[var(--color-accent)]/5 transition-colors"
+              title="Preview sketch (presentation mode)"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <polygon points="5 3 19 12 5 21 5 3" />
+              </svg>
+              Preview
+            </button>
+          )}
+        </div>
 
         {/* Description */}
         <textarea
@@ -202,6 +218,16 @@ export function SketchForm() {
         <ScreenCaptureOverlay
           onCapture={handleCaptureComplete}
           onCancel={handleCaptureCancel}
+        />
+      )}
+
+      {/* Presentation preview */}
+      {showPreview && (
+        <SketchPreview
+          rows={localRows}
+          projectRoot={projectRoot}
+          title={localTitle || "Untitled Sketch"}
+          onClose={() => setShowPreview(false)}
         />
       )}
     </div>
