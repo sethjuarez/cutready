@@ -100,7 +100,7 @@ export function SketchPreview({ rows, projectRoot, title, onClose }: SketchPrevi
         </div>
 
         {/* Narrative & Actions card */}
-        <div className="w-full max-w-3xl shrink-0 bg-[var(--color-surface-alt)] rounded-xl border border-[var(--color-border)] px-6 py-4">
+        <div className="w-full max-w-3xl shrink-0 max-h-[30vh] overflow-y-auto bg-[var(--color-surface-alt)] rounded-xl border border-[var(--color-border)] px-6 py-4">
           <div className="flex gap-8">
             {/* Time */}
             {row.time && (
