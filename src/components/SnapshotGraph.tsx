@@ -35,40 +35,75 @@ interface DisplayRow {
   h: number;                  // row height
 }
 
-/* ── Assign lanes: active branch = 0, others by order ──────────── */
-function assignLanes(nodes: GraphNode[], activeLane: number): Map<number, number> {
-  // Map from backend lane (color_index) → display lane (0 = leftmost)
-  const backendLanes = new Set<number>();
-  for (const n of nodes) backendLanes.add(n.lane);
+/* ── Compute per-node display lanes ────────────────────────────── */
+// Trunk = HEAD's full ancestry + nodes ahead of HEAD on its branch.
+// Shared ancestors below the fork point belong on the trunk (lane 0),
+// matching `git log --graph` where the active branch is the leftmost rail.
+function computeDisplayLanes(
+  nodes: GraphNode[],
+  headNode: GraphNode | undefined,
+): { displayLane: Map<string, number>; numLanes: number } {
+  const displayLane = new Map<string, number>();
+  if (!headNode || nodes.length === 0) {
+    for (const n of nodes) displayLane.set(n.id, 0);
+    return { displayLane, numLanes: 1 };
+  }
 
-  const sorted = [...backendLanes].sort((a, b) => {
-    if (a === activeLane) return -1;
-    if (b === activeLane) return 1;
-    return a - b;
-  });
-  return new Map(sorted.map((bl, i) => [bl, i]));
+  const byId = new Map<string, GraphNode>();
+  for (const n of nodes) byId.set(n.id, n);
+
+  // Walk HEAD's ancestry
+  const trunkIds = new Set<string>();
+  const queue = [headNode.id];
+  while (queue.length > 0) {
+    const id = queue.shift()!;
+    if (trunkIds.has(id)) continue;
+    trunkIds.add(id);
+    const node = byId.get(id);
+    if (node) for (const pid of node.parents) if (byId.has(pid)) queue.push(pid);
+  }
+  // Also include nodes ahead of HEAD on the same backend lane
+  for (const n of nodes) if (n.lane === headNode.lane) trunkIds.add(n.id);
+
+  // Trunk → display lane 0
+  for (const id of trunkIds) displayLane.set(id, 0);
+
+  // Non-trunk grouped by backend lane → display lanes 1, 2, …
+  const branchLaneMap = new Map<number, number>();
+  let nextLane = 1;
+  for (const n of nodes) {
+    if (trunkIds.has(n.id)) continue;
+    if (!branchLaneMap.has(n.lane)) branchLaneMap.set(n.lane, nextLane++);
+    displayLane.set(n.id, branchLaneMap.get(n.lane)!);
+  }
+
+  return { displayLane, numLanes: Math.max(nextLane, 1) };
 }
 
-/* ── Sort nodes for display (active trunk first, branches at fork points) ── */
-function sortForDisplay(nodes: GraphNode[], activeLane: number): GraphNode[] {
+/* ── Sort nodes for display (trunk first, branches at fork points) ── */
+function sortForDisplay(nodes: GraphNode[], displayLane: Map<string, number>): GraphNode[] {
   if (nodes.length === 0) return [];
 
+  // Trunk = display lane 0
   const trunk = nodes
-    .filter(n => n.lane === activeLane)
+    .filter(n => displayLane.get(n.id) === 0)
     .sort((a, b) => +new Date(b.timestamp) - +new Date(a.timestamp));
 
-  const lanes = new Map<number, GraphNode[]>();
+  // Branches = non-trunk, grouped by display lane
+  const branches = new Map<number, GraphNode[]>();
   for (const n of nodes) {
-    if (n.lane === activeLane) continue;
-    if (!lanes.has(n.lane)) lanes.set(n.lane, []);
-    lanes.get(n.lane)!.push(n);
+    const dl = displayLane.get(n.id) ?? 0;
+    if (dl === 0) continue;
+    if (!branches.has(dl)) branches.set(dl, []);
+    branches.get(dl)!.push(n);
   }
-  for (const arr of lanes.values())
+  for (const arr of branches.values())
     arr.sort((a, b) => +new Date(b.timestamp) - +new Date(a.timestamp));
 
+  // Determine fork points: where each branch's oldest node connects to the trunk
   const trunkIds = new Set(trunk.map(n => n.id));
   const branchAtFork = new Map<string, GraphNode[][]>();
-  for (const [, arr] of lanes) {
+  for (const [, arr] of branches) {
     const oldest = arr[arr.length - 1];
     const forkId = oldest.parents.find(p => trunkIds.has(p));
     if (forkId) {
@@ -77,12 +112,13 @@ function sortForDisplay(nodes: GraphNode[], activeLane: number): GraphNode[] {
     }
   }
 
+  // Build: trunk nodes with branches inserted at fork points
   const result: GraphNode[] = [];
   const placed = new Set<string>();
   for (const tn of trunk) {
-    const branches = branchAtFork.get(tn.id);
-    if (branches) {
-      for (const br of branches)
+    const brs = branchAtFork.get(tn.id);
+    if (brs) {
+      for (const br of brs)
         for (const n of br)
           if (!placed.has(n.id)) { result.push(n); placed.add(n.id); }
     }
@@ -126,17 +162,19 @@ export function SnapshotGraph({
   }, [rawNodes]);
 
   const headNode = primaryNodes.find(n => n.is_head);
-  const activeLane = headNode?.lane ?? 0;
 
-  const sorted = useMemo(() => sortForDisplay(primaryNodes, activeLane), [primaryNodes, activeLane]);
-  const laneMap = useMemo(() => assignLanes(primaryNodes, activeLane), [primaryNodes, activeLane]);
+  const { displayLane, numLanes } = useMemo(
+    () => computeDisplayLanes(primaryNodes, headNode),
+    [primaryNodes, headNode],
+  );
+  const sorted = useMemo(() => sortForDisplay(primaryNodes, displayLane), [primaryNodes, displayLane]);
 
   /* ── Build display rows ─────────────────────────── */
   const rows: DisplayRow[] = useMemo(() => {
     const result: DisplayRow[] = [];
     for (let i = 0; i < sorted.length; i++) {
       const n = sorted[i];
-      const dl = laneMap.get(n.lane) ?? 0;
+      const dl = displayLane.get(n.id) ?? 0;
 
       // Ghost row above HEAD (rewound + dirty)
       if (n.is_head && isDirty && isRewound) {
@@ -153,18 +191,19 @@ export function SnapshotGraph({
       const nodeAliases = aliases.get(n.id);
       if (nodeAliases) {
         for (const a of nodeAliases) {
+          // Alias lane: use branch lane map or push to next lane
+          const aliasDl = displayLane.get(`__alias_${a.timeline}`) ?? numLanes;
           result.push({
             kind: "alias", aliasTimeline: a.timeline, aliasLane: a.lane,
-            laneIdx: laneMap.get(a.lane) ?? (laneMap.size), h: DIRTY_ROW_H,
+            laneIdx: Math.max(aliasDl, 1), h: DIRTY_ROW_H,
           });
         }
       }
     }
     return result;
-  }, [sorted, laneMap, isDirty, isRewound, aliases]);
+  }, [sorted, displayLane, numLanes, isDirty, isRewound, aliases]);
 
-  const numLanes = laneMap.size || 1;
-  const graphW = GRAPH_PAD + numLanes * LANE_W + 4;
+  const graphW = GRAPH_PAD + (numLanes || 1) * LANE_W + 4;
 
   /* ── empty state ─────────────────────────────── */
   if (sorted.length === 0 && !isDirty) {
@@ -227,11 +266,9 @@ export function SnapshotGraph({
           color, opacity: 0.7,
         });
       } else {
-        // Different lanes: curve from child to parent
-        // Go down from child, curve horizontally, then down to parent
-        const midY = cy + (py - cy) * 0.5;
+        // Different lanes: smooth S-curve bezier (like git log --graph)
         paths.push({
-          d: `M ${cx} ${cy + NODE_R} L ${cx} ${midY - 6} Q ${cx} ${midY}, ${px} ${midY} L ${px} ${midY} Q ${px} ${midY}, ${px} ${midY + 6} L ${px} ${py - NODE_R}`,
+          d: `M ${cx} ${cy + NODE_R} C ${cx} ${(cy + py) / 2}, ${px} ${(cy + py) / 2}, ${px} ${py - NODE_R}`,
           color, opacity: 0.6,
         });
       }
@@ -323,7 +360,7 @@ export function SnapshotGraph({
 
         if (row.kind === "ghost") {
           const x = laneX(row.laneIdx);
-          const headColor = lc(laneMap.get(activeLane) ?? 0);
+          const headColor = lc(0); // trunk is always lane 0
           return (
             <div key="ghost" className="flex items-center overflow-hidden" style={{ height: row.h }}>
               <div className="shrink-0 relative" style={{ width: graphW, height: row.h }}>
