@@ -50,9 +50,9 @@ pub async fn open_capture_window(
     bg_path: String,
     project_root: String,
 ) -> Result<(), String> {
-    // Close any existing capture window first
+    // Destroy any existing capture window first (synchronous, prevents label conflicts)
     if let Some(existing) = app.get_webview_window("capture") {
-        let _ = existing.close();
+        let _ = existing.destroy();
     }
 
     // Find matching Tauri monitor by physical position to get scale factor
@@ -98,7 +98,7 @@ pub async fn open_capture_window(
 #[tauri::command]
 pub async fn close_capture_window(app: tauri::AppHandle) -> Result<(), String> {
     if let Some(win) = app.get_webview_window("capture") {
-        win.close().map_err(|e| e.to_string())?;
+        win.destroy().map_err(|e| e.to_string())?;
     }
     Ok(())
 }
