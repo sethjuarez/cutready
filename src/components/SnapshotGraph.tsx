@@ -98,44 +98,31 @@ function sortForDisplay(nodes: GraphNode[], displayLane: Map<string, number>): G
   for (const arr of branches.values())
     arr.sort((a, b) => +new Date(b.timestamp) - +new Date(a.timestamp));
 
-  // Determine fork points: where each branch connects to the trunk.
-  // Walk up parent chain to handle branches-of-branches (transitive forks).
-  const trunkIds = new Set(trunk.map(n => n.id));
-  const byId = new Map<string, GraphNode>();
-  for (const n of nodes) byId.set(n.id, n);
-  const branchAtFork = new Map<string, GraphNode[][]>();
+  // Build fork map using DIRECT parent relationships (handles sub-branches)
+  const forkMap = new Map<string, GraphNode[][]>();
   for (const [, arr] of branches) {
     const oldest = arr[arr.length - 1];
-    // Walk parents transitively until we hit a trunk node
-    let forkId: string | undefined;
-    const visited = new Set<string>();
-    const walk = [...oldest.parents];
-    while (walk.length > 0) {
-      const pid = walk.shift()!;
-      if (visited.has(pid)) continue;
-      visited.add(pid);
-      if (trunkIds.has(pid)) { forkId = pid; break; }
-      const pn = byId.get(pid);
-      if (pn) walk.push(...pn.parents);
-    }
-    if (forkId) {
-      if (!branchAtFork.has(forkId)) branchAtFork.set(forkId, []);
-      branchAtFork.get(forkId)!.push(arr);
+    const parentId = oldest.parents[0];
+    if (parentId) {
+      if (!forkMap.has(parentId)) forkMap.set(parentId, []);
+      forkMap.get(parentId)!.push(arr);
     }
   }
 
-  // Build: trunk nodes with branches inserted at fork points
+  // Recursive insertion: sub-branches appear ABOVE their fork point
   const result: GraphNode[] = [];
   const placed = new Set<string>();
-  for (const tn of trunk) {
-    const brs = branchAtFork.get(tn.id);
-    if (brs) {
-      for (const br of brs)
-        for (const n of br)
-          if (!placed.has(n.id)) { result.push(n); placed.add(n.id); }
+  function insertNode(n: GraphNode) {
+    if (placed.has(n.id)) return;
+    const forks = forkMap.get(n.id);
+    if (forks) {
+      for (const br of forks)
+        for (const bn of br) insertNode(bn);
     }
-    if (!placed.has(tn.id)) { result.push(tn); placed.add(tn.id); }
+    result.push(n);
+    placed.add(n.id);
   }
+  for (const tn of trunk) insertNode(tn);
   for (const n of nodes) if (!placed.has(n.id)) result.push(n);
   return result;
 }
@@ -402,9 +389,10 @@ export function SnapshotGraph({
                 title={node.is_head ? "Current snapshot (HEAD)" : `Navigate to: ${node.message}`}
               />
             </div>
-            {/* Label column */}
+            {/* Label column — indented to match lane */}
             <div
               className={`flex-1 min-w-0 pr-2 flex flex-col justify-center ${!node.is_head ? "cursor-pointer" : ""}`}
+              style={{ paddingLeft: dl * LANE_W }}
               onClick={() => !node.is_head && onNodeClick(node.id, node.is_head)}
             >
               <div className={`text-xs truncate leading-tight transition-colors ${
