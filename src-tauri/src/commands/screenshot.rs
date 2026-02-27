@@ -169,6 +169,72 @@ pub async fn open_capture_window(
     Ok(())
 }
 
+/// Open a fullscreen, borderless preview window on the target monitor.
+#[tauri::command]
+pub async fn open_preview_window(
+    app: tauri::AppHandle,
+    phys_x: i32,
+    phys_y: i32,
+    phys_w: u32,
+    phys_h: u32,
+) -> Result<(), String> {
+    eprintln!("[PREVIEW] open_preview_window: pos=({},{}) size={}x{}", phys_x, phys_y, phys_w, phys_h);
+
+    // Destroy any existing preview window first
+    if let Some(existing) = app.get_webview_window("preview") {
+        eprintln!("[PREVIEW] destroying existing preview window");
+        let _ = existing.destroy();
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+
+    // Find matching Tauri monitor by physical position to get scale factor
+    let monitors = app.available_monitors().map_err(|e| e.to_string())?;
+    let scale = monitors
+        .iter()
+        .find(|m| {
+            let pos = m.position();
+            (pos.x - phys_x).abs() < 100 && (pos.y - phys_y).abs() < 100
+        })
+        .map(|m| m.scale_factor())
+        .unwrap_or(1.0);
+
+    let logical_w = phys_w as f64 / scale;
+    let logical_h = phys_h as f64 / scale;
+    let logical_x = phys_x as f64 / scale;
+    let logical_y = phys_y as f64 / scale;
+    eprintln!("[PREVIEW] logical pos=({},{}) size={}x{} scale={}", logical_x, logical_y, logical_w, logical_h, scale);
+
+    let win = WebviewWindowBuilder::new(&app, "preview", WebviewUrl::App("index.html".into()))
+        .initialization_script("window.__IS_PREVIEW = true;")
+        .title("CutReady Preview")
+        .inner_size(logical_w, logical_h)
+        .position(logical_x, logical_y)
+        .decorations(false)
+        .resizable(false)
+        .focused(true)
+        .skip_taskbar(true)
+        .build()
+        .map_err(|e| {
+            eprintln!("[PREVIEW] build FAILED: {}", e);
+            e.to_string()
+        })?;
+
+    eprintln!("[PREVIEW] window created OK, label={}", win.label());
+    Ok(())
+}
+
+/// Close the preview window.
+#[tauri::command]
+pub async fn close_preview_window(app: tauri::AppHandle) -> Result<(), String> {
+    if let Some(win) = app.get_webview_window("preview") {
+        eprintln!("[PREVIEW] close_preview_window: destroying");
+        win.destroy().map_err(|e| e.to_string())?;
+    } else {
+        eprintln!("[PREVIEW] close_preview_window: no window found");
+    }
+    Ok(())
+}
+
 /// Close the capture overlay window.
 #[tauri::command]
 pub async fn close_capture_window(app: tauri::AppHandle) -> Result<(), String> {

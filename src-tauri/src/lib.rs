@@ -71,7 +71,7 @@ pub fn run() {
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(
             tauri_plugin_window_state::Builder::new()
-                .with_denylist(&["capture"])
+                .with_denylist(&["capture", "preview"])
                 .build(),
         )
         .plugin(
@@ -155,6 +155,8 @@ pub fn run() {
             commands::screenshot::close_capture_window,
             commands::screenshot::crop_screenshot,
             commands::screenshot::get_capture_params,
+            commands::screenshot::open_preview_window,
+            commands::screenshot::close_preview_window,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

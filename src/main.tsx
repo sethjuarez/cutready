@@ -10,11 +10,13 @@ import "./index.css";
 declare global {
   interface Window {
     __IS_CAPTURE?: boolean;
+    __IS_PREVIEW?: boolean;
   }
 }
 
 const isCaptureMode = !!window.__IS_CAPTURE;
-console.log(`[main.tsx] isCaptureMode=${isCaptureMode} href=${window.location.href}`);
+const isPreviewMode = !!window.__IS_PREVIEW;
+console.log(`[main.tsx] isCaptureMode=${isCaptureMode} isPreviewMode=${isPreviewMode} href=${window.location.href}`);
 
 async function renderApp() {
   if (isCaptureMode) {
@@ -22,6 +24,11 @@ async function renderApp() {
     const { CaptureWindow } = await import("./components/CaptureWindow");
     ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
       <CaptureWindow />,
+    );
+  } else if (isPreviewMode) {
+    const { StandalonePreview } = await import("./components/StandalonePreview");
+    ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
+      <StandalonePreview />,
     );
   } else {
     const App = (await import("./App")).default;
