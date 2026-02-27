@@ -25,12 +25,10 @@ function lc(i: number) { return LANE_COLORS[i % LANE_COLORS.length]; }
 /* ── Types ────────────────────────────────────────────────────────── */
 interface TimelineInfo { label: string; colorIndex: number }
 
-type RowKind = "node" | "dirty" | "ghost" | "alias";
+type RowKind = "node" | "dirty" | "ghost";
 interface DisplayRow {
   kind: RowKind;
   node?: GraphNode;           // for "node" rows
-  aliasTimeline?: string;     // for "alias" rows
-  aliasLane?: number;
   laneIdx: number;            // which lane this row's dot is on
   h: number;                  // row height
 }
@@ -186,19 +184,6 @@ export function SnapshotGraph({
       }
 
       result.push({ kind: "node", node: n, laneIdx: dl, h: ROW_H });
-
-      // Alias rows after their shared commit
-      const nodeAliases = aliases.get(n.id);
-      if (nodeAliases) {
-        for (const a of nodeAliases) {
-          // Alias lane: use branch lane map or push to next lane
-          const aliasDl = displayLane.get(`__alias_${a.timeline}`) ?? numLanes;
-          result.push({
-            kind: "alias", aliasTimeline: a.timeline, aliasLane: a.lane,
-            laneIdx: Math.max(aliasDl, 1), h: DIRTY_ROW_H,
-          });
-        }
-      }
     }
     return result;
   }, [sorted, displayLane, numLanes, isDirty, isRewound, aliases]);
@@ -299,26 +284,6 @@ export function SnapshotGraph({
     });
   }
 
-  // Alias → parent connector
-  for (let i = 0; i < rows.length; i++) {
-    if (rows[i].kind !== "alias") continue;
-    // Find the node row just before this alias
-    let parentIdx = -1;
-    for (let j = i - 1; j >= 0; j--) {
-      if (rows[j].kind === "node") { parentIdx = j; break; }
-    }
-    if (parentIdx >= 0) {
-      const ax = laneX(rows[i].laneIdx);
-      const px = laneX(rows[parentIdx].laneIdx);
-      const ay = rowCy(i);
-      const py = rowCy(parentIdx);
-      paths.push({
-        d: `M ${px + NODE_R} ${py} Q ${ax} ${py}, ${ax} ${ay - 3}`,
-        color: lc(rows[i].laneIdx), opacity: 0.5, dashed: true,
-      });
-    }
-  }
-
   /* ── Render ──────────────────────────────────── */
   return (
     <div className="relative" style={{ minHeight: totalH }}>
@@ -379,29 +344,6 @@ export function SnapshotGraph({
           );
         }
 
-        if (row.kind === "alias") {
-          const x = laneX(row.laneIdx);
-          const abColor = lc(row.laneIdx);
-          const abInfo = timelineMap.get(row.aliasTimeline ?? "");
-          const abLabel = abInfo?.label ?? row.aliasTimeline ?? "";
-          return (
-            <div key={`alias-${row.aliasTimeline}`} className="flex items-center overflow-hidden" style={{ height: row.h }}>
-              <div className="shrink-0 relative" style={{ width: graphW, height: row.h }}>
-                <div className="absolute rounded-full"
-                  style={{
-                    left: x - 3, top: "50%", transform: "translateY(-50%)",
-                    width: 6, height: 6, backgroundColor: abColor, opacity: 0.5, zIndex: 2,
-                  }} />
-              </div>
-              <div className="flex-1 min-w-0 pr-2 flex items-center gap-1.5">
-                <span className="text-[9px] px-1 py-px rounded-sm"
-                  style={{ color: abColor, backgroundColor: `${abColor}15` }}>{abLabel}</span>
-                <span className="text-[9px] italic text-[var(--color-text-secondary)]/40">no unique snapshots</span>
-              </div>
-            </div>
-          );
-        }
-
         // ── Node row ──
         const node = row.node!;
         const dl = row.laneIdx;
@@ -411,6 +353,7 @@ export function SnapshotGraph({
         const isHov = hovered === node.id;
         const tlInfo = timelineMap.get(node.timeline);
         const tlLabel = tlInfo?.label ?? node.timeline;
+        const nodeAliases = aliases.get(node.id);
 
         return (
           <div key={node.id}
@@ -455,12 +398,20 @@ export function SnapshotGraph({
                   : isHov ? "text-[var(--color-text)]"
                   : "text-[var(--color-text-secondary)]"
               }`}>{node.message}</div>
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1.5 flex-wrap">
                 <span className="text-[10px] text-[var(--color-text-secondary)]/50">{fmtDate(node.timestamp)}</span>
                 {hasMultipleTimelines && (
                   <span className="text-[9px] px-1 py-px rounded-sm leading-tight"
                     style={{ color, backgroundColor: `${color}15` }}>{tlLabel}</span>
                 )}
+                {nodeAliases && nodeAliases.map(a => {
+                  const aInfo = timelineMap.get(a.timeline);
+                  const aLabel = aInfo?.label ?? a.timeline;
+                  return (
+                    <span key={a.timeline} className="text-[9px] px-1 py-px rounded-sm leading-tight text-[var(--color-text-secondary)]/50"
+                      style={{ backgroundColor: "var(--color-surface-alt)" }}>+{aLabel}</span>
+                  );
+                })}
               </div>
             </div>
           </div>
