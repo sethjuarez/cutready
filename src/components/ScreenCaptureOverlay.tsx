@@ -16,12 +16,13 @@ interface ScreenCaptureOverlayProps {
   onCancel: () => void;
 }
 
-type Phase = "pick-monitor" | "select-region";
+type Phase = "pick-monitor" | "choose-mode" | "select-region";
 
 /**
- * Screen capture overlay with two phases:
- * 1. Pick which monitor to capture (shows thumbnails of each)
- * 2. Draw selection rectangle on the chosen monitor's screenshot
+ * Screen capture overlay with three phases:
+ * 1. Pick which monitor (thumbnails — skipped for single monitor)
+ * 2. Choose capture mode: Full Screen or Select Region
+ * 3. Draw selection rectangle (only if region mode chosen)
  */
 export function ScreenCaptureOverlay({ onCapture, onCancel }: ScreenCaptureOverlayProps) {
   const [phase, setPhase] = useState<Phase>("pick-monitor");
@@ -66,19 +67,24 @@ export function ScreenCaptureOverlay({ onCapture, onCancel }: ScreenCaptureOverl
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Escape key to cancel
+  // Escape key — step back through phases
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         if (phase === "select-region") {
-          // Go back to monitor picker if multi-monitor
-          if (monitors.length > 1) {
-            setPhase("pick-monitor");
-            setBgImage(null);
-            setSelStart(null);
-            setSelEnd(null);
-            return;
-          }
+          // Back to choose-mode
+          setSelecting(false);
+          setSelStart(null);
+          setSelEnd(null);
+          setPhase("choose-mode");
+          return;
+        }
+        if (phase === "choose-mode" && monitors.length > 1) {
+          // Back to monitor picker
+          setBgImage(null);
+          setSelectedMonitor(null);
+          setPhase("pick-monitor");
+          return;
         }
         onCancel();
       }
@@ -94,7 +100,7 @@ export function ScreenCaptureOverlay({ onCapture, onCancel }: ScreenCaptureOverl
       const relPath = await invoke<string>("capture_fullscreen", { monitorId: monitor.id });
       const project = await invoke<{ root: string }>("get_current_project");
       setBgImage(convertFileSrc(`${project.root}/${relPath}`));
-      setPhase("select-region");
+      setPhase("choose-mode");
       setLoading(false);
     } catch (err) {
       console.error("Failed to capture monitor:", err);
@@ -206,7 +212,62 @@ export function ScreenCaptureOverlay({ onCapture, onCancel }: ScreenCaptureOverl
     );
   }
 
-  // ── Phase 2: Region selection ──
+  // ── Phase 2: Choose capture mode ──
+  if (phase === "choose-mode") {
+    return (
+      <div
+        className="fixed inset-0 z-[9999] select-none"
+        style={{
+          backgroundImage: bgImage ? `url(${bgImage})` : undefined,
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+        }}
+      >
+        <div className="absolute inset-0 bg-black/50 pointer-events-none" />
+
+        {/* Centered toolbar */}
+        <div className="absolute top-6 left-1/2 -translate-x-1/2 flex items-center gap-3 bg-black/80 backdrop-blur-md rounded-xl px-5 py-3 shadow-2xl">
+          <button
+            onClick={handleFullScreen}
+            className="flex items-center gap-2 text-sm text-white bg-white/10 hover:bg-white/20 px-4 py-2 rounded-lg transition-colors"
+          >
+            <span className="text-base">🖥️</span> Full Screen
+          </button>
+          <div className="w-px h-6 bg-white/20" />
+          <button
+            onClick={() => setPhase("select-region")}
+            className="flex items-center gap-2 text-sm text-white bg-white/10 hover:bg-white/20 px-4 py-2 rounded-lg transition-colors"
+          >
+            <span className="text-base">✂️</span> Select Region
+          </button>
+          {monitors.length > 1 && (
+            <>
+              <div className="w-px h-6 bg-white/20" />
+              <button
+                onClick={() => {
+                  setBgImage(null);
+                  setSelectedMonitor(null);
+                  setPhase("pick-monitor");
+                }}
+                className="text-xs text-white/50 hover:text-white px-2 py-1 transition-colors"
+              >
+                ← Switch Screen
+              </button>
+            </>
+          )}
+          <div className="w-px h-6 bg-white/20" />
+          <button
+            onClick={onCancel}
+            className="text-xs text-white/50 hover:text-white px-2 py-1 transition-colors"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Phase 3: Region selection ──
   return (
     <div
       ref={overlayRef}
@@ -253,29 +314,15 @@ export function ScreenCaptureOverlay({ onCapture, onCancel }: ScreenCaptureOverl
         <span className="text-white/80 text-xs">Click & drag to select a region</span>
         <div className="w-px h-4 bg-white/20" />
         <button
-          onClick={handleFullScreen}
-          className="text-xs text-white bg-white/10 hover:bg-white/20 px-3 py-1 rounded transition-colors"
-        >
-          Full Screen
-        </button>
-        {monitors.length > 1 && (
-          <button
-            onClick={() => {
-              setPhase("pick-monitor");
-              setBgImage(null);
-              setSelStart(null);
-              setSelEnd(null);
-            }}
-            className="text-xs text-white/60 hover:text-white px-2 py-1 transition-colors"
-          >
-            Switch Screen
-          </button>
-        )}
-        <button
-          onClick={onCancel}
+          onClick={() => {
+            setSelecting(false);
+            setSelStart(null);
+            setSelEnd(null);
+            setPhase("choose-mode");
+          }}
           className="text-xs text-white/60 hover:text-white px-2 py-1 transition-colors"
         >
-          Cancel (Esc)
+          ← Back (Esc)
         </button>
       </div>
     </div>
