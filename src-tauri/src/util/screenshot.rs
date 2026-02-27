@@ -109,3 +109,32 @@ pub fn capture_fullscreen(project_dir: &Path, monitor_id: u32) -> Result<String,
     let rel_path = format!(".cutready/screenshots/{filename}");
     Ok(rel_path)
 }
+
+/// Crop a region from an existing screenshot image and save as a new file.
+/// `source_rel` is the relative path from project root (e.g. ".cutready/screenshots/xxx.png").
+/// Crop coordinates are in image pixels.
+pub fn crop_screenshot(
+    project_dir: &Path,
+    source_rel: &str,
+    x: u32,
+    y: u32,
+    width: u32,
+    height: u32,
+) -> Result<String, String> {
+    let source_abs = project_dir.join(source_rel);
+    let img = image::open(&source_abs)
+        .map_err(|e| format!("Failed to open source image: {e}"))?;
+
+    let cropped = image::imageops::crop_imm(&img, x, y, width, height).to_image();
+
+    let dir = screenshots_dir(project_dir)?;
+    let filename = screenshot_filename();
+    let abs_path = dir.join(&filename);
+
+    cropped
+        .save(&abs_path)
+        .map_err(|e| format!("Failed to save cropped screenshot: {e}"))?;
+
+    let rel_path = format!(".cutready/screenshots/{filename}");
+    Ok(rel_path)
+}

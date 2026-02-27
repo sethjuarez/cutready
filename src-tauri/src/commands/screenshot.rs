@@ -102,3 +102,17 @@ pub async fn close_capture_window(app: tauri::AppHandle) -> Result<(), String> {
     }
     Ok(())
 }
+
+/// Crop a region from an already-captured screenshot (avoids re-capturing the monitor).
+#[tauri::command]
+pub async fn crop_screenshot(
+    source_path: String,
+    x: u32,
+    y: u32,
+    width: u32,
+    height: u32,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    let root = project_root(&state)?;
+    screenshot::crop_screenshot(&root, &source_path, x, y, width, height)
+}
