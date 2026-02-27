@@ -16,6 +16,7 @@ import type {
   VersionEntry,
   TimelineInfo,
   GraphNode,
+  NoteSummary,
 } from "../types/sketch";
 
 /** The panels / views available in the app. */
@@ -30,7 +31,7 @@ export type SidebarPosition = "left" | "right";
 /** An open tab in the editor area. */
 export interface EditorTab {
   id: string;
-  type: "sketch" | "storyboard";
+  type: "sketch" | "storyboard" | "note";
   path: string;
   title: string;
 }
@@ -83,6 +84,15 @@ interface AppStoreState {
   activeStoryboardPath: string | null;
   /** The full active storyboard (loaded when viewing). */
   activeStoryboard: Storyboard | null;
+
+  // ── Note state ──────────────────────────────────────────
+
+  /** Note summaries for the current project. */
+  notes: NoteSummary[];
+  /** The currently active note path (relative). */
+  activeNotePath: string | null;
+  /** The full active note content (loaded when editing). */
+  activeNoteContent: string | null;
 
   /** Version history for the current project. */
   versions: VersionEntry[];
@@ -206,6 +216,21 @@ interface AppStoreState {
   /** Close the active storyboard (return to list). */
   closeStoryboard: () => void;
 
+  // ── Note actions ─────────────────────────────────────────
+
+  /** Load note list for current project. */
+  loadNotes: () => Promise<void>;
+  /** Create a new note and open it. */
+  createNote: (title: string) => Promise<void>;
+  /** Open a note for editing by path. */
+  openNote: (notePath: string) => Promise<void>;
+  /** Update the active note content. */
+  updateNote: (content: string) => Promise<void>;
+  /** Delete a note. */
+  deleteNote: (notePath: string) => Promise<void>;
+  /** Close the active note. */
+  closeNote: () => void;
+
   // ── Versioning actions ───────────────────────────────────
 
   /** Load version history. */
@@ -313,6 +338,9 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   storyboards: [],
   activeStoryboardPath: null,
   activeStoryboard: null,
+  notes: [],
+  activeNotePath: null,
+  activeNoteContent: null,
   versions: [],
   timelines: [],
   graphNodes: [],
@@ -398,9 +426,11 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         get().openSketch(nextTab.path);
       } else if (nextTab?.type === "storyboard") {
         get().openStoryboard(nextTab.path);
+      } else if (nextTab?.type === "note") {
+        get().openNote(nextTab.path);
       }
     } else {
-      set({ activeSketchPath: null, activeSketch: null, activeStoryboardPath: null, activeStoryboard: null });
+      set({ activeSketchPath: null, activeSketch: null, activeStoryboardPath: null, activeStoryboard: null, activeNotePath: null, activeNoteContent: null });
     }
   },
   setActiveTab: (tabId) => {
@@ -409,11 +439,14 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     if (!tab) return;
     set({ activeTabId: tabId });
     if (tab.type === "sketch") {
-      set({ activeStoryboardPath: null, activeStoryboard: null });
+      set({ activeStoryboardPath: null, activeStoryboard: null, activeNotePath: null, activeNoteContent: null });
       get().openSketch(tab.path);
     } else if (tab.type === "storyboard") {
-      set({ activeSketchPath: null, activeSketch: null });
+      set({ activeSketchPath: null, activeSketch: null, activeNotePath: null, activeNoteContent: null });
       get().openStoryboard(tab.path);
+    } else if (tab.type === "note") {
+      set({ activeSketchPath: null, activeSketch: null, activeStoryboardPath: null, activeStoryboard: null });
+      get().openNote(tab.path);
     }
   },
   reorderTabs: (tabIds) => {
@@ -453,6 +486,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await get().loadRecentProjects();
       await get().loadSketches();
       await get().loadStoryboards();
+      await get().loadNotes();
     } catch (err) {
       console.error("Failed to create project:", err);
       set({ error: String(err) });
@@ -469,6 +503,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       localStorage.setItem("cutready:lastProject", path);
       await get().loadSketches();
       await get().loadStoryboards();
+      await get().loadNotes();
     } catch (err) {
       console.error("Failed to open project:", err);
       set({ error: String(err) });
@@ -489,6 +524,9 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       storyboards: [],
       activeStoryboardPath: null,
       activeStoryboard: null,
+      notes: [],
+      activeNotePath: null,
+      activeNoteContent: null,
       versions: [],
       timelines: [],
       graphNodes: [],
@@ -720,6 +758,84 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
 
   closeStoryboard: () => {
     set({ activeStoryboardPath: null, activeStoryboard: null, activeSketchPath: null, activeSketch: null });
+  },
+
+  // ── Note actions ──────────────────────────────────────────
+
+  loadNotes: async () => {
+    try {
+      const notes = await invoke<NoteSummary[]>("list_notes");
+      set({ notes });
+    } catch (err) {
+      console.error("Failed to load notes:", err);
+    }
+  },
+
+  createNote: async (title) => {
+    try {
+      let slug = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+      if (!slug) slug = `untitled-${Date.now()}`;
+      const relativePath = slug + ".md";
+      await invoke("create_note", { relativePath });
+      set({
+        activeNotePath: relativePath,
+        activeNoteContent: "",
+        activeSketchPath: null,
+        activeSketch: null,
+        activeStoryboardPath: null,
+        activeStoryboard: null,
+      });
+      get().openTab({ type: "note", path: relativePath, title });
+      await get().loadNotes();
+    } catch (err) {
+      console.error("Failed to create note:", err);
+    }
+  },
+
+  openNote: async (notePath) => {
+    try {
+      const content = await invoke<string>("get_note", { relativePath: notePath });
+      const title = notePath.replace(/\.md$/, "").split("/").pop() ?? notePath;
+      set({
+        activeNotePath: notePath,
+        activeNoteContent: content,
+        activeSketchPath: null,
+        activeSketch: null,
+        activeStoryboardPath: null,
+        activeStoryboard: null,
+      });
+      get().openTab({ type: "note", path: notePath, title });
+    } catch (err) {
+      console.error("Failed to open note:", err);
+    }
+  },
+
+  updateNote: async (content) => {
+    const { activeNotePath } = get();
+    if (!activeNotePath) return;
+    try {
+      await invoke("update_note", { relativePath: activeNotePath, content });
+      set({ activeNoteContent: content, isDirty: true });
+    } catch (err) {
+      console.error("Failed to update note:", err);
+    }
+  },
+
+  deleteNote: async (notePath) => {
+    try {
+      await invoke("delete_note", { relativePath: notePath });
+      const { activeNotePath } = get();
+      if (activeNotePath === notePath) {
+        set({ activeNotePath: null, activeNoteContent: null });
+      }
+      await get().loadNotes();
+    } catch (err) {
+      console.error("Failed to delete note:", err);
+    }
+  },
+
+  closeNote: () => {
+    set({ activeNotePath: null, activeNoteContent: null });
   },
 
   // ── Versioning actions ───────────────────────────────────

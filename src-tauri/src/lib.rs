@@ -157,6 +157,11 @@ pub fn run() {
             commands::screenshot::get_capture_params,
             commands::screenshot::open_preview_window,
             commands::screenshot::close_preview_window,
+            commands::note::create_note,
+            commands::note::get_note,
+            commands::note::update_note,
+            commands::note::delete_note,
+            commands::note::list_notes,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
