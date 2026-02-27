@@ -5,6 +5,7 @@ pub mod export;
 pub mod interaction;
 pub mod project;
 pub mod recording;
+pub mod screenshot;
 pub mod sketch;
 pub mod storyboard;
 pub mod versioning;

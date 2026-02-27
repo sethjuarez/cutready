@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useAppStore } from "../stores/appStore";
 import { ScriptTable } from "./ScriptTable";
+import { ScreenCaptureOverlay } from "./ScreenCaptureOverlay";
 import type { PlanningRow } from "../types/sketch";
 
 /**
@@ -18,8 +19,12 @@ export function SketchForm() {
 
   const [localTitle, setLocalTitle] = useState(activeSketch?.title ?? "");
   const [localRows, setLocalRows] = useState<PlanningRow[]>(activeSketch?.rows ?? []);
+  const [captureRowIdx, setCaptureRowIdx] = useState<number | null>(null);
   const titleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const rowsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const currentProject = useAppStore((s) => s.currentProject);
+  const projectRoot = currentProject?.root ?? "";
 
   // Pending data + path captured at edit time for flush-on-unmount
   const pendingRowsRef = useRef<PlanningRow[] | null>(null);
@@ -95,6 +100,25 @@ export function SketchForm() {
     };
   }, []);
 
+  const handleCaptureScreenshot = useCallback((rowIndex: number) => {
+    setCaptureRowIdx(rowIndex);
+  }, []);
+
+  const handleCaptureComplete = useCallback(
+    (screenshotPath: string) => {
+      if (captureRowIdx === null) return;
+      const updated = [...localRows];
+      updated[captureRowIdx] = { ...updated[captureRowIdx], screenshot: screenshotPath };
+      handleRowsChange(updated);
+      setCaptureRowIdx(null);
+    },
+    [captureRowIdx, localRows, handleRowsChange],
+  );
+
+  const handleCaptureCancel = useCallback(() => {
+    setCaptureRowIdx(null);
+  }, []);
+
   if (!activeSketch) return null;
 
   return (
@@ -147,6 +171,8 @@ export function SketchForm() {
           <ScriptTable
             rows={localRows}
             onChange={handleRowsChange}
+            onCaptureScreenshot={handleCaptureScreenshot}
+            projectRoot={projectRoot}
           />
           {/* Always-visible add row button */}
           <button
@@ -170,6 +196,14 @@ export function SketchForm() {
           </button>
         </div>
       </div>
+
+      {/* Screen capture overlay */}
+      {captureRowIdx !== null && (
+        <ScreenCaptureOverlay
+          onCapture={handleCaptureComplete}
+          onCancel={handleCaptureCancel}
+        />
+      )}
     </div>
   );
 }

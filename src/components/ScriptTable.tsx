@@ -14,6 +14,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { convertFileSrc } from "@tauri-apps/api/core";
 import type { PlanningRow } from "../types/sketch";
 
 function emptyRow(): PlanningRow {
@@ -24,9 +25,11 @@ interface ScriptTableProps {
   rows: PlanningRow[];
   onChange: (rows: PlanningRow[]) => void;
   readOnly?: boolean;
+  onCaptureScreenshot?: (rowIndex: number) => void;
+  projectRoot?: string;
 }
 
-export function ScriptTable({ rows, onChange, readOnly = false }: ScriptTableProps) {
+export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreenshot, projectRoot }: ScriptTableProps) {
   const [activeId, setActiveId] = useState<string | null>(null);
   const focusCellAfterRender = useRef<number | null>(null);
 
@@ -159,6 +162,8 @@ export function ScriptTable({ rows, onChange, readOnly = false }: ScriptTablePro
                   deleteRow={deleteRow}
                   isDragging={activeIdx === idx}
                   isLastRow={idx === rows.length - 1}
+                  onCaptureScreenshot={onCaptureScreenshot}
+                  projectRoot={projectRoot}
                 />
               ))}
             </tbody>
@@ -201,6 +206,8 @@ function SortableRow({
   deleteRow,
   isDragging,
   isLastRow,
+  onCaptureScreenshot,
+  projectRoot,
 }: {
   id: string;
   row: PlanningRow;
@@ -211,6 +218,8 @@ function SortableRow({
   deleteRow: (index: number) => void;
   isDragging: boolean;
   isLastRow: boolean;
+  onCaptureScreenshot?: (rowIndex: number) => void;
+  projectRoot?: string;
 }){
   const {
     attributes,
@@ -310,9 +319,49 @@ function SortableRow({
       </td>
       <td className="script-table-td align-top text-center">
         {row.screenshot ? (
-          <div className="w-16 h-12 rounded-md bg-[var(--color-surface-alt)] border border-[var(--color-border)] overflow-hidden">
-            <img src={row.screenshot} alt="" className="w-full h-full object-cover" />
+          <div className="relative group/ss w-16 h-12 rounded-md bg-[var(--color-surface-alt)] border border-[var(--color-border)] overflow-hidden">
+            <img
+              src={projectRoot ? convertFileSrc(`${projectRoot}/${row.screenshot}`) : row.screenshot}
+              alt=""
+              className="w-full h-full object-cover"
+            />
+            {!readOnly && (
+              <div className="absolute inset-0 bg-black/50 opacity-0 group-hover/ss:opacity-100 transition-opacity flex items-center justify-center gap-1">
+                <button
+                  onClick={() => onCaptureScreenshot?.(idx)}
+                  className="p-0.5 text-white/80 hover:text-white"
+                  title="Re-capture"
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z" />
+                    <circle cx="12" cy="13" r="4" />
+                  </svg>
+                </button>
+                <button
+                  onClick={() => updateRow(idx, "screenshot", "")}
+                  className="p-0.5 text-white/80 hover:text-red-400"
+                  title="Remove screenshot"
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </button>
+              </div>
+            )}
           </div>
+        ) : !readOnly ? (
+          <button
+            onClick={() => onCaptureScreenshot?.(idx)}
+            className="w-16 h-12 rounded-md border border-dashed border-[var(--color-border)] hover:border-[var(--color-accent)] hover:bg-[var(--color-accent)]/5 transition-colors flex items-center justify-center group/cap"
+            title="Capture screenshot"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
+              className="text-[var(--color-text-secondary)] group-hover/cap:text-[var(--color-accent)] transition-colors">
+              <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z" />
+              <circle cx="12" cy="13" r="4" />
+            </svg>
+          </button>
         ) : (
           <span className="text-[10px] text-[var(--color-text-secondary)]">—</span>
         )}
