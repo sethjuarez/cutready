@@ -98,12 +98,26 @@ function sortForDisplay(nodes: GraphNode[], displayLane: Map<string, number>): G
   for (const arr of branches.values())
     arr.sort((a, b) => +new Date(b.timestamp) - +new Date(a.timestamp));
 
-  // Determine fork points: where each branch's oldest node connects to the trunk
+  // Determine fork points: where each branch connects to the trunk.
+  // Walk up parent chain to handle branches-of-branches (transitive forks).
   const trunkIds = new Set(trunk.map(n => n.id));
+  const byId = new Map<string, GraphNode>();
+  for (const n of nodes) byId.set(n.id, n);
   const branchAtFork = new Map<string, GraphNode[][]>();
   for (const [, arr] of branches) {
     const oldest = arr[arr.length - 1];
-    const forkId = oldest.parents.find(p => trunkIds.has(p));
+    // Walk parents transitively until we hit a trunk node
+    let forkId: string | undefined;
+    const visited = new Set<string>();
+    const walk = [...oldest.parents];
+    while (walk.length > 0) {
+      const pid = walk.shift()!;
+      if (visited.has(pid)) continue;
+      visited.add(pid);
+      if (trunkIds.has(pid)) { forkId = pid; break; }
+      const pn = byId.get(pid);
+      if (pn) walk.push(...pn.parents);
+    }
     if (forkId) {
       if (!branchAtFork.has(forkId)) branchAtFork.set(forkId, []);
       branchAtFork.get(forkId)!.push(arr);
