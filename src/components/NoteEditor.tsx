@@ -1,28 +1,85 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import Markdown from "react-markdown";
+import { useCallback, useEffect, useMemo, useRef } from "react";
+import CodeMirror from "@uiw/react-codemirror";
+import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
+import { languages } from "@codemirror/language-data";
+import { EditorView } from "@codemirror/view";
 import { useAppStore } from "../stores/appStore";
-import { ResizeHandle } from "./ResizeHandle";
 
-const PREFS_KEY = "cutready:note-editor";
-
-function loadEditorPrefs(): { previewWidth: number } {
-  try {
-    const raw = localStorage.getItem(PREFS_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      return { previewWidth: Math.min(800, Math.max(200, parsed.previewWidth ?? 400)) };
-    }
-  } catch { /* ignore */ }
-  return { previewWidth: 400 };
-}
-
-function saveEditorPrefs(prefs: { previewWidth: number }) {
-  try { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); } catch { /* ignore */ }
-}
+/** CodeMirror theme that matches app CSS variables + renders markdown inline. */
+const cutreadyTheme = EditorView.theme({
+  "&": {
+    fontSize: "0.9rem",
+    fontFamily: '"Geist Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif',
+    backgroundColor: "transparent",
+    color: "var(--color-text)",
+  },
+  ".cm-content": {
+    padding: "1.5rem 0",
+    caretColor: "var(--color-accent)",
+    lineHeight: "1.7",
+  },
+  ".cm-cursor": { borderLeftColor: "var(--color-accent)" },
+  ".cm-activeLine": { backgroundColor: "var(--color-surface-alt)" },
+  ".cm-selectionBackground, &.cm-focused .cm-selectionBackground": {
+    backgroundColor: "var(--color-accent) !important",
+    opacity: "0.15",
+  },
+  ".cm-gutters": {
+    backgroundColor: "transparent",
+    borderRight: "none",
+    color: "var(--color-text-secondary)",
+    fontSize: "0.75rem",
+    minWidth: "3rem",
+  },
+  ".cm-activeLineGutter": { backgroundColor: "var(--color-surface-alt)" },
+  "&.cm-focused": { outline: "none" },
+  ".cm-scroller": { overflow: "auto" },
+  // Markdown inline styles
+  ".cm-header-1": { fontSize: "1.5rem", fontWeight: "600", lineHeight: "2" },
+  ".cm-header-2": { fontSize: "1.3rem", fontWeight: "600", lineHeight: "1.9" },
+  ".cm-header-3": { fontSize: "1.15rem", fontWeight: "600", lineHeight: "1.8" },
+  ".cm-header-4": { fontSize: "1.05rem", fontWeight: "600" },
+  ".cm-header-5": { fontSize: "1rem", fontWeight: "600" },
+  ".cm-header-6": { fontSize: "0.95rem", fontWeight: "600" },
+  ".cm-strong": { fontWeight: "600" },
+  ".cm-emphasis": { fontStyle: "italic" },
+  ".cm-strikethrough": { textDecoration: "line-through" },
+  ".cm-link": { color: "var(--color-accent)", textDecoration: "underline" },
+  ".cm-url": { color: "var(--color-text-secondary)" },
+  // Inline code
+  ".cm-monospace": {
+    fontFamily: '"Geist Mono", "Cascadia Code", "Fira Code", ui-monospace, monospace',
+    fontSize: "0.825rem",
+    backgroundColor: "var(--color-surface-alt)",
+    padding: "0.1rem 0.3rem",
+    borderRadius: "0.2rem",
+  },
+  // Code block lines
+  ".cm-codeblock": {
+    fontFamily: '"Geist Mono", "Cascadia Code", "Fira Code", ui-monospace, monospace',
+    fontSize: "0.825rem",
+    backgroundColor: "var(--color-surface-inset)",
+  },
+  // Blockquote
+  ".cm-quote": {
+    color: "var(--color-text-secondary)",
+    borderLeft: "3px solid var(--color-accent)",
+    paddingLeft: "0.75rem",
+  },
+  // Meta characters (markdown syntax like #, *, etc.) — subtle
+  ".cm-meta, .cm-processingInstruction": {
+    color: "var(--color-text-secondary)",
+  },
+  // Horizontal rule
+  ".cm-hr": {
+    color: "var(--color-border)",
+  },
+}, { dark: false });
 
 /**
- * NoteEditor — split-view markdown editor for .md note files.
- * Left: monospace textarea (edit), Right: rendered markdown preview.
+ * NoteEditor — inline-styled CodeMirror markdown editor for .md note files.
+ * Markdown renders visually as you type (headers are large, bold is bold, etc.)
+ * while keeping the raw markdown syntax visible.
  * Debounced auto-save on content changes.
  */
 export function NoteEditor() {
@@ -30,41 +87,28 @@ export function NoteEditor() {
   const activeNoteContent = useAppStore((s) => s.activeNoteContent);
   const updateNote = useAppStore((s) => s.updateNote);
 
-  const [localContent, setLocalContent] = useState(activeNoteContent ?? "");
-  const [previewWidth, setPreviewWidth] = useState(loadEditorPrefs().previewWidth);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingContentRef = useRef<string | null>(null);
+  const updateNoteRef = useRef(updateNote);
+  updateNoteRef.current = updateNote;
 
-  // Reset when switching notes
-  useEffect(() => {
-    setLocalContent(activeNoteContent ?? "");
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current);
-      saveTimeoutRef.current = null;
-    }
-    pendingContentRef.current = null;
-  }, [activeNotePath, activeNoteContent]);
+  const extensions = useMemo(() => [
+    markdown({ base: markdownLanguage, codeLanguages: languages }),
+    EditorView.lineWrapping,
+    cutreadyTheme,
+  ], []);
 
   const handleChange = useCallback(
     (value: string) => {
-      setLocalContent(value);
       pendingContentRef.current = value;
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
       saveTimeoutRef.current = setTimeout(() => {
         pendingContentRef.current = null;
-        updateNote(value);
+        updateNoteRef.current(value);
       }, 800);
     },
-    [updateNote],
+    [],
   );
-
-  const handleResize = useCallback((delta: number) => {
-    setPreviewWidth((w) => Math.min(800, Math.max(200, w - delta)));
-  }, []);
-
-  const handleResizeEnd = useCallback(() => {
-    saveEditorPrefs({ previewWidth });
-  }, [previewWidth]);
 
   // Flush on unmount
   useEffect(() => {
@@ -72,11 +116,11 @@ export function NoteEditor() {
       if (saveTimeoutRef.current) {
         clearTimeout(saveTimeoutRef.current);
         if (pendingContentRef.current !== null) {
-          updateNote(pendingContentRef.current);
+          updateNoteRef.current(pendingContentRef.current);
         }
       }
     };
-  }, [updateNote]);
+  }, []);
 
   if (!activeNotePath) return null;
 
@@ -96,34 +140,27 @@ export function NoteEditor() {
         <span className="text-[10px] text-[var(--color-text-secondary)] px-1.5 py-0.5 rounded bg-[var(--color-surface-alt)]">.md</span>
       </div>
 
-      {/* Split editor + preview */}
-      <div className="flex flex-1 overflow-hidden">
-        {/* Editor pane */}
-        <div className="flex-1 min-w-0 overflow-hidden">
-          <textarea
-            value={localContent}
-            onChange={(e) => handleChange(e.target.value)}
-            placeholder="Write your notes here... (Markdown)"
-            className="w-full h-full text-sm bg-transparent text-[var(--color-text)] placeholder:text-[var(--color-text-secondary)]/40 outline-none px-5 py-4 resize-none font-mono leading-relaxed"
-            spellCheck
+      {/* CodeMirror editor */}
+      <div className="flex-1 overflow-auto px-6">
+        <div className="max-w-3xl mx-auto">
+          <CodeMirror
+            key={activeNotePath}
+            value={activeNoteContent ?? ""}
+            extensions={extensions}
+            onChange={handleChange}
+            placeholder="Write your notes here... (Markdown renders inline as you type)"
+            basicSetup={{
+              lineNumbers: false,
+              foldGutter: false,
+              highlightActiveLine: true,
+              highlightSelectionMatches: true,
+              bracketMatching: false,
+              closeBrackets: false,
+              autocompletion: false,
+              indentOnInput: true,
+            }}
+            theme="none"
           />
-        </div>
-
-        {/* Resize handle */}
-        <ResizeHandle direction="horizontal" onResize={handleResize} onResizeEnd={handleResizeEnd} />
-
-        {/* Preview pane */}
-        <div
-          className="shrink-0 overflow-y-auto border-l border-[var(--color-border)] bg-[var(--color-surface)]"
-          style={{ width: previewWidth }}
-        >
-          <div className="px-6 py-4 prose-cutready">
-            {localContent ? (
-              <Markdown>{localContent}</Markdown>
-            ) : (
-              <p className="text-sm text-[var(--color-text-secondary)] italic">Preview will appear here...</p>
-            )}
-          </div>
         </div>
       </div>
     </div>
