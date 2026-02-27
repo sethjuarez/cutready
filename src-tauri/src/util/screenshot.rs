@@ -1,6 +1,8 @@
 //! Screenshot capture utilities using xcap.
 
+use std::io::BufWriter;
 use std::path::{Path, PathBuf};
+use image::ImageEncoder;
 use xcap::Monitor;
 
 /// Information about an available monitor.
@@ -52,7 +54,18 @@ fn screenshots_dir(project_dir: &Path) -> Result<PathBuf, String> {
 /// Generate a timestamped filename for a screenshot.
 fn screenshot_filename() -> String {
     let ts = chrono::Utc::now().format("%Y%m%d_%H%M%S_%3f");
-    format!("{ts}.png")
+    format!("{ts}.jpg")
+}
+
+/// Save an RGBA image as JPEG (quality 95). Much faster than PNG for large screenshots.
+fn save_jpeg(img: &image::RgbaImage, path: &Path) -> Result<(), String> {
+    let file = std::fs::File::create(path)
+        .map_err(|e| format!("Failed to create file: {e}"))?;
+    let writer = BufWriter::new(file);
+    let encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(writer, 95);
+    encoder
+        .write_image(img.as_raw(), img.width(), img.height(), image::ExtendedColorType::Rgba8)
+        .map_err(|e| format!("JPEG encode failed: {e}"))
 }
 
 /// Capture a region of a monitor and save to the project's screenshot directory.
@@ -84,9 +97,7 @@ pub fn capture_region(
     let filename = screenshot_filename();
     let abs_path = dir.join(&filename);
 
-    cropped
-        .save(&abs_path)
-        .map_err(|e| format!("Failed to save screenshot: {e}"))?;
+    save_jpeg(&cropped, &abs_path)?;
 
     let rel_path = format!(".cutready/screenshots/{filename}");
     Ok(rel_path)
@@ -103,8 +114,7 @@ pub fn capture_fullscreen(project_dir: &Path, monitor_id: u32) -> Result<String,
     let filename = screenshot_filename();
     let abs_path = dir.join(&filename);
 
-    img.save(&abs_path)
-        .map_err(|e| format!("Failed to save screenshot: {e}"))?;
+    save_jpeg(&img, &abs_path)?;
 
     let rel_path = format!(".cutready/screenshots/{filename}");
     Ok(rel_path)
@@ -131,9 +141,7 @@ pub fn crop_screenshot(
     let filename = screenshot_filename();
     let abs_path = dir.join(&filename);
 
-    cropped
-        .save(&abs_path)
-        .map_err(|e| format!("Failed to save cropped screenshot: {e}"))?;
+    save_jpeg(&cropped, &abs_path)?;
 
     let rel_path = format!(".cutready/screenshots/{filename}");
     Ok(rel_path)
