@@ -8,7 +8,7 @@ const LANE_W = 16;        // px between lane centers
 const GRAPH_PAD = 14;     // left padding to first lane center
 const NODE_R = 5;         // regular dot radius
 const HEAD_R = 6.5;       // HEAD dot radius
-const STROKE_W = 1.5;     // rail line width
+const STROKE_W = 2;       // rail line width
 
 const LANE_COLORS = [
   "var(--color-accent)",      // purple — main / active
@@ -224,7 +224,7 @@ export function SnapshotGraph({
         // Same lane: straight vertical line
         paths.push({
           d: `M ${cx} ${cy + NODE_R} L ${px} ${py - NODE_R}`,
-          color, opacity: 0.4,
+          color, opacity: 0.7,
         });
       } else {
         // Different lanes: curve from child to parent
@@ -232,7 +232,7 @@ export function SnapshotGraph({
         const midY = cy + (py - cy) * 0.5;
         paths.push({
           d: `M ${cx} ${cy + NODE_R} L ${cx} ${midY - 6} Q ${cx} ${midY}, ${px} ${midY} L ${px} ${midY} Q ${px} ${midY}, ${px} ${midY + 6} L ${px} ${py - NODE_R}`,
-          color, opacity: 0.35,
+          color, opacity: 0.6,
         });
       }
     }
@@ -245,7 +245,7 @@ export function SnapshotGraph({
     const dx = laneX(rows[dirtyRowIdx].laneIdx);
     paths.push({
       d: `M ${dx} ${rowCy(dirtyRowIdx) + 4} L ${dx} ${rowCy(headRowIdx) - HEAD_R}`,
-      color: "var(--color-text-secondary)", opacity: 0.25, dashed: true,
+      color: "var(--color-text-secondary)", opacity: 0.4, dashed: true,
     });
   }
 
@@ -258,7 +258,7 @@ export function SnapshotGraph({
     const hy = rowCy(headRowIdx);
     paths.push({
       d: `M ${hx + HEAD_R} ${hy} Q ${gx} ${hy}, ${gx} ${gy + 4}`,
-      color: lc(rows[headRowIdx].laneIdx), opacity: 0.35, dashed: true,
+      color: lc(rows[headRowIdx].laneIdx), opacity: 0.5, dashed: true,
     });
   }
 
@@ -277,7 +277,7 @@ export function SnapshotGraph({
       const py = rowCy(parentIdx);
       paths.push({
         d: `M ${px + NODE_R} ${py} Q ${ax} ${py}, ${ax} ${ay - 3}`,
-        color: lc(rows[i].laneIdx), opacity: 0.3, dashed: true,
+        color: lc(rows[i].laneIdx), opacity: 0.5, dashed: true,
       });
     }
   }
