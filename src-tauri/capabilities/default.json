@@ -15,6 +15,13 @@
     "core:window:allow-is-maximized",
     "shell:allow-open",
     "fs:default",
+    {
+      "identifier": "fs:allow-read",
+      "allow": [{ "path": "**" }]
+    },
+    {
+      "identifier": "core:app:default"
+    },
     "dialog:default",
     "store:default",
     "global-shortcut:default",

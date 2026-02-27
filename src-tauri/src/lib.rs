@@ -142,6 +142,9 @@ pub fn run() {
             commands::interaction::start_recording_session,
             commands::interaction::stop_recording_session,
             commands::interaction::get_session_actions,
+            commands::screenshot::list_monitors,
+            commands::screenshot::capture_region,
+            commands::screenshot::capture_fullscreen,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
