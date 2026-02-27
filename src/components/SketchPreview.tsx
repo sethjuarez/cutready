@@ -16,6 +16,7 @@ interface SketchPreviewProps {
  */
 export function SketchPreview({ rows, projectRoot, title, onClose }: SketchPreviewProps) {
   const [currentIdx, setCurrentIdx] = useState(0);
+  const [activeTab, setActiveTab] = useState<"narrative" | "actions">("narrative");
   const total = rows.length;
   const row = rows[currentIdx];
 
@@ -87,10 +88,49 @@ export function SketchPreview({ rows, projectRoot, title, onClose }: SketchPrevi
         </button>
       </div>
 
-      {/* Main content area */}
-      <div className="flex-1 flex flex-col items-center justify-center overflow-hidden px-8 py-6 gap-6">
-        {/* Screenshot */}
-        <div className="flex-1 flex items-center justify-center w-full min-h-0">
+      {/* Main content area — side by side */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Left panel: Narrative / Actions tabs */}
+        <div className="w-80 shrink-0 flex flex-col border-r border-[var(--color-border)]">
+          {/* Tabs */}
+          <div className="flex shrink-0 border-b border-[var(--color-border)]">
+            <button
+              onClick={() => setActiveTab("narrative")}
+              className={`flex-1 px-4 py-2.5 text-xs font-medium transition-colors ${
+                activeTab === "narrative"
+                  ? "text-[var(--color-accent)] border-b-2 border-[var(--color-accent)]"
+                  : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"
+              }`}
+            >
+              Narrative
+            </button>
+            <button
+              onClick={() => setActiveTab("actions")}
+              className={`flex-1 px-4 py-2.5 text-xs font-medium transition-colors ${
+                activeTab === "actions"
+                  ? "text-[var(--color-accent)] border-b-2 border-[var(--color-accent)]"
+                  : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"
+              }`}
+            >
+              Actions
+            </button>
+          </div>
+          {/* Tab content */}
+          <div className="flex-1 overflow-y-auto px-5 py-4">
+            {activeTab === "narrative" ? (
+              <div className="text-sm text-[var(--color-text)] whitespace-pre-wrap leading-relaxed">
+                {row.narrative || <span className="text-[var(--color-text-secondary)] italic">No narrative</span>}
+              </div>
+            ) : (
+              <div className="text-sm text-[var(--color-text)] whitespace-pre-wrap leading-relaxed">
+                {row.demo_actions || <span className="text-[var(--color-text-secondary)] italic">No actions</span>}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Right: Screenshot */}
+        <div className="flex-1 flex items-center justify-center p-8 min-w-0">
           {screenshotSrc ? (
             <img
               src={screenshotSrc}
@@ -109,26 +149,6 @@ export function SketchPreview({ rows, projectRoot, title, onClose }: SketchPrevi
               </div>
             </div>
           )}
-        </div>
-
-        {/* Narrative & Actions card */}
-        <div className="w-full max-w-3xl shrink-0 max-h-[30vh] overflow-y-auto bg-[var(--color-surface-alt)] rounded-xl border border-[var(--color-border)] px-6 py-4">
-          <div className="flex gap-8">
-            {/* Narrative */}
-            <div className="flex-1 min-w-0">
-              <div className="text-[10px] font-medium text-[var(--color-text-secondary)] uppercase tracking-wider mb-1">Narrative</div>
-              <div className="text-sm text-[var(--color-text)] whitespace-pre-wrap">
-                {row.narrative || <span className="text-[var(--color-text-secondary)] italic">No narrative</span>}
-              </div>
-            </div>
-            {/* Actions */}
-            {row.demo_actions && (
-              <div className="flex-1 min-w-0">
-                <div className="text-[10px] font-medium text-[var(--color-text-secondary)] uppercase tracking-wider mb-1">Actions</div>
-                <div className="text-sm text-[var(--color-text)] whitespace-pre-wrap">{row.demo_actions}</div>
-              </div>
-            )}
-          </div>
         </div>
       </div>
 
