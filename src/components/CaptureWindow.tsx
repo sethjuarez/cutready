@@ -164,14 +164,26 @@ export function CaptureWindow() {
             disabled={capturing}
             className="flex items-center gap-2 text-sm text-white bg-white/10 hover:bg-white/20 px-4 py-2 rounded-lg transition-colors disabled:opacity-50"
           >
-            <span className="text-base">🖥️</span> Full Screen
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="2" y="3" width="20" height="14" rx="2" />
+              <line x1="8" y1="21" x2="16" y2="21" />
+              <line x1="12" y1="17" x2="12" y2="21" />
+            </svg>
+            Full Screen
           </button>
           <div className="w-px h-6 bg-white/20" />
           <button
             onClick={() => setPhase("select-region")}
             className="flex items-center gap-2 text-sm text-white bg-white/10 hover:bg-white/20 px-4 py-2 rounded-lg transition-colors"
           >
-            <span className="text-base">✂️</span> Select Region
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M6 2L6 8" />
+              <path d="M18 2L18 8" />
+              <path d="M2 6L8 6" />
+              <path d="M16 6L22 6" />
+              <rect x="6" y="6" width="12" height="12" rx="1" strokeDasharray="3 2" />
+            </svg>
+            Select Region
           </button>
           <div className="w-px h-6 bg-white/20" />
           <button
@@ -237,9 +249,13 @@ export function CaptureWindow() {
             setSelEnd(null);
             setPhase("choose-mode");
           }}
-          className="text-xs text-white/60 hover:text-white px-2 py-1 transition-colors"
+          className="flex items-center gap-1 text-xs text-white/60 hover:text-white px-2 py-1 transition-colors"
         >
-          ← Back (Esc)
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="19" y1="12" x2="5" y2="12" />
+            <polyline points="12 19 5 12 12 5" />
+          </svg>
+          Back (Esc)
         </button>
       </div>
     </div>
