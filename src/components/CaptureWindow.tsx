@@ -14,11 +14,8 @@ interface CaptureWindowProps {
  * Communicates results back to main window via Tauri events.
  */
 export function CaptureWindow({ params }: CaptureWindowProps) {
-  const monitorId = Number(params.get("monitorId") ?? 0);
   const monitorW = Number(params.get("mw") ?? 1920);
   const monitorH = Number(params.get("mh") ?? 1080);
-  const monitorX = Number(params.get("mx") ?? 0);
-  const monitorY = Number(params.get("my") ?? 0);
   const bgRelPath = params.get("bg") ?? "";
   const projectRoot = params.get("root") ?? "";
 
@@ -62,15 +59,10 @@ export function CaptureWindow({ params }: CaptureWindowProps) {
   }, [phase, cancel]);
 
   const handleFullScreen = useCallback(async () => {
+    // Use the pre-captured background image (taken before this window opened)
     setCapturing(true);
-    try {
-      const path = await invoke<string>("capture_fullscreen", { monitorId });
-      await finish(path);
-    } catch (err) {
-      console.error("Fullscreen capture failed:", err);
-      cancel();
-    }
-  }, [monitorId, finish, cancel]);
+    await finish(bgRelPath);
+  }, [bgRelPath, finish]);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     if (phase !== "select-region") return;
@@ -99,24 +91,26 @@ export function CaptureWindow({ params }: CaptureWindowProps) {
     try {
       const overlay = overlayRef.current;
       if (!overlay) return;
+      // Scale overlay coordinates to image pixel coordinates
       const scaleX = monitorW / overlay.clientWidth;
       const scaleY = monitorH / overlay.clientHeight;
 
-      const absX = Math.round(monitorX + rect.x * scaleX);
-      const absY = Math.round(monitorY + rect.y * scaleY);
-      const absW = Math.round(rect.w * scaleX);
-      const absH = Math.round(rect.h * scaleY);
+      const cropX = Math.round(rect.x * scaleX);
+      const cropY = Math.round(rect.y * scaleY);
+      const cropW = Math.round(rect.w * scaleX);
+      const cropH = Math.round(rect.h * scaleY);
 
-      const path = await invoke<string>("capture_region", {
-        monitorId,
-        x: absX, y: absY, width: absW, height: absH,
+      // Crop from the pre-captured background image (no overlay artifacts)
+      const path = await invoke<string>("crop_screenshot", {
+        sourcePath: bgRelPath,
+        x: cropX, y: cropY, width: cropW, height: cropH,
       });
       await finish(path);
     } catch (err) {
       console.error("Region capture failed:", err);
       cancel();
     }
-  }, [selecting, selStart, selEnd, monitorW, monitorH, monitorX, monitorY, monitorId, finish, cancel]);
+  }, [selecting, selStart, selEnd, monitorW, monitorH, bgRelPath, finish, cancel]);
 
   const rect = selStart && selEnd ? getSelRect(selStart, selEnd) : null;
 
