@@ -5,7 +5,7 @@ import type { PlanningRow } from "../types/sketch";
 
 const PREFS_KEY = "cutready:preview";
 
-function loadPrefs(): { panelSide: "left" | "right"; panelWidth: number } {
+function loadPrefs(): { panelSide: "left" | "right"; panelWidth: number; panelVisible: boolean } {
   try {
     const raw = localStorage.getItem(PREFS_KEY);
     if (raw) {
@@ -13,13 +13,14 @@ function loadPrefs(): { panelSide: "left" | "right"; panelWidth: number } {
       return {
         panelSide: parsed.panelSide === "right" ? "right" : "left",
         panelWidth: Math.min(600, Math.max(200, parsed.panelWidth ?? 320)),
+        panelVisible: parsed.panelVisible !== false,
       };
     }
   } catch { /* ignore */ }
-  return { panelSide: "left", panelWidth: 320 };
+  return { panelSide: "left", panelWidth: 320, panelVisible: true };
 }
 
-function savePrefs(prefs: { panelSide: "left" | "right"; panelWidth: number }) {
+function savePrefs(prefs: { panelSide: "left" | "right"; panelWidth: number; panelVisible: boolean }) {
   try { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); } catch { /* ignore */ }
 }
 
@@ -40,6 +41,7 @@ export function SketchPreview({ rows, projectRoot, title, onClose }: SketchPrevi
   const [activeTab, setActiveTab] = useState<"narrative" | "actions">("narrative");
   const [panelSide, setPanelSide] = useState<"left" | "right">(loadPrefs().panelSide);
   const [panelWidth, setPanelWidth] = useState(loadPrefs().panelWidth);
+  const [panelVisible, setPanelVisible] = useState(loadPrefs().panelVisible);
   const total = rows.length;
   const row = rows[currentIdx];
 
@@ -54,10 +56,18 @@ export function SketchPreview({ rows, projectRoot, title, onClose }: SketchPrevi
   const toggleSide = useCallback(() => {
     setPanelSide((s) => {
       const next = s === "left" ? "right" : "left";
-      savePrefs({ panelSide: next, panelWidth });
+      savePrefs({ panelSide: next, panelWidth, panelVisible });
       return next;
     });
-  }, [panelWidth]);
+  }, [panelWidth, panelVisible]);
+
+  const togglePanel = useCallback(() => {
+    setPanelVisible((v) => {
+      const next = !v;
+      savePrefs({ panelSide, panelWidth, panelVisible: next });
+      return next;
+    });
+  }, [panelSide, panelWidth]);
 
   const handleResize = useCallback((delta: number) => {
     setPanelWidth((w) => {
@@ -67,8 +77,8 @@ export function SketchPreview({ rows, projectRoot, title, onClose }: SketchPrevi
   }, [panelSide]);
 
   const handleResizeEnd = useCallback(() => {
-    savePrefs({ panelSide, panelWidth });
-  }, [panelSide, panelWidth]);
+    savePrefs({ panelSide, panelWidth, panelVisible });
+  }, [panelSide, panelWidth, panelVisible]);
 
   // Keyboard navigation
   useEffect(() => {
@@ -118,83 +128,131 @@ export function SketchPreview({ rows, projectRoot, title, onClose }: SketchPrevi
             </>
           )}
         </div>
-        <button
-          onClick={onClose}
-          className="flex items-center gap-1.5 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors px-2 py-1 rounded-md hover:bg-[var(--color-surface-alt)]"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="18" y1="6" x2="6" y2="18" />
-            <line x1="6" y1="6" x2="18" y2="18" />
-          </svg>
-          Close
-        </button>
+        <div className="flex items-center gap-1">
+          {/* Toggle panel side */}
+          <button
+            onClick={toggleSide}
+            className="flex items-center gap-1.5 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors px-2 py-1 rounded-md hover:bg-[var(--color-surface-alt)]"
+            title={`Move panel to ${panelSide === "left" ? "right" : "left"}`}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              {panelSide === "left" ? (
+                <>
+                  <rect x="3" y="3" width="18" height="18" rx="2" />
+                  <line x1="15" y1="3" x2="15" y2="21" />
+                </>
+              ) : (
+                <>
+                  <rect x="3" y="3" width="18" height="18" rx="2" />
+                  <line x1="9" y1="3" x2="9" y2="21" />
+                </>
+              )}
+            </svg>
+          </button>
+          {/* Close */}
+          <button
+            onClick={onClose}
+            className="flex items-center gap-1.5 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors px-2 py-1 rounded-md hover:bg-[var(--color-surface-alt)]"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+            Close
+          </button>
+        </div>
       </div>
 
       {/* Main content area — side by side */}
       <div className={`flex-1 flex overflow-hidden ${panelSide === "right" ? "flex-row-reverse" : ""}`}>
         {/* Text panel */}
-        <div className="shrink-0 flex flex-col" style={{ width: panelWidth }}>
-          {/* Tabs + toggle */}
-          <div className="flex shrink-0 border-b border-[var(--color-border)]">
+        {panelVisible && (
+          <>
+            <div className="shrink-0 flex flex-col" style={{ width: panelWidth }}>
+              {/* Tabs + hide */}
+              <div className="flex shrink-0 border-b border-[var(--color-border)] bg-[var(--color-surface-alt)]">
+                <button
+                  onClick={() => setActiveTab("narrative")}
+                  className={`flex-1 px-4 py-3 text-xs font-semibold uppercase tracking-wide transition-colors ${
+                    activeTab === "narrative"
+                      ? "text-[var(--color-accent)] border-b-2 border-[var(--color-accent)] bg-[var(--color-surface)]"
+                      : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"
+                  }`}
+                >
+                  Narrative
+                </button>
+                <button
+                  onClick={() => setActiveTab("actions")}
+                  className={`flex-1 px-4 py-3 text-xs font-semibold uppercase tracking-wide transition-colors ${
+                    activeTab === "actions"
+                      ? "text-[var(--color-accent)] border-b-2 border-[var(--color-accent)] bg-[var(--color-surface)]"
+                      : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"
+                  }`}
+                >
+                  Actions
+                </button>
+                <button
+                  onClick={togglePanel}
+                  className="px-2.5 py-3 text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors"
+                  title="Hide panel"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    {panelSide === "left" ? (
+                      <>
+                        <polyline points="11 17 6 12 11 7" />
+                        <line x1="6" y1="12" x2="18" y2="12" />
+                      </>
+                    ) : (
+                      <>
+                        <polyline points="13 17 18 12 13 7" />
+                        <line x1="18" y1="12" x2="6" y2="12" />
+                      </>
+                    )}
+                  </svg>
+                </button>
+              </div>
+              {/* Tab content */}
+              <div className="flex-1 overflow-y-auto px-5 py-4">
+                {activeTab === "narrative" ? (
+                  <div className="text-sm text-[var(--color-text)] whitespace-pre-wrap leading-relaxed">
+                    {row.narrative || <span className="text-[var(--color-text-secondary)] italic">No narrative</span>}
+                  </div>
+                ) : (
+                  <div className="text-sm text-[var(--color-text)] whitespace-pre-wrap leading-relaxed">
+                    {row.demo_actions || <span className="text-[var(--color-text-secondary)] italic">No actions</span>}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Resize handle */}
+            <ResizeHandle direction="horizontal" onResize={handleResize} onResizeEnd={handleResizeEnd} />
+          </>
+        )}
+
+        {/* Screenshot */}
+        <div className="flex-1 flex items-center justify-center p-8 min-w-0 relative">
+          {!panelVisible && (
             <button
-              onClick={() => setActiveTab("narrative")}
-              className={`flex-1 px-4 py-2.5 text-xs font-medium transition-colors ${
-                activeTab === "narrative"
-                  ? "text-[var(--color-accent)] border-b-2 border-[var(--color-accent)]"
-                  : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"
-              }`}
-            >
-              Narrative
-            </button>
-            <button
-              onClick={() => setActiveTab("actions")}
-              className={`flex-1 px-4 py-2.5 text-xs font-medium transition-colors ${
-                activeTab === "actions"
-                  ? "text-[var(--color-accent)] border-b-2 border-[var(--color-accent)]"
-                  : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"
-              }`}
-            >
-              Actions
-            </button>
-            <button
-              onClick={toggleSide}
-              className="px-2.5 py-2.5 text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors"
-              title={`Move panel to ${panelSide === "left" ? "right" : "left"}`}
+              onClick={togglePanel}
+              className={`absolute top-4 ${panelSide === "left" ? "left-4" : "right-4"} p-2 rounded-lg text-[var(--color-text-secondary)] hover:text-[var(--color-text)] bg-[var(--color-surface-alt)] hover:bg-[var(--color-surface-inset)] border border-[var(--color-border)] transition-colors`}
+              title="Show panel"
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                 {panelSide === "left" ? (
                   <>
-                    <rect x="3" y="3" width="18" height="18" rx="2" />
-                    <line x1="15" y1="3" x2="15" y2="21" />
+                    <polyline points="13 7 18 12 13 17" />
+                    <line x1="18" y1="12" x2="6" y2="12" />
                   </>
                 ) : (
                   <>
-                    <rect x="3" y="3" width="18" height="18" rx="2" />
-                    <line x1="9" y1="3" x2="9" y2="21" />
+                    <polyline points="11 7 6 12 11 17" />
+                    <line x1="6" y1="12" x2="18" y2="12" />
                   </>
                 )}
               </svg>
             </button>
-          </div>
-          {/* Tab content */}
-          <div className="flex-1 overflow-y-auto px-5 py-4">
-            {activeTab === "narrative" ? (
-              <div className="text-sm text-[var(--color-text)] whitespace-pre-wrap leading-relaxed">
-                {row.narrative || <span className="text-[var(--color-text-secondary)] italic">No narrative</span>}
-              </div>
-            ) : (
-              <div className="text-sm text-[var(--color-text)] whitespace-pre-wrap leading-relaxed">
-                {row.demo_actions || <span className="text-[var(--color-text-secondary)] italic">No actions</span>}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Resize handle */}
-        <ResizeHandle direction="horizontal" onResize={handleResize} onResizeEnd={handleResizeEnd} />
-
-        {/* Screenshot */}
-        <div className="flex-1 flex items-center justify-center p-8 min-w-0">
+          )}
           {screenshotSrc ? (
             <img
               src={screenshotSrc}
