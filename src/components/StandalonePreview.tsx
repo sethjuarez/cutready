@@ -19,6 +19,14 @@ export function StandalonePreview() {
   const [data, setData] = useState<PreviewData | null>(null);
 
   useEffect(() => {
+    // Apply theme from main window (shared localStorage)
+    const theme = localStorage.getItem("cutready-theme");
+    if (theme === "dark") {
+      document.documentElement.classList.add("dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+    }
+
     try {
       const raw = localStorage.getItem(DATA_KEY);
       if (raw) {
