@@ -28,6 +28,7 @@ interface ScreenCaptureOverlayProps {
 export function ScreenCaptureOverlay({ onCapture, onCancel }: ScreenCaptureOverlayProps) {
   const [monitors, setMonitors] = useState<MonitorInfo[]>([]);
   const [monitorPreviews, setMonitorPreviews] = useState<Map<number, string>>(new Map());
+  const [previewPaths, setPreviewPaths] = useState<Map<number, string>>(new Map());
   const [loading, setLoading] = useState(true);
   const [waitingForCapture, setWaitingForCapture] = useState(false);
   const mountedRef = useRef(false);
@@ -73,14 +74,21 @@ export function ScreenCaptureOverlay({ onCapture, onCancel }: ScreenCaptureOverl
         }
 
         // Capture preview of each monitor
-        logInfo("[Overlay] Multi-monitor — capturing previews");
+        logInfo("[Overlay] Multi-monitor — capturing previews (parallel)");
         const project = await invoke<{ root: string }>("get_current_project");
+        const ids = mons.map((m) => m.id);
+        const pathMap = await invoke<Record<number, string>>("capture_all_monitors", { monitorIds: ids });
         const previews = new Map<number, string>();
+        const paths = new Map<number, string>();
         for (const m of mons) {
-          const relPath = await invoke<string>("capture_fullscreen", { monitorId: m.id });
-          previews.set(m.id, convertFileSrc(`${project.root}/${relPath}`));
+          const relPath = pathMap[m.id];
+          if (relPath) {
+            previews.set(m.id, convertFileSrc(`${project.root}/${relPath}`));
+            paths.set(m.id, relPath);
+          }
         }
         setMonitorPreviews(previews);
+        setPreviewPaths(paths);
         setLoading(false);
       } catch (err) {
         logError(`[Overlay] Monitor loading failed: ${err}`);
@@ -106,10 +114,15 @@ export function ScreenCaptureOverlay({ onCapture, onCancel }: ScreenCaptureOverl
     logInfo(`[Overlay] openCaptureOnMonitor: id=${monitor.id} ${monitor.width}x${monitor.height}`);
     setWaitingForCapture(true);
     try {
-      // Capture a fresh screenshot of the monitor for the overlay background
-      logInfo("[Overlay] Capturing fullscreen...");
-      const bgRelPath = await invoke<string>("capture_fullscreen", { monitorId: monitor.id });
-      logInfo(`[Overlay] Captured: ${bgRelPath}`);
+      // Reuse existing preview if available; otherwise capture fresh
+      let bgRelPath = previewPaths.get(monitor.id);
+      if (bgRelPath) {
+        logInfo(`[Overlay] Reusing preview: ${bgRelPath}`);
+      } else {
+        logInfo("[Overlay] No preview — capturing fullscreen...");
+        bgRelPath = await invoke<string>("capture_fullscreen", { monitorId: monitor.id });
+        logInfo(`[Overlay] Captured: ${bgRelPath}`);
+      }
       const project = await invoke<{ root: string }>("get_current_project");
       logInfo(`[Overlay] Project root: ${project.root}`);
 
@@ -130,7 +143,7 @@ export function ScreenCaptureOverlay({ onCapture, onCancel }: ScreenCaptureOverl
       console.error("Failed to open capture window:", err);
       onCancel();
     }
-  }, [onCancel]);
+  }, [onCancel, previewPaths]);
 
   // ── Waiting for capture window ──
   if (waitingForCapture) {
