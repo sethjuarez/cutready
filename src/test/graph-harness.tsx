@@ -5,57 +5,81 @@ import type { GraphNode } from "../types/sketch";
 import "../index.css";
 
 /**
- * Standalone test harness for SnapshotGraph.
- * Run: npm run dev, then navigate to http://localhost:1420/test-graph.html
+ * Test harness: each scenario mirrors a real git repo in D:\cutready\test-*
+ * Verify with: cd D:\cutready\test-* && git log --oneline --graph --all --decorate
  */
 
-// ── quipy-demo data ───────────────────────────────────────────
-const quipyNodes: GraphNode[] = [
-  { id: "1a23d36", message: "other 1",                   timestamp: "2026-02-26T23:27:44Z", timeline: "fork-232744",  parents: ["9617d7b"], lane: 2, is_head: true,  is_branch_tip: true },
-  { id: "9e5245f", message: "take 2",                    timestamp: "2026-02-26T23:26:17Z", timeline: "main",         parents: ["977ffee"], lane: 0, is_head: false, is_branch_tip: true },
-  { id: "977ffee", message: "take 1",                    timestamp: "2026-02-26T23:25:00Z", timeline: "main",         parents: ["9617d7b"], lane: 0, is_head: false, is_branch_tip: false },
-  { id: "9617d7b", message: "Initial getting started",   timestamp: "2026-02-26T23:24:00Z", timeline: "main",         parents: ["e906234"], lane: 0, is_head: false, is_branch_tip: false },
-  { id: "e906234", message: "Initialize project",        timestamp: "2026-02-26T23:23:00Z", timeline: "main",         parents: [],          lane: 0, is_head: false, is_branch_tip: false },
-  // Alias: fork-232617 also points at 9e5245f
-  { id: "9e5245f", message: "take 2",                    timestamp: "2026-02-26T23:26:17Z", timeline: "fork-232617",  parents: ["977ffee"], lane: 1, is_head: false, is_branch_tip: true },
+const T = "2026-02-27T05:00:00Z"; // base time
+const t = (m: number) => new Date(+new Date(T) - m * 60000).toISOString();
+
+// ── 1) Linear: 3 commits on main, HEAD at tip ────────────────
+// git: * Final polish (HEAD) / * Added intro / * Initial setup
+const linearNodes: GraphNode[] = [
+  { id: "c3", message: "Final polish",  timestamp: t(0), timeline: "main", parents: ["c2"], lane: 0, is_head: true,  is_branch_tip: true },
+  { id: "c2", message: "Added intro",   timestamp: t(1), timeline: "main", parents: ["c1"], lane: 0, is_head: false, is_branch_tip: false },
+  { id: "c1", message: "Initial setup", timestamp: t(2), timeline: "main", parents: [],     lane: 0, is_head: false, is_branch_tip: false },
 ];
 
-const quipyTimelines = new Map([
-  ["main", { label: "Main", colorIndex: 0 }],
-  ["fork-232617", { label: "fork-232617", colorIndex: 1 }],
-  ["fork-232744", { label: "Other direction", colorIndex: 2 }],
-]);
+// ── 2) Linear + dirty ────────────────────────────────────────
+// Same graph but isDirty=true
 
-// ── voice-demo data ───────────────────────────────────────────
-const voiceNodes: GraphNode[] = [
-  { id: "e3b75fb", message: "part 1",                    timestamp: "2026-02-26T22:10:00Z", timeline: "fork-investigation", parents: ["cf906af"], lane: 2, is_head: false, is_branch_tip: true },
-  { id: "cf906af", message: "my new thing",              timestamp: "2026-02-26T22:09:00Z", timeline: "fork-investigation", parents: ["86102fb"], lane: 2, is_head: false, is_branch_tip: false },
-  { id: "86102fb", message: "part 1",                    timestamp: "2026-02-26T22:08:00Z", timeline: "fork-investigation", parents: ["7f415c7"], lane: 2, is_head: false, is_branch_tip: false },
-  { id: "d8999e1", message: "three",                     timestamp: "2026-02-26T22:07:00Z", timeline: "main",               parents: ["dbf94b6"], lane: 0, is_head: false, is_branch_tip: true },
-  { id: "dbf94b6", message: "two",                       timestamp: "2026-02-26T22:06:00Z", timeline: "main",               parents: ["7f415c7"], lane: 0, is_head: false, is_branch_tip: false },
-  { id: "7f415c7", message: "one",                       timestamp: "2026-02-26T22:05:00Z", timeline: "main",               parents: ["de141e4"], lane: 0, is_head: true,  is_branch_tip: false },
-  { id: "de141e4", message: "start",                     timestamp: "2026-02-26T22:04:00Z", timeline: "main",               parents: ["e085e3d"], lane: 0, is_head: false, is_branch_tip: false },
-  { id: "e085e3d", message: "Initialize project",        timestamp: "2026-02-26T22:03:00Z", timeline: "main",               parents: [],          lane: 0, is_head: false, is_branch_tip: false },
-  // Alias: fork-223120 also points at de141e4
-  { id: "de141e4", message: "start",                     timestamp: "2026-02-26T22:04:00Z", timeline: "fork-223120",        parents: ["e085e3d"], lane: 1, is_head: false, is_branch_tip: true },
+// ── 3) Two branches: main(3) + fork from c2, HEAD on fork ───
+// git: * Main continues (main) / | * Refined approach (HEAD->fork) / | * Exploring idea / |/ / * Added intro / * Initial setup
+const twoBranchNodes: GraphNode[] = [
+  { id: "f2", message: "Refined approach", timestamp: t(0), timeline: "fork-explore", parents: ["f1"], lane: 1, is_head: true,  is_branch_tip: true },
+  { id: "f1", message: "Exploring idea",   timestamp: t(1), timeline: "fork-explore", parents: ["c2"], lane: 1, is_head: false, is_branch_tip: false },
+  { id: "m3", message: "Main continues",   timestamp: t(1), timeline: "main",         parents: ["c2"], lane: 0, is_head: false, is_branch_tip: true },
+  { id: "c2", message: "Added intro",      timestamp: t(2), timeline: "main",         parents: ["c1"], lane: 0, is_head: false, is_branch_tip: false },
+  { id: "c1", message: "Initial setup",    timestamp: t(3), timeline: "main",         parents: [],     lane: 0, is_head: false, is_branch_tip: false },
 ];
 
-const voiceTimelines = new Map([
-  ["main", { label: "Main", colorIndex: 0 }],
-  ["fork-223120", { label: "fork-223120", colorIndex: 1 }],
-  ["fork-investigation", { label: "Investigation", colorIndex: 2 }],
-]);
+// ── 4) Two branches + dirty ──────────────────────────────────
 
-// ── Simple linear (no branches) ──────────────────────────────
-const simpleNodes: GraphNode[] = [
-  { id: "aaa", message: "Latest snapshot",    timestamp: "2026-02-26T23:30:00Z", timeline: "main", parents: ["bbb"], lane: 0, is_head: true,  is_branch_tip: true },
-  { id: "bbb", message: "Added intro scene",  timestamp: "2026-02-26T23:20:00Z", timeline: "main", parents: ["ccc"], lane: 0, is_head: false, is_branch_tip: false },
-  { id: "ccc", message: "Initial setup",      timestamp: "2026-02-26T23:10:00Z", timeline: "main", parents: [],      lane: 0, is_head: false, is_branch_tip: false },
+// ── 5) Three branches: main(3) + fork-A from c2 (2) + fork-B from c1 (1), HEAD on fork-A
+// git: * Alternate (fork-alt) / | * Refined A (HEAD->fork-explore) / | * Exploring A / | | * Main continues (main) / | |/ / | * Added intro / |/ / * Initial setup
+const threeBranchNodes: GraphNode[] = [
+  { id: "a2", message: "Refined A",           timestamp: t(0), timeline: "fork-explore",   parents: ["a1"], lane: 1, is_head: true,  is_branch_tip: true },
+  { id: "a1", message: "Exploring idea A",    timestamp: t(1), timeline: "fork-explore",   parents: ["c2"], lane: 1, is_head: false, is_branch_tip: false },
+  { id: "m3", message: "Main continues",      timestamp: t(1), timeline: "main",           parents: ["c2"], lane: 0, is_head: false, is_branch_tip: true },
+  { id: "b1", message: "Alternate direction",  timestamp: t(1), timeline: "fork-alternate", parents: ["c1"], lane: 2, is_head: false, is_branch_tip: true },
+  { id: "c2", message: "Added intro",         timestamp: t(2), timeline: "main",           parents: ["c1"], lane: 0, is_head: false, is_branch_tip: false },
+  { id: "c1", message: "Initial setup",       timestamp: t(3), timeline: "main",           parents: [],     lane: 0, is_head: false, is_branch_tip: false },
 ];
 
-const simpleTimelines = new Map([
+// ── Timeline maps ─────────────────────────────────────────────
+const mainOnly = new Map([["main", { label: "Main", colorIndex: 0 }]]);
+const twoTl = new Map([
   ["main", { label: "Main", colorIndex: 0 }],
+  ["fork-explore", { label: "Explore", colorIndex: 1 }],
 ]);
+const threeTl = new Map([
+  ["main", { label: "Main", colorIndex: 0 }],
+  ["fork-explore", { label: "Explore", colorIndex: 1 }],
+  ["fork-alternate", { label: "Alternate", colorIndex: 2 }],
+]);
+
+// ── Panel helper ──────────────────────────────────────────────
+function Panel({ title, gitGraph, nodes, isDirty, isRewound, timelineMap, multi, onNodeClick }: {
+  title: string; gitGraph: string;
+  nodes: GraphNode[]; isDirty: boolean; isRewound: boolean;
+  timelineMap: Map<string, { label: string; colorIndex: number }>;
+  multi: boolean; onNodeClick: (id: string) => void;
+}) {
+  return (
+    <div style={{ width: 300, border: "1px solid #45475a", borderRadius: 8, overflow: "hidden" }}>
+      <div style={{ padding: "8px 12px", borderBottom: "1px solid #45475a", fontSize: 13, fontWeight: 600 }}>
+        {title}
+      </div>
+      <SnapshotGraph nodes={nodes} isDirty={isDirty} isRewound={isRewound}
+        timelineMap={timelineMap} hasMultipleTimelines={multi}
+        onNodeClick={(id) => onNodeClick(id)} />
+      <pre style={{ padding: "6px 12px", fontSize: 10, color: "#6c7086", borderTop: "1px solid #313244",
+        whiteSpace: "pre-wrap", margin: 0, lineHeight: 1.4 }}>
+        {gitGraph}
+      </pre>
+    </div>
+  );
+}
 
 function TestApp() {
   const [clicked, setClicked] = useState<string | null>(null);
@@ -77,66 +101,67 @@ function TestApp() {
       <h1 style={{ fontSize: 20, marginBottom: 8 }}>Snapshot Graph Test Harness</h1>
       {clicked && <p style={{ fontSize: 12, color: "#a6adc8", marginBottom: 16 }}>Last clicked: {clicked}</p>}
 
-      <div style={{ display: "flex", gap: 32, flexWrap: "wrap" }}>
-        {/* Simple linear */}
-        <div style={{ width: 280, border: "1px solid #45475a", borderRadius: 8, overflow: "hidden" }}>
-          <div style={{ padding: "8px 12px", borderBottom: "1px solid #45475a", fontSize: 13, fontWeight: 600 }}>
-            Simple (no branches)
-          </div>
-          <SnapshotGraph
-            nodes={simpleNodes}
-            isDirty={false}
-            isRewound={false}
-            timelineMap={simpleTimelines}
-            hasMultipleTimelines={false}
-            onNodeClick={(id) => setClicked(id)}
-          />
-        </div>
+      <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
+        <Panel title="1) Linear" gitGraph={
+`* Final polish (HEAD -> main)
+* Added intro
+* Initial setup`}
+          nodes={linearNodes} isDirty={false} isRewound={false}
+          timelineMap={mainOnly} multi={false} onNodeClick={setClicked} />
 
-        {/* quipy-demo */}
-        <div style={{ width: 280, border: "1px solid #45475a", borderRadius: 8, overflow: "hidden" }}>
-          <div style={{ padding: "8px 12px", borderBottom: "1px solid #45475a", fontSize: 13, fontWeight: 600 }}>
-            quipy-demo (3 branches, duplicate tip)
-          </div>
-          <SnapshotGraph
-            nodes={quipyNodes}
-            isDirty={false}
-            isRewound={false}
-            timelineMap={quipyTimelines}
-            hasMultipleTimelines={true}
-            onNodeClick={(id) => setClicked(id)}
-          />
-        </div>
+        <Panel title="2) Linear + dirty" gitGraph={
+`* Final polish (HEAD -> main)
+* Added intro
+* Initial setup
+(working tree dirty)`}
+          nodes={linearNodes} isDirty={true} isRewound={false}
+          timelineMap={mainOnly} multi={false} onNodeClick={setClicked} />
 
-        {/* voice-demo */}
-        <div style={{ width: 280, border: "1px solid #45475a", borderRadius: 8, overflow: "hidden" }}>
-          <div style={{ padding: "8px 12px", borderBottom: "1px solid #45475a", fontSize: 13, fontWeight: 600 }}>
-            voice-demo (3 branches, shared ancestor)
-          </div>
-          <SnapshotGraph
-            nodes={voiceNodes}
-            isDirty={false}
-            isRewound={false}
-            timelineMap={voiceTimelines}
-            hasMultipleTimelines={true}
-            onNodeClick={(id) => setClicked(id)}
-          />
-        </div>
+        <Panel title="3) Two branches" gitGraph={
+`* Main continues (main)
+| * Refined approach (HEAD -> fork)
+| * Exploring idea
+|/
+* Added intro
+* Initial setup`}
+          nodes={twoBranchNodes} isDirty={false} isRewound={false}
+          timelineMap={twoTl} multi={true} onNodeClick={setClicked} />
 
-        {/* voice-demo with dirty + rewound */}
-        <div style={{ width: 280, border: "1px solid #45475a", borderRadius: 8, overflow: "hidden" }}>
-          <div style={{ padding: "8px 12px", borderBottom: "1px solid #45475a", fontSize: 13, fontWeight: 600 }}>
-            voice-demo (dirty + rewound)
-          </div>
-          <SnapshotGraph
-            nodes={voiceNodes}
-            isDirty={true}
-            isRewound={true}
-            timelineMap={voiceTimelines}
-            hasMultipleTimelines={true}
-            onNodeClick={(id) => setClicked(id)}
-          />
-        </div>
+        <Panel title="4) Two branches + dirty" gitGraph={
+`* Refined approach (HEAD -> fork)
+* Exploring idea
+| * Main continues (main)
+|/
+* Added intro
+* Initial setup
+(working tree dirty)`}
+          nodes={twoBranchNodes} isDirty={true} isRewound={false}
+          timelineMap={twoTl} multi={true} onNodeClick={setClicked} />
+
+        <Panel title="5) Three branches" gitGraph={
+`* Alternate (fork-alt)
+| * Refined A (HEAD -> fork-explore)
+| * Exploring idea A
+| | * Main continues (main)
+| |/
+| * Added intro
+|/
+* Initial setup`}
+          nodes={threeBranchNodes} isDirty={false} isRewound={false}
+          timelineMap={threeTl} multi={true} onNodeClick={setClicked} />
+
+        <Panel title="6) Three branches + dirty" gitGraph={
+`* Alternate (fork-alt)
+| * Refined A (HEAD -> fork-explore)
+| * Exploring idea A
+| | * Main continues (main)
+| |/
+| * Added intro
+|/
+* Initial setup
+(working tree dirty)`}
+          nodes={threeBranchNodes} isDirty={true} isRewound={false}
+          timelineMap={threeTl} multi={true} onNodeClick={setClicked} />
       </div>
     </div>
   );
