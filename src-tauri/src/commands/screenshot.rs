@@ -67,6 +67,23 @@ pub async fn capture_fullscreen(
     result
 }
 
+/// Capture all specified monitors in parallel.
+/// Returns a map of monitor_id → relative screenshot path.
+#[tauri::command]
+pub async fn capture_all_monitors(
+    monitor_ids: Vec<u32>,
+    state: State<'_, AppState>,
+) -> Result<std::collections::HashMap<u32, String>, String> {
+    eprintln!("[CAPTURE] capture_all_monitors: {:?}", monitor_ids);
+    let root = project_root(&state)?;
+    let result = screenshot::capture_all_monitors(&root, &monitor_ids);
+    match &result {
+        Ok(map) => eprintln!("[CAPTURE] capture_all_monitors OK: {} results", map.len()),
+        Err(e) => eprintln!("[CAPTURE] capture_all_monitors FAILED: {}", e),
+    }
+    result
+}
+
 /// Get capture params (called by the capture window on mount).
 #[tauri::command]
 pub async fn get_capture_params(

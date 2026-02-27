@@ -150,6 +150,7 @@ pub fn run() {
             commands::screenshot::list_monitors,
             commands::screenshot::capture_region,
             commands::screenshot::capture_fullscreen,
+            commands::screenshot::capture_all_monitors,
             commands::screenshot::open_capture_window,
             commands::screenshot::close_capture_window,
             commands::screenshot::crop_screenshot,

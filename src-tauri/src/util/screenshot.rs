@@ -51,10 +51,13 @@ fn screenshots_dir(project_dir: &Path) -> Result<PathBuf, String> {
     Ok(dir)
 }
 
-/// Generate a timestamped filename for a screenshot.
+/// Generate a unique timestamped filename for a screenshot.
 fn screenshot_filename() -> String {
+    use std::sync::atomic::{AtomicU32, Ordering};
+    static COUNTER: AtomicU32 = AtomicU32::new(0);
     let ts = chrono::Utc::now().format("%Y%m%d_%H%M%S_%3f");
-    format!("{ts}.jpg")
+    let seq = COUNTER.fetch_add(1, Ordering::Relaxed);
+    format!("{ts}_{seq}.jpg")
 }
 
 /// Save an RGBA image as JPEG (quality 95). Much faster than PNG for large screenshots.
@@ -103,6 +106,53 @@ pub fn capture_region(
 
     let rel_path = format!(".cutready/screenshots/{filename}");
     Ok(rel_path)
+}
+
+/// Capture multiple monitors in parallel and save to the project's screenshot directory.
+/// Returns a map of monitor_id → relative screenshot path.
+pub fn capture_all_monitors(
+    project_dir: &Path,
+    monitor_ids: &[u32],
+) -> Result<std::collections::HashMap<u32, String>, String> {
+    let dir = screenshots_dir(project_dir)?;
+    let all_monitors = Monitor::all().map_err(|e| format!("Failed to enumerate monitors: {e}"))?;
+
+    // Capture images on the main thread (Monitor is !Send due to HMONITOR)
+    let captures: Vec<(u32, image::RgbaImage)> = monitor_ids
+        .iter()
+        .map(|&mid| {
+            let monitor = all_monitors
+                .iter()
+                .find(|m| m.id().unwrap_or(0) == mid)
+                .ok_or_else(|| format!("Monitor {mid} not found"))?;
+            let img = monitor
+                .capture_image()
+                .map_err(|e| format!("Capture failed for monitor {mid}: {e}"))?;
+            Ok((mid, img))
+        })
+        .collect::<Result<Vec<_>, String>>()?;
+
+    // Encode + save in parallel threads (image data is Send)
+    let handles: Vec<_> = captures
+        .into_iter()
+        .map(|(mid, img)| {
+            let dir = dir.clone();
+            std::thread::spawn(move || -> Result<(u32, String), String> {
+                let filename = screenshot_filename();
+                let abs_path = dir.join(&filename);
+                save_jpeg(&img, &abs_path)?;
+                let rel_path = format!(".cutready/screenshots/{filename}");
+                Ok((mid, rel_path))
+            })
+        })
+        .collect();
+
+    let mut results = std::collections::HashMap::new();
+    for h in handles {
+        let (mid, path) = h.join().map_err(|_| "Thread panicked".to_string())??;
+        results.insert(mid, path);
+    }
+    Ok(results)
 }
 
 /// Capture the entire monitor and save to the project's screenshot directory.
