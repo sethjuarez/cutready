@@ -2,40 +2,65 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import { emit } from "@tauri-apps/api/event";
 
-type Phase = "choose-mode" | "select-region";
+type Phase = "loading" | "choose-mode" | "select-region";
 
-interface CaptureWindowProps {
-  params: URLSearchParams;
+interface CaptureParams {
+  monitor_id: number;
+  monitor_w: number;
+  monitor_h: number;
+  monitor_x: number;
+  monitor_y: number;
+  bg_path: string;
+  project_root: string;
 }
 
 /**
  * Standalone capture window that opens fullscreen on the target monitor.
- * Reads monitor info and background screenshot path from URL params.
+ * Reads params from Rust managed state via invoke("get_capture_params").
  * Communicates results back to main window via Tauri events.
  */
-export function CaptureWindow({ params }: CaptureWindowProps) {
-  const monitorW = Number(params.get("mw") ?? 1920);
-  const monitorH = Number(params.get("mh") ?? 1080);
-  const bgRelPath = params.get("bg") ?? "";
-  const projectRoot = params.get("root") ?? "";
-
-  const bgImage = bgRelPath
-    ? convertFileSrc(`${projectRoot}/${bgRelPath}`)
-    : null;
-
-  const [phase, setPhase] = useState<Phase>("choose-mode");
+export function CaptureWindow() {
+  const [phase, setPhase] = useState<Phase>("loading");
+  const [params, setParams] = useState<CaptureParams | null>(null);
   const [selecting, setSelecting] = useState(false);
   const [selStart, setSelStart] = useState<{ x: number; y: number } | null>(null);
   const [selEnd, setSelEnd] = useState<{ x: number; y: number } | null>(null);
   const [capturing, setCapturing] = useState(false);
   const overlayRef = useRef<HTMLDivElement>(null);
 
+  // Load params from Rust managed state on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const p = await invoke<CaptureParams>("get_capture_params");
+        console.log("[CaptureWindow] params loaded:", p);
+        setParams(p);
+        setPhase("choose-mode");
+      } catch (err) {
+        console.error("[CaptureWindow] Failed to get params:", err);
+        await emit("capture-cancel", {});
+        await invoke("close_capture_window");
+      }
+    })();
+  }, []);
+
+  const monitorW = params?.monitor_w ?? 1920;
+  const monitorH = params?.monitor_h ?? 1080;
+  const bgRelPath = params?.bg_path ?? "";
+  const projectRoot = params?.project_root ?? "";
+
+  const bgImage = bgRelPath && projectRoot
+    ? convertFileSrc(projectRoot + "/" + bgRelPath)
+    : null;
+
   const finish = useCallback(async (path: string) => {
+    console.log("[CaptureWindow] finish:", path);
     await emit("capture-complete", { path });
     await invoke("close_capture_window");
   }, []);
 
   const cancel = useCallback(async () => {
+    console.log("[CaptureWindow] cancel");
     await emit("capture-cancel", {});
     await invoke("close_capture_window");
   }, []);
@@ -49,7 +74,7 @@ export function CaptureWindow({ params }: CaptureWindowProps) {
           setSelStart(null);
           setSelEnd(null);
           setPhase("choose-mode");
-        } else {
+        } else if (phase === "choose-mode") {
           cancel();
         }
       }
@@ -59,7 +84,6 @@ export function CaptureWindow({ params }: CaptureWindowProps) {
   }, [phase, cancel]);
 
   const handleFullScreen = useCallback(async () => {
-    // Use the pre-captured background image (taken before this window opened)
     setCapturing(true);
     await finish(bgRelPath);
   }, [bgRelPath, finish]);
@@ -91,7 +115,6 @@ export function CaptureWindow({ params }: CaptureWindowProps) {
     try {
       const overlay = overlayRef.current;
       if (!overlay) return;
-      // Scale overlay coordinates to image pixel coordinates
       const scaleX = monitorW / overlay.clientWidth;
       const scaleY = monitorH / overlay.clientHeight;
 
@@ -100,7 +123,6 @@ export function CaptureWindow({ params }: CaptureWindowProps) {
       const cropW = Math.round(rect.w * scaleX);
       const cropH = Math.round(rect.h * scaleY);
 
-      // Crop from the pre-captured background image (no overlay artifacts)
       const path = await invoke<string>("crop_screenshot", {
         sourcePath: bgRelPath,
         x: cropX, y: cropY, width: cropW, height: cropH,
@@ -113,6 +135,15 @@ export function CaptureWindow({ params }: CaptureWindowProps) {
   }, [selecting, selStart, selEnd, monitorW, monitorH, bgRelPath, finish, cancel]);
 
   const rect = selStart && selEnd ? getSelRect(selStart, selEnd) : null;
+
+  // ── Loading ──
+  if (phase === "loading") {
+    return (
+      <div className="fixed inset-0 bg-black flex items-center justify-center">
+        <div className="text-white/60 text-sm animate-pulse">Loading capture...</div>
+      </div>
+    );
+  }
 
   // ── Choose mode ──
   if (phase === "choose-mode") {
