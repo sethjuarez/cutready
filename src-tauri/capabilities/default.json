@@ -3,7 +3,8 @@
   "identifier": "default",
   "description": "Default permissions for CutReady",
   "windows": [
-    "main"
+    "main",
+    "capture"
   ],
   "permissions": [
     "core:default",
