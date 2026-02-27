@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { info as logInfo, error as logError } from "@tauri-apps/plugin-log";
 
 interface MonitorInfo {
   id: number;
@@ -29,34 +30,50 @@ export function ScreenCaptureOverlay({ onCapture, onCancel }: ScreenCaptureOverl
   const [monitorPreviews, setMonitorPreviews] = useState<Map<number, string>>(new Map());
   const [loading, setLoading] = useState(true);
   const [waitingForCapture, setWaitingForCapture] = useState(false);
+  const mountedRef = useRef(false);
+  const callbacksRef = useRef({ onCapture, onCancel });
+  callbacksRef.current = { onCapture, onCancel };
 
-  // Listen for capture events from the capture window
+  // Listen for capture events from the capture window (stable — no deps on callbacks)
   useEffect(() => {
+    logInfo("[Overlay] Setting up event listeners");
     const unlistenComplete = listen<{ path: string }>("capture-complete", (event) => {
-      onCapture(event.payload.path);
+      logInfo(`[Overlay] capture-complete event: ${event.payload.path}`);
+      callbacksRef.current.onCapture(event.payload.path);
     });
     const unlistenCancel = listen("capture-cancel", () => {
-      onCancel();
+      logInfo("[Overlay] capture-cancel event received");
+      callbacksRef.current.onCancel();
     });
     return () => {
+      logInfo("[Overlay] Cleaning up event listeners");
       unlistenComplete.then((fn) => fn());
       unlistenCancel.then((fn) => fn());
     };
-  }, [onCapture, onCancel]);
+  }, []);
 
-  // Load monitors and preview thumbnails
+  // Load monitors and preview thumbnails (guarded against StrictMode double-fire)
   useEffect(() => {
+    if (mountedRef.current) {
+      logInfo("[Overlay] Skipping duplicate mount (StrictMode)");
+      return;
+    }
+    mountedRef.current = true;
     (async () => {
       try {
+        logInfo("[Overlay] Listing monitors...");
         const mons = await invoke<MonitorInfo[]>("list_monitors");
+        logInfo(`[Overlay] Found ${mons.length} monitor(s)`);
         setMonitors(mons);
 
         if (mons.length === 1) {
+          logInfo("[Overlay] Single monitor — opening capture directly");
           await openCaptureOnMonitor(mons[0]);
           return;
         }
 
         // Capture preview of each monitor
+        logInfo("[Overlay] Multi-monitor — capturing previews");
         const project = await invoke<{ root: string }>("get_current_project");
         const previews = new Map<number, string>();
         for (const m of mons) {
@@ -66,8 +83,9 @@ export function ScreenCaptureOverlay({ onCapture, onCancel }: ScreenCaptureOverl
         setMonitorPreviews(previews);
         setLoading(false);
       } catch (err) {
+        logError(`[Overlay] Monitor loading failed: ${err}`);
         console.error("Failed to list monitors:", err);
-        onCancel();
+        callbacksRef.current.onCancel();
       }
     })();
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -85,13 +103,18 @@ export function ScreenCaptureOverlay({ onCapture, onCancel }: ScreenCaptureOverl
   }, [onCancel, waitingForCapture]);
 
   const openCaptureOnMonitor = useCallback(async (monitor: MonitorInfo) => {
+    logInfo(`[Overlay] openCaptureOnMonitor: id=${monitor.id} ${monitor.width}x${monitor.height}`);
     setWaitingForCapture(true);
     try {
       // Capture a fresh screenshot of the monitor for the overlay background
+      logInfo("[Overlay] Capturing fullscreen...");
       const bgRelPath = await invoke<string>("capture_fullscreen", { monitorId: monitor.id });
+      logInfo(`[Overlay] Captured: ${bgRelPath}`);
       const project = await invoke<{ root: string }>("get_current_project");
+      logInfo(`[Overlay] Project root: ${project.root}`);
 
       // Open capture window on the target monitor
+      logInfo("[Overlay] Opening capture window...");
       await invoke("open_capture_window", {
         monitorId: monitor.id,
         physX: monitor.x,
@@ -101,7 +124,9 @@ export function ScreenCaptureOverlay({ onCapture, onCancel }: ScreenCaptureOverl
         bgPath: bgRelPath,
         projectRoot: project.root,
       });
+      logInfo("[Overlay] Capture window opened successfully");
     } catch (err) {
+      logError(`[Overlay] openCaptureOnMonitor failed: ${err}`);
       console.error("Failed to open capture window:", err);
       onCancel();
     }

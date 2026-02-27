@@ -63,6 +63,7 @@ pub fn run() {
 
     tauri::Builder::default()
         .manage(app_state)
+        .manage(commands::screenshot::CaptureState(Mutex::new(None)))
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
@@ -152,6 +153,7 @@ pub fn run() {
             commands::screenshot::open_capture_window,
             commands::screenshot::close_capture_window,
             commands::screenshot::crop_screenshot,
+            commands::screenshot::get_capture_params,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
