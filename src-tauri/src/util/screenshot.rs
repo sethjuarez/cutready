@@ -59,12 +59,14 @@ fn screenshot_filename() -> String {
 
 /// Save an RGBA image as JPEG (quality 95). Much faster than PNG for large screenshots.
 fn save_jpeg(img: &image::RgbaImage, path: &Path) -> Result<(), String> {
+    // JPEG doesn't support alpha — convert RGBA → RGB
+    let rgb: image::RgbImage = image::DynamicImage::ImageRgba8(img.clone()).to_rgb8();
     let file = std::fs::File::create(path)
         .map_err(|e| format!("Failed to create file: {e}"))?;
     let writer = BufWriter::new(file);
     let encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(writer, 95);
     encoder
-        .write_image(img.as_raw(), img.width(), img.height(), image::ExtendedColorType::Rgba8)
+        .write_image(rgb.as_raw(), rgb.width(), rgb.height(), image::ExtendedColorType::Rgb8)
         .map_err(|e| format!("JPEG encode failed: {e}"))
 }
 
