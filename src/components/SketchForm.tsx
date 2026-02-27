@@ -6,6 +6,18 @@ import { ScreenCaptureOverlay } from "./ScreenCaptureOverlay";
 import { SketchPreview } from "./SketchPreview";
 import type { PlanningRow } from "../types/sketch";
 
+interface MonitorInfo {
+  id: number;
+  name: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  is_primary: boolean;
+}
+
+const PREVIEW_DATA_KEY = "cutready:preview-data";
+
 /**
  * SketchForm — structured editor for a single sketch.
  * Title input + description textarea + planning table.
@@ -22,6 +34,8 @@ export function SketchForm() {
   const [localRows, setLocalRows] = useState<PlanningRow[]>(activeSketch?.rows ?? []);
   const [captureRowIdx, setCaptureRowIdx] = useState<number | null>(null);
   const [showPreview, setShowPreview] = useState(false);
+  const [showMonitorPicker, setShowMonitorPicker] = useState(false);
+  const [availableMonitors, setAvailableMonitors] = useState<MonitorInfo[]>([]);
   const titleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const rowsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -121,6 +135,44 @@ export function SketchForm() {
     setCaptureRowIdx(null);
   }, []);
 
+  /** Launch fullscreen preview on a specific monitor */
+  const launchPreviewOnMonitor = useCallback(async (monitor: MonitorInfo) => {
+    setShowMonitorPicker(false);
+    // Serialize sketch data for the preview window to read
+    localStorage.setItem(PREVIEW_DATA_KEY, JSON.stringify({
+      rows: localRows,
+      projectRoot,
+      title: localTitle || "Untitled Sketch",
+    }));
+    try {
+      await invoke("open_preview_window", {
+        physX: monitor.x,
+        physY: monitor.y,
+        physW: monitor.width,
+        physH: monitor.height,
+      });
+    } catch (e) {
+      console.error("[SketchForm] Failed to open preview window:", e);
+    }
+  }, [localRows, projectRoot, localTitle]);
+
+  /** Handle preview button click — single monitor launches directly, multi shows picker */
+  const handlePreviewClick = useCallback(async () => {
+    try {
+      const monitors: MonitorInfo[] = await invoke("list_monitors");
+      if (monitors.length === 1) {
+        await launchPreviewOnMonitor(monitors[0]);
+      } else {
+        setAvailableMonitors(monitors);
+        setShowMonitorPicker(true);
+      }
+    } catch (e) {
+      console.error("[SketchForm] Failed to list monitors:", e);
+      // Fallback: open in-window preview
+      setShowPreview(true);
+    }
+  }, [launchPreviewOnMonitor]);
+
   if (!activeSketch) return null;
 
   return (
@@ -149,16 +201,55 @@ export function SketchForm() {
             className="flex-1 text-2xl font-semibold bg-transparent text-[var(--color-text)] placeholder:text-[var(--color-text-secondary)]/40 outline-none border-none"
           />
           {localRows.length > 0 && (
-            <button
-              onClick={() => setShowPreview(true)}
-              className="flex items-center gap-1.5 shrink-0 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] px-3 py-1.5 rounded-lg border border-[var(--color-border)] hover:border-[var(--color-accent)]/40 hover:bg-[var(--color-accent)]/5 transition-colors"
-              title="Preview sketch (presentation mode)"
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <polygon points="5 3 19 12 5 21 5 3" />
-              </svg>
-              Preview
-            </button>
+            <div className="relative">
+              <button
+                onClick={handlePreviewClick}
+                className="flex items-center gap-1.5 shrink-0 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] px-3 py-1.5 rounded-lg border border-[var(--color-border)] hover:border-[var(--color-accent)]/40 hover:bg-[var(--color-accent)]/5 transition-colors"
+                title="Preview sketch (presentation mode)"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polygon points="5 3 19 12 5 21 5 3" />
+                </svg>
+                Preview
+              </button>
+
+              {/* Monitor picker dropdown */}
+              {showMonitorPicker && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setShowMonitorPicker(false)} />
+                  <div className="absolute right-0 top-full mt-2 z-50 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg shadow-lg py-1 min-w-[200px]">
+                    <div className="px-3 py-2 text-xs font-medium text-[var(--color-text-secondary)] uppercase tracking-wider border-b border-[var(--color-border)]">
+                      Present on
+                    </div>
+                    {availableMonitors.map((m) => (
+                      <button
+                        key={m.id}
+                        onClick={() => launchPreviewOnMonitor(m)}
+                        className="w-full px-3 py-2 text-left text-sm text-[var(--color-text)] hover:bg-[var(--color-surface-alt)] transition-colors flex items-center gap-2"
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                          <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+                          <line x1="8" y1="21" x2="16" y2="21" />
+                          <line x1="12" y1="17" x2="12" y2="21" />
+                        </svg>
+                        <span>{m.name || `Monitor ${m.id}`}</span>
+                        {m.is_primary && (
+                          <span className="text-[10px] text-[var(--color-accent)] font-medium ml-auto">Primary</span>
+                        )}
+                      </button>
+                    ))}
+                    <div className="border-t border-[var(--color-border)]">
+                      <button
+                        onClick={() => { setShowMonitorPicker(false); setShowPreview(true); }}
+                        className="w-full px-3 py-2 text-left text-xs text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-alt)] transition-colors"
+                      >
+                        Preview in window instead
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
           )}
         </div>
 
