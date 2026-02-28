@@ -5,9 +5,13 @@ interface Props {
 }
 
 const { icon, title } = Astro.props;
+const isSvg = icon.endsWith('.svg');
 ---
 
 <div class="feature-card">
-  <h3>{icon} {title}</h3>
+  <h3>
+    {isSvg ? <img src={icon} alt="" width="24" height="24" style="display:inline; vertical-align:middle; margin-right:0.4rem;" /> : <span>{icon} </span>}
+    {title}
+  </h3>
   <p><slot /></p>
 </div>
