@@ -1,6 +1,6 @@
 import { useAppStore } from "../stores/appStore";
 import type { EditorTab } from "../stores/appStore";
-import { SketchIcon, StoryboardIcon } from "./Icons";
+import { SketchIcon, StoryboardIcon, NoteIcon } from "./Icons";
 
 /**
  * TabBar — horizontal row of open document tabs.
@@ -58,9 +58,15 @@ function Tab({
       onClick={onSelect}
       title={`${typeLabel}: ${tab.path}`}
     >
-      {/* Active tab: accent bar on top, no bottom border (connected to content) */}
+      {/* Active tab: colored bar on top, no bottom border (connected to content) */}
       {isActive && (
-        <span className="absolute top-0 left-0 right-0 h-[2px] bg-[var(--color-accent)]" />
+        <span className={`absolute top-0 left-0 right-0 h-[2px] ${
+          tab.type === "sketch"
+            ? "bg-[var(--color-accent)]"
+            : tab.type === "storyboard"
+              ? "bg-emerald-500"
+              : "bg-amber-500"
+        }`} />
       )}
 
       {/* Separator between tabs */}
@@ -73,10 +79,12 @@ function Tab({
         isActive
           ? tab.type === "sketch"
             ? "text-[var(--color-accent)]"
-            : "text-emerald-500"
+            : tab.type === "storyboard"
+              ? "text-emerald-500"
+              : "text-amber-500"
           : "text-[var(--color-text-secondary)] opacity-60"
       }`}>
-        {tab.type === "sketch" ? <SketchIcon size={13} /> : <StoryboardIcon size={13} />}
+        {tab.type === "sketch" ? <SketchIcon size={13} /> : tab.type === "storyboard" ? <StoryboardIcon size={13} /> : <NoteIcon size={13} />}
       </span>
 
       {/* Title */}
