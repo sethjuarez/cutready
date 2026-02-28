@@ -633,10 +633,13 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   deleteSketch: async (sketchPath) => {
     try {
       await invoke("delete_sketch", { relativePath: sketchPath });
-      const { activeSketchPath } = get();
+      const { activeSketchPath, openTabs } = get();
       if (activeSketchPath === sketchPath) {
         set({ activeSketchPath: null, activeSketch: null });
       }
+      // Close any tab for this sketch
+      const tab = openTabs.find((t) => t.path === sketchPath && t.type === "sketch");
+      if (tab) get().closeTab(tab.id);
       await get().loadSketches();
     } catch (err) {
       console.error("Failed to delete sketch:", err);
@@ -706,10 +709,12 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   deleteStoryboard: async (storyboardPath) => {
     try {
       await invoke("delete_storyboard", { relativePath: storyboardPath });
-      const { activeStoryboardPath } = get();
+      const { activeStoryboardPath, openTabs } = get();
       if (activeStoryboardPath === storyboardPath) {
         set({ activeStoryboardPath: null, activeStoryboard: null });
       }
+      const tab = openTabs.find((t) => t.path === storyboardPath && t.type === "storyboard");
+      if (tab) get().closeTab(tab.id);
       await get().loadStoryboards();
     } catch (err) {
       console.error("Failed to delete storyboard:", err);
@@ -848,10 +853,12 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   deleteNote: async (notePath) => {
     try {
       await invoke("delete_note", { relativePath: notePath });
-      const { activeNotePath } = get();
+      const { activeNotePath, openTabs } = get();
       if (activeNotePath === notePath) {
         set({ activeNotePath: null, activeNoteContent: null });
       }
+      const tab = openTabs.find((t) => t.path === notePath && t.type === "note");
+      if (tab) get().closeTab(tab.id);
       await get().loadNotes();
     } catch (err) {
       console.error("Failed to delete note:", err);
