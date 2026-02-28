@@ -17,7 +17,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { useAppStore } from "../stores/appStore";
 import { SketchPickerItem } from "./SketchCard";
 import { ScriptTable } from "./ScriptTable";
-import type { Sketch, SketchSummary, PlanningRow } from "../types/sketch";
+import type { Sketch, SketchSummary } from "../types/sketch";
+import type { PreviewSlide } from "./SketchPreview";
 
 interface MonitorInfo {
   id: number;
@@ -73,33 +74,36 @@ export function StoryboardView() {
     }
   }, [activeStoryboard, sketchCache]);
 
-  /** Build flat slides array for preview: title slide → (sketch title → sketch rows)... */
-  const buildPreviewSlides = useCallback((): PlanningRow[] => {
+  /** Build typed slides for preview: storyboard title → (sketch title → sketch rows)... */
+  const buildPreviewSlides = useCallback((): PreviewSlide[] => {
     if (!activeStoryboard) return [];
-    const slides: PlanningRow[] = [];
+    const slides: PreviewSlide[] = [];
+    const sbTitle = activeStoryboard.title || "Untitled Storyboard";
     // Storyboard title slide
     slides.push({
-      time: "",
-      narrative: activeStoryboard.description || "",
-      demo_actions: activeStoryboard.title,
-      screenshot: null,
+      type: "title",
+      heading: sbTitle,
+      subtitle: activeStoryboard.description || "",
+      context: sbTitle,
     });
     // Each sketch
     for (const item of activeStoryboard.items) {
       if (item.type !== "sketch_ref") continue;
       const full = sketchCache.get(item.path);
       if (!full) continue;
-      // Sketch title slide
+      const skTitle = full.title || "Untitled Sketch";
+      const context = `${sbTitle} › ${skTitle}`;
       const desc = typeof full.description === "string" ? full.description : "";
+      // Sketch title slide
       slides.push({
-        time: "",
-        narrative: desc,
-        demo_actions: full.title,
-        screenshot: null,
+        type: "title",
+        heading: skTitle,
+        subtitle: desc,
+        context,
       });
       // Sketch rows
       for (const row of full.rows) {
-        slides.push(row);
+        slides.push({ type: "row", row, context });
       }
     }
     return slides;
@@ -107,8 +111,10 @@ export function StoryboardView() {
 
   const launchPreviewOnMonitor = useCallback(async (monitor: MonitorInfo) => {
     setShowMonitorPicker(false);
+    const slides = buildPreviewSlides();
     localStorage.setItem(PREVIEW_DATA_KEY, JSON.stringify({
-      rows: buildPreviewSlides(),
+      rows: [],
+      slides,
       projectRoot: currentProject?.root ?? "",
       title: activeStoryboard?.title ?? "Storyboard",
     }));

@@ -24,11 +24,18 @@ function savePrefs(prefs: { panelSide: "left" | "right"; panelWidth: number; pan
   try { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); } catch { /* ignore */ }
 }
 
+/** A slide in the preview — either a title card or a planning row. */
+export type PreviewSlide =
+  | { type: "title"; heading: string; subtitle: string; context: string }
+  | { type: "row"; row: PlanningRow; context: string };
+
 interface SketchPreviewProps {
   rows: PlanningRow[];
   projectRoot: string;
   title: string;
   onClose: () => void;
+  /** If provided, these typed slides are used instead of rows. */
+  slides?: PreviewSlide[];
 }
 
 /**
@@ -36,14 +43,16 @@ interface SketchPreviewProps {
  * Shows one row at a time: screenshot (or placeholder) + narrative/actions.
  * Arrow keys or click to navigate. Escape to close.
  */
-export function SketchPreview({ rows, projectRoot, title, onClose }: SketchPreviewProps) {
+export function SketchPreview({ rows, projectRoot, title, onClose, slides: slidesProp }: SketchPreviewProps) {
+  // Build slides from rows if not provided explicitly
+  const slides: PreviewSlide[] = slidesProp ?? rows.map((r) => ({ type: "row", row: r, context: title }));
   const [currentIdx, setCurrentIdx] = useState(0);
   const [activeTab, setActiveTab] = useState<"narrative" | "actions">("narrative");
   const [panelSide, setPanelSide] = useState<"left" | "right">(loadPrefs().panelSide);
   const [panelWidth, setPanelWidth] = useState(loadPrefs().panelWidth);
   const [panelVisible, setPanelVisible] = useState(loadPrefs().panelVisible);
-  const total = rows.length;
-  const row = rows[currentIdx];
+  const total = slides.length;
+  const slide = slides[currentIdx];
 
   const goPrev = useCallback(() => {
     setCurrentIdx((i) => Math.max(0, i - 1));
@@ -100,9 +109,13 @@ export function SketchPreview({ rows, projectRoot, title, onClose }: SketchPrevi
     return () => window.removeEventListener("keydown", handler);
   }, [onClose, goNext, goPrev, total]);
 
-  if (!row) return null;
+  if (!slide) return null;
 
-  const screenshotSrc = row.screenshot && projectRoot
+  const isTitle = slide.type === "title";
+  const row = slide.type === "row" ? slide.row : null;
+  const contextLabel = slide.context;
+
+  const screenshotSrc = row?.screenshot && projectRoot
     ? convertFileSrc(`${projectRoot}/${row.screenshot}`)
     : null;
 
@@ -111,11 +124,11 @@ export function SketchPreview({ rows, projectRoot, title, onClose }: SketchPrevi
       {/* Top bar */}
       <div className="flex items-center justify-between px-6 py-3 shrink-0 border-b border-[var(--color-border)]">
         <div className="flex items-center gap-3">
-          <span className="text-sm font-semibold text-[var(--color-text)]">{title}</span>
+          <span className="text-sm font-semibold text-[var(--color-text)]">{contextLabel}</span>
           <span className="text-xs text-[var(--color-text-secondary)]">
             {currentIdx + 1} / {total}
           </span>
-          {row.time && (
+          {row?.time && (
             <>
               <div className="w-px h-4 bg-[var(--color-border)]" />
               <span className="text-xs text-[var(--color-text-secondary)]">
@@ -213,13 +226,15 @@ export function SketchPreview({ rows, projectRoot, title, onClose }: SketchPrevi
               </div>
               {/* Tab content */}
               <div className="flex-1 overflow-y-auto px-5 py-4">
-                {activeTab === "narrative" ? (
+                {isTitle ? (
+                  <div className="text-sm text-[var(--color-text-secondary)] italic">Title slide</div>
+                ) : activeTab === "narrative" ? (
                   <div className="text-sm text-[var(--color-text)] whitespace-pre-wrap leading-relaxed">
-                    {row.narrative || <span className="text-[var(--color-text-secondary)] italic">No narrative</span>}
+                    {row!.narrative || <span className="text-[var(--color-text-secondary)] italic">No narrative</span>}
                   </div>
                 ) : (
                   <div className="text-sm text-[var(--color-text)] whitespace-pre-wrap leading-relaxed">
-                    {row.demo_actions || <span className="text-[var(--color-text-secondary)] italic">No actions</span>}
+                    {row!.demo_actions || <span className="text-[var(--color-text-secondary)] italic">No actions</span>}
                   </div>
                 )}
               </div>
@@ -253,7 +268,15 @@ export function SketchPreview({ rows, projectRoot, title, onClose }: SketchPrevi
               </svg>
             </button>
           )}
-          {screenshotSrc ? (
+          {isTitle ? (
+            /* Title slide — centered heading + subtitle */
+            <div className="flex flex-col items-center justify-center text-center gap-4 max-w-2xl">
+              <h1 className="text-4xl font-bold text-[var(--color-text)]">{slide.heading}</h1>
+              {slide.subtitle && (
+                <p className="text-lg text-[var(--color-text-secondary)] whitespace-pre-wrap leading-relaxed">{slide.subtitle}</p>
+              )}
+            </div>
+          ) : screenshotSrc ? (
             <img
               src={screenshotSrc}
               alt={`Row ${currentIdx + 1}`}
@@ -289,16 +312,18 @@ export function SketchPreview({ rows, projectRoot, title, onClose }: SketchPrevi
 
         {/* Slide dots */}
         <div className="flex items-center gap-1.5">
-          {rows.map((_, i) => (
+          {slides.map((s, i) => (
             <button
               key={i}
               onClick={() => setCurrentIdx(i)}
               className={`rounded-full transition-all ${
                 i === currentIdx
                   ? "w-6 h-2 bg-[var(--color-accent)]"
-                  : "w-2 h-2 bg-[var(--color-text-secondary)]/30 hover:bg-[var(--color-text-secondary)]/60"
+                  : s.type === "title"
+                    ? "w-2.5 h-2.5 bg-[var(--color-text-secondary)]/40 hover:bg-[var(--color-text-secondary)]/60"
+                    : "w-2 h-2 bg-[var(--color-text-secondary)]/30 hover:bg-[var(--color-text-secondary)]/60"
               }`}
-              title={`Slide ${i + 1}`}
+              title={s.type === "title" ? (s as any).heading : `Slide ${i + 1}`}
             />
           ))}
         </div>
