@@ -123,32 +123,32 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
 
   return (
     <div className="script-table-wrapper my-4 rounded-xl border border-[var(--color-border)] overflow-hidden">
-      <table className="w-full border-collapse" style={{ tableLayout: "fixed" }}>
-        <colgroup>
-          {!readOnly && <col style={{ width: 28 }} />}
-          <col style={{ width: 54 }} />
-          <col />
-          <col />
-          <col style={{ width: 80 }} />
-          {!readOnly && <col style={{ width: 36 }} />}
-        </colgroup>
-        <thead>
-          <tr className="bg-[var(--color-surface-alt)]">
-            {!readOnly && <th className="script-table-th" />}
-            <th className="script-table-th">Time</th>
-            <th className="script-table-th">Narrative</th>
-            <th className="script-table-th">Actions</th>
-            <th className="script-table-th">Screenshot</th>
-            {!readOnly && <th className="script-table-th" />}
-          </tr>
-        </thead>
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCenter}
-          onDragStart={(e) => setActiveId(e.active.id as string)}
-          onDragEnd={handleDragEnd}
-        >
-          <SortableContext items={rowIds} strategy={verticalListSortingStrategy}>
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragStart={(e) => setActiveId(e.active.id as string)}
+        onDragEnd={handleDragEnd}
+      >
+        <SortableContext items={rowIds} strategy={verticalListSortingStrategy}>
+          <table className="w-full border-collapse" style={{ tableLayout: "fixed" }}>
+            <colgroup>
+              {!readOnly && <col style={{ width: 28 }} />}
+              <col style={{ width: 54 }} />
+              <col />
+              <col />
+              <col style={{ width: 80 }} />
+              {!readOnly && <col style={{ width: 36 }} />}
+            </colgroup>
+            <thead>
+              <tr className="bg-[var(--color-surface-alt)]">
+                {!readOnly && <th className="script-table-th" />}
+                <th className="script-table-th">Time</th>
+                <th className="script-table-th">Narrative</th>
+                <th className="script-table-th">Actions</th>
+                <th className="script-table-th">Screenshot</th>
+                {!readOnly && <th className="script-table-th" />}
+              </tr>
+            </thead>
             <tbody>
               {rows.map((row, idx) => (
                 <SortableRow
@@ -167,29 +167,29 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
                 />
               ))}
             </tbody>
-          </SortableContext>
-          <DragOverlay>
-            {activeIdx >= 0 ? (
-              <table className="w-full border-collapse">
-                <tbody>
-                  <tr className="bg-[var(--color-surface-alt)] border border-[var(--color-accent)] shadow-lg">
-                    {!readOnly && <td className="p-1 w-7" />}
-                    <td className="script-table-td text-xs" style={{ width: 50 }}>{rows[activeIdx].time}</td>
-                    <td className="script-table-td text-xs">
-                      {rows[activeIdx].narrative || "—"}
-                    </td>
-                    <td className="script-table-td text-xs">
-                      {rows[activeIdx].demo_actions || "—"}
-                    </td>
-                    <td className="script-table-td text-xs text-center">—</td>
-                    {!readOnly && <td className="script-table-td" />}
-                  </tr>
-                </tbody>
-              </table>
-            ) : null}
-          </DragOverlay>
-        </DndContext>
-      </table>
+          </table>
+        </SortableContext>
+        <DragOverlay>
+          {activeIdx >= 0 ? (
+            <table className="w-full border-collapse">
+              <tbody>
+                <tr className="bg-[var(--color-surface-alt)] border border-[var(--color-accent)] shadow-lg">
+                  {!readOnly && <td className="p-1 w-7" />}
+                  <td className="script-table-td text-xs" style={{ width: 50 }}>{rows[activeIdx].time}</td>
+                  <td className="script-table-td text-xs">
+                    {rows[activeIdx].narrative || "—"}
+                  </td>
+                  <td className="script-table-td text-xs">
+                    {rows[activeIdx].demo_actions || "—"}
+                  </td>
+                  <td className="script-table-td text-xs text-center">—</td>
+                  {!readOnly && <td className="script-table-td" />}
+                </tr>
+              </tbody>
+            </table>
+          ) : null}
+        </DragOverlay>
+      </DndContext>
     </div>
   );
 }
