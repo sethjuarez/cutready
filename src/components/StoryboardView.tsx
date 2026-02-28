@@ -395,7 +395,7 @@ function ExpandableSketchCard({
         style={{ gridTemplateRows: expanded ? "1fr" : "0fr" }}
       >
         <div className="overflow-hidden">
-          <div className="border-t border-[var(--color-border)] bg-[var(--color-surface-secondary,var(--color-bg))] px-4 py-3">
+          <div className="border-t border-[var(--color-border)] bg-[var(--color-surface-secondary,var(--color-bg))]">
             {fullSketch ? (
               fullSketch.rows.length > 0 ? (
                 <ScriptTable
