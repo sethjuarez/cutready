@@ -360,7 +360,7 @@ function SortableStoryboardItem({ id, children }: { id: number; children: (dragL
     opacity: isDragging ? 0.4 : 1,
   };
   return (
-    <div ref={setNodeRef} style={style} {...attributes}>
+    <div ref={setNodeRef} style={style} {...attributes} className="outline-none">
       {children(listeners ?? {})}
     </div>
   );
