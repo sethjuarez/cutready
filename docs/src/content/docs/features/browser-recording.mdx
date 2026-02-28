@@ -1,0 +1,76 @@
+---
+title: Browser Recording
+description: Capture browser interactions automatically using Playwright-powered automation.
+sidebar:
+  order: 2
+---
+
+import { Aside, Badge } from '@astrojs/starlight/components';
+
+<Badge text="Available" variant="success" />
+
+CutReady records browser interactions by launching Chrome or Edge via Playwright
+and capturing every action you perform — clicks, typing, navigation, scrolling,
+and more.
+
+## Profile Detection
+
+CutReady automatically detects installed browser profiles on your system:
+
+- **Google Chrome** — Default and named profiles
+- **Microsoft Edge** — Default and named profiles
+
+Each profile includes its cookies, extensions, and login sessions, so your demo
+environment is ready to go without additional setup.
+
+<Aside type="note" title="Windows-only recording">
+  Browser interaction recording currently uses Windows-specific APIs for process
+  management. macOS and Linux support is planned. Screen capture works on all
+  platforms.
+</Aside>
+
+## Recording Modes
+
+### Free-form Recording
+
+Start recording and perform your demo naturally. Every interaction is captured
+as an **ActionCard** in real-time:
+
+- **Navigate** — URL changes and page loads
+- **Click** — Element clicks with CSS selector tracking
+- **Type** — Text input with target field identification
+- **Scroll** — Scroll position changes
+- **Wait** — Timing gaps between actions
+- **Screenshot** — Manual capture points during recording
+
+### Step-by-step Recording
+
+Guided by your sketch rows, the recorder pauses between each planned step. This
+mode is ideal for complex demos where you want to:
+
+- Verify each step completed correctly
+- Add notes or adjust timing between steps
+- Ensure the recorded sequence matches your plan exactly
+
+## Action Stream
+
+During recording, captured actions appear as cards in the Recording Panel:
+
+Each **ActionCard** displays:
+- **Action type** — Color-coded badge (Navigate, Click, Type, etc.)
+- **Description** — Human-readable summary of what happened
+- **Timestamp** — When the action occurred
+- **Thumbnail** — Screenshot at the moment of the action (when available)
+
+## Session Management
+
+- **Start** — Launches the selected browser profile and begins capturing
+- **Stop** — Ends the recording session
+- **Review** — Browse all captured actions in the session
+- Sessions are saved as JSON in the project's `recordings/` directory
+
+## Browser Requirements
+
+- **Chrome** or **Edge** must be installed
+- The browser is launched with CDP (Chrome DevTools Protocol) for automation
+- Your existing profiles and login sessions are preserved

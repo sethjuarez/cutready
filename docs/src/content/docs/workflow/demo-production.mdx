@@ -1,0 +1,109 @@
+---
+title: Demo Production Workflow
+description: The end-to-end workflow for producing demo videos with CutReady.
+sidebar:
+  order: 1
+---
+
+import { Aside, Badge, Steps } from '@astrojs/starlight/components';
+import WorkflowSteps from '../../../components/WorkflowSteps.astro';
+import WorkflowStep from '../../../components/WorkflowStep.astro';
+
+CutReady provides a structured, multi-phase workflow for producing demo videos.
+Each phase builds on the previous one, transforming rough plans into polished
+video output.
+
+## Overview
+
+<WorkflowSteps>
+  <WorkflowStep title="Sketch">
+    Plan your demo structure with narrative, actions, and reference screenshots.
+  </WorkflowStep>
+  <WorkflowStep title="Record">
+    Capture browser interactions using automated Playwright-based recording.
+  </WorkflowStep>
+  <WorkflowStep title="Refine">
+    AI agent processes captured actions into a clean, reproducible script.
+  </WorkflowStep>
+  <WorkflowStep title="Produce">
+    Replay the polished script while recording lossless video and audio.
+  </WorkflowStep>
+  <WorkflowStep title="Export">
+    Package everything into FCPXML timelines for professional video editing.
+  </WorkflowStep>
+</WorkflowSteps>
+
+## Phase 0: Sketch <Badge text="Available" variant="success" />
+
+<Steps>
+1. Create a new project folder
+2. Add sketches with the 4-column planning table
+3. Capture reference screenshots for each step
+4. Organize sketches into storyboards
+5. Save versions as you iterate on the plan
+</Steps>
+
+**Key features used:** Sketch Editor, Screen Capture, Storyboard Management, Version History
+
+## Phase 1: Record <Badge text="Available" variant="success" />
+
+<Steps>
+1. Select a browser profile (Chrome or Edge)
+2. Choose recording mode (free-form or step-by-step)
+3. Perform your demo while CutReady captures every interaction
+4. Review the captured action stream
+5. Re-record individual steps if needed
+</Steps>
+
+**Key features used:** Browser Recording, Action Stream, Profile Detection
+
+## Phase 2: Refine <Badge text="Planned" variant="caution" />
+
+<Aside type="caution" title="Coming Soon">
+  AI refinement is planned but not yet implemented. This phase will use Azure 
+  OpenAI to process raw recordings into clean, reproducible scripts.
+</Aside>
+
+The AI agent will:
+- Clean up redundant or accidental actions
+- Stabilize CSS selectors for reliability
+- Generate narration text from the demo flow
+- Suggest timing adjustments and animations
+- Map recorded actions back to sketch rows
+
+## Phase 3: Review <Badge text="In Progress" variant="note" />
+
+<Aside type="note" title="In Development">
+  The script editor UI exists but is currently showing an empty state. 
+  Full editing capabilities are being built.
+</Aside>
+
+The Script Editor will provide:
+- Row-by-row editing of the captured/refined script
+- Accept, reject, or re-record individual steps
+- Modify selectors, timing, and text inputs
+- Preview actions before committing changes
+
+## Phase 4: Produce <Badge text="Planned" variant="caution" />
+
+<Aside type="caution" title="Coming Soon">
+  Video production via automated replay is planned for a future release.
+</Aside>
+
+This phase will:
+- Replay the finalized action sequence in a controlled browser
+- Record lossless video (FFV1 codec in MKV container) via FFmpeg
+- Capture system audio and narration tracks separately
+- Generate frame-accurate timing metadata
+
+## Phase 5: Export <Badge text="Planned" variant="caution" />
+
+<Aside type="caution" title="Coming Soon">
+  FCPXML export for professional video editors is planned for a future release.
+</Aside>
+
+Export will produce:
+- **FCPXML 1.9** timeline for DaVinci Resolve
+- Organized output folder with video, audio, and metadata
+- Multi-track support (screen recording, narration, system audio)
+- Chapter markers aligned with sketch rows
