@@ -7,26 +7,31 @@ sidebar:
 
 ## Directory Layout
 
-When you create a CutReady project, the following structure is created:
+CutReady uses a **flat, flexible folder structure**. When you create a project,
+it initializes the folder and a `.git` directory for version snapshots.
+You're free to organize files however you like — in the root, in subdirectories,
+or nested as deep as you want.
 
 ```
 my-demo-project/
-├── .storyboards/          # Storyboard definition files
-│   └── storyboard-1.json
-├── sketches/              # Sketch documents (planning tables)
-│   └── sketch-1.json
-├── notes/                 # Markdown note files
-│   └── notes.md
-├── recordings/            # Captured recording sessions
-│   └── session-1.json
-├── snapshots/             # Version history (git via gix)
-│   └── [internal git data]
-└── .manifest              # Sidebar ordering metadata
+├── intro.sk                   # A sketch (planning table)
+├── outro.sk
+├── flows/
+│   ├── login-flow.sk          # Sketches can live in subdirectories
+│   └── checkout-flow.sk
+├── full-demo.sb               # A storyboard (sequence of sketches)
+├── notes/
+│   └── ideas.md               # Markdown notes
+├── .cutready-order.json       # Sidebar ordering (auto-managed)
+└── .git/                      # Version history (managed by gix)
 ```
+
+CutReady scans the entire project tree for `.sk`, `.sb`, and `.md` files
+and displays them in the sidebar grouped by type.
 
 ## File Formats
 
-### Sketches (`.json`)
+### Sketches (`.sk`)
 
 Each sketch is a JSON file containing:
 - Title and description
@@ -34,32 +39,36 @@ Each sketch is a JSON file containing:
 - Lifecycle state (Draft, RecordingEnriched, Refined, Final)
 - Metadata (created/updated timestamps)
 
-### Storyboards (`.json`)
+### Storyboards (`.sb`)
 
-Storyboards reference sketches and organize them into sections:
+Storyboards reference sketches by path and organize them into sections:
 - Title and description
-- Ordered list of sketch references
-- Section groupings
+- Ordered list of sketch references (relative paths to `.sk` files)
+- Optional section groupings
 
 ### Notes (`.md`)
 
 Plain markdown files — no special format required.
 
-### Recording Sessions (`.json`)
+### Sidebar Order (`.cutready-order.json`)
 
-Each session contains:
-- Browser profile used
-- Array of captured actions (type, selector, value, timestamp, screenshot)
-- Session metadata (start/end time, duration)
+A JSON file that tracks the display order of items in the sidebar.
+Updated automatically when you drag-and-drop to reorder:
 
-### Manifest (`.manifest`)
+```json
+{
+  "storyboards": ["full-demo.sb"],
+  "sketches": ["intro.sk", "flows/login-flow.sk", "outro.sk"],
+  "notes": ["notes/ideas.md"]
+}
+```
 
-A JSON file that tracks the display order of items in the storyboard
-list sidebar. Updated automatically when you drag-and-drop to reorder.
+Items not in this file appear at the end of their section. Newly created
+files are automatically appended.
 
 ## Version Control
 
-The `snapshots/` directory contains a bare git repository managed by
-**gitoxide (gix)**. This is completely independent of any source code git
-repository. Each version snapshot is a git commit with the document content
-as the tree.
+The `.git/` directory contains a repository managed by **gitoxide (gix)**.
+This is completely independent of any source code git repository you might
+have. Each version snapshot is a git commit with the document content as
+the tree.
