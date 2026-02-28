@@ -31,7 +31,7 @@ jobs:
         if: matrix.platform == 'ubuntu-24.04'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libpipewire-0.3-dev
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libpipewire-0.3-dev libgbm-dev
 
       # TODO: Add code signing steps once certificates are set up
       # See: https://tauri.app/distribute/sign/macos/ and https://tauri.app/distribute/sign/windows/
