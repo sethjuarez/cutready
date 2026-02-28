@@ -41,6 +41,7 @@ export function StoryboardView() {
   // Cache of full sketch data keyed by path
   const [sketchCache, setSketchCache] = useState<Map<string, Sketch>>(new Map());
   const loadingRef = useRef<Set<string>>(new Set());
+  const [collapsedItems, setCollapsedItems] = useState<Set<number>>(new Set());
 
   const sketchMap = new Map(sketches.map((s) => [s.path, s]));
 
@@ -153,6 +154,12 @@ export function StoryboardView() {
                           onRemove={() => removeFromStoryboard(idx)}
                           projectRoot={currentProject?.root}
                           dragListeners={dragListeners}
+                          collapsed={collapsedItems.has(idx)}
+                          onToggleCollapse={() => setCollapsedItems((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(idx)) next.delete(idx); else next.add(idx);
+                            return next;
+                          })}
                         />
                       ) : (
                         /* Legacy section — render title only */
@@ -245,6 +252,8 @@ function ExpandableSketchCard({
   onRemove,
   projectRoot,
   dragListeners,
+  collapsed,
+  onToggleCollapse,
 }: {
   sketch: SketchSummary;
   fullSketch?: Sketch;
@@ -252,6 +261,8 @@ function ExpandableSketchCard({
   onRemove: () => void;
   projectRoot?: string;
   dragListeners: Record<string, any>;
+  collapsed: boolean;
+  onToggleCollapse: () => void;
 }) {
   return (
     <div className="group/sketch">
@@ -272,6 +283,21 @@ function ExpandableSketchCard({
             <circle cx="6" cy="12" r="1.2" />
           </svg>
         </div>
+
+        {/* Collapse toggle */}
+        <button
+          onClick={onToggleCollapse}
+          className="shrink-0 text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] transition-colors"
+          title={collapsed ? "Show table" : "Hide table"}
+        >
+          <svg
+            width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+            className={`transition-transform ${collapsed ? "" : "rotate-90"}`}
+          >
+            <polyline points="9 18 15 12 9 6" />
+          </svg>
+        </button>
 
         <h3 className="text-base font-semibold text-[var(--color-text)] truncate">
           {sketch.title}
@@ -314,8 +340,8 @@ function ExpandableSketchCard({
         <p className="text-sm text-[var(--color-text-secondary)] mb-2 leading-relaxed">{fullSketch.description}</p>
       )}
 
-      {/* Table — always shown, no accordion, feels like part of the document */}
-      {fullSketch ? (
+      {/* Table — collapsible */}
+      {!collapsed && (fullSketch ? (
         fullSketch.rows.length > 0 ? (
           <ScriptTable
             rows={fullSketch.rows}
@@ -331,7 +357,7 @@ function ExpandableSketchCard({
           <div className="w-3 h-3 border-2 border-[var(--color-text-secondary)]/30 border-t-[var(--color-accent)] rounded-full animate-spin" />
           <span className="text-xs text-[var(--color-text-secondary)]">Loading sketch…</span>
         </div>
-      )}
+      ))}
     </div>
   );
 }
