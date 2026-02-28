@@ -31,6 +31,7 @@ interface ScriptTableProps {
 
 export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreenshot, projectRoot }: ScriptTableProps) {
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
   const focusCellAfterRender = useRef<number | null>(null);
 
   const sensors = useSensors(
@@ -164,6 +165,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
                   isLastRow={idx === rows.length - 1}
                   onCaptureScreenshot={onCaptureScreenshot}
                   projectRoot={projectRoot}
+                  onImageClick={setLightboxSrc}
                 />
               ))}
             </tbody>
@@ -190,6 +192,30 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
           ) : null}
         </DragOverlay>
       </DndContext>
+
+      {/* Lightbox overlay */}
+      {lightboxSrc && (
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 cursor-pointer"
+          onClick={() => setLightboxSrc(null)}
+        >
+          <img
+            src={lightboxSrc}
+            alt="Screenshot preview"
+            className="max-w-[90vw] max-h-[90vh] object-contain rounded-lg shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          />
+          <button
+            onClick={() => setLightboxSrc(null)}
+            className="absolute top-4 right-4 p-2 rounded-full bg-black/50 text-white/80 hover:text-white transition-colors"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -208,6 +234,7 @@ function SortableRow({
   isLastRow,
   onCaptureScreenshot,
   projectRoot,
+  onImageClick,
 }: {
   id: string;
   row: PlanningRow;
@@ -220,6 +247,7 @@ function SortableRow({
   isLastRow: boolean;
   onCaptureScreenshot?: (rowIndex: number) => void;
   projectRoot?: string;
+  onImageClick: (src: string) => void;
 }){
   const {
     attributes,
@@ -319,14 +347,19 @@ function SortableRow({
       </td>
       <td className="script-table-td align-top text-center">
         {row.screenshot ? (
-          <div className="relative group/ss w-16 h-12 rounded-md bg-[var(--color-surface-alt)] border border-[var(--color-border)] overflow-hidden">
+          <div className="relative group/ss w-16 h-12 rounded-md bg-[var(--color-surface-alt)] border border-[var(--color-border)] overflow-hidden cursor-pointer"
+            onClick={() => {
+              const src = projectRoot ? convertFileSrc(`${projectRoot}/${row.screenshot}`) : row.screenshot!;
+              onImageClick(src);
+            }}
+          >
             <img
               src={projectRoot ? convertFileSrc(`${projectRoot}/${row.screenshot}`) : row.screenshot}
               alt=""
               className="w-full h-full object-cover"
             />
             {!readOnly && (
-              <div className="absolute inset-0 bg-black/50 opacity-0 group-hover/ss:opacity-100 transition-opacity flex items-center justify-center gap-1">
+              <div className="absolute inset-0 bg-black/50 opacity-0 group-hover/ss:opacity-100 transition-opacity flex items-center justify-center gap-1" onClick={(e) => e.stopPropagation()}>
                 <button
                   onClick={() => onCaptureScreenshot?.(idx)}
                   className="p-0.5 text-white/80 hover:text-white"
