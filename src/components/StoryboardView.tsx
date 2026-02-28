@@ -389,25 +389,30 @@ function ExpandableSketchCard({
         </button>
       </div>
 
-      {/* Expanded content — read-only ScriptTable */}
-      {expanded && (
-        <div className="border-t border-[var(--color-border)] px-4 py-3">
-          {fullSketch ? (
-            fullSketch.rows.length > 0 ? (
-              <ScriptTable
-                rows={fullSketch.rows}
-                onChange={() => {}}
-                readOnly
-                projectRoot={projectRoot}
-              />
-            ) : (
-              <p className="text-xs text-[var(--color-text-secondary)] text-center py-4">No rows yet</p>
-            )
-          ) : (
-            <p className="text-xs text-[var(--color-text-secondary)] text-center py-4">Loading...</p>
-          )}
+      {/* Expanded content — read-only ScriptTable, accordion style */}
+      <div
+        className="grid transition-[grid-template-rows] duration-200 ease-in-out"
+        style={{ gridTemplateRows: expanded ? "1fr" : "0fr" }}
+      >
+        <div className="overflow-hidden">
+          <div className="border-t border-[var(--color-border)] bg-[var(--color-surface-secondary,var(--color-bg))] px-4 py-3">
+            {fullSketch ? (
+              fullSketch.rows.length > 0 ? (
+                <ScriptTable
+                  rows={fullSketch.rows}
+                  onChange={() => {}}
+                  readOnly
+                  projectRoot={projectRoot}
+                />
+              ) : (
+                <p className="text-xs text-[var(--color-text-secondary)] text-center py-4">No rows yet</p>
+              )
+            ) : expanded ? (
+              <p className="text-xs text-[var(--color-text-secondary)] text-center py-4">Loading...</p>
+            ) : null}
+          </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }
