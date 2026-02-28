@@ -136,7 +136,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
               <col style={{ width: 54 }} />
               <col />
               <col />
-              <col style={{ width: 80 }} />
+              <col style={{ width: 96 }} />
               {!readOnly && <col style={{ width: 36 }} />}
             </colgroup>
             <thead>
