@@ -383,7 +383,7 @@ export function StoryboardList() {
                     onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") handleOpenSketchStandalone(sk.path); }}
                     className={`group/item w-full flex items-center gap-2 px-2 py-2 text-left transition-colors cursor-pointer ${
                       sk.path === activeSketchPath
-                        ? "bg-accent/10 text-accent"
+                        ? "bg-violet-500/10 text-[var(--color-accent)]"
                         : "text-[var(--color-text)] hover:bg-[var(--color-surface-alt)]"
                     }`}
                   >
