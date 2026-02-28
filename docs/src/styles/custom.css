@@ -108,16 +108,14 @@
 
 /* Workflow steps */
 .workflow-steps {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 1rem;
   margin-block: 2rem;
   counter-reset: step;
 }
 
 .workflow-step {
-  flex: 1;
-  min-width: 180px;
   background: var(--sl-color-bg-nav);
   border: 1px solid var(--sl-color-hairline);
   border-radius: 0.75rem;

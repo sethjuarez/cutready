@@ -7,7 +7,13 @@ sidebar:
 
 import { Aside, Badge } from '@astrojs/starlight/components';
 
-<Badge text="Available" variant="success" />
+<Badge text="Experimental" variant="caution" />
+
+<Aside type="caution" title="Experimental Feature">
+  Browser recording is functional but has not been fully tested and validated 
+  across all environments. It currently works best on **Windows** with Chrome. 
+  Expect rough edges — please report issues on GitHub.
+</Aside>
 
 CutReady records browser interactions by launching Chrome or Edge via Playwright
 and capturing every action you perform — clicks, typing, navigation, scrolling,

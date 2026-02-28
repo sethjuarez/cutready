@@ -1,0 +1,111 @@
+---
+title: Storyboards
+description: Sequence sketches into cohesive demo flows with sections and drag-and-drop ordering.
+sidebar:
+  order: 4
+---
+
+import { Aside, Badge } from '@astrojs/starlight/components';
+
+<Badge text="Available" variant="success" />
+
+A **storyboard** is an ordered sequence of sketches that forms a complete demo
+flow. While a sketch is a single scene (one planning table with narrative,
+actions, and screenshots), a storyboard chains multiple sketches together into
+a cohesive presentation.
+
+## Sketches vs. Storyboards
+
+Think of it like a movie:
+
+| | **Sketch** | **Storyboard** |
+|---|---|---|
+| **What it is** | A single scene | A sequence of scenes |
+| **Contains** | Title + planning table (time, narrative, actions, screenshots) | Title + ordered list of sketch references + sections |
+| **File** | `.sk` | `.sb` |
+| **Purpose** | Plan one segment of a demo | Organize an entire demo flow |
+| **Editing** | Full inline editing of table rows | References sketches — click through to edit |
+
+A sketch is the **building block**. A storyboard is the **assembly**.
+
+## Storyboard Structure
+
+A storyboard contains an ordered list of **items**, which can be:
+
+- **Sketch references** — pointers to `.sk` files in your project
+- **Sections** — named groups that organize sketches under headers
+
+```
+Product Launch Demo (storyboard)
+├── intro.sk                         ← sketch reference
+├── Getting Started (section)
+│   ├── install-setup.sk
+│   └── first-run.sk
+├── Core Features (section)
+│   ├── dashboard-tour.sk
+│   └── api-walkthrough.sk
+└── closing-cta.sk                   ← sketch reference
+```
+
+Sketches can exist independently or be referenced by multiple storyboards.
+Deleting a sketch that's referenced by a storyboard will show a warning.
+
+## Creating a Storyboard
+
+1. Click the **+** button in the sidebar
+2. Select **Storyboard**
+3. Give it a title (e.g., "Q1 Product Demo")
+4. The storyboard editor opens with an empty canvas
+
+## Adding Sketches
+
+From the storyboard editor:
+
+- **"+ New Sketch"** — Creates a blank sketch and adds it to the storyboard
+- **"+ Add Existing"** — Opens a searchable picker to select from your sketch library
+- Insert buttons appear **between** sketches for precise positioning
+
+## Organizing
+
+- **Drag and drop** sketches to reorder them within the storyboard
+- **Add sections** to group related sketches under named headers
+- **Collapse/expand** individual sketches to show or hide their planning tables
+- Each sketch card shows its title, lifecycle state badge, and row count
+
+## Preview Mode
+
+Click **Preview** to launch a fullscreen presentation built from the storyboard:
+
+1. Select which monitor to present on (multi-monitor support)
+2. CutReady builds a slide deck: storyboard title → each sketch's title + planning rows
+3. Navigate through the presentation to review the full demo flow
+
+<Aside type="tip">
+  Storyboards reference sketches by file path. You can reorganize your sketches 
+  freely — just keep them in the project folder so the references stay valid.
+</Aside>
+
+## The Sidebar
+
+The **Storyboard List** sidebar shows all project documents together:
+
+| Document Type | Icon | Description |
+|---|---|---|
+| **Sketch** | ✏️ | Individual planning scenes |
+| **Storyboard** | 📋 | Sequences of sketches |
+| **Note** | 📝 | Free-form markdown documents |
+
+Sidebar features:
+- **Drag and drop** to reorder the list
+- **Search** to filter by name
+- **File tree view** as an alternate navigation mode
+- **Context menu** (right-click) for rename, delete, and other actions
+- Order is persisted in a `.manifest` file
+
+## Tabbed Editing
+
+Opening any document adds it as a tab. You can have multiple tabs open:
+
+- Document name and type icon
+- Dirty/unsaved state indicator (dot)
+- Close button on each tab

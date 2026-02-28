@@ -6,12 +6,15 @@ sidebar:
 ---
 
 import { Aside, Badge } from '@astrojs/starlight/components';
+import Screenshot from '../../components/Screenshot.astro';
 
 <Aside type="caution" title="Early Access">
   CutReady is in active development (v0.1.0). Sketch planning, browser recording, 
   screen capture, and storyboard management are functional. AI refinement, video 
   production, and export are coming soon.
 </Aside>
+
+<Screenshot src="/cutready/images/app-home.png" alt="CutReady home screen" caption="CutReady home screen — create or open a project to get started" />
 
 ## What is CutReady?
 
@@ -37,7 +40,7 @@ CutReady follows a phased approach:
 | Phase | Name | Status |
 |-------|------|--------|
 | 0 | **Sketch** — Plan your demo with structured tables | <Badge text="Available" variant="success" /> |
-| 1 | **Record** — Capture browser interactions | <Badge text="Available" variant="success" /> |
+| 1 | **Record** — Capture browser interactions | <Badge text="Experimental" variant="caution" /> |
 | 2 | **Refine** — AI cleans up and enhances | <Badge text="Planned" variant="caution" /> |
 | 3 | **Review** — Edit the captured script | <Badge text="In Progress" variant="note" /> |
 | 4 | **Produce** — Replay and record video | <Badge text="Planned" variant="caution" /> |

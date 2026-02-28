@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
+  <rect width="128" height="128" rx="24" fill="#3d3480"/>
+  <!-- Board -->
+  <rect x="14" y="52" width="100" height="64" rx="4" fill="#7c6fdb"/>
+  <!-- Arm hinged at left, rotated open -->
+  <rect x="14" y="26" width="100" height="16" rx="3" fill="#a49afa" transform="rotate(-14 14 42)"/>
+  <!-- Hinge dot -->
+  <circle cx="14" cy="48" r="5" fill="white"/>
+  <!-- Play -->
+  <path d="M48 68 L88 84 L48 100Z" fill="white"/>
+</svg>
