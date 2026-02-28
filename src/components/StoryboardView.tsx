@@ -17,7 +17,19 @@ import { invoke } from "@tauri-apps/api/core";
 import { useAppStore } from "../stores/appStore";
 import { SketchPickerItem } from "./SketchCard";
 import { ScriptTable } from "./ScriptTable";
-import type { Sketch, SketchSummary } from "../types/sketch";
+import type { Sketch, SketchSummary, PlanningRow } from "../types/sketch";
+
+interface MonitorInfo {
+  id: number;
+  name: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  is_primary: boolean;
+}
+
+const PREVIEW_DATA_KEY = "cutready:preview-data";
 
 /**
  * StoryboardView — displays the active storyboard's items
@@ -42,6 +54,8 @@ export function StoryboardView() {
   const [sketchCache, setSketchCache] = useState<Map<string, Sketch>>(new Map());
   const loadingRef = useRef<Set<string>>(new Set());
   const [collapsedItems, setCollapsedItems] = useState<Set<number>>(new Set());
+  const [showMonitorPicker, setShowMonitorPicker] = useState(false);
+  const [availableMonitors, setAvailableMonitors] = useState<MonitorInfo[]>([]);
 
   const sketchMap = new Map(sketches.map((s) => [s.path, s]));
 
@@ -58,6 +72,71 @@ export function StoryboardView() {
       }
     }
   }, [activeStoryboard, sketchCache]);
+
+  /** Build flat slides array for preview: title slide → (sketch title → sketch rows)... */
+  const buildPreviewSlides = useCallback((): PlanningRow[] => {
+    if (!activeStoryboard) return [];
+    const slides: PlanningRow[] = [];
+    // Storyboard title slide
+    slides.push({
+      time: "",
+      narrative: activeStoryboard.description || "",
+      demo_actions: activeStoryboard.title,
+      screenshot: null,
+    });
+    // Each sketch
+    for (const item of activeStoryboard.items) {
+      if (item.type !== "sketch_ref") continue;
+      const full = sketchCache.get(item.path);
+      if (!full) continue;
+      // Sketch title slide
+      const desc = typeof full.description === "string" ? full.description : "";
+      slides.push({
+        time: "",
+        narrative: desc,
+        demo_actions: full.title,
+        screenshot: null,
+      });
+      // Sketch rows
+      for (const row of full.rows) {
+        slides.push(row);
+      }
+    }
+    return slides;
+  }, [activeStoryboard, sketchCache]);
+
+  const launchPreviewOnMonitor = useCallback(async (monitor: MonitorInfo) => {
+    setShowMonitorPicker(false);
+    localStorage.setItem(PREVIEW_DATA_KEY, JSON.stringify({
+      rows: buildPreviewSlides(),
+      projectRoot: currentProject?.root ?? "",
+      title: activeStoryboard?.title ?? "Storyboard",
+    }));
+    try {
+      await invoke("open_preview_window", {
+        physX: monitor.x,
+        physY: monitor.y,
+        physW: monitor.width,
+        physH: monitor.height,
+      });
+    } catch (e) {
+      console.error("[StoryboardView] Failed to open preview window:", e);
+    }
+  }, [buildPreviewSlides, currentProject, activeStoryboard]);
+
+  const handlePreviewClick = useCallback(async () => {
+    try {
+      const monitors: MonitorInfo[] = await invoke("list_monitors");
+      if (monitors.length === 1) {
+        await launchPreviewOnMonitor(monitors[0]);
+      } else {
+        setAvailableMonitors(monitors);
+        setShowMonitorPicker(true);
+      }
+    } catch (e) {
+      console.error("[StoryboardView] Failed to list monitors:", e);
+    }
+  }, [launchPreviewOnMonitor]);
 
   // DnD
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
@@ -108,18 +187,63 @@ export function StoryboardView() {
     <div className="flex-1 overflow-y-auto">
       <div className="max-w-3xl mx-auto px-6 py-8">
         {/* Storyboard header */}
-        <input
-          type="text"
-          defaultValue={activeStoryboard.title}
-          onBlur={(e) => {
-            const val = e.target.value.trim();
-            if (val && val !== activeStoryboard.title) {
-              updateStoryboard({ title: val });
-            }
-          }}
-          className="w-full text-2xl font-semibold bg-transparent text-[var(--color-text)] placeholder:text-[var(--color-text-secondary)]/40 outline-none border-none mb-2"
-          placeholder="Storyboard title..."
-        />
+        <div className="flex items-center gap-3 mb-2">
+          <input
+            type="text"
+            defaultValue={activeStoryboard.title}
+            onBlur={(e) => {
+              const val = e.target.value.trim();
+              if (val && val !== activeStoryboard.title) {
+                updateStoryboard({ title: val });
+              }
+            }}
+            className="flex-1 text-2xl font-semibold bg-transparent text-[var(--color-text)] placeholder:text-[var(--color-text-secondary)]/40 outline-none border-none"
+            placeholder="Storyboard title..."
+          />
+          {activeStoryboard.items.length > 0 && (
+            <div className="relative">
+              <button
+                onClick={handlePreviewClick}
+                className="flex items-center gap-1.5 shrink-0 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] px-3 py-1.5 rounded-lg border border-[var(--color-border)] hover:border-[var(--color-accent)]/40 hover:bg-[var(--color-accent)]/5 transition-colors"
+                title="Preview storyboard (presentation mode)"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polygon points="5 3 19 12 5 21 5 3" />
+                </svg>
+                Preview
+              </button>
+
+              {/* Monitor picker dropdown */}
+              {showMonitorPicker && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setShowMonitorPicker(false)} />
+                  <div className="absolute right-0 top-full mt-2 z-50 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg shadow-lg py-1 min-w-[200px]">
+                    <div className="px-3 py-2 text-xs font-medium text-[var(--color-text-secondary)] uppercase tracking-wider border-b border-[var(--color-border)]">
+                      Present on
+                    </div>
+                    {availableMonitors.map((m) => (
+                      <button
+                        key={m.id}
+                        onClick={() => launchPreviewOnMonitor(m)}
+                        className="w-full px-3 py-2 text-left text-sm text-[var(--color-text)] hover:bg-[var(--color-surface-alt)] transition-colors flex items-center gap-2"
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                          <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+                          <line x1="8" y1="21" x2="16" y2="21" />
+                          <line x1="12" y1="17" x2="12" y2="21" />
+                        </svg>
+                        <span>{m.name || `Monitor ${m.id}`}</span>
+                        {m.is_primary && (
+                          <span className="text-[10px] text-[var(--color-accent)] font-medium ml-auto">Primary</span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </div>
         <textarea
           defaultValue={activeStoryboard.description}
           onBlur={(e) => {
