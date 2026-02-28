@@ -146,14 +146,14 @@ export function HomePanel() {
         }}
       />
 
-      {/* Two-column layout: hero left, recent projects right */}
-      <div className="relative flex items-start gap-12 w-full max-w-3xl">
-        {/* ── Left column: hero + actions ── */}
-        <div className="flex flex-col items-start flex-1 min-w-0">
+      {/* Responsive: column (below) by default, row (side-by-side) on wide screens */}
+      <div className="relative flex flex-col lg:flex-row lg:items-start items-center gap-8 lg:gap-12 w-full max-w-md lg:max-w-3xl">
+        {/* ── Left / top column: hero + actions ── */}
+        <div className="flex flex-col items-center lg:items-start flex-1 min-w-0 w-full lg:w-auto">
           {/* Hero */}
-          <div className="flex items-center gap-4 mb-6">
+          <div className="flex flex-col items-center lg:flex-row lg:items-center gap-4 mb-6">
             <LogoMark />
-            <div>
+            <div className="text-center lg:text-left">
               <h1 className="text-3xl font-bold tracking-tight">CutReady</h1>
               <p className="text-[var(--color-text-secondary)] text-sm leading-relaxed mt-0.5">
                 Plan, record, and produce polished demo videos.
@@ -230,7 +230,7 @@ export function HomePanel() {
           )}
 
           {/* Keyboard shortcut hint */}
-          <div className="pt-2 text-left">
+          <div className="pt-2 text-center lg:text-left">
             <span className="text-xs text-[var(--color-text-secondary)] opacity-60">
               <kbd className="px-1.5 py-0.5 rounded border border-[var(--color-border)] bg-[var(--color-surface-alt)] text-[10px] font-mono">Ctrl</kbd>
               {" + "}
@@ -241,8 +241,8 @@ export function HomePanel() {
           </div>
         </div>
 
-        {/* ── Right column: recent projects ── */}
-        <div className="w-72 shrink-0 min-h-0">
+        {/* ── Right / bottom column: recent projects ── */}
+        <div className="w-full lg:w-72 lg:shrink-0 min-h-0">
           {loading && recentProjects.length === 0 ? (
             <div className="text-center text-[var(--color-text-secondary)] py-6">
               Loading...
