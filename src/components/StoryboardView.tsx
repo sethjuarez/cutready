@@ -135,6 +135,32 @@ export function StoryboardView() {
                 />
               </div>
             ))}
+
+            {/* Always-visible add bar at end */}
+            <AddBar
+              onAddNew={() => handleAddNewSketch()}
+              onPickExisting={() => setShowPicker(-1)}
+              onAddSection={() => setShowSectionInput(-1)}
+            />
+
+            {/* Picker/section input for the bottom bar */}
+            {showPicker === -1 && (
+              <SketchPicker
+                sketches={filteredSketches}
+                search={pickerSearch}
+                onSearchChange={setPickerSearch}
+                onSelect={(path) => handlePickExisting(path)}
+                onClose={() => { setShowPicker(null); setPickerSearch(""); }}
+              />
+            )}
+            {showSectionInput === -1 && (
+              <SectionInput
+                value={sectionTitle}
+                onChange={setSectionTitle}
+                onSubmit={() => handleAddSection()}
+                onCancel={() => { setShowSectionInput(null); setSectionTitle(""); }}
+              />
+            )}
           </div>
         )}
 
@@ -406,6 +432,54 @@ function SectionInput({
           Cancel
         </button>
       </div>
+    </div>
+  );
+}
+
+function AddBar({
+  onAddNew,
+  onPickExisting,
+  onAddSection,
+}: {
+  onAddNew: () => void;
+  onPickExisting: () => void;
+  onAddSection: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-2 pt-4 pb-2">
+      <div className="h-px flex-1 bg-[var(--color-border)]" />
+      <div className="flex gap-1.5">
+        <button
+          onClick={onAddNew}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-[var(--color-accent)] text-white hover:bg-[var(--color-accent-hover)] transition-colors"
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19" />
+            <line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
+          New Sketch
+        </button>
+        <button
+          onClick={onPickExisting}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:border-[var(--color-accent)]/40 transition-colors"
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+            <polyline points="14 2 14 8 20 8" />
+          </svg>
+          Add Existing
+        </button>
+        <button
+          onClick={onAddSection}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:border-[var(--color-accent)]/40 transition-colors"
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="3" y1="12" x2="21" y2="12" />
+          </svg>
+          Add Section
+        </button>
+      </div>
+      <div className="h-px flex-1 bg-[var(--color-border)]" />
     </div>
   );
 }
