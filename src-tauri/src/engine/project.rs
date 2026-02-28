@@ -433,8 +433,6 @@ pub enum ProjectError {
     NotFound(String),
     #[error("Path traversal rejected: {0}")]
     PathTraversal(String),
-    #[error("File already exists: {0}")]
-    AlreadyExists(String),
 }
 
 #[cfg(test)]
