@@ -10,9 +10,6 @@
 
 use std::path::{Path, PathBuf};
 
-#[cfg(windows)]
-use std::os::windows::process::CommandExt;
-
 use crate::util::sidecar::SidecarManager;
 
 // ── Browser Profile Detection ───────────────────────────────────────────────
@@ -126,8 +123,11 @@ pub fn detect_browser_profiles() -> Vec<BrowserProfile> {
 /// We only care about processes with a visible main window — that means the
 /// browser UI is open and the profile directory is locked.
 ///
-/// Uses PowerShell's `Get-Process` with `MainWindowTitle` filter.
+/// Uses PowerShell's `Get-Process` with `MainWindowTitle` filter (Windows only).
+#[cfg(target_os = "windows")]
 pub fn check_browsers_running() -> BrowserRunningStatus {
+    use std::os::windows::process::CommandExt;
+
     let has_visible_window = |process_name: &str| -> bool {
         std::process::Command::new("powershell")
             .args([
@@ -142,7 +142,6 @@ pub fn check_browsers_running() -> BrowserRunningStatus {
             .output()
             .map(|out| {
                 let stdout = String::from_utf8_lossy(&out.stdout).trim().to_string();
-                // If count > 0, there's a visible browser window
                 stdout.parse::<u32>().unwrap_or(0) > 0
             })
             .unwrap_or(false)
@@ -151,6 +150,15 @@ pub fn check_browsers_running() -> BrowserRunningStatus {
     BrowserRunningStatus {
         msedge: has_visible_window("msedge"),
         chrome: has_visible_window("chrome"),
+    }
+}
+
+/// On non-Windows platforms, return false for both browsers (not implemented).
+#[cfg(not(target_os = "windows"))]
+pub fn check_browsers_running() -> BrowserRunningStatus {
+    BrowserRunningStatus {
+        msedge: false,
+        chrome: false,
     }
 }
 
