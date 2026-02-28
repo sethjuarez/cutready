@@ -1,0 +1,82 @@
+---
+title: Quick Start
+description: Create your first CutReady project and plan a demo in under 5 minutes.
+sidebar:
+  order: 2
+---
+
+import { Steps, Aside } from '@astrojs/starlight/components';
+
+This guide walks you through creating your first CutReady project.
+
+## Create a Project
+
+<Steps>
+
+1. **Launch CutReady** — You'll land on the Home screen.
+
+2. **Click "New Project"** — Choose a folder on your filesystem. CutReady creates
+   a project structure inside it with directories for sketches, storyboards,
+   notes, and recordings.
+
+3. **Name your project** — Give it a descriptive name like "Product Demo Q1".
+
+</Steps>
+
+## Create a Sketch
+
+Sketches are the planning backbone of your demo. Each sketch contains a
+structured table with your demo script.
+
+<Steps>
+
+1. **Click the Sketch icon** (✏️) in the sidebar to switch to Sketch view.
+
+2. **Click "New Sketch"** in the storyboard list panel.
+
+3. **Fill in the planning table** — Each row has four columns:
+
+   | Column | Purpose |
+   |--------|---------|
+   | **Time** | Approximate timing for this step |
+   | **Narrative** | What you'll say during this step |
+   | **Demo Actions** | What happens on screen |
+   | **Screenshot** | Reference image (captured or uploaded) |
+
+4. **Add screenshots** — Click the capture button (📸) in any screenshot cell to
+   take a reference screenshot directly from your screen.
+
+5. **Save a version** — Press `Ctrl+S` to create a snapshot. CutReady uses
+   git-based versioning, so you can always go back.
+
+</Steps>
+
+## Record a Demo
+
+<Steps>
+
+1. **Switch to Record view** — Click the Record icon (🔴) in the sidebar.
+
+2. **Select a browser profile** — CutReady auto-detects Chrome and Edge profiles.
+   Pick the one with your demo environment already set up.
+
+3. **Start recording** — CutReady launches the browser and captures every click,
+   keystroke, navigation, and scroll.
+
+4. **Perform your demo** — Walk through the steps from your sketch.
+
+5. **Stop recording** — Click the stop button. Your captured actions appear as
+   cards in the recording panel.
+
+</Steps>
+
+<Aside type="tip">
+  Use **step-by-step mode** to pause between sketch rows — great for complex demos
+  where you want to verify each step before moving on.
+</Aside>
+
+## What's Next?
+
+- **[Sketch Editor](/cutready/features/sketch-editor/)** — Deep dive into planning features
+- **[Browser Recording](/cutready/features/browser-recording/)** — Learn about recording modes
+- **[Version History](/cutready/features/version-history/)** — Understand the snapshot system

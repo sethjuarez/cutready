@@ -1,0 +1,131 @@
+---
+title: Application Architecture
+description: Technical overview of CutReady's architecture — Tauri, React, Rust, and Playwright.
+sidebar:
+  order: 1
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## High-Level Architecture
+
+CutReady is a **Tauri v2** desktop application with a split architecture:
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    CutReady Desktop App                  │
+├─────────────────────────┬───────────────────────────────┤
+│      Frontend (WebView) │      Backend (Rust)           │
+│                         │                               │
+│  React 19 + TypeScript  │  Tauri Commands               │
+│  Zustand State Store    │  ├── project.rs               │
+│  Tailwind CSS           │  ├── sketch.rs                │
+│  CodeMirror             │  ├── storyboard.rs            │
+│  @dnd-kit               │  ├── note.rs                  │
+│                         │  ├── interaction.rs            │
+│                         │  ├── screenshot.rs             │
+│                         │  └── versioning.rs             │
+│                         │                               │
+│                         │  Sidecar                      │
+│                         │  └── Playwright (Node.js)     │
+├─────────────────────────┴───────────────────────────────┤
+│                    Tauri v2 Runtime                      │
+│              (WebView + Rust + IPC Bridge)               │
+└─────────────────────────────────────────────────────────┘
+```
+
+## Frontend
+
+The frontend is a **React 19** single-page application bundled with **Vite**:
+
+| Technology | Purpose |
+|-----------|---------|
+| **React 19** | UI component framework |
+| **TypeScript** | Type-safe frontend code |
+| **Zustand** | Centralized state management |
+| **Tailwind CSS** | Utility-first styling |
+| **CodeMirror** | Markdown editing (notes) |
+| **@dnd-kit** | Drag-and-drop (storyboard list, table rows) |
+| **react-markdown** | Markdown preview rendering |
+
+### State Management
+
+All application state flows through a single **Zustand store** (`appStore.ts`):
+- Project state (current project, recent list)
+- Document state (sketches, storyboards, notes)
+- UI state (sidebar, tabs, panels, theme)
+- Recording state (profiles, active session)
+- Version history (snapshots, timeline, dirty flags)
+
+The store dispatches **Tauri commands** to the Rust backend for all
+filesystem and system operations.
+
+## Backend (Rust)
+
+The Rust backend handles:
+
+### Commands Layer (`src/commands/`)
+
+| Module | Responsibility |
+|--------|---------------|
+| `project.rs` | Project CRUD, recent projects, sidebar persistence |
+| `sketch.rs` | Sketch document CRUD, list summaries |
+| `storyboard.rs` | Storyboard CRUD, section management |
+| `note.rs` | Markdown note CRUD |
+| `interaction.rs` | Browser profile detection, recording sessions |
+| `screenshot.rs` | Monitor detection, screen/region capture |
+| `versioning.rs` | Snapshot save/restore, timeline, stash |
+
+### Engine Layer (`src/engine/`)
+
+Lower-level implementations:
+- **interaction.rs** — CDP browser communication, Playwright sidecar management
+- **screenshot.rs** — Native screen capture via `xcap` crate
+- **versioning.rs** — Git operations via `gix` (gitoxide)
+
+### Models Layer (`src/models/`)
+
+Shared data types:
+- **action.rs** — Tagged union of browser/native actions
+- **script.rs** — Script rows with metadata
+- **session.rs** — Recording session with captured actions
+- **sketch.rs** — Sketch, Storyboard, VersionEntry, GraphNode
+
+## Playwright Sidecar
+
+Browser automation runs in a **Node.js sidecar process** managed by Tauri:
+
+1. The Rust backend spawns a Playwright Node.js process
+2. Communication happens over stdio (JSON messages)
+3. The sidecar connects to Chrome/Edge via CDP (Chrome DevTools Protocol)
+4. Actions are streamed back to the Rust backend in real-time
+
+This architecture isolates browser automation from the main process,
+preventing UI freezes during recording.
+
+## Cross-Platform Support
+
+| Feature | Windows | macOS | Linux |
+|---------|---------|-------|-------|
+| UI & Navigation | ✅ | ✅ | ✅ |
+| Sketch Editor | ✅ | ✅ | ✅ |
+| Screen Capture | ✅ | ✅ | ✅ (PipeWire) |
+| Browser Recording | ✅ | 🚧 | 🚧 |
+| Version History | ✅ | ✅ | ✅ |
+
+<Aside type="note">
+  Browser recording currently uses Windows-specific process management APIs.
+  Cross-platform support is being added with `#[cfg(target_os)]` guards 
+  and platform-specific implementations.
+</Aside>
+
+## Build & Release
+
+CutReady uses **GitHub Actions** for automated cross-platform builds:
+
+- **macOS** — ARM (Apple Silicon) + Intel (x86_64) builds
+- **Windows** — MSI + NSIS installers
+- **Linux** — DEB + AppImage packages (Ubuntu 24.04)
+
+Releases are triggered by pushing a `v*` git tag and create draft GitHub
+releases with all platform artifacts.

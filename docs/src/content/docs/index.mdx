@@ -1,0 +1,80 @@
+---
+title: CutReady
+head:
+  - tag: title
+    content: CutReady — Demo Video Production Tool
+description: |
+  CutReady is a desktop app that turns rough demo walkthroughs into 
+  polished, production-ready video packages.
+template: splash
+editUrl: false
+lastUpdated: false
+hero:
+  title: From sketch to screen, demo-ready.
+  tagline: |
+    CutReady is a desktop application that helps you plan, capture, and produce 
+    polished demo videos — from initial storyboard sketches through browser recording 
+    to final export.
+  image:
+    html: <svg xmlns="http://www.w3.org/2000/svg" width="280" height="280" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" style="color:var(--cutready-accent-light)"><path d="m15 10-4 4 6 6 4-16-18 7 4 2 2 6 3-4"/></svg>
+  actions:
+    - text: Get Started
+      icon: right-arrow
+      link: /cutready/welcome/
+    - text: View on GitHub
+      icon: external
+      variant: minimal
+      link: https://github.com/sethjuarez/cutready
+sidebar:
+  hidden: true
+---
+
+import FeatureGrid from '../../components/FeatureGrid.astro';
+import FeatureCard from '../../components/FeatureCard.astro';
+import WorkflowSteps from '../../components/WorkflowSteps.astro';
+import WorkflowStep from '../../components/WorkflowStep.astro';
+
+<WorkflowSteps>
+  <WorkflowStep title="Sketch">
+    Plan your demo with a rich editor — add narrative, actions, and reference screenshots.
+  </WorkflowStep>
+  <WorkflowStep title="Record">
+    Capture browser interactions automatically with Playwright-powered recording.
+  </WorkflowStep>
+  <WorkflowStep title="Refine">
+    AI agent cleans up actions, generates narration, and stabilizes selectors.
+  </WorkflowStep>
+  <WorkflowStep title="Produce">
+    Replay and record lossless video with synchronized audio tracks.
+  </WorkflowStep>
+  <WorkflowStep title="Export">
+    Package into FCPXML timelines for DaVinci Resolve or other editors.
+  </WorkflowStep>
+</WorkflowSteps>
+
+<FeatureGrid>
+  <FeatureCard icon="📝" title="Sketch Planning">
+    4-column planning tables with narrative, actions, timing, and screenshot capture.
+  </FeatureCard>
+  <FeatureCard icon="🎬" title="Browser Recording">
+    Automated Chrome/Edge interaction capture with profile detection.
+  </FeatureCard>
+  <FeatureCard icon="📸" title="Screen Capture">
+    Multi-monitor screenshot support with region selection and lightbox preview.
+  </FeatureCard>
+  <FeatureCard icon="📖" title="Storyboard Management">
+    Organize sketches, storyboards, and notes with drag-and-drop reordering.
+  </FeatureCard>
+  <FeatureCard icon="🔄" title="Version History">
+    Git-backed document versioning with visual timeline graph and branching.
+  </FeatureCard>
+  <FeatureCard icon="📓" title="Markdown Notes">
+    Built-in markdown editor with live preview for project notes.
+  </FeatureCard>
+  <FeatureCard icon="🖥️" title="Cross-Platform">
+    Built with Tauri v2 — runs natively on Windows, macOS, and Linux.
+  </FeatureCard>
+  <FeatureCard icon="⌨️" title="Command Palette">
+    Quick access to all commands with Ctrl+Shift+P keyboard shortcut.
+  </FeatureCard>
+</FeatureGrid>

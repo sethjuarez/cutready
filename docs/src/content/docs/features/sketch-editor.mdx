@@ -1,0 +1,77 @@
+---
+title: Sketch Editor
+description: Plan your demos with structured planning tables, rich text, and screenshot capture.
+sidebar:
+  order: 1
+---
+
+import { Aside, Badge } from '@astrojs/starlight/components';
+
+<Badge text="Available" variant="success" />
+
+The Sketch Editor is where you plan your demo before recording anything. It
+provides a structured 4-column table for scripting your walkthrough, along with
+a title, description, and integrated screenshot capture.
+
+## Planning Table
+
+Each sketch contains a planning table with drag-and-drop reorderable rows.
+Every row has four columns:
+
+| Column | Description |
+|--------|-------------|
+| **Time** | Target timing for this segment (e.g., `0:30`) |
+| **Narrative** | What you'll say — your voiceover script |
+| **Demo Actions** | What happens on screen — clicks, navigation, typing |
+| **Screenshot** | Reference image showing the expected screen state |
+
+### Inline Editing
+
+Click any cell to edit it directly. The table supports:
+- Rich text formatting in narrative and action cells
+- Drag handles on the left to reorder rows
+- Add/remove rows with the toolbar buttons
+
+### Screenshot Capture
+
+Each row's screenshot cell has a capture button that opens the
+**Screen Capture Overlay**. This lets you:
+
+- Select from multiple monitors
+- Draw a region to capture, or capture the full screen
+- The captured image is stored with the sketch and displayed as a thumbnail
+- Click any thumbnail to open a **lightbox** for full-size preview
+
+## Document Lifecycle
+
+Sketches progress through lifecycle states:
+
+1. **Draft** — Initial planning phase, freely editable
+2. **Recording Enriched** — After recording, actions are linked back to sketch rows
+3. **Refined** — After AI agent processing (coming soon)
+4. **Final** — Locked for production
+
+## Versioning
+
+Every `Ctrl+S` creates a named snapshot of the current sketch state. The
+**Version History** panel (right sidebar) shows a visual timeline graph where
+you can:
+
+- Browse all saved versions
+- Preview any past version without losing current work
+- Restore or fork from a previous version
+- See dirty/unsaved state indicators
+
+<Aside type="tip">
+  Versioning uses **gitoxide (gix)** — a pure-Rust git implementation. Your 
+  project folder becomes a lightweight git repository for document history,
+  completely separate from your source code git repo.
+</Aside>
+
+## Keyboard Shortcuts
+
+| Shortcut | Action |
+|----------|--------|
+| `Ctrl+S` | Save version (opens label prompt) |
+| `Tab` / `Shift+Tab` | Navigate between cells |
+| Drag handle | Reorder rows |

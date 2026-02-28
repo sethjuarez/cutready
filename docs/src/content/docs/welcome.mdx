@@ -1,0 +1,61 @@
+---
+title: Welcome to CutReady
+description: An overview of what CutReady is and how it helps you produce demo videos.
+sidebar:
+  order: 1
+---
+
+import { Aside, Badge } from '@astrojs/starlight/components';
+
+<Aside type="caution" title="Early Access">
+  CutReady is in active development (v0.1.0). Sketch planning, browser recording, 
+  screen capture, and storyboard management are functional. AI refinement, video 
+  production, and export are coming soon.
+</Aside>
+
+## What is CutReady?
+
+**CutReady** is a desktop application for producing demo videos. It provides a
+structured workflow that takes you from initial planning sketches through automated
+browser recording to polished video output — all in a single tool.
+
+The core idea: instead of screen-recording a live demo (and hoping nothing goes
+wrong), you **plan** the demo as a storyboard, **record** the interactions once,
+then **replay** them perfectly every time for flawless video capture.
+
+## Who is it for?
+
+- **Developer advocates** creating product walkthroughs
+- **Product managers** building demo reels
+- **Educators** producing tutorial content
+- **Anyone** who needs repeatable, polished screen recordings
+
+## The Workflow
+
+CutReady follows a phased approach:
+
+| Phase | Name | Status |
+|-------|------|--------|
+| 0 | **Sketch** — Plan your demo with structured tables | <Badge text="Available" variant="success" /> |
+| 1 | **Record** — Capture browser interactions | <Badge text="Available" variant="success" /> |
+| 2 | **Refine** — AI cleans up and enhances | <Badge text="Planned" variant="caution" /> |
+| 3 | **Review** — Edit the captured script | <Badge text="In Progress" variant="note" /> |
+| 4 | **Produce** — Replay and record video | <Badge text="Planned" variant="caution" /> |
+| 5 | **Export** — Package for video editors | <Badge text="Planned" variant="caution" /> |
+
+## Technology Stack
+
+CutReady is built on modern, cross-platform technologies:
+
+- **[Tauri v2](https://tauri.app)** — Lightweight desktop runtime (Rust + WebView)
+- **React 19 + TypeScript** — Frontend UI
+- **Rust + Tokio** — Backend with async I/O
+- **Playwright** — Browser automation engine
+- **CodeMirror** — Markdown editing
+- **gitoxide (gix)** — Pure-Rust git for version history
+
+## Next Steps
+
+- **[Installation](/cutready/getting-started/installation/)** — Download and install CutReady
+- **[Quick Start](/cutready/getting-started/quick-start/)** — Create your first demo project
+- **[Features](/cutready/features/sketch-editor/)** — Explore what CutReady can do

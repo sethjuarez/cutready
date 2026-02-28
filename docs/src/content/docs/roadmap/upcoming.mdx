@@ -1,0 +1,92 @@
+---
+title: Roadmap
+description: Upcoming features and development plans for CutReady.
+sidebar:
+  order: 1
+---
+
+import { Aside, Badge } from '@astrojs/starlight/components';
+
+<Aside type="caution" title="Preview">
+  This roadmap reflects current development plans and may change. Features 
+  listed here are not yet available unless marked otherwise.
+</Aside>
+
+## Current Release (v0.1.0)
+
+The initial release includes the foundation for demo video production:
+
+- ✅ **Project management** — Create, open, and organize projects
+- ✅ **Sketch editor** — 4-column planning tables with inline editing
+- ✅ **Screen capture** — Multi-monitor screenshots with region selection
+- ✅ **Storyboard management** — Drag-and-drop organization
+- ✅ **Version history** — Git-backed snapshots with visual timeline
+- ✅ **Markdown notes** — CodeMirror editor with auto-save
+- ✅ **Browser recording** — Playwright-based interaction capture (Windows)
+- ✅ **Command palette** — Keyboard-driven command access
+- ✅ **Cross-platform builds** — Windows, macOS (ARM + Intel), Linux
+
+## Upcoming: AI Refinement <Badge text="Planned" variant="caution" />
+
+**Goal:** Automatically transform raw recordings into clean, reproducible scripts.
+
+Planned capabilities:
+- Redundant action removal (accidental clicks, navigation corrections)
+- CSS selector stabilization for replay reliability
+- Narration generation from demo flow
+- Timing optimization and animation suggestions
+- Sketch-to-recording alignment
+
+This will use **Azure OpenAI** with configurable API endpoints (already 
+supported in Settings).
+
+## Upcoming: Script Editor <Badge text="In Progress" variant="note" />
+
+**Goal:** Full editing interface for recorded/refined scripts.
+
+Planned capabilities:
+- Row-by-row script editing with accept/reject per step
+- Re-record individual steps without restarting the full recording
+- Selector modification and timing adjustment
+- Action preview before committing changes
+- Side-by-side view with original sketch
+
+## Upcoming: Video Production <Badge text="Planned" variant="caution" />
+
+**Goal:** Automated replay and lossless video capture.
+
+Planned capabilities:
+- Controlled browser replay of the finalized action sequence
+- FFmpeg integration for lossless recording (FFV1 in MKV)
+- Separate audio tracks (system audio, narration)
+- Frame-accurate timing metadata
+- Retry individual segments on failure
+
+## Upcoming: Export & Packaging <Badge text="Planned" variant="caution" />
+
+**Goal:** Professional video editor integration.
+
+Planned capabilities:
+- FCPXML 1.9 timeline export (DaVinci Resolve compatible)
+- Organized output folders with media, metadata, and project files
+- Multi-track assembly (video, narration, system audio)
+- Chapter markers aligned with sketch rows
+- Batch export for multiple storyboards
+
+## Upcoming: Animation Engine <Badge text="Planned" variant="caution" />
+
+**Goal:** Integrate motion graphics and educational animations.
+
+Planned capabilities:
+- ManimCE integration for mathematical/educational animations
+- Pre-built animation library with customizable parameters
+- Timeline merge for inserting animations into the video sequence
+- Preview rendering before final export
+
+## Future Considerations
+
+- **Code signing** — macOS notarization and Windows EV certificates
+- **Auto-update** — Built-in update mechanism via Tauri updater
+- **Cloud sync** — Optional project synchronization
+- **Team collaboration** — Shared projects and review workflows
+- **Plugin system** — Extensible architecture for custom actions

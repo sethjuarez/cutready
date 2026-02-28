@@ -1,0 +1,102 @@
+---
+title: Installation
+description: How to download and install CutReady on Windows, macOS, or Linux.
+sidebar:
+  order: 1
+---
+
+import { Aside, Tabs, TabItem } from '@astrojs/starlight/components';
+
+## Download
+
+CutReady provides pre-built installers for all major platforms. Download the latest
+release from [GitHub Releases](https://github.com/sethjuarez/cutready/releases).
+
+<Tabs>
+  <TabItem label="Windows">
+    Download the `.msi` or `.exe` (NSIS) installer from the release page.
+
+    1. Run the installer
+    2. Follow the setup wizard
+    3. Launch CutReady from the Start Menu
+
+    <Aside type="note">
+      Windows builds are not yet code-signed. You may see a SmartScreen warning — 
+      click "More info" → "Run anyway" to proceed.
+    </Aside>
+  </TabItem>
+
+  <TabItem label="macOS">
+    Download the `.dmg` file for your architecture:
+    - **Apple Silicon** (M1/M2/M3): `CutReady_x.x.x_aarch64.dmg`
+    - **Intel**: `CutReady_x.x.x_x64.dmg`
+
+    1. Open the `.dmg` file
+    2. Drag CutReady to your Applications folder
+    3. On first launch, right-click → Open to bypass Gatekeeper
+
+    <Aside type="note">
+      macOS builds are not yet notarized. You'll need to explicitly allow the app 
+      in System Settings → Privacy & Security after the first launch attempt.
+    </Aside>
+  </TabItem>
+
+  <TabItem label="Linux">
+    Download the `.deb` package or `.AppImage`:
+
+    **Debian/Ubuntu (.deb):**
+    ```bash
+    sudo dpkg -i cutready_x.x.x_amd64.deb
+    ```
+
+    **AppImage:**
+    ```bash
+    chmod +x CutReady_x.x.x_amd64.AppImage
+    ./CutReady_x.x.x_amd64.AppImage
+    ```
+
+    <Aside type="tip">
+      The Linux build requires PipeWire and GBM libraries for screen capture. 
+      On Ubuntu 24.04+, these are typically pre-installed.
+    </Aside>
+  </TabItem>
+</Tabs>
+
+## Prerequisites
+
+CutReady uses **Playwright** under the hood for browser automation. For recording
+features, you'll need:
+
+- **Chrome** or **Microsoft Edge** installed
+- An active browser profile (CutReady detects installed profiles automatically)
+
+## Building from Source
+
+If you prefer to build from source:
+
+```bash
+# Clone the repository
+git clone https://github.com/sethjuarez/cutready.git
+cd cutready
+
+# Install frontend dependencies
+npm install
+
+# Run in development mode
+npm run tauri dev
+
+# Build for production
+npm run tauri build
+```
+
+### Build Prerequisites
+
+- **Node.js** (LTS)
+- **Rust** (stable)
+- **Tauri CLI v2** (`npm install -g @tauri-apps/cli`)
+
+For Linux, you'll also need:
+```bash
+sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev \
+  librsvg2-dev patchelf libpipewire-0.3-dev libgbm-dev
+```

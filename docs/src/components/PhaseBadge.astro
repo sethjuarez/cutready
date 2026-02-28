@@ -1,0 +1,16 @@
+---
+interface Props {
+  status: 'available' | 'in-progress' | 'planned';
+  label?: string;
+}
+
+const { status, label } = Astro.props;
+const labels: Record<string, string> = {
+  'available': '✅ Available',
+  'in-progress': '🚧 In Progress',
+  'planned': '📋 Planned',
+};
+const displayLabel = label || labels[status] || status;
+---
+
+<span class={`phase-badge ${status}`}>{displayLabel}</span>

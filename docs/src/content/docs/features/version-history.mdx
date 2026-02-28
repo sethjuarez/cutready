@@ -1,0 +1,67 @@
+---
+title: Version History
+description: Git-backed document versioning with visual timeline graph and branching.
+sidebar:
+  order: 5
+---
+
+import { Aside, Badge } from '@astrojs/starlight/components';
+
+<Badge text="Available" variant="success" />
+
+CutReady includes a full version history system backed by **gitoxide (gix)**,
+a pure-Rust git implementation. Every save creates a snapshot that you can
+browse, compare, and restore.
+
+## How It Works
+
+The version history lives in the **right sidebar panel** of the sketch editor.
+It shows a visual **snapshot graph** — a DAG (directed acyclic graph)
+visualization of your document history.
+
+### Saving Versions
+
+Press `Ctrl+S` to save a version:
+1. A dialog appears asking for a **label** (e.g., "Added intro section")
+2. The current state is committed to the project's internal git repository
+3. A new node appears in the snapshot graph
+
+### Visual Timeline
+
+The snapshot graph displays:
+- **Nodes** for each saved version, arranged chronologically
+- **Edges** connecting parent-child versions
+- **Branch points** where history diverged
+- **Current position** highlighted in the graph
+- **Dirty state indicator** when unsaved changes exist
+
+## Restoring Versions
+
+Click any node in the snapshot graph to preview that version. From there you can:
+
+- **Restore** — Replace the current document with the selected version
+- **Fork** — Create a new branch from the selected point
+- **Stash** — Temporarily save unsaved changes before switching
+
+<Aside type="tip">
+  Restoring a version doesn't destroy history. The restore itself becomes a 
+  new snapshot, so you can always go back to any previous state.
+</Aside>
+
+## Editor State Persistence
+
+CutReady preserves your editor state across sessions:
+- Scroll position
+- Cursor location  
+- Open tabs and active document
+- Sidebar width and visibility
+
+This state is saved separately from document content and restored when
+you reopen a project.
+
+## Technical Details
+
+- Snapshots are stored in a `.snapshots/` directory within the project
+- Each snapshot is a git commit with the document JSON as the tree content
+- The graph is computed from the commit DAG using `gix`
+- No external git installation required — it's all built into the app
