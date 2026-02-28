@@ -4,7 +4,7 @@
  */
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { SketchPreview } from "./SketchPreview";
+import { SketchPreview, type PreviewSlide } from "./SketchPreview";
 import type { PlanningRow } from "../types/sketch";
 
 const DATA_KEY = "cutready:preview-data";
@@ -13,6 +13,7 @@ interface PreviewData {
   rows: PlanningRow[];
   projectRoot: string;
   title: string;
+  slides?: PreviewSlide[];
 }
 
 export function StandalonePreview() {
@@ -59,6 +60,7 @@ export function StandalonePreview() {
       projectRoot={data.projectRoot}
       title={data.title}
       onClose={handleClose}
+      slides={data.slides}
     />
   );
 }
