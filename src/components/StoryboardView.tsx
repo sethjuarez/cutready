@@ -300,7 +300,7 @@ function ExpandableSketchCard({
         {/* Drag handle — grip dots before title */}
         <div
           {...dragListeners}
-          className="shrink-0 cursor-grab active:cursor-grabbing opacity-0 group-hover/sketch:opacity-40 hover:!opacity-100 transition-opacity"
+          className="shrink-0 cursor-grab active:cursor-grabbing opacity-30 hover:opacity-100 transition-opacity"
           title="Drag to reorder"
         >
           <svg width="8" height="14" viewBox="0 0 8 14" fill="currentColor" className="text-[var(--color-text-secondary)]">
