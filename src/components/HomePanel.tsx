@@ -7,7 +7,7 @@ import { invoke } from "@tauri-apps/api/core";
 
 function LogoMark() {
   return (
-    <div className="relative w-16 h-16 mb-6">
+    <div className="relative w-16 h-16">
       {/* Gradient glow behind the icon */}
       <div
         className="absolute inset-0 rounded-2xl blur-xl opacity-40"
@@ -136,7 +136,7 @@ export function HomePanel() {
   );
 
   return (
-    <div className="flex flex-col items-center justify-center h-full overflow-y-auto px-6 py-6">
+    <div className="flex items-center justify-center h-full overflow-y-auto px-6 py-6">
       {/* ── Decorative background gradient ── */}
       <div
         className="pointer-events-none fixed inset-0 opacity-[0.04]"
@@ -146,87 +146,103 @@ export function HomePanel() {
         }}
       />
 
-      {/* Inner wrapper: stays compact, shrinks gaps at small heights */}
-      <div className="relative flex flex-col items-center w-full max-w-md">
-        {/* ── Hero ── */}
-        <div className="flex flex-col items-center text-center mb-6">
-          <LogoMark />
-          <h1 className="text-3xl font-bold tracking-tight mb-1">CutReady</h1>
-          <p className="text-[var(--color-text-secondary)] text-sm max-w-xs leading-relaxed">
-            Plan, record, and produce polished demo videos — all&nbsp;in&nbsp;one&nbsp;place.
-          </p>
-        </div>
-
-        {/* ── Action cards ── */}
-        <div className="grid grid-cols-2 gap-3 w-full mb-6">
-          <button
-            onClick={() => setShowCreate(true)}
-            className="group flex flex-col items-center gap-2 p-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-alt)] hover:border-[var(--color-accent)] hover:shadow-lg hover:shadow-[var(--color-accent)]/5 transition-all"
-          >
-            <div className="w-9 h-9 rounded-lg bg-[var(--color-accent)] text-white flex items-center justify-center group-hover:scale-110 transition-transform">
-              <ActionIcon type="new" />
-            </div>
+      {/* Two-column layout: hero left, recent projects right */}
+      <div className="relative flex items-start gap-12 w-full max-w-3xl">
+        {/* ── Left column: hero + actions ── */}
+        <div className="flex flex-col items-start flex-1 min-w-0">
+          {/* Hero */}
+          <div className="flex items-center gap-4 mb-6">
+            <LogoMark />
             <div>
-              <div className="text-sm font-semibold">New Project</div>
-              <div className="text-xs text-[var(--color-text-secondary)] mt-0.5">
-                Start from scratch
-              </div>
+              <h1 className="text-3xl font-bold tracking-tight">CutReady</h1>
+              <p className="text-[var(--color-text-secondary)] text-sm leading-relaxed mt-0.5">
+                Plan, record, and produce polished demo videos.
+              </p>
             </div>
-          </button>
-          <button
-            onClick={handleOpen}
-            className="group flex flex-col items-center gap-2 p-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-alt)] hover:border-[var(--color-accent)] hover:shadow-lg hover:shadow-[var(--color-accent)]/5 transition-all"
-          >
-            <div className="w-9 h-9 rounded-lg border-2 border-[var(--color-border)] text-[var(--color-text-secondary)] flex items-center justify-center group-hover:border-[var(--color-accent)] group-hover:text-[var(--color-accent)] group-hover:scale-110 transition-all">
-              <ActionIcon type="open" />
-            </div>
-            <div>
-              <div className="text-sm font-semibold">Open Project</div>
-              <div className="text-xs text-[var(--color-text-secondary)] mt-0.5">
-                Pick an existing folder
-              </div>
-            </div>
-          </button>
-        </div>
-
-        {/* ── Create project inline form ── */}
-        {showCreate && (
-          <div className="w-full mb-6 p-4 rounded-xl bg-[var(--color-surface-alt)] border border-[var(--color-accent)] shadow-lg shadow-[var(--color-accent)]/5 animate-[fadeSlideIn_0.15s_ease-out]">
-            <label className="block text-sm font-medium mb-2">Project name</label>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder="My Demo"
-                autoFocus
-                className="flex-1 px-3 py-2 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] text-sm text-[var(--color-text)] placeholder:text-[var(--color-text-secondary)]/50 focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]/40"
-              />
-              <button
-                onClick={handleCreate}
-                disabled={!slug}
-                className="px-4 py-2 rounded-lg bg-[var(--color-accent)] text-white text-sm font-medium hover:bg-[var(--color-accent-hover)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                Choose Folder
-              </button>
-              <button
-                onClick={() => { setShowCreate(false); setNewName(""); }}
-                className="px-3 py-2 rounded-lg text-sm text-[var(--color-text-secondary)] hover:bg-[var(--color-surface)] transition-colors"
-              >
-                Cancel
-              </button>
-            </div>
-            {slug && (
-              <div className="mt-2 text-xs text-[var(--color-text-secondary)]">
-                Folder: <span className="font-mono text-[var(--color-text)]">{slug}</span>
-              </div>
-            )}
           </div>
-        )}
 
-        {/* ── Recent projects (scrollable when list is long) ── */}
-        <div className="w-full min-h-0">
+          {/* Action cards */}
+          <div className="grid grid-cols-2 gap-3 w-full mb-6">
+            <button
+              onClick={() => setShowCreate(true)}
+              className="group flex flex-col items-center gap-2 p-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-alt)] hover:border-[var(--color-accent)] hover:shadow-lg hover:shadow-[var(--color-accent)]/5 transition-all"
+            >
+              <div className="w-9 h-9 rounded-lg bg-[var(--color-accent)] text-white flex items-center justify-center group-hover:scale-110 transition-transform">
+                <ActionIcon type="new" />
+              </div>
+              <div>
+                <div className="text-sm font-semibold">New Project</div>
+                <div className="text-xs text-[var(--color-text-secondary)] mt-0.5">
+                  Start from scratch
+                </div>
+              </div>
+            </button>
+            <button
+              onClick={handleOpen}
+              className="group flex flex-col items-center gap-2 p-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-alt)] hover:border-[var(--color-accent)] hover:shadow-lg hover:shadow-[var(--color-accent)]/5 transition-all"
+            >
+              <div className="w-9 h-9 rounded-lg border-2 border-[var(--color-border)] text-[var(--color-text-secondary)] flex items-center justify-center group-hover:border-[var(--color-accent)] group-hover:text-[var(--color-accent)] group-hover:scale-110 transition-all">
+                <ActionIcon type="open" />
+              </div>
+              <div>
+                <div className="text-sm font-semibold">Open Project</div>
+                <div className="text-xs text-[var(--color-text-secondary)] mt-0.5">
+                  Pick an existing folder
+                </div>
+              </div>
+            </button>
+          </div>
+
+          {/* Create project inline form */}
+          {showCreate && (
+            <div className="w-full mb-6 p-4 rounded-xl bg-[var(--color-surface-alt)] border border-[var(--color-accent)] shadow-lg shadow-[var(--color-accent)]/5 animate-[fadeSlideIn_0.15s_ease-out]">
+              <label className="block text-sm font-medium mb-2">Project name</label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder="My Demo"
+                  autoFocus
+                  className="flex-1 px-3 py-2 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] text-sm text-[var(--color-text)] placeholder:text-[var(--color-text-secondary)]/50 focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]/40"
+                />
+                <button
+                  onClick={handleCreate}
+                  disabled={!slug}
+                  className="px-4 py-2 rounded-lg bg-[var(--color-accent)] text-white text-sm font-medium hover:bg-[var(--color-accent-hover)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Choose Folder
+                </button>
+                <button
+                  onClick={() => { setShowCreate(false); setNewName(""); }}
+                  className="px-3 py-2 rounded-lg text-sm text-[var(--color-text-secondary)] hover:bg-[var(--color-surface)] transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+              {slug && (
+                <div className="mt-2 text-xs text-[var(--color-text-secondary)]">
+                  Folder: <span className="font-mono text-[var(--color-text)]">{slug}</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Keyboard shortcut hint */}
+          <div className="pt-2 text-left">
+            <span className="text-xs text-[var(--color-text-secondary)] opacity-60">
+              <kbd className="px-1.5 py-0.5 rounded border border-[var(--color-border)] bg-[var(--color-surface-alt)] text-[10px] font-mono">Ctrl</kbd>
+              {" + "}
+              <kbd className="px-1.5 py-0.5 rounded border border-[var(--color-border)] bg-[var(--color-surface-alt)] text-[10px] font-mono">K</kbd>
+              {" "}
+              Command Palette
+            </span>
+          </div>
+        </div>
+
+        {/* ── Right column: recent projects ── */}
+        <div className="w-72 shrink-0 min-h-0">
           {loading && recentProjects.length === 0 ? (
             <div className="text-center text-[var(--color-text-secondary)] py-6">
               Loading...
@@ -234,7 +250,7 @@ export function HomePanel() {
           ) : recentProjects.length === 0 ? (
             <div className="text-center py-4">
               <p className="text-sm text-[var(--color-text-secondary)]">
-                No recent projects yet — create one to get started!
+                No recent projects yet.
               </p>
             </div>
           ) : (
@@ -242,7 +258,7 @@ export function HomePanel() {
               <h2 className="text-xs font-medium text-[var(--color-text-secondary)] uppercase tracking-wider mb-2">
                 Recent Projects
               </h2>
-              <div className="flex flex-col gap-1.5 max-h-[40vh] overflow-y-auto pr-1">
+              <div className="flex flex-col gap-1.5 max-h-[60vh] overflow-y-auto pr-1">
                 {recentProjects.map((p) => {
                   const name = p.path.split(/[/\\]/).pop() ?? "project";
                   return (
@@ -258,8 +274,8 @@ export function HomePanel() {
                           {p.path}
                         </div>
                       </div>
-                      <div className="flex items-center gap-2 ml-2 shrink-0">
-                        <span className="text-xs text-[var(--color-text-secondary)]">
+                      <div className="flex items-center gap-1 ml-1 shrink-0">
+                        <span className="text-[10px] text-[var(--color-text-secondary)]">
                           {formatRelativeDate(p.last_opened)}
                         </span>
                         <button
@@ -282,17 +298,6 @@ export function HomePanel() {
               </div>
             </>
           )}
-        </div>
-
-        {/* ── Keyboard shortcut hint ── */}
-        <div className="pt-6 pb-1 text-center">
-          <span className="text-xs text-[var(--color-text-secondary)] opacity-60">
-            <kbd className="px-1.5 py-0.5 rounded border border-[var(--color-border)] bg-[var(--color-surface-alt)] text-[10px] font-mono">Ctrl</kbd>
-            {" + "}
-            <kbd className="px-1.5 py-0.5 rounded border border-[var(--color-border)] bg-[var(--color-surface-alt)] text-[10px] font-mono">K</kbd>
-            {" "}
-            Command Palette
-          </span>
         </div>
       </div>
     </div>
