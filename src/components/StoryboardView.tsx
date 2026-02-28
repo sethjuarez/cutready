@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   DndContext,
   closestCenter,
@@ -41,29 +41,25 @@ export function StoryboardView() {
   const [showSectionInput, setShowSectionInput] = useState<number | null>(null);
   const [sectionTitle, setSectionTitle] = useState("");
 
-  // Expand/collapse state: set of item indices that are expanded
-  const [expandedItems, setExpandedItems] = useState<Set<number>>(new Set());
   // Cache of full sketch data keyed by path
   const [sketchCache, setSketchCache] = useState<Map<string, Sketch>>(new Map());
+  const loadingRef = useRef<Set<string>>(new Set());
 
   const sketchMap = new Map(sketches.map((s) => [s.path, s]));
 
-  const toggleExpand = useCallback(async (idx: number, path: string) => {
-    setExpandedItems((prev) => {
-      const next = new Set(prev);
-      if (next.has(idx)) { next.delete(idx); } else { next.add(idx); }
-      return next;
-    });
-    // Lazy-load sketch if not cached
-    if (!sketchCache.has(path)) {
-      try {
-        const sketch = await invoke<Sketch>("get_sketch", { relativePath: path });
-        setSketchCache((prev) => new Map(prev).set(path, sketch));
-      } catch (err) {
-        console.error("Failed to load sketch for preview:", err);
+  // Eagerly load all referenced sketches
+  useEffect(() => {
+    if (!activeStoryboard) return;
+    for (const item of activeStoryboard.items) {
+      if (item.type === "sketch_ref" && !sketchCache.has(item.path) && !loadingRef.current.has(item.path)) {
+        loadingRef.current.add(item.path);
+        invoke<Sketch>("get_sketch", { relativePath: item.path })
+          .then((sketch) => setSketchCache((prev) => new Map(prev).set(item.path, sketch)))
+          .catch((err) => console.error("Failed to load sketch:", err))
+          .finally(() => loadingRef.current.delete(item.path));
       }
     }
-  }, [sketchCache]);
+  }, [activeStoryboard, sketchCache]);
 
   // DnD
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
@@ -78,17 +74,6 @@ export function StoryboardView() {
     const reordered = [...items];
     const [moved] = reordered.splice(oldIdx, 1);
     reordered.splice(newIdx, 0, moved);
-    // Also remap expanded set
-    setExpandedItems((prev) => {
-      const next = new Set<number>();
-      for (const i of prev) {
-        if (i === oldIdx) next.add(newIdx);
-        else if (oldIdx < newIdx && i > oldIdx && i <= newIdx) next.add(i - 1);
-        else if (oldIdx > newIdx && i >= newIdx && i < oldIdx) next.add(i + 1);
-        else next.add(i);
-      }
-      return next;
-    });
     reorderStoryboardItems(reordered);
   }, [activeStoryboard, reorderStoryboardItems]);
 
@@ -170,19 +155,18 @@ export function StoryboardView() {
           <>
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
             <SortableContext items={activeStoryboard.items.map((_, i) => i)} strategy={verticalListSortingStrategy}>
-              <div className="space-y-2">
+              <div className="divide-y divide-[var(--color-border)]">
                 {activeStoryboard.items.map((item, idx) => (
-                  <div key={idx}>
+                  <div key={idx} className="py-6 first:pt-0">
                     <SortableStoryboardItem id={idx}>
-                      {item.type === "sketch_ref" ? (
+                      {(dragListeners) => item.type === "sketch_ref" ? (
                         <ExpandableSketchCard
                           sketch={sketchMap.get(item.path) ?? makePlaceholder(item.path)}
                           fullSketch={sketchCache.get(item.path)}
-                          expanded={expandedItems.has(idx)}
-                          onToggle={() => toggleExpand(idx, item.path)}
                           onOpen={() => openSketch(item.path)}
                           onRemove={() => removeFromStoryboard(idx)}
                           projectRoot={currentProject?.root}
+                          dragListeners={dragListeners}
                         />
                       ) : (
                         <SectionHeader
@@ -271,7 +255,7 @@ export function StoryboardView() {
 
 /* ── Sortable wrapper for storyboard items ─────────────── */
 
-function SortableStoryboardItem({ id, children }: { id: number; children: React.ReactNode }) {
+function SortableStoryboardItem({ id, children }: { id: number; children: (dragListeners: Record<string, any>) => React.ReactNode }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -280,23 +264,7 @@ function SortableStoryboardItem({ id, children }: { id: number; children: React.
   };
   return (
     <div ref={setNodeRef} style={style} {...attributes}>
-      <div className="flex items-start gap-1">
-        <div
-          {...listeners}
-          className="shrink-0 w-5 pt-3.5 flex items-center justify-center cursor-grab opacity-30 hover:opacity-100 transition-opacity"
-          title="Drag to reorder"
-        >
-          <svg width="8" height="14" viewBox="0 0 8 14" fill="currentColor" className="text-[var(--color-text-secondary)]">
-            <circle cx="2" cy="2" r="1.2" />
-            <circle cx="6" cy="2" r="1.2" />
-            <circle cx="2" cy="7" r="1.2" />
-            <circle cx="6" cy="7" r="1.2" />
-            <circle cx="2" cy="12" r="1.2" />
-            <circle cx="6" cy="12" r="1.2" />
-          </svg>
-        </div>
-        <div className="flex-1 min-w-0">{children}</div>
-      </div>
+      {children(listeners ?? {})}
     </div>
   );
 }
@@ -313,73 +281,65 @@ const stateLabels: Record<string, string> = {
 function ExpandableSketchCard({
   sketch,
   fullSketch,
-  expanded,
-  onToggle,
   onOpen,
   onRemove,
   projectRoot,
+  dragListeners,
 }: {
   sketch: SketchSummary;
   fullSketch?: Sketch;
-  expanded: boolean;
-  onToggle: () => void;
   onOpen: () => void;
   onRemove: () => void;
   projectRoot?: string;
+  dragListeners: Record<string, any>;
 }) {
   return (
-    <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] overflow-hidden transition-colors hover:border-[var(--color-accent)]/40">
-      {/* Header row — always visible */}
-      <div className="flex items-center gap-3 px-4 py-3">
-        {/* Expand toggle */}
-        <button
-          onClick={onToggle}
-          className="shrink-0 text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] transition-colors"
-          title={expanded ? "Collapse" : "Expand"}
+    <div className="group/sketch">
+      {/* Title row — document sub-heading style */}
+      <div className="flex items-center gap-2 py-1">
+        {/* Drag handle — grip dots before title */}
+        <div
+          {...dragListeners}
+          className="shrink-0 cursor-grab active:cursor-grabbing opacity-0 group-hover/sketch:opacity-40 hover:!opacity-100 transition-opacity"
+          title="Drag to reorder"
         >
-          <svg
-            width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-            strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-            className={`transition-transform ${expanded ? "rotate-90" : ""}`}
-          >
-            <polyline points="9 18 15 12 9 6" />
-          </svg>
-        </button>
-
-        {/* Icon */}
-        <div className="text-[var(--color-text-secondary)] shrink-0">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-            <polyline points="14 2 14 8 20 8" />
+          <svg width="8" height="14" viewBox="0 0 8 14" fill="currentColor" className="text-[var(--color-text-secondary)]">
+            <circle cx="2" cy="2" r="1.2" />
+            <circle cx="6" cy="2" r="1.2" />
+            <circle cx="2" cy="7" r="1.2" />
+            <circle cx="6" cy="7" r="1.2" />
+            <circle cx="2" cy="12" r="1.2" />
+            <circle cx="6" cy="12" r="1.2" />
           </svg>
         </div>
 
-        {/* Title + meta */}
-        <div className="flex-1 min-w-0 cursor-pointer" onClick={onToggle}>
-          <div className="text-sm font-medium truncate">{sketch.title}</div>
-          <div className="flex items-center gap-2 mt-0.5">
-            <span className="text-[10px] text-[var(--color-text-secondary)]">
-              {sketch.row_count} {sketch.row_count === 1 ? "row" : "rows"}
-            </span>
-            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[var(--color-accent)]/10 text-[var(--color-accent)]">
-              {stateLabels[sketch.state] ?? sketch.state}
-            </span>
-          </div>
-        </div>
+        <h3 className="text-base font-semibold text-[var(--color-text)] truncate">
+          {sketch.title}
+        </h3>
 
-        {/* Open in editor */}
+        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[var(--color-accent)]/10 text-[var(--color-accent)] shrink-0">
+          {stateLabels[sketch.state] ?? sketch.state}
+        </span>
+
+        <span className="text-[10px] text-[var(--color-text-secondary)] shrink-0">
+          {sketch.row_count} {sketch.row_count === 1 ? "row" : "rows"}
+        </span>
+
+        {/* Edit pencil */}
         <button
           onClick={onOpen}
-          className="shrink-0 px-2 py-1 text-[10px] font-medium rounded-md text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 transition-colors"
+          className="shrink-0 p-1 rounded text-[var(--color-text-secondary)] opacity-0 group-hover/sketch:opacity-100 hover:text-[var(--color-accent)] transition-all"
           title="Open in editor"
         >
-          Edit
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
+          </svg>
         </button>
 
         {/* Remove */}
         <button
           onClick={onRemove}
-          className="shrink-0 p-1 rounded text-[var(--color-text-secondary)] hover:text-red-400 transition-colors"
+          className="shrink-0 p-1 rounded text-[var(--color-text-secondary)] opacity-0 group-hover/sketch:opacity-100 hover:text-red-400 transition-all"
           title="Remove from storyboard"
         >
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -389,30 +349,29 @@ function ExpandableSketchCard({
         </button>
       </div>
 
-      {/* Expanded content — read-only ScriptTable, accordion style */}
-      <div
-        className="grid transition-[grid-template-rows] duration-200 ease-in-out"
-        style={{ gridTemplateRows: expanded ? "1fr" : "0fr" }}
-      >
-        <div className="overflow-hidden">
-          <div className="border-t border-[var(--color-border)] bg-[var(--color-surface-secondary,var(--color-bg))]">
-            {fullSketch ? (
-              fullSketch.rows.length > 0 ? (
-                <ScriptTable
-                  rows={fullSketch.rows}
-                  onChange={() => {}}
-                  readOnly
-                  projectRoot={projectRoot}
-                />
-              ) : (
-                <p className="text-xs text-[var(--color-text-secondary)] text-center py-4">No rows yet</p>
-              )
-            ) : expanded ? (
-              <p className="text-xs text-[var(--color-text-secondary)] text-center py-4">Loading...</p>
-            ) : null}
-          </div>
+      {/* Description (from full sketch if loaded) */}
+      {fullSketch && typeof fullSketch.description === "string" && fullSketch.description.trim() && (
+        <p className="text-sm text-[var(--color-text-secondary)] mb-2 leading-relaxed">{fullSketch.description}</p>
+      )}
+
+      {/* Table — always shown, no accordion, feels like part of the document */}
+      {fullSketch ? (
+        fullSketch.rows.length > 0 ? (
+          <ScriptTable
+            rows={fullSketch.rows}
+            onChange={() => {}}
+            readOnly
+            projectRoot={projectRoot}
+          />
+        ) : (
+          <p className="text-xs text-[var(--color-text-secondary)] py-2">No rows yet</p>
+        )
+      ) : (
+        <div className="flex items-center gap-2 py-3">
+          <div className="w-3 h-3 border-2 border-[var(--color-text-secondary)]/30 border-t-[var(--color-accent)] rounded-full animate-spin" />
+          <span className="text-xs text-[var(--color-text-secondary)]">Loading sketch…</span>
         </div>
-      </div>
+      )}
     </div>
   );
 }
