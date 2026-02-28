@@ -14,13 +14,13 @@ jobs:
       matrix:
         include:
           - platform: 'macos-latest'
-            args: '--target aarch64-apple-darwin --verbose'
+            args: '--target aarch64-apple-darwin'
           - platform: 'macos-latest'
-            args: '--target x86_64-apple-darwin --verbose'
+            args: '--target x86_64-apple-darwin'
           - platform: 'ubuntu-24.04'
-            args: '--verbose'
+            args: ''
           - platform: 'windows-latest'
-            args: '--verbose'
+            args: ''
 
     runs-on: ${{ matrix.platform }}
 
@@ -68,15 +68,3 @@ jobs:
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
-
-      - name: Debug - List bundle directory
-        if: always()
-        shell: bash
-        run: |
-          echo "=== Listing target release bundle ==="
-          find src-tauri/target -path "*/release/bundle" -type d 2>/dev/null | while read dir; do
-            echo "--- $dir ---"
-            ls -laR "$dir" 2>/dev/null || echo "(empty or not found)"
-          done
-          echo "=== Listing target release root ==="
-          find src-tauri/target -name "cutready" -o -name "cutready.exe" -o -name "CutReady*" 2>/dev/null | head -20
