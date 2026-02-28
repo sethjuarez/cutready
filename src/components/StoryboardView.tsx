@@ -31,15 +31,12 @@ export function StoryboardView() {
   const createSketch = useAppStore((s) => s.createSketch);
   const addSketchToStoryboard = useAppStore((s) => s.addSketchToStoryboard);
   const removeFromStoryboard = useAppStore((s) => s.removeFromStoryboard);
-  const addSectionToStoryboard = useAppStore((s) => s.addSectionToStoryboard);
   const reorderStoryboardItems = useAppStore((s) => s.reorderStoryboardItems);
   const updateStoryboard = useAppStore((s) => s.updateStoryboard);
   const loadSketches = useAppStore((s) => s.loadSketches);
 
   const [showPicker, setShowPicker] = useState<number | null>(null);
   const [pickerSearch, setPickerSearch] = useState("");
-  const [showSectionInput, setShowSectionInput] = useState<number | null>(null);
-  const [sectionTitle, setSectionTitle] = useState("");
 
   // Cache of full sketch data keyed by path
   const [sketchCache, setSketchCache] = useState<Map<string, Sketch>>(new Map());
@@ -100,16 +97,6 @@ export function StoryboardView() {
     [addSketchToStoryboard],
   );
 
-  const handleAddSection = useCallback(
-    async (position?: number) => {
-      if (!sectionTitle.trim()) return;
-      await addSectionToStoryboard(sectionTitle.trim(), position);
-      setShowSectionInput(null);
-      setSectionTitle("");
-    },
-    [sectionTitle, addSectionToStoryboard],
-  );
-
   if (!activeStoryboard) return null;
 
   const filteredSketches = sketches.filter((s) =>
@@ -149,7 +136,6 @@ export function StoryboardView() {
           <EmptyState
             onAddNew={() => handleAddNewSketch()}
             onPickExisting={() => setShowPicker(0)}
-            onAddSection={() => setShowSectionInput(0)}
           />
         ) : (
           <>
@@ -169,12 +155,10 @@ export function StoryboardView() {
                           dragListeners={dragListeners}
                         />
                       ) : (
-                        <SectionHeader
-                          title={item.title}
-                          sketchPaths={item.sketches}
-                          sketchMap={sketchMap}
-                          onOpenSketch={openSketch}
-                        />
+                        /* Legacy section — render title only */
+                        <div className="text-xs font-medium text-[var(--color-text-secondary)] uppercase tracking-wider py-2">
+                          {item.title}
+                        </div>
                       )}
                     </SortableStoryboardItem>
 
@@ -184,15 +168,10 @@ export function StoryboardView() {
                       onAddNew={handleAddNewSketch}
                       showPicker={showPicker}
                       setShowPicker={setShowPicker}
-                      showSectionInput={showSectionInput}
-                      setShowSectionInput={setShowSectionInput}
                       filteredSketches={filteredSketches}
                       pickerSearch={pickerSearch}
                       setPickerSearch={setPickerSearch}
                       onPickExisting={handlePickExisting}
-                      sectionTitle={sectionTitle}
-                      setSectionTitle={setSectionTitle}
-                      onAddSection={handleAddSection}
                     />
                   </div>
                 ))}
@@ -204,7 +183,6 @@ export function StoryboardView() {
           <AddBar
             onAddNew={() => handleAddNewSketch()}
             onPickExisting={() => setShowPicker(-1)}
-            onAddSection={() => setShowSectionInput(-1)}
           />
 
           {/* Picker/section input for the bottom bar */}
@@ -215,14 +193,6 @@ export function StoryboardView() {
               onSearchChange={setPickerSearch}
               onSelect={(path) => handlePickExisting(path)}
               onClose={() => { setShowPicker(null); setPickerSearch(""); }}
-            />
-          )}
-          {showSectionInput === -1 && (
-            <SectionInput
-              value={sectionTitle}
-              onChange={setSectionTitle}
-              onSubmit={() => handleAddSection()}
-              onCancel={() => { setShowSectionInput(null); setSectionTitle(""); }}
             />
           )}
         </>
@@ -236,16 +206,6 @@ export function StoryboardView() {
             onSearchChange={setPickerSearch}
             onSelect={(path) => handlePickExisting(path, showPicker)}
             onClose={() => { setShowPicker(null); setPickerSearch(""); }}
-          />
-        )}
-
-        {/* Section input (when shown) */}
-        {showSectionInput !== null && activeStoryboard.items.length === 0 && (
-          <SectionInput
-            value={sectionTitle}
-            onChange={setSectionTitle}
-            onSubmit={() => handleAddSection(showSectionInput)}
-            onCancel={() => { setShowSectionInput(null); setSectionTitle(""); }}
           />
         )}
       </div>
@@ -379,11 +339,9 @@ function ExpandableSketchCard({
 function EmptyState({
   onAddNew,
   onPickExisting,
-  onAddSection,
 }: {
   onAddNew: () => void;
   onPickExisting: () => void;
-  onAddSection: () => void;
 }) {
   return (
     <div className="flex flex-col items-center justify-center py-16">
@@ -408,59 +366,7 @@ function EmptyState({
         >
           Add Existing
         </button>
-        <button
-          onClick={onAddSection}
-          className="flex items-center gap-2 px-4 py-2.5 text-xs font-medium rounded-xl border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:border-[var(--color-accent)]/40 transition-colors"
-        >
-          Add Section
-        </button>
       </div>
-    </div>
-  );
-}
-
-function SectionHeader({
-  title,
-  sketchPaths,
-  sketchMap,
-  onOpenSketch,
-}: {
-  title: string;
-  sketchPaths: string[];
-  sketchMap: Map<string, import("../types/sketch").SketchSummary>;
-  onOpenSketch: (path: string) => void;
-}) {
-  return (
-    <div className="mt-4 mb-2">
-      <div className="flex items-center gap-2 mb-2">
-        <div className="h-px flex-1 bg-[var(--color-border)]" />
-        <span className="text-xs font-medium text-[var(--color-text-secondary)] uppercase tracking-wider px-2">
-          {title}
-        </span>
-        <div className="h-px flex-1 bg-[var(--color-border)]" />
-      </div>
-      {sketchPaths.length > 0 && (
-        <div className="space-y-1 ml-4">
-          {sketchPaths.map((sp) => {
-            const sketch = sketchMap.get(sp);
-            if (!sketch) return null;
-            return (
-              <div
-                key={sp}
-                onClick={() => onOpenSketch(sp)}
-                className="flex items-center gap-2 px-3 py-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] hover:border-[var(--color-accent)]/40 cursor-pointer transition-colors"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-[var(--color-text-secondary)] shrink-0">
-                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                  <polyline points="14 2 14 8 20 8" />
-                </svg>
-                <span className="text-xs font-medium truncate">{sketch.title}</span>
-                <span className="text-[10px] text-[var(--color-text-secondary)] ml-auto">{sketch.row_count} rows</span>
-              </div>
-            );
-          })}
-        </div>
-      )}
     </div>
   );
 }
@@ -470,29 +376,19 @@ function AddItemButton({
   onAddNew,
   showPicker,
   setShowPicker,
-  showSectionInput,
-  setShowSectionInput,
   filteredSketches,
   pickerSearch,
   setPickerSearch,
   onPickExisting,
-  sectionTitle,
-  setSectionTitle,
-  onAddSection,
 }: {
   position: number;
   onAddNew: (pos: number) => void;
   showPicker: number | null;
   setShowPicker: (v: number | null) => void;
-  showSectionInput: number | null;
-  setShowSectionInput: (v: number | null) => void;
   filteredSketches: import("../types/sketch").SketchSummary[];
   pickerSearch: string;
   setPickerSearch: (v: string) => void;
   onPickExisting: (path: string, pos: number) => void;
-  sectionTitle: string;
-  setSectionTitle: (v: string) => void;
-  onAddSection: (pos: number) => void;
 }) {
   return (
     <div className="relative flex items-center justify-center py-1">
@@ -511,13 +407,6 @@ function AddItemButton({
         >
           + Existing
         </button>
-        <button
-          onClick={() => setShowSectionInput(showSectionInput === position ? null : position)}
-          className="px-2 py-1 text-[10px] rounded-md text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 transition-colors"
-          title="Add section divider"
-        >
-          + Section
-        </button>
       </div>
 
       {showPicker === position && (
@@ -528,17 +417,6 @@ function AddItemButton({
             onSearchChange={setPickerSearch}
             onSelect={(path) => onPickExisting(path, position)}
             onClose={() => { setShowPicker(null); setPickerSearch(""); }}
-          />
-        </div>
-      )}
-
-      {showSectionInput === position && (
-        <div className="absolute top-full left-1/2 -translate-x-1/2 z-10 mt-1">
-          <SectionInput
-            value={sectionTitle}
-            onChange={setSectionTitle}
-            onSubmit={() => onAddSection(position)}
-            onCancel={() => { setShowSectionInput(null); setSectionTitle(""); }}
           />
         </div>
       )}
@@ -587,57 +465,12 @@ function SketchPicker({
   );
 }
 
-function SectionInput({
-  value,
-  onChange,
-  onSubmit,
-  onCancel,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  onSubmit: () => void;
-  onCancel: () => void;
-}) {
-  return (
-    <div className="w-64 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-lg p-3">
-      <input
-        type="text"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder="Section title..."
-        autoFocus
-        onKeyDown={(e) => {
-          if (e.key === "Enter") onSubmit();
-          if (e.key === "Escape") onCancel();
-        }}
-        className="w-full px-2 py-1.5 text-xs bg-transparent text-[var(--color-text)] placeholder:text-[var(--color-text-secondary)]/50 outline-none border border-[var(--color-border)] rounded-md focus:ring-1 focus:ring-[var(--color-accent)]/40 mb-2"
-      />
-      <div className="flex gap-2">
-        <button
-          onClick={onSubmit}
-          className="flex-1 py-1.5 text-xs rounded-md bg-[var(--color-accent)] text-white hover:bg-[var(--color-accent-hover)] transition-colors"
-        >
-          Add
-        </button>
-        <button
-          onClick={onCancel}
-          className="flex-1 py-1.5 text-xs rounded-md border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors"
-        >
-          Cancel
-        </button>
-      </div>
-    </div>
-  );
-}
-
 function AddBar({
   onAddNew,
   onPickExisting,
-  onAddSection,
 }: {
   onAddNew: () => void;
   onPickExisting: () => void;
-  onAddSection: () => void;
 }) {
   return (
     <div className="flex items-center gap-2 pt-4 pb-2">
@@ -662,15 +495,6 @@ function AddBar({
             <polyline points="14 2 14 8 20 8" />
           </svg>
           Add Existing
-        </button>
-        <button
-          onClick={onAddSection}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:border-[var(--color-accent)]/40 transition-colors"
-        >
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="3" y1="12" x2="21" y2="12" />
-          </svg>
-          Add Section
         </button>
       </div>
       <div className="h-px flex-1 bg-[var(--color-border)]" />
