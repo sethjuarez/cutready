@@ -13,6 +13,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { invoke } from "@tauri-apps/api/core";
 import { useAppStore, type SidebarOrder } from "../stores/appStore";
 import { FileTreeView } from "./FileTreeView";
 import { SketchIcon, StoryboardIcon } from "./Icons";
@@ -96,7 +97,17 @@ export function StoryboardList() {
   const [newSkTitle, setNewSkTitle] = useState("");
   const [isCreatingNote, setIsCreatingNote] = useState(false);
   const [newNoteTitle, setNewNoteTitle] = useState("");
-  const [pendingDelete, setPendingDelete] = useState<{ type: "storyboard" | "sketch" | "note"; path: string; title: string } | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<{ type: "storyboard" | "sketch" | "note"; path: string; title: string; usedBy?: string[] } | null>(null);
+
+  const requestDelete = useCallback(async (type: "storyboard" | "sketch" | "note", path: string, title: string) => {
+    let usedBy: string[] | undefined;
+    if (type === "sketch") {
+      try {
+        usedBy = await invoke<string[]>("sketch_used_by_storyboards", { relativePath: path });
+      } catch { /* ignore */ }
+    }
+    setPendingDelete({ type, path, title, usedBy });
+  }, []);
 
   useEffect(() => {
     loadStoryboards();
@@ -291,7 +302,7 @@ export function StoryboardList() {
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        setPendingDelete({ type: "storyboard", path: sb.path, title: sb.title });
+                        requestDelete("storyboard", sb.path, sb.title);
                       }}
                       className="opacity-0 group-hover/item:opacity-100 p-0.5 rounded text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-all"
                       title="Delete storyboard"
@@ -377,7 +388,7 @@ export function StoryboardList() {
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        setPendingDelete({ type: "sketch", path: sk.path, title: sk.title });
+                        requestDelete("sketch", sk.path, sk.title);
                       }}
                       className="opacity-0 group-hover/item:opacity-100 p-0.5 rounded text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-all"
                       title="Delete sketch"
@@ -465,7 +476,7 @@ export function StoryboardList() {
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        setPendingDelete({ type: "note", path: note.path, title: note.title });
+                        requestDelete("note", note.path, note.title);
                       }}
                       className="opacity-0 group-hover/item:opacity-100 p-0.5 rounded text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-all"
                       title="Delete note"
@@ -490,9 +501,18 @@ export function StoryboardList() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
           <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl shadow-xl p-5 max-w-sm mx-4">
             <p className="text-sm text-[var(--color-text)] mb-1 font-medium">Delete {pendingDelete.type}?</p>
-            <p className="text-xs text-[var(--color-text-secondary)] mb-4">
+            <p className="text-xs text-[var(--color-text-secondary)] mb-2">
               "{pendingDelete.title}" will be permanently deleted.
             </p>
+            {pendingDelete.usedBy && pendingDelete.usedBy.length > 0 && (
+              <div className="mb-3 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/30">
+                <p className="text-xs text-amber-400 font-medium mb-1">⚠ Used in {pendingDelete.usedBy.length === 1 ? "a storyboard" : `${pendingDelete.usedBy.length} storyboards`}:</p>
+                <ul className="text-[11px] text-amber-300/80 list-disc list-inside">
+                  {pendingDelete.usedBy.map((t) => <li key={t}>{t}</li>)}
+                </ul>
+                <p className="text-[11px] text-amber-300/80 mt-1">Deleting will leave broken references.</p>
+              </div>
+            )}
             <div className="flex gap-2 justify-end">
               <button
                 onClick={() => setPendingDelete(null)}

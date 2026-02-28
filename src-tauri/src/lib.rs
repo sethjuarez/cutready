@@ -112,6 +112,7 @@ pub fn run() {
             commands::sketch::update_sketch,
             commands::sketch::update_sketch_title,
             commands::sketch::delete_sketch,
+            commands::sketch::sketch_used_by_storyboards,
             commands::sketch::list_sketches,
             commands::sketch::get_sketch,
             commands::sketch::rename_sketch,
