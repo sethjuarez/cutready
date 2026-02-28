@@ -368,6 +368,21 @@ function SortableRow({
             {!readOnly && (
               <div className="absolute inset-0 bg-black/50 opacity-0 group-hover/ss:opacity-100 transition-opacity flex items-center justify-center gap-1" onClick={(e) => e.stopPropagation()}>
                 <button
+                  onClick={() => {
+                    const src = projectRoot ? convertFileSrc(`${projectRoot}/${row.screenshot}`) : row.screenshot!;
+                    onImageClick(src);
+                  }}
+                  className="p-0.5 text-white/80 hover:text-white"
+                  title="Preview"
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="11" cy="11" r="8" />
+                    <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                    <line x1="11" y1="8" x2="11" y2="14" />
+                    <line x1="8" y1="11" x2="14" y2="11" />
+                  </svg>
+                </button>
+                <button
                   onClick={() => onCaptureScreenshot?.(idx)}
                   className="p-0.5 text-white/80 hover:text-white"
                   title="Re-capture"
