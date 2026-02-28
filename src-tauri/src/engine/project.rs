@@ -249,7 +249,31 @@ pub fn scan_storyboards(project_root: &Path) -> Result<Vec<StoryboardSummary>, P
     Ok(summaries)
 }
 
-// ── Note file I/O (.md) ──────────────────────────────────────────
+/// Return titles of storyboards that reference the given sketch path.
+pub fn storyboards_referencing_sketch(
+    project_root: &Path,
+    sketch_rel_path: &str,
+) -> Result<Vec<String>, ProjectError> {
+    let mut titles = Vec::new();
+    scan_files_recursive(project_root, project_root, "sb", &mut |_rel_path, abs_path| {
+        if let Ok(data) = std::fs::read_to_string(abs_path) {
+            if let Ok(sb) = serde_json::from_str::<Storyboard>(&data) {
+                let refs_sketch = sb.items.iter().any(|item| match item {
+                    crate::models::sketch::StoryboardItem::SketchRef { path } => {
+                        path == sketch_rel_path
+                    }
+                    crate::models::sketch::StoryboardItem::Section { sketches, .. } => {
+                        sketches.iter().any(|s| s == sketch_rel_path)
+                    }
+                });
+                if refs_sketch {
+                    titles.push(sb.title.clone());
+                }
+            }
+        }
+    })?;
+    Ok(titles)
+}
 //
 // Notes are plain markdown files anywhere in the project tree.
 

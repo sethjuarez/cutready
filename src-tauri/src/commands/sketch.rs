@@ -88,6 +88,15 @@ pub async fn delete_sketch(
 }
 
 #[tauri::command]
+pub async fn sketch_used_by_storyboards(
+    relative_path: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<String>, String> {
+    let root = project_root(&state)?;
+    project::storyboards_referencing_sketch(&root, &relative_path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub async fn list_sketches(state: State<'_, AppState>) -> Result<Vec<SketchSummary>, String> {
     let root = project_root(&state)?;
     project::scan_sketches(&root).map_err(|e| e.to_string())
