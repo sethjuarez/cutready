@@ -72,9 +72,18 @@ export function StoryboardList() {
   const storyboards = useAppStore((s) => s.storyboards);
   const sketches = useAppStore((s) => s.sketches);
   const notes = useAppStore((s) => s.notes);
-  const activeStoryboardPath = useAppStore((s) => s.activeStoryboardPath);
-  const activeSketchPath = useAppStore((s) => s.activeSketchPath);
-  const activeNotePath = useAppStore((s) => s.activeNotePath);
+  const activeStoryboardPath = useAppStore((s) => {
+    const tab = s.openTabs.find((t) => t.id === s.activeTabId);
+    return tab?.type === "storyboard" ? tab.path : null;
+  });
+  const activeSketchPath = useAppStore((s) => {
+    const tab = s.openTabs.find((t) => t.id === s.activeTabId);
+    return tab?.type === "sketch" ? tab.path : null;
+  });
+  const activeNotePath = useAppStore((s) => {
+    const tab = s.openTabs.find((t) => t.id === s.activeTabId);
+    return tab?.type === "note" ? tab.path : null;
+  });
   const loadStoryboards = useAppStore((s) => s.loadStoryboards);
   const loadSketches = useAppStore((s) => s.loadSketches);
   const loadNotes = useAppStore((s) => s.loadNotes);
@@ -373,7 +382,7 @@ export function StoryboardList() {
                     onClick={() => handleOpenSketchStandalone(sk.path)}
                     onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") handleOpenSketchStandalone(sk.path); }}
                     className={`group/item w-full flex items-center gap-2 px-2 py-2 text-left transition-colors cursor-pointer ${
-                      sk.path === activeSketchPath && !activeStoryboardPath
+                      sk.path === activeSketchPath
                         ? "bg-[var(--color-accent)]/10 text-[var(--color-accent)]"
                         : "text-[var(--color-text)] hover:bg-[var(--color-surface-alt)]"
                     }`}
