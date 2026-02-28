@@ -31,7 +31,7 @@ jobs:
         if: matrix.platform == 'ubuntu-22.04'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libpipewire-0.3-dev
 
       # TODO: Add code signing steps once certificates are set up
       # See: https://tauri.app/distribute/sign/macos/ and https://tauri.app/distribute/sign/windows/
@@ -58,7 +58,7 @@ jobs:
       - name: Run tests
         run: npm test
 
-      - uses: tauri-apps/tauri-action@v0
+      - uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
