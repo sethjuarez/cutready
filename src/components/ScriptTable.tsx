@@ -122,7 +122,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
   if (rows.length === 0) return null;
 
   return (
-    <div className={`script-table-wrapper rounded-xl border border-[var(--color-border)] overflow-hidden${readOnly ? "" : " my-4"}`}>
+    <div className={`script-table-wrapper border border-[var(--color-border)] overflow-hidden${readOnly ? " rounded-b-xl" : " rounded-xl my-4"}`}>
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
