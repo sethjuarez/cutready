@@ -96,6 +96,7 @@ export function StoryboardList() {
   const [newSkTitle, setNewSkTitle] = useState("");
   const [isCreatingNote, setIsCreatingNote] = useState(false);
   const [newNoteTitle, setNewNoteTitle] = useState("");
+  const [pendingDelete, setPendingDelete] = useState<{ type: "storyboard" | "sketch" | "note"; path: string; title: string } | null>(null);
 
   useEffect(() => {
     loadStoryboards();
@@ -290,9 +291,7 @@ export function StoryboardList() {
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        if (confirm(`Delete "${sb.title}"?`)) {
-                          deleteStoryboard(sb.path);
-                        }
+                        setPendingDelete({ type: "storyboard", path: sb.path, title: sb.title });
                       }}
                       className="opacity-0 group-hover/item:opacity-100 p-0.5 rounded text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-all"
                       title="Delete storyboard"
@@ -378,9 +377,7 @@ export function StoryboardList() {
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        if (confirm(`Delete "${sk.title}"?`)) {
-                          deleteSketch(sk.path);
-                        }
+                        setPendingDelete({ type: "sketch", path: sk.path, title: sk.title });
                       }}
                       className="opacity-0 group-hover/item:opacity-100 p-0.5 rounded text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-all"
                       title="Delete sketch"
@@ -468,9 +465,7 @@ export function StoryboardList() {
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        if (confirm(`Delete "${note.title}"?`)) {
-                          deleteNote(note.path);
-                        }
+                        setPendingDelete({ type: "note", path: note.path, title: note.title });
                       }}
                       className="opacity-0 group-hover/item:opacity-100 p-0.5 rounded text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-all"
                       title="Delete note"
@@ -488,6 +483,38 @@ export function StoryboardList() {
         )}
       </div>
       </>
+      )}
+
+      {/* Delete confirmation overlay */}
+      {pendingDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl shadow-xl p-5 max-w-sm mx-4">
+            <p className="text-sm text-[var(--color-text)] mb-1 font-medium">Delete {pendingDelete.type}?</p>
+            <p className="text-xs text-[var(--color-text-secondary)] mb-4">
+              "{pendingDelete.title}" will be permanently deleted.
+            </p>
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => setPendingDelete(null)}
+                className="px-3 py-1.5 text-xs rounded-lg border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  const { type, path } = pendingDelete;
+                  setPendingDelete(null);
+                  if (type === "sketch") deleteSketch(path);
+                  else if (type === "storyboard") deleteStoryboard(path);
+                  else deleteNote(path);
+                }}
+                className="px-3 py-1.5 text-xs rounded-lg bg-red-500 text-white hover:bg-red-600 transition-colors"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
