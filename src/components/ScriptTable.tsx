@@ -34,6 +34,13 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
   const focusCellAfterRender = useRef<number | null>(null);
 
+  useEffect(() => {
+    if (!lightboxSrc) return;
+    const handleKey = (e: KeyboardEvent) => { if (e.key === "Escape") setLightboxSrc(null); };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [lightboxSrc]);
+
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
   );
