@@ -10,6 +10,7 @@ export function VersionHistory() {
   const checkDirty = useAppStore((s) => s.checkDirty);
   const checkRewound = useAppStore((s) => s.checkRewound);
   const navigateToSnapshot = useAppStore((s) => s.navigateToSnapshot);
+  const discardChanges = useAppStore((s) => s.discardChanges);
   const loadGraphData = useAppStore((s) => s.loadGraphData);
   const sidebarPosition = useAppStore((s) => s.sidebarPosition);
   const snapshotPromptOpen = useAppStore((s) => s.snapshotPromptOpen);
@@ -21,6 +22,8 @@ export function VersionHistory() {
   const [showLabelInput, setShowLabelInput] = useState(false);
   const [saving, setSaving] = useState(false);
   const [pendingNavTarget, setPendingNavTarget] = useState<string | null>(null);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const [discarding, setDiscarding] = useState(false);
 
   const pendingNavRef = useRef<string | null>(null);
 
@@ -99,6 +102,15 @@ export function VersionHistory() {
     await loadTimelines();
   }, [pendingNavTarget, navigateToSnapshot, loadGraphData, loadTimelines]);
 
+  const handleDiscard = useCallback(async () => {
+    setDiscarding(true);
+    await discardChanges();
+    setConfirmDiscard(false);
+    setDiscarding(false);
+    await loadGraphData();
+    await loadTimelines();
+  }, [discardChanges, loadGraphData, loadTimelines]);
+
   const borderClass = sidebarPosition === "left" ? "border-l" : "border-r";
 
   return (
@@ -108,21 +120,62 @@ export function VersionHistory() {
         <span className="text-xs font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">
           Snapshots
         </span>
-        <button
-          onClick={() => setShowLabelInput(true)}
-          className="group/btn flex items-center gap-1 p-1 rounded text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] transition-colors"
-          title="Save Project Snapshot (Ctrl+S)"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
-            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
-            <polyline points="17 21 17 13 7 13 7 21" />
-            <polyline points="7 3 7 8 15 8" />
-          </svg>
-          <span className="max-w-0 overflow-hidden group-hover/btn:max-w-[10rem] transition-all duration-200 whitespace-nowrap text-[10px]">
-            Save
-          </span>
-        </button>
+        <div className="flex items-center gap-0.5">
+          {isDirty && !pendingNavTarget && (
+            <button
+              onClick={() => setConfirmDiscard(true)}
+              className="group/btn flex items-center gap-1 p-1 rounded text-[var(--color-text-secondary)] hover:text-red-400 transition-colors"
+              title="Discard changes"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+                <polyline points="1 4 1 10 7 10" />
+                <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+              </svg>
+              <span className="max-w-0 overflow-hidden group-hover/btn:max-w-[10rem] transition-all duration-200 whitespace-nowrap text-[10px]">
+                Discard
+              </span>
+            </button>
+          )}
+          <button
+            onClick={() => setShowLabelInput(true)}
+            className="group/btn flex items-center gap-1 p-1 rounded text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] transition-colors"
+            title="Save Project Snapshot (Ctrl+S)"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+              <polyline points="17 21 17 13 7 13 7 21" />
+              <polyline points="7 3 7 8 15 8" />
+            </svg>
+            <span className="max-w-0 overflow-hidden group-hover/btn:max-w-[10rem] transition-all duration-200 whitespace-nowrap text-[10px]">
+              Save
+            </span>
+          </button>
+        </div>
       </div>
+
+      {/* Discard confirmation */}
+      {confirmDiscard && (
+        <div className="px-3 py-2 border-b border-red-500/20 bg-red-500/5">
+          <div className="text-[10px] font-medium text-red-500 dark:text-red-400 mb-1.5">
+            Discard all changes since last snapshot?
+          </div>
+          <div className="flex gap-1.5">
+            <button
+              onClick={handleDiscard}
+              disabled={discarding}
+              className="flex-1 px-2 py-1 rounded-md text-[10px] font-medium text-white bg-red-500 hover:bg-red-600 disabled:opacity-40 transition-colors"
+            >
+              {discarding ? "Discarding..." : "Discard"}
+            </button>
+            <button
+              onClick={() => setConfirmDiscard(false)}
+              className="px-2 py-1 rounded-md text-[10px] text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Save dialog — snapshot name + optional fork/timeline name */}
       {showLabelInput && (

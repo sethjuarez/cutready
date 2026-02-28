@@ -88,6 +88,19 @@ pub async fn checkout_version(
 }
 
 #[tauri::command]
+pub async fn discard_changes(state: State<'_, AppState>) -> Result<(), String> {
+    let root = project_root(&state)?;
+    versioning::discard_changes(&root).map_err(|e| e.to_string())?;
+
+    // Re-scan project after discard
+    let view = ProjectView::new(root);
+    let mut current = state.current_project.lock().map_err(|e| e.to_string())?;
+    *current = Some(view);
+
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn has_unsaved_changes(state: State<'_, AppState>) -> Result<bool, String> {
     let root = project_root(&state)?;
     if !root.join(".git").exists() {

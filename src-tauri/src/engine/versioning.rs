@@ -113,6 +113,19 @@ pub fn is_rewound(project_dir: &Path) -> bool {
     prev_tip_path(project_dir).exists()
 }
 
+/// Discard all working-directory changes, resetting files to match HEAD.
+pub fn discard_changes(project_dir: &Path) -> Result<(), VersioningError> {
+    let repo = open_repo(project_dir)?;
+    let head_commit = repo
+        .head_commit()
+        .map_err(|e| VersioningError::Git(e.to_string()))?;
+    let tree = head_commit
+        .tree()
+        .map_err(|e| VersioningError::Git(e.to_string()))?;
+    clean_working_dir(project_dir)?;
+    write_tree_to_dir(&repo, tree.id, project_dir)
+}
+
 /// Check if working directory has changes not captured in a snapshot.
 pub fn has_unsaved_changes(project_dir: &Path) -> Result<bool, VersioningError> {
     let repo = open_repo(project_dir)?;
