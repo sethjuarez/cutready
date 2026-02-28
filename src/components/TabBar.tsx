@@ -46,7 +46,17 @@ function Tab({
   onSelect: () => void;
   onClose: () => void;
 }) {
-  const typeLabel = tab.type === "sketch" ? "Sketch" : "Storyboard";
+  const typeLabel = tab.type === "sketch" ? "Sketch" : tab.type === "storyboard" ? "Storyboard" : "Note";
+
+  /* Explicit RGB so inline styles always resolve (CSS vars don't work in all inline contexts) */
+  const typeClasses =
+    tab.type === "sketch"
+      ? { bar: "bg-[var(--color-accent)]", icon: "text-[var(--color-accent)]", tint: "bg-[var(--color-accent)]" }
+      : tab.type === "storyboard"
+        ? { bar: "bg-emerald-500", icon: "text-emerald-500", tint: "bg-emerald-500" }
+        : { bar: "bg-amber-500", icon: "text-amber-500", tint: "bg-amber-500" };
+
+  const TabIcon = tab.type === "sketch" ? SketchIcon : tab.type === "storyboard" ? StoryboardIcon : NoteIcon;
 
   return (
     <div
@@ -58,15 +68,14 @@ function Tab({
       onClick={onSelect}
       title={`${typeLabel}: ${tab.path}`}
     >
-      {/* Active tab: colored bar on top, no bottom border (connected to content) */}
+      {/* Active tab: colored bar on top */}
       {isActive && (
-        <span className={`absolute top-0 left-0 right-0 h-[2px] ${
-          tab.type === "sketch"
-            ? "bg-[var(--color-accent)]"
-            : tab.type === "storyboard"
-              ? "bg-emerald-500"
-              : "bg-amber-500"
-        }`} />
+        <span className={`absolute top-0 left-0 right-0 h-[2px] ${typeClasses.bar}`} />
+      )}
+
+      {/* Hover tint for inactive tabs — type-colored wash */}
+      {!isActive && (
+        <span className={`absolute inset-0 opacity-0 group-hover:opacity-[0.06] transition-opacity pointer-events-none ${typeClasses.tint}`} />
       )}
 
       {/* Separator between tabs */}
@@ -75,16 +84,12 @@ function Tab({
       }`} />
 
       {/* Type icon */}
-      <span className={`shrink-0 ${
+      <span className={`shrink-0 transition-colors ${
         isActive
-          ? tab.type === "sketch"
-            ? "text-[var(--color-accent)]"
-            : tab.type === "storyboard"
-              ? "text-emerald-500"
-              : "text-amber-500"
+          ? typeClasses.icon
           : "text-[var(--color-text-secondary)] opacity-60"
       }`}>
-        {tab.type === "sketch" ? <SketchIcon size={13} /> : tab.type === "storyboard" ? <StoryboardIcon size={13} /> : <NoteIcon size={13} />}
+        <TabIcon size={13} />
       </span>
 
       {/* Title */}
