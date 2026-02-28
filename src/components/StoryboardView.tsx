@@ -1,6 +1,23 @@
 import { useCallback, useState } from "react";
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { invoke } from "@tauri-apps/api/core";
 import { useAppStore } from "../stores/appStore";
-import { SketchCard, SketchPickerItem } from "./SketchCard";
+import { SketchPickerItem } from "./SketchCard";
+import { ScriptTable } from "./ScriptTable";
+import type { Sketch, SketchSummary } from "../types/sketch";
 
 /**
  * StoryboardView — displays the active storyboard's items
@@ -9,11 +26,13 @@ import { SketchCard, SketchPickerItem } from "./SketchCard";
 export function StoryboardView() {
   const activeStoryboard = useAppStore((s) => s.activeStoryboard);
   const sketches = useAppStore((s) => s.sketches);
+  const currentProject = useAppStore((s) => s.currentProject);
   const openSketch = useAppStore((s) => s.openSketch);
   const createSketch = useAppStore((s) => s.createSketch);
   const addSketchToStoryboard = useAppStore((s) => s.addSketchToStoryboard);
   const removeFromStoryboard = useAppStore((s) => s.removeFromStoryboard);
   const addSectionToStoryboard = useAppStore((s) => s.addSectionToStoryboard);
+  const reorderStoryboardItems = useAppStore((s) => s.reorderStoryboardItems);
   const updateStoryboard = useAppStore((s) => s.updateStoryboard);
   const loadSketches = useAppStore((s) => s.loadSketches);
 
@@ -22,7 +41,56 @@ export function StoryboardView() {
   const [showSectionInput, setShowSectionInput] = useState<number | null>(null);
   const [sectionTitle, setSectionTitle] = useState("");
 
+  // Expand/collapse state: set of item indices that are expanded
+  const [expandedItems, setExpandedItems] = useState<Set<number>>(new Set());
+  // Cache of full sketch data keyed by path
+  const [sketchCache, setSketchCache] = useState<Map<string, Sketch>>(new Map());
+
   const sketchMap = new Map(sketches.map((s) => [s.path, s]));
+
+  const toggleExpand = useCallback(async (idx: number, path: string) => {
+    setExpandedItems((prev) => {
+      const next = new Set(prev);
+      if (next.has(idx)) { next.delete(idx); } else { next.add(idx); }
+      return next;
+    });
+    // Lazy-load sketch if not cached
+    if (!sketchCache.has(path)) {
+      try {
+        const sketch = await invoke<Sketch>("get_sketch", { relativePath: path });
+        setSketchCache((prev) => new Map(prev).set(path, sketch));
+      } catch (err) {
+        console.error("Failed to load sketch for preview:", err);
+      }
+    }
+  }, [sketchCache]);
+
+  // DnD
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+
+  const handleDragEnd = useCallback((event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || !activeStoryboard || active.id === over.id) return;
+    const items = activeStoryboard.items;
+    const oldIdx = Number(active.id);
+    const newIdx = Number(over.id);
+    if (isNaN(oldIdx) || isNaN(newIdx)) return;
+    const reordered = [...items];
+    const [moved] = reordered.splice(oldIdx, 1);
+    reordered.splice(newIdx, 0, moved);
+    // Also remap expanded set
+    setExpandedItems((prev) => {
+      const next = new Set<number>();
+      for (const i of prev) {
+        if (i === oldIdx) next.add(newIdx);
+        else if (oldIdx < newIdx && i > oldIdx && i <= newIdx) next.add(i - 1);
+        else if (oldIdx > newIdx && i >= newIdx && i < oldIdx) next.add(i + 1);
+        else next.add(i);
+      }
+      return next;
+    });
+    reorderStoryboardItems(reordered);
+  }, [activeStoryboard, reorderStoryboardItems]);
 
   const handleAddNewSketch = useCallback(
     async (position?: number) => {
@@ -99,69 +167,81 @@ export function StoryboardView() {
             onAddSection={() => setShowSectionInput(0)}
           />
         ) : (
-          <div className="space-y-2">
-            {activeStoryboard.items.map((item, idx) => (
-              <div key={idx}>
-                {item.type === "sketch_ref" ? (
-                  <SketchCard
-                    sketch={sketchMap.get(item.path) ?? makePlaceholder(item.path)}
-                    onOpen={() => openSketch(item.path)}
-                    onRemove={() => removeFromStoryboard(idx)}
-                  />
-                ) : (
-                  <SectionHeader
-                    title={item.title}
-                    sketchPaths={item.sketches}
-                    sketchMap={sketchMap}
-                    onOpenSketch={openSketch}
-                  />
-                )}
+          <>
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+            <SortableContext items={activeStoryboard.items.map((_, i) => i)} strategy={verticalListSortingStrategy}>
+              <div className="space-y-2">
+                {activeStoryboard.items.map((item, idx) => (
+                  <div key={idx}>
+                    <SortableStoryboardItem id={idx}>
+                      {item.type === "sketch_ref" ? (
+                        <ExpandableSketchCard
+                          sketch={sketchMap.get(item.path) ?? makePlaceholder(item.path)}
+                          fullSketch={sketchCache.get(item.path)}
+                          expanded={expandedItems.has(idx)}
+                          onToggle={() => toggleExpand(idx, item.path)}
+                          onOpen={() => openSketch(item.path)}
+                          onRemove={() => removeFromStoryboard(idx)}
+                          projectRoot={currentProject?.root}
+                        />
+                      ) : (
+                        <SectionHeader
+                          title={item.title}
+                          sketchPaths={item.sketches}
+                          sketchMap={sketchMap}
+                          onOpenSketch={openSketch}
+                        />
+                      )}
+                    </SortableStoryboardItem>
 
-                {/* Add button between items */}
-                <AddItemButton
-                  position={idx + 1}
-                  onAddNew={handleAddNewSketch}
-                  showPicker={showPicker}
-                  setShowPicker={setShowPicker}
-                  showSectionInput={showSectionInput}
-                  setShowSectionInput={setShowSectionInput}
-                  filteredSketches={filteredSketches}
-                  pickerSearch={pickerSearch}
-                  setPickerSearch={setPickerSearch}
-                  onPickExisting={handlePickExisting}
-                  sectionTitle={sectionTitle}
-                  setSectionTitle={setSectionTitle}
-                  onAddSection={handleAddSection}
-                />
+                    {/* Add button between items */}
+                    <AddItemButton
+                      position={idx + 1}
+                      onAddNew={handleAddNewSketch}
+                      showPicker={showPicker}
+                      setShowPicker={setShowPicker}
+                      showSectionInput={showSectionInput}
+                      setShowSectionInput={setShowSectionInput}
+                      filteredSketches={filteredSketches}
+                      pickerSearch={pickerSearch}
+                      setPickerSearch={setPickerSearch}
+                      onPickExisting={handlePickExisting}
+                      sectionTitle={sectionTitle}
+                      setSectionTitle={setSectionTitle}
+                      onAddSection={handleAddSection}
+                    />
+                  </div>
+                ))}
               </div>
-            ))}
+            </SortableContext>
+          </DndContext>
 
-            {/* Always-visible add bar at end */}
-            <AddBar
-              onAddNew={() => handleAddNewSketch()}
-              onPickExisting={() => setShowPicker(-1)}
-              onAddSection={() => setShowSectionInput(-1)}
+          {/* Always-visible add bar at end */}
+          <AddBar
+            onAddNew={() => handleAddNewSketch()}
+            onPickExisting={() => setShowPicker(-1)}
+            onAddSection={() => setShowSectionInput(-1)}
+          />
+
+          {/* Picker/section input for the bottom bar */}
+          {showPicker === -1 && (
+            <SketchPicker
+              sketches={filteredSketches}
+              search={pickerSearch}
+              onSearchChange={setPickerSearch}
+              onSelect={(path) => handlePickExisting(path)}
+              onClose={() => { setShowPicker(null); setPickerSearch(""); }}
             />
-
-            {/* Picker/section input for the bottom bar */}
-            {showPicker === -1 && (
-              <SketchPicker
-                sketches={filteredSketches}
-                search={pickerSearch}
-                onSearchChange={setPickerSearch}
-                onSelect={(path) => handlePickExisting(path)}
-                onClose={() => { setShowPicker(null); setPickerSearch(""); }}
-              />
-            )}
-            {showSectionInput === -1 && (
-              <SectionInput
-                value={sectionTitle}
-                onChange={setSectionTitle}
-                onSubmit={() => handleAddSection()}
-                onCancel={() => { setShowSectionInput(null); setSectionTitle(""); }}
-              />
-            )}
-          </div>
+          )}
+          {showSectionInput === -1 && (
+            <SectionInput
+              value={sectionTitle}
+              onChange={setSectionTitle}
+              onSubmit={() => handleAddSection()}
+              onCancel={() => { setShowSectionInput(null); setSectionTitle(""); }}
+            />
+          )}
+        </>
         )}
 
         {/* Picker overlay (when shown at a position) */}
@@ -185,6 +265,149 @@ export function StoryboardView() {
           />
         )}
       </div>
+    </div>
+  );
+}
+
+/* ── Sortable wrapper for storyboard items ─────────────── */
+
+function SortableStoryboardItem({ id, children }: { id: number; children: React.ReactNode }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.4 : 1,
+  };
+  return (
+    <div ref={setNodeRef} style={style} {...attributes}>
+      <div className="flex items-start gap-1">
+        <div
+          {...listeners}
+          className="shrink-0 w-5 pt-3.5 flex items-center justify-center cursor-grab opacity-30 hover:opacity-100 transition-opacity"
+          title="Drag to reorder"
+        >
+          <svg width="8" height="14" viewBox="0 0 8 14" fill="currentColor" className="text-[var(--color-text-secondary)]">
+            <circle cx="2" cy="2" r="1.2" />
+            <circle cx="6" cy="2" r="1.2" />
+            <circle cx="2" cy="7" r="1.2" />
+            <circle cx="6" cy="7" r="1.2" />
+            <circle cx="2" cy="12" r="1.2" />
+            <circle cx="6" cy="12" r="1.2" />
+          </svg>
+        </div>
+        <div className="flex-1 min-w-0">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Expandable sketch card with inline read-only preview ─ */
+
+const stateLabels: Record<string, string> = {
+  draft: "Draft",
+  recording_enriched: "Recording",
+  refined: "Refined",
+  final: "Final",
+};
+
+function ExpandableSketchCard({
+  sketch,
+  fullSketch,
+  expanded,
+  onToggle,
+  onOpen,
+  onRemove,
+  projectRoot,
+}: {
+  sketch: SketchSummary;
+  fullSketch?: Sketch;
+  expanded: boolean;
+  onToggle: () => void;
+  onOpen: () => void;
+  onRemove: () => void;
+  projectRoot?: string;
+}) {
+  return (
+    <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] overflow-hidden transition-colors hover:border-[var(--color-accent)]/40">
+      {/* Header row — always visible */}
+      <div className="flex items-center gap-3 px-4 py-3">
+        {/* Expand toggle */}
+        <button
+          onClick={onToggle}
+          className="shrink-0 text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] transition-colors"
+          title={expanded ? "Collapse" : "Expand"}
+        >
+          <svg
+            width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+            className={`transition-transform ${expanded ? "rotate-90" : ""}`}
+          >
+            <polyline points="9 18 15 12 9 6" />
+          </svg>
+        </button>
+
+        {/* Icon */}
+        <div className="text-[var(--color-text-secondary)] shrink-0">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+            <polyline points="14 2 14 8 20 8" />
+          </svg>
+        </div>
+
+        {/* Title + meta */}
+        <div className="flex-1 min-w-0 cursor-pointer" onClick={onToggle}>
+          <div className="text-sm font-medium truncate">{sketch.title}</div>
+          <div className="flex items-center gap-2 mt-0.5">
+            <span className="text-[10px] text-[var(--color-text-secondary)]">
+              {sketch.row_count} {sketch.row_count === 1 ? "row" : "rows"}
+            </span>
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[var(--color-accent)]/10 text-[var(--color-accent)]">
+              {stateLabels[sketch.state] ?? sketch.state}
+            </span>
+          </div>
+        </div>
+
+        {/* Open in editor */}
+        <button
+          onClick={onOpen}
+          className="shrink-0 px-2 py-1 text-[10px] font-medium rounded-md text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 transition-colors"
+          title="Open in editor"
+        >
+          Edit
+        </button>
+
+        {/* Remove */}
+        <button
+          onClick={onRemove}
+          className="shrink-0 p-1 rounded text-[var(--color-text-secondary)] hover:text-red-400 transition-colors"
+          title="Remove from storyboard"
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
+      </div>
+
+      {/* Expanded content — read-only ScriptTable */}
+      {expanded && (
+        <div className="border-t border-[var(--color-border)] px-4 py-3">
+          {fullSketch ? (
+            fullSketch.rows.length > 0 ? (
+              <ScriptTable
+                rows={fullSketch.rows}
+                onChange={() => {}}
+                readOnly
+                projectRoot={projectRoot}
+              />
+            ) : (
+              <p className="text-xs text-[var(--color-text-secondary)] text-center py-4">No rows yet</p>
+            )
+          ) : (
+            <p className="text-xs text-[var(--color-text-secondary)] text-center py-4">Loading...</p>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -253,16 +476,23 @@ function SectionHeader({
         <div className="h-px flex-1 bg-[var(--color-border)]" />
       </div>
       {sketchPaths.length > 0 && (
-        <div className="space-y-2 ml-4">
+        <div className="space-y-1 ml-4">
           {sketchPaths.map((sp) => {
             const sketch = sketchMap.get(sp);
             if (!sketch) return null;
             return (
-              <SketchCard
+              <div
                 key={sp}
-                sketch={sketch}
-                onOpen={() => onOpenSketch(sp)}
-              />
+                onClick={() => onOpenSketch(sp)}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] hover:border-[var(--color-accent)]/40 cursor-pointer transition-colors"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-[var(--color-text-secondary)] shrink-0">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                  <polyline points="14 2 14 8 20 8" />
+                </svg>
+                <span className="text-xs font-medium truncate">{sketch.title}</span>
+                <span className="text-[10px] text-[var(--color-text-secondary)] ml-auto">{sketch.row_count} rows</span>
+              </div>
             );
           })}
         </div>
