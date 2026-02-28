@@ -1,7 +1,64 @@
 import { useCallback, useEffect, useState } from "react";
-import { useAppStore } from "../stores/appStore";
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { useAppStore, type SidebarOrder } from "../stores/appStore";
 import { FileTreeView } from "./FileTreeView";
 import { SketchIcon, StoryboardIcon } from "./Icons";
+
+/** Sort items by manifest order. Items not in the manifest go at the end. */
+function applySidebarOrder<T extends { path: string }>(items: T[], order: string[]): T[] {
+  if (!order.length) return items;
+  const indexMap = new Map(order.map((p, i) => [p, i]));
+  return [...items].sort((a, b) => {
+    const ai = indexMap.get(a.path) ?? Infinity;
+    const bi = indexMap.get(b.path) ?? Infinity;
+    return ai - bi;
+  });
+}
+
+/** Wrapper that makes a sidebar list item draggable. */
+function SortableSidebarItem({ id, children }: { id: string; children: React.ReactNode }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.4 : 1,
+  };
+  return (
+    <div ref={setNodeRef} style={style} {...attributes}>
+      <div className="flex items-center">
+        {/* Drag handle */}
+        <div
+          {...listeners}
+          className="shrink-0 w-4 flex items-center justify-center cursor-grab opacity-0 group-hover/item:opacity-50 hover:!opacity-100 transition-opacity"
+          title="Drag to reorder"
+        >
+          <svg width="8" height="14" viewBox="0 0 8 14" fill="currentColor" className="text-[var(--color-text-secondary)]">
+            <circle cx="2" cy="2" r="1.2" />
+            <circle cx="6" cy="2" r="1.2" />
+            <circle cx="2" cy="7" r="1.2" />
+            <circle cx="6" cy="7" r="1.2" />
+            <circle cx="2" cy="12" r="1.2" />
+            <circle cx="6" cy="12" r="1.2" />
+          </svg>
+        </div>
+        <div className="flex-1 min-w-0">{children}</div>
+      </div>
+    </div>
+  );
+}
 
 /**
  * StoryboardList — sidebar with two modes:
@@ -30,6 +87,8 @@ export function StoryboardList() {
   const openNote = useAppStore((s) => s.openNote);
   const deleteNote = useAppStore((s) => s.deleteNote);
   const closeStoryboard = useAppStore((s) => s.closeStoryboard);
+  const sidebarOrder = useAppStore((s) => s.sidebarOrder);
+  const saveSidebarOrder = useAppStore((s) => s.saveSidebarOrder);
 
   const [isCreatingSb, setIsCreatingSb] = useState(false);
   const [newSbTitle, setNewSbTitle] = useState("");
@@ -43,6 +102,43 @@ export function StoryboardList() {
     loadSketches();
     loadNotes();
   }, [loadStoryboards, loadSketches, loadNotes]);
+
+  // Apply sidebar order
+  const orderedStoryboards = applySidebarOrder(storyboards, sidebarOrder?.storyboards ?? []);
+  const orderedSketches = applySidebarOrder(sketches, sidebarOrder?.sketches ?? []);
+  const orderedNotes = applySidebarOrder(notes, sidebarOrder?.notes ?? []);
+
+  // DnD sensors — require 5px movement to start drag (avoids accidental drags on click)
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+
+  const handleDragEnd = useCallback(
+    (category: "storyboards" | "sketches" | "notes") =>
+      (event: DragEndEvent) => {
+        const { active, over } = event;
+        if (!over || active.id === over.id) return;
+
+        const items =
+          category === "storyboards" ? orderedStoryboards :
+          category === "sketches" ? orderedSketches : orderedNotes;
+
+        const oldIdx = items.findIndex((i) => i.path === active.id);
+        const newIdx = items.findIndex((i) => i.path === over.id);
+        if (oldIdx < 0 || newIdx < 0) return;
+
+        const reordered = [...items];
+        const [moved] = reordered.splice(oldIdx, 1);
+        reordered.splice(newIdx, 0, moved);
+
+        const newOrder: SidebarOrder = {
+          storyboards: sidebarOrder?.storyboards ?? storyboards.map((s) => s.path),
+          sketches: sidebarOrder?.sketches ?? sketches.map((s) => s.path),
+          notes: sidebarOrder?.notes ?? notes.map((n) => n.path),
+          [category]: reordered.map((i) => i.path),
+        };
+        saveSidebarOrder(newOrder);
+      },
+    [orderedStoryboards, orderedSketches, orderedNotes, sidebarOrder, storyboards, sketches, notes, saveSidebarOrder],
+  );
 
   const handleCreateSb = useCallback(async () => {
     const title = newSbTitle.trim();
@@ -161,7 +257,7 @@ export function StoryboardList() {
       )}
 
       <div className="overflow-y-auto py-1" style={{ maxHeight: "40%" }}>
-        {storyboards.length === 0 && !isCreatingSb ? (
+        {orderedStoryboards.length === 0 && !isCreatingSb ? (
           <button
             onClick={() => setIsCreatingSb(true)}
             className="w-full px-3 py-4 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] transition-colors"
@@ -169,43 +265,48 @@ export function StoryboardList() {
             + New storyboard
           </button>
         ) : (
-          storyboards.map((sb) => (
-            <div
-              key={sb.path}
-              role="button"
-              tabIndex={0}
-              onClick={() => openStoryboard(sb.path)}
-              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") openStoryboard(sb.path); }}
-              className={`group w-full flex items-center gap-2 px-3 py-2 text-left transition-colors cursor-pointer ${
-                sb.path === activeStoryboardPath
-                  ? "bg-[var(--color-accent)]/10 text-[var(--color-accent)]"
-                  : "text-[var(--color-text)] hover:bg-[var(--color-surface-alt)]"
-              }`}
-            >
-              <StoryboardIcon className="shrink-0" />
-              <div className="flex-1 min-w-0">
-                <div className="text-xs font-medium truncate">{sb.title}</div>
-                <div className="text-[10px] text-[var(--color-text-secondary)]">
-                  {sb.sketch_count} {sb.sketch_count === 1 ? "sketch" : "sketches"}
-                </div>
-              </div>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (confirm(`Delete "${sb.title}"?`)) {
-                    deleteStoryboard(sb.path);
-                  }
-                }}
-                className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-all"
-                title="Delete storyboard"
-              >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="3 6 5 6 21 6" />
-                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                </svg>
-              </button>
-            </div>
-          ))
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd("storyboards")}>
+            <SortableContext items={orderedStoryboards.map((sb) => sb.path)} strategy={verticalListSortingStrategy}>
+              {orderedStoryboards.map((sb) => (
+                <SortableSidebarItem key={sb.path} id={sb.path}>
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => openStoryboard(sb.path)}
+                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") openStoryboard(sb.path); }}
+                    className={`group/item w-full flex items-center gap-2 px-2 py-2 text-left transition-colors cursor-pointer ${
+                      sb.path === activeStoryboardPath
+                        ? "bg-[var(--color-accent)]/10 text-[var(--color-accent)]"
+                        : "text-[var(--color-text)] hover:bg-[var(--color-surface-alt)]"
+                    }`}
+                  >
+                    <StoryboardIcon className="shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs font-medium truncate">{sb.title}</div>
+                      <div className="text-[10px] text-[var(--color-text-secondary)]">
+                        {sb.sketch_count} {sb.sketch_count === 1 ? "sketch" : "sketches"}
+                      </div>
+                    </div>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (confirm(`Delete "${sb.title}"?`)) {
+                          deleteStoryboard(sb.path);
+                        }
+                      }}
+                      className="opacity-0 group-hover/item:opacity-100 p-0.5 rounded text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-all"
+                      title="Delete storyboard"
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="3 6 5 6 21 6" />
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                      </svg>
+                    </button>
+                  </div>
+                </SortableSidebarItem>
+              ))}
+            </SortableContext>
+          </DndContext>
         )}
       </div>
 
@@ -244,7 +345,7 @@ export function StoryboardList() {
       )}
 
       <div className="flex-1 overflow-y-auto py-1">
-        {sketches.length === 0 && !isCreatingSk ? (
+        {orderedSketches.length === 0 && !isCreatingSk ? (
           <button
             onClick={() => setIsCreatingSk(true)}
             className="w-full px-3 py-4 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] transition-colors"
@@ -252,43 +353,48 @@ export function StoryboardList() {
             + New sketch
           </button>
         ) : (
-          sketches.map((sk) => (
-            <div
-              key={sk.path}
-              role="button"
-              tabIndex={0}
-              onClick={() => handleOpenSketchStandalone(sk.path)}
-              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") handleOpenSketchStandalone(sk.path); }}
-              className={`group w-full flex items-center gap-2 px-3 py-2 text-left transition-colors cursor-pointer ${
-                sk.path === activeSketchPath && !activeStoryboardPath
-                  ? "bg-[var(--color-accent)]/10 text-[var(--color-accent)]"
-                  : "text-[var(--color-text)] hover:bg-[var(--color-surface-alt)]"
-              }`}
-            >
-              <SketchIcon className="shrink-0" />
-              <div className="flex-1 min-w-0">
-                <div className="text-xs font-medium truncate">{sk.title}</div>
-                <div className="text-[10px] text-[var(--color-text-secondary)]">
-                  {sk.row_count} {sk.row_count === 1 ? "row" : "rows"}
-                </div>
-              </div>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (confirm(`Delete "${sk.title}"?`)) {
-                    deleteSketch(sk.path);
-                  }
-                }}
-                className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-all"
-                title="Delete sketch"
-              >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="3 6 5 6 21 6" />
-                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                </svg>
-              </button>
-            </div>
-          ))
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd("sketches")}>
+            <SortableContext items={orderedSketches.map((sk) => sk.path)} strategy={verticalListSortingStrategy}>
+              {orderedSketches.map((sk) => (
+                <SortableSidebarItem key={sk.path} id={sk.path}>
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => handleOpenSketchStandalone(sk.path)}
+                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") handleOpenSketchStandalone(sk.path); }}
+                    className={`group/item w-full flex items-center gap-2 px-2 py-2 text-left transition-colors cursor-pointer ${
+                      sk.path === activeSketchPath && !activeStoryboardPath
+                        ? "bg-[var(--color-accent)]/10 text-[var(--color-accent)]"
+                        : "text-[var(--color-text)] hover:bg-[var(--color-surface-alt)]"
+                    }`}
+                  >
+                    <SketchIcon className="shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs font-medium truncate">{sk.title}</div>
+                      <div className="text-[10px] text-[var(--color-text-secondary)]">
+                        {sk.row_count} {sk.row_count === 1 ? "row" : "rows"}
+                      </div>
+                    </div>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (confirm(`Delete "${sk.title}"?`)) {
+                          deleteSketch(sk.path);
+                        }
+                      }}
+                      className="opacity-0 group-hover/item:opacity-100 p-0.5 rounded text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-all"
+                      title="Delete sketch"
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="3 6 5 6 21 6" />
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                      </svg>
+                    </button>
+                  </div>
+                </SortableSidebarItem>
+              ))}
+            </SortableContext>
+          </DndContext>
         )}
       </div>
 
@@ -327,7 +433,7 @@ export function StoryboardList() {
       )}
 
       <div className="flex-1 overflow-y-auto py-1">
-        {notes.length === 0 && !isCreatingNote ? (
+        {orderedNotes.length === 0 && !isCreatingNote ? (
           <button
             onClick={() => setIsCreatingNote(true)}
             className="w-full px-3 py-4 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] transition-colors"
@@ -335,45 +441,50 @@ export function StoryboardList() {
             + New note
           </button>
         ) : (
-          notes.map((note) => (
-            <div
-              key={note.path}
-              role="button"
-              tabIndex={0}
-              onClick={() => openNote(note.path)}
-              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") openNote(note.path); }}
-              className={`group w-full flex items-center gap-2 px-3 py-2 text-left transition-colors cursor-pointer ${
-                note.path === activeNotePath
-                  ? "bg-[var(--color-accent)]/10 text-[var(--color-accent)]"
-                  : "text-[var(--color-text)] hover:bg-[var(--color-surface-alt)]"
-              }`}
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                <polyline points="14 2 14 8 20 8" />
-                <line x1="16" y1="13" x2="8" y2="13" />
-                <line x1="16" y1="17" x2="8" y2="17" />
-              </svg>
-              <div className="flex-1 min-w-0">
-                <div className="text-xs font-medium truncate">{note.title}</div>
-              </div>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (confirm(`Delete "${note.title}"?`)) {
-                    deleteNote(note.path);
-                  }
-                }}
-                className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-all"
-                title="Delete note"
-              >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="3 6 5 6 21 6" />
-                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                </svg>
-              </button>
-            </div>
-          ))
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd("notes")}>
+            <SortableContext items={orderedNotes.map((n) => n.path)} strategy={verticalListSortingStrategy}>
+              {orderedNotes.map((note) => (
+                <SortableSidebarItem key={note.path} id={note.path}>
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => openNote(note.path)}
+                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") openNote(note.path); }}
+                    className={`group/item w-full flex items-center gap-2 px-2 py-2 text-left transition-colors cursor-pointer ${
+                      note.path === activeNotePath
+                        ? "bg-[var(--color-accent)]/10 text-[var(--color-accent)]"
+                        : "text-[var(--color-text)] hover:bg-[var(--color-surface-alt)]"
+                    }`}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                      <polyline points="14 2 14 8 20 8" />
+                      <line x1="16" y1="13" x2="8" y2="13" />
+                      <line x1="16" y1="17" x2="8" y2="17" />
+                    </svg>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs font-medium truncate">{note.title}</div>
+                    </div>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (confirm(`Delete "${note.title}"?`)) {
+                          deleteNote(note.path);
+                        }
+                      }}
+                      className="opacity-0 group-hover/item:opacity-100 p-0.5 rounded text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-all"
+                      title="Delete note"
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="3 6 5 6 21 6" />
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                      </svg>
+                    </button>
+                  </div>
+                </SortableSidebarItem>
+              ))}
+            </SortableContext>
+          </DndContext>
         )}
       </div>
       </>

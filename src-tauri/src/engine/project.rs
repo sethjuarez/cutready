@@ -19,6 +19,17 @@ use crate::models::sketch::{
     NoteSummary, Sketch, SketchSummary, Storyboard, StoryboardSummary,
 };
 
+/// Sidebar ordering manifest stored in `.cutready-order.json`.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default)]
+pub struct SidebarOrder {
+    #[serde(default)]
+    pub storyboards: Vec<String>,
+    #[serde(default)]
+    pub sketches: Vec<String>,
+    #[serde(default)]
+    pub notes: Vec<String>,
+}
+
 // ── Path safety ────────────────────────────────────────────────────
 
 /// Resolve a user-provided relative path against a project root,
@@ -301,6 +312,31 @@ pub fn delete_note(path: &Path, project_root: &Path) -> Result<(), ProjectError>
 /// Check if a sketch file exists given a relative path from project root.
 pub fn sketch_file_exists(relative_path: &str, project_root: &Path) -> bool {
     project_root.join(relative_path).exists()
+}
+
+// ── Sidebar order manifest ──────────────────────────────────────────
+
+const ORDER_FILE: &str = ".cutready-order.json";
+
+/// Read the sidebar ordering manifest. Returns default (empty) if missing.
+pub fn read_sidebar_order(project_root: &Path) -> SidebarOrder {
+    let path = project_root.join(ORDER_FILE);
+    if let Ok(data) = std::fs::read_to_string(&path) {
+        serde_json::from_str(&data).unwrap_or_default()
+    } else {
+        SidebarOrder::default()
+    }
+}
+
+/// Write the sidebar ordering manifest.
+pub fn write_sidebar_order(
+    project_root: &Path,
+    order: &SidebarOrder,
+) -> Result<(), ProjectError> {
+    let path = project_root.join(ORDER_FILE);
+    let data =
+        serde_json::to_string_pretty(order).map_err(|e| ProjectError::Serialize(e.to_string()))?;
+    std::fs::write(&path, data).map_err(|e| ProjectError::Io(e.to_string()))
 }
 
 // ── Versioning helpers ─────────────────────────────────────────────

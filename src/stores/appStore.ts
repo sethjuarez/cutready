@@ -28,6 +28,13 @@ export type SidebarMode = "list" | "tree";
 /** Sidebar position. */
 export type SidebarPosition = "left" | "right";
 
+/** Sidebar display order manifest. */
+export interface SidebarOrder {
+  storyboards: string[];
+  sketches: string[];
+  notes: string[];
+}
+
 /** An open tab in the editor area. */
 export interface EditorTab {
   id: string;
@@ -110,6 +117,10 @@ interface AppStoreState {
   hasStash: boolean;
   /** Whether we are viewing a rewound snapshot (prev-tip exists). */
   isRewound: boolean;
+
+  // ── Sidebar order ────────────────────────────────────────
+  /** Sidebar display order manifest (paths per category). */
+  sidebarOrder: SidebarOrder | null;
 
   // ── Profile detection ─────────────────────────────────────
 
@@ -266,6 +277,13 @@ interface AppStoreState {
   /** Open snapshot name prompt (and ensure panel is visible). */
   promptSnapshot: () => void;
 
+  // ── Sidebar order actions ──────────────────────────────────
+
+  /** Load sidebar order manifest from project. */
+  loadSidebarOrder: () => Promise<void>;
+  /** Save sidebar order manifest. */
+  saveSidebarOrder: (order: SidebarOrder) => Promise<void>;
+
   // ── Profile actions ───────────────────────────────────────
 
   /** Detect browser profiles available on the system. */
@@ -351,6 +369,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   isDirty: false,
   hasStash: false,
   isRewound: false,
+  sidebarOrder: null,
 
   profiles: [],
 
@@ -489,6 +508,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await get().loadSketches();
       await get().loadStoryboards();
       await get().loadNotes();
+      await get().loadSidebarOrder();
     } catch (err) {
       console.error("Failed to create project:", err);
       set({ error: String(err) });
@@ -506,6 +526,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await get().loadSketches();
       await get().loadStoryboards();
       await get().loadNotes();
+      await get().loadSidebarOrder();
     } catch (err) {
       console.error("Failed to open project:", err);
       set({ error: String(err) });
@@ -536,6 +557,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       isDirty: false,
       hasStash: false,
       isRewound: false,
+      sidebarOrder: null,
       openTabs: [],
       activeTabId: null,
     });
@@ -1067,6 +1089,26 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   promptSnapshot: () => {
     set({ showVersionHistory: true, snapshotPromptOpen: true });
     saveLayout({ showVersionHistory: true });
+  },
+
+  // ── Sidebar order actions ──────────────────────────────────
+
+  loadSidebarOrder: async () => {
+    try {
+      const order = await invoke<SidebarOrder>("get_sidebar_order");
+      set({ sidebarOrder: order });
+    } catch {
+      set({ sidebarOrder: null });
+    }
+  },
+
+  saveSidebarOrder: async (order) => {
+    set({ sidebarOrder: order });
+    try {
+      await invoke("set_sidebar_order", { order });
+    } catch (err) {
+      console.error("Failed to save sidebar order:", err);
+    }
   },
 
   // ── Profile actions ───────────────────────────────────────

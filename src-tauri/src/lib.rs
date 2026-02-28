@@ -106,6 +106,8 @@ pub fn run() {
             commands::project::add_recent_project,
             commands::project::remove_recent_project,
             commands::project::get_last_parent_folder,
+            commands::project::get_sidebar_order,
+            commands::project::set_sidebar_order,
             commands::sketch::create_sketch,
             commands::sketch::update_sketch,
             commands::sketch::update_sketch_title,
