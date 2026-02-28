@@ -241,6 +241,8 @@ interface AppStoreState {
   saveVersion: (label: string, forkLabel?: string) => Promise<void>;
   /** Stash dirty working tree before browsing snapshots. */
   stashChanges: () => Promise<void>;
+  /** Discard all working-directory changes, resetting to last snapshot. */
+  discardChanges: () => Promise<void>;
   /** Pop stash (restore stashed work). */
   popStash: () => Promise<void>;
   /** Check whether a stash exists. */
@@ -886,6 +888,23 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       set({ hasStash: true });
     } catch (err) {
       console.error("Failed to stash changes:", err);
+    }
+  },
+
+  discardChanges: async () => {
+    try {
+      // Clear active editors FIRST to cancel pending debounced saves
+      set({ activeSketch: null, activeSketchPath: null, activeStoryboard: null, activeStoryboardPath: null, activeNotePath: null, activeNoteContent: null });
+      await invoke("discard_changes");
+      set({ isDirty: false });
+      // Reload all file lists
+      await get().loadSketches();
+      await get().loadStoryboards();
+      await get().loadNotes();
+      // Clear tabs (files may have changed)
+      set({ openTabs: [], activeTabId: null });
+    } catch (err) {
+      console.error("Failed to discard changes:", err);
     }
   },
 

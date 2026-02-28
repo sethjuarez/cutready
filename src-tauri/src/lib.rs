@@ -128,6 +128,7 @@ pub fn run() {
             commands::versioning::restore_version,
             commands::versioning::checkout_version,
             commands::versioning::has_unsaved_changes,
+            commands::versioning::discard_changes,
             commands::versioning::stash_changes,
             commands::versioning::pop_stash,
             commands::versioning::create_timeline,
