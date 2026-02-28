@@ -58,8 +58,8 @@ html {
 
 /* Scrollbar styling */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
@@ -67,20 +67,12 @@ html {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #c8c3bb;
-  border-radius: 4px;
-}
-
-.dark ::-webkit-scrollbar-thumb {
-  background: #4a4744;
+  background: var(--color-border);
+  border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #a9a49c;
-}
-
-.dark ::-webkit-scrollbar-thumb:hover {
-  background: #5c5956;
+  background: var(--color-text-secondary);
 }
 
 /* ── Animations ──────────────────────────────────────────── */
