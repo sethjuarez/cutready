@@ -17,8 +17,6 @@ pub enum VersioningError {
     Git(String),
     #[error("I/O error: {0}")]
     Io(String),
-    #[error("No commits found")]
-    NoCommits,
 }
 
 /// Initialize a git repository in the given project directory.

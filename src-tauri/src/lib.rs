@@ -8,7 +8,6 @@ use util::sidecar::SidecarManager;
 
 mod commands;
 mod engine;
-mod llm;
 mod models;
 mod util;
 
