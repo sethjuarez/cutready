@@ -194,21 +194,20 @@ pub struct ModelsResponse {
     pub data: Vec<ModelInfo>,
 }
 
-/// Foundry /models response uses "value" array with "name" field.
+/// Foundry deployments response.
 #[derive(Debug, Deserialize)]
 struct FoundryModelsResponse {
     value: Vec<FoundryModelEntry>,
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct FoundryModelEntry {
-    id: String,
+    name: String,
     #[serde(default)]
-    name: Option<String>,
+    model_name: Option<String>,
     #[serde(default)]
-    created: Option<u64>,
-    #[serde(default)]
-    owned_by: Option<String>,
+    capabilities: Option<std::collections::HashMap<String, String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -365,7 +364,7 @@ impl LlmClient {
             .await
             .map_err(|e| format!("Failed to read models response: {e}"))?;
 
-        // Try standard OpenAI format first, then Foundry format
+        // Try standard OpenAI format first, then Foundry deployments format
         if let Ok(parsed) = serde_json::from_str::<ModelsResponse>(&body) {
             return Ok(parsed.data);
         }
@@ -374,10 +373,18 @@ impl LlmClient {
                 parsed
                     .value
                     .into_iter()
+                    .filter(|m| {
+                        // Show chat-capable deployments
+                        m.capabilities
+                            .as_ref()
+                            .and_then(|c| c.get("chat_completion"))
+                            .map(|v| v == "true")
+                            .unwrap_or(false)
+                    })
                     .map(|m| ModelInfo {
-                        id: m.name.unwrap_or(m.id),
-                        created: m.created,
-                        owned_by: m.owned_by,
+                        id: m.name,
+                        created: None,
+                        owned_by: m.model_name,
                     })
                     .collect(),
             );
