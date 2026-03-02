@@ -305,7 +305,17 @@ impl LlmClient {
         if !resp.status().is_success() {
             let status = resp.status();
             let body = resp.text().await.unwrap_or_default();
-            return Err(format!("Model list failed ({status}): {body}"));
+            // If bearer token auth failed, decode JWT to show actual audience
+            let token_info = self
+                .config
+                .bearer_token
+                .as_deref()
+                .and_then(decode_jwt_audience)
+                .map(|aud| format!(" [token aud={aud}]"))
+                .unwrap_or_default();
+            return Err(format!(
+                "Model list failed ({status}){token_info}: {body}"
+            ));
         }
 
         let parsed: ModelsResponse = resp
@@ -410,4 +420,19 @@ impl LlmClient {
 
         Ok(stream)
     }
+}
+
+/// Decode the `aud` claim from a JWT without verifying the signature.
+fn decode_jwt_audience(token: &str) -> Option<String> {
+    use base64::Engine;
+    let parts: Vec<&str> = token.split('.').collect();
+    let payload = parts.get(1)?;
+    // JWT uses base64url without padding
+    let bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
+        .decode(payload)
+        .ok()?;
+    let val: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
+    val.get("aud")
+        .and_then(|a| a.as_str())
+        .map(|s| s.to_string())
 }
