@@ -246,7 +246,7 @@ impl LlmClient {
         match self.config.provider {
             LlmProvider::AzureOpenai => {
                 let base = self.config.endpoint.trim_end_matches('/');
-                format!("{}/openai/models?api-version=2024-10-21", base)
+                format!("{}/openai/models?api-version=2024-06-01", base)
             }
             LlmProvider::Openai => {
                 let base = if self.config.endpoint.is_empty() {
