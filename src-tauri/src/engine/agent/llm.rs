@@ -276,9 +276,9 @@ impl LlmClient {
             LlmProvider::AzureOpenai => {
                 let base = self.config.endpoint.trim_end_matches('/');
                 if self.is_foundry() {
-                    // Foundry uses /models (not /openai/models)
+                    // Foundry projects use OpenAI-compatible path
                     format!(
-                        "{}/models?api-version=2025-01-01-preview",
+                        "{}/openai/models?api-version=2024-10-21",
                         base
                     )
                 } else {
