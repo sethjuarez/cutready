@@ -6,6 +6,8 @@ use crate::engine::agent::azure_auth::{self, AuthCodeFlowInit, DeviceCodeRespons
 use crate::engine::agent::llm::{
     ChatMessage, LlmClient, LlmConfig, LlmProvider, ModelInfo,
 };
+use crate::engine::agent::runner;
+use crate::AppState;
 
 /// Serialisable provider config sent from the frontend.
 #[derive(Debug, Deserialize)]
@@ -53,6 +55,39 @@ pub async fn agent_chat(
         .next()
         .map(|c| c.message)
         .ok_or_else(|| "No response from model".into())
+}
+
+/// Agentic chat with function calling — the LLM can read/write project files.
+/// Returns the full conversation (including tool calls) and the final response.
+#[tauri::command]
+pub async fn agent_chat_with_tools(
+    state: tauri::State<'_, AppState>,
+    config: ProviderConfig,
+    messages: Vec<ChatMessage>,
+) -> Result<AgentChatResult, String> {
+    let project_root = {
+        let guard = state.current_project.lock().unwrap();
+        guard
+            .as_ref()
+            .ok_or("No project open")?
+            .root
+            .clone()
+    };
+
+    let client = LlmClient::new(config.into());
+    let result = runner::run(&client, messages, &project_root).await?;
+
+    Ok(AgentChatResult {
+        messages: result.messages,
+        response: result.response,
+    })
+}
+
+/// Serializable result from the agentic chat.
+#[derive(serde::Serialize)]
+pub struct AgentChatResult {
+    pub messages: Vec<ChatMessage>,
+    pub response: String,
 }
 
 // ---------------------------------------------------------------------------

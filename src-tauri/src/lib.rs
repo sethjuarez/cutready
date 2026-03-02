@@ -168,6 +168,7 @@ pub fn run() {
             commands::note::list_notes,
             commands::agent::list_models,
             commands::agent::agent_chat,
+            commands::agent::agent_chat_with_tools,
             commands::agent::azure_device_code_start,
             commands::agent::azure_device_code_poll,
             commands::agent::azure_token_refresh,
