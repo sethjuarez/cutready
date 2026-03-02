@@ -220,14 +220,28 @@ impl LlmClient {
         }
     }
 
+    /// Detect whether the endpoint is Azure AI Foundry (`.services.ai.azure.com`).
+    fn is_foundry(&self) -> bool {
+        self.config.endpoint.contains(".services.ai.azure.com")
+    }
+
+    /// API version: Foundry uses preview versions, standard Azure OpenAI uses GA.
+    fn api_version(&self) -> &str {
+        if self.is_foundry() {
+            "2024-10-01-preview"
+        } else {
+            "2024-10-21"
+        }
+    }
+
     /// Build the chat completions URL based on provider.
     fn chat_url(&self) -> String {
         match self.config.provider {
             LlmProvider::AzureOpenai => {
                 let base = self.config.endpoint.trim_end_matches('/');
                 format!(
-                    "{}/openai/deployments/{}/chat/completions?api-version=2024-10-21",
-                    base, self.config.model
+                    "{}/openai/deployments/{}/chat/completions?api-version={}",
+                    base, self.config.model, self.api_version()
                 )
             }
             LlmProvider::Openai => {
@@ -246,7 +260,10 @@ impl LlmClient {
         match self.config.provider {
             LlmProvider::AzureOpenai => {
                 let base = self.config.endpoint.trim_end_matches('/');
-                format!("{}/openai/models?api-version=2024-06-01", base)
+                format!(
+                    "{}/openai/models?api-version={}",
+                    base, self.api_version()
+                )
             }
             LlmProvider::Openai => {
                 let base = if self.config.endpoint.is_empty() {
