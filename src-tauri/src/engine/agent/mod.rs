@@ -1,14 +1,6 @@
-//! Agent engine — LLM-powered refinement pipeline.
+//! Agent engine — LLM-powered sketch assistant.
 //!
-//! Sub-modules handle each stage of refinement:
-//! - cleanup: remove accidental/redundant actions
-//! - selectors: stabilize targeting strategies
-//! - narrative: generate voiceover text
-//! - animations: suggest and generate ManimCE code
-//! - healing: self-heal broken selectors during replay
+//! Core module providing the LLM client for chat completions with
+//! function calling, streaming, and the agentic tool loop.
 
-pub mod animations;
-pub mod cleanup;
-pub mod healing;
-pub mod narrative;
-pub mod selectors;
+pub mod llm;

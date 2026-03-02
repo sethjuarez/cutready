@@ -23,6 +23,9 @@ tracing = "0.1"
 log = "0.4"
 dirs = "6"
 tokio = { version = "1", features = ["process", "io-util", "sync", "time"] }
+reqwest = { version = "0.12", features = ["json", "stream"] }
+tokio-stream = "0.1"
+futures-util = "0.3"
 gix = { version = "0.70", default-features = false, features = ["basic", "index"] }
 xcap = "0.8"
 image = "0.25"

@@ -166,6 +166,8 @@ pub fn run() {
             commands::note::update_note,
             commands::note::delete_note,
             commands::note::list_notes,
+            commands::agent::list_models,
+            commands::agent::agent_chat,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
