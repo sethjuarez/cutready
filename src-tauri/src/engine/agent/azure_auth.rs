@@ -153,10 +153,32 @@ pub async fn wait_for_auth_code(port: u16, timeout_secs: u64) -> Result<String, 
         let error_desc = extract_query_param(path, "error_description")
             .unwrap_or_else(|| extract_query_param(path, "error").unwrap_or_default());
         let error_page = format!(
-            "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n\
-             <html><body style='font-family:system-ui;padding:40px;text-align:center'>\
-             <h2 style='color:#c00'>Authentication failed</h2><p>{}</p>\
-             <p>You can close this tab.</p></body></html>",
+            "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nConnection: close\r\n\r\n\
+<!DOCTYPE html>\
+<html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">\
+<title>CutReady — Sign-in Failed</title>\
+<style>\
+  *{{margin:0;padding:0;box-sizing:border-box}}\
+  body{{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;\
+    display:flex;align-items:center;justify-content:center;min-height:100vh;\
+    background:#f8f9fa;color:#1a1a1a}}\
+  @media(prefers-color-scheme:dark){{body{{background:#1a1a1a;color:#e8e8e8}}}}\
+  .card{{text-align:center;padding:48px 40px;max-width:420px;\
+    background:#fff;border-radius:16px;box-shadow:0 2px 24px rgba(0,0,0,.08)}}\
+  @media(prefers-color-scheme:dark){{.card{{background:#2a2a2a;box-shadow:0 2px 24px rgba(0,0,0,.3)}}}}\
+  .icon{{font-size:48px;margin-bottom:16px}}\
+  h1{{font-size:20px;font-weight:600;margin-bottom:8px}}\
+  p{{font-size:14px;opacity:.7;line-height:1.5}}\
+  .detail{{margin-top:12px;font-size:12px;opacity:.5;word-break:break-word}}\
+  .fade{{animation:fadeIn .4s ease}}\
+  @keyframes fadeIn{{from{{opacity:0;transform:translateY(8px)}}to{{opacity:1;transform:none}}}}\
+</style></head>\
+<body><div class=\"card fade\">\
+  <div class=\"icon\">❌</div>\
+  <h1>Sign-in failed</h1>\
+  <p>Something went wrong during authentication.</p>\
+  <p class=\"detail\">{}</p>\
+</div></body></html>",
             error_desc
         );
         let _ = stream.write_all(error_page.as_bytes()).await;
@@ -167,13 +189,33 @@ pub async fn wait_for_auth_code(port: u16, timeout_secs: u64) -> Result<String, 
     let code = extract_query_param(path, "code")
         .ok_or_else(|| format!("No authorization code in redirect: {path}"))?;
 
-    // Send a nice success page
-    let success_page = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n\
-        <html><body style='font-family:system-ui;padding:40px;text-align:center'>\
-        <h2 style='color:#0a0'>✓ Signed in to CutReady</h2>\
-        <p>You can close this tab and return to the app.</p>\
-        <script>setTimeout(()=>window.close(),2000)</script>\
-        </body></html>";
+    // Send a polished success page
+    let success_page = "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nConnection: close\r\n\r\n\
+<!DOCTYPE html>\
+<html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">\
+<title>CutReady — Signed In</title>\
+<style>\
+  *{margin:0;padding:0;box-sizing:border-box}\
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;\
+    display:flex;align-items:center;justify-content:center;min-height:100vh;\
+    background:#f8f9fa;color:#1a1a1a}\
+  @media(prefers-color-scheme:dark){body{background:#1a1a1a;color:#e8e8e8}}\
+  .card{text-align:center;padding:48px 40px;max-width:420px;\
+    background:#fff;border-radius:16px;box-shadow:0 2px 24px rgba(0,0,0,.08)}\
+  @media(prefers-color-scheme:dark){.card{background:#2a2a2a;box-shadow:0 2px 24px rgba(0,0,0,.3)}}\
+  .icon{font-size:48px;margin-bottom:16px}\
+  h1{font-size:20px;font-weight:600;margin-bottom:8px}\
+  p{font-size:14px;opacity:.7;line-height:1.5}\
+  .fade{animation:fadeIn .4s ease}\
+  @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}\
+</style></head>\
+<body><div class=\"card fade\">\
+  <div class=\"icon\">✅</div>\
+  <h1>Signed in to CutReady</h1>\
+  <p>You can close this tab and return to the app.</p>\
+</div>\
+<script>setTimeout(()=>window.close(),3000)</script>\
+</body></html>";
     let _ = stream.write_all(success_page.as_bytes()).await;
     let _ = stream.shutdown().await;
 
