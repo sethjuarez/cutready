@@ -277,13 +277,13 @@ impl LlmClient {
             LlmProvider::AzureOpenai => {
                 let base = self.config.endpoint.trim_end_matches('/');
                 if self.is_foundry() {
-                    // Foundry: list at resource root (strip project path)
+                    // Foundry: try deployments at resource root
                     let resource_base = if let Some(idx) = base.find("/api/projects") {
                         &base[..idx]
                     } else {
                         base
                     };
-                    format!("{}/openai/v1/models", resource_base)
+                    format!("{}/openai/v1/deployments", resource_base)
                 } else {
                     format!(
                         "{}/openai/models?api-version=2024-10-21",
