@@ -248,9 +248,10 @@ impl LlmClient {
             LlmProvider::AzureOpenai => {
                 let base = self.config.endpoint.trim_end_matches('/');
                 if self.is_foundry() {
+                    // Foundry v1 API — no api-version param
                     format!(
-                        "{}/openai/deployments/{}/chat/completions?api-version=2025-01-01-preview",
-                        base, self.config.model
+                        "{}/openai/v1/chat/completions",
+                        base
                     )
                 } else {
                     format!(
@@ -276,11 +277,8 @@ impl LlmClient {
             LlmProvider::AzureOpenai => {
                 let base = self.config.endpoint.trim_end_matches('/');
                 if self.is_foundry() {
-                    // Foundry projects use OpenAI-compatible path
-                    format!(
-                        "{}/openai/models?api-version=2024-10-21",
-                        base
-                    )
+                    // Foundry uses v1 API (no api-version param)
+                    format!("{}/openai/v1/models", base)
                 } else {
                     format!(
                         "{}/openai/models?api-version=2024-10-21",
@@ -393,7 +391,14 @@ impl LlmClient {
         let body = ChatCompletionRequest {
             model: match self.config.provider {
                 LlmProvider::Openai => Some(self.config.model.clone()),
-                LlmProvider::AzureOpenai => None, // model is in the URL
+                LlmProvider::AzureOpenai => {
+                    if self.is_foundry() {
+                        // Foundry v1: model goes in body
+                        Some(self.config.model.clone())
+                    } else {
+                        None // standard Azure: model is in the URL
+                    }
+                }
             },
             messages: messages.to_vec(),
             tools: tools.map(|t| t.to_vec()),
@@ -430,7 +435,13 @@ impl LlmClient {
         let body = ChatCompletionRequest {
             model: match self.config.provider {
                 LlmProvider::Openai => Some(self.config.model.clone()),
-                LlmProvider::AzureOpenai => None,
+                LlmProvider::AzureOpenai => {
+                    if self.is_foundry() {
+                        Some(self.config.model.clone())
+                    } else {
+                        None
+                    }
+                }
             },
             messages: messages.to_vec(),
             tools: tools.map(|t| t.to_vec()),
