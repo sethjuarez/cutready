@@ -334,9 +334,10 @@ impl LlmClient {
 
     /// List available models from the provider.
     pub async fn list_models(&self) -> Result<Vec<ModelInfo>, String> {
+        let url = self.models_url();
         let resp = self
             .http
-            .get(&self.models_url())
+            .get(&url)
             .headers(self.auth_headers())
             .send()
             .await
@@ -345,7 +346,6 @@ impl LlmClient {
         if !resp.status().is_success() {
             let status = resp.status();
             let body = resp.text().await.unwrap_or_default();
-            // If bearer token auth failed, decode JWT to show actual audience
             let token_info = self
                 .config
                 .bearer_token
@@ -354,7 +354,7 @@ impl LlmClient {
                 .map(|aud| format!(" [token aud={aud}]"))
                 .unwrap_or_default();
             return Err(format!(
-                "Model list failed ({status}){token_info}: {body}"
+                "Model list failed ({status}){token_info} [url={url}]: {body}"
             ));
         }
 
