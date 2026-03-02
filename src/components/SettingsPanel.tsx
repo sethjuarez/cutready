@@ -29,6 +29,7 @@ export function SettingsPanel() {
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [loadingModels, setLoadingModels] = useState(false);
   const [modelError, setModelError] = useState("");
+  const [modelFilter, setModelFilter] = useState("");
 
   // OAuth flow state
   const [oauthStatus, setOauthStatus] = useState<"idle" | "waiting" | "polling" | "success" | "error">("idle");
@@ -288,43 +289,68 @@ export function SettingsPanel() {
           <fieldset className="flex flex-col gap-2">
             <label className="text-sm font-medium">Model</label>
             <div className="flex gap-2">
-              {models.length > 0 ? (
-                <select
-                  value={settings.aiModel}
-                  onChange={(e) => updateSetting("aiModel", e.target.value)}
-                  className={inputClass + " flex-1"}
-                >
-                  <option value="">Select a model…</option>
-                  {models.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.id}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <input
-                  type="text"
-                  value={settings.aiModel}
-                  onChange={(e) => updateSetting("aiModel", e.target.value)}
-                  placeholder={isAzure ? "gpt-4o" : "gpt-4o"}
-                  className={inputClass + " flex-1"}
-                />
-              )}
+              <input
+                type="text"
+                value={models.length > 0 ? modelFilter : settings.aiModel}
+                onChange={(e) => {
+                  if (models.length > 0) {
+                    setModelFilter(e.target.value);
+                  } else {
+                    updateSetting("aiModel", e.target.value);
+                  }
+                }}
+                placeholder={models.length > 0 ? "Filter models…" : (isAzure ? "gpt-4o" : "gpt-4o")}
+                className={inputClass + " flex-1"}
+              />
               <button
-                onClick={fetchModels}
-                disabled={loadingModels || !canFetchModels}
+                onClick={() => {
+                  if (models.length > 0) {
+                    setModels([]);
+                    setModelFilter("");
+                  } else {
+                    fetchModels();
+                  }
+                }}
+                disabled={loadingModels || (!canFetchModels && models.length === 0)}
                 className="px-3 py-2 rounded-lg bg-[var(--color-accent)] text-white text-sm font-medium hover:opacity-90 disabled:opacity-40 transition-opacity"
-                title="Fetch available models"
+                title={models.length > 0 ? "Clear list" : "Fetch available models"}
               >
-                {loadingModels ? "…" : "🔄"}
+                {loadingModels ? "…" : models.length > 0 ? "✕" : "🔄"}
               </button>
             </div>
+            {models.length > 0 && (
+              <div className="max-h-48 overflow-y-auto rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-alt)]">
+                {models
+                  .filter((m) =>
+                    m.id.toLowerCase().includes(modelFilter.toLowerCase())
+                  )
+                  .map((m) => (
+                    <button
+                      key={m.id}
+                      onClick={() => {
+                        updateSetting("aiModel", m.id);
+                        setModels([]);
+                        setModelFilter("");
+                      }}
+                      className={`w-full text-left px-3 py-1.5 text-sm hover:bg-[var(--color-accent)]/10 transition-colors ${
+                        settings.aiModel === m.id
+                          ? "text-[var(--color-accent)] font-medium"
+                          : "text-[var(--color-text)]"
+                      }`}
+                    >
+                      {m.id}
+                    </button>
+                  ))}
+              </div>
+            )}
+            {settings.aiModel && models.length === 0 && (
+              <p className="text-xs text-[var(--color-text-secondary)]">
+                Selected: <span className="font-medium">{settings.aiModel}</span>
+              </p>
+            )}
             {modelError && (
               <p className="text-xs text-red-500">{modelError}</p>
             )}
-            <p className="text-xs text-[var(--color-text-secondary)]">
-              Enter a model name or click 🔄 to fetch available models.
-            </p>
           </fieldset>
         </div>
 
