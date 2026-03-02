@@ -1,5 +1,7 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useUpdateStore } from "../stores/updateStore";
+import { relaunch } from "@tauri-apps/plugin-process";
 
 interface TitleBarProps {
   sidebarVisible?: boolean;
@@ -109,6 +111,8 @@ export function TitleBar({
 
       {/* Right: Layout toggles + window controls */}
       <div className="flex items-center h-full shrink-0">
+        {/* Update indicator */}
+        <UpdateIndicator />
         {/* Layout toggles — icons match spatial positions, actions swap with sidebar position */}
         <div className="flex items-center gap-0.5 px-2" style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}>
           {/* Left panel icon — toggles whichever panel is on the left */}
@@ -288,6 +292,105 @@ function LayoutDropdown({
               Right
             </button>
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function UpdateIndicator() {
+  const update = useUpdateStore((s) => s.update);
+  const [open, setOpen] = useState(false);
+  const [installing, setInstalling] = useState(false);
+  const [progress, setProgress] = useState("");
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handleClose = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    window.addEventListener("mousedown", handleClose);
+    window.addEventListener("keydown", handleEsc);
+    return () => {
+      window.removeEventListener("mousedown", handleClose);
+      window.removeEventListener("keydown", handleEsc);
+    };
+  }, [open]);
+
+  if (!update) return null;
+
+  const handleInstall = async () => {
+    setInstalling(true);
+    try {
+      let downloaded = 0;
+      await update.downloadAndInstall((event) => {
+        switch (event.event) {
+          case "Started":
+            setProgress("Downloading...");
+            break;
+          case "Progress":
+            downloaded += event.data.chunkLength;
+            setProgress(`${(downloaded / 1024 / 1024).toFixed(1)} MB`);
+            break;
+          case "Finished":
+            setProgress("Installing...");
+            break;
+        }
+      });
+      await relaunch();
+    } catch {
+      setProgress("Failed");
+      setInstalling(false);
+    }
+  };
+
+  return (
+    <div
+      ref={ref}
+      className="relative flex items-center px-1"
+      style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
+    >
+      <button
+        className="relative flex items-center justify-center w-7 h-[22px] rounded text-indigo-400 hover:text-indigo-300 hover:bg-[var(--color-surface-alt)] transition-colors"
+        onClick={() => setOpen(!open)}
+        title={`Update available: v${update.version}`}
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+          <polyline points="7 10 12 15 17 10" />
+          <line x1="12" y1="15" x2="12" y2="3" />
+        </svg>
+        {/* Notification dot */}
+        <span className="absolute top-0.5 right-0.5 w-2 h-2 rounded-full bg-indigo-400 animate-pulse" />
+      </button>
+
+      {open && (
+        <div className="absolute right-0 top-full mt-1 z-[100] w-[240px] py-2.5 px-3 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg shadow-lg">
+          <div className="text-[10px] font-medium text-[var(--color-text-secondary)] uppercase tracking-wider mb-1.5">
+            Update Available
+          </div>
+          <div className="text-xs text-[var(--color-text)] mb-2">
+            <span className="font-semibold">v{update.version}</span>
+            {update.body && (
+              <p className="mt-1 text-[var(--color-text-secondary)] line-clamp-3">
+                {update.body}
+              </p>
+            )}
+          </div>
+          {installing ? (
+            <div className="text-[11px] text-indigo-400">{progress}</div>
+          ) : (
+            <button
+              onClick={handleInstall}
+              className="w-full h-[26px] rounded text-[11px] font-medium bg-indigo-600 hover:bg-indigo-500 text-white transition-colors"
+            >
+              Download &amp; Install
+            </button>
+          )}
         </div>
       )}
     </div>

@@ -4,6 +4,7 @@ import { useGlobalHotkeys } from "./hooks/useGlobalHotkeys";
 import { StatusBar } from "./components/StatusBar";
 import { AppLayout } from "./components/AppLayout";
 import { useAppStore } from "./stores/appStore";
+import { useUpdateStore } from "./stores/updateStore";
 
 function App() {
   const { theme, toggle } = useTheme();
@@ -17,6 +18,8 @@ function App() {
     } else {
       useAppStore.getState().loadRecentProjects();
     }
+    // Silent update check on startup
+    useUpdateStore.getState().checkForUpdate();
   }, []);
 
   return (
