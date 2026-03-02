@@ -11,8 +11,8 @@ use tokio::net::TcpListener;
 
 const AZURE_OPENAI_SCOPE: &str = "https://cognitiveservices.azure.com/.default offline_access";
 
-/// VS Code client ID — first-party, pre-consented in virtually all Azure AD tenants.
-const DEFAULT_CLIENT_ID: &str = "aebc6443-996d-45c2-90f0-388ff96faa56";
+/// Azure PowerShell client ID — first-party, respects requested scopes for cognitive services.
+const DEFAULT_CLIENT_ID: &str = "1950a258-227b-4e31-a9cf-717495945fc2";
 
 // ---------------------------------------------------------------------------
 // Shared types
