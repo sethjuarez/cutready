@@ -9,20 +9,16 @@ interface ModelInfo {
   owned_by?: string;
 }
 
-interface DeviceCodeResponse {
-  device_code: string;
-  user_code: string;
-  verification_uri: string;
-  expires_in: number;
-  interval: number;
-  message: string;
-}
-
 interface TokenResponse {
   access_token: string;
   token_type: string;
   expires_in: number;
   refresh_token?: string;
+}
+
+interface AuthCodeFlowInit {
+  auth_url: string;
+  port: number;
 }
 
 const inputClass =
@@ -34,8 +30,7 @@ export function SettingsPanel() {
   const [loadingModels, setLoadingModels] = useState(false);
   const [modelError, setModelError] = useState("");
 
-  // Device code flow state
-  const [deviceCode, setDeviceCode] = useState<DeviceCodeResponse | null>(null);
+  // OAuth flow state
   const [oauthStatus, setOauthStatus] = useState<"idle" | "waiting" | "polling" | "success" | "error">("idle");
   const [oauthError, setOauthError] = useState("");
 
@@ -67,23 +62,23 @@ export function SettingsPanel() {
     setOauthStatus("waiting");
     setOauthError("");
     try {
-      const resp = await invoke<DeviceCodeResponse>("azure_device_code_start", {
+      // Start browser-based auth code + PKCE flow
+      const init = await invoke<AuthCodeFlowInit>("azure_browser_auth_start", {
         tenantId: settings.aiTenantId || "",
+        clientId: settings.aiClientId || null,
       });
-      setDeviceCode(resp);
-      // Open browser for user
+      // Open the browser to the auth URL
       try {
-        await shellOpen(resp.verification_uri);
+        await shellOpen(init.auth_url);
       } catch {
-        // If shell open fails, user can still click the link
+        // Fallback: user can still copy/paste the URL
       }
-      // Start polling
       setOauthStatus("polling");
-      const token = await invoke<TokenResponse>("azure_device_code_poll", {
+      // Wait for the browser callback (blocks until redirect or timeout)
+      const token = await invoke<TokenResponse>("azure_browser_auth_complete", {
         tenantId: settings.aiTenantId || "",
-        deviceCode: resp.device_code,
-        interval: resp.interval,
-        timeout: resp.expires_in,
+        clientId: settings.aiClientId || null,
+        timeout: 300,
       });
       // Store tokens
       await updateSetting("aiAccessToken", token.access_token);
@@ -91,7 +86,6 @@ export function SettingsPanel() {
         await updateSetting("aiRefreshToken", token.refresh_token);
       }
       setOauthStatus("success");
-      setDeviceCode(null);
     } catch (e) {
       setOauthError(String(e));
       setOauthStatus("error");
@@ -220,14 +214,31 @@ export function SettingsPanel() {
                 <label className="text-sm font-medium">
                   Tenant ID{" "}
                   <span className="text-[var(--color-text-secondary)] font-normal">
-                    (optional — defaults to "common")
+                    (optional — defaults to "organizations")
                   </span>
                 </label>
                 <input
                   type="text"
                   value={settings.aiTenantId}
                   onChange={(e) => updateSetting("aiTenantId", e.target.value)}
-                  placeholder="common"
+                  placeholder="organizations"
+                  className={inputClass}
+                />
+              </fieldset>
+
+              {/* Client ID (advanced) */}
+              <fieldset className="flex flex-col gap-2">
+                <label className="text-sm font-medium">
+                  Client ID{" "}
+                  <span className="text-[var(--color-text-secondary)] font-normal">
+                    (optional — defaults to Azure PowerShell)
+                  </span>
+                </label>
+                <input
+                  type="text"
+                  value={settings.aiClientId}
+                  onChange={(e) => updateSetting("aiClientId", e.target.value)}
+                  placeholder="1950a258-227b-4e31-a9cf-717495945fc2"
                   className={inputClass}
                 />
               </fieldset>
@@ -255,31 +266,14 @@ export function SettingsPanel() {
                     {oauthStatus === "waiting"
                       ? "Starting…"
                       : oauthStatus === "polling"
-                        ? "Waiting for sign-in…"
+                        ? "Waiting for browser sign-in…"
                         : "Sign in with Azure"}
                   </button>
 
-                  {/* Device code display */}
-                  {deviceCode && oauthStatus === "polling" && (
-                    <div className="bg-[var(--color-surface-alt)] border border-[var(--color-border)] rounded-lg p-3 text-sm">
-                      <p className="mb-2">
-                        Enter this code at{" "}
-                        <a
-                          href={deviceCode.verification_uri}
-                          onClick={async (e) => {
-                            e.preventDefault();
-                            try { await shellOpen(deviceCode.verification_uri); } catch {}
-                          }}
-                          className="text-[var(--color-accent)] underline cursor-pointer"
-                        >
-                          {deviceCode.verification_uri}
-                        </a>
-                        :
-                      </p>
-                      <code className="text-xl font-mono font-bold tracking-widest select-all">
-                        {deviceCode.user_code}
-                      </code>
-                    </div>
+                  {oauthStatus === "polling" && (
+                    <p className="text-xs text-[var(--color-text-secondary)]">
+                      Complete sign-in in your browser. This page will update automatically.
+                    </p>
                   )}
 
                   {oauthError && (

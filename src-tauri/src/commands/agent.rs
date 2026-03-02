@@ -2,7 +2,7 @@
 
 use serde::Deserialize;
 
-use crate::engine::agent::azure_auth::{self, DeviceCodeResponse, TokenResponse};
+use crate::engine::agent::azure_auth::{self, AuthCodeFlowInit, DeviceCodeResponse, TokenResponse};
 use crate::engine::agent::llm::{
     ChatMessage, LlmClient, LlmConfig, LlmProvider, ModelInfo,
 };
@@ -63,9 +63,10 @@ pub async fn agent_chat(
 #[tauri::command]
 pub async fn azure_device_code_start(
     tenant_id: String,
+    client_id: Option<String>,
 ) -> Result<DeviceCodeResponse, String> {
-    let tid = if tenant_id.is_empty() { "common" } else { &tenant_id };
-    azure_auth::request_device_code(tid).await
+    let tid = if tenant_id.is_empty() { "organizations" } else { &tenant_id };
+    azure_auth::request_device_code(tid, client_id.as_deref()).await
 }
 
 /// Poll for the token after the user has completed sign-in.
@@ -76,9 +77,10 @@ pub async fn azure_device_code_poll(
     device_code: String,
     interval: u64,
     timeout: u64,
+    client_id: Option<String>,
 ) -> Result<TokenResponse, String> {
-    let tid = if tenant_id.is_empty() { "common" } else { &tenant_id };
-    azure_auth::poll_for_token(tid, &device_code, interval, timeout).await
+    let tid = if tenant_id.is_empty() { "organizations" } else { &tenant_id };
+    azure_auth::poll_for_token(tid, &device_code, interval, timeout, client_id.as_deref()).await
 }
 
 /// Refresh an Azure OAuth token using a refresh token.
@@ -86,7 +88,81 @@ pub async fn azure_device_code_poll(
 pub async fn azure_token_refresh(
     tenant_id: String,
     refresh_token: String,
+    client_id: Option<String>,
 ) -> Result<TokenResponse, String> {
-    let tid = if tenant_id.is_empty() { "common" } else { &tenant_id };
-    azure_auth::refresh_token(tid, &refresh_token).await
+    let tid = if tenant_id.is_empty() { "organizations" } else { &tenant_id };
+    azure_auth::refresh_token(tid, &refresh_token, client_id.as_deref()).await
+}
+
+// ---------------------------------------------------------------------------
+// Browser-based Authorization Code + PKCE flow
+// ---------------------------------------------------------------------------
+
+/// State for an in-progress browser auth flow.
+struct PendingBrowserAuth {
+    code_verifier: String,
+    port: u16,
+}
+
+static PENDING_BROWSER_AUTH: std::sync::OnceLock<tokio::sync::Mutex<Option<PendingBrowserAuth>>> =
+    std::sync::OnceLock::new();
+
+fn pending_auth() -> &'static tokio::sync::Mutex<Option<PendingBrowserAuth>> {
+    PENDING_BROWSER_AUTH.get_or_init(|| tokio::sync::Mutex::new(None))
+}
+
+/// Start the browser auth flow. Returns the auth URL + port for the frontend to open.
+#[tauri::command]
+pub async fn azure_browser_auth_start(
+    tenant_id: String,
+    client_id: Option<String>,
+) -> Result<AuthCodeFlowInit, String> {
+    let tid = if tenant_id.is_empty() { "organizations" } else { &tenant_id };
+    let (init, verifier) =
+        azure_auth::start_auth_code_flow(tid, client_id.as_deref()).await?;
+
+    // Store verifier + port for the exchange step
+    let mut guard = pending_auth().lock().await;
+    *guard = Some(PendingBrowserAuth {
+        code_verifier: verifier,
+        port: init.port,
+    });
+
+    Ok(init)
+}
+
+/// Wait for the browser callback, then exchange the code for tokens.
+#[tauri::command]
+pub async fn azure_browser_auth_complete(
+    tenant_id: String,
+    client_id: Option<String>,
+    timeout: Option<u64>,
+) -> Result<TokenResponse, String> {
+    let tid = if tenant_id.is_empty() { "organizations" } else { &tenant_id };
+
+    let (verifier, port) = {
+        let guard = pending_auth().lock().await;
+        let p = guard
+            .as_ref()
+            .ok_or("No pending browser auth flow")?;
+        (p.code_verifier.clone(), p.port)
+    };
+
+    let code = azure_auth::wait_for_auth_code(port, timeout.unwrap_or(300)).await?;
+
+    let redirect_uri = format!("http://localhost:{port}");
+    let token = azure_auth::exchange_code_for_token(
+        tid,
+        &code,
+        &redirect_uri,
+        &verifier,
+        client_id.as_deref(),
+    )
+    .await?;
+
+    // Clean up
+    let mut guard = pending_auth().lock().await;
+    *guard = None;
+
+    Ok(token)
 }

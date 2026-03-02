@@ -13,8 +13,10 @@ export interface AppSettings {
   aiApiKey: string;
   /** Model / deployment name. */
   aiModel: string;
-  /** Azure tenant ID for OAuth (default: "common"). */
+  /** Azure tenant ID for OAuth (default: "organizations"). */
   aiTenantId: string;
+  /** Custom OAuth client ID (leave empty for default Azure PowerShell). */
+  aiClientId: string;
   /** Azure OAuth access token (stored ephemerally). */
   aiAccessToken: string;
   /** Azure OAuth refresh token (for silent re-auth). */
@@ -34,6 +36,7 @@ const defaultSettings: AppSettings = {
   aiApiKey: "",
   aiModel: "",
   aiTenantId: "",
+  aiClientId: "",
   aiAccessToken: "",
   aiRefreshToken: "",
   audioDevice: "",
