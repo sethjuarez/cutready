@@ -277,8 +277,14 @@ impl LlmClient {
             LlmProvider::AzureOpenai => {
                 let base = self.config.endpoint.trim_end_matches('/');
                 if self.is_foundry() {
-                    // Foundry uses v1 API (no api-version param)
-                    format!("{}/openai/v1/models", base)
+                    // Foundry: models listing is at resource root, not project level.
+                    // Strip /api/projects/... to get the resource base.
+                    let resource_base = if let Some(idx) = base.find("/api/projects") {
+                        &base[..idx]
+                    } else {
+                        base
+                    };
+                    format!("{}/openai/v1/models", resource_base)
                 } else {
                     format!(
                         "{}/openai/models?api-version=2024-10-21",
