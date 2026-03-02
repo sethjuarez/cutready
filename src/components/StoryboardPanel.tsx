@@ -3,14 +3,14 @@ import { useAppStore } from "../stores/appStore";
 import { StoryboardView } from "./StoryboardView";
 import { SketchForm } from "./SketchForm";
 import { NoteEditor } from "./NoteEditor";
-import { VersionHistory } from "./VersionHistory";
+import { ChatPanel } from "./ChatPanel";
 import { ResizeHandle } from "./ResizeHandle";
 import { TabBar } from "./TabBar";
 
 /**
  * StoryboardPanel — center content area for sketch/storyboard workflow.
  *
- * TabBar + editor content + secondary panel (VersionHistory).
+ * TabBar + editor content + secondary panel (Chat + VersionHistory tabs).
  * The primary sidebar (StoryboardList) is now managed by AppLayout.
  */
 export function StoryboardPanel() {
@@ -20,13 +20,13 @@ export function StoryboardPanel() {
   const showVersionHistory = useAppStore((s) => s.showVersionHistory);
   const sidebarPosition = useAppStore((s) => s.sidebarPosition);
 
-  const [secondaryWidth, setSecondaryWidth] = useState(280);
+  const [secondaryWidth, setSecondaryWidth] = useState(340);
   const secondaryOnLeft = sidebarPosition === "right";
 
   const handleSecondaryResize = useCallback(
     (delta: number) => {
       const adjusted = secondaryOnLeft ? delta : -delta;
-      setSecondaryWidth((w) => Math.min(500, Math.max(180, w + adjusted)));
+      setSecondaryWidth((w) => Math.min(600, Math.max(260, w + adjusted)));
     },
     [secondaryOnLeft],
   );
@@ -35,7 +35,7 @@ export function StoryboardPanel() {
     <>
       {!secondaryOnLeft && <ResizeHandle direction="horizontal" onResize={handleSecondaryResize} />}
       <div className="shrink-0 h-full" style={{ width: secondaryWidth }}>
-        <VersionHistory />
+        <ChatPanel />
       </div>
       {secondaryOnLeft && <ResizeHandle direction="horizontal" onResize={handleSecondaryResize} />}
     </>
