@@ -357,7 +357,7 @@ function UpdateIndicator() {
       <button
         className="relative flex items-center justify-center w-7 h-[22px] rounded text-indigo-400 hover:text-indigo-300 hover:bg-[var(--color-surface-alt)] transition-colors"
         onClick={() => setOpen(!open)}
-        title={`Update available: v${update.version}`}
+        title={`Update available: v${update.version}${update.body ? `\n${update.body.slice(0, 200)}` : ""}`}
       >
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
