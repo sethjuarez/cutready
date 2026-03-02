@@ -5,12 +5,20 @@ export interface AppSettings {
   outputDirectory: string;
   /** "azure_openai" or "openai" */
   aiProvider: string;
+  /** "api_key" or "azure_oauth" */
+  aiAuthMode: string;
   /** Azure: resource endpoint. OpenAI: leave empty for default. */
   aiEndpoint: string;
   /** API key for the selected provider. */
   aiApiKey: string;
   /** Model / deployment name. */
   aiModel: string;
+  /** Azure tenant ID for OAuth (default: "common"). */
+  aiTenantId: string;
+  /** Azure OAuth access token (stored ephemerally). */
+  aiAccessToken: string;
+  /** Azure OAuth refresh token (for silent re-auth). */
+  aiRefreshToken: string;
   audioDevice: string;
   // Legacy fields (migrated on load)
   llmApiKey?: string;
@@ -21,9 +29,13 @@ export interface AppSettings {
 const defaultSettings: AppSettings = {
   outputDirectory: "",
   aiProvider: "azure_openai",
+  aiAuthMode: "api_key",
   aiEndpoint: "",
   aiApiKey: "",
   aiModel: "",
+  aiTenantId: "",
+  aiAccessToken: "",
+  aiRefreshToken: "",
   audioDevice: "",
 };
 

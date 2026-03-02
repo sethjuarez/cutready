@@ -26,10 +26,13 @@ pub struct LlmConfig {
     /// For Azure: `https://<resource>.openai.azure.com`
     /// For OpenAI: `https://api.openai.com` (or omit — defaults applied)
     pub endpoint: String,
-    /// API key (used when not using Azure browser OAuth).
+    /// API key (used when auth_mode is "api_key").
     pub api_key: String,
     /// Deployment / model name (e.g. "gpt-4o", "gpt-4.1").
     pub model: String,
+    /// Optional bearer token (used when auth_mode is "azure_oauth").
+    #[serde(default)]
+    pub bearer_token: Option<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -256,10 +259,23 @@ impl LlmClient {
         }
     }
 
-    /// Build auth headers based on provider type.
+    /// Build auth headers based on provider type and auth mode.
     fn auth_headers(&self) -> HeaderMap {
         let mut headers = HeaderMap::new();
         headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
+
+        // Bearer token takes priority (from OAuth flow)
+        if let Some(ref token) = self.config.bearer_token {
+            if !token.is_empty() {
+                let bearer = format!("Bearer {}", token);
+                if let Ok(v) = HeaderValue::from_str(&bearer) {
+                    headers.insert(AUTHORIZATION, v);
+                }
+                return headers;
+            }
+        }
+
+        // Fall back to API key
         match self.config.provider {
             LlmProvider::AzureOpenai => {
                 if let Ok(v) = HeaderValue::from_str(&self.config.api_key) {
