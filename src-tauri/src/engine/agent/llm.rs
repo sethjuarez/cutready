@@ -194,6 +194,23 @@ pub struct ModelsResponse {
     pub data: Vec<ModelInfo>,
 }
 
+/// Foundry /models response uses "value" array with "name" field.
+#[derive(Debug, Deserialize)]
+struct FoundryModelsResponse {
+    value: Vec<FoundryModelEntry>,
+}
+
+#[derive(Debug, Deserialize)]
+struct FoundryModelEntry {
+    id: String,
+    #[serde(default)]
+    name: Option<String>,
+    #[serde(default)]
+    created: Option<u64>,
+    #[serde(default)]
+    owned_by: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModelInfo {
     pub id: String,
@@ -225,24 +242,22 @@ impl LlmClient {
         self.config.endpoint.contains(".services.ai.azure.com")
     }
 
-    /// API version: Foundry uses preview versions, standard Azure OpenAI uses GA.
-    fn api_version(&self) -> &str {
-        if self.is_foundry() {
-            "2024-10-01-preview"
-        } else {
-            "2024-10-21"
-        }
-    }
-
     /// Build the chat completions URL based on provider.
     fn chat_url(&self) -> String {
         match self.config.provider {
             LlmProvider::AzureOpenai => {
                 let base = self.config.endpoint.trim_end_matches('/');
-                format!(
-                    "{}/openai/deployments/{}/chat/completions?api-version={}",
-                    base, self.config.model, self.api_version()
-                )
+                if self.is_foundry() {
+                    format!(
+                        "{}/openai/deployments/{}/chat/completions?api-version=2025-01-01-preview",
+                        base, self.config.model
+                    )
+                } else {
+                    format!(
+                        "{}/openai/deployments/{}/chat/completions?api-version=2024-10-21",
+                        base, self.config.model
+                    )
+                }
             }
             LlmProvider::Openai => {
                 let base = if self.config.endpoint.is_empty() {
@@ -260,10 +275,18 @@ impl LlmClient {
         match self.config.provider {
             LlmProvider::AzureOpenai => {
                 let base = self.config.endpoint.trim_end_matches('/');
-                format!(
-                    "{}/openai/models?api-version={}",
-                    base, self.api_version()
-                )
+                if self.is_foundry() {
+                    // Foundry uses /models (not /openai/models)
+                    format!(
+                        "{}/models?api-version=2025-01-01-preview",
+                        base
+                    )
+                } else {
+                    format!(
+                        "{}/openai/models?api-version=2024-10-21",
+                        base
+                    )
+                }
             }
             LlmProvider::Openai => {
                 let base = if self.config.endpoint.is_empty() {
@@ -335,11 +358,30 @@ impl LlmClient {
             ));
         }
 
-        let parsed: ModelsResponse = resp
-            .json()
+        // Foundry /models may use { "data": [...] } or { "value": [...] }
+        let body = resp
+            .text()
             .await
-            .map_err(|e| format!("Failed to parse models response: {e}"))?;
-        Ok(parsed.data)
+            .map_err(|e| format!("Failed to read models response: {e}"))?;
+
+        // Try standard OpenAI format first, then Foundry format
+        if let Ok(parsed) = serde_json::from_str::<ModelsResponse>(&body) {
+            return Ok(parsed.data);
+        }
+        if let Ok(parsed) = serde_json::from_str::<FoundryModelsResponse>(&body) {
+            return Ok(
+                parsed
+                    .value
+                    .into_iter()
+                    .map(|m| ModelInfo {
+                        id: m.name.unwrap_or(m.id),
+                        created: m.created,
+                        owned_by: m.owned_by,
+                    })
+                    .collect(),
+            );
+        }
+        Err(format!("Failed to parse models response: {body}"))
     }
 
     /// Send a non-streaming chat completion request.
