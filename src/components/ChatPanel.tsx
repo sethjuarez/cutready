@@ -32,6 +32,115 @@ interface FileReference {
 
 type SecondaryTab = "chat" | "history";
 
+// ── SVG Icons (matching app's Feather/Lucide style) ──────────────
+
+function IconSparkles({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z" />
+      <path d="M20 3v4" /><path d="M22 5h-4" />
+    </svg>
+  );
+}
+
+function IconHistory({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+      <path d="M3 3v5h5" /><path d="M12 7v5l4 2" />
+    </svg>
+  );
+}
+
+function IconSend({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z" />
+      <path d="m21.854 2.147-10.94 10.939" />
+    </svg>
+  );
+}
+
+function IconFile({ size = 12 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" />
+      <path d="M14 2v4a2 2 0 0 0 2 2h4" />
+    </svg>
+  );
+}
+
+function IconWrench({ size = 12 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
+    </svg>
+  );
+}
+
+function IconZap({ size = 12 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z" />
+    </svg>
+  );
+}
+
+function IconTrash({ size = 12 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 6h18" /><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+      <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+    </svg>
+  );
+}
+
+function IconPlus({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M5 12h14" /><path d="M12 5v14" />
+    </svg>
+  );
+}
+
+function IconSketch({ size = 12 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 20h9" />
+      <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+    </svg>
+  );
+}
+
+function IconNote({ size = 12 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M16 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8Z" />
+      <path d="M15 3v4a2 2 0 0 0 2 2h4" />
+    </svg>
+  );
+}
+
+function IconStoryboard({ size = 12 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" />
+      <rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" />
+    </svg>
+  );
+}
+
+function IconChevron({ size = 10, expanded = false }: { size?: number; expanded?: boolean }) {
+  return (
+    <svg
+      width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+      style={{ transform: expanded ? "rotate(90deg)" : "rotate(0deg)", transition: "transform 0.15s" }}
+    >
+      <path d="m9 18 6-6-6-6" />
+    </svg>
+  );
+}
+
 // ── Main Panel ───────────────────────────────────────────────────
 
 export function ChatPanel() {
@@ -39,18 +148,30 @@ export function ChatPanel() {
 
   return (
     <div className="flex flex-col h-full bg-[var(--color-surface)]">
-      {/* Tab bar */}
-      <div className="flex items-center border-b border-[var(--color-border)] shrink-0">
-        <TabButton
-          label="💬 Chat"
-          active={activeTab === "chat"}
+      {/* Tab bar — toolbar style with icon buttons */}
+      <div className="flex items-center gap-0.5 px-2 h-[34px] bg-[var(--color-surface-alt)] border-b border-[var(--color-border)] shrink-0">
+        <button
+          className={`flex items-center gap-1.5 px-2.5 h-[26px] rounded text-[11px] font-medium transition-all ${
+            activeTab === "chat"
+              ? "bg-[var(--color-surface)] text-[var(--color-text)] shadow-sm border border-[var(--color-border)]"
+              : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)]/50"
+          }`}
           onClick={() => setActiveTab("chat")}
-        />
-        <TabButton
-          label="📜 History"
-          active={activeTab === "history"}
+        >
+          <IconSparkles size={12} />
+          Chat
+        </button>
+        <button
+          className={`flex items-center gap-1.5 px-2.5 h-[26px] rounded text-[11px] font-medium transition-all ${
+            activeTab === "history"
+              ? "bg-[var(--color-surface)] text-[var(--color-text)] shadow-sm border border-[var(--color-border)]"
+              : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)]/50"
+          }`}
           onClick={() => setActiveTab("history")}
-        />
+        >
+          <IconHistory size={12} />
+          History
+        </button>
       </div>
 
       {/* Tab content */}
@@ -58,29 +179,6 @@ export function ChatPanel() {
         {activeTab === "chat" ? <ChatTab /> : <VersionHistory />}
       </div>
     </div>
-  );
-}
-
-function TabButton({
-  label,
-  active,
-  onClick,
-}: {
-  label: string;
-  active: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      className={`px-3 py-1.5 text-xs font-medium transition-colors border-b-2 ${
-        active
-          ? "border-[var(--color-accent)] text-[var(--color-text)]"
-          : "border-transparent text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"
-      }`}
-      onClick={onClick}
-    >
-      {label}
-    </button>
   );
 }
 
@@ -331,53 +429,82 @@ Keep responses concise and actionable. Use markdown formatting.`;
 
   return (
     <div className="flex flex-col h-full">
-      {/* Header */}
-      <div className="flex items-center justify-between px-3 py-1.5 border-b border-[var(--color-border)] shrink-0">
-        <span className="text-xs font-medium text-[var(--color-text-secondary)]">
+      {/* Top toolbar — like Confluo/VS Code chat */}
+      <div className="flex items-center gap-0.5 px-2 h-[30px] border-b border-[var(--color-border)] shrink-0">
+        <button
+          className="flex items-center justify-center w-[26px] h-[26px] rounded text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-alt)] transition-colors"
+          onClick={clearChat}
+          title="New Chat"
+        >
+          <IconPlus size={14} />
+        </button>
+        <div className="flex-1" />
+        <span className="text-[10px] text-[var(--color-text-secondary)] px-1">
           {settings.aiModel || "No model"}
         </span>
         {messages.length > 0 && (
           <button
-            className="text-[10px] text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors"
+            className="flex items-center justify-center w-[26px] h-[26px] rounded text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-alt)] transition-colors"
             onClick={clearChat}
             title="Clear chat"
           >
-            Clear
+            <IconTrash size={12} />
           </button>
         )}
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto min-h-0 px-3 py-2 space-y-3">
+      <div className="flex-1 overflow-y-auto min-h-0 py-2">
         {messages.length === 0 && !loading && (
-          <div className="flex flex-col items-center justify-center h-full text-center">
-            <div className="text-3xl mb-2">✨</div>
-            <p className="text-xs text-[var(--color-text-secondary)] max-w-[200px]">
-              Ask me to help plan your demo, generate sketches, or refine your script.
-              Use <kbd className="px-1 py-0.5 text-[10px] bg-[var(--color-surface-alt)] rounded border border-[var(--color-border)]">@</kbd> to reference files.
+          <div className="flex flex-col items-center justify-center h-full text-center px-4">
+            <div className="w-10 h-10 rounded-full bg-[var(--color-accent)]/10 flex items-center justify-center mb-3 text-[var(--color-accent)]">
+              <IconSparkles size={20} />
+            </div>
+            <p className="text-[13px] font-medium text-[var(--color-text)] mb-1">
+              CutReady AI
             </p>
+            <p className="text-xs text-[var(--color-text-secondary)] max-w-[220px] leading-relaxed mb-4">
+              I can help plan your demo, generate sketches, or refine your script. Use <kbd className="px-1 py-0.5 text-[10px] bg-[var(--color-surface-alt)] rounded border border-[var(--color-border)]">@</kbd> to reference project files.
+            </p>
+            <div className="flex flex-wrap gap-1.5 justify-center max-w-[260px]">
+              {[
+                "Plan a demo from my notes",
+                "Generate sketch rows",
+                "Refine my script timing",
+              ].map((suggestion) => (
+                <button
+                  key={suggestion}
+                  className="px-2.5 py-1 text-[11px] rounded-full border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:border-[var(--color-accent)] hover:bg-[var(--color-accent)]/5 transition-colors"
+                  onClick={() => {
+                    setInput(suggestion);
+                    inputRef.current?.focus();
+                  }}
+                >
+                  {suggestion}
+                </button>
+              ))}
+            </div>
           </div>
         )}
 
         {messages.map((msg, i) => (
-          <MessageBubble key={i} message={msg} />
+          <MessageRow key={i} message={msg} />
         ))}
 
         {loading && (
-          <div className="flex items-start gap-2">
-            <div className="w-5 h-5 rounded-full bg-[var(--color-accent)]/20 flex items-center justify-center shrink-0">
-              <span className="text-[10px]">✨</span>
+          <div className="flex gap-2.5 px-3.5 py-2.5">
+            <div className="w-6 h-6 rounded-full bg-[var(--color-accent)]/15 flex items-center justify-center shrink-0 mt-0.5 text-[var(--color-accent)]">
+              <IconSparkles size={12} />
             </div>
-            <div className="flex items-center gap-1 py-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-text-secondary)] animate-bounce" style={{ animationDelay: "0ms" }} />
-              <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-text-secondary)] animate-bounce" style={{ animationDelay: "150ms" }} />
-              <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-text-secondary)] animate-bounce" style={{ animationDelay: "300ms" }} />
+            <div className="flex-1 min-w-0">
+              <div className="text-[11px] font-semibold text-[var(--color-text-secondary)] mb-0.5">CutReady</div>
+              <span className="text-xs text-[var(--color-text-secondary)] italic">Thinking…</span>
             </div>
           </div>
         )}
 
         {error && (
-          <div className="text-xs text-red-400 bg-red-400/10 rounded-md px-3 py-2 border border-red-400/20">
+          <div className="mx-3 text-xs text-red-400 bg-red-400/10 rounded-md px-3 py-2 border border-red-400/20">
             {error}
           </div>
         )}
@@ -385,20 +512,20 @@ Keep responses concise and actionable. Use markdown formatting.`;
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input area */}
-      <div className="shrink-0 border-t border-[var(--color-border)] px-3 py-2">
+      {/* Input area — Confluo-style bordered container */}
+      <div className="shrink-0 mx-2.5 mb-2.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-alt)] overflow-hidden transition-colors focus-within:border-[var(--color-accent)]">
         {/* Reference chips */}
         {references.length > 0 && (
-          <div className="flex flex-wrap gap-1 mb-1.5">
+          <div className="flex flex-wrap gap-1 px-2.5 pt-2">
             {references.map((ref) => (
               <span
                 key={ref.path}
-                className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] bg-[var(--color-accent)]/15 text-[var(--color-accent)] rounded-md border border-[var(--color-accent)]/30"
+                className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] bg-[var(--color-accent)]/10 text-[var(--color-accent)] rounded border border-[var(--color-accent)]/20"
               >
-                <FileIcon type={ref.type} />
+                <FileTypeIcon type={ref.type} />
                 {ref.title}
                 <button
-                  className="hover:text-red-400 ml-0.5"
+                  className="hover:text-red-400 ml-0.5 opacity-60 hover:opacity-100"
                   onClick={() => removeReference(ref.path)}
                 >
                   ×
@@ -415,17 +542,17 @@ Keep responses concise and actionable. Use markdown formatting.`;
               {autocompleteOptions.map((file, i) => (
                 <button
                   key={file.path}
-                  className={`w-full flex items-center gap-2 px-2 py-1.5 text-left text-xs transition-colors ${
+                  className={`w-full flex items-center gap-2 px-2.5 py-1.5 text-left text-xs transition-colors ${
                     i === autocompleteIndex
-                      ? "bg-[var(--color-accent)]/15 text-[var(--color-text)]"
+                      ? "bg-[var(--color-accent)]/10 text-[var(--color-text)]"
                       : "text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-alt)]"
                   }`}
                   onClick={() => insertReference(file)}
                   onMouseEnter={() => setAutocompleteIndex(i)}
                 >
-                  <FileIcon type={file.type} />
+                  <FileTypeIcon type={file.type} />
                   <span className="flex-1 truncate">{file.title}</span>
-                  <span className="text-[10px] text-[var(--color-text-secondary)] opacity-60">{file.type}</span>
+                  <span className="text-[10px] text-[var(--color-text-secondary)] opacity-50">{file.type}</span>
                 </button>
               ))}
             </div>
@@ -433,8 +560,9 @@ Keep responses concise and actionable. Use markdown formatting.`;
 
           <textarea
             ref={inputRef}
-            className="w-full resize-none rounded-md bg-[var(--color-surface-alt)] border border-[var(--color-border)] px-2.5 py-1.5 text-xs text-[var(--color-text)] placeholder-[var(--color-text-secondary)] focus:outline-none focus:border-[var(--color-accent)] transition-colors"
-            rows={2}
+            className="w-full resize-none bg-transparent px-2.5 py-2 text-[13px] text-[var(--color-text)] placeholder-[var(--color-text-secondary)]/60 focus:outline-none leading-[1.5]"
+            style={{ maxHeight: 200 }}
+            rows={1}
             placeholder="Ask about your demo plan… (@ to reference files)"
             value={input}
             onChange={handleInputChange}
@@ -443,16 +571,19 @@ Keep responses concise and actionable. Use markdown formatting.`;
           />
         </div>
 
-        <div className="flex items-center justify-between mt-1">
-          <span className="text-[10px] text-[var(--color-text-secondary)]">
-            Enter to send · Shift+Enter for newline
+        {/* Bottom toolbar */}
+        <div className="flex items-center gap-0.5 px-1.5 pb-1.5">
+          <span className="text-[10px] text-[var(--color-text-secondary)]/50 px-1">
+            Enter ↵
           </span>
+          <div className="flex-1" />
           <button
-            className="px-2 py-0.5 text-[10px] font-medium rounded bg-[var(--color-accent)] text-white hover:opacity-90 transition-opacity disabled:opacity-40"
+            className="flex items-center justify-center w-[26px] h-[26px] rounded text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
             onClick={handleSend}
             disabled={loading || !input.trim()}
+            title="Send (Enter)"
           >
-            Send
+            <IconSend size={14} />
           </button>
         </div>
       </div>
@@ -460,14 +591,18 @@ Keep responses concise and actionable. Use markdown formatting.`;
   );
 }
 
-// ── Message Bubble ───────────────────────────────────────────────
+// ── Message Row (VS Code Copilot chat style) ────────────────────
 
-function MessageBubble({ message }: { message: ChatMessage }) {
+function MessageRow({ message }: { message: ChatMessage }) {
   if (message.role === "user") {
     return (
-      <div className="flex justify-end">
-        <div className="max-w-[85%] rounded-lg px-3 py-1.5 text-xs bg-[var(--color-accent)]/15 text-[var(--color-text)] border border-[var(--color-accent)]/20">
-          <div className="whitespace-pre-wrap break-words">{message.content}</div>
+      <div className="flex gap-2.5 px-3.5 py-2.5 hover:bg-[var(--color-surface-alt)]/50 transition-colors">
+        <div className="w-6 h-6 rounded-full bg-[var(--color-surface-alt)] flex items-center justify-center shrink-0 mt-0.5 text-[var(--color-text-secondary)]">
+          <span className="text-[10px] font-bold">U</span>
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="text-[11px] font-semibold text-[var(--color-text-secondary)] mb-0.5">You</div>
+          <div className="text-[13px] text-[var(--color-text)] whitespace-pre-wrap break-words leading-[1.6]">{message.content}</div>
         </div>
       </div>
     );
@@ -475,26 +610,29 @@ function MessageBubble({ message }: { message: ChatMessage }) {
 
   if (message.role === "assistant" && message.tool_calls && message.tool_calls.length > 0) {
     return (
-      <div className="space-y-1">
+      <div className="px-3.5 py-1 ml-[34px] space-y-1">
         {message.tool_calls.map((tc) => (
-          <ToolCallBadge key={tc.id} toolCall={tc} />
+          <ToolCallRow key={tc.id} toolCall={tc} />
         ))}
       </div>
     );
   }
 
   if (message.role === "tool") {
-    return null; // Tool results are shown inline with tool calls
+    return null;
   }
 
   if (message.role === "assistant") {
     return (
-      <div className="flex items-start gap-2">
-        <div className="w-5 h-5 rounded-full bg-[var(--color-accent)]/20 flex items-center justify-center shrink-0 mt-0.5">
-          <span className="text-[10px]">✨</span>
+      <div className="flex gap-2.5 px-3.5 py-2.5 hover:bg-[var(--color-surface-alt)]/50 transition-colors">
+        <div className="w-6 h-6 rounded-full bg-[var(--color-accent)]/15 flex items-center justify-center shrink-0 mt-0.5 text-[var(--color-accent)]">
+          <IconSparkles size={12} />
         </div>
-        <div className="flex-1 min-w-0 text-xs text-[var(--color-text)] leading-relaxed">
-          <MarkdownContent content={message.content || ""} />
+        <div className="flex-1 min-w-0">
+          <div className="text-[11px] font-semibold text-[var(--color-text-secondary)] mb-0.5">CutReady</div>
+          <div className="text-[13px] text-[var(--color-text)] leading-[1.6]">
+            <MarkdownContent content={message.content || ""} />
+          </div>
         </div>
       </div>
     );
@@ -503,17 +641,17 @@ function MessageBubble({ message }: { message: ChatMessage }) {
   return null;
 }
 
-// ── Tool Call Badge ──────────────────────────────────────────────
+// ── Tool Call Row ────────────────────────────────────────────────
 
-function ToolCallBadge({ toolCall }: { toolCall: ToolCall }) {
+function ToolCallRow({ toolCall }: { toolCall: ToolCall }) {
   const [expanded, setExpanded] = useState(false);
   const name = toolCall.function.name;
 
   const icon = name.startsWith("read_") || name === "list_project_files"
-    ? "📄"
+    ? <IconFile size={11} />
     : name.startsWith("set_") || name.startsWith("update_")
-    ? "🔧"
-    : "⚡";
+    ? <IconWrench size={11} />
+    : <IconZap size={11} />;
 
   const label = name
     .replace(/_/g, " ")
@@ -529,18 +667,18 @@ function ToolCallBadge({ toolCall }: { toolCall: ToolCall }) {
   }
 
   return (
-    <div className="ml-7">
+    <div>
       <button
-        className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] rounded-full bg-[var(--color-surface-alt)] text-[var(--color-text-secondary)] border border-[var(--color-border)] hover:text-[var(--color-text)] transition-colors"
+        className="inline-flex items-center gap-1.5 px-2 py-1 text-[11px] rounded bg-[var(--color-surface-alt)] text-[var(--color-text-secondary)] border border-[var(--color-border)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-alt)] transition-colors"
         onClick={() => setExpanded(!expanded)}
       >
-        <span>{icon}</span>
-        <span>{label}</span>
-        {argsSummary && <span className="opacity-60">({argsSummary})</span>}
-        <span className="ml-0.5 text-[8px]">{expanded ? "▼" : "▶"}</span>
+        <span className="opacity-70">{icon}</span>
+        <span className="font-medium">{label}</span>
+        {argsSummary && <span className="opacity-50 font-normal">{argsSummary}</span>}
+        <IconChevron size={9} expanded={expanded} />
       </button>
       {expanded && (
-        <pre className="mt-1 p-2 text-[10px] rounded bg-[var(--color-surface-alt)] border border-[var(--color-border)] overflow-x-auto text-[var(--color-text-secondary)]">
+        <pre className="mt-1 p-2 text-[11px] rounded bg-[var(--color-surface-alt)] border border-[var(--color-border)] overflow-x-auto text-[var(--color-text-secondary)] leading-relaxed">
           {JSON.stringify(JSON.parse(toolCall.function.arguments), null, 2)}
         </pre>
       )}
@@ -691,15 +829,16 @@ function renderInline(text: string): React.ReactNode {
 
 // ── Helpers ──────────────────────────────────────────────────────
 
-function FileIcon({ type }: { type: string }) {
+function FileTypeIcon({ type }: { type: string }) {
+  const cls = "shrink-0 text-[var(--color-text-secondary)]";
   switch (type) {
     case "sketch":
-      return <span className="text-[10px]">🎬</span>;
+      return <span className={cls}><IconSketch /></span>;
     case "note":
-      return <span className="text-[10px]">📝</span>;
+      return <span className={cls}><IconNote /></span>;
     case "storyboard":
-      return <span className="text-[10px]">📋</span>;
+      return <span className={cls}><IconStoryboard /></span>;
     default:
-      return <span className="text-[10px]">📄</span>;
+      return <span className={cls}><IconFile /></span>;
   }
 }
