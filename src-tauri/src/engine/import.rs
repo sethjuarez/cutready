@@ -33,7 +33,13 @@ fn image_ext(name: &str) -> &str {
 /// Images are saved to project_root/.cutready/screenshots/.
 pub fn docx_to_markdown(data: &[u8], project_root: &Path) -> Result<String, String> {
     let cursor = Cursor::new(data);
-    let mut archive = zip::ZipArchive::new(cursor).map_err(|e| format!("Invalid .docx: {e}"))?;
+    let mut archive = match zip::ZipArchive::new(cursor) {
+        Ok(a) => a,
+        Err(_) => {
+            // Not a ZIP — likely an old .doc binary format. Extract readable text.
+            return doc_binary_to_markdown(data);
+        }
+    };
 
     let prefix = format!("docx-{}", chrono::Utc::now().format("%Y%m%d%H%M%S"));
 
@@ -438,4 +444,86 @@ fn extract_pptx_text(xml: &str) -> String {
     }
 
     paragraphs.join("\n")
+}
+
+/// Extract readable text from an old binary .doc file.
+/// Uses a simple heuristic: find runs of printable characters, skipping binary junk.
+fn doc_binary_to_markdown(data: &[u8]) -> Result<String, String> {
+    // Old .doc files have a Compound File Binary Format (CFBF) header.
+    // The actual text is stored as UTF-16LE (or sometimes ASCII) in the file stream.
+    // We try UTF-16LE first (most common for .doc), then fall back to ASCII extraction.
+
+    // Try UTF-16LE extraction: scan for runs of valid UTF-16LE pairs
+    let mut utf16_text = String::new();
+    if data.len() >= 2 {
+        let mut i = 0;
+        let mut current_run = Vec::new();
+        while i + 1 < data.len() {
+            let lo = data[i];
+            let hi = data[i + 1];
+            let ch = u16::from_le_bytes([lo, hi]);
+            if let Some(c) = char::from_u32(ch as u32) {
+                if c.is_ascii_graphic() || c == ' ' || c == '\n' || c == '\r' || c == '\t' {
+                    current_run.push(c);
+                } else if !current_run.is_empty() {
+                    // End of a run — keep if substantial (>20 chars with spaces = likely real text)
+                    let run: String = current_run.drain(..).collect();
+                    if run.len() > 20 && run.contains(' ') {
+                        utf16_text.push_str(run.trim());
+                        utf16_text.push_str("\n\n");
+                    }
+                }
+            } else if !current_run.is_empty() {
+                let run: String = current_run.drain(..).collect();
+                if run.len() > 20 && run.contains(' ') {
+                    utf16_text.push_str(run.trim());
+                    utf16_text.push_str("\n\n");
+                }
+            }
+            i += 2;
+        }
+        // Flush remaining
+        if !current_run.is_empty() {
+            let run: String = current_run.drain(..).collect();
+            if run.len() > 20 && run.contains(' ') {
+                utf16_text.push_str(run.trim());
+                utf16_text.push_str("\n\n");
+            }
+        }
+    }
+
+    let result = utf16_text.trim().to_string();
+    if result.len() > 50 {
+        return Ok(result);
+    }
+
+    // Fallback: ASCII extraction for very old files
+    let mut ascii_text = String::new();
+    let mut current_run = String::new();
+    for &b in data {
+        let c = b as char;
+        if c.is_ascii_graphic() || c == ' ' || c == '\n' || c == '\r' || c == '\t' {
+            current_run.push(c);
+        } else if !current_run.is_empty() {
+            let run = current_run.trim().to_string();
+            if run.len() > 20 && run.contains(' ') {
+                ascii_text.push_str(&run);
+                ascii_text.push_str("\n\n");
+            }
+            current_run.clear();
+        }
+    }
+    if !current_run.is_empty() {
+        let run = current_run.trim().to_string();
+        if run.len() > 20 && run.contains(' ') {
+            ascii_text.push_str(&run);
+        }
+    }
+
+    let result = ascii_text.trim().to_string();
+    if result.is_empty() {
+        Err("Could not extract text. The file may be an old .doc format — try saving it as .docx first.".to_string())
+    } else {
+        Ok(result)
+    }
 }

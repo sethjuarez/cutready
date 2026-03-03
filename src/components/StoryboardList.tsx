@@ -202,8 +202,8 @@ export function StoryboardList() {
         title: "Import Document",
         multiple: false,
         filters: [
-          { name: "Documents", extensions: ["docx", "pdf", "pptx"] },
-          { name: "Word (.docx)", extensions: ["docx"] },
+          { name: "Documents", extensions: ["docx", "doc", "pdf", "pptx"] },
+          { name: "Word (.docx, .doc)", extensions: ["docx", "doc"] },
           { name: "PDF (.pdf)", extensions: ["pdf"] },
           { name: "PowerPoint (.pptx)", extensions: ["pptx"] },
         ],
@@ -216,7 +216,7 @@ export function StoryboardList() {
       const ext = filePath.split(".").pop()?.toLowerCase();
 
       let resultPath: string;
-      if (ext === "docx") {
+      if (ext === "docx" || ext === "doc") {
         resultPath = await invoke<string>("import_docx", { filePath });
       } else if (ext === "pdf") {
         resultPath = await invoke<string>("import_pdf", { filePath });
