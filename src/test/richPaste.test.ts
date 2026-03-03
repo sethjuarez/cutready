@@ -114,5 +114,49 @@ describe("richPaste", () => {
       const result = await htmlToMarkdown(html, { saveImages: true });
       expect(result.markdown).toContain(".cutready/screenshots/pasted-123.png");
     });
+
+    it("converts Word-style tables (td with bold, no thead)", async () => {
+      // Word uses <td><b>Header</b></td> instead of <th>
+      const html = `<table>
+        <tr><td><b>Step</b></td><td><b>Action</b></td></tr>
+        <tr><td>1</td><td>Click login</td></tr>
+        <tr><td>2</td><td>Enter credentials</td></tr>
+      </table>`;
+      const result = await htmlToMarkdown(html);
+      // Should produce a Markdown table, not raw HTML
+      expect(result.markdown).toContain("|");
+      expect(result.markdown).toContain("Step");
+      expect(result.markdown).toContain("Action");
+      expect(result.markdown).toContain("Click login");
+      expect(result.markdown).not.toContain("<table");
+    });
+
+    it("ensures blank lines around headings", async () => {
+      const html = "<h1>Title</h1><p>Paragraph</p><h2>Section</h2><p>More text</p>";
+      const result = await htmlToMarkdown(html);
+      // Headings should be separated from surrounding text by blank lines
+      expect(result.markdown).toMatch(/# Title\n\nParagraph/);
+      expect(result.markdown).toMatch(/Paragraph\n\n## Section/);
+    });
+
+    it("handles realistic Word HTML with tables and images", async () => {
+      const html = `<html><head><style>p.MsoNormal{font-family:Calibri}</style></head>
+      <body>
+        <h1 class="MsoNormal">Demo Script</h1>
+        <p class="MsoNormal">This is the <b>introduction</b>.</p>
+        <table class="MsoTableGrid" style="mso-table-lspace:0;border-collapse:collapse">
+          <tr><td style="border:solid windowtext 1.0pt;mso-border-alt:solid windowtext .5pt"><b>Step</b></td>
+              <td style="border:solid windowtext 1.0pt;mso-border-alt:solid windowtext .5pt"><b>Action</b></td></tr>
+          <tr><td>1</td><td>Click login</td></tr>
+        </table>
+        <p><img src="data:image/png;base64,AAAA" width="400"></p>
+      </body></html>`;
+      const result = await htmlToMarkdown(html, { saveImages: true });
+      expect(result.markdown).toContain("# Demo Script");
+      expect(result.markdown).toContain("**introduction**");
+      expect(result.markdown).toContain("|"); // table converted
+      expect(result.markdown).toContain("Step");
+      expect(result.markdown).toContain(".cutready/screenshots/pasted-123.png"); // image saved
+    });
   });
 });
