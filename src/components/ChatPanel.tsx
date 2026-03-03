@@ -462,10 +462,8 @@ function ChatTab() {
         parts.push(`[References: ${fileRefs.map((r) => `#${r.type}:${r.path}`).join(", ")}]`);
       }
 
-      // Display-only: compact web references
-      for (const wr of webRefs) {
-        parts.push(`[Web: ${wr.path}]`);
-      }
+      // Web refs shown as compact footnotes after the message text
+      const webTags = webRefs.map((wr) => `[Web: ${wr.path}]`).join(" ");
 
       // Build separate LLM parts with full web content
       const llmParts = [...parts];
@@ -475,8 +473,9 @@ function ChatTab() {
         }
       }
 
-      userContent = `${parts.join("\n\n")}\n\n${text}`;
-      llmContent = `${llmParts.join("\n\n")}\n\n${text}`;
+      const prefix = parts.length > 0 ? `${parts.join(" · ")} ` : "";
+      userContent = `${prefix}${text}${webTags ? `\n${webTags}` : ""}`;
+      llmContent = `${prefix}${text}\n\n${llmParts.filter((p) => p.startsWith("[Web Content:")).join("\n\n")}`;
     }
 
     const userMsg: ChatMessage = { role: "user", content: userContent };
@@ -1187,30 +1186,34 @@ function WebRefChip({ url }: { url: string }) {
     setLoading(false);
   };
 
+  const shortUrl = url.replace(/^https?:\/\//, "");
+
   return (
-    <span className="block my-0.5">
+    <>
       <button
         onClick={handleExpand}
-        className="flex items-center gap-1.5 w-full px-2 py-1 rounded bg-[var(--color-surface)] border border-[var(--color-border)] text-[11px] text-[var(--color-accent)] hover:bg-[var(--color-surface-toolbar)] transition-colors font-mono overflow-hidden"
+        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[var(--color-surface)] border border-[var(--color-border)] text-[11px] text-[var(--color-accent)] hover:bg-[var(--color-surface-toolbar)] transition-colors font-mono align-baseline"
       >
-        <svg className="shrink-0" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><path d="M2 12h20" /><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" /></svg>
-        <span className="truncate min-w-0">{url.replace(/^https?:\/\//, "")}</span>
-        <svg className={`shrink-0 transition-transform ${expanded ? "rotate-180" : ""}`} width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        <svg className="shrink-0" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><path d="M2 12h20" /><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" /></svg>
+        <span className="max-w-[200px] truncate">{shortUrl}</span>
+        <svg className={`shrink-0 transition-transform ${expanded ? "rotate-180" : ""}`} width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
           <polyline points="6 9 12 15 18 9" />
         </svg>
       </button>
       {expanded && (
-        <div className="mt-0.5 rounded border border-[var(--color-border)] bg-[var(--color-surface)] overflow-hidden">
-          <div className="flex items-center justify-between px-2 py-1 border-b border-[var(--color-border)] bg-[var(--color-surface-toolbar)]">
-            <span className="text-[10px] text-[var(--color-text-secondary)] font-mono truncate">{url}</span>
-            {content && <span className="shrink-0 text-[10px] text-[var(--color-text-secondary)] tabular-nums ml-2">{content.length.toLocaleString()} chars</span>}
-          </div>
-          <div className="max-h-[150px] overflow-y-auto p-2 text-[11px] font-mono text-[var(--color-text-secondary)] whitespace-pre-wrap break-words leading-[1.4]">
-            {loading ? "Loading…" : content || "No content"}
-          </div>
-        </div>
+        <span className="block mt-1">
+          <span className="block rounded border border-[var(--color-border)] bg-[var(--color-surface)] overflow-hidden">
+            <span className="flex items-center justify-between px-2 py-1 border-b border-[var(--color-border)] bg-[var(--color-surface-toolbar)]">
+              <span className="text-[10px] text-[var(--color-text-secondary)] font-mono truncate">{url}</span>
+              {content && <span className="shrink-0 text-[10px] text-[var(--color-text-secondary)] tabular-nums ml-2">{content.length.toLocaleString()} chars</span>}
+            </span>
+            <span className="block max-h-[150px] overflow-y-auto p-2 text-[11px] font-mono text-[var(--color-text-secondary)] whitespace-pre-wrap break-words leading-[1.4]">
+              {loading ? "Loading…" : content || "No content"}
+            </span>
+          </span>
+        </span>
       )}
-    </span>
+    </>
   );
 }
 
