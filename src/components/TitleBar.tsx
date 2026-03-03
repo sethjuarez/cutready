@@ -435,13 +435,16 @@ function FeedbackPopover() {
     ux: { label: "Design", icon: "M12 19l7-7 3 3-7 7-3-3zM18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5zM2 2l7.586 7.586M11 13a2 2 0 1 1-4 0 2 2 0 0 1 4 0z" },
   };
 
-  const handleCopy = async () => {
+  const handleSubmit = async () => {
     if (!feedback.trim()) return;
     const entry = {
       category: categoryLabels[category].label,
       feedback: feedback.trim(),
       date: new Date().toISOString(),
     };
+    // Always persist to app data directory
+    await invoke("save_feedback", { entry }).catch(() => {});
+    // Also copy to clipboard
     const text = [
       `## CutReady Feedback`,
       `**Category:** ${entry.category}`,
@@ -449,19 +452,13 @@ function FeedbackPopover() {
       ``,
       entry.feedback,
     ].join("\n");
-    try {
-      await navigator.clipboard.writeText(text);
-      // Persist to app data directory
-      await invoke("save_feedback", { entry }).catch(() => {});
-      setCopied(true);
-      setTimeout(() => {
-        setCopied(false);
-        setFeedback("");
-        setOpen(false);
-      }, 1200);
-    } catch {
-      /* ignore */
-    }
+    await navigator.clipboard.writeText(text).catch(() => {});
+    setCopied(true);
+    setTimeout(() => {
+      setCopied(false);
+      setFeedback("");
+      setOpen(false);
+    }, 1200);
   };
 
   return (
@@ -521,7 +518,7 @@ function FeedbackPopover() {
 
           {/* Copy button */}
           <button
-            onClick={handleCopy}
+            onClick={handleSubmit}
             disabled={!feedback.trim()}
             className={`w-full flex items-center justify-center gap-1.5 h-[28px] rounded-md text-[11px] font-medium transition-colors ${
               !feedback.trim()
@@ -536,14 +533,14 @@ function FeedbackPopover() {
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                   <polyline points="20 6 9 17 4 12" />
                 </svg>
-                Copied!
+                Submitted!
               </>
             ) : (
               <>
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                  <line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" />
                 </svg>
-                Copy to Clipboard
+                Submit Feedback
               </>
             )}
           </button>
