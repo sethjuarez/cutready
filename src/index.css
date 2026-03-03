@@ -163,6 +163,14 @@ html {
   margin-top: 0.25rem;
 }
 
+/* Description markdown preview */
+.prose-desc p { margin: 0; }
+.prose-desc p + p { margin-top: 0.35rem; }
+.prose-desc ul, .prose-desc ol { margin: 0.25rem 0; padding-left: 1.25rem; }
+.prose-desc li { margin: 0.1rem 0; }
+.prose-desc code { font-size: 0.85em; background: var(--color-surface-inset); padding: 0.1em 0.3em; border-radius: 3px; }
+.prose-desc a { color: var(--color-accent); text-decoration: underline; }
+
 .md-cell-ul,
 .md-cell-ol {
   margin: 0;

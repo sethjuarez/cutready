@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { useAppStore } from "../stores/appStore";
 import { ScriptTable } from "./ScriptTable";
 import { ScreenCaptureOverlay } from "./ScreenCaptureOverlay";
@@ -36,7 +38,17 @@ export function SketchForm() {
   const [showPreview, setShowPreview] = useState(false);
   const [showMonitorPicker, setShowMonitorPicker] = useState(false);
   const [availableMonitors, setAvailableMonitors] = useState<MonitorInfo[]>([]);
-  const [descExpanded, setDescExpanded] = useState(false);
+  const [editingDesc, setEditingDesc] = useState(false);
+  const [localDesc, setLocalDesc] = useState(
+    typeof activeSketch?.description === "string" ? activeSketch.description : ""
+  );
+  const descRef = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    if (editingDesc && descRef.current) {
+      descRef.current.focus();
+      descRef.current.selectionStart = descRef.current.value.length;
+    }
+  }, [editingDesc]);
   const titleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const rowsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -54,6 +66,8 @@ export function SketchForm() {
   useEffect(() => {
     setLocalTitle(activeSketch?.title ?? "");
     setLocalRows(activeSketch?.rows ?? []);
+    setLocalDesc(typeof activeSketch?.description === "string" ? activeSketch.description : "");
+    setEditingDesc(false);
     // Cancel pending debounced writes — they belong to the previous sketch/version
     if (titleTimeoutRef.current) {
       clearTimeout(titleTimeoutRef.current);
@@ -278,55 +292,53 @@ export function SketchForm() {
           )}
         </div>
 
-        {/* Description (collapsible) */}
-        <div className="mb-8">
-          <button
-            onClick={() => setDescExpanded(!descExpanded)}
-            className="flex items-center gap-1.5 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors mb-2"
-          >
-            <svg
-              width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
-              className={`transition-transform ${descExpanded ? "rotate-90" : ""}`}
+        {/* Description — markdown preview, click to edit */}
+        <div className="relative group/desc mb-8">
+          {editingDesc ? (
+            <textarea
+              ref={descRef}
+              value={localDesc}
+              onChange={(e) => {
+                setLocalDesc(e.target.value);
+                updateSketch({ description: e.target.value });
+              }}
+              onBlur={() => setEditingDesc(false)}
+              placeholder="Describe what this sketch covers..."
+              rows={4}
+              className="w-full text-sm bg-transparent text-[var(--color-text)] placeholder:text-[var(--color-text-secondary)]/40 outline-none border border-[var(--color-border)] rounded-lg px-3 py-2 resize-none focus:ring-1 focus:ring-[var(--color-accent)]/40 transition-colors"
+              autoFocus
+            />
+          ) : (
+            <div
+              tabIndex={0}
+              onClick={() => setEditingDesc(true)}
+              onFocus={() => setEditingDesc(true)}
+              className="min-h-[2rem] rounded-lg px-3 py-2 text-sm cursor-text border border-transparent hover:border-[var(--color-border)] transition-colors"
             >
-              <polyline points="9 6 15 12 9 18" />
-            </svg>
-            Description
-            {!descExpanded && typeof activeSketch.description === "string" && activeSketch.description && (
-              <span className="text-[var(--color-text-secondary)]/60 truncate max-w-[300px] font-normal">
-                — {activeSketch.description.split("\n")[0]}
-              </span>
-            )}
-          </button>
-          {descExpanded && (
-            <div className="relative group/desc">
-              <textarea
-                defaultValue={
-                  typeof activeSketch.description === "string"
-                    ? activeSketch.description
-                    : ""
-                }
-                onChange={(e) => {
-                  updateSketch({ description: e.target.value });
-                }}
-                placeholder="Describe what this sketch covers..."
-                rows={3}
-                className="w-full text-sm bg-transparent text-[var(--color-text)] placeholder:text-[var(--color-text-secondary)]/40 outline-none border border-[var(--color-border)] rounded-lg px-3 py-2 resize-none focus:ring-1 focus:ring-[var(--color-accent)]/40 transition-colors"
-              />
-              {typeof activeSketch.description === "string" && activeSketch.description && (
-                <button
-                  onClick={() => sendChatPrompt(
-                    `Improve the description of sketch "${activeSketchPath ?? "current"}". Current description: "${activeSketch.description}". Make it clearer and more informative. IMPORTANT: Only update the description — do NOT change the title or any rows. Use set_planning_rows with the improved description but keep the existing title and all rows exactly as they are.`,
-                    { silent: true }
-                  )}
-                  className="absolute right-2 top-2 opacity-0 group-hover/desc:opacity-100 p-1 rounded text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 transition-all"
-                  title="Improve description with AI"
-                >
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M12 2l2.09 6.26L20.18 10l-6.09 1.74L12 18l-2.09-6.26L3.82 10l6.09-1.74L12 2z" />
-                  </svg>
-                </button>
+              {localDesc ? (
+                <div className="prose-desc text-[var(--color-text)] leading-relaxed">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{localDesc}</ReactMarkdown>
+                </div>
+              ) : (
+                <span className="text-[var(--color-text-secondary)]/40">
+                  Describe what this sketch covers...
+                </span>
               )}
             </div>
+          )}
+          {localDesc && !editingDesc && (
+            <button
+              onClick={() => sendChatPrompt(
+                `Improve the description of sketch "${activeSketchPath ?? "current"}". Current description: "${localDesc}". Make it clearer and more informative. IMPORTANT: Only update the description — do NOT change the title or any rows. Use set_planning_rows with the improved description but keep the existing title and all rows exactly as they are.`,
+                { silent: true }
+              )}
+              className="absolute right-2 top-2 opacity-0 group-hover/desc:opacity-100 p-1 rounded text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 transition-all"
+              title="Improve description with AI"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2l2.09 6.26L20.18 10l-6.09 1.74L12 18l-2.09-6.26L3.82 10l6.09-1.74L12 2z" />
+              </svg>
+            </button>
           )}
         </div>
 
