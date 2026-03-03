@@ -167,14 +167,6 @@ function IconWrench({ size = 12 }: { size?: number }) {
   );
 }
 
-function IconZap({ size = 12 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z" />
-    </svg>
-  );
-}
-
 function IconTrash({ size = 12 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1328,10 +1320,8 @@ function MessageRow({ message }: { message: ChatMessage }) {
 
   if (message.role === "assistant" && message.tool_calls && message.tool_calls.length > 0) {
     return (
-      <div className="px-3.5 py-1 space-y-1">
-        {message.tool_calls.map((tc) => (
-          <ToolCallRow key={tc.id} toolCall={tc} />
-        ))}
+      <div className="px-3.5 py-1">
+        <ToolCallsRow toolCalls={message.tool_calls} />
       </div>
     );
   }
@@ -1355,44 +1345,48 @@ function MessageRow({ message }: { message: ChatMessage }) {
 
 // ── Tool Call Row ────────────────────────────────────────────────
 
-function ToolCallRow({ toolCall }: { toolCall: ToolCall }) {
+function ToolCallsRow({ toolCalls }: { toolCalls: ToolCall[] }) {
   const [expanded, setExpanded] = useState(false);
-  const name = toolCall.function.name;
 
-  const icon = name.startsWith("read_") || name === "list_project_files"
-    ? <IconFile size={11} />
-    : name.startsWith("set_") || name.startsWith("update_")
-    ? <IconWrench size={11} />
-    : <IconZap size={11} />;
-
-  const label = name
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (c) => c.toUpperCase());
-
-  let argsSummary = "";
-  try {
-    const args = JSON.parse(toolCall.function.arguments);
-    if (args.path) argsSummary = args.path;
-    else if (args.index !== undefined) argsSummary = `row ${args.index}`;
-  } catch {
-    // ignore
-  }
+  // Build compact one-line summary
+  const names = toolCalls.map((tc) => {
+    const name = tc.function.name.replace(/_/g, " ");
+    let summary = name;
+    try {
+      const args = JSON.parse(tc.function.arguments);
+      if (args.path) summary += ` → ${args.path}`;
+      else if (args.index !== undefined) summary += ` → row ${args.index}`;
+    } catch { /* ignore */ }
+    return summary;
+  });
+  const label = toolCalls.length === 1 ? names[0] : `${toolCalls.length} tool calls`;
 
   return (
     <div>
       <button
-        className="inline-flex items-center gap-1.5 px-2 py-1 text-[11px] rounded bg-[var(--color-surface-alt)] text-[var(--color-text-secondary)] border border-[var(--color-border)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-alt)] transition-colors"
+        className="inline-flex items-center gap-1.5 px-2 py-0.5 text-[11px] rounded bg-[var(--color-surface-alt)] text-[var(--color-text-secondary)] border border-[var(--color-border)] hover:text-[var(--color-text)] transition-colors max-w-full"
         onClick={() => setExpanded(!expanded)}
       >
-        <span className="opacity-70">{icon}</span>
-        <span className="font-medium">{label}</span>
-        {argsSummary && <span className="opacity-50 font-normal">{argsSummary}</span>}
+        <span className="opacity-70"><IconWrench size={11} /></span>
+        <span className="font-medium truncate">{label}</span>
         <IconChevron size={9} expanded={expanded} />
       </button>
       {expanded && (
-        <pre className="mt-1 p-2 text-[11px] rounded bg-[var(--color-surface-alt)] border border-[var(--color-border)] overflow-x-auto text-[var(--color-text-secondary)] leading-relaxed">
-          {JSON.stringify(JSON.parse(toolCall.function.arguments), null, 2)}
-        </pre>
+        <div className="mt-1 space-y-1">
+          {toolCalls.map((tc) => {
+            const name = tc.function.name.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+            let parsed = "{}";
+            try { parsed = JSON.stringify(JSON.parse(tc.function.arguments), null, 2); } catch { /* ignore */ }
+            return (
+              <div key={tc.id} className="text-[11px]">
+                <div className="font-medium text-[var(--color-text-secondary)]">{name}</div>
+                <pre className="p-2 rounded bg-[var(--color-surface-alt)] border border-[var(--color-border)] overflow-x-auto text-[var(--color-text-secondary)] leading-relaxed text-[10px]">
+                  {parsed}
+                </pre>
+              </div>
+            );
+          })}
+        </div>
       )}
     </div>
   );
