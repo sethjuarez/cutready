@@ -723,15 +723,15 @@ function ChatTab() {
       if (hashIndex >= 0 && (hashIndex === 0 || textBefore[hashIndex - 1] === " ")) {
         const query = textBefore.slice(hashIndex + 1);
 
-        // Detect completed #web:URL pattern — triggers when space follows the URL
-        const webMatch = val.slice(hashIndex + 1).match(/^web:(https?:\/\/\S+)\s/);
+        // Detect completed #URL pattern — triggers when space follows the URL
+        const webMatch = val.slice(hashIndex + 1).match(/^(?:web:)?(https?:\/\/\S+)\s/);
         if (webMatch) {
           const url = webMatch[1];
           setReferences((prev) => {
             if (prev.some((r) => r.path === url)) return prev;
             return [...prev, { type: "web", path: url, title: url, webStatus: "loading" }];
           });
-          // Keep #web:URL text in the input — just close autocomplete
+          // Keep #URL text in the input — just close autocomplete
           setShowAutocomplete(false);
           // Fetch content in background
           invoke<string>("fetch_url_content", { url }).then((content) => {
@@ -1228,10 +1228,10 @@ function ChatTab() {
 // ── User Content — renders [Web: URL] as styled reference chips ──
 
 function UserContent({ content }: { content: string }) {
-  // Split on [Web: ...], [References: ...], and inline #web:URL patterns
+  // Split on [Web: ...], [References: ...], and inline #URL patterns
   const parts: React.ReactNode[] = [];
   let lastIndex = 0;
-  const combined = /\[(Web|References):\s*([^\]]+)\]|#web:(https?:\/\/\S+)/g;
+  const combined = /\[(Web|References):\s*([^\]]+)\]|#(?:web:)?(https?:\/\/\S+)/g;
   let match;
   while ((match = combined.exec(content)) !== null) {
     if (match.index > lastIndex) {
@@ -1246,10 +1246,10 @@ function UserContent({ content }: { content: string }) {
         </span>
       );
     } else if (match[3]) {
-      // Inline #web:URL — styled as accent link
+      // Inline #URL — styled as accent link
       parts.push(
         <span key={match.index} className="text-[var(--color-accent)] font-mono text-[12px]">
-          #web:<span className="underline decoration-[var(--color-accent)]/40">{match[3]}</span>
+          #<span className="underline decoration-[var(--color-accent)]/40">{match[3]}</span>
         </span>
       );
     }
