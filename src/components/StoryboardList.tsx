@@ -196,6 +196,7 @@ export function StoryboardList() {
   }, [newNoteTitle, createNote]);
 
   const handleImportNote = useCallback(async () => {
+    let filePath = "";
     try {
       const { open: openDialog } = await import("@tauri-apps/plugin-dialog");
       const selected = await openDialog({
@@ -211,7 +212,7 @@ export function StoryboardList() {
       if (!selected) return;
 
       // Tauri v2 dialog may return a string or an object with a path property
-      const filePath = typeof selected === "string" ? selected : String(selected);
+      filePath = typeof selected === "string" ? selected : String(selected);
       console.log("[import] Selected file:", filePath);
       const ext = filePath.split(".").pop()?.toLowerCase();
 
@@ -230,8 +231,41 @@ export function StoryboardList() {
       await loadNotes();
       openNote(resultPath);
     } catch (err) {
-      console.error("[import] Import failed:", err);
-      alert(`Import failed: ${err instanceof Error ? err.message : String(err)}`);
+      const errMsg = err instanceof Error ? err.message : String(err);
+      console.error("[import] Import failed:", errMsg);
+
+      // DRM-protected? Offer clipboard fallback
+      if (errMsg.includes("DRM-protected") || errMsg.includes("protected or encrypted")) {
+        const ok = confirm(
+          "This document is protected. To import it:\n\n" +
+          "1. Open the file in Word\n" +
+          "2. Select all text (Ctrl+A)\n" +
+          "3. Copy it (Ctrl+C)\n" +
+          "4. Click OK here\n\n" +
+          "The note will be created from your clipboard."
+        );
+        if (ok) {
+          try {
+            const text = await navigator.clipboard.readText();
+            if (text && text.trim().length > 0) {
+              // Derive filename from the original path
+              const name = filePath.split(/[/\\]/).pop()?.replace(/\.[^.]+$/, "") ?? "imported";
+              const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+              const notePath = `${slug || "imported"}.md`;
+              await invoke("create_note", { relativePath: notePath });
+              await invoke("update_note", { relativePath: notePath, content: text.trim() });
+              await loadNotes();
+              openNote(notePath);
+            } else {
+              alert("Clipboard is empty. Please copy the text from Word first.");
+            }
+          } catch (clipErr) {
+            alert("Could not read clipboard. Please make sure you copied text from Word.");
+          }
+        }
+      } else {
+        alert(`Import failed: ${errMsg}`);
+      }
     }
   }, [loadNotes, openNote]);
 
