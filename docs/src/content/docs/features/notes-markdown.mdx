@@ -5,7 +5,7 @@ sidebar:
   order: 6
 ---
 
-import { Badge } from '@astrojs/starlight/components';
+import { Aside, Badge } from '@astrojs/starlight/components';
 
 <Badge text="Available" variant="success" />
 
@@ -36,6 +36,22 @@ Notes use a **CodeMirror**-based editor with:
 
 Notes appear alongside sketches and storyboards in the sidebar and can be
 reordered with drag-and-drop.
+
+## Document Import
+
+CutReady can import external documents and convert them to markdown notes:
+
+- **Supported formats:** `.docx`, `.doc`, `.pdf`, `.pptx`
+- Click the **import button** in the sidebar storyboard list panel
+- Select a file — CutReady extracts the text content and creates a new note
+
+Imported documents become fully editable markdown notes that you can
+restructure, annotate, and use as reference material for your sketches.
+
+<Aside type="tip">
+  See [Document Import](/cutready/features/document-import/) for full details
+  on supported formats, conversion options, and troubleshooting.
+</Aside>
 
 ## Storage
 

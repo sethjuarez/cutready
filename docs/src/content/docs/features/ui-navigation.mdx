@@ -14,17 +14,18 @@ editors, resizable panels, and a command palette.
 
 ## Layout
 
-```
-┌──────────────────────────────────────────────────┐
-│  Title Bar (window controls, panel toggles)      │
-├────────┬─────────────────────────────────────────┤
-│ Side-  │  Tab Bar (open documents)               │
-│ bar    ├─────────────────────────────────────────┤
-│ (5     │  Main Content                           │
-│ icons) │  (Sketch / Record / Script / Settings)  │
-│        ├─────────────────────────────────────────┤
-│        │  Output Panel (activity log)            │
-└────────┴─────────────────────────────────────────┘
+```text
+┌────────────────────────────────────────────────────────────┐
+│  Title Bar (window controls, panel toggles)                │
+├────────┬──────────────────────────────────┬────────────────┤
+│ Side-  │  Tab Bar (open documents)        │  Chat Panel    │
+│ bar    ├──────────────────────────────────┤  (AI chat +    │
+│ (5     │  Main Content                    │   Activity)    │
+│ icons) │  (Sketch / Record / Script /     │                │
+│        │   Settings)                      │                │
+│        ├──────────────────────────────────┤                │
+│        │  Output Panel (activity log)     │                │
+└────────┴──────────────────────────────────┴────────────────┘
 ```
 
 ## Sidebar
@@ -38,6 +39,7 @@ The sidebar has 5 navigation icons:
 | 🔴 | Record | Browser profile selection and recording |
 | 📄 | Script | Edit recorded scripts (coming soon) |
 | ⚙️ | Settings | API keys, output directory configuration |
+| 💬 | Chat | AI chat panel (right sidebar) |
 
 - **Toggle visibility**: `Ctrl+B`
 - **Move sidebar**: Right-click for left/right positioning
@@ -68,7 +70,21 @@ system messages, and command output.
 | `Ctrl+B` | Toggle Sidebar |
 | `` Ctrl+` `` | Toggle Output Panel |
 | `Ctrl+S` | Save Version |
+| `Ctrl+Shift+I` | Toggle Chat Panel |
 | `Escape` | Close overlays/modals |
+
+## Chat Panel
+
+The **Chat Panel** is a right-side panel for interacting with the AI assistant:
+
+- **Chat tab** — Converse with built-in AI agents (Script Writer, Demo Planner,
+  Sketch Improver) or custom agents
+- **Activity tab** — View color-coded logs of AI operations (sparkle button
+  calls, agent responses, errors)
+- **Toggle** — Click the 💬 icon in the sidebar or press `Ctrl+Shift+I`
+
+The chat panel is independent of the main content area — you can keep it open
+while editing sketches, reviewing storyboards, or working on notes.
 
 ## Theme
 

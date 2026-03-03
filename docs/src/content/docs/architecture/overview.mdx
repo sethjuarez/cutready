@@ -24,10 +24,15 @@ CutReady is a **Tauri v2** desktop application with a split architecture:
 │  @dnd-kit               │  ├── note.rs                  │
 │                         │  ├── interaction.rs            │
 │                         │  ├── screenshot.rs             │
-│                         │  └── versioning.rs             │
+│                         │  ├── import.rs                  │
+│                         │  ├── agent.rs                   │
+│                         │  └── versioning.rs              │
 │                         │                               │
-│                         │  Sidecar                      │
-│                         │  └── Playwright (Node.js)     │
+│                         │  AI Layer                       │
+│                         │  └── Azure OpenAI (reqwest)     │
+│                         │                                 │
+│                         │  Sidecar                        │
+│                         │  └── Playwright (Node.js)       │
 ├─────────────────────────┴───────────────────────────────┤
 │                    Tauri v2 Runtime                      │
 │              (WebView + Rust + IPC Bridge)               │
@@ -74,6 +79,8 @@ The Rust backend handles:
 | `note.rs` | Markdown note CRUD |
 | `interaction.rs` | Browser profile detection, recording sessions |
 | `screenshot.rs` | Monitor detection, screen/region capture |
+| `import.rs` | Document import (docx, pdf, pptx conversion) |
+| `agent.rs` | AI chat and agent commands |
 | `versioning.rs` | Snapshot save/restore, timeline, stash |
 
 ### Engine Layer (`src/engine/`)
@@ -82,6 +89,18 @@ Lower-level implementations:
 - **interaction.rs** — CDP browser communication, Playwright sidecar management
 - **screenshot.rs** — Native screen capture via `xcap` crate
 - **versioning.rs** — Git operations via `gix` (gitoxide)
+
+### AI Layer
+
+CutReady integrates with **Azure OpenAI** for AI-powered features:
+
+- **API communication** via `reqwest` with configurable endpoints and OAuth support
+- **Function calling** for structured sketch manipulation (add rows, update fields)
+- **Streaming responses** delivered to the frontend via Tauri channels
+- **Silent mode** for sparkle buttons — results are applied directly without chat UI
+
+The AI layer supports 3 built-in agents (Script Writer, Demo Planner, Sketch
+Improver) plus user-defined custom agents.
 
 ### Models Layer (`src/models/`)
 
