@@ -210,6 +210,20 @@ struct FoundryModelEntry {
     capabilities: Option<std::collections::HashMap<String, String>>,
 }
 
+/// Azure OpenAI deployments response (standard AOAI resources).
+#[derive(Debug, Deserialize)]
+struct AzureDeploymentsResponse {
+    #[serde(default)]
+    data: Vec<AzureDeploymentEntry>,
+}
+
+#[derive(Debug, Deserialize)]
+struct AzureDeploymentEntry {
+    id: String,
+    #[serde(default)]
+    model: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModelInfo {
     pub id: String,
@@ -281,20 +295,20 @@ impl LlmClient {
         }
     }
 
-    /// Build the models list URL based on provider.
+    /// Build the models/deployments list URL based on provider.
     fn models_url(&self) -> String {
         match self.config.provider {
             LlmProvider::AzureOpenai => {
                 if self.is_foundry() {
                     let base = self.foundry_base();
                     format!(
-                        "{}/openai/models?api-version=2024-10-21",
+                        "{}/openai/deployments?api-version=2024-10-21",
                         base
                     )
                 } else {
                     let base = self.config.endpoint.trim_end_matches('/');
                     format!(
-                        "{}/openai/models?api-version=2024-10-21",
+                        "{}/openai/deployments?api-version=2024-10-21",
                         base
                     )
                 }
@@ -375,10 +389,27 @@ impl LlmClient {
             .await
             .map_err(|e| format!("Failed to read models response: {e}"))?;
 
-        // Try standard OpenAI format first, then Foundry deployments format
+        // Try standard OpenAI format first (for OpenAI provider)
         if let Ok(parsed) = serde_json::from_str::<ModelsResponse>(&body) {
             return Ok(parsed.data);
         }
+        // Azure deployments format: { "data": [{ "id": "...", "model": "..." }] }
+        if let Ok(parsed) = serde_json::from_str::<AzureDeploymentsResponse>(&body) {
+            if !parsed.data.is_empty() {
+                return Ok(
+                    parsed
+                        .data
+                        .into_iter()
+                        .map(|d| ModelInfo {
+                            id: d.id,
+                            created: None,
+                            owned_by: d.model,
+                        })
+                        .collect(),
+                );
+            }
+        }
+        // Foundry deployments format: { "value": [{ "name": "...", ... }] }
         if let Ok(parsed) = serde_json::from_str::<FoundryModelsResponse>(&body) {
             return Ok(
                 parsed
@@ -390,7 +421,7 @@ impl LlmClient {
                             .as_ref()
                             .and_then(|c| c.get("chat_completion"))
                             .map(|v| v == "true")
-                            .unwrap_or(false)
+                            .unwrap_or(true) // if no capabilities field, include it
                     })
                     .map(|m| ModelInfo {
                         id: m.name,
