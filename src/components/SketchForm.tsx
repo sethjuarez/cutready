@@ -194,13 +194,28 @@ export function SketchForm() {
 
         {/* Title + Preview button */}
         <div className="flex items-center gap-3 mb-4">
-          <input
-            type="text"
-            value={localTitle}
-            onChange={(e) => handleTitleChange(e.target.value)}
-            placeholder="Sketch title..."
-            className="flex-1 text-2xl font-semibold bg-transparent text-[var(--color-text)] placeholder:text-[var(--color-text-secondary)]/40 outline-none border-none"
-          />
+          <div className="relative flex-1 group/title">
+            <input
+              type="text"
+              value={localTitle}
+              onChange={(e) => handleTitleChange(e.target.value)}
+              placeholder="Sketch title..."
+              className="w-full text-2xl font-semibold bg-transparent text-[var(--color-text)] placeholder:text-[var(--color-text-secondary)]/40 outline-none border-none"
+            />
+            {localTitle && (
+              <button
+                onClick={() => sendChatPrompt(
+                  `Improve the title of sketch "${activeSketchPath ?? "current"}". Current title: "${localTitle}". Suggest a more compelling, concise title and apply it using set_planning_rows.`
+                )}
+                className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover/title:opacity-100 p-1 rounded text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 transition-all"
+                title="Improve title with AI"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 2l2.09 6.26L20.18 10l-6.09 1.74L12 18l-2.09-6.26L3.82 10l6.09-1.74L12 2z" />
+                </svg>
+              </button>
+            )}
+          </div>
           {localRows.length > 0 && (
             <div className="relative">
               <button
@@ -255,19 +270,34 @@ export function SketchForm() {
         </div>
 
         {/* Description */}
-        <textarea
-          defaultValue={
-            typeof activeSketch.description === "string"
-              ? activeSketch.description
-              : ""
-          }
-          onChange={(e) => {
-            updateSketch({ description: e.target.value });
-          }}
-          placeholder="Describe what this sketch covers..."
-          rows={3}
-          className="w-full text-sm bg-transparent text-[var(--color-text)] placeholder:text-[var(--color-text-secondary)]/40 outline-none border border-[var(--color-border)] rounded-lg px-3 py-2 resize-none focus:ring-1 focus:ring-[var(--color-accent)]/40 transition-colors mb-8"
-        />
+        <div className="relative group/desc mb-8">
+          <textarea
+            defaultValue={
+              typeof activeSketch.description === "string"
+                ? activeSketch.description
+                : ""
+            }
+            onChange={(e) => {
+              updateSketch({ description: e.target.value });
+            }}
+            placeholder="Describe what this sketch covers..."
+            rows={3}
+            className="w-full text-sm bg-transparent text-[var(--color-text)] placeholder:text-[var(--color-text-secondary)]/40 outline-none border border-[var(--color-border)] rounded-lg px-3 py-2 resize-none focus:ring-1 focus:ring-[var(--color-accent)]/40 transition-colors"
+          />
+          {typeof activeSketch.description === "string" && activeSketch.description && (
+            <button
+              onClick={() => sendChatPrompt(
+                `Improve the description of sketch "${activeSketchPath ?? "current"}". Current description: "${activeSketch.description}". Make it clearer and more informative, then apply using set_planning_rows.`
+              )}
+              className="absolute right-2 top-2 opacity-0 group-hover/desc:opacity-100 p-1 rounded text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 transition-all"
+              title="Improve description with AI"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2l2.09 6.26L20.18 10l-6.09 1.74L12 18l-2.09-6.26L3.82 10l6.09-1.74L12 2z" />
+              </svg>
+            </button>
+          )}
+        </div>
 
         {/* Planning Table */}
         <div>
