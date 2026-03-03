@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useSettings, type AgentPreset } from "../hooks/useSettings";
+import { useSettings, useSettingsStore, type AgentPreset } from "../hooks/useSettings";
 import { invoke } from "@tauri-apps/api/core";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
 import { BUILT_IN_AGENTS } from "./ChatPanel";
@@ -773,10 +773,25 @@ interface FeedbackEntry {
   debug_log?: string;
 }
 
+const GITHUB_REPO = "sethjuarez/cutready";
+const ISSUE_FORMAT_PROMPT = `You are formatting user feedback into a GitHub issue. Given the feedback below, produce a JSON object with two fields:
+- "title": A concise, descriptive issue title (max 80 chars)
+- "body": A well-formatted GitHub issue body in markdown. Include:
+  - A clear description of the feedback
+  - The category as a label suggestion
+  - If debug log is provided, include it in a collapsible <details> section
+  - Keep it professional and actionable
+
+Respond ONLY with valid JSON, no markdown fences.`;
+
+/** Max URL length for browser safety. */
+const MAX_URL_LENGTH = 8000;
+
 function FeedbackListTab() {
   const [entries, setEntries] = useState<FeedbackEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
+  const [issuePending, setIssuePending] = useState<number | null>(null);
 
   useEffect(() => {
     invoke("list_feedback")
@@ -807,6 +822,98 @@ function FeedbackListTab() {
     try {
       await navigator.clipboard.writeText(text);
     } catch { /* ignore */ }
+  };
+
+  /** Build a simple fallback issue (no LLM). */
+  const buildFallbackIssue = (entry: FeedbackEntry) => {
+    const title = `[${entry.category}] Feedback — ${entry.date.split("T")[0]}`;
+    let body = `## ${entry.category} Feedback\n\n${entry.feedback}`;
+    if (entry.debug_log) {
+      body += `\n\n<details><summary>Debug Log (${entry.debug_log.split("\n").length} lines)</summary>\n\n\`\`\`\n${entry.debug_log}\n\`\`\`\n</details>`;
+    }
+    return { title, body };
+  };
+
+  /** Try LLM formatting, fall back to simple template. */
+  const formatAndOpenIssue = async (entry: FeedbackEntry, index: number) => {
+    if (issuePending !== null) return;
+    setIssuePending(index);
+
+    let title: string;
+    let body: string;
+
+    try {
+      // Try to get AI config from settings store
+      const s = useSettingsStore.getState().settings;
+      const hasAi = s.aiModel && s.aiEndpoint;
+
+      if (hasAi) {
+        let bearerToken = s.aiAuthMode === "azure_oauth" ? s.aiAccessToken : null;
+        if (s.aiAuthMode === "azure_oauth" && s.aiRefreshToken) {
+          try {
+            const tokenResult = await invoke<{ access_token: string; refresh_token?: string }>(
+              "azure_token_refresh",
+              { tenantId: s.aiTenantId || "", refreshToken: s.aiRefreshToken, clientId: s.aiClientId || null },
+            );
+            if (tokenResult.access_token) bearerToken = tokenResult.access_token;
+          } catch { /* use existing token */ }
+        }
+
+        const config = {
+          provider: s.aiProvider,
+          endpoint: s.aiEndpoint,
+          api_key: s.aiApiKey,
+          model: s.aiModel,
+          bearer_token: bearerToken,
+        };
+
+        const userContent = [
+          `Category: ${entry.category}`,
+          `Date: ${entry.date}`,
+          `Feedback: ${entry.feedback}`,
+          ...(entry.debug_log ? [`Debug Log:\n${entry.debug_log}`] : []),
+        ].join("\n\n");
+
+        const result = await invoke<{ role: string; content: string | null }>("agent_chat", {
+          config,
+          messages: [
+            { role: "system", content: ISSUE_FORMAT_PROMPT },
+            { role: "user", content: userContent },
+          ],
+        });
+
+        if (result.content) {
+          const parsed = JSON.parse(result.content.trim());
+          title = parsed.title || buildFallbackIssue(entry).title;
+          body = parsed.body || buildFallbackIssue(entry).body;
+        } else {
+          ({ title, body } = buildFallbackIssue(entry));
+        }
+      } else {
+        ({ title, body } = buildFallbackIssue(entry));
+      }
+    } catch {
+      ({ title, body } = buildFallbackIssue(entry));
+    }
+
+    // Truncate body if URL would be too long
+    const baseUrl = `https://github.com/${GITHUB_REPO}/issues/new?title=${encodeURIComponent(title)}&body=`;
+    const maxBodyLen = MAX_URL_LENGTH - baseUrl.length;
+    const encodedBody = encodeURIComponent(
+      body.length > maxBodyLen / 3
+        ? body.slice(0, Math.floor(maxBodyLen / 3)) + "\n\n…(truncated)"
+        : body,
+    );
+    const url = baseUrl + encodedBody;
+
+    try {
+      await shellOpen(url);
+    } catch {
+      // Fallback: copy to clipboard
+      await navigator.clipboard.writeText(`# ${title}\n\n${body}`).catch(() => {});
+    }
+
+    setIssuePending(null);
   };
 
   if (loading) {
@@ -876,12 +983,32 @@ function FeedbackListTab() {
               )}
               <button
                 onClick={() => copySingle(entry)}
-                className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 p-1 rounded text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)] transition-all"
+                className="absolute top-2 right-9 opacity-0 group-hover:opacity-100 p-1 rounded text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)] transition-all"
                 title="Copy this item"
               >
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <rect x="9" y="9" width="13" height="13" rx="2" ry="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
                 </svg>
+              </button>
+              <button
+                onClick={() => formatAndOpenIssue(entry, i)}
+                disabled={issuePending !== null}
+                className={`absolute top-2 right-2 opacity-0 group-hover:opacity-100 p-1 rounded transition-all ${
+                  issuePending === i
+                    ? "text-[var(--color-accent)] animate-pulse"
+                    : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)]"
+                }`}
+                title="Create GitHub Issue"
+              >
+                {issuePending === i ? (
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="animate-spin">
+                    <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+                  </svg>
+                ) : (
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z" />
+                  </svg>
+                )}
               </button>
             </div>
           ))}
