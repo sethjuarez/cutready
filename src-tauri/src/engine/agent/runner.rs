@@ -37,6 +37,12 @@ pub enum AgentEvent {
     /// A tool returned a result.
     #[serde(rename = "tool_result")]
     ToolResult { name: String, result: String },
+    /// A sub-agent is starting work.
+    #[serde(rename = "agent_start")]
+    AgentStart { agent_id: String, task: String },
+    /// A sub-agent finished.
+    #[serde(rename = "agent_done")]
+    AgentDone { agent_id: String },
     /// The agent loop finished.
     #[serde(rename = "done")]
     Done { response: String },
@@ -300,10 +306,21 @@ async fn exec_delegation(
         ChatMessage::user(message),
     ];
 
-    match run_with_depth(client, sub_messages, project_root, agent_prompts, pending, depth + 1, emit).await {
+    emit(AgentEvent::AgentStart {
+        agent_id: agent_id.to_string(),
+        task: message.to_string(),
+    });
+
+    let result = match run_with_depth(client, sub_messages, project_root, agent_prompts, pending, depth + 1, emit.clone()).await {
         Ok(result) => format!("[Agent '{}' responded:]\n\n{}", agent_id, result.response),
         Err(e) => format!("Error from agent '{}': {}", agent_id, e),
-    }
+    };
+
+    emit(AgentEvent::AgentDone {
+        agent_id: agent_id.to_string(),
+    });
+
+    result
 }
 
 /// Execute a fetch_url tool call.

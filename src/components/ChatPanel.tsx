@@ -344,7 +344,7 @@ function ChatTab() {
   const streamingRef = useRef("");
   const pendingToolArgsRef = useRef<Record<string, string>>({});
   useEffect(() => {
-    const unlisten = listen<{ type: string; content?: string; message?: string; name?: string; arguments?: string; result?: string; response?: string }>("agent-event", (event) => {
+    const unlisten = listen<{ type: string; content?: string; message?: string; name?: string; arguments?: string; result?: string; response?: string; agent_id?: string; task?: string }>("agent-event", (event) => {
       const ev = event.payload;
       switch (ev.type) {
         case "delta":
@@ -396,6 +396,25 @@ function ChatTab() {
           }
           break;
         }
+        case "agent_start":
+          addActivityEntries([{
+            id: crypto.randomUUID(),
+            timestamp: new Date(),
+            source: `delegate:${ev.agent_id ?? "agent"}`,
+            content: `🤖 Agent "${ev.agent_id}" started: ${ev.task ?? ""}`,
+            level: "info",
+          }]);
+          setStreamingStatus(`Agent "${ev.agent_id}" working…`);
+          break;
+        case "agent_done":
+          addActivityEntries([{
+            id: crypto.randomUUID(),
+            timestamp: new Date(),
+            source: `delegate:${ev.agent_id ?? "agent"}`,
+            content: `✓ Agent "${ev.agent_id}" finished`,
+            level: "success",
+          }]);
+          break;
         case "done":
           // Final response handled by the invoke return
           break;
