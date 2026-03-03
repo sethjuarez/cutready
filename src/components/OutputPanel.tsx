@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAppStore, type ActivityEntry } from "../stores/appStore";
 
 /** Format activity log as plain text and copy to clipboard / save to file. */
@@ -42,6 +42,13 @@ export function OutputPanel({ onCollapse }: OutputPanelProps) {
   const [activeTab, setActiveTab] = useState<OutputTab>("activity");
   const outputs = useAppStore((s) => s.activityLog);
   const clearActivityLog = useAppStore((s) => s.clearActivityLog);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll to bottom when new entries arrive
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [outputs.length]);
 
   return (
     <div className="flex flex-col h-full bg-[var(--color-surface-inset)] border-t border-[var(--color-border)]">
@@ -97,8 +104,8 @@ export function OutputPanel({ onCollapse }: OutputPanelProps) {
         </div>
       </div>
 
-      {/* Content — newest first */}
-      <div className="flex-1 overflow-y-auto p-2 text-xs font-mono flex flex-col-reverse">
+      {/* Content — auto-scrolls to latest */}
+      <div ref={scrollRef} className="flex-1 overflow-y-auto p-2 text-xs font-mono">
         {activeTab === "activity" && (
           <>
             {outputs.length === 0 ? (
@@ -106,7 +113,7 @@ export function OutputPanel({ onCollapse }: OutputPanelProps) {
                 No activity yet — AI agent output will appear here
               </div>
             ) : (
-              [...outputs].reverse().map((entry) => (
+              outputs.map((entry) => (
                 <ActivityRow key={entry.id} entry={entry} />
               ))
             )}
