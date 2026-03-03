@@ -1484,6 +1484,17 @@ function MarkdownContent({ content, projectRoot }: { content: string; projectRoo
               </pre>
             );
           }
+          // Inline code — colorize if it looks like a project file path
+          const text = typeof children === "string" ? children : "";
+          const fileType = detectFileType(text);
+          if (fileType) {
+            const c = typeColors(fileType);
+            return (
+              <code className={`px-1 py-0.5 rounded text-[10px] border ${c.bg} ${c.text} ${c.border}`}>
+                {children}
+              </code>
+            );
+          }
           return (
             <code className="px-1 py-0.5 bg-[var(--color-surface-alt)] rounded text-[10px] border border-[var(--color-border)]">
               {children}
@@ -1646,6 +1657,19 @@ function typeColors(type: string): { text: string; bg: string; border: string } 
     default:
       return { text: "text-[var(--color-text-secondary)]", bg: "bg-[var(--color-surface)]", border: "border-[var(--color-border)]" };
   }
+}
+
+/** Detect file type from a path string for colorizing. */
+function detectFileType(text: string): string | null {
+  if (!text) return null;
+  const t = text.trim();
+  if (/\.sk$/i.test(t)) return "sketch";
+  if (/\.md$/i.test(t) || /^notes?\//i.test(t)) return "note";
+  if (/\.sb$/i.test(t) || /^storyboards?\//i.test(t)) return "storyboard";
+  // Also match tool-style references
+  if (/^(read_|set_|update_).*sketch|planning_row/i.test(t)) return "sketch";
+  if (/^read_note/i.test(t)) return "note";
+  return null;
 }
 
 function FileTypeIcon({ type }: { type: string }) {
