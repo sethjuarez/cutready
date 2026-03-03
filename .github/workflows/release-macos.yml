@@ -1,4 +1,4 @@
-name: Release
+name: Release (macOS)
 
 on:
   push:
@@ -6,32 +6,23 @@ on:
       - 'v*'
 
 jobs:
-  publish-tauri:
+  build:
     permissions:
       contents: write
     strategy:
       fail-fast: false
       matrix:
         include:
-          - platform: 'macos-latest'
-            args: '--target aarch64-apple-darwin'
-          - platform: 'macos-latest'
-            args: '--target x86_64-apple-darwin'
-          - platform: 'ubuntu-24.04'
-            args: ''
-          - platform: 'windows-latest'
-            args: ''
+          - args: '--target aarch64-apple-darwin'
+            arch: 'silicon'
+          - args: '--target x86_64-apple-darwin'
+            arch: 'intel'
 
-    runs-on: ${{ matrix.platform }}
+    runs-on: macos-latest
+    timeout-minutes: 45
 
     steps:
       - uses: actions/checkout@v4
-
-      - name: Install dependencies (ubuntu only)
-        if: matrix.platform == 'ubuntu-24.04'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libpipewire-0.3-dev libgbm-dev
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -42,7 +33,7 @@ jobs:
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+          targets: 'aarch64-apple-darwin,x86_64-apple-darwin'
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2
@@ -66,10 +57,9 @@ jobs:
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         with:
-          tagName: v__VERSION__
-          releaseName: 'CutReady v__VERSION__'
+          tagName: ${{ github.ref_name }}
+          releaseName: 'CutReady ${{ github.ref_name }}'
           releaseBody: 'See the assets to download and install this version.'
           releaseDraft: true
           prerelease: false
-          updaterJsonPreferNsis: true
           args: ${{ matrix.args }}
