@@ -252,7 +252,7 @@ fn run_with_depth<'a>(
 
                 emit(AgentEvent::ToolResult {
                     name: call.function.name.clone(),
-                    result: result.chars().take(500).collect(),
+                    result: result.clone(),
                 });
                 messages.push(ChatMessage::tool_result(&call.id, &result));
             }

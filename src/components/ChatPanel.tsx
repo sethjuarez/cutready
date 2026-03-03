@@ -318,6 +318,8 @@ function ChatTab() {
   const addActivityEntries = useAppStore((s) => s.addActivityEntries);
   const chatSessionPath = useAppStore((s) => s.chatSessionPath);
   const newChatSession = useAppStore((s) => s.newChatSession);
+  const loadSketches = useAppStore((s) => s.loadSketches);
+  const openSketch = useAppStore((s) => s.openSketch);
 
   const [input, setInput] = useState("");
   const [references, setReferences] = useState<FileReference[]>([]);
@@ -340,6 +342,7 @@ function ChatTab() {
 
   // Listen for streaming agent events from the backend
   const streamingRef = useRef("");
+  const pendingToolArgsRef = useRef<Record<string, string>>({});
   useEffect(() => {
     const unlisten = listen<{ type: string; content?: string; message?: string; name?: string; arguments?: string; result?: string; response?: string }>("agent-event", (event) => {
       const ev = event.payload;
@@ -359,6 +362,8 @@ function ChatTab() {
           }]);
           break;
         case "tool_call":
+          // Stash args so tool_result can use them (e.g. to extract path)
+          if (ev.name) pendingToolArgsRef.current[ev.name] = ev.arguments ?? "{}";
           addActivityEntries([{
             id: crypto.randomUUID(),
             timestamp: new Date(),
@@ -367,7 +372,7 @@ function ChatTab() {
             level: "info",
           }]);
           break;
-        case "tool_result":
+        case "tool_result": {
           addActivityEntries([{
             id: crypto.randomUUID(),
             timestamp: new Date(),
@@ -375,7 +380,22 @@ function ChatTab() {
             content: ev.result ?? "",
             level: "success",
           }]);
+          // Auto-refresh sidebar and open sketches after tool mutations
+          const toolName = ev.name ?? "";
+          const resultText = ev.result ?? "";
+          const isSuccess = !resultText.startsWith("Error");
+          if (isSuccess && (toolName === "set_planning_rows" || toolName === "update_planning_row")) {
+            loadSketches();
+            // Open the sketch using the relative path from tool args
+            if (toolName === "set_planning_rows") {
+              try {
+                const args = JSON.parse(pendingToolArgsRef.current[toolName] ?? "{}");
+                if (args.path) openSketch(args.path);
+              } catch { /* ignore parse errors */ }
+            }
+          }
           break;
+        }
         case "done":
           // Final response handled by the invoke return
           break;
@@ -391,7 +411,7 @@ function ChatTab() {
       }
     });
     return () => { unlisten.then((f) => f()); };
-  }, [addActivityEntries]);
+  }, [addActivityEntries, loadSketches, openSketch]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
