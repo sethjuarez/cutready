@@ -10,7 +10,7 @@
  * - Full realistic Word document clipboard output
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { htmlToMarkdown, clipboardHasHtml } from "../services/richPaste";
+import { htmlToMarkdown, clipboardHasHtml, detectPasteComplexity } from "../services/richPaste";
 
 // Mock Tauri invoke for image saving
 const mockInvoke = vi.fn().mockResolvedValue(".cutready/screenshots/pasted-123.png");
@@ -649,6 +649,52 @@ describe("richPaste", () => {
     it("returns hadHtml: true", async () => {
       const result = await htmlToMarkdown("<p>Hello</p>");
       expect(result.hadHtml).toBe(true);
+    });
+  });
+
+  // ─── Paste complexity detection ─────────────────────────────────
+
+  describe("detectPasteComplexity", () => {
+    it("scores simple text as low complexity", () => {
+      const result = detectPasteComplexity("<p>Hello world</p>");
+      expect(result.score).toBeLessThan(4);
+      expect(result.hasTables).toBe(false);
+      expect(result.hasImages).toBe(false);
+    });
+
+    it("scores tables as complex", () => {
+      const html = "<table><tr><td>A</td><td>B</td></tr><tr><td>1</td><td>2</td></tr></table>";
+      const result = detectPasteComplexity(html);
+      expect(result.hasTables).toBe(true);
+      expect(result.score).toBeGreaterThanOrEqual(3);
+    });
+
+    it("scores images as moderately complex", () => {
+      const html = '<p>Text</p><img src="pic.png"><p>More</p>';
+      const result = detectPasteComplexity(html);
+      expect(result.hasImages).toBe(true);
+      expect(result.score).toBeGreaterThanOrEqual(2);
+    });
+
+    it("scores tables + images as highly complex", () => {
+      const html = `
+        <h1>Report</h1>
+        <h2>Overview</h2>
+        <table><tr><td>A</td></tr></table>
+        <img src="chart.png">
+        <img src="graph.png">
+        <img src="logo.png">`;
+      const result = detectPasteComplexity(html);
+      expect(result.score).toBeGreaterThanOrEqual(4);
+      expect(result.hasTables).toBe(true);
+      expect(result.hasImages).toBe(true);
+      expect(result.hasMultipleHeadings).toBe(true);
+    });
+
+    it("detects nested lists", () => {
+      const html = "<ul><li>A<ul><li>B</li></ul></li></ul>";
+      const result = detectPasteComplexity(html);
+      expect(result.hasNestedLists).toBe(true);
     });
   });
 });

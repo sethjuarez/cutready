@@ -292,11 +292,66 @@ Clean up the markdown to be well-structured and readable. Rules:
 6. Remove any garbled formatting artifacts
 7. Return ONLY the cleaned markdown — no explanations or commentary`;
 
+const AI_COMPLEX_PASTE_PROMPT = `You are an expert document conversion assistant. Convert the following HTML content into clean, well-structured Markdown.
+
+The HTML comes from a clipboard paste (likely from Word, a web page, or a rich text editor). It may contain formatting artifacts, inline styles, and messy structure.
+
+Rules:
+1. Preserve ALL text content exactly — do not add, remove, or rephrase anything
+2. Create proper Markdown structure: headings, lists, tables, bold, italic, links
+3. Tables must use proper Markdown pipe syntax with header separator rows
+4. Preserve all image references exactly as they appear (![](path) or <img> tags → ![](src))
+5. Remove all HTML artifacts, inline styles, and formatting cruft
+6. Use ATX-style headings (# H1, ## H2, etc.)
+7. Use - for bullet lists, 1. for numbered lists
+8. Return ONLY the cleaned Markdown — no explanations, no code fences`;
+
+// ─── Paste complexity detection ────────────────────────────────────
+
+interface PasteComplexity {
+  score: number;
+  hasTables: boolean;
+  hasImages: boolean;
+  hasNestedLists: boolean;
+  hasMultipleHeadings: boolean;
+  elementCount: number;
+}
+
+export { detectPasteComplexity };
+export type { PasteComplexity };
+
+function detectPasteComplexity(html: string): PasteComplexity {
+  const hasTables = /<table[\s>]/i.test(html);
+  const hasImages = /<img[\s>]/i.test(html);
+  const hasNestedLists = /<[uo]l[\s>][\s\S]*?<[uo]l[\s>]/i.test(html);
+  const headingCount = (html.match(/<h[1-6][\s>]/gi) || []).length;
+  const hasMultipleHeadings = headingCount >= 2;
+
+  // Count structural elements
+  const tableCount = (html.match(/<table[\s>]/gi) || []).length;
+  const imageCount = (html.match(/<img[\s>]/gi) || []).length;
+  const listCount = (html.match(/<[uo]l[\s>]/gi) || []).length;
+  const elementCount = tableCount + imageCount + listCount + headingCount;
+
+  // Complexity score (0-10 scale)
+  let score = 0;
+  if (hasTables) score += 3;
+  if (tableCount > 1) score += 1;
+  if (hasImages) score += 2;
+  if (imageCount > 2) score += 1;
+  if (hasNestedLists) score += 2;
+  if (hasMultipleHeadings) score += 1;
+  if (html.length > 5000) score += 1;
+
+  return { score, hasTables, hasImages, hasNestedLists, hasMultipleHeadings, elementCount };
+}
+
 /**
  * Convert HTML clipboard content to Markdown.
  * If `saveImages` is true, base64 images are saved to the project's
  * screenshots directory and replaced with relative Markdown links.
- * If `aiConfig` is provided, the result is refined by the AI model.
+ * Complex pastes (tables, images, nested formatting) use AI-first conversion.
+ * Simple pastes use Turndown with optional AI cleanup.
  */
 export async function htmlToMarkdown(
   html: string,
@@ -338,8 +393,78 @@ export async function htmlToMarkdown(
   }
 
   const cleaned = cleanWordHtml(workingHtml);
+  const complexity = detectPasteComplexity(cleaned);
+
+  let md: string;
+
+  // Complex pastes: AI-first conversion from cleaned HTML
+  if (complexity.score >= 4 && options.aiConfig) {
+    const features = [
+      complexity.hasTables && "tables",
+      complexity.hasImages && "images",
+      complexity.hasNestedLists && "nested lists",
+      complexity.hasMultipleHeadings && "multiple headings",
+    ].filter(Boolean).join(", ");
+    log(`Rich paste: complex content detected (${features}) — using AI conversion`, "info");
+
+    try {
+      // Truncate very large HTML to avoid token limits
+      const htmlForAi = cleaned.length > 30000 ? cleaned.slice(0, 30000) + "\n<!-- truncated -->" : cleaned;
+      const refined = await invoke<{ role: string; content: string | null }>("agent_chat", {
+        config: options.aiConfig,
+        messages: [
+          { role: "system", content: AI_COMPLEX_PASTE_PROMPT },
+          { role: "user", content: htmlForAi },
+        ],
+      });
+      if (refined.content && refined.content.trim().length > 0) {
+        md = stripCodeFence(refined.content.trim());
+        log("Rich paste: AI conversion complete ✓", "success");
+      } else {
+        // AI returned empty — fall back to turndown
+        log("Rich paste: AI returned empty, falling back to Turndown", "warn");
+        md = turndownConvert(cleaned);
+      }
+    } catch (e) {
+      log(`Rich paste: AI conversion failed, falling back to Turndown — ${e}`, "warn");
+      md = turndownConvert(cleaned);
+    }
+  } else {
+    // Simple pastes: Turndown conversion with optional AI cleanup
+    md = turndownConvert(cleaned);
+
+    // AI refinement for simple pastes
+    if (options.aiConfig && md.length > 0) {
+      log(`Rich paste: refining with AI model (${options.aiConfig.model})…`, "info");
+      try {
+        const refined = await invoke<{ role: string; content: string | null }>("agent_chat", {
+          config: options.aiConfig,
+          messages: [
+            { role: "system", content: AI_PASTE_PROMPT },
+            { role: "user", content: md },
+          ],
+        });
+        if (refined.content && refined.content.trim().length > 0) {
+          md = stripCodeFence(refined.content.trim());
+          log("Rich paste: AI refinement complete ✓", "success");
+        }
+      } catch (e) {
+        log(`Rich paste: AI refinement failed, using basic conversion — ${e}`, "warn");
+      }
+    } else if (!options.aiConfig) {
+      log("Rich paste: no AI model configured, using basic conversion", "info");
+    }
+  }
+
+  log("Rich paste: done ✓", "success");
+
+  return { markdown: md, hadHtml: true };
+}
+
+/** Run Turndown conversion with post-processing cleanup. */
+function turndownConvert(cleanedHtml: string): string {
   const td = getTurndown();
-  let md = td.turndown(cleaned);
+  let md = td.turndown(cleanedHtml);
 
   // Post-processing cleanup
   md = md
@@ -351,44 +476,23 @@ export async function htmlToMarkdown(
     .replace(/[ \t]+$/gm, "")
     .trim();
 
-  // AI refinement — pass through model if configured
-  if (options.aiConfig && md.length > 0) {
-    log(`Rich paste: refining with AI model (${options.aiConfig.model})…`, "info");
-    try {
-      const refined = await invoke<{ role: string; content: string | null }>("agent_chat", {
-        config: options.aiConfig,
-        messages: [
-          { role: "system", content: AI_PASTE_PROMPT },
-          { role: "user", content: md },
-        ],
-      });
-      if (refined.content && refined.content.trim().length > 0) {
-        // Strip markdown code fence if the model wrapped its response
-        let result = refined.content.trim();
-        if (result.startsWith("```markdown")) {
-          result = result.slice("```markdown".length);
-        } else if (result.startsWith("```md")) {
-          result = result.slice("```md".length);
-        } else if (result.startsWith("```")) {
-          result = result.slice(3);
-        }
-        if (result.endsWith("```")) {
-          result = result.slice(0, -3);
-        }
-        md = result.trim();
-        log("Rich paste: AI refinement complete ✓", "success");
-      }
-    } catch (e) {
-      // AI refinement failed — use basic conversion (already in md)
-      log(`Rich paste: AI refinement failed, using basic conversion — ${e}`, "warn");
-    }
-  } else if (!options.aiConfig) {
-    log("Rich paste: no AI model configured, using basic conversion", "info");
+  return md;
+}
+
+/** Strip markdown code fence wrapper from AI response. */
+function stripCodeFence(text: string): string {
+  let result = text;
+  if (result.startsWith("```markdown")) {
+    result = result.slice("```markdown".length);
+  } else if (result.startsWith("```md")) {
+    result = result.slice("```md".length);
+  } else if (result.startsWith("```")) {
+    result = result.slice(3);
   }
-
-  log("Rich paste: done ✓", "success");
-
-  return { markdown: md, hadHtml: true };
+  if (result.endsWith("```")) {
+    result = result.slice(0, -3);
+  }
+  return result.trim();
 }
 
 /**
