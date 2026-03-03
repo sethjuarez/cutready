@@ -186,9 +186,9 @@ export function TitleBar({
           aria-label="Maximize"
         >
           {maximized ? (
-            <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1">
-              <rect x="2" y="0" width="8" height="8" rx="0.5" />
-              <rect x="0" y="2" width="8" height="8" rx="0.5" />
+            <svg width="10" height="10" viewBox="0 0 11 11" fill="none" stroke="currentColor" strokeWidth="1">
+              <rect x="3.5" y="0.5" width="7" height="7" rx="0.5" />
+              <rect x="0.5" y="3.5" width="7" height="7" rx="0.5" fill="var(--color-surface-toolbar)" />
             </svg>
           ) : (
             <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1">
