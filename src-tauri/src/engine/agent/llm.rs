@@ -391,7 +391,7 @@ impl LlmClient {
 
         let url = self.models_url();
         let body = self.fetch_models_body(&url).await?;
-        self.parse_models_response(&body, &url)
+        self.parse_models_response(&body, false)
     }
 
     /// Foundry-specific model listing: tries deployments endpoints first, falls back to /openai/models.
@@ -410,9 +410,10 @@ impl LlmClient {
 
         let mut last_err = String::new();
         for url in &urls {
-            log::info!("[list_models_foundry] trying: {}", url);
+            let is_deployments = url.contains("/deployments");
+            log::info!("[list_models_foundry] trying: {} (filter_chat={})", url, !is_deployments);
             match self.fetch_models_body(url).await {
-                Ok(body) => match self.parse_models_response(&body, url) {
+                Ok(body) => match self.parse_models_response(&body, !is_deployments) {
                     Ok(models) if !models.is_empty() => {
                         log::info!("[list_models_foundry] success from {} — {} models", url, models.len());
                         return Ok(models);
@@ -468,7 +469,8 @@ impl LlmClient {
     }
 
     /// Parse a models/deployments response body into ModelInfo list.
-    fn parse_models_response(&self, body: &str, _url: &str) -> Result<Vec<ModelInfo>, String> {
+    /// When `filter_chat_only` is true, only include chat-capable models (for catalog responses).
+    fn parse_models_response(&self, body: &str, filter_chat_only: bool) -> Result<Vec<ModelInfo>, String> {
         // Try standard OpenAI format: { "data": [{ "id": "...", ... }] }
         if let Ok(parsed) = serde_json::from_str::<ModelsResponse>(body) {
             if !parsed.data.is_empty() {
@@ -499,6 +501,10 @@ impl LlmClient {
                         .value
                         .into_iter()
                         .filter(|m| {
+                            if !filter_chat_only {
+                                return true; // deployments endpoint: show all
+                            }
+                            // catalog: only chat-capable models
                             m.capabilities
                                 .as_ref()
                                 .and_then(|c| c.get("chat_completion"))
