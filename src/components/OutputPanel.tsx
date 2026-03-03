@@ -29,7 +29,7 @@ async function exportActivity(entries: ActivityEntry[]) {
   URL.revokeObjectURL(url);
 }
 
-type OutputTab = "activity" | "problems";
+type OutputTab = "activity" | "debug";
 
 interface OutputPanelProps {
   onCollapse: () => void;
@@ -41,7 +41,9 @@ interface OutputPanelProps {
 export function OutputPanel({ onCollapse }: OutputPanelProps) {
   const [activeTab, setActiveTab] = useState<OutputTab>("activity");
   const outputs = useAppStore((s) => s.activityLog);
+  const debugEntries = useAppStore((s) => s.debugLog);
   const clearActivityLog = useAppStore((s) => s.clearActivityLog);
+  const clearDebugLog = useAppStore((s) => s.clearDebugLog);
   const scrollRef = useRef<HTMLDivElement>(null);
   // No auto-scroll needed — newest entries render at top via flex-col-reverse
 
@@ -61,17 +63,24 @@ export function OutputPanel({ onCollapse }: OutputPanelProps) {
             Activity
           </TabButton>
           <TabButton
-            active={activeTab === "problems"}
-            onClick={() => setActiveTab("problems")}
+            active={activeTab === "debug"}
+            onClick={() => setActiveTab("debug")}
           >
-            Problems
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 2a4 4 0 0 0-4 4v2H6a2 2 0 0 0-2 2v1h4" />
+              <path d="M18 10h-4V8a4 4 0 0 0-4-4" />
+              <rect x="4" y="10" width="16" height="12" rx="2" />
+              <path d="M12 10v12" />
+              <path d="M4 16h16" />
+            </svg>
+            Debug
           </TabButton>
         </div>
         <div className="flex items-center gap-1">
           <button
-            onClick={() => exportActivity(outputs)}
+            onClick={() => activeTab === "activity" ? exportActivity(outputs) : exportActivity(debugEntries)}
             className="p-1 rounded text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-alt)] transition-colors"
-            title="Export activity log"
+            title={activeTab === "activity" ? "Export activity log" : "Export debug log"}
           >
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
@@ -80,7 +89,7 @@ export function OutputPanel({ onCollapse }: OutputPanelProps) {
             </svg>
           </button>
           <button
-            onClick={clearActivityLog}
+            onClick={() => activeTab === "activity" ? clearActivityLog() : clearDebugLog()}
             className="p-1 rounded text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-alt)] transition-colors"
             title="Clear"
           >
@@ -115,10 +124,18 @@ export function OutputPanel({ onCollapse }: OutputPanelProps) {
             )}
           </>
         )}
-        {activeTab === "problems" && (
-          <div className="text-center text-[var(--color-text-secondary)] py-8">
-            No problems
-          </div>
+        {activeTab === "debug" && (
+          <>
+            {debugEntries.length === 0 ? (
+              <div className="text-center text-[var(--color-text-secondary)] py-8">
+                No debug messages yet — backend and frontend logs will appear here
+              </div>
+            ) : (
+              [...debugEntries].reverse().map((entry) => (
+                <ActivityRow key={entry.id} entry={entry} />
+              ))
+            )}
+          </>
         )}
       </div>
     </div>

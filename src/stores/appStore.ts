@@ -125,6 +125,8 @@ interface AppStoreState {
   pendingChatPrompt: { text: string; silent?: boolean } | null;
   /** Activity log entries for the output panel. */
   activityLog: ActivityEntry[];
+  /** Debug log entries for the debug panel. */
+  debugLog: ActivityEntry[];
 
   /** Version history for the current project. */
   versions: VersionEntry[];
@@ -289,6 +291,10 @@ interface AppStoreState {
   addActivityEntries: (entries: ActivityEntry[]) => void;
   /** Clear activity log. */
   clearActivityLog: () => void;
+  /** Add a debug log entry. */
+  addDebugEntry: (entry: ActivityEntry) => void;
+  /** Clear debug log. */
+  clearDebugLog: () => void;
   /** List saved chat sessions. */
   listChatSessions: () => Promise<ChatSessionSummary[]>;
   /** Delete a chat session. */
@@ -419,6 +425,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   chatError: null,
   pendingChatPrompt: null,
   activityLog: [],
+  debugLog: [],
   versions: [],
   timelines: [],
   graphNodes: [],
@@ -619,6 +626,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       chatError: null,
       pendingChatPrompt: null,
       activityLog: [],
+      debugLog: [],
       versions: [],
       timelines: [],
       graphNodes: [],
@@ -1003,6 +1011,8 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   sendChatPrompt: (prompt, opts) => set({ pendingChatPrompt: { text: prompt, silent: opts?.silent } }),
   addActivityEntries: (entries) => set((s) => ({ activityLog: [...s.activityLog, ...entries] })),
   clearActivityLog: () => set({ activityLog: [] }),
+  addDebugEntry: (entry) => set((s) => ({ debugLog: [...s.debugLog.slice(-499), entry] })),
+  clearDebugLog: () => set({ debugLog: [] }),
 
   listChatSessions: async () => {
     try {

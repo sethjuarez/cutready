@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useTheme } from "./hooks/useTheme";
 import { useGlobalHotkeys } from "./hooks/useGlobalHotkeys";
+import { useDebugLog } from "./hooks/useDebugLog";
 import { StatusBar } from "./components/StatusBar";
 import { AppLayout } from "./components/AppLayout";
 import { useAppStore } from "./stores/appStore";
@@ -9,6 +10,7 @@ import { useUpdateStore } from "./stores/updateStore";
 function App() {
   const { theme, toggle } = useTheme();
   useGlobalHotkeys();
+  useDebugLog();
 
   // Auto-open last project on startup
   useEffect(() => {
