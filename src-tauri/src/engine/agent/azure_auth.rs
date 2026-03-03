@@ -9,7 +9,7 @@ use sha2::{Digest, Sha256};
 use tokio::io::AsyncWriteExt;
 use tokio::net::TcpListener;
 
-const AZURE_OPENAI_SCOPE: &str = "https://ai.azure.com/.default offline_access";
+const AZURE_OPENAI_SCOPE: &str = "https://cognitiveservices.azure.com/.default offline_access";
 
 /// Azure PowerShell client ID — first-party, respects requested scopes for cognitive services.
 const DEFAULT_CLIENT_ID: &str = "1950a258-227b-4e31-a9cf-717495945fc2";
