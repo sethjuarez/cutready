@@ -149,7 +149,9 @@ export function Sidebar() {
         }`}
         onContextMenu={handleContextMenu}
       >
-        {navItems.map((item) => {
+        {navItems
+          .filter((item) => item.id !== "recording" && item.id !== "editor")
+          .map((item) => {
           const isActive = view === item.id;
           const requiresProject = item.id === "sketch" || item.id === "editor" || item.id === "recording";
           const isDisabled = requiresProject && !currentProject;
