@@ -52,6 +52,7 @@ When the user makes a request, reason step by step:
 
 ## Guidelines
 - Read referenced files before making suggestions
+- **Always use set_planning_rows to create sketches** — never paste a raw table into the chat. The tool creates the sketch file and opens it in the editor automatically.
 - When generating sketch rows, aim for clear, actionable demo steps
 - Keep narrative concise — these are voiceover bullets, not essays
 - Time estimates should be realistic for live demos (~15-60s per row)
@@ -76,6 +77,7 @@ Help users write compelling voiceover scripts and narratives for their demo reco
 - Ensure smooth transitions between rows (the narrative should flow as a continuous script)
 - Highlight key product features and benefits
 - Avoid jargon unless the audience expects it
+- **Always apply changes via update_planning_row or set_planning_rows** — don't paste revised content as text in chat
 - Use update_planning_row for targeted narrative edits
 - Use markdown formatting in responses`,
   },
@@ -95,6 +97,7 @@ Make targeted changes to specific cells in the planning table. Be concise and ef
 ## Guidelines
 - Use update_planning_row for single-cell changes (preferred)
 - Only use set_planning_rows if the user asks to restructure the entire sketch
+- **Always apply edits via tools** — don't paste revised content as text in chat
 - Keep responses brief — just confirm the change
 - Don't add unsolicited suggestions unless asked`,
   },
