@@ -57,3 +57,17 @@ pub fn list_feedback(app: tauri::AppHandle) -> Result<Vec<FeedbackEntry>, String
         serde_json::from_str(&content).map_err(|e| format!("Parse error: {e}"))?;
     Ok(entries)
 }
+
+/// Clear all feedback entries.
+#[tauri::command]
+pub fn clear_feedback(app: tauri::AppHandle) -> Result<(), String> {
+    let data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Could not resolve app data dir: {e}"))?;
+    let path = data_dir.join("feedback.json");
+    if path.exists() {
+        fs::write(&path, "[]").map_err(|e| format!("Could not clear feedback: {e}"))?;
+    }
+    Ok(())
+}

@@ -196,6 +196,7 @@ pub fn run() {
             commands::agent::azure_browser_auth_complete,
             commands::feedback::save_feedback,
             commands::feedback::list_feedback,
+            commands::feedback::clear_feedback,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -817,12 +817,17 @@ function FeedbackListTab() {
     } catch { /* ignore */ }
   };
 
-  const copySingle = async (entry: FeedbackEntry) => {
+   const copySingle = async (entry: FeedbackEntry) => {
     let text = `## ${entry.category}\n**Date:** ${entry.date.split("T")[0]}\n\n${entry.feedback}`;
     if (entry.debug_log) text += `\n\n---\n### Debug Log\n\`\`\`\n${entry.debug_log}\n\`\`\``;
     try {
       await navigator.clipboard.writeText(text);
     } catch { /* ignore */ }
+  };
+
+  const clearAll = async () => {
+    await invoke("clear_feedback").catch(() => {});
+    setEntries([]);
   };
 
   /** Build a simple fallback issue (no LLM). */
@@ -939,30 +944,41 @@ function FeedbackListTab() {
             : `${entries.length} feedback item${entries.length === 1 ? "" : "s"}`}
         </p>
         {entries.length > 0 && (
-          <button
-            onClick={copyAll}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-[11px] rounded-lg font-medium transition-colors ${
-              copied
-                ? "bg-emerald-500/15 text-emerald-500 border border-emerald-500/30"
-                : "bg-[var(--color-accent)] text-white hover:bg-[var(--color-accent-hover)]"
-            }`}
-          >
-            {copied ? (
-              <>
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="20 6 9 17 4 12" />
-                </svg>
-                Copied All!
-              </>
-            ) : (
-              <>
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                </svg>
-                Copy All to Clipboard
-              </>
-            )}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={copyAll}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-[11px] rounded-lg font-medium transition-colors border ${
+                copied
+                  ? "bg-emerald-500/15 text-emerald-500 border-emerald-500/30"
+                  : "bg-[var(--color-surface-alt)] text-[var(--color-text-secondary)] border-[var(--color-border)] hover:text-[var(--color-text)] hover:border-[var(--color-text-secondary)]/40"
+              }`}
+            >
+              {copied ? (
+                <>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                  Copied All!
+                </>
+              ) : (
+                <>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                  </svg>
+                  Copy All
+                </>
+              )}
+            </button>
+            <button
+              onClick={clearAll}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] rounded-lg font-medium transition-colors border bg-[var(--color-surface-alt)] text-[var(--color-text-secondary)] border-[var(--color-border)] hover:text-red-400 hover:border-red-400/40"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 6h18M8 6V4h8v2M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+              </svg>
+              Clear All
+            </button>
+          </div>
         )}
       </div>
 
