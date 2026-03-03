@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useAppStore } from "../stores/appStore";
 import { SnapshotGraph } from "./SnapshotGraph";
 
@@ -6,26 +6,18 @@ export function VersionHistory() {
   const graphNodes = useAppStore((s) => s.graphNodes);
   const isDirty = useAppStore((s) => s.isDirty);
   const isRewound = useAppStore((s) => s.isRewound);
-  const saveVersion = useAppStore((s) => s.saveVersion);
   const checkDirty = useAppStore((s) => s.checkDirty);
   const checkRewound = useAppStore((s) => s.checkRewound);
   const navigateToSnapshot = useAppStore((s) => s.navigateToSnapshot);
   const discardChanges = useAppStore((s) => s.discardChanges);
   const loadGraphData = useAppStore((s) => s.loadGraphData);
   const sidebarPosition = useAppStore((s) => s.sidebarPosition);
-  const snapshotPromptOpen = useAppStore((s) => s.snapshotPromptOpen);
   const timelines = useAppStore((s) => s.timelines);
   const loadTimelines = useAppStore((s) => s.loadTimelines);
 
-  const [labelInput, setLabelInput] = useState("");
-  const [forkLabelInput, setForkLabelInput] = useState("");
-  const [showLabelInput, setShowLabelInput] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [pendingNavTarget, setPendingNavTarget] = useState<string | null>(null);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [discarding, setDiscarding] = useState(false);
-
-  const pendingNavRef = useRef<string | null>(null);
 
   // Build a label map: timeline name → { label, color_index }
   const timelineMap = new Map(
@@ -38,39 +30,6 @@ export function VersionHistory() {
     checkDirty();
     checkRewound();
   }, [loadGraphData, loadTimelines, checkDirty, checkRewound]);
-
-  useEffect(() => {
-    if (snapshotPromptOpen) {
-      setShowLabelInput(true);
-      useAppStore.setState({ snapshotPromptOpen: false });
-    }
-  }, [snapshotPromptOpen]);
-
-  // Whether this save will create a fork (rewound + saving new work)
-  const willFork = isRewound && showLabelInput;
-
-  const handleSave = useCallback(async () => {
-    const label = labelInput.trim();
-    if (!label) return;
-    const forkLabel = isRewound ? forkLabelInput.trim() || undefined : undefined;
-    if (isRewound && !forkLabel) return;
-    setSaving(true);
-    await saveVersion(label, forkLabel);
-    setLabelInput("");
-    setForkLabelInput("");
-    setShowLabelInput(false);
-    setSaving(false);
-    // Force full refresh
-    await loadGraphData();
-    await loadTimelines();
-    const navTarget = pendingNavRef.current;
-    if (navTarget) {
-      pendingNavRef.current = null;
-      await navigateToSnapshot(navTarget);
-      await loadGraphData();
-      await loadTimelines();
-    }
-  }, [labelInput, forkLabelInput, isRewound, saveVersion, navigateToSnapshot, loadGraphData, loadTimelines]);
 
   const handleNodeClick = useCallback(async (commitId: string, isHead: boolean) => {
     if (isHead) return;
@@ -89,8 +48,7 @@ export function VersionHistory() {
     const target = pendingNavTarget;
     if (!target) return;
     setPendingNavTarget(null);
-    setShowLabelInput(true);
-    pendingNavRef.current = target;
+    useAppStore.setState({ pendingNavAfterSave: target, snapshotPromptOpen: true });
   }, [pendingNavTarget]);
 
   const handleNavDiscard = useCallback(async () => {
@@ -137,7 +95,7 @@ export function VersionHistory() {
             </button>
           )}
           <button
-            onClick={() => setShowLabelInput(true)}
+            onClick={() => useAppStore.setState({ snapshotPromptOpen: true })}
             className="group/btn flex items-center gap-1 p-1 rounded text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] transition-colors"
             title="Save Project Snapshot (Ctrl+S)"
           >
@@ -172,68 +130,6 @@ export function VersionHistory() {
               className="px-2 py-1 rounded-md text-[10px] text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors"
             >
               Cancel
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Save dialog — snapshot name + optional fork/timeline name */}
-      {showLabelInput && (
-        <div className="px-3 py-2 border-b border-[var(--color-border)]">
-          {willFork && (
-            <div className="mb-2">
-              <div className="flex items-center gap-1.5 mb-1.5">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-amber-500 shrink-0">
-                  <circle cx="12" cy="12" r="10" />
-                  <line x1="12" y1="8" x2="12" y2="12" />
-                  <line x1="12" y1="16" x2="12.01" y2="16" />
-                </svg>
-                <span className="text-[10px] font-medium text-amber-600 dark:text-amber-400">
-                  You're starting a new direction
-                </span>
-              </div>
-              <input
-                type="text"
-                value={forkLabelInput}
-                onChange={(e) => setForkLabelInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Escape") {
-                    setShowLabelInput(false);
-                    setLabelInput("");
-                    setForkLabelInput("");
-                    pendingNavRef.current = null;
-                  }
-                }}
-                placeholder="Name this line of thinking..."
-                autoFocus
-                className="w-full px-2 py-1 rounded-md bg-[var(--color-surface)] border border-amber-500/30 text-xs text-[var(--color-text)] placeholder:text-[var(--color-text-secondary)]/50 focus:outline-none focus:ring-1 focus:ring-amber-500/40"
-              />
-            </div>
-          )}
-          <div className="flex gap-1.5">
-            <input
-              type="text"
-              value={labelInput}
-              onChange={(e) => setLabelInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") handleSave();
-                if (e.key === "Escape") {
-                  setShowLabelInput(false);
-                  setLabelInput("");
-                  setForkLabelInput("");
-                  pendingNavRef.current = null;
-                }
-              }}
-              placeholder="Snapshot name..."
-              autoFocus={!willFork}
-              className="flex-1 min-w-0 px-2 py-1 rounded-md bg-[var(--color-surface)] border border-[var(--color-border)] text-xs text-[var(--color-text)] placeholder:text-[var(--color-text-secondary)]/50 focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)]/40"
-            />
-            <button
-              onClick={handleSave}
-              disabled={!labelInput.trim() || (isRewound && !forkLabelInput.trim()) || saving}
-              className="px-2 py-1 rounded-md text-xs font-medium bg-[var(--color-accent)] text-white hover:bg-[var(--color-accent-hover)] disabled:opacity-40 transition-colors"
-            >
-              {saving ? "..." : "Save"}
             </button>
           </div>
         </div>

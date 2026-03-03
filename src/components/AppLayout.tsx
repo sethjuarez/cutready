@@ -12,6 +12,7 @@ import { ResizeHandle } from "./ResizeHandle";
 import { OutputPanel } from "./OutputPanel";
 import { CommandPalette } from "./CommandPalette";
 import { TitleBar } from "./TitleBar";
+import { SnapshotDialog } from "./SnapshotDialog";
 import { commandRegistry, useCommands } from "../services/commandRegistry";
 
 export function AppLayout() {
@@ -229,6 +230,8 @@ export function AppLayout() {
         onExecute={handleExecuteCommand}
         recentCommands={recentCommands}
       />
+
+      <SnapshotDialog />
     </>
   );
 }

@@ -136,6 +136,8 @@ interface AppStoreState {
   showVersionHistory: boolean;
   /** Whether the snapshot name prompt should be shown (triggered by Ctrl+S). */
   snapshotPromptOpen: boolean;
+  /** After saving a snapshot, navigate to this commit ID (used by nav-save flow). */
+  pendingNavAfterSave: string | null;
   /** Whether there are unsaved changes since the last snapshot. */
   isDirty: boolean;
   /** Whether a stash (temporarily saved work) exists. */
@@ -422,6 +424,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   graphNodes: [],
   showVersionHistory: savedLayout.showVersionHistory ?? false,
   snapshotPromptOpen: false,
+  pendingNavAfterSave: null,
   isDirty: false,
   hasStash: false,
   isRewound: false,
@@ -1239,8 +1242,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   },
 
   promptSnapshot: () => {
-    set({ showVersionHistory: true, snapshotPromptOpen: true });
-    saveLayout({ showVersionHistory: true });
+    set({ snapshotPromptOpen: true });
   },
 
   // ── Sidebar order actions ──────────────────────────────────
