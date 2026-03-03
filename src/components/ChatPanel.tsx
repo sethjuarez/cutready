@@ -765,14 +765,20 @@ function ChatTab() {
   const insertReference = useCallback(
     (file: FileReference) => {
       setReferences((prev) => [...prev, file]);
-      // Remove the #query from input
+      // Replace the #query with a clean #title mention
       const cursorPos = inputRef.current?.selectionStart ?? input.length;
       const textBefore = input.slice(0, cursorPos);
       const hashIndex = textBefore.lastIndexOf("#");
-      const newInput = input.slice(0, hashIndex) + input.slice(cursorPos);
+      const mention = `#${file.title} `;
+      const newInput = input.slice(0, hashIndex) + mention + input.slice(cursorPos);
       setInput(newInput);
       setShowAutocomplete(false);
-      inputRef.current?.focus();
+      // Move cursor after the inserted mention
+      setTimeout(() => {
+        const pos = hashIndex + mention.length;
+        inputRef.current?.setSelectionRange(pos, pos);
+        inputRef.current?.focus();
+      }, 0);
     },
     [input],
   );
