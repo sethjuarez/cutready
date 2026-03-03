@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useAppStore } from "../stores/appStore";
+import { useAppStore, type ActivityEntry } from "../stores/appStore";
 
 type OutputTab = "activity" | "problems";
 
@@ -68,25 +68,7 @@ export function OutputPanel({ onCollapse }: OutputPanelProps) {
               </div>
             ) : (
               outputs.map((entry) => (
-                <div
-                  key={entry.id}
-                  className={`flex items-start gap-1.5 py-0.5 ${
-                    entry.level === "error"
-                      ? "text-red-400"
-                      : entry.level === "warn"
-                        ? "text-amber-400"
-                        : entry.level === "success"
-                          ? "text-emerald-400"
-                          : "text-[var(--color-text-secondary)]"
-                  }`}
-                >
-                  <span className="shrink-0 text-[var(--color-text-secondary)] tabular-nums">
-                    {entry.timestamp.toLocaleTimeString()}
-                  </span>
-                  <ActivityIcon source={entry.source} level={entry.level} />
-                  <span className="shrink-0 text-[var(--color-text-secondary)]">{entry.source}</span>
-                  <span className="text-[var(--color-text)] truncate">{entry.content}</span>
-                </div>
+                <ActivityRow key={entry.id} entry={entry} />
               ))
             )}
           </>
@@ -97,6 +79,41 @@ export function OutputPanel({ onCollapse }: OutputPanelProps) {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function ActivityRow({ entry }: { entry: ActivityEntry }) {
+  const [expanded, setExpanded] = useState(false);
+  const isTruncatable = entry.content.length > 80;
+  const colorCls =
+    entry.level === "error" ? "text-red-400"
+    : entry.level === "warn" ? "text-amber-400"
+    : entry.level === "success" ? "text-emerald-400"
+    : "text-[var(--color-text-secondary)]";
+
+  return (
+    <div className={`flex items-start gap-1.5 py-0.5 ${colorCls}`}>
+      <span className="shrink-0 text-[var(--color-text-secondary)] tabular-nums">
+        {entry.timestamp.toLocaleTimeString()}
+      </span>
+      <ActivityIcon source={entry.source} level={entry.level} />
+      <span className="shrink-0 text-[var(--color-text-secondary)]">{entry.source}</span>
+      <span
+        className={`text-[var(--color-text)] min-w-0 ${expanded ? "whitespace-pre-wrap break-words" : "truncate"} ${isTruncatable ? "cursor-pointer hover:text-[var(--color-accent)]" : ""}`}
+        onClick={isTruncatable ? () => setExpanded(!expanded) : undefined}
+        title={isTruncatable ? (expanded ? "Click to collapse" : "Click to expand") : undefined}
+      >
+        {entry.content}
+      </span>
+      {isTruncatable && !expanded && (
+        <button
+          onClick={() => setExpanded(true)}
+          className="shrink-0 text-[10px] text-[var(--color-accent)] hover:underline"
+        >
+          expand
+        </button>
+      )}
     </div>
   );
 }
