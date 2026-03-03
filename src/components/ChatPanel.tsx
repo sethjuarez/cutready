@@ -435,7 +435,7 @@ function ChatTab() {
       try {
         await invoke("push_pending_chat_message", { message: text });
         // Show pending message in the chat with a visual marker
-        const pendingMsg: ChatMessage = { role: "user", content: `⏳ ${text}` };
+        const pendingMsg: ChatMessage = { role: "user", content: `[pending] ${text}` };
         setChatMessages([...messages, pendingMsg]);
       } catch (err) {
         console.error("Failed to push pending message:", err);
@@ -485,7 +485,7 @@ function ChatTab() {
     addActivityEntries([{
       id: crypto.randomUUID(),
       timestamp: new Date(),
-      source: "💬 chat",
+      source: "chat",
       content: `Sent: "${userContent.slice(0, 100)}${userContent.length > 100 ? "…" : ""}"`,
       level: "info",
     }]);
@@ -519,7 +519,7 @@ function ChatTab() {
           activityEntries.push({
             id: tc.id ?? crypto.randomUUID(),
             timestamp: new Date(),
-            source: isDelegation ? `🤖 ${tc.function?.name}` : `🔧 ${tc.function?.name ?? "tool"}`,
+            source: isDelegation ? `delegate ${tc.function?.name}` : tc.function?.name ?? "tool",
             content: isDelegation
               ? `Delegated to agent: ${JSON.parse(tc.function?.arguments ?? "{}").agent_id ?? "unknown"}`
               : `Called with: ${tc.function?.arguments ?? "{}"}`,
@@ -531,7 +531,7 @@ function ChatTab() {
         activityEntries.push({
           id: crypto.randomUUID(),
           timestamp: new Date(),
-          source: `📄 ${tr.tool_call_id ?? "result"}`,
+          source: `result ${tr.tool_call_id ?? ""}`.trim(),
           content: (tr.content ?? "").slice(0, 200),
           level: "success",
         });
@@ -560,7 +560,7 @@ function ChatTab() {
       addActivityEntries([{
         id: crypto.randomUUID(),
         timestamp: new Date(),
-        source: "✅ response",
+        source: "response",
         content: `${toolMessages.length > 0 ? `${toolMessages.reduce((n, m) => n + (m.tool_calls?.length ?? 0), 0)} tool call(s) → ` : ""}${(result.response ?? "").slice(0, 120)}${(result.response ?? "").length > 120 ? "…" : ""}`,
         level: "success",
       }]);
@@ -573,7 +573,7 @@ function ChatTab() {
       addActivityEntries([{
         id: crypto.randomUUID(),
         timestamp: new Date(),
-        source: "❌ error",
+        source: "error",
         content: errMsg.slice(0, 200),
         level: "error",
       }]);

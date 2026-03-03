@@ -70,7 +70,7 @@ export function OutputPanel({ onCollapse }: OutputPanelProps) {
               outputs.map((entry) => (
                 <div
                   key={entry.id}
-                  className={`flex gap-2 py-0.5 ${
+                  className={`flex items-start gap-1.5 py-0.5 ${
                     entry.level === "error"
                       ? "text-red-400"
                       : entry.level === "warn"
@@ -80,11 +80,12 @@ export function OutputPanel({ onCollapse }: OutputPanelProps) {
                           : "text-[var(--color-text-secondary)]"
                   }`}
                 >
-                  <span className="shrink-0 text-[var(--color-text-secondary)]">
+                  <span className="shrink-0 text-[var(--color-text-secondary)] tabular-nums">
                     {entry.timestamp.toLocaleTimeString()}
                   </span>
-                  <span className="shrink-0">[{entry.source}]</span>
-                  <span className="text-[var(--color-text)]">{entry.content}</span>
+                  <ActivityIcon source={entry.source} level={entry.level} />
+                  <span className="shrink-0 text-[var(--color-text-secondary)]">{entry.source}</span>
+                  <span className="text-[var(--color-text)] truncate">{entry.content}</span>
                 </div>
               ))
             )}
@@ -121,4 +122,18 @@ function TabButton({
       {children}
     </button>
   );
+}
+
+const S = 11; // icon size for activity rows
+const iconProps = { width: S, height: S, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
+
+function ActivityIcon({ source, level }: { source: string; level: string }) {
+  const cls = "shrink-0 mt-px";
+  if (level === "error") return <svg className={cls} {...iconProps}><circle cx="12" cy="12" r="10" /><path d="m15 9-6 6M9 9l6 6" /></svg>;
+  if (source === "chat") return <svg className={cls} {...iconProps}><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>;
+  if (source === "response") return <svg className={cls} {...iconProps}><polyline points="20 6 9 17 4 12" /></svg>;
+  if (source.startsWith("result")) return <svg className={cls} {...iconProps}><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" /><path d="M14 2v4a2 2 0 0 0 2 2h4" /></svg>;
+  if (source.startsWith("delegate")) return <svg className={cls} {...iconProps}><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>;
+  // Default: wrench for tool calls
+  return <svg className={cls} {...iconProps}><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" /></svg>;
 }
