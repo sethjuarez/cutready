@@ -1,0 +1,114 @@
+---
+title: Settings
+description: Configure output directories, AI providers, API credentials, and custom agents.
+sidebar:
+  order: 1
+---
+
+import { Aside, Badge, Tabs, TabItem } from '@astrojs/starlight/components';
+
+<Badge text="Available" variant="success" />
+
+The Settings panel lets you configure CutReady's output behavior, AI provider
+connection, and custom agent definitions. Open it from the **gear icon** (⚙️)
+in the sidebar.
+
+## Settings Tabs
+
+Settings are organized into three tabs:
+
+<Tabs>
+<TabItem label="General">
+
+### Output Directory
+
+Choose where CutReady saves exported video files and assembled output folders.
+Click **Browse** to select a directory, or type a path directly.
+
+### Audio Input Device
+
+Select the microphone used for narration recording during the Produce phase.
+CutReady lists all available audio input devices detected on your system. The
+selected device is saved and reused across sessions.
+
+</TabItem>
+<TabItem label="AI Provider">
+
+### Provider Selector
+
+Choose between supported LLM providers:
+
+| Provider | Auth Method | Configuration |
+| --- | --- | --- |
+| **Azure OpenAI** | OAuth or API key | Endpoint, Tenant ID, Client ID, model |
+| **OpenAI** | API key | API key, model |
+
+### Azure OpenAI Setup
+
+For Azure OpenAI, configure the following:
+
+- **API Endpoint** — Your Azure OpenAI resource URL (e.g.,
+  `https://your-resource.openai.azure.com/`)
+- **Authentication** — Choose between:
+  - **OAuth** — Click "Sign in with Azure" to start the Azure AD flow. Requires
+    Tenant ID and Client ID.
+  - **API Key** — Paste your Azure OpenAI API key directly
+- **Tenant ID** — Your Azure AD tenant identifier (for OAuth)
+- **Client ID** — Your Azure AD application client ID (for OAuth)
+- **Model** — The deployed model name (e.g., `gpt-4o`, `gpt-4o-mini`)
+
+### OpenAI Setup
+
+For direct OpenAI access:
+
+- **API Key** — Your OpenAI API key
+- **Model** — The model to use (e.g., `gpt-4o`, `gpt-4o-mini`)
+
+<Aside type="caution">
+  API keys are stored locally on your machine. They are never transmitted
+  anywhere except to the configured API endpoint.
+</Aside>
+
+</TabItem>
+<TabItem label="Agents">
+
+### Built-in Agents
+
+CutReady ships with three built-in agents that are **read-only** — you can
+view their system prompts but not modify them:
+
+| Agent | Purpose |
+| --- | --- |
+| **Planner** | Demo planning, structure, and flow |
+| **Writer** | Narrative refinement and voiceover text |
+| **Editor** | Precise, surgical edits to specific content |
+
+### Custom Agents
+
+Create your own agents with custom system prompts for specialized tasks:
+
+- **Add** — Click "Add Agent" and provide a name and system prompt
+- **Edit** — Click any custom agent to modify its name or prompt
+- **Delete** — Remove custom agents you no longer need
+
+Custom agents appear alongside built-in agents in the chat panel's agent
+selector. They use the same model and tools as built-in agents.
+
+#### Example Use Cases
+
+- **Brand Voice** — An agent that writes in your company's style guidelines
+- **Technical Writer** — An agent focused on precision and technical accuracy
+- **Concise Editor** — An agent that ruthlessly cuts unnecessary words
+
+</TabItem>
+</Tabs>
+
+## Settings Persistence
+
+All settings are persisted locally using Tauri's app data directory. Settings
+are loaded on startup and apply immediately when changed — no restart required.
+
+<Aside type="tip">
+  If you're not sure which AI model to use, start with `gpt-4o` for the best
+  quality, or `gpt-4o-mini` for faster responses at lower cost.
+</Aside>
