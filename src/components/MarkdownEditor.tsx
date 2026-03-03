@@ -64,8 +64,8 @@ export interface MarkdownEditorProps {
   editorKey?: string;
   /** Whether to save pasted images to project (requires open project). */
   saveImages?: boolean;
-  /** AI config for smart paste refinement (pass from useSettings). */
-  aiConfig?: RichPasteOptions["aiConfig"];
+  /** Async function that returns fresh AI config (with refreshed token). */
+  getAiConfig?: () => Promise<RichPasteOptions["aiConfig"] | undefined>;
 }
 
 /**
@@ -74,7 +74,7 @@ export interface MarkdownEditorProps {
  */
 function richPasteExtension(
   saveImages: boolean,
-  getAiConfig: () => RichPasteOptions["aiConfig"],
+  getAiConfig: () => Promise<RichPasteOptions["aiConfig"] | undefined>,
   logActivity: (msg: string, level: ActivityEntry["level"]) => void,
 ) {
   return EditorView.domEventHandlers({
@@ -90,13 +90,14 @@ function richPasteExtension(
         // Prevent default paste — we'll insert our own content
         event.preventDefault();
 
-        // Convert async — insert placeholder then replace
-        const aiConfig = getAiConfig();
-        htmlToMarkdown(html, {
-          saveImages,
-          aiConfig,
-          onStatus: logActivity,
-        }).then(({ markdown: md }) => {
+        // Get fresh AI config (with refreshed token) then convert
+        getAiConfig().then((aiConfig) =>
+          htmlToMarkdown(html, {
+            saveImages,
+            aiConfig,
+            onStatus: logActivity,
+          })
+        ).then(({ markdown: md }) => {
           const { from, to } = view.state.selection.main;
           view.dispatch({
             changes: { from, to, insert: md },
@@ -150,9 +151,9 @@ function richPasteExtension(
   });
 }
 
-export function MarkdownEditor({ value, onChange, placeholder, editorKey, saveImages = true, aiConfig }: MarkdownEditorProps) {
-  const aiConfigRef = useRef(aiConfig);
-  aiConfigRef.current = aiConfig;
+export function MarkdownEditor({ value, onChange, placeholder, editorKey, saveImages = true, getAiConfig }: MarkdownEditorProps) {
+  const getAiConfigRef = useRef(getAiConfig);
+  getAiConfigRef.current = getAiConfig;
 
   const addActivityEntries = useAppStore((s) => s.addActivityEntries);
   const addActivityRef = useRef(addActivityEntries);
@@ -164,7 +165,7 @@ export function MarkdownEditor({ value, onChange, placeholder, editorKey, saveIm
     editorTheme,
     richPasteExtension(
       saveImages,
-      () => aiConfigRef.current,
+      async () => getAiConfigRef.current?.(),
       (msg, level) => {
         addActivityRef.current([{
           id: `paste-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,

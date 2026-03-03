@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useAppStore } from "../stores/appStore";
 import { useSettings } from "../hooks/useSettings";
 import { MarkdownEditor } from "./MarkdownEditor";
+import { invoke } from "@tauri-apps/api/core";
 
 /**
  * NoteEditor — edits .md note files using the reusable MarkdownEditor.
@@ -13,20 +14,46 @@ export function NoteEditor() {
   const activeNotePath = useAppStore((s) => s.activeNotePath);
   const activeNoteContent = useAppStore((s) => s.activeNoteContent);
   const updateNote = useAppStore((s) => s.updateNote);
-  const { settings } = useSettings();
+  const { settings, updateSetting } = useSettings();
   const [mode, setMode] = useState<"edit" | "preview">("edit");
 
-  // Build AI config for smart paste (only if model is configured)
-  const aiConfig = useMemo(() => {
+  // Async getter for AI config — refreshes OAuth token on demand
+  const getAiConfig = useCallback(async () => {
     if (!settings.aiModel || !settings.aiEndpoint) return undefined;
+
+    let bearerToken = settings.aiAuthMode === "azure_oauth" ? settings.aiAccessToken : null;
+
+    // Auto-refresh OAuth token if we have a refresh token
+    if (settings.aiAuthMode === "azure_oauth" && settings.aiRefreshToken) {
+      try {
+        const tokenResult = await invoke<{ access_token: string; refresh_token?: string }>(
+          "azure_token_refresh",
+          {
+            tenantId: settings.aiTenantId || "",
+            refreshToken: settings.aiRefreshToken,
+            clientId: settings.aiClientId || null,
+          },
+        );
+        if (tokenResult.access_token) {
+          bearerToken = tokenResult.access_token;
+          await updateSetting("aiAccessToken", tokenResult.access_token);
+          if (tokenResult.refresh_token) {
+            await updateSetting("aiRefreshToken", tokenResult.refresh_token);
+          }
+        }
+      } catch {
+        // Token refresh failed — use existing token (may be stale)
+      }
+    }
+
     return {
       provider: settings.aiProvider,
       endpoint: settings.aiEndpoint,
       api_key: settings.aiApiKey,
       model: settings.aiModel,
-      bearer_token: settings.aiAuthMode === "azure_oauth" ? settings.aiAccessToken : null,
+      bearer_token: bearerToken,
     };
-  }, [settings.aiProvider, settings.aiEndpoint, settings.aiApiKey, settings.aiModel, settings.aiAuthMode, settings.aiAccessToken]);
+  }, [settings, updateSetting]);
 
   const saveTimeoutRef= useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingContentRef = useRef<string | null>(null);
@@ -112,7 +139,7 @@ export function NoteEditor() {
               value={activeNoteContent ?? ""}
               onChange={handleChange}
               placeholder="Write your notes here..."
-              aiConfig={aiConfig}
+              getAiConfig={getAiConfig}
             />
           </div>
         </div>
