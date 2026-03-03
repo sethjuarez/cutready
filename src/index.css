@@ -137,6 +137,8 @@ html {
 .prose-desc p { margin: 0; padding: 0; }
 .prose-desc p + p { margin-top: 0.35rem; }
 .prose-desc ul, .prose-desc ol { margin: 0.25rem 0; padding: 0; list-style-position: inside; }
+.prose-desc ul { list-style-type: disc; }
+.prose-desc ol { list-style-type: decimal; }
 .prose-desc li { margin: 0.1rem 0; padding: 0; padding-left: 0.25rem; }
 .prose-desc code { font-size: 0.85em; background: var(--color-surface-inset); padding: 0.1em 0.3em; border-radius: 3px; }
 .prose-desc a { color: var(--color-accent); text-decoration: underline; }
