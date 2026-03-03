@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -903,14 +903,14 @@ function ChatTab() {
         )}
 
         {messages.map((msg, i) => (
-          <MessageRow key={i} message={msg} />
+          <MessageRow key={i} message={msg} projectRoot={currentProject?.root} />
         ))}
 
         {loading && (
           <div className="px-3.5 py-2">
             {streamingText ? (
               <div className="text-[13px] text-[var(--color-text)] leading-[1.6]">
-                <MarkdownContent content={streamingText} />
+                <MarkdownContent content={streamingText} projectRoot={currentProject?.root} />
                 <span className="inline-block w-1.5 h-4 bg-[var(--color-accent)] animate-pulse ml-0.5 align-text-bottom rounded-sm" />
               </div>
             ) : (
@@ -1313,7 +1313,7 @@ function WebRefChip({ url }: { url: string }) {
 
 // ── Message Row (VS Code Copilot chat style) ────────────────────
 
-function MessageRow({ message }: { message: ChatMessage }) {
+function MessageRow({ message, projectRoot }: { message: ChatMessage; projectRoot?: string }) {
   if (message.role === "user") {
     return (
       <div className="px-3.5 py-2 flex justify-end">
@@ -1340,7 +1340,7 @@ function MessageRow({ message }: { message: ChatMessage }) {
     return (
       <div className="px-3.5 py-2">
         <div className="border-l-2 border-[var(--color-accent)]/30 pl-3 text-[13px] text-[var(--color-text)] leading-[1.6]">
-          <MarkdownContent content={message.content || ""} />
+          <MarkdownContent content={message.content || ""} projectRoot={projectRoot} />
         </div>
       </div>
     );
@@ -1400,7 +1400,7 @@ function ToolCallsRow({ toolCalls }: { toolCalls: ToolCall[] }) {
 
 // ── Simple Markdown Renderer ─────────────────────────────────────
 
-function MarkdownContent({ content }: { content: string }) {
+function MarkdownContent({ content, projectRoot }: { content: string; projectRoot?: string }) {
   return (
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
@@ -1453,6 +1453,13 @@ function MarkdownContent({ content }: { content: string }) {
           <div className="border-l-2 border-[var(--color-accent)] pl-2 my-1 text-[var(--color-text-secondary)]">{children}</div>
         ),
         hr: () => <div className="border-t border-[var(--color-border)] my-2" />,
+        img: ({ src, alt, ...props }) => {
+          let resolvedSrc = src ?? "";
+          if (projectRoot && resolvedSrc.includes(".cutready/screenshots/")) {
+            resolvedSrc = convertFileSrc(`${projectRoot}/${resolvedSrc}`);
+          }
+          return <img src={resolvedSrc} alt={alt ?? ""} {...props} className="max-w-full rounded my-1" />;
+        },
       }}
     >
       {content}

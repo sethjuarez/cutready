@@ -4,7 +4,7 @@ import remarkGfm from "remark-gfm";
 import { useAppStore } from "../stores/appStore";
 import { useSettings } from "../hooks/useSettings";
 import { MarkdownEditor } from "./MarkdownEditor";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 
 /**
  * NoteEditor — edits .md note files using the reusable MarkdownEditor.
@@ -14,6 +14,7 @@ export function NoteEditor() {
   const activeNotePath = useAppStore((s) => s.activeNotePath);
   const activeNoteContent = useAppStore((s) => s.activeNoteContent);
   const updateNote = useAppStore((s) => s.updateNote);
+  const projectRoot = useAppStore((s) => s.currentProject?.root);
   const { settings, updateSetting } = useSettings();
   const [mode, setMode] = useState<"edit" | "preview">("edit");
 
@@ -148,7 +149,20 @@ export function NoteEditor() {
           <div className="max-w-3xl mx-auto py-6">
             <div className="prose-desc text-sm text-[var(--color-text)] leading-relaxed">
             {activeNoteContent ? (
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{activeNoteContent}</ReactMarkdown>
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                components={{
+                  img: ({ src, alt, ...props }) => {
+                    let resolvedSrc = src ?? "";
+                    if (projectRoot && resolvedSrc.includes(".cutready/screenshots/")) {
+                      resolvedSrc = convertFileSrc(`${projectRoot}/${resolvedSrc}`);
+                    }
+                    return <img src={resolvedSrc} alt={alt ?? ""} {...props} className="max-w-full rounded" />;
+                  },
+                }}
+              >
+                {activeNoteContent}
+              </ReactMarkdown>
             ) : (
               <p className="text-[var(--color-text-secondary)] italic">Nothing to preview</p>
             )}
