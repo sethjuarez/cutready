@@ -697,7 +697,6 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       const tab = openTabs.find((t) => t.path === sketchPath && t.type === "sketch");
       if (tab) get().closeTab(tab.id);
       await get().loadSketches();
-      await get().saveVersion("Delete sketch");
     } catch (err) {
       console.error("Failed to delete sketch:", err);
     }
@@ -773,7 +772,6 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       const tab = openTabs.find((t) => t.path === storyboardPath && t.type === "storyboard");
       if (tab) get().closeTab(tab.id);
       await get().loadStoryboards();
-      await get().saveVersion("Delete storyboard");
     } catch (err) {
       console.error("Failed to delete storyboard:", err);
     }
@@ -918,7 +916,6 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       const tab = openTabs.find((t) => t.path === notePath && t.type === "note");
       if (tab) get().closeTab(tab.id);
       await get().loadNotes();
-      await get().saveVersion("Delete note");
     } catch (err) {
       console.error("Failed to delete note:", err);
     }
