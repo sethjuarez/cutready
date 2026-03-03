@@ -1136,23 +1136,28 @@ function ChatTab() {
 // ── User Content — renders [Web: URL] as styled reference chips ──
 
 function UserContent({ content }: { content: string }) {
-  // Split on [Web: ...] or [References: ...] markers
+  // Split on [Web: ...], [References: ...], and inline #web:URL patterns
   const parts: React.ReactNode[] = [];
   let lastIndex = 0;
-  const combined = /\[(Web|References):\s*([^\]]+)\]/g;
+  const combined = /\[(Web|References):\s*([^\]]+)\]|#web:(https?:\/\/\S+)/g;
   let match;
   while ((match = combined.exec(content)) !== null) {
     if (match.index > lastIndex) {
       parts.push(content.slice(lastIndex, match.index));
     }
-    const type = match[1];
-    const value = match[2].trim();
-    if (type === "Web") {
-      parts.push(<WebRefChip key={match.index} url={value} />);
-    } else {
+    if (match[1] === "Web") {
+      parts.push(<WebRefChip key={match.index} url={match[2].trim()} />);
+    } else if (match[1] === "References") {
       parts.push(
         <span key={match.index} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[var(--color-surface)] border border-[var(--color-border)] text-[11px] text-[var(--color-text-secondary)] font-mono">
-          📎 {value}
+          📎 {match[2].trim()}
+        </span>
+      );
+    } else if (match[3]) {
+      // Inline #web:URL — styled as accent link
+      parts.push(
+        <span key={match.index} className="text-[var(--color-accent)] font-mono text-[12px]">
+          #web:<span className="underline decoration-[var(--color-accent)]/40">{match[3]}</span>
         </span>
       );
     }
