@@ -242,7 +242,8 @@ interface ExtractedImage {
 
 function extractBase64Images(html: string): ExtractedImage[] {
   const images: ExtractedImage[] = [];
-  const regex = /<img[^>]+src="(data:image\/([^;]+);base64,([^"]+))"/gi;
+  // Match both double-quoted and single-quoted src attributes
+  const regex = /<img[^>]+src=["'](data:image\/([^;]+);base64,([^"']+))["']/gi;
   let match;
   while ((match = regex.exec(html)) !== null) {
     images.push({
@@ -261,17 +262,45 @@ export interface RichPasteResult {
   hadHtml: boolean;
 }
 
+export interface RichPasteOptions {
+  saveImages?: boolean;
+  /** AI provider config — if provided, the pasted markdown is refined by the model. */
+  aiConfig?: {
+    provider: string;
+    endpoint: string;
+    api_key: string;
+    model: string;
+    bearer_token: string | null;
+  };
+}
+
+const AI_PASTE_PROMPT = `You are a document conversion assistant. The user pasted content from a Word document that was automatically converted from HTML to Markdown. The conversion has issues:
+
+- Tables may be malformed or have pipe characters in the wrong places
+- Some formatting may be lost or garbled
+- Lists may not be properly structured
+- Images references (like ![](path)) should be preserved exactly as-is
+
+Clean up the markdown to be well-structured and readable. Rules:
+1. Preserve ALL content — do not add, remove, or rephrase anything
+2. Fix table formatting so tables render correctly in markdown
+3. Ensure proper heading hierarchy
+4. Fix list formatting (bulleted and numbered)
+5. Preserve all image references exactly as they appear
+6. Remove any garbled formatting artifacts
+7. Return ONLY the cleaned markdown — no explanations or commentary`;
+
 /**
  * Convert HTML clipboard content to Markdown.
  * If `saveImages` is true, base64 images are saved to the project's
  * screenshots directory and replaced with relative Markdown links.
+ * If `aiConfig` is provided, the result is refined by the AI model.
  */
 export async function htmlToMarkdown(
   html: string,
-  options: { saveImages?: boolean } = {},
+  options: RichPasteOptions = {},
 ): Promise<RichPasteResult> {
   let workingHtml = html;
-  const imagePaths: Map<string, string> = new Map();
 
   // Extract and save images BEFORE cleaning (DOMParser may alter data URIs)
   if (options.saveImages) {
@@ -283,15 +312,18 @@ export async function htmlToMarkdown(
           base64Data: img.base64,
           extension: img.extension,
         });
-        // Replace data URI with a placeholder in the HTML before Turndown
-        const placeholder = `__PASTED_IMG_${imgIndex}__`;
         workingHtml = workingHtml.split(img.originalSrc).join(relativePath);
-        imagePaths.set(placeholder, relativePath);
         imgIndex++;
       } catch (e) {
         console.warn("Failed to save pasted image:", e);
       }
     }
+  } else {
+    // Even when not saving, strip base64 data URIs to avoid huge markdown
+    workingHtml = workingHtml.replace(
+      /<img[^>]+src=["']data:image\/[^"']+["'][^>]*\/?>/gi,
+      ""
+    );
   }
 
   const cleaned = cleanWordHtml(workingHtml);
@@ -307,6 +339,37 @@ export async function htmlToMarkdown(
     // Trim trailing whitespace on each line
     .replace(/[ \t]+$/gm, "")
     .trim();
+
+  // AI refinement — pass through model if configured
+  if (options.aiConfig && md.length > 0) {
+    try {
+      const refined = await invoke<{ role: string; content: string | null }>("agent_chat", {
+        config: options.aiConfig,
+        messages: [
+          { role: "system", content: AI_PASTE_PROMPT },
+          { role: "user", content: md },
+        ],
+      });
+      if (refined.content && refined.content.trim().length > 0) {
+        // Strip markdown code fence if the model wrapped its response
+        let result = refined.content.trim();
+        if (result.startsWith("```markdown")) {
+          result = result.slice("```markdown".length);
+        } else if (result.startsWith("```md")) {
+          result = result.slice("```md".length);
+        } else if (result.startsWith("```")) {
+          result = result.slice(3);
+        }
+        if (result.endsWith("```")) {
+          result = result.slice(0, -3);
+        }
+        md = result.trim();
+      }
+    } catch (e) {
+      // AI refinement failed — use basic conversion (already in md)
+      console.warn("AI paste refinement failed, using basic conversion:", e);
+    }
+  }
 
   return { markdown: md, hadHtml: true };
 }

@@ -7,7 +7,7 @@
  *
  * Uses the app's CSS variables for seamless light/dark mode support.
  */
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { languages } from "@codemirror/language-data";
@@ -17,6 +17,7 @@ import {
   htmlToMarkdown,
   getClipboardImageBlob,
   blobToBase64,
+  type RichPasteOptions,
 } from "../services/richPaste";
 import { invoke } from "@tauri-apps/api/core";
 
@@ -62,13 +63,15 @@ export interface MarkdownEditorProps {
   editorKey?: string;
   /** Whether to save pasted images to project (requires open project). */
   saveImages?: boolean;
+  /** AI config for smart paste refinement (pass from useSettings). */
+  aiConfig?: RichPasteOptions["aiConfig"];
 }
 
 /**
  * CodeMirror extension: intercept paste events to convert HTML → Markdown.
  * Handles Word documents, web pages, and pasted images.
  */
-function richPasteExtension(saveImages: boolean) {
+function richPasteExtension(saveImages: boolean, getAiConfig: () => RichPasteOptions["aiConfig"]) {
   return EditorView.domEventHandlers({
     paste(event: ClipboardEvent, view: EditorView) {
       const clip = event.clipboardData;
@@ -83,7 +86,8 @@ function richPasteExtension(saveImages: boolean) {
         event.preventDefault();
 
         // Convert async — insert placeholder then replace
-        htmlToMarkdown(html, { saveImages }).then(({ markdown: md }) => {
+        const aiConfig = getAiConfig();
+        htmlToMarkdown(html, { saveImages, aiConfig }).then(({ markdown: md }) => {
           const { from, to } = view.state.selection.main;
           view.dispatch({
             changes: { from, to, insert: md },
@@ -137,12 +141,15 @@ function richPasteExtension(saveImages: boolean) {
   });
 }
 
-export function MarkdownEditor({ value, onChange, placeholder, editorKey, saveImages = true }: MarkdownEditorProps) {
+export function MarkdownEditor({ value, onChange, placeholder, editorKey, saveImages = true, aiConfig }: MarkdownEditorProps) {
+  const aiConfigRef = useRef(aiConfig);
+  aiConfigRef.current = aiConfig;
+
   const extensions = useMemo(() => [
     markdown({ base: markdownLanguage, codeLanguages: languages }),
     EditorView.lineWrapping,
     editorTheme,
-    richPasteExtension(saveImages),
+    richPasteExtension(saveImages, () => aiConfigRef.current),
   ], [saveImages]);
 
   return (

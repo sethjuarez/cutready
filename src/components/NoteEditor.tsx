@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useAppStore } from "../stores/appStore";
+import { useSettings } from "../hooks/useSettings";
 import { MarkdownEditor } from "./MarkdownEditor";
 
 /**
@@ -12,9 +13,22 @@ export function NoteEditor() {
   const activeNotePath = useAppStore((s) => s.activeNotePath);
   const activeNoteContent = useAppStore((s) => s.activeNoteContent);
   const updateNote = useAppStore((s) => s.updateNote);
+  const { settings } = useSettings();
   const [mode, setMode] = useState<"edit" | "preview">("edit");
 
-  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Build AI config for smart paste (only if model is configured)
+  const aiConfig = useMemo(() => {
+    if (!settings.aiModel || !settings.aiEndpoint) return undefined;
+    return {
+      provider: settings.aiProvider,
+      endpoint: settings.aiEndpoint,
+      api_key: settings.aiApiKey,
+      model: settings.aiModel,
+      bearer_token: settings.aiAuthMode === "azure_oauth" ? settings.aiAccessToken : null,
+    };
+  }, [settings.aiProvider, settings.aiEndpoint, settings.aiApiKey, settings.aiModel, settings.aiAuthMode, settings.aiAccessToken]);
+
+  const saveTimeoutRef= useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingContentRef = useRef<string | null>(null);
   const updateNoteRef = useRef(updateNote);
   updateNoteRef.current = updateNote;
@@ -97,7 +111,8 @@ export function NoteEditor() {
               editorKey={activeNotePath}
               value={activeNoteContent ?? ""}
               onChange={handleChange}
-              placeholder="Write your notes here... (Markdown renders inline as you type)"
+              placeholder="Write your notes here..."
+              aiConfig={aiConfig}
             />
           </div>
         </div>
