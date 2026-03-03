@@ -30,6 +30,15 @@ export type SidebarMode = "list" | "tree";
 /** Sidebar position. */
 export type SidebarPosition = "left" | "right";
 
+/** Activity log entry for the output panel. */
+export interface ActivityEntry {
+  id: string;
+  timestamp: Date;
+  source: string;
+  content: string;
+  level: "info" | "warn" | "error" | "success";
+}
+
 /** Sidebar display order manifest. */
 export interface SidebarOrder {
   storyboards: string[];
@@ -112,6 +121,8 @@ interface AppStoreState {
   chatLoading: boolean;
   /** Last chat error message. */
   chatError: string | null;
+  /** Activity log entries for the output panel. */
+  activityLog: ActivityEntry[];
 
   /** Version history for the current project. */
   versions: VersionEntry[];
@@ -268,6 +279,10 @@ interface AppStoreState {
   setChatLoading: (loading: boolean) => void;
   /** Set chat error. */
   setChatError: (error: string | null) => void;
+  /** Add entries to activity log. */
+  addActivityEntries: (entries: ActivityEntry[]) => void;
+  /** Clear activity log. */
+  clearActivityLog: () => void;
   /** List saved chat sessions. */
   listChatSessions: () => Promise<ChatSessionSummary[]>;
   /** Delete a chat session. */
@@ -396,6 +411,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   chatSessionPath: null,
   chatLoading: false,
   chatError: null,
+  activityLog: [],
   versions: [],
   timelines: [],
   graphNodes: [],
@@ -589,6 +605,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       chatSessionPath: null,
       chatLoading: false,
       chatError: null,
+      activityLog: [],
       versions: [],
       timelines: [],
       graphNodes: [],
@@ -929,6 +946,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       chatSessionPath: `.chats/chat-${ts}.chat`,
       chatLoading: false,
       chatError: null,
+      activityLog: [],
     });
   },
 
@@ -972,6 +990,8 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
 
   setChatLoading: (loading) => set({ chatLoading: loading }),
   setChatError: (error) => set({ chatError: error }),
+  addActivityEntries: (entries) => set((s) => ({ activityLog: [...s.activityLog, ...entries] })),
+  clearActivityLog: () => set({ activityLog: [] }),
 
   listChatSessions: async () => {
     try {

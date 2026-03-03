@@ -51,6 +51,8 @@ pub struct AppState {
     /// The prepared browser connection (if any).
     /// Uses `tokio::sync::Mutex` because it's held across await points.
     pub browser: Arc<tokio::sync::Mutex<Option<BrowserConnection>>>,
+    /// Pending chat messages queued by the user while the agent loop is running.
+    pub pending_chat_messages: Arc<Mutex<Vec<String>>>,
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -58,6 +60,7 @@ pub fn run() {
     let app_state = AppState {
         current_project: Mutex::new(None),
         browser: Arc::new(tokio::sync::Mutex::new(None)),
+        pending_chat_messages: Arc::new(Mutex::new(Vec::new())),
     };
 
     tauri::Builder::default()
@@ -169,6 +172,7 @@ pub fn run() {
             commands::agent::list_models,
             commands::agent::agent_chat,
             commands::agent::agent_chat_with_tools,
+            commands::agent::push_pending_chat_message,
             commands::agent::list_chat_sessions,
             commands::agent::get_chat_session,
             commands::agent::save_chat_session,

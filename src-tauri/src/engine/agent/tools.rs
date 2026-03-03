@@ -83,6 +83,18 @@ pub fn all_tools() -> Vec<ToolDefinition> {
                 "required": ["path", "index"]
             }),
         ),
+        tool_def(
+            "delegate_to_agent",
+            "Delegate a task to another AI agent with a different specialization. The agent runs independently and returns its result. Available agents: planner, writer, editor, plus any custom agents.",
+            json!({
+                "type": "object",
+                "properties": {
+                    "agent_id": { "type": "string", "description": "ID of the agent to delegate to (e.g. 'writer', 'editor', 'planner')" },
+                    "message": { "type": "string", "description": "The task to delegate — be specific about what you want the agent to do" }
+                },
+                "required": ["agent_id", "message"]
+            }),
+        ),
     ]
 }
 

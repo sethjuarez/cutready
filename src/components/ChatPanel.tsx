@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { useAppStore } from "../stores/appStore";
+import { useAppStore, type ActivityEntry } from "../stores/appStore";
 import { useSettings, type AgentPreset } from "../hooks/useSettings";
 import { VersionHistory } from "./VersionHistory";
 import { SketchIcon, StoryboardIcon, NoteIcon } from "./Icons";
@@ -298,6 +298,7 @@ function ChatTab() {
   const setChatLoading = useAppStore((s) => s.setChatLoading);
   const error = useAppStore((s) => s.chatError);
   const setChatError = useAppStore((s) => s.setChatError);
+  const addActivityEntries = useAppStore((s) => s.addActivityEntries);
   const chatSessionPath = useAppStore((s) => s.chatSessionPath);
   const newChatSession = useAppStore((s) => s.newChatSession);
 
@@ -391,7 +392,7 @@ function ChatTab() {
   }, [showContextPicker, contextFilter, allFiles, references]);
 
   // Available tools list
-  const availableTools = ["list_project_files", "read_note", "read_sketch", "set_planning_rows", "update_planning_row"];
+  const availableTools = ["list_project_files", "read_note", "read_sketch", "set_planning_rows", "update_planning_row", "delegate_to_agent"];
 
   const buildConfig = useCallback(() => ({
     provider: settings.aiProvider,
@@ -414,11 +415,25 @@ function ChatTab() {
 
   const handleSend = useCallback(async () => {
     const text = input.trim();
-    if (!text || loading) return;
+    if (!text) return;
 
     setInput("");
-    setChatError(null);
     setShowAutocomplete(false);
+
+    // If agent is already running, push to pending stack
+    if (loading) {
+      try {
+        await invoke("push_pending_chat_message", { message: text });
+        // Show pending message in the chat with a visual marker
+        const pendingMsg: ChatMessage = { role: "user", content: `⏳ ${text}` };
+        setChatMessages([...messages, pendingMsg]);
+      } catch (err) {
+        console.error("Failed to push pending message:", err);
+      }
+      return;
+    }
+
+    setChatError(null);
 
     // Build user message with @references context
     let userContent = text;
@@ -440,9 +455,19 @@ function ChatTab() {
 
     setChatLoading(true);
     try {
+      // Build agent prompts map for sub-agent delegation
+      const agentPrompts: Record<string, string> = {};
+      for (const a of BUILT_IN_AGENTS) {
+        agentPrompts[a.id] = a.prompt;
+      }
+      for (const a of (settings.aiAgents || [])) {
+        agentPrompts[a.id] = a.prompt;
+      }
+
       const result = await invoke<AgentChatResult>("agent_chat_with_tools", {
         config: buildConfig(),
         messages: fullMessages,
+        agentPrompts,
       });
 
       // Extract tool calls for transparency
@@ -450,6 +475,35 @@ function ChatTab() {
         (m) => m.role === "assistant" && m.tool_calls && m.tool_calls.length > 0,
       );
       const toolResultMessages = result.messages.filter((m) => m.role === "tool");
+
+      // Log tool activity to the activity panel
+      const activityEntries: ActivityEntry[] = [];
+      for (const tm of toolMessages) {
+        for (const tc of tm.tool_calls ?? []) {
+          const isDelegation = tc.function?.name === "delegate_to_agent";
+          activityEntries.push({
+            id: tc.id ?? crypto.randomUUID(),
+            timestamp: new Date(),
+            source: isDelegation ? `🤖 ${tc.function?.name}` : `🔧 ${tc.function?.name ?? "tool"}`,
+            content: isDelegation
+              ? `Delegated to agent: ${JSON.parse(tc.function?.arguments ?? "{}").agent_id ?? "unknown"}`
+              : `Called with: ${tc.function?.arguments ?? "{}"}`,
+            level: "info",
+          });
+        }
+      }
+      for (const tr of toolResultMessages) {
+        activityEntries.push({
+          id: crypto.randomUUID(),
+          timestamp: new Date(),
+          source: `📄 ${tr.tool_call_id ?? "result"}`,
+          content: (tr.content ?? "").slice(0, 200),
+          level: "success",
+        });
+      }
+      if (activityEntries.length > 0) {
+        addActivityEntries(activityEntries);
+      }
 
       // Build the display messages: user msg + any tool transparency + assistant response
       const displayMessages: ChatMessage[] = [...newMessages];
@@ -476,7 +530,7 @@ function ChatTab() {
     } finally {
       setChatLoading(false);
     }
-  }, [input, loading, messages, references, systemPrompt, buildConfig, setChatMessages, setChatLoading, setChatError]);
+  }, [input, loading, messages, references, systemPrompt, buildConfig, setChatMessages, setChatLoading, setChatError, addActivityEntries, settings.aiAgents]);
 
   const handleInputChange = useCallback(
     (e: React.ChangeEvent<HTMLTextAreaElement>) => {

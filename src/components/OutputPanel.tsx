@@ -1,26 +1,19 @@
 import { useState } from "react";
+import { useAppStore } from "../stores/appStore";
 
 type OutputTab = "activity" | "problems";
 
-export interface OutputEntry {
-  id: string;
-  timestamp: Date;
-  source: string;
-  content: string;
-  level: "info" | "warn" | "error" | "success";
-}
-
 interface OutputPanelProps {
-  outputs: OutputEntry[];
-  onClear: () => void;
   onCollapse: () => void;
 }
 
 /**
  * OutputPanel — bottom panel with tabs for AI activity and problems.
  */
-export function OutputPanel({ outputs, onClear, onCollapse }: OutputPanelProps) {
+export function OutputPanel({ onCollapse }: OutputPanelProps) {
   const [activeTab, setActiveTab] = useState<OutputTab>("activity");
+  const outputs = useAppStore((s) => s.activityLog);
+  const clearActivityLog = useAppStore((s) => s.clearActivityLog);
 
   return (
     <div className="flex flex-col h-full bg-[var(--color-surface-inset)] border-t border-[var(--color-border)]">
@@ -45,7 +38,7 @@ export function OutputPanel({ outputs, onClear, onCollapse }: OutputPanelProps) 
         </div>
         <div className="flex items-center gap-1">
           <button
-            onClick={onClear}
+            onClick={clearActivityLog}
             className="p-1 rounded text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-alt)] transition-colors"
             title="Clear"
           >

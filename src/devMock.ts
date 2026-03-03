@@ -133,14 +133,30 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
     case "list_models":
       return ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-35-turbo", "o1-preview"];
     case "agent_chat_with_tools": {
-      // Simulate a delayed AI response
+      // Simulate a delayed AI response with mock tool calls
       const userMsgs = (args?.messages as Array<{ role: string; content: string }>) || [];
       const lastUser = userMsgs.filter(m => m.role === "user").pop();
+      const mockToolCall = {
+        role: "assistant" as const,
+        content: null,
+        tool_calls: [{
+          id: "mock_tc_1",
+          type: "function",
+          function: { name: "list_project_files", arguments: "{}" },
+        }],
+      };
+      const mockToolResult = {
+        role: "tool" as const,
+        content: "sketches/intro.sk, notes/outline.md",
+        tool_call_id: "mock_tc_1",
+      };
       return {
-        messages: userMsgs,
+        messages: [...userMsgs, mockToolCall, mockToolResult],
         response: `This is a mock response to: "${lastUser?.content?.substring(0, 50) || "your message"}"\n\nIn production, this would come from your configured AI provider. The chat UI is fully functional — try the @reference autocomplete, context picker, and model selector!`,
       };
     }
+    case "push_pending_chat_message":
+      return null;
     case "check_for_update":
       return null;
     case "install_update":

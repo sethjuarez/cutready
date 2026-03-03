@@ -57,6 +57,16 @@ pub async fn agent_chat(
         .ok_or_else(|| "No response from model".into())
 }
 
+/// Push a message onto the pending stack while the agent loop is running.
+#[tauri::command]
+pub async fn push_pending_chat_message(
+    state: tauri::State<'_, AppState>,
+    message: String,
+) -> Result<(), String> {
+    state.pending_chat_messages.lock().unwrap().push(message);
+    Ok(())
+}
+
 /// Agentic chat with function calling — the LLM can read/write project files.
 /// Returns the full conversation (including tool calls) and the final response.
 #[tauri::command]
@@ -64,6 +74,7 @@ pub async fn agent_chat_with_tools(
     state: tauri::State<'_, AppState>,
     config: ProviderConfig,
     messages: Vec<ChatMessage>,
+    agent_prompts: Option<std::collections::HashMap<String, String>>,
 ) -> Result<AgentChatResult, String> {
     let project_root = {
         let guard = state.current_project.lock().unwrap();
@@ -74,8 +85,13 @@ pub async fn agent_chat_with_tools(
             .clone()
     };
 
+    let pending = state.pending_chat_messages.clone();
+    // Clear any stale pending messages before starting
+    pending.lock().unwrap().clear();
+
+    let prompts = agent_prompts.unwrap_or_default();
     let client = LlmClient::new(config.into());
-    let result = runner::run(&client, messages, &project_root).await?;
+    let result = runner::run(&client, messages, &project_root, &prompts, &pending).await?;
 
     Ok(AgentChatResult {
         messages: result.messages,

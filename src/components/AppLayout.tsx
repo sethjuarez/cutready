@@ -9,7 +9,6 @@ import { StoryboardPanel } from "./StoryboardPanel";
 import { StoryboardList } from "./StoryboardList";
 import { ResizeHandle } from "./ResizeHandle";
 import { OutputPanel } from "./OutputPanel";
-import type { OutputEntry } from "./OutputPanel";
 import { CommandPalette } from "./CommandPalette";
 import { TitleBar } from "./TitleBar";
 import { commandRegistry, useCommands } from "../services/commandRegistry";
@@ -30,7 +29,6 @@ export function AppLayout() {
 
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [recentCommands, setRecentCommands] = useState<string[]>([]);
-  const [outputs, setOutputs] = useState<OutputEntry[]>([]);
 
   const commands = useCommands();
   const mainRef = useRef<HTMLDivElement>(null);
@@ -183,8 +181,6 @@ export function AppLayout() {
                 <ResizeHandle direction="vertical" onResize={handleOutputResize} />
                 <div className="shrink-0 overflow-hidden" style={{ height: outputHeight }}>
                   <OutputPanel
-                    outputs={outputs}
-                    onClear={() => setOutputs([])}
                     onCollapse={toggleOutput}
                   />
                 </div>
