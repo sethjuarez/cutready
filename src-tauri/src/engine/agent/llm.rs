@@ -400,16 +400,12 @@ impl LlmClient {
         let full_endpoint = self.config.endpoint.trim_end_matches('/');
 
         // Build candidate URLs in priority order:
-        // 1. Project-level deployments (if endpoint has /api/projects/...)
-        // 2. Resource-level /models (Foundry inference API — deployed only)
-        // 3. Resource-level /openai/deployments
-        // 4. Fallback: /openai/models (OpenAI compat — may include non-deployed)
+        // 1. Project-level /deployments with api-version=v1 (deployed only, 7 items)
+        // 2. Fallback: /openai/models (full catalog — 288+ items, filtered by capability)
         let mut urls = Vec::new();
         if full_endpoint.contains("/api/projects") {
-            urls.push(format!("{}/deployments?api-version=2024-10-01-preview", full_endpoint));
+            urls.push(format!("{}/deployments?api-version=v1", full_endpoint));
         }
-        urls.push(format!("{}/models?api-version=2024-10-21", base));
-        urls.push(format!("{}/openai/deployments?api-version=2024-10-21", base));
         urls.push(format!("{}/openai/models?api-version=2024-10-21", base));
 
         let mut last_err = String::new();
