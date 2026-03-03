@@ -101,7 +101,7 @@ export function OutputPanel({ onCollapse }: OutputPanelProps) {
       </div>
 
       {/* Content — auto-scrolls to latest */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto p-2 text-xs font-mono flex flex-col-reverse">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto p-2 text-xs font-mono">
         {activeTab === "activity" && (
           <>
             {outputs.length === 0 ? (
@@ -109,7 +109,7 @@ export function OutputPanel({ onCollapse }: OutputPanelProps) {
                 No activity yet — AI agent output will appear here
               </div>
             ) : (
-              outputs.map((entry) => (
+              [...outputs].reverse().map((entry) => (
                 <ActivityRow key={entry.id} entry={entry} />
               ))
             )}
