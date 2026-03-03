@@ -401,24 +401,37 @@ impl LlmClient {
 
         // Build candidate URLs in priority order:
         // 1. Project-level deployments (if endpoint has /api/projects/...)
-        // 2. Resource-level /openai/deployments
-        // 3. Fallback: /openai/models (returns all available, not just deployed)
+        // 2. Resource-level /models (Foundry inference API — deployed only)
+        // 3. Resource-level /openai/deployments
+        // 4. Fallback: /openai/models (OpenAI compat — may include non-deployed)
         let mut urls = Vec::new();
         if full_endpoint.contains("/api/projects") {
             urls.push(format!("{}/deployments?api-version=2024-10-01-preview", full_endpoint));
         }
+        urls.push(format!("{}/models?api-version=2024-10-21", base));
         urls.push(format!("{}/openai/deployments?api-version=2024-10-21", base));
         urls.push(format!("{}/openai/models?api-version=2024-10-21", base));
 
         let mut last_err = String::new();
         for url in &urls {
+            log::info!("[list_models_foundry] trying: {}", url);
             match self.fetch_models_body(url).await {
                 Ok(body) => match self.parse_models_response(&body, url) {
-                    Ok(models) if !models.is_empty() => return Ok(models),
-                    Ok(_) => continue, // empty result, try next
-                    Err(_) => continue, // parse failed, try next
+                    Ok(models) if !models.is_empty() => {
+                        log::info!("[list_models_foundry] success from {} — {} models", url, models.len());
+                        return Ok(models);
+                    }
+                    Ok(_) => {
+                        log::info!("[list_models_foundry] empty result from {}", url);
+                        continue;
+                    }
+                    Err(e) => {
+                        log::info!("[list_models_foundry] parse failed from {}: {}", url, e);
+                        continue;
+                    }
                 },
                 Err(e) => {
+                    log::info!("[list_models_foundry] fetch failed from {}: {}", url, e);
                     last_err = e;
                     continue;
                 }
