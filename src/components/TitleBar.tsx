@@ -115,6 +115,8 @@ export function TitleBar({
         <UpdateIndicator />
         {/* Layout toggles — icons match spatial positions, actions swap with sidebar position */}
         <div className="flex items-center gap-0.5 px-1.5" style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}>
+          {/* Feedback button */}
+          <FeedbackPopover />
           {/* Left panel icon — toggles whichever panel is on the left */}
           <button
             className={`flex items-center justify-center w-6 h-[20px] rounded transition-colors ${
@@ -394,6 +396,141 @@ function UpdateIndicator() {
               Download &amp; Install
             </button>
           )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FeedbackPopover() {
+  const [open, setOpen] = useState(false);
+  const [feedback, setFeedback] = useState("");
+  const [category, setCategory] = useState<"general" | "bug" | "feature" | "ux">("general");
+  const [copied, setCopied] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handleClose = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    window.addEventListener("mousedown", handleClose);
+    window.addEventListener("keydown", handleEsc);
+    return () => {
+      window.removeEventListener("mousedown", handleClose);
+      window.removeEventListener("keydown", handleEsc);
+    };
+  }, [open]);
+
+  const categoryLabels: Record<string, string> = {
+    general: "💬 General",
+    bug: "🐛 Bug",
+    feature: "✨ Feature",
+    ux: "🎨 UX",
+  };
+
+  const handleCopy = async () => {
+    if (!feedback.trim()) return;
+    const text = [
+      `## CutReady Feedback`,
+      `**Category:** ${categoryLabels[category]}`,
+      `**Date:** ${new Date().toISOString().split("T")[0]}`,
+      ``,
+      feedback.trim(),
+    ].join("\n");
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => {
+        setCopied(false);
+        setFeedback("");
+        setOpen(false);
+      }, 1200);
+    } catch {
+      /* ignore */
+    }
+  };
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        className={`flex items-center justify-center w-6 h-[20px] rounded transition-colors ${
+          open
+            ? "text-[var(--color-accent)] bg-[var(--color-surface-alt)]"
+            : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-alt)]"
+        }`}
+        onClick={() => setOpen(!open)}
+        title="Send Feedback"
+      >
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+        </svg>
+      </button>
+
+      {open && (
+        <div className="absolute right-0 top-full mt-1 z-[100] w-[280px] py-3 px-3 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg shadow-lg space-y-2.5">
+          <div className="text-[10px] font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">
+            Send Feedback
+          </div>
+
+          {/* Category pills */}
+          <div className="flex gap-1">
+            {(Object.keys(categoryLabels) as Array<keyof typeof categoryLabels>).map((key) => (
+              <button
+                key={key}
+                onClick={() => setCategory(key as typeof category)}
+                className={`px-2 py-1 text-[10px] rounded-md border transition-colors ${
+                  category === key
+                    ? "bg-[var(--color-accent)]/15 text-[var(--color-accent)] border-[var(--color-accent)]/30"
+                    : "bg-[var(--color-surface-alt)] text-[var(--color-text-secondary)] border-[var(--color-border)] hover:text-[var(--color-text)]"
+                }`}
+              >
+                {categoryLabels[key]}
+              </button>
+            ))}
+          </div>
+
+          {/* Text */}
+          <textarea
+            value={feedback}
+            onChange={(e) => setFeedback(e.target.value)}
+            placeholder="What's on your mind?"
+            rows={3}
+            className="w-full px-2.5 py-2 rounded-md bg-[var(--color-surface-alt)] border border-[var(--color-border)] text-xs text-[var(--color-text)] placeholder:text-[var(--color-text-secondary)]/50 focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)]/40 resize-none"
+            autoFocus
+          />
+
+          {/* Copy button */}
+          <button
+            onClick={handleCopy}
+            disabled={!feedback.trim()}
+            className={`w-full flex items-center justify-center gap-1.5 h-[28px] rounded-md text-[11px] font-medium transition-colors ${
+              !feedback.trim()
+                ? "bg-[var(--color-surface-alt)] text-[var(--color-text-secondary)]/40 cursor-not-allowed"
+                : copied
+                  ? "bg-emerald-500/15 text-emerald-500 border border-emerald-500/30"
+                  : "bg-[var(--color-accent)] text-white hover:bg-[var(--color-accent-hover)]"
+            }`}
+          >
+            {copied ? (
+              <>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+                Copied!
+              </>
+            ) : (
+              <>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                </svg>
+                Copy to Clipboard
+              </>
+            )}
+          </button>
         </div>
       )}
     </div>
