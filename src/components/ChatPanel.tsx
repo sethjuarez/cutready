@@ -151,7 +151,7 @@ export function ChatPanel() {
   const [activeTab, setActiveTab] = useState<SecondaryTab>("chat");
 
   return (
-    <div className="flex flex-col h-full bg-[var(--color-surface)]">
+    <div className="flex flex-col h-full bg-[var(--color-surface-alt)]">
       {/* Tab bar — underline tabs like VS Code panel tabs */}
       <div className="flex items-stretch border-b border-[var(--color-border)] shrink-0">
         <button
