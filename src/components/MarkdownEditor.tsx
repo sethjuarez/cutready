@@ -20,6 +20,7 @@ import {
   type RichPasteOptions,
 } from "../services/richPaste";
 import { invoke } from "@tauri-apps/api/core";
+import { useAppStore, type ActivityEntry } from "../stores/appStore";
 
 /** Editor chrome theme — cursor, selection, gutters, layout. */
 const editorTheme = EditorView.theme({
@@ -71,7 +72,11 @@ export interface MarkdownEditorProps {
  * CodeMirror extension: intercept paste events to convert HTML → Markdown.
  * Handles Word documents, web pages, and pasted images.
  */
-function richPasteExtension(saveImages: boolean, getAiConfig: () => RichPasteOptions["aiConfig"]) {
+function richPasteExtension(
+  saveImages: boolean,
+  getAiConfig: () => RichPasteOptions["aiConfig"],
+  logActivity: (msg: string, level: ActivityEntry["level"]) => void,
+) {
   return EditorView.domEventHandlers({
     paste(event: ClipboardEvent, view: EditorView) {
       const clip = event.clipboardData;
@@ -87,14 +92,18 @@ function richPasteExtension(saveImages: boolean, getAiConfig: () => RichPasteOpt
 
         // Convert async — insert placeholder then replace
         const aiConfig = getAiConfig();
-        htmlToMarkdown(html, { saveImages, aiConfig }).then(({ markdown: md }) => {
+        htmlToMarkdown(html, {
+          saveImages,
+          aiConfig,
+          onStatus: logActivity,
+        }).then(({ markdown: md }) => {
           const { from, to } = view.state.selection.main;
           view.dispatch({
             changes: { from, to, insert: md },
             selection: { anchor: from + md.length },
           });
         }).catch((err) => {
-          console.error("Rich paste failed, falling back to plain text:", err);
+          logActivity(`Rich paste failed: ${err}`, "error");
           // Fallback: insert plain text
           const plain = clip.getData("text/plain");
           if (plain) {
@@ -145,11 +154,27 @@ export function MarkdownEditor({ value, onChange, placeholder, editorKey, saveIm
   const aiConfigRef = useRef(aiConfig);
   aiConfigRef.current = aiConfig;
 
+  const addActivityEntries = useAppStore((s) => s.addActivityEntries);
+  const addActivityRef = useRef(addActivityEntries);
+  addActivityRef.current = addActivityEntries;
+
   const extensions = useMemo(() => [
     markdown({ base: markdownLanguage, codeLanguages: languages }),
     EditorView.lineWrapping,
     editorTheme,
-    richPasteExtension(saveImages, () => aiConfigRef.current),
+    richPasteExtension(
+      saveImages,
+      () => aiConfigRef.current,
+      (msg, level) => {
+        addActivityRef.current([{
+          id: `paste-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          timestamp: new Date(),
+          source: "Rich Paste",
+          content: msg,
+          level,
+        }]);
+      },
+    ),
   ], [saveImages]);
 
   return (

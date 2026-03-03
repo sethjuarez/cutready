@@ -272,6 +272,8 @@ export interface RichPasteOptions {
     model: string;
     bearer_token: string | null;
   };
+  /** Optional callback for status updates (shown in activity panel). */
+  onStatus?: (message: string, level: "info" | "warn" | "error" | "success") => void;
 }
 
 const AI_PASTE_PROMPT = `You are a document conversion assistant. The user pasted content from a Word document that was automatically converted from HTML to Markdown. The conversion has issues:
@@ -300,12 +302,18 @@ export async function htmlToMarkdown(
   html: string,
   options: RichPasteOptions = {},
 ): Promise<RichPasteResult> {
+  const log = options.onStatus ?? (() => {});
   let workingHtml = html;
+
+  log("Rich paste: converting HTML to Markdown…", "info");
 
   // Extract and save images BEFORE cleaning (DOMParser may alter data URIs)
   if (options.saveImages) {
     const images = extractBase64Images(workingHtml);
-    let imgIndex = 0;
+    if (images.length > 0) {
+      log(`Rich paste: found ${images.length} embedded image(s), saving…`, "info");
+    }
+    let savedCount = 0;
     for (const img of images) {
       try {
         const relativePath = await invoke<string>("save_pasted_image", {
@@ -313,10 +321,13 @@ export async function htmlToMarkdown(
           extension: img.extension,
         });
         workingHtml = workingHtml.split(img.originalSrc).join(relativePath);
-        imgIndex++;
+        savedCount++;
       } catch (e) {
-        console.warn("Failed to save pasted image:", e);
+        log(`Rich paste: failed to save image — ${e}`, "warn");
       }
+    }
+    if (savedCount > 0) {
+      log(`Rich paste: saved ${savedCount} image(s) to project`, "success");
     }
   } else {
     // Even when not saving, strip base64 data URIs to avoid huge markdown
@@ -342,6 +353,7 @@ export async function htmlToMarkdown(
 
   // AI refinement — pass through model if configured
   if (options.aiConfig && md.length > 0) {
+    log(`Rich paste: refining with AI model (${options.aiConfig.model})…`, "info");
     try {
       const refined = await invoke<{ role: string; content: string | null }>("agent_chat", {
         config: options.aiConfig,
@@ -364,12 +376,17 @@ export async function htmlToMarkdown(
           result = result.slice(0, -3);
         }
         md = result.trim();
+        log("Rich paste: AI refinement complete ✓", "success");
       }
     } catch (e) {
       // AI refinement failed — use basic conversion (already in md)
-      console.warn("AI paste refinement failed, using basic conversion:", e);
+      log(`Rich paste: AI refinement failed, using basic conversion — ${e}`, "warn");
     }
+  } else if (!options.aiConfig) {
+    log("Rich paste: no AI model configured, using basic conversion", "info");
   }
+
+  log("Rich paste: done ✓", "success");
 
   return { markdown: md, hadHtml: true };
 }
