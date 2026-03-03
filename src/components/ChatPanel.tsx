@@ -3,21 +3,9 @@ import { invoke } from "@tauri-apps/api/core";
 import { useAppStore } from "../stores/appStore";
 import { useSettings } from "../hooks/useSettings";
 import { VersionHistory } from "./VersionHistory";
+import type { ChatMessage, ToolCall } from "../types/sketch";
 
 // ── Types ────────────────────────────────────────────────────────
-
-interface ChatMessage {
-  role: string;
-  content: string | null;
-  tool_calls?: ToolCall[];
-  tool_call_id?: string;
-}
-
-interface ToolCall {
-  id: string;
-  call_type: string;
-  function: { name: string; arguments: string };
-}
 
 interface AgentChatResult {
   messages: ChatMessage[];
@@ -215,11 +203,16 @@ function ChatTab() {
   const notes = useAppStore((s) => s.notes);
   const storyboards = useAppStore((s) => s.storyboards);
   const activeSketchPath = useAppStore((s) => s.activeSketchPath);
+  const messages = useAppStore((s) => s.chatMessages);
+  const setChatMessages = useAppStore((s) => s.setChatMessages);
+  const loading = useAppStore((s) => s.chatLoading);
+  const setChatLoading = useAppStore((s) => s.setChatLoading);
+  const error = useAppStore((s) => s.chatError);
+  const setChatError = useAppStore((s) => s.setChatError);
+  const chatSessionPath = useAppStore((s) => s.chatSessionPath);
+  const newChatSession = useAppStore((s) => s.newChatSession);
 
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [references, setReferences] = useState<FileReference[]>([]);
   const [showAutocomplete, setShowAutocomplete] = useState(false);
   const [autocompleteFilter, setAutocompleteFilter] = useState("");
@@ -228,6 +221,11 @@ function ChatTab() {
   const [contextFilter, setContextFilter] = useState("");
   const [showModelPicker, setShowModelPicker] = useState(false);
   const [showToolsInfo, setShowToolsInfo] = useState(false);
+
+  // Auto-create a session path on first mount if none exists
+  useEffect(() => {
+    if (!chatSessionPath) newChatSession();
+  }, [chatSessionPath, newChatSession]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -310,7 +308,7 @@ Keep responses concise and actionable. Use markdown formatting.`;
     if (!text || loading) return;
 
     setInput("");
-    setError(null);
+    setChatError(null);
     setShowAutocomplete(false);
 
     // Build user message with @references context
@@ -322,7 +320,7 @@ Keep responses concise and actionable. Use markdown formatting.`;
 
     const userMsg: ChatMessage = { role: "user", content: userContent };
     const newMessages = [...messages, userMsg];
-    setMessages(newMessages);
+    setChatMessages(newMessages);
     setReferences([]);
 
     // Build full conversation with system prompt
@@ -331,7 +329,7 @@ Keep responses concise and actionable. Use markdown formatting.`;
       ...newMessages,
     ];
 
-    setLoading(true);
+    setChatLoading(true);
     try {
       const result = await invoke<AgentChatResult>("agent_chat_with_tools", {
         config: buildConfig(),
@@ -360,16 +358,16 @@ Keep responses concise and actionable. Use markdown formatting.`;
         displayMessages.push({ role: "assistant", content: result.response });
       }
 
-      setMessages(displayMessages);
+      setChatMessages(displayMessages);
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
-      setError(errMsg);
+      setChatError(errMsg);
       // Keep user message visible
-      setMessages(newMessages);
+      setChatMessages(newMessages);
     } finally {
-      setLoading(false);
+      setChatLoading(false);
     }
-  }, [input, loading, messages, references, systemPrompt, buildConfig]);
+  }, [input, loading, messages, references, systemPrompt, buildConfig, setChatMessages, setChatLoading, setChatError]);
 
   const handleInputChange = useCallback(
     (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -448,10 +446,9 @@ Keep responses concise and actionable. Use markdown formatting.`;
   );
 
   const clearChat = useCallback(() => {
-    setMessages([]);
+    newChatSession();
     setReferences([]);
-    setError(null);
-  }, []);
+  }, [newChatSession]);
 
   const isConfigured = settings.aiEndpoint && (settings.aiApiKey || settings.aiAccessToken);
 

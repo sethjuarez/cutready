@@ -91,6 +91,67 @@ pub struct AgentChatResult {
 }
 
 // ---------------------------------------------------------------------------
+// Chat session persistence
+// ---------------------------------------------------------------------------
+
+use crate::engine::project::{ChatSession, ChatSessionSummary};
+
+/// List all chat sessions in the current project.
+#[tauri::command]
+pub async fn list_chat_sessions(
+    state: tauri::State<'_, AppState>,
+) -> Result<Vec<ChatSessionSummary>, String> {
+    let root = {
+        let guard = state.current_project.lock().unwrap();
+        guard.as_ref().ok_or("No project open")?.root.clone()
+    };
+    crate::engine::project::scan_chat_sessions(&root).map_err(|e| e.to_string())
+}
+
+/// Load a chat session by relative path.
+#[tauri::command]
+pub async fn get_chat_session(
+    relative_path: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<ChatSession, String> {
+    let root = {
+        let guard = state.current_project.lock().unwrap();
+        guard.as_ref().ok_or("No project open")?.root.clone()
+    };
+    let abs = crate::engine::project::safe_resolve(&root, &relative_path).map_err(|e| e.to_string())?;
+    crate::engine::project::read_chat_session(&abs).map_err(|e| e.to_string())
+}
+
+/// Save a chat session to a relative path.
+#[tauri::command]
+pub async fn save_chat_session(
+    relative_path: String,
+    session: ChatSession,
+    state: tauri::State<'_, AppState>,
+) -> Result<(), String> {
+    let root = {
+        let guard = state.current_project.lock().unwrap();
+        guard.as_ref().ok_or("No project open")?.root.clone()
+    };
+    let abs = crate::engine::project::safe_resolve(&root, &relative_path).map_err(|e| e.to_string())?;
+    crate::engine::project::write_chat_session(&abs, &session).map_err(|e| e.to_string())
+}
+
+/// Delete a chat session by relative path.
+#[tauri::command]
+pub async fn delete_chat_session(
+    relative_path: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<(), String> {
+    let root = {
+        let guard = state.current_project.lock().unwrap();
+        guard.as_ref().ok_or("No project open")?.root.clone()
+    };
+    let abs = crate::engine::project::safe_resolve(&root, &relative_path).map_err(|e| e.to_string())?;
+    crate::engine::project::delete_chat_session(&abs).map_err(|e| e.to_string())
+}
+
+// ---------------------------------------------------------------------------
 // Azure Device Code OAuth
 // ---------------------------------------------------------------------------
 

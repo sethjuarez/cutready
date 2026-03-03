@@ -338,6 +338,72 @@ pub fn sketch_file_exists(relative_path: &str, project_root: &Path) -> bool {
     project_root.join(relative_path).exists()
 }
 
+// ── Chat sessions (.chat JSON files) ────────────────────────────────
+
+/// Summary of a saved chat session.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ChatSessionSummary {
+    pub path: String,
+    pub title: String,
+    pub message_count: usize,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+/// A persisted chat session.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ChatSession {
+    pub title: String,
+    pub messages: Vec<serde_json::Value>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+/// Scan for .chat files in the project.
+pub fn scan_chat_sessions(project_root: &Path) -> Result<Vec<ChatSessionSummary>, ProjectError> {
+    let mut summaries = Vec::new();
+    scan_files_recursive(project_root, project_root, "chat", &mut |rel_path, abs_path| {
+        if let Ok(data) = std::fs::read_to_string(abs_path) {
+            if let Ok(session) = serde_json::from_str::<ChatSession>(&data) {
+                summaries.push(ChatSessionSummary {
+                    path: rel_path.to_string(),
+                    title: session.title,
+                    message_count: session.messages.len(),
+                    updated_at: session.updated_at,
+                });
+            }
+        }
+    })?;
+    summaries.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+    Ok(summaries)
+}
+
+/// Read a chat session file.
+pub fn read_chat_session(path: &Path) -> Result<ChatSession, ProjectError> {
+    if !path.exists() {
+        return Err(ProjectError::NotFound(path.to_string_lossy().into_owned()));
+    }
+    let data = std::fs::read_to_string(path).map_err(|e| ProjectError::Io(e.to_string()))?;
+    serde_json::from_str(&data).map_err(|e| ProjectError::Io(format!("Invalid chat session: {e}")))
+}
+
+/// Write a chat session file.
+pub fn write_chat_session(path: &Path, session: &ChatSession) -> Result<(), ProjectError> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| ProjectError::Io(e.to_string()))?;
+    }
+    let json = serde_json::to_string_pretty(session)
+        .map_err(|e| ProjectError::Io(e.to_string()))?;
+    std::fs::write(path, json).map_err(|e| ProjectError::Io(e.to_string()))
+}
+
+/// Delete a chat session file.
+pub fn delete_chat_session(path: &Path) -> Result<(), ProjectError> {
+    if path.exists() {
+        std::fs::remove_file(path).map_err(|e| ProjectError::Io(e.to_string()))?;
+    }
+    Ok(())
+}
+
 // ── Sidebar order manifest ──────────────────────────────────────────
 
 const ORDER_FILE: &str = ".cutready-order.json";

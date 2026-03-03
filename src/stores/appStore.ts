@@ -17,6 +17,8 @@ import type {
   TimelineInfo,
   GraphNode,
   NoteSummary,
+  ChatMessage,
+  ChatSessionSummary,
 } from "../types/sketch";
 
 /** The panels / views available in the app. */
@@ -100,6 +102,16 @@ interface AppStoreState {
   activeNotePath: string | null;
   /** The full active note content (loaded when editing). */
   activeNoteContent: string | null;
+
+  // ── Chat state ──────────────────────────────────────────────
+  /** Messages in the current chat session. */
+  chatMessages: ChatMessage[];
+  /** Relative path of the current chat session file (null = unsaved). */
+  chatSessionPath: string | null;
+  /** Whether the chat is waiting for a response. */
+  chatLoading: boolean;
+  /** Last chat error message. */
+  chatError: string | null;
 
   /** Version history for the current project. */
   versions: VersionEntry[];
@@ -242,6 +254,25 @@ interface AppStoreState {
   /** Close the active note. */
   closeNote: () => void;
 
+  // ── Chat actions ────────────────────────────────────────────
+
+  /** Set chat messages (updates store + auto-saves to disk). */
+  setChatMessages: (messages: ChatMessage[]) => void;
+  /** Start a new chat session (clears messages, assigns path). */
+  newChatSession: () => void;
+  /** Load a saved chat session by path. */
+  loadChatSession: (sessionPath: string) => Promise<void>;
+  /** Save the current chat session to disk. */
+  saveChatSession: () => Promise<void>;
+  /** Set chat loading state. */
+  setChatLoading: (loading: boolean) => void;
+  /** Set chat error. */
+  setChatError: (error: string | null) => void;
+  /** List saved chat sessions. */
+  listChatSessions: () => Promise<ChatSessionSummary[]>;
+  /** Delete a chat session. */
+  deleteChatSession: (sessionPath: string) => Promise<void>;
+
   // ── Versioning actions ───────────────────────────────────
 
   /** Load version history. */
@@ -361,6 +392,10 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   notes: [],
   activeNotePath: null,
   activeNoteContent: null,
+  chatMessages: [],
+  chatSessionPath: null,
+  chatLoading: false,
+  chatError: null,
   versions: [],
   timelines: [],
   graphNodes: [],
@@ -550,6 +585,10 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       notes: [],
       activeNotePath: null,
       activeNoteContent: null,
+      chatMessages: [],
+      chatSessionPath: null,
+      chatLoading: false,
+      chatError: null,
       versions: [],
       timelines: [],
       graphNodes: [],
@@ -870,6 +909,85 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
 
   closeNote: () => {
     set({ activeNotePath: null, activeNoteContent: null });
+  },
+
+  // ── Chat actions ──────────────────────────────────────────
+
+  setChatMessages: (messages) => {
+    set({ chatMessages: messages, chatError: null });
+    // Auto-save after a short delay
+    const state = get();
+    if (state.chatSessionPath && messages.length > 0) {
+      state.saveChatSession().catch(console.error);
+    }
+  },
+
+  newChatSession: () => {
+    const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+    set({
+      chatMessages: [],
+      chatSessionPath: `.chats/chat-${ts}.chat`,
+      chatLoading: false,
+      chatError: null,
+    });
+  },
+
+  loadChatSession: async (sessionPath) => {
+    try {
+      const session = await invoke<{ title: string; messages: ChatMessage[]; created_at: string; updated_at: string }>(
+        "get_chat_session",
+        { relativePath: sessionPath },
+      );
+      set({
+        chatMessages: session.messages,
+        chatSessionPath: sessionPath,
+        chatError: null,
+      });
+    } catch (err) {
+      console.error("Failed to load chat session:", err);
+    }
+  },
+
+  saveChatSession: async () => {
+    const { chatMessages, chatSessionPath } = get();
+    if (!chatSessionPath || chatMessages.length === 0) return;
+    // Derive title from first user message
+    const firstUser = chatMessages.find((m) => m.role === "user");
+    const title = firstUser?.content?.slice(0, 80) || "Chat session";
+    const now = new Date().toISOString();
+    try {
+      await invoke("save_chat_session", {
+        relativePath: chatSessionPath,
+        session: {
+          title,
+          messages: chatMessages,
+          created_at: now,
+          updated_at: now,
+        },
+      });
+    } catch (err) {
+      console.error("Failed to save chat session:", err);
+    }
+  },
+
+  setChatLoading: (loading) => set({ chatLoading: loading }),
+  setChatError: (error) => set({ chatError: error }),
+
+  listChatSessions: async () => {
+    try {
+      return await invoke<ChatSessionSummary[]>("list_chat_sessions");
+    } catch (err) {
+      console.error("Failed to list chat sessions:", err);
+      return [];
+    }
+  },
+
+  deleteChatSession: async (sessionPath) => {
+    try {
+      await invoke("delete_chat_session", { relativePath: sessionPath });
+    } catch (err) {
+      console.error("Failed to delete chat session:", err);
+    }
   },
 
   // ── Versioning actions ───────────────────────────────────

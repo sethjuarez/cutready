@@ -96,3 +96,35 @@ export interface NoteSummary {
   size: number;
   updated_at: string;
 }
+
+// ── Chat types ────────────────────────────────────────────────
+
+/** A chat message (matches Rust ChatMessage). */
+export interface ChatMessage {
+  role: string;
+  content: string | null;
+  tool_calls?: ToolCall[];
+  tool_call_id?: string;
+}
+
+export interface ToolCall {
+  id: string;
+  call_type: string;
+  function: { name: string; arguments: string };
+}
+
+/** Summary of a saved chat session. */
+export interface ChatSessionSummary {
+  path: string;
+  title: string;
+  message_count: number;
+  updated_at: string;
+}
+
+/** A persisted chat session. */
+export interface ChatSession {
+  title: string;
+  messages: ChatMessage[];
+  created_at: string;
+  updated_at: string;
+}
