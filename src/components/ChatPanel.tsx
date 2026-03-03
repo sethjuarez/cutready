@@ -573,9 +573,10 @@ function ChatTab() {
         }
       }
 
-      const prefix = parts.length > 0 ? `${parts.join(" · ")} ` : "";
-      userContent = `${prefix}${text}${webTags ? `\n${webTags}` : ""}`;
-      llmContent = `${prefix}${text}\n\n${llmParts.filter((p) => p.startsWith("[Web Content:")).join("\n\n")}`;
+      // File refs + web refs shown as footnotes after the message text
+      const footnote = parts.length > 0 ? `\n${parts.join(" · ")}` : "";
+      userContent = `${text}${footnote}${webTags ? `\n${webTags}` : ""}`;
+      llmContent = `${text}${footnote}\n\n${llmParts.filter((p) => p.startsWith("[Web Content:")).join("\n\n")}`;
     }
 
     const userMsg: ChatMessage = { role: "user", content: userContent };
