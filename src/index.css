@@ -145,6 +145,18 @@ html {
 .prose-desc code { font-size: 0.85em; background: var(--color-surface-inset); padding: 0.1em 0.3em; border-radius: 3px; }
 .prose-desc a { color: var(--color-accent); text-decoration: underline; }
 
+/* Bold / italic distinction for all rendered markdown */
+.prose-desc strong, .md-cell-preview strong,
+.prose-desc b, .md-cell-preview b {
+  font-weight: 700;
+  color: var(--color-text);
+}
+.prose-desc em, .md-cell-preview em,
+.prose-desc i, .md-cell-preview i {
+  font-style: italic;
+  color: var(--color-accent);
+}
+
 .md-cell-ul,
 .md-cell-ol {
   margin: 0;

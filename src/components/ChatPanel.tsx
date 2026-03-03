@@ -1409,8 +1409,8 @@ function MarkdownContent({ content }: { content: string }) {
         h2: ({ children }) => <div className="font-semibold text-[11px] mt-2 mb-0.5">{children}</div>,
         h3: ({ children }) => <div className="font-semibold text-[11px] mt-2 mb-0.5">{children}</div>,
         p: ({ children }) => <div className="my-0.5">{children}</div>,
-        strong: ({ children }) => <strong>{children}</strong>,
-        em: ({ children }) => <em>{children}</em>,
+        strong: ({ children }) => <strong className="font-bold text-[var(--color-text)]">{children}</strong>,
+        em: ({ children }) => <em className="italic text-[var(--color-accent)]">{children}</em>,
         code: ({ className, children }) => {
           const isBlock = className?.includes("language-");
           if (isBlock) {
