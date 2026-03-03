@@ -209,7 +209,10 @@ export function StoryboardList() {
         ],
       });
       if (!selected) return;
-      const filePath = typeof selected === "string" ? selected : (selected as { path: string }).path;
+
+      // Tauri v2 dialog may return a string or an object with a path property
+      const filePath = typeof selected === "string" ? selected : String(selected);
+      console.log("[import] Selected file:", filePath);
       const ext = filePath.split(".").pop()?.toLowerCase();
 
       let resultPath: string;
@@ -220,12 +223,15 @@ export function StoryboardList() {
       } else if (ext === "pptx") {
         resultPath = await invoke<string>("import_pptx", { filePath });
       } else {
+        console.error("[import] Unsupported extension:", ext);
         return;
       }
+      console.log("[import] Created note:", resultPath);
       await loadNotes();
       openNote(resultPath);
     } catch (err) {
-      console.error("Import failed:", err);
+      console.error("[import] Import failed:", err);
+      alert(`Import failed: ${err instanceof Error ? err.message : String(err)}`);
     }
   }, [loadNotes, openNote]);
 
