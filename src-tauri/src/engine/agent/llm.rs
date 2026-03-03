@@ -248,10 +248,7 @@ impl LlmClient {
                 let base = self.config.endpoint.trim_end_matches('/');
                 if self.is_foundry() {
                     // Foundry model inference API — model name goes in request body
-                    format!(
-                        "{}/models/chat/completions?api-version=2025-03-01-preview",
-                        base
-                    )
+                    format!("{}/models/chat/completions", base)
                 } else {
                     format!(
                         "{}/openai/deployments/{}/chat/completions?api-version=2024-10-21",
@@ -415,9 +412,10 @@ impl LlmClient {
             stream: None,
         };
 
+        let url = self.chat_url();
         let resp = self
             .http
-            .post(&self.chat_url())
+            .post(&url)
             .headers(self.auth_headers())
             .json(&body)
             .send()
@@ -427,7 +425,7 @@ impl LlmClient {
         if !resp.status().is_success() {
             let status = resp.status();
             let text = resp.text().await.unwrap_or_default();
-            return Err(format!("Chat API error ({status}): {text}"));
+            return Err(format!("Chat API error ({status}) [url={url}]: {text}"));
         }
 
         resp.json()
