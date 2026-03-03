@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { ResizeHandle } from "./ResizeHandle";
 import type { PlanningRow } from "../types/sketch";
 
@@ -229,13 +231,21 @@ export function SketchPreview({ rows, projectRoot, title, onClose, slides: slide
                 {isTitle ? (
                   <div className="text-sm text-[var(--color-text-secondary)] italic">Title slide</div>
                 ) : activeTab === "narrative" ? (
-                  <div className="text-sm text-[var(--color-text)] whitespace-pre-wrap leading-relaxed">
-                    {row!.narrative || <span className="text-[var(--color-text-secondary)] italic">No narrative</span>}
-                  </div>
+                  row!.narrative ? (
+                    <div className="prose-desc text-sm text-[var(--color-text)] leading-relaxed">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{row!.narrative}</ReactMarkdown>
+                    </div>
+                  ) : (
+                    <span className="text-sm text-[var(--color-text-secondary)] italic">No narrative</span>
+                  )
                 ) : (
-                  <div className="text-sm text-[var(--color-text)] whitespace-pre-wrap leading-relaxed">
-                    {row!.demo_actions || <span className="text-[var(--color-text-secondary)] italic">No actions</span>}
-                  </div>
+                  row!.demo_actions ? (
+                    <div className="prose-desc text-sm text-[var(--color-text)] leading-relaxed">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{row!.demo_actions}</ReactMarkdown>
+                    </div>
+                  ) : (
+                    <span className="text-sm text-[var(--color-text-secondary)] italic">No actions</span>
+                  )
                 )}
               </div>
             </div>
