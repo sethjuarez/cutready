@@ -425,24 +425,33 @@ function FeedbackPopover() {
     };
   }, [open]);
 
-  const categoryLabels: Record<string, string> = {
-    general: "💬 General",
-    bug: "🐛 Bug",
-    feature: "✨ Feature",
-    ux: "🎨 UX",
+  const categoryLabels: Record<string, { label: string; icon: string }> = {
+    general: { label: "General", icon: "M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" },
+    bug: { label: "Bug", icon: "M8 2l1.88 1.88M14.12 3.88L16 2M9 7.13v-1a3.003 3.003 0 1 1 6 0v1M12 20c-3.3 0-6-2.7-6-6v-3a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v3c0 3.3-2.7 6-6 6M12 20v-9M6.53 9C4.6 8.8 3 7.1 3 5M17.47 9c1.93-.2 3.53-1.9 3.53-4M12 11h.01" },
+    feature: { label: "Feature", icon: "M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" },
+    ux: { label: "Design", icon: "M12 19l7-7 3 3-7 7-3-3zM18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5zM2 2l7.586 7.586M11 13a2 2 0 1 1-4 0 2 2 0 0 1 4 0z" },
   };
 
   const handleCopy = async () => {
     if (!feedback.trim()) return;
+    const entry = {
+      category: categoryLabels[category].label,
+      feedback: feedback.trim(),
+      date: new Date().toISOString(),
+    };
     const text = [
       `## CutReady Feedback`,
-      `**Category:** ${categoryLabels[category]}`,
-      `**Date:** ${new Date().toISOString().split("T")[0]}`,
+      `**Category:** ${entry.category}`,
+      `**Date:** ${entry.date.split("T")[0]}`,
       ``,
-      feedback.trim(),
+      entry.feedback,
     ].join("\n");
     try {
       await navigator.clipboard.writeText(text);
+      // Persist to localStorage
+      const stored = JSON.parse(localStorage.getItem("cutready-feedback") || "[]");
+      stored.push(entry);
+      localStorage.setItem("cutready-feedback", JSON.stringify(stored));
       setCopied(true);
       setTimeout(() => {
         setCopied(false);
@@ -478,19 +487,25 @@ function FeedbackPopover() {
 
           {/* Category pills */}
           <div className="flex gap-1">
-            {(Object.keys(categoryLabels) as Array<keyof typeof categoryLabels>).map((key) => (
-              <button
-                key={key}
-                onClick={() => setCategory(key as typeof category)}
-                className={`px-2 py-1 text-[10px] rounded-md border transition-colors ${
-                  category === key
-                    ? "bg-[var(--color-accent)]/15 text-[var(--color-accent)] border-[var(--color-accent)]/30"
-                    : "bg-[var(--color-surface-alt)] text-[var(--color-text-secondary)] border-[var(--color-border)] hover:text-[var(--color-text)]"
-                }`}
-              >
-                {categoryLabels[key]}
-              </button>
-            ))}
+            {(Object.keys(categoryLabels) as Array<keyof typeof categoryLabels>).map((key) => {
+              const cat = categoryLabels[key];
+              return (
+                <button
+                  key={key}
+                  onClick={() => setCategory(key as typeof category)}
+                  className={`inline-flex items-center gap-1 px-2 py-1 text-[10px] rounded-md border transition-colors ${
+                    category === key
+                      ? "bg-[var(--color-accent)]/15 text-[var(--color-accent)] border-[var(--color-accent)]/30"
+                      : "bg-[var(--color-surface-alt)] text-[var(--color-text-secondary)] border-[var(--color-border)] hover:text-[var(--color-text)]"
+                  }`}
+                >
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d={cat.icon} />
+                  </svg>
+                  {cat.label}
+                </button>
+              );
+            })}
           </div>
 
           {/* Text */}
