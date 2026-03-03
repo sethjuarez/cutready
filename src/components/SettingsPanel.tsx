@@ -551,10 +551,23 @@ function AIProviderTab({ settings, updateSetting, isAzure, isOAuth, hasToken, ca
               }
             }}
             disabled={loadingModels || (!canFetchModels && models.length === 0)}
-            className="px-3 py-2 rounded-lg bg-[var(--color-accent)] text-white text-sm font-medium hover:opacity-90 disabled:opacity-40 transition-opacity"
+            className="px-3 py-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-alt)] text-sm text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:border-[var(--color-accent)]/40 disabled:opacity-40 transition-colors"
             title={models.length > 0 ? "Clear list" : "Fetch available models"}
           >
-            {loadingModels ? "…" : models.length > 0 ? "✕" : "🔄"}
+            {loadingModels ? (
+              <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M12 2v4m0 12v4m-7.07-3.93l2.83-2.83m8.48-8.48l2.83-2.83M2 12h4m12 0h4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83" />
+              </svg>
+            ) : models.length > 0 ? (
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <path d="M18 6L6 18M6 6l12 12" />
+              </svg>
+            ) : (
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 12a9 9 0 11-6.22-8.56" />
+                <path d="M21 3v5h-5" />
+              </svg>
+            )}
           </button>
         </div>
         {models.length > 0 && (
