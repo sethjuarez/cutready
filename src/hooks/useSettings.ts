@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { create } from "zustand";
 import { LazyStore } from "@tauri-apps/plugin-store";
+import { invoke } from "@tauri-apps/api/core";
 
 export interface AgentPreset {
   id: string;
@@ -111,6 +112,36 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
     }
 
     set({ settings: result, loaded: true });
+
+    // Auto-refresh OAuth token on startup if we have a refresh token
+    if (result.aiAuthMode === "azure_oauth" && result.aiRefreshToken) {
+      try {
+        const tokenResult = await invoke<{ access_token: string; refresh_token?: string }>(
+          "azure_token_refresh",
+          {
+            tenantId: result.aiTenantId || "",
+            refreshToken: result.aiRefreshToken,
+            clientId: result.aiClientId || null,
+          },
+        );
+        if (tokenResult.access_token) {
+          const updates: Partial<AppSettings> = { aiAccessToken: tokenResult.access_token };
+          if (tokenResult.refresh_token) {
+            updates.aiRefreshToken = tokenResult.refresh_token;
+          }
+          set((state) => ({ settings: { ...state.settings, ...updates } }));
+          if (store) {
+            await store.set("aiAccessToken", tokenResult.access_token);
+            if (tokenResult.refresh_token) {
+              await store.set("aiRefreshToken", tokenResult.refresh_token);
+            }
+            await store.save();
+          }
+        }
+      } catch {
+        // Token refresh failed silently — user will re-auth when needed
+      }
+    }
   },
 
   updateSetting: async (key, value) => {
