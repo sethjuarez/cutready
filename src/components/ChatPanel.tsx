@@ -1137,6 +1137,83 @@ function ChatTab() {
   );
 }
 
+// ── User Content — renders [Web: URL] as styled reference chips ──
+
+function UserContent({ content }: { content: string }) {
+  // Split on [Web: ...] or [References: ...] markers
+  const parts: React.ReactNode[] = [];
+  let lastIndex = 0;
+  const combined = /\[(Web|References):\s*([^\]]+)\]/g;
+  let match;
+  while ((match = combined.exec(content)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(content.slice(lastIndex, match.index));
+    }
+    const type = match[1];
+    const value = match[2].trim();
+    if (type === "Web") {
+      parts.push(<WebRefChip key={match.index} url={value} />);
+    } else {
+      parts.push(
+        <span key={match.index} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[var(--color-surface)] border border-[var(--color-border)] text-[11px] text-[var(--color-text-secondary)] font-mono">
+          📎 {value}
+        </span>
+      );
+    }
+    lastIndex = match.index + match[0].length;
+  }
+  if (lastIndex < content.length) {
+    parts.push(content.slice(lastIndex));
+  }
+  return <>{parts}</>;
+}
+
+function WebRefChip({ url }: { url: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const [content, setContent] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const handleExpand = async () => {
+    if (expanded) { setExpanded(false); return; }
+    setExpanded(true);
+    if (content) return;
+    setLoading(true);
+    try {
+      const result = await invoke<string>("fetch_url_content", { url });
+      setContent(result);
+    } catch {
+      setContent("Failed to fetch content");
+    }
+    setLoading(false);
+  };
+
+  return (
+    <span className="block my-1">
+      <button
+        onClick={handleExpand}
+        className="inline-flex items-center gap-1.5 px-2 py-1 rounded bg-[var(--color-surface)] border border-[var(--color-border)] text-[11px] text-[var(--color-accent)] hover:bg-[var(--color-surface-toolbar)] transition-colors font-mono"
+      >
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><path d="M2 12h20" /><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" /></svg>
+        {url.replace(/^https?:\/\//, "").slice(0, 50)}{url.replace(/^https?:\/\//, "").length > 50 ? "…" : ""}
+        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform ${expanded ? "rotate-180" : ""}`}>
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+      </button>
+      {expanded && (
+        <div className="mt-1 rounded border border-[var(--color-border)] bg-[var(--color-surface)] overflow-hidden">
+          <div className="flex items-center justify-between px-2 py-1 border-b border-[var(--color-border)] bg-[var(--color-surface-toolbar)]">
+            <span className="text-[10px] text-[var(--color-text-secondary)] font-mono truncate">{url}</span>
+            {content && <span className="shrink-0 text-[10px] text-[var(--color-text-secondary)] tabular-nums ml-2">{content.length.toLocaleString()} chars</span>}
+          </div>
+          <div className="max-h-[150px] overflow-y-auto p-2 text-[11px] font-mono text-[var(--color-text-secondary)] whitespace-pre-wrap break-words leading-[1.4]">
+            {loading ? "Loading…" : content || "No content"}
+          </div>
+        </div>
+      )}
+    </span>
+  );
+}
+
 // ── Message Row (VS Code Copilot chat style) ────────────────────
 
 function MessageRow({ message }: { message: ChatMessage }) {
@@ -1144,7 +1221,7 @@ function MessageRow({ message }: { message: ChatMessage }) {
     return (
       <div className="px-3.5 py-2">
         <div className="bg-[var(--color-surface-alt)] rounded-lg px-3 py-2 text-[13px] text-[var(--color-text)] whitespace-pre-wrap break-words leading-[1.6]">
-          {message.content}
+          <UserContent content={message.content || ""} />
         </div>
       </div>
     );
