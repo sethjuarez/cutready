@@ -122,7 +122,7 @@ export function SettingsPanel() {
   const canFetchModels = isOAuth ? hasToken : !!settings.aiApiKey;
 
   return (
-    <div className="max-w-2xl mx-auto px-6 py-10">
+    <div className="max-w-4xl mx-auto px-6 py-10">
       <h1 className="text-2xl font-semibold tracking-tight mb-2">Settings</h1>
       <p className="text-sm text-[var(--color-text-secondary)] mb-6">
         Configure CutReady preferences.
