@@ -1011,6 +1011,11 @@ function renderInline(text: string): React.ReactNode {
   return parts.length === 1 ? parts[0] : <>{parts}</>;
 }
 
+// ── Model list cache (module-level, survives re-renders) ─────────
+
+const modelCache: { key: string; models: string[]; ts: number } = { key: "", models: [], ts: 0 };
+const MODEL_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
 // ── Model Picker Dropdown ────────────────────────────────────────
 
 function ModelPickerDropdown({
@@ -1023,11 +1028,19 @@ function ModelPickerDropdown({
   maxHeight: number;
 }) {
   const { settings, updateSetting } = useSettings();
-  const [models, setModels] = useState<string[]>([]);
+  const [models, setModels] = useState<string[]>(modelCache.models);
   const [loadingModels, setLoadingModels] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
+    const cacheKey = `${settings.aiProvider}|${settings.aiEndpoint}|${settings.aiAuthMode}`;
+
+    // Use cache if key matches and not expired
+    if (modelCache.key === cacheKey && modelCache.models.length > 0 && Date.now() - modelCache.ts < MODEL_CACHE_TTL) {
+      setModels(modelCache.models);
+      return;
+    }
+
     async function load() {
       setLoadingModels(true);
       try {
@@ -1039,9 +1052,14 @@ function ModelPickerDropdown({
           bearer_token: settings.aiAuthMode === "azure_oauth" ? settings.aiAccessToken : null,
         };
         const result = await invoke<{ id: string; name: string }[]>("list_models", { config });
-        if (!cancelled) setModels(result.map((m) => m.id || m.name));
+        if (!cancelled) {
+          const ids = result.map((m) => m.id || m.name);
+          modelCache.key = cacheKey;
+          modelCache.models = ids;
+          modelCache.ts = Date.now();
+          setModels(ids);
+        }
       } catch {
-        // If listing fails, show just the current model
         if (!cancelled && currentModel) setModels([currentModel]);
       } finally {
         if (!cancelled) setLoadingModels(false);
