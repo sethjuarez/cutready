@@ -118,6 +118,8 @@ export function TitleBar({
         <div className="flex items-center gap-0.5 px-1.5" style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}>
           {/* Feedback button */}
           <FeedbackPopover />
+          {/* Separator between feedback and panel toggles */}
+          <div className="w-px h-3 bg-[var(--color-border)] mx-0.5 shrink-0" />
           {/* Left panel icon — toggles whichever panel is on the left */}
           <button
             className={`flex items-center justify-center w-6 h-[20px] rounded transition-colors ${
