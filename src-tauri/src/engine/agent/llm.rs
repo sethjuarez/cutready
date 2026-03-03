@@ -249,7 +249,7 @@ impl LlmClient {
                 if self.is_foundry() {
                     // Foundry model inference API — model name goes in request body
                     format!(
-                        "{}/models/chat/completions?api-version=2024-05-01-preview",
+                        "{}/models/chat/completions?api-version=2025-03-01-preview",
                         base
                     )
                 } else {
@@ -278,7 +278,7 @@ impl LlmClient {
                 if self.is_foundry() {
                     // Foundry project API: list deployments
                     format!(
-                        "{}/deployments?api-version=2025-11-15-preview",
+                        "{}/models?api-version=2025-03-01-preview",
                         base
                     )
                 } else {
