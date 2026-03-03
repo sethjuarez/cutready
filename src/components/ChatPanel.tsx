@@ -130,6 +130,30 @@ function IconStoryboard({ size = 12 }: { size?: number }) {
   );
 }
 
+function IconPaperclip({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+    </svg>
+  );
+}
+
+function IconTool({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
+    </svg>
+  );
+}
+
+function IconChevronDown({ size = 10 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="m6 9 6 6 6-6" />
+    </svg>
+  );
+}
+
 function IconChevron({ size = 10, expanded = false }: { size?: number; expanded?: boolean }) {
   return (
     <svg
@@ -200,14 +224,33 @@ function ChatTab() {
   const [showAutocomplete, setShowAutocomplete] = useState(false);
   const [autocompleteFilter, setAutocompleteFilter] = useState("");
   const [autocompleteIndex, setAutocompleteIndex] = useState(0);
+  const [showContextPicker, setShowContextPicker] = useState(false);
+  const [contextFilter, setContextFilter] = useState("");
+  const [showModelPicker, setShowModelPicker] = useState(false);
+  const [showToolsInfo, setShowToolsInfo] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const contextPickerRef = useRef<HTMLDivElement>(null);
+  const modelPickerRef = useRef<HTMLDivElement>(null);
+  const toolsInfoRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  // Click-outside to close pickers
+  useEffect(() => {
+    if (!showContextPicker && !showModelPicker && !showToolsInfo) return;
+    const handle = (e: MouseEvent) => {
+      if (showContextPicker && contextPickerRef.current && !contextPickerRef.current.contains(e.target as Node)) setShowContextPicker(false);
+      if (showModelPicker && modelPickerRef.current && !modelPickerRef.current.contains(e.target as Node)) setShowModelPicker(false);
+      if (showToolsInfo && toolsInfoRef.current && !toolsInfoRef.current.contains(e.target as Node)) setShowToolsInfo(false);
+    };
+    window.addEventListener("mousedown", handle);
+    return () => window.removeEventListener("mousedown", handle);
+  }, [showContextPicker, showModelPicker, showToolsInfo]);
 
   // All referenceable files
   const allFiles = useMemo<FileReference[]>(() => {
@@ -227,6 +270,19 @@ function ChatTab() {
       .filter((f) => f.title.toLowerCase().includes(q) || f.path.toLowerCase().includes(q))
       .slice(0, 8);
   }, [showAutocomplete, autocompleteFilter, allFiles, references]);
+
+  // Filtered context picker options (for Add Context button)
+  const contextPickerOptions = useMemo(() => {
+    if (!showContextPicker) return [];
+    const q = contextFilter.toLowerCase();
+    return allFiles
+      .filter((f) => !references.some((r) => r.path === f.path))
+      .filter((f) => f.title.toLowerCase().includes(q) || f.path.toLowerCase().includes(q))
+      .slice(0, 10);
+  }, [showContextPicker, contextFilter, allFiles, references]);
+
+  // Available tools list
+  const availableTools = ["list_project_files", "read_note", "read_sketch", "set_planning_rows", "update_planning_row"];
 
   const buildConfig = useCallback(() => ({
     provider: settings.aiProvider,
@@ -429,7 +485,7 @@ Keep responses concise and actionable. Use markdown formatting.`;
 
   return (
     <div className="flex flex-col h-full">
-      {/* Top toolbar — like Confluo/VS Code chat */}
+      {/* Top toolbar — session controls */}
       <div className="flex items-center gap-0.5 px-2 h-[30px] border-b border-[var(--color-border)] shrink-0">
         <button
           className="flex items-center justify-center w-[26px] h-[26px] rounded text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-alt)] transition-colors"
@@ -439,9 +495,6 @@ Keep responses concise and actionable. Use markdown formatting.`;
           <IconPlus size={14} />
         </button>
         <div className="flex-1" />
-        <span className="text-[10px] text-[var(--color-text-secondary)] px-1">
-          {settings.aiModel || "No model"}
-        </span>
         {messages.length > 0 && (
           <button
             className="flex items-center justify-center w-[26px] h-[26px] rounded text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-alt)] transition-colors"
@@ -512,30 +565,33 @@ Keep responses concise and actionable. Use markdown formatting.`;
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input area — Confluo-style bordered container */}
+      {/* Input area — VS Code Copilot chat style */}
       <div className="shrink-0 mx-2.5 mb-2.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-alt)] overflow-hidden transition-colors focus-within:border-[var(--color-accent)]">
-        {/* Reference chips */}
+        {/* Reference chips (shown above textarea like VS Code) */}
         {references.length > 0 && (
           <div className="flex flex-wrap gap-1 px-2.5 pt-2">
             {references.map((ref) => (
               <span
                 key={ref.path}
-                className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] bg-[var(--color-accent)]/10 text-[var(--color-accent)] rounded border border-[var(--color-accent)]/20"
+                className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[11px] bg-[var(--color-surface)] text-[var(--color-text)] rounded border border-[var(--color-border)] hover:border-[var(--color-accent)]/40 transition-colors"
               >
                 <FileTypeIcon type={ref.type} />
-                {ref.title}
+                <span className="max-w-[120px] truncate">{ref.title}</span>
                 <button
-                  className="hover:text-red-400 ml-0.5 opacity-60 hover:opacity-100"
+                  className="text-[var(--color-text-secondary)] hover:text-red-400 transition-colors"
                   onClick={() => removeReference(ref.path)}
+                  title="Remove"
                 >
-                  ×
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
                 </button>
               </span>
             ))}
           </div>
         )}
 
-        {/* Autocomplete dropdown */}
+        {/* Textarea with @ autocomplete */}
         <div className="relative">
           {showAutocomplete && autocompleteOptions.length > 0 && (
             <div className="absolute bottom-full left-0 right-0 mb-1 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-md shadow-lg overflow-hidden z-10 max-h-[200px] overflow-y-auto">
@@ -571,12 +627,117 @@ Keep responses concise and actionable. Use markdown formatting.`;
           />
         </div>
 
-        {/* Bottom toolbar */}
+        {/* Bottom toolbar — Add Context | Model | Tools | Send */}
         <div className="flex items-center gap-0.5 px-1.5 pb-1.5">
-          <span className="text-[10px] text-[var(--color-text-secondary)]/50 px-1">
-            Enter ↵
-          </span>
+          {/* Add Context button + picker */}
+          <div className="relative" ref={contextPickerRef}>
+            <button
+              className={`flex items-center gap-1 px-1.5 h-[26px] rounded text-[11px] transition-colors ${
+                showContextPicker
+                  ? "bg-[var(--color-surface)] text-[var(--color-text)]"
+                  : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)]"
+              }`}
+              onClick={() => { setShowContextPicker(!showContextPicker); setContextFilter(""); }}
+              title="Add Context (@)"
+            >
+              <IconPaperclip size={12} />
+            </button>
+            {showContextPicker && (
+              <div className="absolute bottom-full left-0 mb-1 w-[240px] bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg shadow-lg overflow-hidden z-20">
+                <div className="px-2.5 pt-2 pb-1">
+                  <input
+                    className="w-full px-2 py-1 text-[11px] bg-[var(--color-surface-alt)] border border-[var(--color-border)] rounded text-[var(--color-text)] placeholder-[var(--color-text-secondary)] focus:outline-none focus:border-[var(--color-accent)]"
+                    placeholder="Search files…"
+                    value={contextFilter}
+                    onChange={(e) => setContextFilter(e.target.value)}
+                    autoFocus
+                  />
+                </div>
+                <div className="max-h-[200px] overflow-y-auto">
+                  {contextPickerOptions.length === 0 ? (
+                    <div className="px-3 py-2 text-[11px] text-[var(--color-text-secondary)]">
+                      No matching files
+                    </div>
+                  ) : (
+                    contextPickerOptions.map((file) => (
+                      <button
+                        key={file.path}
+                        className="w-full flex items-center gap-2 px-2.5 py-1.5 text-left text-[11px] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-alt)] hover:text-[var(--color-text)] transition-colors"
+                        onClick={() => {
+                          setReferences((prev) => [...prev, file]);
+                          setShowContextPicker(false);
+                          inputRef.current?.focus();
+                        }}
+                      >
+                        <FileTypeIcon type={file.type} />
+                        <span className="flex-1 truncate">{file.title}</span>
+                        <span className="text-[10px] opacity-40">{file.type}</span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Model picker */}
+          <div className="relative" ref={modelPickerRef}>
+            <button
+              className={`flex items-center gap-1 px-1.5 h-[26px] rounded text-[11px] transition-colors ${
+                showModelPicker
+                  ? "bg-[var(--color-surface)] text-[var(--color-text)]"
+                  : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)]"
+              }`}
+              onClick={() => setShowModelPicker(!showModelPicker)}
+              title="Select Model"
+            >
+              <span className="max-w-[100px] truncate">{settings.aiModel || "Model"}</span>
+              <IconChevronDown size={10} />
+            </button>
+            {showModelPicker && (
+              <ModelPickerDropdown
+                currentModel={settings.aiModel}
+                onClose={() => setShowModelPicker(false)}
+              />
+            )}
+          </div>
+
+          {/* Tools info */}
+          <div className="relative" ref={toolsInfoRef}>
+            <button
+              className={`flex items-center gap-1 px-1.5 h-[26px] rounded text-[11px] transition-colors ${
+                showToolsInfo
+                  ? "bg-[var(--color-surface)] text-[var(--color-text)]"
+                  : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)]"
+              }`}
+              onClick={() => setShowToolsInfo(!showToolsInfo)}
+              title="Available Tools"
+            >
+              <IconTool size={12} />
+              <span>{availableTools.length}</span>
+            </button>
+            {showToolsInfo && (
+              <div className="absolute bottom-full left-0 mb-1 w-[220px] bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg shadow-lg overflow-hidden z-20">
+                <div className="px-3 py-2 border-b border-[var(--color-border)]">
+                  <span className="text-[10px] font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">Available Tools</span>
+                </div>
+                <div className="py-1">
+                  {availableTools.map((tool) => (
+                    <div key={tool} className="flex items-center gap-2 px-3 py-1.5 text-[11px] text-[var(--color-text-secondary)]">
+                      {tool.startsWith("read_") || tool === "list_project_files"
+                        ? <IconFile size={11} />
+                        : <IconWrench size={11} />}
+                      <span>{tool}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
           <div className="flex-1" />
+
+          {/* Send button */}
           <button
             className="flex items-center justify-center w-[26px] h-[26px] rounded text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
             onClick={handleSend}
@@ -825,6 +986,80 @@ function renderInline(text: string): React.ReactNode {
   }
 
   return parts.length === 1 ? parts[0] : <>{parts}</>;
+}
+
+// ── Model Picker Dropdown ────────────────────────────────────────
+
+function ModelPickerDropdown({
+  currentModel,
+  onClose,
+}: {
+  currentModel: string;
+  onClose: () => void;
+}) {
+  const { settings, updateSetting } = useSettings();
+  const [models, setModels] = useState<string[]>([]);
+  const [loadingModels, setLoadingModels] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      setLoadingModels(true);
+      try {
+        const config = {
+          provider: settings.aiProvider,
+          endpoint: settings.aiEndpoint,
+          api_key: settings.aiApiKey,
+          model: settings.aiModel || "unused",
+          bearer_token: settings.aiAuthMode === "azure_oauth" ? settings.aiAccessToken : null,
+        };
+        const result = await invoke<{ id: string; name: string }[]>("list_models", { config });
+        if (!cancelled) setModels(result.map((m) => m.id || m.name));
+      } catch {
+        // If listing fails, show just the current model
+        if (!cancelled && currentModel) setModels([currentModel]);
+      } finally {
+        if (!cancelled) setLoadingModels(false);
+      }
+    }
+    load();
+    return () => { cancelled = true; };
+  }, [settings, currentModel]);
+
+  return (
+    <div className="absolute bottom-full left-0 mb-1 w-[200px] bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg shadow-lg overflow-hidden z-20">
+      <div className="px-3 py-2 border-b border-[var(--color-border)]">
+        <span className="text-[10px] font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">Model</span>
+      </div>
+      <div className="max-h-[200px] overflow-y-auto py-1">
+        {loadingModels ? (
+          <div className="px-3 py-2 text-[11px] text-[var(--color-text-secondary)] italic">Loading…</div>
+        ) : (
+          models.map((model) => (
+            <button
+              key={model}
+              className={`w-full flex items-center gap-2 px-3 py-1.5 text-left text-[11px] transition-colors ${
+                model === currentModel
+                  ? "text-[var(--color-accent)] bg-[var(--color-accent)]/5"
+                  : "text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-alt)] hover:text-[var(--color-text)]"
+              }`}
+              onClick={() => {
+                updateSetting("aiModel", model);
+                onClose();
+              }}
+            >
+              {model === currentModel && (
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              )}
+              <span className={model === currentModel ? "" : "ml-[18px]"}>{model}</span>
+            </button>
+          ))
+        )}
+      </div>
+    </div>
+  );
 }
 
 // ── Helpers ──────────────────────────────────────────────────────
