@@ -24,7 +24,7 @@ pub async fn import_docx(
 ) -> Result<String, String> {
     let root = project_root(&state)?;
     let data = fs::read(&file_path).map_err(|e| format!("Failed to read file: {e}"))?;
-    let markdown = import::docx_to_markdown(&data)?;
+    let markdown = import::docx_to_markdown(&data, &root)?;
 
     let filename = std::path::Path::new(&file_path)
         .file_stem()
@@ -83,7 +83,7 @@ pub async fn import_pptx(
 ) -> Result<String, String> {
     let root = project_root(&state)?;
     let data = fs::read(&file_path).map_err(|e| format!("Failed to read file: {e}"))?;
-    let (title, rows) = import::pptx_to_planning_rows(&data)?;
+    let (title, rows) = import::pptx_to_planning_rows(&data, &root)?;
 
     let filename = std::path::Path::new(&file_path)
         .file_stem()
