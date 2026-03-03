@@ -364,22 +364,47 @@ pub fn delete_note(path: &Path, project_root: &Path) -> Result<(), ProjectError>
 }
 
 /// Extract `.cutready/screenshots/...` image paths from markdown content.
-/// Matches `![...](path)` where path contains `.cutready/screenshots/`.
+/// Matches both markdown `![...](path)` and HTML `<img src="path">` syntax.
 fn extract_screenshot_refs(content: &str) -> Vec<String> {
     let mut refs = Vec::new();
-    // Match markdown image syntax: ![alt](path)
+
+    // Match markdown image/link syntax: [...](.cutready/screenshots/...)
     let mut rest = content;
     while let Some(pos) = rest.find("](") {
         let after = &rest[pos + 2..];
         if let Some(end) = after.find(')') {
             let img_path = after[..end].trim();
             if img_path.contains(".cutready/screenshots/") {
-                // Normalize to forward slashes
                 refs.push(img_path.replace('\\', "/"));
             }
         }
         rest = &rest[pos + 2..];
     }
+
+    // Match HTML img tags: <img ... src="path" ...>
+    rest = content;
+    while let Some(pos) = rest.find("<img ") {
+        let tag_rest = &rest[pos..];
+        if let Some(tag_end) = tag_rest.find('>') {
+            let tag = &tag_rest[..tag_end];
+            // Extract src attribute value (single or double quotes)
+            for prefix in &["src=\"", "src='"] {
+                if let Some(src_start) = tag.find(prefix) {
+                    let val_start = src_start + prefix.len();
+                    let quote = prefix.as_bytes()[prefix.len() - 1] as char;
+                    if let Some(val_end) = tag[val_start..].find(quote) {
+                        let src = tag[val_start..val_start + val_end].trim();
+                        if src.contains(".cutready/screenshots/") {
+                            refs.push(src.replace('\\', "/"));
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+        rest = &rest[pos + 5..];
+    }
+
     refs
 }
 
@@ -924,5 +949,107 @@ mod tests {
 
         delete_note(&note, root).unwrap();
         assert!(!note.exists());
+    }
+
+    // ── list_images_with_refs tests ─────────────────────────────
+
+    #[test]
+    fn list_images_with_refs_finds_references() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+
+        // Create screenshots dir and images
+        let ss_dir = root.join(".cutready").join("screenshots");
+        std::fs::create_dir_all(&ss_dir).unwrap();
+        std::fs::write(ss_dir.join("pasted-001.png"), b"img1").unwrap();
+        std::fs::write(ss_dir.join("pasted-002.png"), b"img2").unwrap();
+
+        // Create a note at root level referencing one image
+        std::fs::write(
+            root.join("my-note.md"),
+            "# Hello\n\n![screenshot](.cutready/screenshots/pasted-001.png)\n",
+        ).unwrap();
+
+        let result = list_images_with_refs(root).unwrap();
+        assert_eq!(result.len(), 2);
+
+        let img1 = result.iter().find(|i| i.path.contains("pasted-001")).unwrap();
+        assert_eq!(img1.referenced_by.len(), 1, "pasted-001 should be referenced by my-note.md");
+        assert!(img1.referenced_by[0].contains("my-note.md"));
+
+        let img2 = result.iter().find(|i| i.path.contains("pasted-002")).unwrap();
+        assert_eq!(img2.referenced_by.len(), 0, "pasted-002 should be orphaned");
+    }
+
+    #[test]
+    fn list_images_with_refs_no_false_orphans() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+
+        // Create screenshots dir and an image
+        let ss_dir = root.join(".cutready").join("screenshots");
+        std::fs::create_dir_all(&ss_dir).unwrap();
+        std::fs::write(ss_dir.join("pasted-100.png"), b"img").unwrap();
+
+        // Create a note referencing the image
+        std::fs::write(
+            root.join("script-draft.md"),
+            "Some text\n\n![pic](.cutready/screenshots/pasted-100.png)\n\nMore text",
+        ).unwrap();
+
+        let result = list_images_with_refs(root).unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(
+            result[0].referenced_by.len(),
+            1,
+            "Image should NOT be reported as orphaned when referenced by a note"
+        );
+    }
+
+    #[test]
+    fn extract_refs_finds_html_img_tags() {
+        let content = r#"Some text
+<img src=".cutready/screenshots/pasted-500.png" alt="test" />
+More text"#;
+        let refs = extract_screenshot_refs(content);
+        assert_eq!(refs.len(), 1);
+        assert_eq!(refs[0], ".cutready/screenshots/pasted-500.png");
+    }
+
+    #[test]
+    fn extract_refs_finds_both_markdown_and_html() {
+        let content = r#"# Doc
+![pic](.cutready/screenshots/pasted-001.png)
+Some text
+<img src=".cutready/screenshots/pasted-002.png" />
+"#;
+        let refs = extract_screenshot_refs(content);
+        assert_eq!(refs.len(), 2);
+        assert!(refs.iter().any(|r| r.contains("pasted-001")));
+        assert!(refs.iter().any(|r| r.contains("pasted-002")));
+    }
+
+    #[test]
+    fn list_images_with_refs_detects_html_img_refs() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+
+        let ss_dir = root.join(".cutready").join("screenshots");
+        std::fs::create_dir_all(&ss_dir).unwrap();
+        std::fs::write(ss_dir.join("pasted-html.png"), b"img").unwrap();
+
+        // Note uses HTML img tag instead of markdown syntax
+        std::fs::write(
+            root.join("html-note.md"),
+            "# Note\n\n<img src=\".cutready/screenshots/pasted-html.png\" alt=\"test\" />\n",
+        ).unwrap();
+
+        let result = list_images_with_refs(root).unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(
+            result[0].referenced_by.len(),
+            1,
+            "HTML img tag references should be detected"
+        );
     }
 }

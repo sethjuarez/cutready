@@ -47,6 +47,8 @@ export function ImageManagerTab() {
   }, [loadImages]);
 
   const deleteImage = async (path: string) => {
+    const fileName = path.split("/").pop() || path;
+    if (!window.confirm(`Delete ${fileName}?`)) return;
     try {
       await invoke("delete_project_image", { relativePath: path });
       setImages((prev) => prev.filter((img) => img.path !== path));
@@ -57,14 +59,17 @@ export function ImageManagerTab() {
 
   const deleteAllOrphaned = async () => {
     const orphaned = images.filter((img) => img.referencedBy.length === 0);
-    for (const img of orphaned) {
-      try {
-        await invoke("delete_project_image", { relativePath: img.path });
-      } catch {
-        // continue with others
-      }
+    if (orphaned.length === 0) return;
+    const confirmed = window.confirm(
+      `Delete ${orphaned.length} orphaned image${orphaned.length !== 1 ? "s" : ""}?\n\nThis cannot be undone.`
+    );
+    if (!confirmed) return;
+    try {
+      const deleted = await invoke<number>("delete_orphaned_images");
+      if (deleted > 0) await loadImages();
+    } catch (err) {
+      setError(String(err));
     }
-    await loadImages();
   };
 
   const filtered = images.filter((img) => {

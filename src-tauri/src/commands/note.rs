@@ -149,6 +149,25 @@ pub async fn delete_project_image(
     Ok(())
 }
 
+/// Delete all orphaned images (re-verified server-side).
+/// Returns the count of deleted images.
+#[tauri::command]
+pub async fn delete_orphaned_images(state: State<'_, AppState>) -> Result<u32, String> {
+    let root = project_root(&state)?;
+    let refs = project::list_images_with_refs(&root).map_err(|e| e.to_string())?;
+    let mut deleted = 0u32;
+    for img in &refs {
+        if img.referenced_by.is_empty() {
+            let abs = root.join(&img.path);
+            if abs.exists() {
+                std::fs::remove_file(&abs).map_err(|e| format!("Failed to delete {}: {e}", img.path))?;
+                deleted += 1;
+            }
+        }
+    }
+    Ok(deleted)
+}
+
 fn base64_decode(input: &str) -> Result<Vec<u8>, String> {
     use base64::Engine;
     base64::engine::general_purpose::STANDARD
