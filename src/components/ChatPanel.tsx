@@ -445,7 +445,7 @@ function ChatTab() {
 
     setChatError(null);
 
-    // Build user message with @references context
+    // Build user message with #references context
     let userContent = text;
     if (references.length > 0) {
       // Fetch web references first
@@ -454,7 +454,7 @@ function ChatTab() {
       const parts: string[] = [];
 
       if (fileRefs.length > 0) {
-        parts.push(`[References: ${fileRefs.map((r) => `@${r.type}:${r.path}`).join(", ")}]`);
+        parts.push(`[References: ${fileRefs.map((r) => `#${r.type}:${r.path}`).join(", ")}]`);
       }
 
       for (const wr of webRefs) {
@@ -589,26 +589,25 @@ function ChatTab() {
       const val = e.target.value;
       setInput(val);
 
-      // Detect @ trigger
+      // Detect # trigger for references
       const cursorPos = e.target.selectionStart;
       const textBefore = val.slice(0, cursorPos);
-      const atIndex = textBefore.lastIndexOf("@");
+      const hashIndex = textBefore.lastIndexOf("#");
 
-      if (atIndex >= 0 && (atIndex === 0 || textBefore[atIndex - 1] === " ")) {
-        const query = textBefore.slice(atIndex + 1);
+      if (hashIndex >= 0 && (hashIndex === 0 || textBefore[hashIndex - 1] === " ")) {
+        const query = textBefore.slice(hashIndex + 1);
 
-        // Detect completed @web:URL pattern — triggers when space follows the URL
-        // The space is included in textBefore since cursor is after it
-        const webMatch = val.slice(atIndex + 1).match(/^web:(https?:\/\/\S+)\s/);
+        // Detect completed #web:URL pattern — triggers when space follows the URL
+        const webMatch = val.slice(hashIndex + 1).match(/^web:(https?:\/\/\S+)\s/);
         if (webMatch) {
           const url = webMatch[1];
           setReferences((prev) => {
             if (prev.some((r) => r.path === url)) return prev;
             return [...prev, { type: "web", path: url, title: url }];
           });
-          // Remove @web:URL + trailing space from input
-          const before = val.slice(0, atIndex);
-          const after = val.slice(atIndex + 1 + webMatch[0].length);
+          // Remove #web:URL + trailing space from input
+          const before = val.slice(0, hashIndex);
+          const after = val.slice(hashIndex + 1 + webMatch[0].length);
           setInput(before + after);
           setShowAutocomplete(false);
           return;
@@ -629,11 +628,11 @@ function ChatTab() {
   const insertReference = useCallback(
     (file: FileReference) => {
       setReferences((prev) => [...prev, file]);
-      // Remove the @query from input
+      // Remove the #query from input
       const cursorPos = inputRef.current?.selectionStart ?? input.length;
       const textBefore = input.slice(0, cursorPos);
-      const atIndex = textBefore.lastIndexOf("@");
-      const newInput = input.slice(0, atIndex) + input.slice(cursorPos);
+      const hashIndex = textBefore.lastIndexOf("#");
+      const newInput = input.slice(0, hashIndex) + input.slice(cursorPos);
       setInput(newInput);
       setShowAutocomplete(false);
       inputRef.current?.focus();
@@ -747,7 +746,7 @@ function ChatTab() {
               CutReady AI
             </p>
             <p className="text-xs text-[var(--color-text-secondary)] max-w-[220px] leading-relaxed mb-4">
-              I can help plan your demo, generate sketches, or refine your script. Use <kbd className="px-1 py-0.5 text-[10px] bg-[var(--color-surface-alt)] rounded border border-[var(--color-border)]">@</kbd> to reference project files.
+              I can help plan your demo, generate sketches, or refine your script. Use <kbd className="px-1 py-0.5 text-[10px] bg-[var(--color-surface-alt)] rounded border border-[var(--color-border)]">#</kbd> to reference files and websites.
             </p>
             <div className="flex flex-wrap gap-1.5 justify-center max-w-[260px]">
               {[
@@ -815,7 +814,7 @@ function ChatTab() {
           </div>
         )}
 
-        {/* Textarea with @ autocomplete */}
+        {/* Textarea with # autocomplete */}
         <div className="relative" ref={autocompleteRef}>
           {showAutocomplete && autocompleteOptions.length > 0 && (
             <div className="absolute bottom-full left-0 right-0 mb-1 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-md shadow-lg overflow-hidden z-10 overflow-y-auto" style={{ maxHeight: acMaxH }}>
@@ -843,7 +842,7 @@ function ChatTab() {
             className="w-full resize-none bg-transparent px-2.5 py-2 text-[13px] text-[var(--color-text)] placeholder-[var(--color-text-secondary)]/60 focus:outline-none leading-[1.5]"
             style={{ maxHeight: 300 }}
             rows={3}
-            placeholder="Ask about your demo plan… (@ to reference files)"
+            placeholder="Ask about your demo plan… (# to reference files)"
             value={input}
             onChange={handleInputChange}
             onKeyDown={handleKeyDown}
@@ -862,7 +861,7 @@ function ChatTab() {
                   : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)]"
               }`}
               onClick={() => { setShowContextPicker(!showContextPicker); setContextFilter(""); }}
-              title="Add Context (@)"
+              title="Add Context (#)"
             >
               <IconPaperclip size={12} />
             </button>
