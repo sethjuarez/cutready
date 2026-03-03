@@ -29,7 +29,7 @@ pub fn all_tools() -> Vec<ToolDefinition> {
             json!({
                 "type": "object",
                 "properties": {
-                    "path": { "type": "string", "description": "Relative path to the note (e.g. 'notes/overview.md')" }
+                    "path": { "type": "string", "description": "Relative path exactly as returned by list_project_files (e.g. 'getting-started.md' or 'docs/overview.md')" }
                 },
                 "required": ["path"]
             }),
@@ -40,18 +40,18 @@ pub fn all_tools() -> Vec<ToolDefinition> {
             json!({
                 "type": "object",
                 "properties": {
-                    "path": { "type": "string", "description": "Relative path to the sketch (e.g. 'sketches/demo.sk')" }
+                    "path": { "type": "string", "description": "Relative path exactly as returned by list_project_files (e.g. 'introduction.sk' or 'demos/overview.sk')" }
                 },
                 "required": ["path"]
             }),
         ),
         tool_def(
             "set_planning_rows",
-            "Replace ALL planning rows in a sketch. Use this to generate a full plan from scratch.",
+            "Replace ALL planning rows in a sketch, or create a new sketch if it doesn't exist yet. Use this to generate a full plan from scratch.",
             json!({
                 "type": "object",
                 "properties": {
-                    "path": { "type": "string", "description": "Relative path to the sketch" },
+                    "path": { "type": "string", "description": "Relative path to the sketch. Use a path from list_project_files to update, or a new filename like 'my-sketch.sk' to create" },
                     "rows": {
                         "type": "array",
                         "items": {
@@ -74,7 +74,7 @@ pub fn all_tools() -> Vec<ToolDefinition> {
             json!({
                 "type": "object",
                 "properties": {
-                    "path": { "type": "string", "description": "Relative path to the sketch" },
+                    "path": { "type": "string", "description": "Relative path exactly as returned by list_project_files" },
                     "index": { "type": "integer", "description": "0-based row index" },
                     "time": { "type": "string", "description": "New time value (optional)" },
                     "narrative": { "type": "string", "description": "New narrative (optional)" },
@@ -147,9 +147,10 @@ fn exec_list_project_files(root: &Path) -> String {
 
     if let Ok(sketches) = project::scan_sketches(root) {
         out.push_str("## Sketches\n");
+        out.push_str("Use the exact path value with read_sketch/set_planning_rows/update_planning_row.\n");
         for s in &sketches {
             out.push_str(&format!(
-                "- {} ({}, {} rows)\n",
+                "- path: \"{}\" — {} ({} rows)\n",
                 s.path, s.title, s.row_count
             ));
         }
@@ -157,8 +158,9 @@ fn exec_list_project_files(root: &Path) -> String {
 
     if let Ok(notes) = project::scan_notes(root) {
         out.push_str("\n## Notes\n");
+        out.push_str("Use the exact path value with read_note.\n");
         for n in &notes {
-            out.push_str(&format!("- {} ({})\n", n.path, n.title));
+            out.push_str(&format!("- path: \"{}\" — {}\n", n.path, n.title));
         }
     }
 
@@ -231,9 +233,28 @@ fn exec_set_planning_rows(root: &Path, args: &Value) -> String {
         None => return "Error: 'rows' must be an array".into(),
     };
 
+    // Load existing sketch or create a new one
     let mut sketch = match project::read_sketch(&path) {
         Ok(s) => s,
-        Err(e) => return format!("Error reading sketch: {e}"),
+        Err(_) => {
+            // New sketch — derive title from filename
+            let title = path
+                .file_stem()
+                .map(|s| {
+                    s.to_string_lossy()
+                        .replace('-', " ")
+                        .replace('_', " ")
+                })
+                .unwrap_or_else(|| "Untitled".into());
+            crate::models::sketch::Sketch {
+                title,
+                description: serde_json::Value::Null,
+                rows: vec![],
+                state: crate::models::sketch::SketchState::Draft,
+                created_at: chrono::Utc::now(),
+                updated_at: chrono::Utc::now(),
+            }
+        }
     };
 
     let count = new_rows.len();
