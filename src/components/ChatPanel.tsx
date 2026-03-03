@@ -498,7 +498,7 @@ function ChatTab() {
       id: crypto.randomUUID(),
       timestamp: new Date(),
       source: "chat",
-      content: `Sent: "${userContent.slice(0, 100)}${userContent.length > 100 ? "…" : ""}"`,
+      content: `Sent: "${userContent}"`,
       level: "info",
     }]);
     try {
@@ -573,7 +573,7 @@ function ChatTab() {
           id: crypto.randomUUID(),
           timestamp: new Date(),
           source: `result ${tr.tool_call_id ?? ""}`.trim(),
-          content: (tr.content ?? "").slice(0, 200),
+          content: tr.content ?? "",
           level: "success",
         });
       }
@@ -602,7 +602,7 @@ function ChatTab() {
         id: crypto.randomUUID(),
         timestamp: new Date(),
         source: "response",
-        content: `${toolMessages.length > 0 ? `${toolMessages.reduce((n, m) => n + (m.tool_calls?.length ?? 0), 0)} tool call(s) → ` : ""}${(result.response ?? "").slice(0, 120)}${(result.response ?? "").length > 120 ? "…" : ""}`,
+        content: `${toolMessages.length > 0 ? `${toolMessages.reduce((n, m) => n + (m.tool_calls?.length ?? 0), 0)} tool call(s) → ` : ""}${result.response ?? ""}`,
         level: "success",
       }]);
 
@@ -615,7 +615,7 @@ function ChatTab() {
         id: crypto.randomUUID(),
         timestamp: new Date(),
         source: "error",
-        content: errMsg.slice(0, 200),
+        content: errMsg,
         level: "error",
       }]);
       // Keep user message visible
