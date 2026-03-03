@@ -453,10 +453,10 @@ function FeedbackPopover() {
       entry.feedback,
     ].join("\n");
     await navigator.clipboard.writeText(text).catch(() => {});
+    setFeedback("");
     setCopied(true);
     setTimeout(() => {
       setCopied(false);
-      setFeedback("");
       setOpen(false);
     }, 1200);
   };
