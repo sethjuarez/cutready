@@ -2,6 +2,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useUpdateStore } from "../stores/updateStore";
+import { useAppStore } from "../stores/appStore";
 import { relaunch } from "@tauri-apps/plugin-process";
 
 interface TitleBarProps {
@@ -409,6 +410,7 @@ function FeedbackPopover() {
   const [open, setOpen] = useState(false);
   const [feedback, setFeedback] = useState("");
   const [category, setCategory] = useState<"general" | "bug" | "feature" | "ux">("general");
+  const [includeDebug, setIncludeDebug] = useState(false);
   const [copied, setCopied] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -437,10 +439,21 @@ function FeedbackPopover() {
 
   const handleSubmit = async () => {
     if (!feedback.trim()) return;
+    // Snapshot debug log if toggle is on
+    let debugLogText: string | undefined;
+    if (includeDebug) {
+      const entries = useAppStore.getState().debugLog;
+      if (entries.length > 0) {
+        debugLogText = entries
+          .map((e) => `[${e.timestamp.toISOString()}] [${e.level.toUpperCase().padEnd(7)}] [${e.source}] ${e.content}`)
+          .join("\n");
+      }
+    }
     const entry = {
       category: categoryLabels[category].label,
       feedback: feedback.trim(),
       date: new Date().toISOString(),
+      ...(debugLogText ? { debug_log: debugLogText } : {}),
     };
     // Always persist to app data directory
     await invoke("save_feedback", { entry }).catch(() => {});
@@ -451,9 +464,11 @@ function FeedbackPopover() {
       `**Date:** ${entry.date.split("T")[0]}`,
       ``,
       entry.feedback,
+      ...(debugLogText ? [``, `---`, `### Debug Log`, `\`\`\``, debugLogText, `\`\`\``] : []),
     ].join("\n");
     await navigator.clipboard.writeText(text).catch(() => {});
     setFeedback("");
+    setIncludeDebug(false);
     setCopied(true);
     setTimeout(() => {
       setCopied(false);
@@ -515,6 +530,30 @@ function FeedbackPopover() {
             className="w-full px-2.5 py-2 rounded-md bg-[var(--color-surface-alt)] border border-[var(--color-border)] text-xs text-[var(--color-text)] placeholder:text-[var(--color-text-secondary)]/50 focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)]/40 resize-none"
             autoFocus
           />
+
+          {/* Include debug log toggle */}
+          <label className="flex items-center gap-1.5 cursor-pointer group">
+            <button
+              type="button"
+              role="switch"
+              aria-checked={includeDebug}
+              onClick={() => setIncludeDebug(!includeDebug)}
+              className={`relative inline-flex h-[14px] w-[26px] shrink-0 rounded-full border transition-colors ${
+                includeDebug
+                  ? "bg-[var(--color-accent)] border-[var(--color-accent)]"
+                  : "bg-[var(--color-surface-alt)] border-[var(--color-border)]"
+              }`}
+            >
+              <span
+                className={`pointer-events-none block h-[10px] w-[10px] rounded-full bg-white shadow-sm transition-transform mt-[1px] ${
+                  includeDebug ? "translate-x-[13px]" : "translate-x-[1px]"
+                }`}
+              />
+            </button>
+            <span className="text-[10px] text-[var(--color-text-secondary)] group-hover:text-[var(--color-text)] transition-colors select-none">
+              Include debug log
+            </span>
+          </label>
 
           {/* Copy button */}
           <button

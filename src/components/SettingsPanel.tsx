@@ -770,6 +770,7 @@ interface FeedbackEntry {
   category: string;
   feedback: string;
   date: string;
+  debug_log?: string;
 }
 
 function FeedbackListTab() {
@@ -787,7 +788,11 @@ function FeedbackListTab() {
   const copyAll = async () => {
     if (entries.length === 0) return;
     const text = entries
-      .map((e) => `## ${e.category}\n**Date:** ${e.date.split("T")[0]}\n\n${e.feedback}`)
+      .map((e) => {
+        let t = `## ${e.category}\n**Date:** ${e.date.split("T")[0]}\n\n${e.feedback}`;
+        if (e.debug_log) t += `\n\n---\n### Debug Log\n\`\`\`\n${e.debug_log}\n\`\`\``;
+        return t;
+      })
       .join("\n\n---\n\n");
     try {
       await navigator.clipboard.writeText(text);
@@ -797,7 +802,8 @@ function FeedbackListTab() {
   };
 
   const copySingle = async (entry: FeedbackEntry) => {
-    const text = `## ${entry.category}\n**Date:** ${entry.date.split("T")[0]}\n\n${entry.feedback}`;
+    let text = `## ${entry.category}\n**Date:** ${entry.date.split("T")[0]}\n\n${entry.feedback}`;
+    if (entry.debug_log) text += `\n\n---\n### Debug Log\n\`\`\`\n${entry.debug_log}\n\`\`\``;
     try {
       await navigator.clipboard.writeText(text);
     } catch { /* ignore */ }
@@ -859,6 +865,15 @@ function FeedbackListTab() {
                 </span>
               </div>
               <p className="text-xs text-[var(--color-text)] whitespace-pre-wrap">{entry.feedback}</p>
+              {entry.debug_log && (
+                <div className="mt-1.5 flex items-center gap-1 text-[10px] text-[var(--color-text-secondary)]">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="4" y="10" width="16" height="12" rx="2" />
+                    <path d="M12 10v12" /><path d="M4 16h16" />
+                  </svg>
+                  Debug log attached ({entry.debug_log.split("\n").length} lines)
+                </div>
+              )}
               <button
                 onClick={() => copySingle(entry)}
                 className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 p-1 rounded text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)] transition-all"

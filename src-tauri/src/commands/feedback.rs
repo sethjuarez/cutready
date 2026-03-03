@@ -9,6 +9,8 @@ pub struct FeedbackEntry {
     pub category: String,
     pub feedback: String,
     pub date: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub debug_log: Option<String>,
 }
 
 /// Append a feedback entry to `<app_data>/feedback.json`.
