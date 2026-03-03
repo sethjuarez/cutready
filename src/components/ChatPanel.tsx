@@ -652,40 +652,25 @@ function ChatTab() {
         agentPrompts,
       });
 
-      // Extract tool calls for transparency in display
-      const toolMessages = result.messages.filter(
-        (m) => m.role === "assistant" && m.tool_calls && m.tool_calls.length > 0,
-      );
-      const toolResultMessages = result.messages.filter((m) => m.role === "tool");
-
       // Activity logging now handled by real-time agent-event listener
 
-      // Build the display messages: user msg + any tool transparency + assistant response
-      const displayMessages: ChatMessage[] = [...newMessages];
-
-      // Add tool call transparency messages
-      for (const tm of toolMessages) {
-        displayMessages.push(tm);
-      }
-      for (const tr of toolResultMessages) {
-        displayMessages.push(tr);
-      }
-
-      // Add final assistant response
-      if (result.response) {
-        displayMessages.push({ role: "assistant", content: result.response });
-      }
+      // Use the backend's full conversation (with correct tool_call/tool_result ordering)
+      // but strip the system prompt for display
+      const backendMessages = result.messages.filter((m) => m.role !== "system");
 
       // Log response to activity
+      const toolCallCount = backendMessages.filter(
+        (m) => m.role === "assistant" && m.tool_calls && m.tool_calls.length > 0,
+      ).reduce((n, m) => n + (m.tool_calls?.length ?? 0), 0);
       addActivityEntries([{
         id: crypto.randomUUID(),
         timestamp: new Date(),
         source: "response",
-        content: `${toolMessages.length > 0 ? `${toolMessages.reduce((n, m) => n + (m.tool_calls?.length ?? 0), 0)} tool call(s) → ` : ""}${result.response ?? ""}`,
+        content: `${toolCallCount > 0 ? `${toolCallCount} tool call(s) → ` : ""}${result.response ?? ""}`,
         level: "success",
       }]);
 
-      setChatMessages(displayMessages);
+      setChatMessages(backendMessages);
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
       setChatError(errMsg);
