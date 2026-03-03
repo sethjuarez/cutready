@@ -158,7 +158,7 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
     case "push_pending_chat_message":
       return null;
     case "fetch_url_content":
-      return `[Mock web content for: ${args?.url ?? "unknown"}]\n\nThis is simulated web content. In production, the URL would be fetched and cleaned to plain text using the scraper crate (like Python's BeautifulSoup).`;
+      return `Mock web content for: ${args?.url ?? "unknown"}\n\nAzure Functions is a serverless compute service that lets you run event-triggered code without having to explicitly provision or manage infrastructure. You can write just the code you need for the problem at hand, without worrying about a whole application or the infrastructure to run it.\n\nKey Features:\n- Simplified programming model\n- Flexible hosting options\n- Built-in triggers and bindings\n- Pay-per-execution pricing\n- Integrated security\n\nAzure Functions supports triggers from HTTP requests, timers, Azure Storage, Azure Service Bus, and many more event sources. You can write functions in C#, JavaScript, Python, Java, and PowerShell.\n\nGetting Started:\n1. Create a function app in the Azure portal\n2. Choose your development environment\n3. Create your first function\n4. Test locally and deploy to Azure`;
     case "check_for_update":
       return null;
     case "install_update":

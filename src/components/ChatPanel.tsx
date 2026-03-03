@@ -17,6 +17,10 @@ interface FileReference {
   type: "sketch" | "note" | "storyboard" | "web";
   path: string;
   title: string;
+  /** Cached web content (only for type: "web"). */
+  webContent?: string;
+  /** Fetch status for web refs. */
+  webStatus?: "loading" | "ready" | "error";
 }
 
 type SecondaryTab = "chat" | "history";
@@ -322,6 +326,7 @@ function ChatTab() {
   const [showModelPicker, setShowModelPicker] = useState(false);
   const [showToolsInfo, setShowToolsInfo] = useState(false);
   const [showAgentPicker, setShowAgentPicker] = useState(false);
+  const [expandedWebRef, setExpandedWebRef] = useState<string | null>(null);
 
   // Auto-create a session path on first mount if none exists
   useEffect(() => {
@@ -448,7 +453,6 @@ function ChatTab() {
     // Build user message with #references context
     let userContent = text;
     if (references.length > 0) {
-      // Fetch web references first
       const webRefs = references.filter((r) => r.type === "web");
       const fileRefs = references.filter((r) => r.type !== "web");
       const parts: string[] = [];
@@ -458,11 +462,10 @@ function ChatTab() {
       }
 
       for (const wr of webRefs) {
-        try {
-          const content = await invoke<string>("fetch_url_content", { url: wr.path });
-          parts.push(`[Web: ${wr.path}]\n${content}`);
-        } catch {
-          parts.push(`[Web: ${wr.path}] (failed to fetch)`);
+        if (wr.webContent && wr.webStatus === "ready") {
+          parts.push(`[Web: ${wr.path}]\n${wr.webContent}`);
+        } else {
+          parts.push(`[Web: ${wr.path}] (content not available)`);
         }
       }
 
@@ -490,6 +493,35 @@ function ChatTab() {
       level: "info",
     }]);
     try {
+      // Auto-refresh OAuth token if we have a refresh token
+      let freshBearerToken = settings.aiAuthMode === "azure_oauth" ? settings.aiAccessToken : null;
+      if (settings.aiAuthMode === "azure_oauth" && settings.aiRefreshToken) {
+        try {
+          const tokenResult = await invoke<{ access_token: string; refresh_token?: string }>(
+            "azure_token_refresh",
+            {
+              tenantId: settings.aiTenantId || "",
+              refreshToken: settings.aiRefreshToken,
+              clientId: settings.aiClientId || null,
+            },
+          );
+          if (tokenResult.access_token) {
+            freshBearerToken = tokenResult.access_token;
+            await updateSetting("aiAccessToken", tokenResult.access_token);
+            if (tokenResult.refresh_token) {
+              await updateSetting("aiRefreshToken", tokenResult.refresh_token);
+            }
+          }
+        } catch {
+          // Refresh failed — will try with existing token
+        }
+      }
+
+      const config = {
+        ...buildConfig(),
+        bearer_token: freshBearerToken,
+      };
+
       // Build agent prompts map for sub-agent delegation
       const agentPrompts: Record<string, string> = {};
       for (const a of BUILT_IN_AGENTS) {
@@ -500,7 +532,7 @@ function ChatTab() {
       }
 
       const result = await invoke<AgentChatResult>("agent_chat_with_tools", {
-        config: buildConfig(),
+        config,
         messages: fullMessages,
         agentPrompts,
       });
@@ -603,13 +635,23 @@ function ChatTab() {
           const url = webMatch[1];
           setReferences((prev) => {
             if (prev.some((r) => r.path === url)) return prev;
-            return [...prev, { type: "web", path: url, title: url }];
+            return [...prev, { type: "web", path: url, title: url, webStatus: "loading" }];
           });
           // Remove #web:URL + trailing space from input
           const before = val.slice(0, hashIndex);
           const after = val.slice(hashIndex + 1 + webMatch[0].length);
           setInput(before + after);
           setShowAutocomplete(false);
+          // Fetch content in background
+          invoke<string>("fetch_url_content", { url }).then((content) => {
+            setReferences((prev) => prev.map((r) =>
+              r.path === url ? { ...r, webContent: content, webStatus: "ready" as const } : r
+            ));
+          }).catch(() => {
+            setReferences((prev) => prev.map((r) =>
+              r.path === url ? { ...r, webContent: "Failed to fetch", webStatus: "error" as const } : r
+            ));
+          });
           return;
         }
 
@@ -790,27 +832,61 @@ function ChatTab() {
 
       {/* Input area — VS Code Copilot chat style */}
       <div className="shrink-0 mx-2.5 mb-2.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] shadow-sm transition-colors focus-within:border-[var(--color-accent)]">
-        {/* Reference chips (shown above textarea like VS Code) */}
+        {/* Reference chips (shown above textarea) */}
         {references.length > 0 && (
-          <div className="flex flex-wrap gap-1 px-2.5 pt-2">
-            {references.map((ref) => (
-              <span
-                key={ref.path}
-                className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[11px] bg-[var(--color-surface)] text-[var(--color-text)] rounded border border-[var(--color-border)] hover:border-[var(--color-accent)]/40 transition-colors"
-              >
-                <FileTypeIcon type={ref.type} />
-                <span className="max-w-[120px] truncate">{ref.title}</span>
-                <button
-                  className="text-[var(--color-text-secondary)] hover:text-red-400 transition-colors"
-                  onClick={() => removeReference(ref.path)}
-                  title="Remove"
+          <div className="px-2.5 pt-2 space-y-1">
+            <div className="flex flex-wrap gap-1">
+              {references.map((ref) => (
+                <span
+                  key={ref.path}
+                  className={`inline-flex items-center gap-1 px-1.5 py-0.5 text-[11px] rounded border transition-colors ${
+                    ref.type === "web" && ref.webStatus === "loading"
+                      ? "bg-[var(--color-surface)] text-[var(--color-text-secondary)] border-[var(--color-border)] animate-pulse"
+                      : ref.type === "web" && ref.webStatus === "error"
+                        ? "bg-red-400/10 text-red-400 border-red-400/30"
+                        : "bg-[var(--color-surface)] text-[var(--color-text)] border-[var(--color-border)] hover:border-[var(--color-accent)]/40"
+                  }`}
                 >
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-                  </svg>
-                </button>
-              </span>
-            ))}
+                  <FileTypeIcon type={ref.type} />
+                  {ref.type === "web" ? (
+                    <button
+                      className="max-w-[180px] truncate hover:underline"
+                      onClick={() => setExpandedWebRef(expandedWebRef === ref.path ? null : ref.path)}
+                      title={ref.webStatus === "loading" ? "Fetching…" : "Click to preview"}
+                    >
+                      {ref.webStatus === "loading" ? "Fetching…" : ref.title}
+                    </button>
+                  ) : (
+                    <span className="max-w-[120px] truncate">{ref.title}</span>
+                  )}
+                  <button
+                    className="text-[var(--color-text-secondary)] hover:text-red-400 transition-colors"
+                    onClick={() => { removeReference(ref.path); if (expandedWebRef === ref.path) setExpandedWebRef(null); }}
+                    title="Remove"
+                  >
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                    </svg>
+                  </button>
+                </span>
+              ))}
+            </div>
+            {/* Web content preview */}
+            {expandedWebRef && (() => {
+              const ref = references.find((r) => r.path === expandedWebRef);
+              if (!ref?.webContent) return null;
+              return (
+                <div className="rounded border border-[var(--color-border)] bg-[var(--color-surface-alt)] text-[11px] text-[var(--color-text-secondary)] overflow-hidden">
+                  <div className="flex items-center justify-between px-2 py-1 border-b border-[var(--color-border)]">
+                    <span className="truncate font-medium">{ref.path}</span>
+                    <span className="shrink-0 text-[10px] tabular-nums">{ref.webContent.length.toLocaleString()} chars</span>
+                  </div>
+                  <div className="max-h-[120px] overflow-y-auto px-2 py-1.5 font-mono whitespace-pre-wrap leading-relaxed">
+                    {ref.webContent}
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         )}
 
