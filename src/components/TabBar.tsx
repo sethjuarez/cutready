@@ -54,7 +54,7 @@ function Tab({
       ? { bar: "bg-[var(--color-accent)]", icon: "text-[var(--color-accent)]", tint: "bg-[var(--color-accent)]" }
       : tab.type === "storyboard"
         ? { bar: "bg-emerald-500", icon: "text-emerald-500", tint: "bg-emerald-500" }
-        : { bar: "bg-amber-500", icon: "text-amber-500", tint: "bg-amber-500" };
+        : { bar: "bg-rose-500", icon: "text-rose-500", tint: "bg-rose-500" };
 
   const TabIcon = tab.type === "sketch" ? SketchIcon : tab.type === "storyboard" ? StoryboardIcon : NoteIcon;
 

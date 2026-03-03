@@ -569,7 +569,7 @@ export function StoryboardList() {
                     onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") openNote(note.path); }}
                     className={`group/item w-full flex items-center gap-2 px-2 py-2 text-left transition-colors cursor-pointer ${
                       note.path === activeNotePath
-                        ? "bg-amber-500/10 text-amber-500"
+                        ? "bg-rose-500/10 text-rose-500"
                         : "text-[var(--color-text)] hover:bg-[var(--color-surface-alt)]"
                     }`}
                   >

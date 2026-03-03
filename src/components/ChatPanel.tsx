@@ -1649,7 +1649,7 @@ function typeColors(type: string): { text: string; bg: string; border: string } 
     case "sketch":
       return { text: "text-violet-500", bg: "bg-violet-500/10", border: "border-violet-500/25" };
     case "note":
-      return { text: "text-amber-500", bg: "bg-amber-500/10", border: "border-amber-500/25" };
+      return { text: "text-rose-500", bg: "bg-rose-500/10", border: "border-rose-500/25" };
     case "storyboard":
       return { text: "text-emerald-500", bg: "bg-emerald-500/10", border: "border-emerald-500/25" };
     case "web":
