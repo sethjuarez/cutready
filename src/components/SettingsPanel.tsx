@@ -779,6 +779,7 @@ const ISSUE_FORMAT_PROMPT = `You are formatting user feedback into a GitHub issu
 - "body": A well-formatted GitHub issue body in markdown. Include:
   - A clear description of the feedback
   - The category as a label suggestion
+  - The app version in an "Environment" section
   - If debug log is provided, include it in a collapsible <details> section
   - Keep it professional and actionable
 
@@ -825,9 +826,10 @@ function FeedbackListTab() {
   };
 
   /** Build a simple fallback issue (no LLM). */
-  const buildFallbackIssue = (entry: FeedbackEntry) => {
+  const buildFallbackIssue = (entry: FeedbackEntry, version?: string) => {
     const title = `[${entry.category}] Feedback — ${entry.date.split("T")[0]}`;
     let body = `## ${entry.category} Feedback\n\n${entry.feedback}`;
+    body += `\n\n---\n**App Version:** ${version || "unknown"}`;
     if (entry.debug_log) {
       body += `\n\n<details><summary>Debug Log (${entry.debug_log.split("\n").length} lines)</summary>\n\n\`\`\`\n${entry.debug_log}\n\`\`\`\n</details>`;
     }
@@ -838,6 +840,13 @@ function FeedbackListTab() {
   const formatAndOpenIssue = async (entry: FeedbackEntry, index: number) => {
     if (issuePending !== null) return;
     setIssuePending(index);
+
+    // Get app version
+    let appVersion = "unknown";
+    try {
+      const { getVersion } = await import("@tauri-apps/api/app");
+      appVersion = await getVersion();
+    } catch { /* not available in dev */ }
 
     let title: string;
     let body: string;
@@ -870,6 +879,7 @@ function FeedbackListTab() {
         const userContent = [
           `Category: ${entry.category}`,
           `Date: ${entry.date}`,
+          `App Version: ${appVersion}`,
           `Feedback: ${entry.feedback}`,
           ...(entry.debug_log ? [`Debug Log:\n${entry.debug_log}`] : []),
         ].join("\n\n");
@@ -884,16 +894,16 @@ function FeedbackListTab() {
 
         if (result.content) {
           const parsed = JSON.parse(result.content.trim());
-          title = parsed.title || buildFallbackIssue(entry).title;
-          body = parsed.body || buildFallbackIssue(entry).body;
+          title = parsed.title || buildFallbackIssue(entry, appVersion).title;
+          body = parsed.body || buildFallbackIssue(entry, appVersion).body;
         } else {
-          ({ title, body } = buildFallbackIssue(entry));
+          ({ title, body } = buildFallbackIssue(entry, appVersion));
         }
       } else {
-        ({ title, body } = buildFallbackIssue(entry));
+        ({ title, body } = buildFallbackIssue(entry, appVersion));
       }
     } catch {
-      ({ title, body } = buildFallbackIssue(entry));
+      ({ title, body } = buildFallbackIssue(entry, appVersion));
     }
 
     // Truncate body if URL would be too long
