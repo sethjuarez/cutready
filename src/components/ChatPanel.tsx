@@ -1188,7 +1188,7 @@ function WebRefChip({ url }: { url: string }) {
   };
 
   return (
-    <span className="block my-1">
+    <span className="block my-0.5">
       <button
         onClick={handleExpand}
         className="inline-flex items-center gap-1.5 px-2 py-1 rounded bg-[var(--color-surface)] border border-[var(--color-border)] text-[11px] text-[var(--color-accent)] hover:bg-[var(--color-surface-toolbar)] transition-colors font-mono"
@@ -1200,7 +1200,7 @@ function WebRefChip({ url }: { url: string }) {
         </svg>
       </button>
       {expanded && (
-        <div className="mt-1 rounded border border-[var(--color-border)] bg-[var(--color-surface)] overflow-hidden">
+        <div className="mt-0.5 rounded border border-[var(--color-border)] bg-[var(--color-surface)] overflow-hidden">
           <div className="flex items-center justify-between px-2 py-1 border-b border-[var(--color-border)] bg-[var(--color-surface-toolbar)]">
             <span className="text-[10px] text-[var(--color-text-secondary)] font-mono truncate">{url}</span>
             {content && <span className="shrink-0 text-[10px] text-[var(--color-text-secondary)] tabular-nums ml-2">{content.length.toLocaleString()} chars</span>}
