@@ -44,6 +44,8 @@ export interface AppSettings {
   displayRowColors: string;
   /** Editor width: "centered" | "full" (default "centered"). */
   displayEditorWidth: string;
+  /** Font family: "system" | "sans" | "serif" | "mono" (default "system"). */
+  displayFontFamily: string;
   // Legacy fields (migrated on load)
   llmApiKey?: string;
   llmEndpoint?: string;
@@ -69,6 +71,7 @@ const defaultSettings: AppSettings = {
   displayRowDensity: "comfortable",
   displayRowColors: "vivid",
   displayEditorWidth: "centered",
+  displayFontFamily: "system",
 };
 
 const STORE_PATH = "settings.json";

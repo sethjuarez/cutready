@@ -224,6 +224,41 @@ function DisplayTab({ settings, updateSetting }: {
 }) {
   return (
     <div className="flex flex-col gap-6">
+      {/* Font family */}
+      <fieldset className="flex flex-col gap-2">
+        <label className="text-sm font-medium">Font</label>
+        <div className="flex gap-2">
+          {([
+            { id: "system", label: "System", preview: "Geist Sans" },
+            { id: "sans", label: "Sans", preview: "Inter" },
+            { id: "serif", label: "Serif", preview: "Lora" },
+            { id: "mono", label: "Mono", preview: "Geist Mono" },
+          ] as const).map((f) => (
+            <button
+              key={f.id}
+              onClick={() => updateSetting("displayFontFamily", f.id)}
+              className={`flex-1 flex flex-col items-center gap-1 px-3 py-2.5 rounded-lg text-sm transition-colors border ${
+                settings.displayFontFamily === f.id
+                  ? "bg-[var(--color-accent)] text-white border-[var(--color-accent)]"
+                  : "bg-[var(--color-surface-alt)] border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"
+              }`}
+            >
+              <span
+                className="text-base leading-none"
+                style={{ fontFamily: f.id === "system" ? "var(--app-font-family)" :
+                  f.id === "sans" ? '"Inter", "Helvetica Neue", sans-serif' :
+                  f.id === "serif" ? '"Lora", Georgia, serif' :
+                  '"Geist Mono", "Cascadia Code", monospace' }}
+              >
+                Aa
+              </span>
+              <span className="text-[10px]">{f.label}</span>
+            </button>
+          ))}
+        </div>
+        <p className="text-xs text-[var(--color-text-secondary)]">Font used throughout the app. Serif and Sans require web fonts to be available.</p>
+      </fieldset>
+
       {/* Editor text size */}
       <fieldset className="flex flex-col gap-2">
         <label className="text-sm font-medium">Editor Text Size</label>

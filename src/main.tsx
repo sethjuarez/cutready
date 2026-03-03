@@ -3,6 +3,14 @@ import ReactDOM from "react-dom/client";
 import "@fontsource/geist-sans/400.css";
 import "@fontsource/geist-sans/500.css";
 import "@fontsource/geist-sans/600.css";
+import "@fontsource/inter/400.css";
+import "@fontsource/inter/500.css";
+import "@fontsource/inter/600.css";
+import "@fontsource/inter/700.css";
+import "@fontsource/lora/400.css";
+import "@fontsource/lora/400-italic.css";
+import "@fontsource/lora/600.css";
+import "@fontsource/lora/700.css";
 import "./index.css";
 
 // Install dev mocks when running in browser without Tauri runtime

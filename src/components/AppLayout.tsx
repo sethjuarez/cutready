@@ -140,6 +140,13 @@ export function AppLayout() {
     root.style.setProperty("--row-line-height", density.lineHeight);
     root.style.setProperty("--row-color-palette", displaySettings.displayRowColors);
     root.style.setProperty("--editor-max-width", displaySettings.displayEditorWidth === "full" ? "100%" : "56rem");
+    const fontMap: Record<string, string> = {
+      system: '"Geist Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif',
+      sans: '"Inter", "Helvetica Neue", Helvetica, Arial, sans-serif',
+      serif: '"Lora", "Georgia", "Times New Roman", serif',
+      mono: '"Geist Mono", "Cascadia Code", "Fira Code", ui-monospace, monospace',
+    };
+    root.style.setProperty("--app-font-family", fontMap[displaySettings.displayFontFamily] ?? fontMap.system);
   }, [displaySettings]);
 
   const handleExecuteCommand= useCallback((commandId: string) => {
