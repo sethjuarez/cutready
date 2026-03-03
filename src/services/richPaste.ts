@@ -46,7 +46,7 @@ function getTurndown(): TurndownService {
       // Keep spans that have meaningful formatting; skip pure-Word ones
       return style.includes("mso-") && !style.includes("font-weight") && !style.includes("font-style");
     },
-    replacement: (_content, node) => (node as HTMLElement).textContent ?? "",
+    replacement: (content) => content,
   });
 
   _turndown = td;
@@ -64,35 +64,100 @@ function cleanWordHtml(html: string): string {
 
   // Strip XML namespace declarations
   cleaned = cleaned.replace(/<\?xml[^>]*\?>/gi, "");
-  cleaned = cleaned.replace(/<\/?o:[^>]*>/gi, ""); // <o:p>, </o:p>
-  cleaned = cleaned.replace(/<\/?v:[^>]*>/gi, ""); // VML shapes
-  cleaned = cleaned.replace(/<\/?w:[^>]*>/gi, ""); // Word-specific
+
+  // Strip conditional comments: <!--[if ...]>...<![endif]-->
+  cleaned = cleaned.replace(/<!--\[if[^>]*\]>[\s\S]*?<!\[endif\]-->/gi, "");
+  // Strip non-comment conditionals: <![if !supportLists]>...<![endif]>
+  cleaned = cleaned.replace(/<!\[if[^>]*\]>/gi, "");
+  cleaned = cleaned.replace(/<!\[endif\]>/gi, "");
+  // Strip <!--StartFragment--> / <!--EndFragment-->
+  cleaned = cleaned.replace(/<!--(Start|End)Fragment-->/gi, "");
+  // Strip remaining HTML comments
+  cleaned = cleaned.replace(/<!--[\s\S]*?-->/gi, "");
+
+  // Strip XML-namespaced elements and their content
+  cleaned = cleaned.replace(/<o:[^>]*>[\s\S]*?<\/o:[^>]*>/gi, "");
+  cleaned = cleaned.replace(/<\/?o:[^>]*>/gi, "");
+  cleaned = cleaned.replace(/<v:[^>]*>[\s\S]*?<\/v:[^>]*>/gi, "");
+  cleaned = cleaned.replace(/<\/?v:[^>]*>/gi, "");
+  cleaned = cleaned.replace(/<w:[^>]*>[\s\S]*?<\/w:[^>]*>/gi, "");
+  cleaned = cleaned.replace(/<\/?w:[^>]*>/gi, "");
+  cleaned = cleaned.replace(/<m:[^>]*>[\s\S]*?<\/m:[^>]*>/gi, "");
+  cleaned = cleaned.replace(/<\/?m:[^>]*>/gi, "");
 
   // Strip <style>...</style> blocks
   cleaned = cleaned.replace(/<style[\s\S]*?<\/style>/gi, "");
 
-  // Strip class attributes (Word generates class="MsoNormal" etc.)
-  cleaned = cleaned.replace(/\s+class="[^"]*"/gi, "");
+  // Convert Word list paragraphs to proper <li> BEFORE stripping classes
+  cleaned = convertWordLists(cleaned);
 
-  // Strip mso-* inline styles but keep the rest
-  cleaned = cleaned.replace(/\s*mso-[^;:"]+:[^;"]+(;?)/gi, "");
+  // Strip class attributes — Word uses both class="X" and class=X (unquoted)
+  cleaned = cleaned.replace(/\s+class=("[^"]*"|'[^']*'|[^\s>]+)/gi, "");
 
-  // Remove empty style attributes left after stripping
-  cleaned = cleaned.replace(/\s+style="\s*"/gi, "");
+  // Strip ALL style attributes — Word uses both style="..." and style='...'
+  cleaned = cleaned.replace(/\s+style=("[^"]*"|'[^']*')/gi, "");
 
   // Collapse excessive <br> tags
   cleaned = cleaned.replace(/(<br\s*\/?>){3,}/gi, "<br><br>");
 
-  // Strip all remaining style attributes (Word leaves border/padding cruft
-  // that prevents Turndown GFM from recognizing tables)
-  cleaned = cleaned.replace(/\s+style="[^"]*"/gi, "");
+  // Strip layout attributes (width, height, valign, border, cellspacing, etc.)
+  cleaned = cleaned.replace(/\s+(width|height|valign|border|cellspacing|cellpadding|lang|link|vlink)=("[^"]*"|'[^']*'|[^\s>]+)/gi, "");
 
-  // Normalize Word tables for Turndown GFM compatibility:
-  // Turndown requires <thead>/<th> to convert tables to Markdown.
-  // Word uses <td><b>Header</b></td> for the first row instead.
+  // Normalize Word tables for Turndown GFM compatibility
   cleaned = normalizeWordTables(cleaned);
 
+  // Clean up &nbsp; runs (Word uses these for list indentation)
+  cleaned = cleaned.replace(/(&nbsp;\s*){3,}/gi, " ");
+
   return cleaned.trim();
+}
+
+/**
+ * Convert Word's MsoListParagraph paragraphs to proper HTML list items.
+ *
+ * Word doesn't use <ul>/<li> — it uses <p class="MsoListParagraph"> with
+ * inline dashes/numbers and conditional comments for list markers.
+ * This converts them to proper <ul><li> or <ol><li> structures.
+ */
+function convertWordLists(html: string): string {
+  let result = html;
+
+  // Convert individual list paragraphs to <li> elements.
+  // Word list paragraph classes: MsoListParagraph, MsoListParagraphCxSpFirst,
+  // MsoListParagraphCxSpMiddle, MsoListParagraphCxSpLast
+  // Word uses both class="MsoListParagraph" and class=MsoListParagraph (unquoted)
+  result = result.replace(
+    /<p\s+[^>]*class=["']?MsoListParagraph[^"'>\s]*["']?[^>]*>([\s\S]*?)<\/p>/gi,
+    (_match, content) => {
+      let text = content.trim();
+      // Remove leftover span wrappers from list marker conditional comments
+      text = text.replace(/^<span[^>]*><span[^>]*>[-•·]\s*<span[^>]*>[^<]*<\/span><\/span><\/span>/i, "");
+      text = text.replace(/^<span[^>]*>[-•·]\s*<\/span>/i, "");
+      text = text.replace(/^\s*[-•·]\s+/, "");
+      text = text.replace(/^\s*\d+[.)]\s+/, "");
+      return `<li>${text.trim()}</li>`;
+    }
+  );
+
+  // Wrap consecutive <li> elements in <ul> tags,
+  // but only if they are NOT already inside a <ul> or <ol>
+  result = result.replace(
+    /(<li>[\s\S]*?<\/li>\s*)+/gi,
+    (match, _p1, offset) => {
+      // Check if this <li> group is already inside a <ul> or <ol>
+      const before = result.slice(Math.max(0, offset - 200), offset);
+      // Find the last opening <ul>/<ol> and last closing </ul>/</ol> before this match
+      const lastOpenUl = Math.max(before.lastIndexOf("<ul"), before.lastIndexOf("<ol"));
+      const lastCloseUl = Math.max(before.lastIndexOf("</ul>"), before.lastIndexOf("</ol>"));
+      if (lastOpenUl > lastCloseUl) {
+        // Already inside a list — don't wrap
+        return match;
+      }
+      return `<ul>${match}</ul>`;
+    }
+  );
+
+  return result;
 }
 
 /**
