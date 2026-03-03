@@ -247,10 +247,10 @@ impl LlmClient {
             LlmProvider::AzureOpenai => {
                 let base = self.config.endpoint.trim_end_matches('/');
                 if self.is_foundry() {
-                    // Foundry v1 API — no api-version param
+                    // Foundry uses same deployments path as standard Azure OpenAI
                     format!(
-                        "{}/openai/v1/chat/completions",
-                        base
+                        "{}/openai/deployments/{}/chat/completions?api-version=2024-10-21",
+                        base, self.config.model
                     )
                 } else {
                     format!(
