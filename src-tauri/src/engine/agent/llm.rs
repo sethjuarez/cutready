@@ -224,6 +224,31 @@ struct AzureDeploymentEntry {
     model: Option<String>,
 }
 
+/// Foundry project-level deployments response.
+#[derive(Debug, Deserialize)]
+struct FoundryProjectDeploymentsResponse {
+    #[serde(default)]
+    value: Vec<FoundryProjectDeployment>,
+}
+
+#[derive(Debug, Deserialize)]
+struct FoundryProjectDeployment {
+    name: String,
+    #[serde(default)]
+    properties: Option<FoundryDeploymentProperties>,
+}
+
+#[derive(Debug, Deserialize)]
+struct FoundryDeploymentProperties {
+    #[serde(default)]
+    model: Option<FoundryDeploymentModel>,
+}
+
+#[derive(Debug, Deserialize)]
+struct FoundryDeploymentModel {
+    name: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModelInfo {
     pub id: String,
@@ -359,10 +384,55 @@ impl LlmClient {
 
     /// List available models from the provider.
     pub async fn list_models(&self) -> Result<Vec<ModelInfo>, String> {
+        // For Foundry, try deployments endpoints first (deployed only), then fall back to models
+        if self.config.provider == LlmProvider::AzureOpenai && self.is_foundry() {
+            return self.list_models_foundry().await;
+        }
+
         let url = self.models_url();
+        let body = self.fetch_models_body(&url).await?;
+        self.parse_models_response(&body, &url)
+    }
+
+    /// Foundry-specific model listing: tries deployments endpoints first, falls back to /openai/models.
+    async fn list_models_foundry(&self) -> Result<Vec<ModelInfo>, String> {
+        let base = self.foundry_base();
+        let full_endpoint = self.config.endpoint.trim_end_matches('/');
+
+        // Build candidate URLs in priority order:
+        // 1. Project-level deployments (if endpoint has /api/projects/...)
+        // 2. Resource-level /openai/deployments
+        // 3. Fallback: /openai/models (returns all available, not just deployed)
+        let mut urls = Vec::new();
+        if full_endpoint.contains("/api/projects") {
+            urls.push(format!("{}/deployments?api-version=2024-10-01-preview", full_endpoint));
+        }
+        urls.push(format!("{}/openai/deployments?api-version=2024-10-21", base));
+        urls.push(format!("{}/openai/models?api-version=2024-10-21", base));
+
+        let mut last_err = String::new();
+        for url in &urls {
+            match self.fetch_models_body(url).await {
+                Ok(body) => match self.parse_models_response(&body, url) {
+                    Ok(models) if !models.is_empty() => return Ok(models),
+                    Ok(_) => continue, // empty result, try next
+                    Err(_) => continue, // parse failed, try next
+                },
+                Err(e) => {
+                    last_err = e;
+                    continue;
+                }
+            }
+        }
+
+        Err(format!("No Foundry deployments found. Last error: {last_err}"))
+    }
+
+    /// Fetch the raw body from a models/deployments URL.
+    async fn fetch_models_body(&self, url: &str) -> Result<String, String> {
         let resp = self
             .http
-            .get(&url)
+            .get(url)
             .headers(self.auth_headers())
             .send()
             .await
@@ -383,18 +453,21 @@ impl LlmClient {
             ));
         }
 
-        // Foundry /models may use { "data": [...] } or { "value": [...] }
-        let body = resp
-            .text()
+        resp.text()
             .await
-            .map_err(|e| format!("Failed to read models response: {e}"))?;
+            .map_err(|e| format!("Failed to read models response: {e}"))
+    }
 
-        // Try standard OpenAI format first (for OpenAI provider)
-        if let Ok(parsed) = serde_json::from_str::<ModelsResponse>(&body) {
-            return Ok(parsed.data);
+    /// Parse a models/deployments response body into ModelInfo list.
+    fn parse_models_response(&self, body: &str, _url: &str) -> Result<Vec<ModelInfo>, String> {
+        // Try standard OpenAI format: { "data": [{ "id": "...", ... }] }
+        if let Ok(parsed) = serde_json::from_str::<ModelsResponse>(body) {
+            if !parsed.data.is_empty() {
+                return Ok(parsed.data);
+            }
         }
         // Azure deployments format: { "data": [{ "id": "...", "model": "..." }] }
-        if let Ok(parsed) = serde_json::from_str::<AzureDeploymentsResponse>(&body) {
+        if let Ok(parsed) = serde_json::from_str::<AzureDeploymentsResponse>(body) {
             if !parsed.data.is_empty() {
                 return Ok(
                     parsed
@@ -409,27 +482,46 @@ impl LlmClient {
                 );
             }
         }
-        // Foundry deployments format: { "value": [{ "name": "...", ... }] }
-        if let Ok(parsed) = serde_json::from_str::<FoundryModelsResponse>(&body) {
-            return Ok(
-                parsed
-                    .value
-                    .into_iter()
-                    .filter(|m| {
-                        // Show chat-capable deployments
-                        m.capabilities
-                            .as_ref()
-                            .and_then(|c| c.get("chat_completion"))
-                            .map(|v| v == "true")
-                            .unwrap_or(true) // if no capabilities field, include it
-                    })
-                    .map(|m| ModelInfo {
-                        id: m.name,
-                        created: None,
-                        owned_by: m.model_name,
-                    })
-                    .collect(),
-            );
+        // Foundry format: { "value": [{ "name": "...", "modelName": "...", "capabilities": {...} }] }
+        if let Ok(parsed) = serde_json::from_str::<FoundryModelsResponse>(body) {
+            if !parsed.value.is_empty() {
+                return Ok(
+                    parsed
+                        .value
+                        .into_iter()
+                        .filter(|m| {
+                            m.capabilities
+                                .as_ref()
+                                .and_then(|c| c.get("chat_completion"))
+                                .map(|v| v == "true")
+                                .unwrap_or(true)
+                        })
+                        .map(|m| ModelInfo {
+                            id: m.name,
+                            created: None,
+                            owned_by: m.model_name,
+                        })
+                        .collect(),
+                );
+            }
+        }
+        // Foundry project deployments: { "value": [{ "name": "...", "properties": { "model": { "name": "..." } } }] }
+        if let Ok(parsed) = serde_json::from_str::<FoundryProjectDeploymentsResponse>(body) {
+            if !parsed.value.is_empty() {
+                return Ok(
+                    parsed
+                        .value
+                        .into_iter()
+                        .map(|d| ModelInfo {
+                            id: d.name,
+                            created: None,
+                            owned_by: d.properties
+                                .and_then(|p| p.model)
+                                .map(|m| m.name),
+                        })
+                        .collect(),
+                );
+            }
         }
         Err(format!("Failed to parse models response: {body}"))
     }
