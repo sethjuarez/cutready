@@ -38,6 +38,10 @@ export default defineConfig({
           autogenerate: { directory: "architecture" },
         },
         {
+          label: "Settings",
+          autogenerate: { directory: "settings" },
+        },
+        {
           label: "Roadmap",
           autogenerate: { directory: "roadmap" },
           badge: { text: "Preview", variant: "caution" },
