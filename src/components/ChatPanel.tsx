@@ -1636,13 +1636,13 @@ function ModelPickerDropdown({
 function typeColors(type: string): { text: string; bg: string; border: string } {
   switch (type) {
     case "sketch":
-      return { text: "text-purple-400", bg: "bg-purple-400/8", border: "border-purple-400/25" };
+      return { text: "text-purple-300", bg: "bg-purple-500/15", border: "border-purple-400/30" };
     case "note":
-      return { text: "text-amber-400", bg: "bg-amber-400/8", border: "border-amber-400/25" };
+      return { text: "text-amber-300", bg: "bg-amber-500/15", border: "border-amber-400/30" };
     case "storyboard":
-      return { text: "text-emerald-400", bg: "bg-emerald-400/8", border: "border-emerald-400/25" };
+      return { text: "text-emerald-300", bg: "bg-emerald-500/15", border: "border-emerald-400/30" };
     case "web":
-      return { text: "text-blue-400", bg: "bg-blue-400/8", border: "border-blue-400/25" };
+      return { text: "text-blue-300", bg: "bg-blue-500/15", border: "border-blue-400/30" };
     default:
       return { text: "text-[var(--color-text-secondary)]", bg: "bg-[var(--color-surface)]", border: "border-[var(--color-border)]" };
   }
