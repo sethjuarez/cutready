@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useSettings, type AgentPreset } from "../hooks/useSettings";
 import { invoke } from "@tauri-apps/api/core";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
@@ -24,7 +24,7 @@ interface AuthCodeFlowInit {
   port: number;
 }
 
-type SettingsTab = "general" | "ai" | "agents" | "display" | "images";
+type SettingsTab = "general" | "ai" | "agents" | "display" | "images" | "feedback";
 
 const inputClass =
   "px-3 py-2 rounded-lg bg-[var(--color-surface-alt)] border border-[var(--color-border)] text-sm text-[var(--color-text)] placeholder:text-[var(--color-text-secondary)]/50 focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]/40";
@@ -135,6 +135,7 @@ export function SettingsPanel() {
         <button className={tabBtnClass(activeTab === "ai")} onClick={() => setActiveTab("ai")}>AI Provider</button>
         <button className={tabBtnClass(activeTab === "agents")} onClick={() => setActiveTab("agents")}>Agents</button>
         <button className={tabBtnClass(activeTab === "images")} onClick={() => setActiveTab("images")}>Images</button>
+        <button className={tabBtnClass(activeTab === "feedback")} onClick={() => setActiveTab("feedback")}>Feedback</button>
       </div>
 
       {/* Tab content */}
@@ -170,6 +171,9 @@ export function SettingsPanel() {
       )}
       {activeTab === "images" && (
         <ImageManagerTab />
+      )}
+      {activeTab === "feedback" && (
+        <FeedbackListTab />
       )}
     </div>
   );
@@ -760,4 +764,115 @@ function AgentsTab({ settings, updateSetting }: {
   );
 }
 
+// ── Feedback List Tab ───────────────────────────────────────────
+
+interface FeedbackEntry {
+  category: string;
+  feedback: string;
+  date: string;
+}
+
+function FeedbackListTab() {
+  const [entries, setEntries] = useState<FeedbackEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    invoke("list_feedback")
+      .then((data) => setEntries(data as FeedbackEntry[]))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  const copyAll = async () => {
+    if (entries.length === 0) return;
+    const text = entries
+      .map((e) => `## ${e.category}\n**Date:** ${e.date.split("T")[0]}\n\n${e.feedback}`)
+      .join("\n\n---\n\n");
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch { /* ignore */ }
+  };
+
+  const copySingle = async (entry: FeedbackEntry) => {
+    const text = `## ${entry.category}\n**Date:** ${entry.date.split("T")[0]}\n\n${entry.feedback}`;
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch { /* ignore */ }
+  };
+
+  if (loading) {
+    return <p className="text-xs text-[var(--color-text-secondary)]">Loading…</p>;
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-[var(--color-text-secondary)]">
+          {entries.length === 0
+            ? "No feedback submitted yet. Use the 💬 button in the title bar."
+            : `${entries.length} feedback item${entries.length === 1 ? "" : "s"}`}
+        </p>
+        {entries.length > 0 && (
+          <button
+            onClick={copyAll}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-[11px] rounded-lg font-medium transition-colors ${
+              copied
+                ? "bg-emerald-500/15 text-emerald-500 border border-emerald-500/30"
+                : "bg-[var(--color-accent)] text-white hover:bg-[var(--color-accent-hover)]"
+            }`}
+          >
+            {copied ? (
+              <>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+                Copied All!
+              </>
+            ) : (
+              <>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                </svg>
+                Copy All to Clipboard
+              </>
+            )}
+          </button>
+        )}
+      </div>
+
+      {entries.length > 0 && (
+        <div className="space-y-2 max-h-[400px] overflow-y-auto">
+          {[...entries].reverse().map((entry, i) => (
+            <div
+              key={i}
+              className="group relative px-3 py-2.5 rounded-lg bg-[var(--color-surface-alt)] border border-[var(--color-border)]"
+            >
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-[var(--color-accent)]/10 text-[var(--color-accent)] border border-[var(--color-accent)]/20">
+                  {entry.category}
+                </span>
+                <span className="text-[10px] text-[var(--color-text-secondary)]">
+                  {entry.date.split("T")[0]}
+                </span>
+              </div>
+              <p className="text-xs text-[var(--color-text)] whitespace-pre-wrap">{entry.feedback}</p>
+              <button
+                onClick={() => copySingle(entry)}
+                className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 p-1 rounded text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)] transition-all"
+                title="Copy this item"
+              >
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                </svg>
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
