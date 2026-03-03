@@ -472,7 +472,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   }),
 
   openTab: (tab) => {
-    const { openTabs } = get();
+    const { openTabs, view } = get();
     const existing = openTabs.find((t) => t.path === tab.path && t.type === tab.type);
     if (existing) {
       set({ activeTabId: existing.id });
@@ -480,6 +480,10 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       const id = `${tab.type}-${tab.path}`;
       const newTab: EditorTab = { ...tab, id };
       set({ openTabs: [...openTabs, newTab], activeTabId: id });
+    }
+    // Navigate away from non-editor views (settings, home) to show the tab
+    if (view === "settings" || view === "home") {
+      set({ view: "sketch" });
     }
   },
   closeTab: (tabId) => {
