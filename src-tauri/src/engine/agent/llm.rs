@@ -241,18 +241,29 @@ impl LlmClient {
         self.config.endpoint.contains(".services.ai.azure.com")
     }
 
+    /// Extract the Foundry host base, stripping any /api/projects/... suffix.
+    fn foundry_base(&self) -> String {
+        let base = self.config.endpoint.trim_end_matches('/');
+        if let Some(idx) = base.find("/api/projects") {
+            base[..idx].to_string()
+        } else {
+            base.to_string()
+        }
+    }
+
     /// Build the chat completions URL based on provider.
     fn chat_url(&self) -> String {
         match self.config.provider {
             LlmProvider::AzureOpenai => {
-                let base = self.config.endpoint.trim_end_matches('/');
                 if self.is_foundry() {
-                    // Foundry projects API — model name in URL path
+                    // Foundry: use OpenAI-compatible path on the host base
+                    let base = self.foundry_base();
                     format!(
-                        "{}/models/{}/chat/completions?api-version=2024-05-01-preview",
+                        "{}/openai/deployments/{}/chat/completions?api-version=2024-10-21",
                         base, self.config.model
                     )
                 } else {
+                    let base = self.config.endpoint.trim_end_matches('/');
                     format!(
                         "{}/openai/deployments/{}/chat/completions?api-version=2024-10-21",
                         base, self.config.model
@@ -274,14 +285,14 @@ impl LlmClient {
     fn models_url(&self) -> String {
         match self.config.provider {
             LlmProvider::AzureOpenai => {
-                let base = self.config.endpoint.trim_end_matches('/');
                 if self.is_foundry() {
-                    // Foundry project API: list deployments
+                    let base = self.foundry_base();
                     format!(
-                        "{}/models?api-version=2024-05-01-preview",
+                        "{}/openai/models?api-version=2024-10-21",
                         base
                     )
                 } else {
+                    let base = self.config.endpoint.trim_end_matches('/');
                     format!(
                         "{}/openai/models?api-version=2024-10-21",
                         base
