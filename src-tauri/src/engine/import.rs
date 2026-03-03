@@ -46,6 +46,17 @@ pub fn docx_to_markdown(data: &[u8], project_root: &Path) -> Result<String, Stri
         return Err("This file appears to be protected or encrypted. Please open it in Word, remove protection (File → Info → Protect Document), save as a new .docx, and try again.".to_string());
     }
 
+    // Check for DRM / Microsoft Information Protection
+    let has_drm = (0..archive.len()).any(|i| {
+        archive.by_index(i).ok().map_or(false, |f| {
+            let n = f.name().to_lowercase();
+            n.contains("labelinfo") || n.contains("rights") || n.contains("miplabel") || n.contains("encryptedpackage")
+        })
+    });
+    if has_drm {
+        return Err("This document is DRM-protected (Microsoft Information Protection). Please open it in Word, save an unprotected copy (File → Save As), and import that instead.".to_string());
+    }
+
     let prefix = format!("docx-{}", chrono::Utc::now().format("%Y%m%d%H%M%S"));
 
     // Extract images from word/media/
@@ -170,7 +181,14 @@ pub fn docx_to_markdown(data: &[u8], project_root: &Path) -> Result<String, Stri
         buf.clear();
     }
 
-    Ok(md.trim().to_string())
+    let result = md.trim().to_string();
+
+    // Sanity check: if output looks like raw XML, the document is likely DRM-protected
+    if result.starts_with("<?xml") || result.contains("<clbl:") || result.contains("<XrML") || result.contains("Rights Label") {
+        return Err("This document is DRM-protected (Microsoft Information Protection). Please open it in Word, save an unprotected copy (File → Save As), and import that instead.".to_string());
+    }
+
+    Ok(result)
 }
 
 /// Extract text from a PDF file and return it as markdown.
