@@ -247,8 +247,11 @@ impl LlmClient {
             LlmProvider::AzureOpenai => {
                 let base = self.config.endpoint.trim_end_matches('/');
                 if self.is_foundry() {
-                    // Foundry model inference API — model name goes in request body
-                    format!("{}/models/chat/completions", base)
+                    // Foundry projects API — model name in URL path
+                    format!(
+                        "{}/models/{}/chat/completions?api-version=2024-05-01-preview",
+                        base, self.config.model
+                    )
                 } else {
                     format!(
                         "{}/openai/deployments/{}/chat/completions?api-version=2024-10-21",
@@ -275,7 +278,7 @@ impl LlmClient {
                 if self.is_foundry() {
                     // Foundry project API: list deployments
                     format!(
-                        "{}/models?api-version=2025-03-01-preview",
+                        "{}/models?api-version=2024-05-01-preview",
                         base
                     )
                 } else {
