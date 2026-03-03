@@ -6,6 +6,17 @@ import { useSettings } from "../hooks/useSettings";
 import { MarkdownEditor } from "./MarkdownEditor";
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 
+const AI_NOTE_CLEANUP_PROMPT = `You are a document editor. Clean up and improve the following Markdown note.
+
+Rules:
+1. Preserve ALL content — do not add, remove, or rephrase anything
+2. Fix formatting: proper headings, lists, tables, bold, italic
+3. Ensure consistent heading hierarchy
+4. Clean up spacing and structure for readability
+5. Preserve all image references exactly as they appear
+6. Remove garbled formatting artifacts
+7. Return ONLY the cleaned Markdown — no explanations or code fences`;
+
 /**
  * NoteEditor — edits .md note files using the reusable MarkdownEditor.
  * Debounced auto-save on content changes.
@@ -15,8 +26,10 @@ export function NoteEditor() {
   const activeNoteContent = useAppStore((s) => s.activeNoteContent);
   const updateNote = useAppStore((s) => s.updateNote);
   const projectRoot = useAppStore((s) => s.currentProject?.root);
+  const addActivityEntries = useAppStore((s) => s.addActivityEntries);
   const { settings, updateSetting } = useSettings();
   const [mode, setMode] = useState<"edit" | "preview">("edit");
+  const [aiCleaning, setAiCleaning] = useState(false);
 
   // Async getter for AI config — refreshes OAuth token on demand
   const getAiConfig = useCallback(async () => {
@@ -90,6 +103,49 @@ export function NoteEditor() {
     };
   }, []);
 
+  // AI cleanup — send note content to model for formatting improvements
+  const handleAiCleanup = useCallback(async () => {
+    if (!activeNoteContent || aiCleaning) return;
+    const config = await getAiConfig();
+    if (!config) return;
+
+    setAiCleaning(true);
+    const logEntry = (msg: string, level: "info" | "warn" | "success") =>
+      addActivityEntries([{
+        id: `ai-clean-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        timestamp: new Date(),
+        source: "AI Cleanup",
+        content: msg,
+        level,
+      }]);
+
+    logEntry("Cleaning up note with AI…", "info");
+    try {
+      const result = await invoke<{ role: string; content: string | null }>("agent_chat", {
+        config,
+        messages: [
+          { role: "system", content: AI_NOTE_CLEANUP_PROMPT },
+          { role: "user", content: activeNoteContent },
+        ],
+      });
+      if (result.content && result.content.trim().length > 0) {
+        let cleaned = result.content.trim();
+        // Strip code fence wrapper
+        if (cleaned.startsWith("```markdown")) cleaned = cleaned.slice("```markdown".length);
+        else if (cleaned.startsWith("```md")) cleaned = cleaned.slice("```md".length);
+        else if (cleaned.startsWith("```")) cleaned = cleaned.slice(3);
+        if (cleaned.endsWith("```")) cleaned = cleaned.slice(0, -3);
+        cleaned = cleaned.trim();
+        updateNote(cleaned);
+        logEntry("Note cleaned up ✓", "success");
+      }
+    } catch (e) {
+      logEntry(`AI cleanup failed: ${e}`, "warn");
+    } finally {
+      setAiCleaning(false);
+    }
+  }, [activeNoteContent, aiCleaning, getAiConfig, updateNote, addActivityEntries]);
+
   if (!activeNotePath) return null;
 
   const displayTitle = activeNotePath.replace(/\.md$/, "").split("/").pop() ?? activeNotePath;
@@ -107,27 +163,61 @@ export function NoteEditor() {
         <h1 className="text-lg font-semibold text-[var(--color-text)]">{displayTitle}</h1>
         <span className="text-[10px] text-[var(--color-text-secondary)] px-1.5 py-0.5 rounded bg-[var(--color-surface-alt)]">.md</span>
 
-        <div className="ml-auto flex items-center gap-0.5 bg-[var(--color-surface-alt)] rounded-lg p-0.5">
+        <div className="ml-auto flex items-center gap-1">
+          {/* AI cleanup sparkle button */}
           <button
-            onClick={() => setMode("edit")}
-            className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors ${
-              mode === "edit"
-                ? "bg-[var(--color-surface)] text-[var(--color-text)] shadow-sm"
-                : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"
-            }`}
+            onClick={handleAiCleanup}
+            disabled={aiCleaning || !settings.aiModel || !activeNoteContent}
+            className="flex items-center justify-center w-7 h-7 rounded-md text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+            title="Clean up with AI"
           >
-            Edit
+            {aiCleaning ? (
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="animate-spin">
+                <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+              </svg>
+            ) : (
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3z" />
+                <path d="M19 14l.9 2.7 2.7.9-2.7.9-.9 2.7-.9-2.7L15.4 17.6l2.7-.9.9-2.7z" />
+              </svg>
+            )}
           </button>
-          <button
-            onClick={() => setMode("preview")}
-            className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors ${
-              mode === "preview"
-                ? "bg-[var(--color-surface)] text-[var(--color-text)] shadow-sm"
-                : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"
-            }`}
-          >
-            Preview
-          </button>
+
+          <div className="w-px h-4 bg-[var(--color-border)] mx-0.5" />
+
+          {/* Edit / Preview toggle */}
+          <div className="flex items-center gap-0.5 bg-[var(--color-surface-alt)] rounded-lg p-0.5">
+            <button
+              onClick={() => setMode("edit")}
+              className={`flex items-center justify-center w-7 h-7 rounded-md transition-colors ${
+                mode === "edit"
+                  ? "bg-[var(--color-surface)] text-[var(--color-text)] shadow-sm"
+                  : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"
+              }`}
+              title="Edit"
+            >
+              {/* Pencil icon */}
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 20h9" />
+                <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+              </svg>
+            </button>
+            <button
+              onClick={() => setMode("preview")}
+              className={`flex items-center justify-center w-7 h-7 rounded-md transition-colors ${
+                mode === "preview"
+                  ? "bg-[var(--color-surface)] text-[var(--color-text)] shadow-sm"
+                  : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"
+              }`}
+              title="Preview"
+            >
+              {/* Eye icon */}
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                <circle cx="12" cy="12" r="3" />
+              </svg>
+            </button>
+          </div>
         </div>
       </div>
 

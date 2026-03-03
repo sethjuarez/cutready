@@ -1258,11 +1258,35 @@ function UserContent({ content }: { content: string }) {
     if (match[1] === "Web") {
       parts.push(<WebRefChip key={match.index} url={match[2].trim()} />);
     } else if (match[1] === "References") {
-      parts.push(
-        <span key={match.index} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[var(--color-surface)] border border-[var(--color-border)] text-[11px] text-[var(--color-text-secondary)] font-mono">
-          📎 {match[2].trim()}
-        </span>
-      );
+      // Parse individual references: #note:path, #sketch:path, #storyboard:path
+      const refStr = match[2].trim();
+      const refs = refStr.split(/,\s*/);
+      refs.forEach((ref, i) => {
+        const refMatch = ref.match(/^#(note|sketch|storyboard):(.+)$/);
+        if (refMatch) {
+          const [, type, path] = refMatch;
+          const title = path.replace(/\.\w+$/, "").split("/").pop() ?? path;
+          parts.push(
+            <span
+              key={`${match!.index}-${i}`}
+              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[var(--color-surface)] border border-[var(--color-border)] text-[11px] text-[var(--color-text-secondary)] font-mono align-baseline mr-0.5"
+            >
+              <FileTypeIcon type={type} />
+              <span className="max-w-[140px] truncate">{title}</span>
+            </span>
+          );
+        } else {
+          parts.push(
+            <span
+              key={`${match!.index}-${i}`}
+              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[var(--color-surface)] border border-[var(--color-border)] text-[11px] text-[var(--color-text-secondary)] font-mono align-baseline mr-0.5"
+            >
+              <FileTypeIcon type="file" />
+              <span className="max-w-[140px] truncate">{ref}</span>
+            </span>
+          );
+        }
+      });
     } else if (match[3]) {
       // Inline #URL — styled as accent link
       parts.push(
