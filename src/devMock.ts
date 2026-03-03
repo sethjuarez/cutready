@@ -157,6 +157,8 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
     }
     case "push_pending_chat_message":
       return null;
+    case "fetch_url_content":
+      return `[Mock web content for: ${args?.url ?? "unknown"}]\n\nThis is simulated web content. In production, the URL would be fetched and cleaned to plain text using the scraper crate (like Python's BeautifulSoup).`;
     case "check_for_update":
       return null;
     case "install_update":

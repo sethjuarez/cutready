@@ -14,7 +14,7 @@ interface AgentChatResult {
 }
 
 interface FileReference {
-  type: "sketch" | "note" | "storyboard";
+  type: "sketch" | "note" | "storyboard" | "web";
   path: string;
   title: string;
 }
@@ -135,6 +135,16 @@ function IconFile({ size = 12 }: { size?: number }) {
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" />
       <path d="M14 2v4a2 2 0 0 0 2 2h4" />
+    </svg>
+  );
+}
+
+function IconGlobe({ size = 12 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10" />
+      <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20" />
+      <path d="M2 12h20" />
     </svg>
   );
 }
@@ -392,7 +402,7 @@ function ChatTab() {
   }, [showContextPicker, contextFilter, allFiles, references]);
 
   // Available tools list
-  const availableTools = ["list_project_files", "read_note", "read_sketch", "set_planning_rows", "update_planning_row", "delegate_to_agent"];
+  const availableTools = ["list_project_files", "read_note", "read_sketch", "set_planning_rows", "update_planning_row", "delegate_to_agent", "fetch_url"];
 
   const buildConfig = useCallback(() => ({
     provider: settings.aiProvider,
@@ -438,8 +448,25 @@ function ChatTab() {
     // Build user message with @references context
     let userContent = text;
     if (references.length > 0) {
-      const refList = references.map((r) => `@${r.type}:${r.path}`).join(", ");
-      userContent = `[References: ${refList}]\n\n${text}`;
+      // Fetch web references first
+      const webRefs = references.filter((r) => r.type === "web");
+      const fileRefs = references.filter((r) => r.type !== "web");
+      const parts: string[] = [];
+
+      if (fileRefs.length > 0) {
+        parts.push(`[References: ${fileRefs.map((r) => `@${r.type}:${r.path}`).join(", ")}]`);
+      }
+
+      for (const wr of webRefs) {
+        try {
+          const content = await invoke<string>("fetch_url_content", { url: wr.path });
+          parts.push(`[Web: ${wr.path}]\n${content}`);
+        } catch {
+          parts.push(`[Web: ${wr.path}] (failed to fetch)`);
+        }
+      }
+
+      userContent = `${parts.join("\n\n")}\n\n${text}`;
     }
 
     const userMsg: ChatMessage = { role: "user", content: userContent };
@@ -544,6 +571,24 @@ function ChatTab() {
 
       if (atIndex >= 0 && (atIndex === 0 || textBefore[atIndex - 1] === " ")) {
         const query = textBefore.slice(atIndex + 1);
+
+        // Detect completed @web:URL pattern — triggers when space follows the URL
+        // The space is included in textBefore since cursor is after it
+        const webMatch = val.slice(atIndex + 1).match(/^web:(https?:\/\/\S+)\s/);
+        if (webMatch) {
+          const url = webMatch[1];
+          setReferences((prev) => {
+            if (prev.some((r) => r.path === url)) return prev;
+            return [...prev, { type: "web", path: url, title: url }];
+          });
+          // Remove @web:URL + trailing space from input
+          const before = val.slice(0, atIndex);
+          const after = val.slice(atIndex + 1 + webMatch[0].length);
+          setInput(before + after);
+          setShowAutocomplete(false);
+          return;
+        }
+
         if (!query.includes(" ") && !query.includes("\n")) {
           setShowAutocomplete(true);
           setAutocompleteFilter(query);
@@ -1329,6 +1374,8 @@ function FileTypeIcon({ type }: { type: string }) {
       return <span className={cls}><NoteIcon size={12} /></span>;
     case "storyboard":
       return <span className={cls}><StoryboardIcon size={12} /></span>;
+    case "web":
+      return <span className={cls}><IconGlobe /></span>;
     default:
       return <span className={cls}><IconFile /></span>;
   }

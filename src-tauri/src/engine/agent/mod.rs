@@ -7,3 +7,4 @@ pub mod azure_auth;
 pub mod llm;
 pub mod runner;
 pub mod tools;
+pub mod web;

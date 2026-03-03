@@ -8,7 +8,7 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 use crate::engine::agent::llm::{ChatMessage, LlmClient};
-use crate::engine::agent::tools;
+use crate::engine::agent::{tools, web};
 
 /// Maximum tool-call rounds to prevent infinite loops.
 const MAX_TOOL_ROUNDS: usize = 10;
@@ -81,6 +81,8 @@ fn run_with_depth<'a>(
             for call in &tool_calls {
                 let result = if call.function.name == "delegate_to_agent" {
                     exec_delegation(client, call, project_root, agent_prompts, pending, depth).await
+                } else if call.function.name == "fetch_url" {
+                    exec_fetch_url(call).await
                 } else {
                     tools::execute_tool(call, project_root)
                 };
@@ -132,5 +134,21 @@ async fn exec_delegation(
     match run_with_depth(client, sub_messages, project_root, agent_prompts, pending, depth + 1).await {
         Ok(result) => format!("[Agent '{}' responded:]\n\n{}", agent_id, result.response),
         Err(e) => format!("Error from agent '{}': {}", agent_id, e),
+    }
+}
+
+/// Execute a fetch_url tool call.
+async fn exec_fetch_url(call: &crate::engine::agent::llm::ToolCall) -> String {
+    let args: serde_json::Value =
+        serde_json::from_str(&call.function.arguments).unwrap_or(serde_json::json!({}));
+
+    let url = match args.get("url").and_then(|v| v.as_str()) {
+        Some(u) => u,
+        None => return "Error: missing 'url' argument".into(),
+    };
+
+    match web::fetch_and_clean(url).await {
+        Ok(content) => content,
+        Err(e) => format!("Error fetching URL: {e}"),
     }
 }

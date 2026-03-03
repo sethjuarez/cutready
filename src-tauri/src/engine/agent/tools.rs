@@ -95,6 +95,17 @@ pub fn all_tools() -> Vec<ToolDefinition> {
                 "required": ["agent_id", "message"]
             }),
         ),
+        tool_def(
+            "fetch_url",
+            "Fetch a web page and return its content as clean readable text. Use this to pull in reference material, documentation, or any web content. Scripts, styles, and navigation are stripped.",
+            json!({
+                "type": "object",
+                "properties": {
+                    "url": { "type": "string", "description": "The URL to fetch (e.g. 'https://docs.example.com/guide')" }
+                },
+                "required": ["url"]
+            }),
+        ),
     ]
 }
 

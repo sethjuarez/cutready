@@ -173,6 +173,7 @@ pub fn run() {
             commands::agent::agent_chat,
             commands::agent::agent_chat_with_tools,
             commands::agent::push_pending_chat_message,
+            commands::agent::fetch_url_content,
             commands::agent::list_chat_sessions,
             commands::agent::get_chat_session,
             commands::agent::save_chat_session,
