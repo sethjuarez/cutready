@@ -119,6 +119,18 @@ pub fn all_tools() -> Vec<ToolDefinition> {
                 "required": ["url"]
             }),
         ),
+        tool_def(
+            "save_feedback",
+            "Save user feedback about CutReady. Use this when the user wants to submit feedback, report a bug, request a feature, or share thoughts about the app or an interaction.",
+            json!({
+                "type": "object",
+                "properties": {
+                    "category": { "type": "string", "enum": ["General", "Bug", "Feature", "Design"], "description": "Feedback category" },
+                    "feedback": { "type": "string", "description": "The user's feedback text" }
+                },
+                "required": ["category", "feedback"]
+            }),
+        ),
     ]
 }
 
@@ -148,6 +160,7 @@ pub fn execute_tool(call: &ToolCall, project_root: &Path) -> String {
         "set_planning_rows" => exec_set_planning_rows(project_root, &args),
         "update_planning_row" => exec_update_planning_row(project_root, &args),
         "list_project_images" => exec_list_project_images(project_root),
+        "save_feedback" => exec_save_feedback(&args),
         other => format!("Unknown tool: {other}"),
     }
 }
@@ -364,4 +377,42 @@ fn exec_list_project_images(root: &Path) -> String {
     }
     out.push_str("\nUse these paths as 'screenshot' values in set_planning_rows or update_planning_row.");
     out
+}
+
+fn exec_save_feedback(args: &Value) -> String {
+    let category = args.get("category").and_then(|v| v.as_str()).unwrap_or("General");
+    let feedback = match args.get("feedback").and_then(|v| v.as_str()) {
+        Some(f) if !f.trim().is_empty() => f.trim(),
+        _ => return "Error: feedback text is required".into(),
+    };
+
+    // Use the same app data path as commands/feedback.rs
+    let data_dir = dirs::data_dir()
+        .map(|d| d.join("com.cutready"))
+        .unwrap_or_else(|| PathBuf::from("."));
+    if let Err(e) = std::fs::create_dir_all(&data_dir) {
+        return format!("Error creating data dir: {e}");
+    }
+
+    let path = data_dir.join("feedback.json");
+    let mut entries: Vec<Value> = if path.exists() {
+        let content = std::fs::read_to_string(&path).unwrap_or_else(|_| "[]".into());
+        serde_json::from_str(&content).unwrap_or_default()
+    } else {
+        vec![]
+    };
+
+    entries.push(json!({
+        "category": category,
+        "feedback": feedback,
+        "date": chrono::Utc::now().to_rfc3339(),
+    }));
+
+    match serde_json::to_string_pretty(&entries) {
+        Ok(json) => match std::fs::write(&path, json) {
+            Ok(()) => format!("Feedback saved: [{}] {}", category, feedback),
+            Err(e) => format!("Error writing feedback: {e}"),
+        },
+        Err(e) => format!("Serialization error: {e}"),
+    }
 }
