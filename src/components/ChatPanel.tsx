@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useAppStore } from "../stores/appStore";
-import { useSettings } from "../hooks/useSettings";
+import { useSettings, type AgentPreset } from "../hooks/useSettings";
 import { VersionHistory } from "./VersionHistory";
 import { SketchIcon, StoryboardIcon, NoteIcon } from "./Icons";
 import type { ChatMessage, ToolCall } from "../types/sketch";
@@ -20,6 +20,86 @@ interface FileReference {
 }
 
 type SecondaryTab = "chat" | "history";
+
+// ── Built-in Agent Presets ───────────────────────────────────────
+
+export const BUILT_IN_AGENTS: AgentPreset[] = [
+  {
+    id: "planner",
+    name: "Planner",
+    prompt: `You are CutReady AI — Planner mode. You help users plan demo videos from scratch.
+
+## Your Role
+Help users create and refine sketches — planning tables with columns:
+- **time**: Duration (e.g. "~30s", "1:00")
+- **narrative**: Voiceover/narration script
+- **demo_actions**: On-screen actions to perform
+
+## How to Think
+When the user makes a request, reason step by step:
+1. **Understand**: What is the user trying to accomplish? What kind of demo are they building?
+2. **Gather**: What project context do you need? Use list_project_files, read_note, read_sketch to understand the current state.
+3. **Plan**: Explain your approach briefly before making changes.
+4. **Act**: Use set_planning_rows (full generation) or update_planning_row (surgical edit) to make changes.
+5. **Verify**: Summarize what you did and suggest next steps.
+
+## Guidelines
+- Read referenced files before making suggestions
+- When generating sketch rows, aim for clear, actionable demo steps
+- Keep narrative concise — these are voiceover bullets, not essays
+- Time estimates should be realistic for live demos (~15-60s per row)
+- Use markdown formatting in responses`,
+  },
+  {
+    id: "writer",
+    name: "Writer",
+    prompt: `You are CutReady AI — Writer mode. You specialize in narrative and script refinement.
+
+## Your Role
+Help users write compelling voiceover scripts and narratives for their demo recordings. Focus on storytelling, pacing, and audience engagement.
+
+## How to Think
+1. **Read**: Review the current sketch and any referenced notes to understand the demo flow.
+2. **Analyze**: Consider the audience, tone, and pacing of the existing content.
+3. **Improve**: Rewrite narrative text to be more engaging, clear, and natural when spoken aloud.
+4. **Explain**: Briefly note what you changed and why.
+
+## Guidelines
+- Write for spoken delivery — short sentences, natural rhythm, conversational tone
+- Ensure smooth transitions between rows (the narrative should flow as a continuous script)
+- Highlight key product features and benefits
+- Avoid jargon unless the audience expects it
+- Use update_planning_row for targeted narrative edits
+- Use markdown formatting in responses`,
+  },
+  {
+    id: "editor",
+    name: "Editor",
+    prompt: `You are CutReady AI — Editor mode. You make precise, surgical edits to existing sketches.
+
+## Your Role
+Make targeted changes to specific cells in the planning table. Be concise and efficient.
+
+## How to Think
+1. Read the current sketch to understand context.
+2. Make the specific edit requested — no unnecessary changes.
+3. Confirm what you changed in one sentence.
+
+## Guidelines
+- Use update_planning_row for single-cell changes (preferred)
+- Only use set_planning_rows if the user asks to restructure the entire sketch
+- Keep responses brief — just confirm the change
+- Don't add unsolicited suggestions unless asked`,
+  },
+];
+
+/** Resolve an agent ID to its prompt text. Checks custom agents first, then built-ins. */
+export function resolveAgentPrompt(agentId: string, customAgents: AgentPreset[]): string {
+  const custom = customAgents.find((a) => a.id === agentId);
+  if (custom) return custom.prompt;
+  const builtin = BUILT_IN_AGENTS.find((a) => a.id === agentId);
+  return builtin?.prompt ?? BUILT_IN_AGENTS[0].prompt;
+}
 
 // ── SVG Icons (matching app's Feather/Lucide style) ──────────────
 
@@ -127,6 +207,23 @@ function IconChevron({ size = 10, expanded = false }: { size?: number; expanded?
   );
 }
 
+function IconCheck({ size = 12 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="ml-auto shrink-0">
+      <path d="M20 6 9 17l-5-5" />
+    </svg>
+  );
+}
+
+function IconUser({ size = 12 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
+      <circle cx="12" cy="7" r="4" />
+    </svg>
+  );
+}
+
 // ── Dropdown height constraint hook ──────────────────────────────
 // Measures available viewport space above a trigger element so
 // upward-opening dropdowns never extend off-screen.
@@ -151,7 +248,7 @@ export function ChatPanel() {
   const [activeTab, setActiveTab] = useState<SecondaryTab>("chat");
 
   return (
-    <div className="flex flex-col h-full bg-[var(--color-surface-alt)]">
+    <div className="flex flex-col h-full bg-[var(--color-surface-inset)]">
       {/* Tab bar — underline tabs like VS Code panel tabs */}
       <div className="flex items-stretch border-b border-[var(--color-border)] shrink-0">
         <button
@@ -189,7 +286,7 @@ export function ChatPanel() {
 // ── Chat Tab ─────────────────────────────────────────────────────
 
 function ChatTab() {
-  const { settings } = useSettings();
+  const { settings, updateSetting } = useSettings();
   const currentProject = useAppStore((s) => s.currentProject);
   const sketches = useAppStore((s) => s.sketches);
   const notes = useAppStore((s) => s.notes);
@@ -213,6 +310,7 @@ function ChatTab() {
   const [contextFilter, setContextFilter] = useState("");
   const [showModelPicker, setShowModelPicker] = useState(false);
   const [showToolsInfo, setShowToolsInfo] = useState(false);
+  const [showAgentPicker, setShowAgentPicker] = useState(false);
 
   // Auto-create a session path on first mount if none exists
   useEffect(() => {
@@ -225,12 +323,25 @@ function ChatTab() {
   const contextPickerRef = useRef<HTMLDivElement>(null);
   const modelPickerRef = useRef<HTMLDivElement>(null);
   const toolsInfoRef = useRef<HTMLDivElement>(null);
+  const agentPickerRef = useRef<HTMLDivElement>(null);
 
   // Constrain dropdown heights to available viewport space
   const acMaxH = useDropdownMaxHeight(autocompleteRef, showAutocomplete);
   const ctxMaxH = useDropdownMaxHeight(contextPickerRef, showContextPicker);
   const modelMaxH = useDropdownMaxHeight(modelPickerRef, showModelPicker);
   const toolsMaxH = useDropdownMaxHeight(toolsInfoRef, showToolsInfo);
+  const agentMaxH = useDropdownMaxHeight(agentPickerRef, showAgentPicker);
+
+  // All agents: built-ins + custom
+  const allAgents = useMemo(() => {
+    const custom = settings.aiAgents || [];
+    return [...BUILT_IN_AGENTS, ...custom];
+  }, [settings.aiAgents]);
+
+  const selectedAgent = useMemo(() => {
+    const id = settings.aiSelectedAgent || "planner";
+    return allAgents.find((a) => a.id === id) ?? BUILT_IN_AGENTS[0];
+  }, [settings.aiSelectedAgent, allAgents]);
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
@@ -239,11 +350,12 @@ function ChatTab() {
 
   // Click-outside to close pickers
   useEffect(() => {
-    if (!showContextPicker && !showModelPicker && !showToolsInfo) return;
+    if (!showContextPicker && !showModelPicker && !showToolsInfo && !showAgentPicker) return;
     const handle = (e: MouseEvent) => {
       if (showContextPicker && contextPickerRef.current && !contextPickerRef.current.contains(e.target as Node)) setShowContextPicker(false);
       if (showModelPicker && modelPickerRef.current && !modelPickerRef.current.contains(e.target as Node)) setShowModelPicker(false);
       if (showToolsInfo && toolsInfoRef.current && !toolsInfoRef.current.contains(e.target as Node)) setShowToolsInfo(false);
+      if (showAgentPicker && agentPickerRef.current && !agentPickerRef.current.contains(e.target as Node)) setShowAgentPicker(false);
     };
     window.addEventListener("mousedown", handle);
     return () => window.removeEventListener("mousedown", handle);
@@ -289,18 +401,16 @@ function ChatTab() {
     bearer_token: settings.aiAuthMode === "azure_oauth" ? settings.aiAccessToken : null,
   }), [settings]);
 
-  // Build system prompt
+  // Build system prompt from selected agent
   const systemPrompt = useMemo(() => {
-    let prompt = `You are CutReady AI, an assistant for demo video production planning. You help users create and refine sketches (planning tables with time, narrative, demo_actions columns) for demo recordings.
-
-When the user references project files, read them with your tools. When they ask you to create or update planning rows, use set_planning_rows or update_planning_row.
-
-Keep responses concise and actionable. Use markdown formatting.`;
+    const agentId = settings.aiSelectedAgent || "planner";
+    const customAgents = settings.aiAgents || [];
+    let prompt = resolveAgentPrompt(agentId, customAgents);
     if (activeSketchPath) {
       prompt += `\n\nThe user is currently editing the sketch at: ${activeSketchPath}`;
     }
     return prompt;
-  }, [activeSketchPath]);
+  }, [settings.aiSelectedAgent, settings.aiAgents, activeSketchPath]);
 
   const handleSend = useCallback(async () => {
     const text = input.trim();
@@ -480,11 +590,11 @@ Keep responses concise and actionable. Use markdown formatting.`;
   }
 
   return (
-    <div className="flex flex-col h-full bg-[var(--color-surface-alt)]">
+    <div className="flex flex-col h-full">
       {/* Top toolbar — session controls */}
       <div className="flex items-center gap-0.5 px-2 h-[30px] border-b border-[var(--color-border)] shrink-0">
         <button
-          className="flex items-center justify-center w-[26px] h-[26px] rounded text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-inset)] transition-colors"
+          className="flex items-center justify-center w-[26px] h-[26px] rounded text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-toolbar)] transition-colors"
           onClick={clearChat}
           title="New Chat"
         >
@@ -493,7 +603,7 @@ Keep responses concise and actionable. Use markdown formatting.`;
         <div className="flex-1" />
         {messages.length > 0 && (
           <button
-            className="flex items-center justify-center w-[26px] h-[26px] rounded text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-inset)] transition-colors"
+            className="flex items-center justify-center w-[26px] h-[26px] rounded text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-toolbar)] transition-colors"
             onClick={clearChat}
             title="Clear chat"
           >
@@ -503,7 +613,7 @@ Keep responses concise and actionable. Use markdown formatting.`;
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto min-h-0 py-2 bg-[var(--color-surface-inset)]">
+      <div className="flex-1 overflow-y-auto min-h-0 py-2">
         {messages.length === 0 && !loading && (
           <div className="flex flex-col items-center justify-center h-full text-center px-4">
             <div className="w-10 h-10 rounded-full bg-[var(--color-accent)]/10 flex items-center justify-center mb-3 text-[var(--color-accent)]">
@@ -672,6 +782,81 @@ Keep responses concise and actionable. Use markdown formatting.`;
                     ))
                   )}
                 </div>
+              </div>
+            )}
+          </div>
+
+          {/* Agent picker */}
+          <div className="relative" ref={agentPickerRef}>
+            <button
+              className={`flex items-center gap-1 px-1.5 h-[26px] rounded text-[11px] transition-colors ${
+                showAgentPicker
+                  ? "bg-[var(--color-surface)] text-[var(--color-text)]"
+                  : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)]"
+              }`}
+              onClick={() => setShowAgentPicker(!showAgentPicker)}
+              title="Select Agent"
+            >
+              <IconSparkles size={11} />
+              <span className="max-w-[80px] truncate">{selectedAgent.name}</span>
+              <IconChevronDown size={10} />
+            </button>
+            {showAgentPicker && (
+              <div className="absolute bottom-full left-0 mb-1 w-[200px] bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg shadow-lg overflow-hidden z-20 flex flex-col" style={{ maxHeight: agentMaxH }}>
+                {BUILT_IN_AGENTS.length > 0 && (
+                  <>
+                    <div className="px-3 py-1.5 border-b border-[var(--color-border)] shrink-0">
+                      <span className="text-[10px] font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">Built-in</span>
+                    </div>
+                    <div className="py-0.5">
+                      {BUILT_IN_AGENTS.map((agent) => (
+                        <button
+                          key={agent.id}
+                          className={`w-full flex items-center gap-2 px-3 py-1.5 text-[11px] text-left transition-colors ${
+                            selectedAgent.id === agent.id
+                              ? "bg-[var(--color-accent)]/10 text-[var(--color-text)]"
+                              : "text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-alt)] hover:text-[var(--color-text)]"
+                          }`}
+                          onClick={() => {
+                            updateSetting("aiSelectedAgent", agent.id);
+                            setShowAgentPicker(false);
+                          }}
+                        >
+                          <IconSparkles size={11} />
+                          <span>{agent.name}</span>
+                          {selectedAgent.id === agent.id && <IconCheck size={11} />}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+                {(settings.aiAgents?.length ?? 0) > 0 && (
+                  <>
+                    <div className="px-3 py-1.5 border-t border-[var(--color-border)] shrink-0">
+                      <span className="text-[10px] font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">Custom</span>
+                    </div>
+                    <div className="py-0.5 overflow-y-auto">
+                      {(settings.aiAgents || []).map((agent) => (
+                        <button
+                          key={agent.id}
+                          className={`w-full flex items-center gap-2 px-3 py-1.5 text-[11px] text-left transition-colors ${
+                            selectedAgent.id === agent.id
+                              ? "bg-[var(--color-accent)]/10 text-[var(--color-text)]"
+                              : "text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-alt)] hover:text-[var(--color-text)]"
+                          }`}
+                          onClick={() => {
+                            updateSetting("aiSelectedAgent", agent.id);
+                            setShowAgentPicker(false);
+                          }}
+                        >
+                          <IconUser size={11} />
+                          <span className="truncate">{agent.name}</span>
+                          {selectedAgent.id === agent.id && <IconCheck size={11} />}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
               </div>
             )}
           </div>

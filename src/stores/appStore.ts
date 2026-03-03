@@ -1360,3 +1360,8 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     }
   },
 }));
+
+// Expose store on window in dev mode for Playwright/debugging
+if (import.meta.env.DEV) {
+  (window as unknown as Record<string, unknown>).__CUTREADY_STORE__ = useAppStore;
+}

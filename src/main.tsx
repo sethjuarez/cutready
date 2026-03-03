@@ -5,6 +5,12 @@ import "@fontsource/geist-sans/500.css";
 import "@fontsource/geist-sans/600.css";
 import "./index.css";
 
+// Install dev mocks when running in browser without Tauri runtime
+if (import.meta.env.DEV && !(window as any).__TAURI_INTERNALS__) {
+  const { installDevMocks } = await import("./devMock");
+  installDevMocks();
+}
+
 // Detect capture window mode via initialization script flag
 // (set by Rust open_capture_window via WebviewWindowBuilder::initialization_script)
 declare global {

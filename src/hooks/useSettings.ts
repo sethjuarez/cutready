@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { LazyStore } from "@tauri-apps/plugin-store";
 
+export interface AgentPreset {
+  id: string;
+  name: string;
+  prompt: string;
+}
+
 export interface AppSettings {
   outputDirectory: string;
   /** "azure_openai" or "openai" */
@@ -22,6 +28,10 @@ export interface AppSettings {
   /** Azure OAuth refresh token (for silent re-auth). */
   aiRefreshToken: string;
   audioDevice: string;
+  /** Currently selected agent ID (default: "planner"). */
+  aiSelectedAgent: string;
+  /** User-created custom agents (name + prompt). */
+  aiAgents: AgentPreset[];
   // Legacy fields (migrated on load)
   llmApiKey?: string;
   llmEndpoint?: string;
@@ -40,6 +50,8 @@ const defaultSettings: AppSettings = {
   aiAccessToken: "",
   aiRefreshToken: "",
   audioDevice: "",
+  aiSelectedAgent: "planner",
+  aiAgents: [],
 };
 
 const STORE_PATH = "settings.json";
@@ -60,9 +72,9 @@ export function useSettings() {
 
       const result = { ...defaultSettings };
       for (const key of Object.keys(defaultSettings) as (keyof AppSettings)[]) {
-        const val = await store.get<string>(key);
+        const val = await store.get(key);
         if (val !== null && val !== undefined) {
-          (result as Record<string, string>)[key] = val;
+          (result as Record<string, unknown>)[key] = val;
         }
       }
 
@@ -84,7 +96,7 @@ export function useSettings() {
     async <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => {
       setSettings((prev) => ({ ...prev, [key]: value }));
       if (storeRef.current) {
-        await storeRef.current.set(key, value as string);
+        await storeRef.current.set(key, value);
         await storeRef.current.save();
       }
     },
