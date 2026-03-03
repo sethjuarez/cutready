@@ -1643,17 +1643,17 @@ function ModelPickerDropdown({
 
 // ── Helpers ──────────────────────────────────────────────────────
 
-/** Type-specific accent colors for sketches, notes, storyboards, web, etc. */
+/** Type-specific accent colors — matches the explorer sidebar selected styles. */
 function typeColors(type: string): { text: string; bg: string; border: string } {
   switch (type) {
     case "sketch":
-      return { text: "text-purple-300", bg: "bg-purple-500/15", border: "border-purple-400/30" };
+      return { text: "text-violet-500", bg: "bg-violet-500/10", border: "border-violet-500/25" };
     case "note":
-      return { text: "text-amber-300", bg: "bg-amber-500/15", border: "border-amber-400/30" };
+      return { text: "text-amber-500", bg: "bg-amber-500/10", border: "border-amber-500/25" };
     case "storyboard":
-      return { text: "text-emerald-300", bg: "bg-emerald-500/15", border: "border-emerald-400/30" };
+      return { text: "text-emerald-500", bg: "bg-emerald-500/10", border: "border-emerald-500/25" };
     case "web":
-      return { text: "text-blue-300", bg: "bg-blue-500/15", border: "border-blue-400/30" };
+      return { text: "text-blue-400", bg: "bg-blue-400/10", border: "border-blue-400/25" };
     default:
       return { text: "text-[var(--color-text-secondary)]", bg: "bg-[var(--color-surface)]", border: "border-[var(--color-border)]" };
   }
