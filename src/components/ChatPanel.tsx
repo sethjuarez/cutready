@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { useAppStore, type ActivityEntry } from "../stores/appStore";
+import { listen } from "@tauri-apps/api/event";
+import { useAppStore } from "../stores/appStore";
 import { useSettings, type AgentPreset } from "../hooks/useSettings";
 import { VersionHistory } from "./VersionHistory";
 import { SketchIcon, StoryboardIcon, NoteIcon } from "./Icons";
@@ -327,11 +328,68 @@ function ChatTab() {
   const [showToolsInfo, setShowToolsInfo] = useState(false);
   const [showAgentPicker, setShowAgentPicker] = useState(false);
   const [expandedWebRef, setExpandedWebRef] = useState<string | null>(null);
+  const [streamingText, setStreamingText] = useState<string>("");
+  const [streamingStatus, setStreamingStatus] = useState<string>("");
 
   // Auto-create a session path on first mount if none exists
   useEffect(() => {
     if (!chatSessionPath) newChatSession();
   }, [chatSessionPath, newChatSession]);
+
+  // Listen for streaming agent events from the backend
+  const streamingRef = useRef("");
+  useEffect(() => {
+    const unlisten = listen<{ type: string; content?: string; message?: string; name?: string; arguments?: string; result?: string; response?: string }>("agent-event", (event) => {
+      const ev = event.payload;
+      switch (ev.type) {
+        case "delta":
+          streamingRef.current += ev.content ?? "";
+          setStreamingText(streamingRef.current);
+          break;
+        case "status":
+          setStreamingStatus(ev.message ?? "");
+          addActivityEntries([{
+            id: crypto.randomUUID(),
+            timestamp: new Date(),
+            source: "status",
+            content: ev.message ?? "",
+            level: "info",
+          }]);
+          break;
+        case "tool_call":
+          addActivityEntries([{
+            id: crypto.randomUUID(),
+            timestamp: new Date(),
+            source: ev.name ?? "tool",
+            content: `Called with: ${ev.arguments ?? "{}"}`,
+            level: "info",
+          }]);
+          break;
+        case "tool_result":
+          addActivityEntries([{
+            id: crypto.randomUUID(),
+            timestamp: new Date(),
+            source: `result ${ev.name ?? ""}`.trim(),
+            content: ev.result ?? "",
+            level: "success",
+          }]);
+          break;
+        case "done":
+          // Final response handled by the invoke return
+          break;
+        case "error":
+          addActivityEntries([{
+            id: crypto.randomUUID(),
+            timestamp: new Date(),
+            source: "error",
+            content: ev.message ?? "",
+            level: "error",
+          }]);
+          break;
+      }
+    });
+    return () => { unlisten.then((f) => f()); };
+  }, [addActivityEntries]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -493,6 +551,9 @@ function ChatTab() {
     ];
 
     setChatLoading(true);
+    streamingRef.current = "";
+    setStreamingText("");
+    setStreamingStatus("Connecting…");
     // Log the send to activity
     addActivityEntries([{
       id: crypto.randomUUID(),
@@ -546,40 +607,13 @@ function ChatTab() {
         agentPrompts,
       });
 
-      // Extract tool calls for transparency
+      // Extract tool calls for transparency in display
       const toolMessages = result.messages.filter(
         (m) => m.role === "assistant" && m.tool_calls && m.tool_calls.length > 0,
       );
       const toolResultMessages = result.messages.filter((m) => m.role === "tool");
 
-      // Log tool activity to the activity panel
-      const activityEntries: ActivityEntry[] = [];
-      for (const tm of toolMessages) {
-        for (const tc of tm.tool_calls ?? []) {
-          const isDelegation = tc.function?.name === "delegate_to_agent";
-          activityEntries.push({
-            id: tc.id ?? crypto.randomUUID(),
-            timestamp: new Date(),
-            source: isDelegation ? `delegate ${tc.function?.name}` : tc.function?.name ?? "tool",
-            content: isDelegation
-              ? `Delegated to agent: ${JSON.parse(tc.function?.arguments ?? "{}").agent_id ?? "unknown"}`
-              : `Called with: ${tc.function?.arguments ?? "{}"}`,
-            level: "info",
-          });
-        }
-      }
-      for (const tr of toolResultMessages) {
-        activityEntries.push({
-          id: crypto.randomUUID(),
-          timestamp: new Date(),
-          source: `result ${tr.tool_call_id ?? ""}`.trim(),
-          content: tr.content ?? "",
-          level: "success",
-        });
-      }
-      if (activityEntries.length > 0) {
-        addActivityEntries(activityEntries);
-      }
+      // Activity logging now handled by real-time agent-event listener
 
       // Build the display messages: user msg + any tool transparency + assistant response
       const displayMessages: ChatMessage[] = [...newMessages];
@@ -622,6 +656,9 @@ function ChatTab() {
       setChatMessages(newMessages);
     } finally {
       setChatLoading(false);
+      setStreamingText("");
+      setStreamingStatus("");
+      streamingRef.current = "";
     }
   }, [input, loading, messages, references, systemPrompt, buildConfig, setChatMessages, setChatLoading, setChatError, addActivityEntries, settings.aiAgents]);
 
@@ -823,7 +860,14 @@ function ChatTab() {
 
         {loading && (
           <div className="px-3.5 py-2">
-            <span className="text-xs text-[var(--color-text-secondary)] italic">Thinking…</span>
+            {streamingText ? (
+              <div className="text-[13px] text-[var(--color-text)] leading-[1.6]">
+                <MarkdownContent content={streamingText} />
+                <span className="inline-block w-1.5 h-4 bg-[var(--color-accent)] animate-pulse ml-0.5 align-text-bottom rounded-sm" />
+              </div>
+            ) : (
+              <span className="text-xs text-[var(--color-text-secondary)] italic">{streamingStatus || "Thinking…"}</span>
+            )}
           </div>
         )}
 

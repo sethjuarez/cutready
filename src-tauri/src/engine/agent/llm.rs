@@ -453,7 +453,7 @@ impl LlmClient {
         &self,
         messages: &[ChatMessage],
         tools: Option<&[ToolDefinition]>,
-    ) -> Result<impl futures_util::Stream<Item = Result<StreamChunk, String>>, String> {
+    ) -> Result<impl futures_util::Stream<Item = Result<Vec<StreamChunk>, String>>, String> {
         let body = ChatCompletionRequest {
             model: match self.config.provider {
                 LlmProvider::Openai => Some(self.config.model.clone()),
@@ -489,7 +489,7 @@ impl LlmClient {
             let bytes = chunk_result.map_err(|e| format!("Stream read error: {e}"))?;
             let text = String::from_utf8_lossy(&bytes);
 
-            // SSE format: "data: {...}\n\n"
+            // SSE format: "data: {...}\n\n" — collect ALL chunks from this batch
             let mut chunks = Vec::new();
             for line in text.lines() {
                 let line = line.trim();
@@ -503,11 +503,7 @@ impl LlmClient {
                 }
             }
 
-            // Return the last chunk from this SSE batch (most common: 1 per batch)
-            chunks
-                .into_iter()
-                .last()
-                .ok_or_else(|| "No parseable chunk in SSE data".to_string())
+            Ok(chunks)
         });
 
         Ok(stream)

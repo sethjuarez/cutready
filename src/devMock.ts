@@ -133,9 +133,31 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
     case "list_models":
       return ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-35-turbo", "o1-preview"];
     case "agent_chat_with_tools": {
-      // Simulate a delayed AI response with mock tool calls
+      // Simulate streaming with agent events
       const userMsgs = (args?.messages as Array<{ role: string; content: string }>) || [];
       const lastUser = userMsgs.filter(m => m.role === "user").pop();
+      const response = `This is a mock response to: "${lastUser?.content?.substring(0, 50) || "your message"}"\n\nIn production, this would come from your configured AI provider. The chat UI is fully functional — try the #reference autocomplete, context picker, and model selector!`;
+      const w = window as any;
+
+      // Emit streaming events asynchronously
+      const streamEvents = async () => {
+        w.__TAURI_INTERNALS__?.emit?.("agent-event", { type: "status", message: "Thinking…" });
+        await new Promise(r => setTimeout(r, 300));
+        w.__TAURI_INTERNALS__?.emit?.("agent-event", { type: "tool_call", name: "list_project_files", arguments: "{}" });
+        await new Promise(r => setTimeout(r, 200));
+        w.__TAURI_INTERNALS__?.emit?.("agent-event", { type: "tool_result", name: "list_project_files", result: "sketches/intro.sk, notes/outline.md" });
+        await new Promise(r => setTimeout(r, 200));
+        w.__TAURI_INTERNALS__?.emit?.("agent-event", { type: "status", message: "Thinking… (round 2)" });
+        await new Promise(r => setTimeout(r, 200));
+        const words = response.split(" ");
+        for (let i = 0; i < words.length; i++) {
+          w.__TAURI_INTERNALS__?.emit?.("agent-event", { type: "delta", content: (i === 0 ? "" : " ") + words[i] });
+          await new Promise(r => setTimeout(r, 30));
+        }
+        w.__TAURI_INTERNALS__?.emit?.("agent-event", { type: "done", response });
+      };
+      streamEvents(); // fire and forget
+
       const mockToolCall = {
         role: "assistant" as const,
         content: null,
@@ -150,10 +172,11 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
         content: "sketches/intro.sk, notes/outline.md",
         tool_call_id: "mock_tc_1",
       };
-      return {
+      // Delay the return so streaming events fire first
+      return new Promise(resolve => setTimeout(() => resolve({
         messages: [...userMsgs, mockToolCall, mockToolResult],
-        response: `This is a mock response to: "${lastUser?.content?.substring(0, 50) || "your message"}"\n\nIn production, this would come from your configured AI provider. The chat UI is fully functional — try the @reference autocomplete, context picker, and model selector!`,
-      };
+        response,
+      }), 2000));
     }
     case "push_pending_chat_message":
       return null;
@@ -234,13 +257,33 @@ function mockPluginStore(cmd: string, args?: Record<string, unknown>): unknown {
 }
 
 /** Mock plugin:event handler */
-function mockPluginEvent(cmd: string, _args?: Record<string, unknown>): unknown {
+function mockPluginEvent(cmd: string, args?: Record<string, unknown>): unknown {
   const op = cmd.replace("plugin:event|", "");
+  const internals = (window as any).__TAURI_INTERNALS__;
   switch (op) {
-    case "listen":
-      return 0; // return a listener id
-    case "unlisten":
+    case "listen": {
+      // Register event listener: args has { event, handler (callback id) }
+      const event = args?.event as string;
+      const handlerId = args?.handler as number;
+      if (event && handlerId !== undefined && internals?._eventListeners) {
+        if (!internals._eventListeners.has(event)) {
+          internals._eventListeners.set(event, new Map());
+        }
+        const listener = internals._listeners?.get(handlerId);
+        if (listener) {
+          internals._eventListeners.get(event)!.set(handlerId, listener);
+        }
+      }
+      return handlerId ?? 0;
+    }
+    case "unlisten": {
+      const handlerId = args?.handler as number;
+      const event = args?.event as string;
+      if (event && internals?._eventListeners?.has(event)) {
+        internals._eventListeners.get(event)!.delete(handlerId);
+      }
       return null;
+    }
     default:
       return null;
   }
@@ -257,16 +300,21 @@ export function installDevMocks() {
   const tauriInternals = (window as any).__TAURI_INTERNALS__;
   if (!tauriInternals) {
     const listeners = new Map<number, Function>();
+    const eventListeners = new Map<string, Map<number, Function>>();
     let listenerId = 0;
 
     (window as any).__TAURI_INTERNALS__ = {
       invoke: async (cmd: string, args?: Record<string, unknown>) => {
-        // Small delay to simulate IPC
-        await new Promise(r => setTimeout(r, cmd === "agent_chat_with_tools" ? 800 : 50));
+        // Small delay to simulate IPC (but not for agent_chat since streaming handles timing)
+        if (cmd !== "agent_chat_with_tools") {
+          await new Promise(r => setTimeout(r, 50));
+        }
         return mockInvoke(cmd, args);
       },
       metadata: { currentWindow: { label: "main" }, currentWebview: { label: "main" } },
       convertFileSrc: (path: string) => path,
+      _listeners: listeners,
+      _eventListeners: eventListeners,
       transformCallback: (fn: Function, once = false) => {
         const id = listenerId++;
         listeners.set(id, (...args: unknown[]) => {
@@ -274,6 +322,15 @@ export function installDevMocks() {
           fn(...args);
         });
         return id;
+      },
+      // Emit events to registered listeners
+      emit: (event: string, payload: unknown) => {
+        const handlers = eventListeners.get(event);
+        if (handlers) {
+          for (const handler of handlers.values()) {
+            handler({ event, payload });
+          }
+        }
       },
       // Event system mock
       registerListener: (cb: Function) => {

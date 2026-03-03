@@ -6,7 +6,7 @@ use crate::engine::agent::azure_auth::{self, AuthCodeFlowInit, DeviceCodeRespons
 use crate::engine::agent::llm::{
     ChatMessage, LlmClient, LlmConfig, LlmProvider, ModelInfo,
 };
-use crate::engine::agent::runner;
+use crate::engine::agent::runner::{self, AgentEvent};
 use crate::AppState;
 
 /// Serialisable provider config sent from the frontend.
@@ -69,13 +69,17 @@ pub async fn push_pending_chat_message(
 
 /// Agentic chat with function calling — the LLM can read/write project files.
 /// Returns the full conversation (including tool calls) and the final response.
+/// Emits `agent-event` events to the frontend for real-time streaming.
 #[tauri::command]
 pub async fn agent_chat_with_tools(
+    app: tauri::AppHandle,
     state: tauri::State<'_, AppState>,
     config: ProviderConfig,
     messages: Vec<ChatMessage>,
     agent_prompts: Option<std::collections::HashMap<String, String>>,
 ) -> Result<AgentChatResult, String> {
+    use tauri::Emitter;
+
     let project_root = {
         let guard = state.current_project.lock().unwrap();
         guard
@@ -91,7 +95,19 @@ pub async fn agent_chat_with_tools(
 
     let prompts = agent_prompts.unwrap_or_default();
     let client = LlmClient::new(config.into());
-    let result = runner::run(&client, messages, &project_root, &prompts, &pending).await?;
+
+    let emit_handle = app.clone();
+    let result = runner::run(
+        &client,
+        messages,
+        &project_root,
+        &prompts,
+        &pending,
+        move |event: AgentEvent| {
+            let _ = emit_handle.emit("agent-event", &event);
+        },
+    )
+    .await?;
 
     Ok(AgentChatResult {
         messages: result.messages,
