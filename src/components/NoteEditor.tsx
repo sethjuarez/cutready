@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { useAppStore } from "../stores/appStore";
 import { MarkdownEditor } from "./MarkdownEditor";
 
@@ -10,6 +12,7 @@ export function NoteEditor() {
   const activeNotePath = useAppStore((s) => s.activeNotePath);
   const activeNoteContent = useAppStore((s) => s.activeNoteContent);
   const updateNote = useAppStore((s) => s.updateNote);
+  const [mode, setMode] = useState<"edit" | "preview">("edit");
 
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingContentRef = useRef<string | null>(null);
@@ -27,6 +30,11 @@ export function NoteEditor() {
     },
     [],
   );
+
+  // Reset to edit mode when switching notes
+  useEffect(() => {
+    setMode("edit");
+  }, [activeNotePath]);
 
   // Flush on unmount
   useEffect(() => {
@@ -56,19 +64,54 @@ export function NoteEditor() {
         </svg>
         <h1 className="text-lg font-semibold text-[var(--color-text)]">{displayTitle}</h1>
         <span className="text-[10px] text-[var(--color-text-secondary)] px-1.5 py-0.5 rounded bg-[var(--color-surface-alt)]">.md</span>
-      </div>
 
-      {/* Markdown editor */}
-      <div className="flex-1 overflow-auto px-6">
-        <div className="max-w-3xl mx-auto">
-          <MarkdownEditor
-            editorKey={activeNotePath}
-            value={activeNoteContent ?? ""}
-            onChange={handleChange}
-            placeholder="Write your notes here... (Markdown renders inline as you type)"
-          />
+        <div className="ml-auto flex items-center gap-0.5 bg-[var(--color-surface-alt)] rounded-lg p-0.5">
+          <button
+            onClick={() => setMode("edit")}
+            className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors ${
+              mode === "edit"
+                ? "bg-[var(--color-surface)] text-[var(--color-text)] shadow-sm"
+                : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"
+            }`}
+          >
+            Edit
+          </button>
+          <button
+            onClick={() => setMode("preview")}
+            className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors ${
+              mode === "preview"
+                ? "bg-[var(--color-surface)] text-[var(--color-text)] shadow-sm"
+                : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"
+            }`}
+          >
+            Preview
+          </button>
         </div>
       </div>
+
+      {/* Content */}
+      {mode === "edit" ? (
+        <div className="flex-1 overflow-auto px-6">
+          <div className="max-w-3xl mx-auto">
+            <MarkdownEditor
+              editorKey={activeNotePath}
+              value={activeNoteContent ?? ""}
+              onChange={handleChange}
+              placeholder="Write your notes here... (Markdown renders inline as you type)"
+            />
+          </div>
+        </div>
+      ) : (
+        <div className="flex-1 overflow-auto px-6 py-6">
+          <div className="max-w-3xl mx-auto prose-desc text-sm text-[var(--color-text)] leading-relaxed">
+            {activeNoteContent ? (
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{activeNoteContent}</ReactMarkdown>
+            ) : (
+              <p className="text-[var(--color-text-secondary)] italic">Nothing to preview</p>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
