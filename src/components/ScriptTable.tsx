@@ -608,40 +608,85 @@ function renderMarkdown(text: string): ReactNode {
   let i = 0;
   let bk = 0;
 
+  // Build a nested list structure from indented bullet/number lines
+  function parseList(startIdx: number, baseIndent: number, ordered: boolean): { node: ReactNode; nextIdx: number } {
+    const items: { text: string; children: ReactNode | null }[] = [];
+    let idx = startIdx;
+
+    while (idx < lines.length) {
+      const line = lines[idx];
+      const indentMatch = line.match(/^(\s*)/);
+      const indent = indentMatch ? indentMatch[1].length : 0;
+
+      // Check if this is a list item at our level
+      const bulletMatch = line.match(/^(\s*)[-*]\s(.*)/);
+      const numberMatch = line.match(/^(\s*)\d+\.\s(.*)/);
+      const match = ordered ? numberMatch : bulletMatch;
+
+      if (match && indent === baseIndent) {
+        items.push({ text: match[2], children: null });
+        idx++;
+
+        // Check for sub-list (indented further)
+        if (idx < lines.length) {
+          const nextIndentMatch = lines[idx].match(/^(\s*)/);
+          const nextIndent = nextIndentMatch ? nextIndentMatch[1].length : 0;
+          const nextIsBullet = /^\s*[-*]\s/.test(lines[idx]);
+          const nextIsNumber = /^\s*\d+\.\s/.test(lines[idx]);
+          if (nextIndent > baseIndent && (nextIsBullet || nextIsNumber)) {
+            const sub = parseList(idx, nextIndent, nextIsNumber);
+            items[items.length - 1].children = sub.node;
+            idx = sub.nextIdx;
+          }
+        }
+      } else if (indent > baseIndent && (bulletMatch || numberMatch)) {
+        // Deeper indent than expected — sub-list of the last item
+        const isSubOrdered = !!numberMatch;
+        const sub = parseList(idx, indent, isSubOrdered);
+        if (items.length > 0) {
+          items[items.length - 1].children = sub.node;
+        }
+        idx = sub.nextIdx;
+      } else {
+        break;
+      }
+    }
+
+    const ListTag = ordered ? "ol" : "ul";
+    const className = ordered ? "md-cell-ol" : "md-cell-ul";
+    const node = (
+      <ListTag key={bk++} className={className}>
+        {items.map((item, j) => (
+          <li key={j}>
+            {formatInline(item.text)}
+            {item.children}
+          </li>
+        ))}
+      </ListTag>
+    );
+    return { node, nextIdx: idx };
+  }
+
   while (i < lines.length) {
     const line = lines[i];
 
-    // Bullet list (- or *)
-    if (/^[-*]\s/.test(line)) {
-      const items: string[] = [];
-      while (i < lines.length && /^[-*]\s/.test(lines[i])) {
-        items.push(lines[i].replace(/^[-*]\s/, ""));
-        i++;
-      }
-      blocks.push(
-        <ul key={bk++} className="md-cell-ul">
-          {items.map((item, j) => (
-            <li key={j}>{formatInline(item)}</li>
-          ))}
-        </ul>,
-      );
+    // Bullet list (- or *) at any indent level
+    if (/^\s*[-*]\s/.test(line)) {
+      const indentMatch = line.match(/^(\s*)/);
+      const indent = indentMatch ? indentMatch[1].length : 0;
+      const result = parseList(i, indent, false);
+      blocks.push(result.node);
+      i = result.nextIdx;
       continue;
     }
 
     // Numbered list
-    if (/^\d+\.\s/.test(line)) {
-      const items: string[] = [];
-      while (i < lines.length && /^\d+\.\s/.test(lines[i])) {
-        items.push(lines[i].replace(/^\d+\.\s/, ""));
-        i++;
-      }
-      blocks.push(
-        <ol key={bk++} className="md-cell-ol">
-          {items.map((item, j) => (
-            <li key={j}>{formatInline(item)}</li>
-          ))}
-        </ol>,
-      );
+    if (/^\s*\d+\.\s/.test(line)) {
+      const indentMatch = line.match(/^(\s*)/);
+      const indent = indentMatch ? indentMatch[1].length : 0;
+      const result = parseList(i, indent, true);
+      blocks.push(result.node);
+      i = result.nextIdx;
       continue;
     }
 
