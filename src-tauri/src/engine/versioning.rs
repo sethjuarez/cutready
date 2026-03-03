@@ -909,8 +909,10 @@ fn build_tree_from_dir(
         let path = fs_entry.path();
         let name = fs_entry.file_name().to_string_lossy().to_string();
 
-        // Skip .git but include .cutready (contains screenshots, metadata)
-        if name == ".git" || (name.starts_with('.') && name != ".cutready") {
+        // Skip .git but include .cutready (screenshots, metadata) and .chats (chat sessions)
+        if name == ".git"
+            || (name.starts_with('.') && name != ".cutready" && name != ".chats")
+        {
             continue;
         }
 
@@ -958,8 +960,10 @@ fn clean_working_dir(project_dir: &Path) -> Result<(), VersioningError> {
     for entry in std::fs::read_dir(project_dir).map_err(|e| VersioningError::Io(e.to_string()))? {
         let entry = entry.map_err(|e| VersioningError::Io(e.to_string()))?;
         let name = entry.file_name().to_string_lossy().to_string();
-        // Skip .git but clean .cutready (contains screenshots, metadata)
-        if name == ".git" || (name.starts_with('.') && name != ".cutready") {
+        // Skip .git but clean .cutready (screenshots, metadata) and .chats (chat sessions)
+        if name == ".git"
+            || (name.starts_with('.') && name != ".cutready" && name != ".chats")
+        {
             continue;
         }
         let path = entry.path();

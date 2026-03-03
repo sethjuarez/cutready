@@ -3,6 +3,7 @@ import { useSettings, type AgentPreset } from "../hooks/useSettings";
 import { invoke } from "@tauri-apps/api/core";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
 import { BUILT_IN_AGENTS } from "./ChatPanel";
+import { ImageManagerTab } from "./ImageManagerTab";
 
 interface ModelInfo {
   id: string;
@@ -22,7 +23,7 @@ interface AuthCodeFlowInit {
   port: number;
 }
 
-type SettingsTab = "general" | "ai" | "agents" | "display";
+type SettingsTab = "general" | "ai" | "agents" | "display" | "images";
 
 const inputClass =
   "px-3 py-2 rounded-lg bg-[var(--color-surface-alt)] border border-[var(--color-border)] text-sm text-[var(--color-text)] placeholder:text-[var(--color-text-secondary)]/50 focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]/40";
@@ -132,6 +133,7 @@ export function SettingsPanel() {
         <button className={tabBtnClass(activeTab === "display")} onClick={() => setActiveTab("display")}>Display</button>
         <button className={tabBtnClass(activeTab === "ai")} onClick={() => setActiveTab("ai")}>AI Provider</button>
         <button className={tabBtnClass(activeTab === "agents")} onClick={() => setActiveTab("agents")}>Agents</button>
+        <button className={tabBtnClass(activeTab === "images")} onClick={() => setActiveTab("images")}>Images</button>
       </div>
 
       {/* Tab content */}
@@ -164,6 +166,9 @@ export function SettingsPanel() {
       )}
       {activeTab === "agents" && (
         <AgentsTab settings={settings} updateSetting={updateSetting} />
+      )}
+      {activeTab === "images" && (
+        <ImageManagerTab />
       )}
     </div>
   );

@@ -1,9 +1,9 @@
 /**
- * MarkdownEditor — reusable inline-styled CodeMirror markdown editor.
+ * MarkdownEditor — plain CodeMirror markdown editor with syntax highlighting.
  *
- * Renders markdown visually as you type: headers appear larger, bold is bold,
- * code gets backgrounds, blockquotes get accent borders — while keeping raw
- * markdown syntax visible (Typora-like experience).
+ * Shows raw markdown with light syntax coloring. The preview tab (in
+ * NoteEditor) handles rich rendering — keeping the editor simple and
+ * predictable, especially for tables and complex markdown.
  *
  * Uses the app's CSS variables for seamless light/dark mode support.
  */
@@ -11,9 +11,7 @@ import { useMemo } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { languages } from "@codemirror/language-data";
-import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { EditorView } from "@codemirror/view";
-import { tags } from "@lezer/highlight";
 import {
   clipboardHasHtml,
   htmlToMarkdown,
@@ -22,39 +20,11 @@ import {
 } from "../services/richPaste";
 import { invoke } from "@tauri-apps/api/core";
 
-/** Syntax highlighting style — applies inline styling to markdown tokens. */
-const markdownHighlightStyle = HighlightStyle.define([
-  // Headings
-  { tag: tags.heading1, fontSize: "1.5em", fontWeight: "700", lineHeight: "1.3" },
-  { tag: tags.heading2, fontSize: "1.3em", fontWeight: "600", lineHeight: "1.35" },
-  { tag: tags.heading3, fontSize: "1.15em", fontWeight: "600", lineHeight: "1.4" },
-  { tag: tags.heading4, fontSize: "1.05em", fontWeight: "600" },
-  { tag: tags.heading5, fontSize: "1em", fontWeight: "600" },
-  { tag: tags.heading6, fontSize: "0.95em", fontWeight: "600" },
-  // Inline formatting
-  { tag: tags.strong, fontWeight: "700" },
-  { tag: tags.emphasis, fontStyle: "italic" },
-  { tag: tags.strikethrough, textDecoration: "line-through", color: "var(--color-text-secondary)" },
-  // Links
-  { tag: tags.link, color: "var(--color-accent)", textDecoration: "underline" },
-  { tag: tags.url, color: "var(--color-text-secondary)" },
-  // Code
-  { tag: tags.monospace, fontFamily: '"Geist Mono", "Cascadia Code", "Fira Code", ui-monospace, monospace', fontSize: "0.85em", color: "var(--color-accent)" },
-  // Quotes
-  { tag: tags.quote, color: "var(--color-text-secondary)", fontStyle: "italic" },
-  // Meta/markup characters (#, *, >, ```, etc.)
-  { tag: tags.processingInstruction, color: "var(--color-text-secondary)" },
-  { tag: tags.meta, color: "var(--color-text-secondary)" },
-  // Content/keywords
-  { tag: tags.contentSeparator, color: "var(--color-border)" },
-  { tag: tags.labelName, color: "var(--color-accent)" },
-]);
-
 /** Editor chrome theme — cursor, selection, gutters, layout. */
 const editorTheme = EditorView.theme({
   "&": {
-    fontSize: "0.9rem",
-    fontFamily: '"Geist Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif',
+    fontSize: "0.85rem",
+    fontFamily: '"Geist Mono", "Cascadia Code", "Fira Code", ui-monospace, monospace',
     backgroundColor: "transparent",
     color: "var(--color-text)",
   },
@@ -170,7 +140,6 @@ function richPasteExtension(saveImages: boolean) {
 export function MarkdownEditor({ value, onChange, placeholder, editorKey, saveImages = true }: MarkdownEditorProps) {
   const extensions = useMemo(() => [
     markdown({ base: markdownLanguage, codeLanguages: languages }),
-    syntaxHighlighting(markdownHighlightStyle),
     EditorView.lineWrapping,
     editorTheme,
     richPasteExtension(saveImages),

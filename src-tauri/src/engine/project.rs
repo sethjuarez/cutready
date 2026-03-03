@@ -316,12 +316,137 @@ pub fn write_note(path: &Path, content: &str) -> Result<(), ProjectError> {
     std::fs::write(path, content).map_err(|e| ProjectError::Io(e.to_string()))
 }
 
-/// Delete a note file and auto-commit.
-pub fn delete_note(path: &Path, _project_root: &Path) -> Result<(), ProjectError> {
-    if path.exists() {
-        std::fs::remove_file(path).map_err(|e| ProjectError::Io(e.to_string()))?;
+/// Delete a note file and clean up any images that become orphaned.
+///
+/// Parses the note's markdown for `![...](path)` image references in
+/// `.cutready/screenshots/`. If no other note references the same image,
+/// the image file is deleted to prevent orphaned files accumulating.
+pub fn delete_note(path: &Path, project_root: &Path) -> Result<(), ProjectError> {
+    if !path.exists() {
+        return Ok(());
     }
+
+    // Read the note to find image references before deleting
+    let content = std::fs::read_to_string(path).unwrap_or_default();
+    let images_in_note = extract_screenshot_refs(&content);
+
+    // Delete the note file
+    std::fs::remove_file(path).map_err(|e| ProjectError::Io(e.to_string()))?;
+
+    // If the note had no screenshot references, we're done
+    if images_in_note.is_empty() {
+        return Ok(());
+    }
+
+    // Scan all remaining notes for image references
+    let mut all_referenced = std::collections::HashSet::new();
+    let _ = scan_files_recursive(project_root, project_root, "md", &mut |_rel, abs| {
+        if abs != path {
+            if let Ok(other_content) = std::fs::read_to_string(abs) {
+                for img in extract_screenshot_refs(&other_content) {
+                    all_referenced.insert(img);
+                }
+            }
+        }
+    });
+
+    // Delete images only referenced by the deleted note
+    for img_path in &images_in_note {
+        if !all_referenced.contains(img_path) {
+            let abs_img = project_root.join(img_path);
+            if abs_img.exists() {
+                let _ = std::fs::remove_file(&abs_img);
+            }
+        }
+    }
+
     Ok(())
+}
+
+/// Extract `.cutready/screenshots/...` image paths from markdown content.
+/// Matches `![...](path)` where path contains `.cutready/screenshots/`.
+fn extract_screenshot_refs(content: &str) -> Vec<String> {
+    let mut refs = Vec::new();
+    // Match markdown image syntax: ![alt](path)
+    let mut rest = content;
+    while let Some(pos) = rest.find("](") {
+        let after = &rest[pos + 2..];
+        if let Some(end) = after.find(')') {
+            let img_path = after[..end].trim();
+            if img_path.contains(".cutready/screenshots/") {
+                // Normalize to forward slashes
+                refs.push(img_path.replace('\\', "/"));
+            }
+        }
+        rest = &rest[pos + 2..];
+    }
+    refs
+}
+
+/// List all images in .cutready/screenshots/ with their reference info.
+///
+/// For each image, scans all .md notes to find which ones reference it.
+pub fn list_images_with_refs(project_root: &Path) -> Result<Vec<ImageRefInfo>, ProjectError> {
+    let ss_dir = project_root.join(".cutready").join("screenshots");
+    if !ss_dir.exists() {
+        return Ok(Vec::new());
+    }
+
+    // Collect all image files
+    let mut images: Vec<(String, u64)> = Vec::new();
+    for entry in std::fs::read_dir(&ss_dir).map_err(|e| ProjectError::Io(e.to_string()))? {
+        let entry = entry.map_err(|e| ProjectError::Io(e.to_string()))?;
+        let path = entry.path();
+        if path.is_file() {
+            let name = entry.file_name().to_string_lossy().to_string();
+            let rel = format!(".cutready/screenshots/{name}");
+            let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
+            images.push((rel, size));
+        }
+    }
+
+    if images.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    // Build a map of image path → list of notes that reference it
+    let mut ref_map: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
+    for (img, _) in &images {
+        ref_map.insert(img.clone(), Vec::new());
+    }
+
+    scan_files_recursive(project_root, project_root, "md", &mut |rel_path, abs_path| {
+        if let Ok(content) = std::fs::read_to_string(abs_path) {
+            let refs = extract_screenshot_refs(&content);
+            for img_ref in refs {
+                if let Some(referrers) = ref_map.get_mut(&img_ref) {
+                    referrers.push(rel_path.to_string());
+                }
+            }
+        }
+    })?;
+
+    let mut result: Vec<ImageRefInfo> = images
+        .into_iter()
+        .map(|(path, size)| {
+            let referenced_by = ref_map.remove(&path).unwrap_or_default();
+            ImageRefInfo {
+                path,
+                size,
+                referenced_by,
+            }
+        })
+        .collect();
+
+    result.sort_by(|a, b| a.path.cmp(&b.path));
+    Ok(result)
+}
+
+/// Image reference info returned by list_images_with_refs.
+pub struct ImageRefInfo {
+    pub path: String,
+    pub size: u64,
+    pub referenced_by: Vec<String>,
 }
 
 /// Check if a sketch file exists given a relative path from project root.
@@ -714,5 +839,90 @@ mod tests {
 
         #[cfg(not(target_os = "windows"))]
         assert!(safe_resolve(root, "/etc/passwd").is_err());
+    }
+
+    // ── extract_screenshot_refs tests ─────────────────────────
+
+    #[test]
+    fn extract_refs_finds_screenshot_paths() {
+        let md = "Some text\n![screenshot](.cutready/screenshots/pasted-123.png)\nMore text";
+        let refs = extract_screenshot_refs(md);
+        assert_eq!(refs, vec![".cutready/screenshots/pasted-123.png"]);
+    }
+
+    #[test]
+    fn extract_refs_finds_multiple() {
+        let md = "![a](.cutready/screenshots/a.png) and ![b](.cutready/screenshots/b.jpg)";
+        let refs = extract_screenshot_refs(md);
+        assert_eq!(refs.len(), 2);
+    }
+
+    #[test]
+    fn extract_refs_ignores_non_screenshot_images() {
+        let md = "![logo](assets/logo.png)";
+        let refs = extract_screenshot_refs(md);
+        assert!(refs.is_empty());
+    }
+
+    #[test]
+    fn extract_refs_empty_content() {
+        assert!(extract_screenshot_refs("").is_empty());
+        assert!(extract_screenshot_refs("no images here").is_empty());
+    }
+
+    // ── delete_note with image cleanup tests ──────────────────
+
+    #[test]
+    fn delete_note_removes_orphaned_images() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+
+        // Create screenshots dir and an image
+        let ss_dir = root.join(".cutready").join("screenshots");
+        std::fs::create_dir_all(&ss_dir).unwrap();
+        let img = ss_dir.join("pasted-123.png");
+        std::fs::write(&img, b"fake image").unwrap();
+
+        // Create a note referencing the image
+        let note = root.join("test.md");
+        std::fs::write(&note, "![screenshot](.cutready/screenshots/pasted-123.png)").unwrap();
+
+        delete_note(&note, root).unwrap();
+        assert!(!note.exists(), "note should be deleted");
+        assert!(!img.exists(), "orphaned image should be deleted");
+    }
+
+    #[test]
+    fn delete_note_keeps_shared_images() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+
+        // Create screenshots dir and an image
+        let ss_dir = root.join(".cutready").join("screenshots");
+        std::fs::create_dir_all(&ss_dir).unwrap();
+        let img = ss_dir.join("shared.png");
+        std::fs::write(&img, b"fake image").unwrap();
+
+        // Two notes reference the same image
+        let note1 = root.join("note1.md");
+        let note2 = root.join("note2.md");
+        std::fs::write(&note1, "![a](.cutready/screenshots/shared.png)").unwrap();
+        std::fs::write(&note2, "![b](.cutready/screenshots/shared.png)").unwrap();
+
+        delete_note(&note1, root).unwrap();
+        assert!(!note1.exists(), "note1 should be deleted");
+        assert!(img.exists(), "shared image should be kept (note2 still references it)");
+    }
+
+    #[test]
+    fn delete_note_no_images_works() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+
+        let note = root.join("simple.md");
+        std::fs::write(&note, "Just some text").unwrap();
+
+        delete_note(&note, root).unwrap();
+        assert!(!note.exists());
     }
 }

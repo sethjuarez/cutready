@@ -102,6 +102,53 @@ pub async fn save_pasted_image(
     Ok(format!(".cutready/screenshots/{filename}"))
 }
 
+/// Image info returned by the image manager.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImageInfo {
+    /// Relative path (e.g. ".cutready/screenshots/pasted-123.png")
+    pub path: String,
+    /// File size in bytes
+    pub size: u64,
+    /// Which note files reference this image (relative paths)
+    pub referenced_by: Vec<String>,
+}
+
+/// List all images in the project's screenshots directory with reference info.
+#[tauri::command]
+pub async fn list_project_images(state: State<'_, AppState>) -> Result<Vec<ImageInfo>, String> {
+    let root = project_root(&state)?;
+    let refs = project::list_images_with_refs(&root).map_err(|e| e.to_string())?;
+    Ok(refs
+        .into_iter()
+        .map(|r| ImageInfo {
+            path: r.path,
+            size: r.size,
+            referenced_by: r.referenced_by,
+        })
+        .collect())
+}
+
+/// Delete a specific image file from the project.
+#[tauri::command]
+pub async fn delete_project_image(
+    relative_path: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let root = project_root(&state)?;
+    let abs_path = project::safe_resolve(&root, &relative_path).map_err(|e| e.to_string())?;
+
+    if !abs_path.exists() {
+        return Err(format!("Image not found: {relative_path}"));
+    }
+    // Only allow deleting from .cutready/screenshots
+    if !relative_path.starts_with(".cutready/screenshots/") {
+        return Err("Can only delete images from .cutready/screenshots/".into());
+    }
+    std::fs::remove_file(&abs_path).map_err(|e| format!("Failed to delete image: {e}"))?;
+    Ok(())
+}
+
 fn base64_decode(input: &str) -> Result<Vec<u8>, String> {
     use base64::Engine;
     base64::engine::general_purpose::STANDARD
