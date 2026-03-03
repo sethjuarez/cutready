@@ -135,8 +135,7 @@ function ActivityRow({ entry }: { entry: ActivityEntry }) {
   const colorCls =
     entry.level === "error" ? "text-red-400"
     : entry.level === "warn" ? "text-amber-400"
-    : entry.level === "success" ? "text-emerald-400"
-    : "text-[var(--color-text-secondary)]";
+    : "text-[var(--color-text)]";
 
   return (
     <div className="flex items-start gap-1.5 py-0.5">
