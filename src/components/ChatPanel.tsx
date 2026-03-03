@@ -617,8 +617,8 @@ Keep responses concise and actionable. Use markdown formatting.`;
           <textarea
             ref={inputRef}
             className="w-full resize-none bg-transparent px-2.5 py-2 text-[13px] text-[var(--color-text)] placeholder-[var(--color-text-secondary)]/60 focus:outline-none leading-[1.5]"
-            style={{ maxHeight: 200 }}
-            rows={1}
+            style={{ maxHeight: 300 }}
+            rows={3}
             placeholder="Ask about your demo plan… (@ to reference files)"
             value={input}
             onChange={handleInputChange}
