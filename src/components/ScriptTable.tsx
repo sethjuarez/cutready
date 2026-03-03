@@ -349,7 +349,7 @@ function SortableRow({
           />
           {onSparkle && !readOnly && (
             <SparkleButton onClick={() => onSparkle(
-              `Improve the narrative for row ${idx + 1} of sketch "${sketchPath ?? "current"}". Current text: "${row.narrative}". Make it more engaging and natural for spoken delivery.`
+              `Improve the narrative for row ${idx + 1} of sketch "${sketchPath ?? "current"}". Current text: "${row.narrative}". Make it more engaging and natural for spoken delivery. Use update_planning_row to change only this row.`
             )} />
           )}
         </div>
@@ -365,7 +365,7 @@ function SortableRow({
           />
           {onSparkle && !readOnly && (
             <SparkleButton onClick={() => onSparkle(
-              `Improve the demo actions for row ${idx + 1} of sketch "${sketchPath ?? "current"}". Current text: "${row.demo_actions}". Make the steps clearer and more specific.`
+              `Improve the demo actions for row ${idx + 1} of sketch "${sketchPath ?? "current"}". Current text: "${row.demo_actions}". Make the steps clearer and more specific. Use update_planning_row to change only this row.`
             )} />
           )}
         </div>

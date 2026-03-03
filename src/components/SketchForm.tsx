@@ -205,7 +205,7 @@ export function SketchForm() {
             {localTitle && (
               <button
                 onClick={() => sendChatPrompt(
-                  `Improve the title of sketch "${activeSketchPath ?? "current"}". Current title: "${localTitle}". Suggest a more compelling, concise title and apply it using set_planning_rows.`
+                  `Improve the title of sketch "${activeSketchPath ?? "current"}". Current title: "${localTitle}". Suggest a more compelling, concise title. IMPORTANT: Only update the title — do NOT change the description or any rows. Use set_planning_rows with the improved title but keep the existing description and all rows exactly as they are.`
                 )}
                 className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover/title:opacity-100 p-1 rounded text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 transition-all"
                 title="Improve title with AI"
@@ -287,7 +287,7 @@ export function SketchForm() {
           {typeof activeSketch.description === "string" && activeSketch.description && (
             <button
               onClick={() => sendChatPrompt(
-                `Improve the description of sketch "${activeSketchPath ?? "current"}". Current description: "${activeSketch.description}". Make it clearer and more informative, then apply using set_planning_rows.`
+                `Improve the description of sketch "${activeSketchPath ?? "current"}". Current description: "${activeSketch.description}". Make it clearer and more informative. IMPORTANT: Only update the description — do NOT change the title or any rows. Use set_planning_rows with the improved description but keep the existing title and all rows exactly as they are.`
               )}
               className="absolute right-2 top-2 opacity-0 group-hover/desc:opacity-100 p-1 rounded text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 transition-all"
               title="Improve description with AI"
