@@ -122,7 +122,7 @@ interface AppStoreState {
   /** Last chat error message. */
   chatError: string | null;
   /** A prompt queued from outside the chat (e.g. sparkle buttons). ChatPanel picks this up and sends it. */
-  pendingChatPrompt: string | null;
+  pendingChatPrompt: { text: string; silent?: boolean } | null;
   /** Activity log entries for the output panel. */
   activityLog: ActivityEntry[];
 
@@ -282,7 +282,7 @@ interface AppStoreState {
   /** Set chat error. */
   setChatError: (error: string | null) => void;
   /** Queue a prompt to be sent by the chat panel. */
-  sendChatPrompt: (prompt: string) => void;
+  sendChatPrompt: (prompt: string, opts?: { silent?: boolean }) => void;
   /** Add entries to activity log. */
   addActivityEntries: (entries: ActivityEntry[]) => void;
   /** Clear activity log. */
@@ -993,7 +993,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
 
   setChatLoading: (loading) => set({ chatLoading: loading }),
   setChatError: (error) => set({ chatError: error }),
-  sendChatPrompt: (prompt) => set({ pendingChatPrompt: prompt }),
+  sendChatPrompt: (prompt, opts) => set({ pendingChatPrompt: { text: prompt, silent: opts?.silent } }),
   addActivityEntries: (entries) => set((s) => ({ activityLog: [...s.activityLog, ...entries] })),
   clearActivityLog: () => set({ activityLog: [] }),
 

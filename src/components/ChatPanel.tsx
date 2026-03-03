@@ -523,9 +523,10 @@ function ChatTab() {
     return prompt;
   }, [settings.aiSelectedAgent, settings.aiAgents, activeSketchPath]);
 
-  const handleSend = useCallback(async (overrideText?: string) => {
+  const handleSend = useCallback(async (overrideText?: string, opts?: { silent?: boolean }) => {
     const text = (overrideText ?? input).trim();
     if (!text) return;
+    const silent = opts?.silent ?? false;
 
     setInput("");
     setShowAutocomplete(false);
@@ -575,7 +576,10 @@ function ChatTab() {
 
     const userMsg: ChatMessage = { role: "user", content: userContent };
     const newMessages = [...messages, userMsg];
-    setChatMessages(newMessages);
+    // For silent sends, don't update the displayed chat with the user message
+    if (!silent) {
+      setChatMessages(newMessages);
+    }
     setReferences([]);
 
     // Build full conversation with system prompt — use llmContent for last message so LLM gets web content
@@ -596,7 +600,7 @@ function ChatTab() {
       id: crypto.randomUUID(),
       timestamp: new Date(),
       source: "chat",
-      content: `Sent: "${userContent}"`,
+      content: silent ? `✨ ${userContent.slice(0, 60)}…` : `Sent: "${userContent}"`,
       level: "info",
     }]);
     try {
@@ -657,7 +661,9 @@ function ChatTab() {
             return { ...m, content: userContent };
           }
           return m;
-        });
+        })
+        // For silent sends, remove the triggering user message from display
+        .filter((m) => !(silent && m.role === "user" && (m.content === userContent || m.content === llmContent)));
 
       // Log response to activity
       const toolCallCount = backendMessages.filter(
@@ -683,8 +689,8 @@ function ChatTab() {
         content: errMsg,
         level: "error",
       }]);
-      // Keep user message visible
-      setChatMessages(newMessages);
+      // Keep user message visible (unless silent)
+      if (!silent) setChatMessages(newMessages);
     } finally {
       setChatLoading(false);
       setStreamingText("");
@@ -698,9 +704,9 @@ function ChatTab() {
   handleSendRef.current = handleSend;
   useEffect(() => {
     if (pendingChatPrompt) {
-      const prompt = pendingChatPrompt;
+      const { text, silent } = pendingChatPrompt;
       useAppStore.setState({ pendingChatPrompt: null });
-      handleSendRef.current(prompt);
+      handleSendRef.current(text, { silent });
     }
   }, [pendingChatPrompt]);
 
