@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAppStore } from "../stores/appStore";
+import { useSettings } from "../hooks/useSettings";
 import { HomePanel } from "./HomePanel";
 import { RecordingPanel } from "./RecordingPanel";
 import { ScriptEditorPanel } from "./ScriptEditorPanel";
@@ -123,7 +124,25 @@ export function AppLayout() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [toggleSidebar, toggleOutput]);
 
-  const handleExecuteCommand = useCallback((commandId: string) => {
+  // Apply display settings as CSS variables
+  const { settings: displaySettings } = useSettings();
+  useEffect(() => {
+    const root = document.documentElement;
+    root.style.setProperty("--editor-font-size", `${displaySettings.displayFontSize}px`);
+    root.style.setProperty("--chat-font-size", `${displaySettings.displayChatFontSize}px`);
+    const densityMap: Record<string, { padding: string; lineHeight: string }> = {
+      compact: { padding: "0.25rem 0.5rem", lineHeight: "1.4" },
+      comfortable: { padding: "0.5rem 0.75rem", lineHeight: "1.5" },
+      spacious: { padding: "0.75rem 1rem", lineHeight: "1.75" },
+    };
+    const density = densityMap[displaySettings.displayRowDensity] ?? densityMap.comfortable;
+    root.style.setProperty("--row-padding", density.padding);
+    root.style.setProperty("--row-line-height", density.lineHeight);
+    root.style.setProperty("--row-color-palette", displaySettings.displayRowColors);
+    root.style.setProperty("--editor-max-width", displaySettings.displayEditorWidth === "full" ? "100%" : "56rem");
+  }, [displaySettings]);
+
+  const handleExecuteCommand= useCallback((commandId: string) => {
     commandRegistry.execute(commandId);
     setRecentCommands((prev) => [
       commandId,

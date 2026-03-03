@@ -538,12 +538,25 @@ export function StoryboardList() {
 
       <div className="flex-1 overflow-y-auto py-1">
         {orderedNotes.length === 0 && !isCreatingNote ? (
-          <button
-            onClick={() => setIsCreatingNote(true)}
-            className="w-full px-3 py-4 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] transition-colors"
-          >
-            + New note
-          </button>
+          <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
+            <p className="text-xs text-[var(--color-text-secondary)] mb-3 leading-relaxed">
+              Import a document or create a new note
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setIsCreatingNote(true)}
+                className="px-3 py-1.5 text-[11px] rounded-lg border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:border-[var(--color-accent)] transition-colors"
+              >
+                + New note
+              </button>
+              <button
+                onClick={handleImportNote}
+                className="px-3 py-1.5 text-[11px] rounded-lg border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:border-[var(--color-accent)] transition-colors"
+              >
+                Import
+              </button>
+            </div>
+          </div>
         ) : (
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd("notes")}>
             <SortableContext items={orderedNotes.map((n) => n.path)} strategy={verticalListSortingStrategy}>

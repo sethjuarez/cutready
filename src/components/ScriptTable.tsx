@@ -17,6 +17,28 @@ import { CSS } from "@dnd-kit/utilities";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import type { PlanningRow } from "../types/sketch";
 
+/* Row accent colors — thin left stripe for visual anchoring */
+const ROW_PALETTES: Record<string, string[]> = {
+  vivid: [
+    "#60a5fa", "#34d399", "#fbbf24", "#a78bfa",
+    "#fb7185", "#22d3ee", "#f97316", "#a3e635",
+  ],
+  pastel: [
+    "#93c5fd", "#6ee7b7", "#fde68a", "#c4b5fd",
+    "#fda4af", "#67e8f9", "#fdba74", "#d9f99d",
+  ],
+  neutral: [
+    "#9ca3af", "#9ca3af", "#9ca3af", "#9ca3af",
+    "#9ca3af", "#9ca3af", "#9ca3af", "#9ca3af",
+  ],
+};
+
+function getRowColor(idx: number): string {
+  const palette = getComputedStyle(document.documentElement).getPropertyValue("--row-color-palette").trim() || "vivid";
+  const colors = ROW_PALETTES[palette] ?? ROW_PALETTES.vivid;
+  return colors[idx % colors.length];
+}
+
 function emptyRow(): PlanningRow {
   return { time: "", narrative: "", demo_actions: "", screenshot: null };
 }
@@ -132,7 +154,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
   if (rows.length === 0) return null;
 
   return (
-    <div className={`script-table-wrapper rounded-xl border border-[var(--color-border)] overflow-hidden${readOnly ? "" : " my-4"}`}>
+    <div className={`script-table-wrapper overflow-hidden${readOnly ? "" : " my-4"}`}>
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
@@ -140,7 +162,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
         onDragEnd={handleDragEnd}
       >
         <SortableContext items={rowIds} strategy={verticalListSortingStrategy}>
-          <table className="w-full border-collapse" style={{ tableLayout: "fixed" }}>
+          <table className="w-full" style={{ tableLayout: "fixed", borderSpacing: "0 4px", borderCollapse: "separate" }}>
             <colgroup>
               {!readOnly && <col style={{ width: 28 }} />}
               <col style={{ width: 54 }} />
@@ -150,7 +172,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
               {!readOnly && <col style={{ width: 36 }} />}
             </colgroup>
             <thead>
-              <tr className="bg-[var(--color-surface-alt)]">
+              <tr>
                 {!readOnly && <th className="script-table-th" />}
                 <th className="script-table-th">Time</th>
                 <th className="script-table-th">Narrative</th>
@@ -184,10 +206,10 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
         </SortableContext>
         <DragOverlay>
           {activeIdx >= 0 ? (
-            <table className="w-full border-collapse">
+            <table className="w-full" style={{ borderCollapse: "separate" }}>
               <tbody>
-                <tr className="bg-[var(--color-surface-alt)] border border-[var(--color-accent)] shadow-lg">
-                  {!readOnly && <td className="p-1 w-7" />}
+                <tr className="card-row shadow-lg" style={{ backgroundColor: "var(--color-surface-alt)" }}>
+                  {!readOnly && <td className="p-1 w-7" style={{ borderLeft: `3px solid ${getRowColor(activeIdx)}` }} />}
                   <td className="script-table-td text-xs" style={{ width: 50 }}>{rows[activeIdx].time}</td>
                   <td className="script-table-td text-xs">
                     {rows[activeIdx].narrative || "—"}
@@ -279,11 +301,14 @@ function SortableRow({
     opacity: isDragging ? 0.3 : 1,
   };
 
+  const accentColor = getRowColor(idx);
+  const rowBg = idx % 2 === 0 ? "var(--color-surface-alt)" : "var(--color-surface-inset)";
+
   return (
     <tr
       ref={setNodeRef}
-      style={style}
-      className={`group border-t border-[var(--color-border)] ${isSorting ? "" : "transition-colors"}`}
+      style={{ ...style, backgroundColor: rowBg }}
+      className={`card-row group hover:shadow-sm ${isSorting ? "" : "transition-all"}`}
       onKeyDown={(e) => {
         if (readOnly) return;
         // Ctrl+Enter → add row below
@@ -310,13 +335,15 @@ function SortableRow({
       }}
     >
       {!readOnly && (
-        <td className="p-0 align-middle">
+        <td className="p-0 align-middle" style={{ borderLeft: `3px solid ${accentColor}` }}>
           <div
-            className="cursor-grab active:cursor-grabbing opacity-30 group-hover:opacity-100 transition-opacity text-[var(--color-text-secondary)] hover:text-[var(--color-text)] flex items-center justify-center h-full"
+            className="cursor-grab active:cursor-grabbing text-[var(--color-text-secondary)] flex items-center justify-center h-full"
             {...attributes}
             {...listeners}
           >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+            {/* Row number (visible by default), drag icon on hover */}
+            <span className="text-[0.625rem] font-medium opacity-40 group-hover:hidden">{idx + 1}</span>
+            <svg className="hidden group-hover:block opacity-50 hover:opacity-100 transition-opacity" width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
               <circle cx="9" cy="5" r="1.5" />
               <circle cx="15" cy="5" r="1.5" />
               <circle cx="9" cy="12" r="1.5" />
@@ -327,7 +354,7 @@ function SortableRow({
           </div>
         </td>
       )}
-      <td className="py-2 px-1.5 align-top text-[0.8125rem]">
+      <td className="py-2 px-1.5 align-top text-[0.8125rem]" style={readOnly ? { borderLeft: `3px solid ${accentColor}` } : undefined}>
         <div data-tab-cell={idx * 3}>
           <LocalInput
             value={row.time}
@@ -698,11 +725,12 @@ function MarkdownCell({
   // Preview mode — use localValue to preserve edits before debounce saves
   if (readOnly || !isEditing) {
     const rendered = renderMarkdown(localValue);
+    const hasContent = !!localValue?.trim();
     return (
       <div
         data-cell
         tabIndex={readOnly ? undefined : 0}
-        className={`md-cell-preview min-h-[1.5rem] rounded outline-none transition-colors ${!readOnly ? "cursor-text focus:ring-1 focus:ring-[var(--color-accent)]/40" : ""}`}
+        className={`md-cell-preview min-h-[1.5rem] rounded outline-none transition-colors ${!readOnly ? "cursor-text focus:ring-1 focus:ring-[var(--color-accent)]/40" : ""} ${hasContent ? "md-cell-clamp" : ""}`}
         onClick={() => {
           if (!readOnly) setIsEditing(true);
         }}

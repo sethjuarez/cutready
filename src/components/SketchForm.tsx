@@ -36,6 +36,7 @@ export function SketchForm() {
   const [showPreview, setShowPreview] = useState(false);
   const [showMonitorPicker, setShowMonitorPicker] = useState(false);
   const [availableMonitors, setAvailableMonitors] = useState<MonitorInfo[]>([]);
+  const [descExpanded, setDescExpanded] = useState(false);
   const titleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const rowsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -178,7 +179,7 @@ export function SketchForm() {
 
   return (
     <div className="flex-1 overflow-y-auto">
-      <div className="max-w-4xl mx-auto px-6 py-8">
+      <div className="mx-auto px-6 py-8" style={{ maxWidth: "var(--editor-max-width, 56rem)" }}>
         {/* Back button — only show when inside a storyboard */}
         {activeStoryboard && (
           <button
@@ -191,6 +192,13 @@ export function SketchForm() {
             Back to storyboard
           </button>
         )}
+
+        {/* Details section */}
+        <div className="mb-2">
+          <h3 className="text-xs font-medium text-[var(--color-text-secondary)] uppercase tracking-wider mb-3">
+            Details
+          </h3>
+        </div>
 
         {/* Title + Preview button */}
         <div className="flex items-center gap-3 mb-4">
@@ -270,34 +278,55 @@ export function SketchForm() {
           )}
         </div>
 
-        {/* Description */}
-        <div className="relative group/desc mb-8">
-          <textarea
-            defaultValue={
-              typeof activeSketch.description === "string"
-                ? activeSketch.description
-                : ""
-            }
-            onChange={(e) => {
-              updateSketch({ description: e.target.value });
-            }}
-            placeholder="Describe what this sketch covers..."
-            rows={3}
-            className="w-full text-sm bg-transparent text-[var(--color-text)] placeholder:text-[var(--color-text-secondary)]/40 outline-none border border-[var(--color-border)] rounded-lg px-3 py-2 resize-none focus:ring-1 focus:ring-[var(--color-accent)]/40 transition-colors"
-          />
-          {typeof activeSketch.description === "string" && activeSketch.description && (
-            <button
-              onClick={() => sendChatPrompt(
-                `Improve the description of sketch "${activeSketchPath ?? "current"}". Current description: "${activeSketch.description}". Make it clearer and more informative. IMPORTANT: Only update the description — do NOT change the title or any rows. Use set_planning_rows with the improved description but keep the existing title and all rows exactly as they are.`,
-                { silent: true }
-              )}
-              className="absolute right-2 top-2 opacity-0 group-hover/desc:opacity-100 p-1 rounded text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 transition-all"
-              title="Improve description with AI"
+        {/* Description (collapsible) */}
+        <div className="mb-8">
+          <button
+            onClick={() => setDescExpanded(!descExpanded)}
+            className="flex items-center gap-1.5 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors mb-2"
+          >
+            <svg
+              width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+              className={`transition-transform ${descExpanded ? "rotate-90" : ""}`}
             >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12 2l2.09 6.26L20.18 10l-6.09 1.74L12 18l-2.09-6.26L3.82 10l6.09-1.74L12 2z" />
-              </svg>
-            </button>
+              <polyline points="9 6 15 12 9 18" />
+            </svg>
+            Description
+            {!descExpanded && typeof activeSketch.description === "string" && activeSketch.description && (
+              <span className="text-[var(--color-text-secondary)]/60 truncate max-w-[300px] font-normal">
+                — {activeSketch.description.split("\n")[0]}
+              </span>
+            )}
+          </button>
+          {descExpanded && (
+            <div className="relative group/desc">
+              <textarea
+                defaultValue={
+                  typeof activeSketch.description === "string"
+                    ? activeSketch.description
+                    : ""
+                }
+                onChange={(e) => {
+                  updateSketch({ description: e.target.value });
+                }}
+                placeholder="Describe what this sketch covers..."
+                rows={3}
+                className="w-full text-sm bg-transparent text-[var(--color-text)] placeholder:text-[var(--color-text-secondary)]/40 outline-none border border-[var(--color-border)] rounded-lg px-3 py-2 resize-none focus:ring-1 focus:ring-[var(--color-accent)]/40 transition-colors"
+              />
+              {typeof activeSketch.description === "string" && activeSketch.description && (
+                <button
+                  onClick={() => sendChatPrompt(
+                    `Improve the description of sketch "${activeSketchPath ?? "current"}". Current description: "${activeSketch.description}". Make it clearer and more informative. IMPORTANT: Only update the description — do NOT change the title or any rows. Use set_planning_rows with the improved description but keep the existing title and all rows exactly as they are.`,
+                    { silent: true }
+                  )}
+                  className="absolute right-2 top-2 opacity-0 group-hover/desc:opacity-100 p-1 rounded text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 transition-all"
+                  title="Improve description with AI"
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 2l2.09 6.26L20.18 10l-6.09 1.74L12 18l-2.09-6.26L3.82 10l6.09-1.74L12 2z" />
+                  </svg>
+                </button>
+              )}
+            </div>
           )}
         </div>
 

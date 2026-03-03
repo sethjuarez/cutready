@@ -869,7 +869,7 @@ function ChatTab() {
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto min-h-0 py-2">
+      <div className="flex-1 overflow-y-auto min-h-0 py-2" style={{ fontSize: "var(--chat-font-size, 13px)" }}>
         {messages.length === 0 && !loading && (
           <div className="flex flex-col items-center justify-center h-full text-center px-4">
             <div className="w-10 h-10 rounded-full bg-[var(--color-accent)]/10 flex items-center justify-center mb-3 text-[var(--color-accent)]">
@@ -1316,8 +1316,8 @@ function WebRefChip({ url }: { url: string }) {
 function MessageRow({ message }: { message: ChatMessage }) {
   if (message.role === "user") {
     return (
-      <div className="px-3.5 py-2">
-        <div className="bg-[var(--color-surface-alt)] rounded-lg px-3 py-2 text-[13px] text-[var(--color-text)] whitespace-pre-wrap break-words leading-[1.6]">
+      <div className="px-3.5 py-2 flex justify-end">
+        <div className="bg-[var(--color-accent)]/15 rounded-xl rounded-br-sm px-3 py-2 text-[13px] text-[var(--color-text)] whitespace-pre-wrap break-words leading-[1.6] max-w-[85%]">
           <UserContent content={message.content || ""} />
         </div>
       </div>
@@ -1339,7 +1339,7 @@ function MessageRow({ message }: { message: ChatMessage }) {
   if (message.role === "assistant") {
     return (
       <div className="px-3.5 py-2">
-        <div className="text-[13px] text-[var(--color-text)] leading-[1.6]">
+        <div className="border-l-2 border-[var(--color-accent)]/30 pl-3 text-[13px] text-[var(--color-text)] leading-[1.6]">
           <MarkdownContent content={message.content || ""} />
         </div>
       </div>

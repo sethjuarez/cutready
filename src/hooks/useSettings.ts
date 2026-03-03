@@ -32,6 +32,17 @@ export interface AppSettings {
   aiSelectedAgent: string;
   /** User-created custom agents (name + prompt). */
   aiAgents: AgentPreset[];
+  /* ── Display settings ────────────────────────── */
+  /** Editor text size in px (13–18, default 14). */
+  displayFontSize: number;
+  /** Chat panel text size in px (13–18, default 14). */
+  displayChatFontSize: number;
+  /** Row density: "compact" | "comfortable" | "spacious" (default "comfortable"). */
+  displayRowDensity: string;
+  /** Row color palette: "neutral" | "pastel" | "vivid" (default "vivid"). */
+  displayRowColors: string;
+  /** Editor width: "centered" | "full" (default "centered"). */
+  displayEditorWidth: string;
   // Legacy fields (migrated on load)
   llmApiKey?: string;
   llmEndpoint?: string;
@@ -52,6 +63,11 @@ const defaultSettings: AppSettings = {
   audioDevice: "",
   aiSelectedAgent: "planner",
   aiAgents: [],
+  displayFontSize: 14,
+  displayChatFontSize: 14,
+  displayRowDensity: "comfortable",
+  displayRowColors: "vivid",
+  displayEditorWidth: "centered",
 };
 
 const STORE_PATH = "settings.json";

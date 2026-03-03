@@ -22,7 +22,7 @@ interface AuthCodeFlowInit {
   port: number;
 }
 
-type SettingsTab = "general" | "ai" | "agents";
+type SettingsTab = "general" | "ai" | "agents" | "display";
 
 const inputClass =
   "px-3 py-2 rounded-lg bg-[var(--color-surface-alt)] border border-[var(--color-border)] text-sm text-[var(--color-text)] placeholder:text-[var(--color-text-secondary)]/50 focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]/40";
@@ -129,6 +129,7 @@ export function SettingsPanel() {
       {/* Tab bar */}
       <div className="flex items-stretch border-b border-[var(--color-border)] mb-6">
         <button className={tabBtnClass(activeTab === "general")} onClick={() => setActiveTab("general")}>General</button>
+        <button className={tabBtnClass(activeTab === "display")} onClick={() => setActiveTab("display")}>Display</button>
         <button className={tabBtnClass(activeTab === "ai")} onClick={() => setActiveTab("ai")}>AI Provider</button>
         <button className={tabBtnClass(activeTab === "agents")} onClick={() => setActiveTab("agents")}>Agents</button>
       </div>
@@ -136,6 +137,9 @@ export function SettingsPanel() {
       {/* Tab content */}
       {activeTab === "general" && (
         <GeneralTab settings={settings} updateSetting={updateSetting} />
+      )}
+      {activeTab === "display" && (
+        <DisplayTab settings={settings} updateSetting={updateSetting} />
       )}
       {activeTab === "ai" && (
         <AIProviderTab
@@ -200,6 +204,117 @@ function GeneralTab({ settings, updateSetting }: {
           Device name for narration recording. Audio device enumeration will
           be available in a future update.
         </p>
+      </fieldset>
+    </div>
+  );
+}
+
+// ── Display Tab ──────────────────────────────────────────────────
+
+const fontSizes = [
+  { value: 13, label: "Small (13px)" },
+  { value: 14, label: "Medium (14px)" },
+  { value: 16, label: "Large (16px)" },
+  { value: 18, label: "XL (18px)" },
+];
+
+function DisplayTab({ settings, updateSetting }: {
+  settings: ReturnType<typeof useSettings>["settings"];
+  updateSetting: ReturnType<typeof useSettings>["updateSetting"];
+}) {
+  return (
+    <div className="flex flex-col gap-6">
+      {/* Editor text size */}
+      <fieldset className="flex flex-col gap-2">
+        <label className="text-sm font-medium">Editor Text Size</label>
+        <select
+          value={settings.displayFontSize}
+          onChange={(e) => updateSetting("displayFontSize", Number(e.target.value))}
+          className={inputClass}
+        >
+          {fontSizes.map((s) => (
+            <option key={s.value} value={s.value}>{s.label}</option>
+          ))}
+        </select>
+        <p className="text-xs text-[var(--color-text-secondary)]">Text size for the sketch editor and planning table.</p>
+      </fieldset>
+
+      {/* Chat text size */}
+      <fieldset className="flex flex-col gap-2">
+        <label className="text-sm font-medium">Chat Text Size</label>
+        <select
+          value={settings.displayChatFontSize}
+          onChange={(e) => updateSetting("displayChatFontSize", Number(e.target.value))}
+          className={inputClass}
+        >
+          {fontSizes.map((s) => (
+            <option key={s.value} value={s.value}>{s.label}</option>
+          ))}
+        </select>
+        <p className="text-xs text-[var(--color-text-secondary)]">Text size for the chat panel.</p>
+      </fieldset>
+
+      {/* Row density */}
+      <fieldset className="flex flex-col gap-2">
+        <label className="text-sm font-medium">Row Density</label>
+        <div className="flex gap-2">
+          {(["compact", "comfortable", "spacious"] as const).map((d) => (
+            <button
+              key={d}
+              onClick={() => updateSetting("displayRowDensity", d)}
+              className={`px-3 py-1.5 rounded-lg text-sm capitalize transition-colors border ${
+                settings.displayRowDensity === d
+                  ? "bg-[var(--color-accent)] text-white border-[var(--color-accent)]"
+                  : "bg-[var(--color-surface-alt)] border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"
+              }`}
+            >
+              {d}
+            </button>
+          ))}
+        </div>
+        <p className="text-xs text-[var(--color-text-secondary)]">Controls padding and line-height in planning table rows.</p>
+      </fieldset>
+
+      {/* Row colors */}
+      <fieldset className="flex flex-col gap-2">
+        <label className="text-sm font-medium">Row Color Palette</label>
+        <div className="flex gap-2">
+          {(["neutral", "pastel", "vivid"] as const).map((c) => (
+            <button
+              key={c}
+              onClick={() => updateSetting("displayRowColors", c)}
+              className={`px-3 py-1.5 rounded-lg text-sm capitalize transition-colors border ${
+                settings.displayRowColors === c
+                  ? "bg-[var(--color-accent)] text-white border-[var(--color-accent)]"
+                  : "bg-[var(--color-surface-alt)] border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"
+              }`}
+            >
+              {c}
+            </button>
+          ))}
+        </div>
+        <p className="text-xs text-[var(--color-text-secondary)]">Color intensity of the left stripe on planning rows.</p>
+      </fieldset>
+
+      {/* Editor width */}
+      <fieldset className="flex flex-col gap-2">
+        <label className="text-sm font-medium">Editor Width</label>
+        <div className="flex gap-2">
+          {(["centered", "full"] as const).map((w) => (
+            <button
+              key={w}
+              onClick={() => updateSetting("displayEditorWidth", w)}
+              className={`px-3 py-1.5 rounded-lg text-sm capitalize transition-colors border ${
+                settings.displayEditorWidth === w
+                  ? "bg-[var(--color-accent)] text-white border-[var(--color-accent)]"
+                  : "bg-[var(--color-surface-alt)] border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"
+              }`}
+            >
+              {w === "centered" ? "Centered (896px)" : "Full Width"}
+            </button>
+          ))}
+        </div>
+        <p className="text-xs text-[var(--color-text-secondary)]">Whether the sketch editor uses a max-width or expands to fill available space.</p>
       </fieldset>
     </div>
   );
