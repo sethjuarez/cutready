@@ -302,7 +302,7 @@ impl LlmClient {
                 if self.is_foundry() {
                     let base = self.foundry_base();
                     format!(
-                        "{}/openai/deployments?api-version=2024-10-21",
+                        "{}/openai/models?api-version=2024-10-21",
                         base
                     )
                 } else {
