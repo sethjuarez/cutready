@@ -23,10 +23,10 @@ export function OutputPanel({ outputs, onClear, onCollapse }: OutputPanelProps) 
   const [activeTab, setActiveTab] = useState<OutputTab>("activity");
 
   return (
-    <div className="flex flex-col h-full bg-[var(--color-surface)] border-t border-[var(--color-border)]">
+    <div className="flex flex-col h-full bg-[var(--color-surface-alt)] border-t border-[var(--color-border)]">
       {/* Header */}
-      <div className="no-select flex items-center justify-between px-3 h-9 shrink-0 border-b border-[var(--color-border)]">
-        <div className="flex items-center gap-1">
+      <div className="no-select flex items-center justify-between px-3 shrink-0 border-b border-[var(--color-border)]">
+        <div className="flex items-stretch gap-0">
           <TabButton
             active={activeTab === "activity"}
             onClick={() => setActiveTab("activity")}
@@ -119,10 +119,10 @@ function TabButton({
   return (
     <button
       onClick={onClick}
-      className={`flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium transition-colors ${
+      className={`flex items-center gap-1 px-3 py-2 text-[11px] font-medium transition-colors border-b-2 -mb-px ${
         active
-          ? "text-[var(--color-text)] bg-[var(--color-surface-alt)]"
-          : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"
+          ? "border-[var(--color-accent)] text-[var(--color-text)]"
+          : "border-transparent text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:border-[var(--color-text-secondary)]/30"
       }`}
     >
       {children}
