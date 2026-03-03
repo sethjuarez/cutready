@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useAppStore } from "../stores/appStore";
 import { useSettings } from "../hooks/useSettings";
@@ -153,6 +153,24 @@ function IconChevron({ size = 10, expanded = false }: { size?: number; expanded?
   );
 }
 
+// ── Dropdown height constraint hook ──────────────────────────────
+// Measures available viewport space above a trigger element so
+// upward-opening dropdowns never extend off-screen.
+function useDropdownMaxHeight(
+  triggerRef: React.RefObject<HTMLElement | null>,
+  isOpen: boolean,
+  cap = 260,
+): number {
+  const [maxH, setMaxH] = useState(cap);
+  useLayoutEffect(() => {
+    if (!isOpen || !triggerRef.current) return;
+    const rect = triggerRef.current.getBoundingClientRect();
+    const spaceAbove = rect.top - 8; // 8px viewport padding
+    setMaxH(Math.max(120, Math.min(spaceAbove, cap)));
+  }, [isOpen, cap]);
+  return maxH;
+}
+
 // ── Main Panel ───────────────────────────────────────────────────
 
 export function ChatPanel() {
@@ -229,9 +247,16 @@ function ChatTab() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const autocompleteRef = useRef<HTMLDivElement>(null);
   const contextPickerRef = useRef<HTMLDivElement>(null);
   const modelPickerRef = useRef<HTMLDivElement>(null);
   const toolsInfoRef = useRef<HTMLDivElement>(null);
+
+  // Constrain dropdown heights to available viewport space
+  const acMaxH = useDropdownMaxHeight(autocompleteRef, showAutocomplete);
+  const ctxMaxH = useDropdownMaxHeight(contextPickerRef, showContextPicker);
+  const modelMaxH = useDropdownMaxHeight(modelPickerRef, showModelPicker);
+  const toolsMaxH = useDropdownMaxHeight(toolsInfoRef, showToolsInfo);
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
@@ -563,7 +588,7 @@ Keep responses concise and actionable. Use markdown formatting.`;
       </div>
 
       {/* Input area — VS Code Copilot chat style */}
-      <div className="shrink-0 mx-2.5 mb-2.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-alt)] overflow-hidden transition-colors focus-within:border-[var(--color-accent)]">
+      <div className="shrink-0 mx-2.5 mb-2.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-alt)] transition-colors focus-within:border-[var(--color-accent)]">
         {/* Reference chips (shown above textarea like VS Code) */}
         {references.length > 0 && (
           <div className="flex flex-wrap gap-1 px-2.5 pt-2">
@@ -589,9 +614,9 @@ Keep responses concise and actionable. Use markdown formatting.`;
         )}
 
         {/* Textarea with @ autocomplete */}
-        <div className="relative">
+        <div className="relative" ref={autocompleteRef}>
           {showAutocomplete && autocompleteOptions.length > 0 && (
-            <div className="absolute bottom-full left-0 right-0 mb-1 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-md shadow-lg overflow-hidden z-10 max-h-[200px] overflow-y-auto">
+            <div className="absolute bottom-full left-0 right-0 mb-1 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-md shadow-lg overflow-hidden z-10 overflow-y-auto" style={{ maxHeight: acMaxH }}>
               {autocompleteOptions.map((file, i) => (
                 <button
                   key={file.path}
@@ -640,8 +665,8 @@ Keep responses concise and actionable. Use markdown formatting.`;
               <IconPaperclip size={12} />
             </button>
             {showContextPicker && (
-              <div className="absolute bottom-full left-0 mb-1 w-[240px] bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg shadow-lg overflow-hidden z-20">
-                <div className="px-2.5 pt-2 pb-1">
+              <div className="absolute bottom-full left-0 mb-1 w-[240px] bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg shadow-lg overflow-hidden z-20 flex flex-col" style={{ maxHeight: ctxMaxH }}>
+                <div className="px-2.5 pt-2 pb-1 shrink-0">
                   <input
                     className="w-full px-2 py-1 text-[11px] bg-[var(--color-surface-alt)] border border-[var(--color-border)] rounded text-[var(--color-text)] placeholder-[var(--color-text-secondary)] focus:outline-none focus:border-[var(--color-accent)]"
                     placeholder="Search files…"
@@ -650,7 +675,7 @@ Keep responses concise and actionable. Use markdown formatting.`;
                     autoFocus
                   />
                 </div>
-                <div className="max-h-[200px] overflow-y-auto">
+                <div className="flex-1 overflow-y-auto">
                   {contextPickerOptions.length === 0 ? (
                     <div className="px-3 py-2 text-[11px] text-[var(--color-text-secondary)]">
                       No matching files
@@ -695,6 +720,7 @@ Keep responses concise and actionable. Use markdown formatting.`;
               <ModelPickerDropdown
                 currentModel={settings.aiModel}
                 onClose={() => setShowModelPicker(false)}
+                maxHeight={modelMaxH}
               />
             )}
           </div>
@@ -714,11 +740,11 @@ Keep responses concise and actionable. Use markdown formatting.`;
               <span>{availableTools.length}</span>
             </button>
             {showToolsInfo && (
-              <div className="absolute bottom-full left-0 mb-1 w-[220px] bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg shadow-lg overflow-hidden z-20">
-                <div className="px-3 py-2 border-b border-[var(--color-border)]">
+              <div className="absolute bottom-full left-0 mb-1 w-[220px] bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg shadow-lg overflow-hidden z-20 flex flex-col" style={{ maxHeight: toolsMaxH }}>
+                <div className="px-3 py-2 border-b border-[var(--color-border)] shrink-0">
                   <span className="text-[10px] font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">Available Tools</span>
                 </div>
-                <div className="py-1">
+                <div className="flex-1 overflow-y-auto py-1">
                   {availableTools.map((tool) => (
                     <div key={tool} className="flex items-center gap-2 px-3 py-1.5 text-[11px] text-[var(--color-text-secondary)]">
                       {tool.startsWith("read_") || tool === "list_project_files"
@@ -990,9 +1016,11 @@ function renderInline(text: string): React.ReactNode {
 function ModelPickerDropdown({
   currentModel,
   onClose,
+  maxHeight,
 }: {
   currentModel: string;
   onClose: () => void;
+  maxHeight: number;
 }) {
   const { settings, updateSetting } = useSettings();
   const [models, setModels] = useState<string[]>([]);
@@ -1024,11 +1052,11 @@ function ModelPickerDropdown({
   }, [settings, currentModel]);
 
   return (
-    <div className="absolute bottom-full left-0 mb-1 w-[200px] bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg shadow-lg overflow-hidden z-20">
-      <div className="px-3 py-2 border-b border-[var(--color-border)]">
+    <div className="absolute bottom-full left-0 mb-1 w-[200px] bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg shadow-lg overflow-hidden z-20 flex flex-col" style={{ maxHeight }}>
+      <div className="px-3 py-2 border-b border-[var(--color-border)] shrink-0">
         <span className="text-[10px] font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">Model</span>
       </div>
-      <div className="max-h-[200px] overflow-y-auto py-1">
+      <div className="flex-1 overflow-y-auto py-1">
         {loadingModels ? (
           <div className="px-3 py-2 text-[11px] text-[var(--color-text-secondary)] italic">Loading…</div>
         ) : (
