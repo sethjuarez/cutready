@@ -531,32 +531,30 @@ function FeedbackPopover() {
             autoFocus
           />
 
-          {/* Include debug log toggle */}
-          <label className="flex items-center gap-1.5 cursor-pointer group">
-            <button
-              type="button"
-              role="switch"
-              aria-checked={includeDebug}
-              onClick={() => setIncludeDebug(!includeDebug)}
-              className={`relative inline-flex h-[14px] w-[26px] shrink-0 rounded-full border transition-colors ${
-                includeDebug
-                  ? "bg-[var(--color-accent)] border-[var(--color-accent)]"
-                  : "bg-[var(--color-surface-alt)] border-[var(--color-border)]"
-              }`}
-            >
-              <span
-                className={`pointer-events-none block h-[10px] w-[10px] rounded-full bg-white shadow-sm transition-transform mt-[1px] ${
-                  includeDebug ? "translate-x-[13px]" : "translate-x-[1px]"
+          {/* Debug toggle + submit on same row */}
+          <div className="flex items-center justify-between">
+            <label className="flex items-center gap-1.5 cursor-pointer group">
+              <button
+                type="button"
+                role="switch"
+                aria-checked={includeDebug}
+                onClick={() => setIncludeDebug(!includeDebug)}
+                className={`relative inline-flex h-[14px] w-[26px] shrink-0 rounded-full border transition-colors ${
+                  includeDebug
+                    ? "bg-[var(--color-accent)] border-[var(--color-accent)]"
+                    : "bg-[var(--color-surface-alt)] border-[var(--color-border)]"
                 }`}
-              />
-            </button>
-            <span className="text-[10px] text-[var(--color-text-secondary)] group-hover:text-[var(--color-text)] transition-colors select-none">
-              Include debug log
-            </span>
-          </label>
-
-          {/* Submit — icon-only with tooltip */}
-          <div className="flex items-center justify-end">
+              >
+                <span
+                  className={`pointer-events-none block h-[10px] w-[10px] rounded-full bg-white shadow-sm transition-transform mt-[1px] ${
+                    includeDebug ? "translate-x-[13px]" : "translate-x-[1px]"
+                  }`}
+                />
+              </button>
+              <span className="text-[10px] text-[var(--color-text-secondary)] group-hover:text-[var(--color-text)] transition-colors select-none">
+                Include debug log
+              </span>
+            </label>
             <button
               onClick={handleSubmit}
               disabled={!feedback.trim()}
