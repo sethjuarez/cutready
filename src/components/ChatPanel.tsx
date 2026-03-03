@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { useAppStore } from "../stores/appStore";
 import { useSettings, type AgentPreset } from "../hooks/useSettings";
 import { VersionHistory } from "./VersionHistory";
@@ -1351,142 +1353,63 @@ function ToolCallRow({ toolCall }: { toolCall: ToolCall }) {
 // ── Simple Markdown Renderer ─────────────────────────────────────
 
 function MarkdownContent({ content }: { content: string }) {
-  // Minimal markdown: bold, italic, inline code, code blocks, headers, lists
-  const lines = content.split("\n");
-  const elements: React.ReactNode[] = [];
-  let i = 0;
-
-  while (i < lines.length) {
-    const line = lines[i];
-
-    // Code block
-    if (line.startsWith("```")) {
-      const codeLines: string[] = [];
-      i++;
-      while (i < lines.length && !lines[i].startsWith("```")) {
-        codeLines.push(lines[i]);
-        i++;
-      }
-      i++; // skip closing ```
-      elements.push(
-        <pre key={elements.length} className="my-1.5 p-2 rounded bg-[var(--color-surface-alt)] border border-[var(--color-border)] overflow-x-auto text-[10px] leading-relaxed">
-          {codeLines.join("\n")}
-        </pre>,
-      );
-      continue;
-    }
-
-    // Header
-    if (line.startsWith("### ")) {
-      elements.push(
-        <div key={elements.length} className="font-semibold text-[11px] mt-2 mb-0.5">
-          {renderInline(line.slice(4))}
-        </div>,
-      );
-      i++;
-      continue;
-    }
-    if (line.startsWith("## ")) {
-      elements.push(
-        <div key={elements.length} className="font-semibold text-[11px] mt-2 mb-0.5">
-          {renderInline(line.slice(3))}
-        </div>,
-      );
-      i++;
-      continue;
-    }
-
-    // List item
-    if (line.match(/^[-*] /)) {
-      elements.push(
-        <div key={elements.length} className="flex gap-1.5 ml-1">
-          <span className="text-[var(--color-text-secondary)]">•</span>
-          <span>{renderInline(line.slice(2))}</span>
-        </div>,
-      );
-      i++;
-      continue;
-    }
-
-    // Numbered list
-    const numMatch = line.match(/^(\d+)\.\s/);
-    if (numMatch) {
-      elements.push(
-        <div key={elements.length} className="flex gap-1.5 ml-1">
-          <span className="text-[var(--color-text-secondary)] min-w-[12px]">{numMatch[1]}.</span>
-          <span>{renderInline(line.slice(numMatch[0].length))}</span>
-        </div>,
-      );
-      i++;
-      continue;
-    }
-
-    // Empty line
-    if (!line.trim()) {
-      elements.push(<div key={elements.length} className="h-1.5" />);
-      i++;
-      continue;
-    }
-
-    // Regular paragraph
-    elements.push(
-      <div key={elements.length}>{renderInline(line)}</div>,
-    );
-    i++;
-  }
-
-  return <>{elements}</>;
-}
-
-/** Render inline markdown: **bold**, *italic*, `code` */
-function renderInline(text: string): React.ReactNode {
-  const parts: React.ReactNode[] = [];
-  let remaining = text;
-  let key = 0;
-
-  while (remaining.length > 0) {
-    // Bold
-    const boldMatch = remaining.match(/\*\*(.+?)\*\*/);
-    // Inline code
-    const codeMatch = remaining.match(/`(.+?)`/);
-    // Italic
-    const italicMatch = remaining.match(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/);
-
-    // Find earliest match
-    const matches = [
-      boldMatch && { type: "bold", match: boldMatch },
-      codeMatch && { type: "code", match: codeMatch },
-      italicMatch && { type: "italic", match: italicMatch },
-    ].filter(Boolean) as { type: string; match: RegExpMatchArray }[];
-
-    if (matches.length === 0) {
-      parts.push(remaining);
-      break;
-    }
-
-    const earliest = matches.sort(
-      (a, b) => (a.match.index ?? 0) - (b.match.index ?? 0),
-    )[0];
-    const idx = earliest.match.index ?? 0;
-
-    if (idx > 0) parts.push(remaining.slice(0, idx));
-
-    if (earliest.type === "bold") {
-      parts.push(<strong key={key++}>{earliest.match[1]}</strong>);
-    } else if (earliest.type === "code") {
-      parts.push(
-        <code key={key++} className="px-1 py-0.5 bg-[var(--color-surface-alt)] rounded text-[10px] border border-[var(--color-border)]">
-          {earliest.match[1]}
-        </code>,
-      );
-    } else {
-      parts.push(<em key={key++}>{earliest.match[1]}</em>);
-    }
-
-    remaining = remaining.slice(idx + earliest.match[0].length);
-  }
-
-  return parts.length === 1 ? parts[0] : <>{parts}</>;
+  return (
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      components={{
+        h1: ({ children }) => <div className="font-bold text-[12px] mt-2 mb-1">{children}</div>,
+        h2: ({ children }) => <div className="font-semibold text-[11px] mt-2 mb-0.5">{children}</div>,
+        h3: ({ children }) => <div className="font-semibold text-[11px] mt-2 mb-0.5">{children}</div>,
+        p: ({ children }) => <div className="my-0.5">{children}</div>,
+        strong: ({ children }) => <strong>{children}</strong>,
+        em: ({ children }) => <em>{children}</em>,
+        code: ({ className, children }) => {
+          const isBlock = className?.includes("language-");
+          if (isBlock) {
+            return (
+              <pre className="my-1.5 p-2 rounded bg-[var(--color-surface-alt)] border border-[var(--color-border)] overflow-x-auto text-[10px] leading-relaxed">
+                <code>{children}</code>
+              </pre>
+            );
+          }
+          return (
+            <code className="px-1 py-0.5 bg-[var(--color-surface-alt)] rounded text-[10px] border border-[var(--color-border)]">
+              {children}
+            </code>
+          );
+        },
+        pre: ({ children }) => <>{children}</>,
+        ul: ({ children }) => <ul className="ml-3 my-0.5 list-disc list-outside">{children}</ul>,
+        ol: ({ children }) => <ol className="ml-3 my-0.5 list-decimal list-outside">{children}</ol>,
+        li: ({ children }) => (
+          <li className="my-0.5 pl-0.5">{children}</li>
+        ),
+        table: ({ children }) => (
+          <div className="my-1.5 overflow-x-auto rounded border border-[var(--color-border)]">
+            <table className="w-full text-[10px] border-collapse">{children}</table>
+          </div>
+        ),
+        thead: ({ children }) => (
+          <thead className="bg-[var(--color-surface-alt)] text-[var(--color-text-secondary)]">{children}</thead>
+        ),
+        th: ({ children }) => (
+          <th className="px-2 py-1 text-left font-medium border-b border-[var(--color-border)]">{children}</th>
+        ),
+        td: ({ children }) => (
+          <td className="px-2 py-1 border-b border-[var(--color-border)]">{children}</td>
+        ),
+        a: ({ href, children }) => (
+          <a href={href} className="text-[var(--color-accent)] hover:underline" target="_blank" rel="noopener noreferrer">{children}</a>
+        ),
+        blockquote: ({ children }) => (
+          <div className="border-l-2 border-[var(--color-accent)] pl-2 my-1 text-[var(--color-text-secondary)]">{children}</div>
+        ),
+        hr: () => <div className="border-t border-[var(--color-border)] my-2" />,
+      }}
+    >
+      {content}
+    </ReactMarkdown>
+  );
 }
 
 // ── Model list cache (module-level, survives re-renders) ─────────
