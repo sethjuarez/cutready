@@ -136,8 +136,8 @@ html {
 .prose-desc { margin: 0; padding: 0; }
 .prose-desc p { margin: 0; padding: 0; }
 .prose-desc p + p { margin-top: 0.35rem; }
-.prose-desc ul, .prose-desc ol { margin: 0.25rem 0; padding: 0 0 0 1.25rem; }
-.prose-desc li { margin: 0.1rem 0; padding: 0; }
+.prose-desc ul, .prose-desc ol { margin: 0.25rem 0; padding: 0; list-style-position: inside; }
+.prose-desc li { margin: 0.1rem 0; padding: 0; padding-left: 0.25rem; }
 .prose-desc code { font-size: 0.85em; background: var(--color-surface-inset); padding: 0.1em 0.3em; border-radius: 3px; }
 .prose-desc a { color: var(--color-accent); text-decoration: underline; }
 .prose-desc blockquote { margin: 0.25rem 0; padding-left: 0.75rem; border-left: 2px solid var(--color-accent); }
