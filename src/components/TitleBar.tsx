@@ -114,10 +114,10 @@ export function TitleBar({
         {/* Update indicator */}
         <UpdateIndicator />
         {/* Layout toggles — icons match spatial positions, actions swap with sidebar position */}
-        <div className="flex items-center gap-0.5 px-2" style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}>
+        <div className="flex items-center gap-0.5 px-1.5" style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}>
           {/* Left panel icon — toggles whichever panel is on the left */}
           <button
-            className={`flex items-center justify-center w-7 h-[22px] rounded transition-colors ${
+            className={`flex items-center justify-center w-6 h-[20px] rounded transition-colors ${
               (sidebarPosition === "left" ? sidebarVisible : secondaryVisible)
                 ? "text-[var(--color-accent)]"
                 : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"
@@ -125,14 +125,14 @@ export function TitleBar({
             onClick={sidebarPosition === "left" ? onToggleSidebar : onToggleSecondary}
             title={sidebarPosition === "left" ? "Toggle Sidebar (Ctrl+B)" : "Toggle Secondary Panel"}
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <rect x="3" y="3" width="18" height="18" rx="2" />
               <line x1="9" y1="3" x2="9" y2="21" />
             </svg>
           </button>
           {/* Bottom panel icon */}
           <button
-            className={`flex items-center justify-center w-7 h-[22px] rounded transition-colors ${
+            className={`flex items-center justify-center w-6 h-[20px] rounded transition-colors ${
               outputVisible
                 ? "text-[var(--color-accent)]"
                 : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"
@@ -140,14 +140,14 @@ export function TitleBar({
             onClick={onToggleOutput}
             title="Toggle Panel (Ctrl+`)"
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <rect x="3" y="3" width="18" height="18" rx="2" />
               <line x1="3" y1="15" x2="21" y2="15" />
             </svg>
           </button>
           {/* Right panel icon — toggles whichever panel is on the right */}
           <button
-            className={`flex items-center justify-center w-7 h-[22px] rounded transition-colors ${
+            className={`flex items-center justify-center w-6 h-[20px] rounded transition-colors ${
               (sidebarPosition === "right" ? sidebarVisible : secondaryVisible)
                 ? "text-[var(--color-accent)]"
                 : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"
@@ -155,7 +155,7 @@ export function TitleBar({
             onClick={sidebarPosition === "right" ? onToggleSidebar : onToggleSecondary}
             title={sidebarPosition === "right" ? "Toggle Sidebar (Ctrl+B)" : "Toggle Secondary Panel"}
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <rect x="3" y="3" width="18" height="18" rx="2" />
               <line x1="15" y1="3" x2="15" y2="21" />
             </svg>
@@ -166,6 +166,9 @@ export function TitleBar({
             onToggleSidebarPosition={onToggleSidebarPosition}
           />
         </div>
+
+        {/* Separator between layout toggles and window controls */}
+        <div className="w-px h-4 bg-[var(--color-border)] mx-1 shrink-0" />
 
         {/* Window controls */}
         <button
@@ -237,13 +240,13 @@ function LayoutDropdown({
   return (
     <div ref={ref} className="relative">
       <button
-        className={`flex items-center justify-center w-7 h-[22px] rounded transition-colors text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-alt)] ${
+        className={`flex items-center justify-center w-6 h-[20px] rounded transition-colors text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-alt)] ${
           open ? "bg-[var(--color-surface-alt)] text-[var(--color-text)]" : ""
         }`}
         onClick={() => setOpen(!open)}
         title="Customize Layout"
       >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <rect x="3" y="3" width="7" height="7" rx="1" />
           <rect x="14" y="3" width="7" height="7" rx="1" />
           <rect x="3" y="14" width="7" height="7" rx="1" />
