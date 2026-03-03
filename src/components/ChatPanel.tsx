@@ -323,6 +323,7 @@ function ChatTab() {
   const newChatSession = useAppStore((s) => s.newChatSession);
   const loadSketches = useAppStore((s) => s.loadSketches);
   const openSketch = useAppStore((s) => s.openSketch);
+  const pendingChatPrompt = useAppStore((s) => s.pendingChatPrompt);
 
   const [input, setInput] = useState("");
   const [references, setReferences] = useState<FileReference[]>([]);
@@ -530,8 +531,8 @@ function ChatTab() {
     return prompt;
   }, [settings.aiSelectedAgent, settings.aiAgents, activeSketchPath]);
 
-  const handleSend = useCallback(async () => {
-    const text = input.trim();
+  const handleSend = useCallback(async (overrideText?: string) => {
+    const text = (overrideText ?? input).trim();
     if (!text) return;
 
     setInput("");
@@ -705,6 +706,17 @@ function ChatTab() {
       streamingRef.current = "";
     }
   }, [input, loading, messages, references, systemPrompt, buildConfig, setChatMessages, setChatLoading, setChatError, addActivityEntries, settings.aiAgents]);
+
+  // Pick up prompts queued from outside the chat (e.g. sparkle buttons)
+  const handleSendRef = useRef(handleSend);
+  handleSendRef.current = handleSend;
+  useEffect(() => {
+    if (pendingChatPrompt) {
+      const prompt = pendingChatPrompt;
+      useAppStore.setState({ pendingChatPrompt: null });
+      handleSendRef.current(prompt);
+    }
+  }, [pendingChatPrompt]);
 
   const handleInputChange = useCallback(
     (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -1209,7 +1221,7 @@ function ChatTab() {
           {/* Send button */}
           <button
             className="flex items-center justify-center w-[26px] h-[26px] rounded text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-            onClick={handleSend}
+            onClick={() => handleSend()}
             disabled={loading || !input.trim()}
             title="Send (Enter)"
           >

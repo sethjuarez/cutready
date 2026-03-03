@@ -26,10 +26,12 @@ interface ScriptTableProps {
   onChange: (rows: PlanningRow[]) => void;
   readOnly?: boolean;
   onCaptureScreenshot?: (rowIndex: number) => void;
+  onSparkle?: (prompt: string) => void;
   projectRoot?: string;
+  sketchPath?: string;
 }
 
-export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreenshot, projectRoot }: ScriptTableProps) {
+export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreenshot, onSparkle, projectRoot, sketchPath }: ScriptTableProps) {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
   const focusCellAfterRender = useRef<number | null>(null);
@@ -171,7 +173,9 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
                   isDragging={activeIdx === idx}
                   isLastRow={idx === rows.length - 1}
                   onCaptureScreenshot={onCaptureScreenshot}
+                  onSparkle={onSparkle}
                   projectRoot={projectRoot}
+                  sketchPath={sketchPath}
                   onImageClick={setLightboxSrc}
                 />
               ))}
@@ -240,7 +244,9 @@ function SortableRow({
   isDragging,
   isLastRow,
   onCaptureScreenshot,
+  onSparkle,
   projectRoot,
+  sketchPath,
   onImageClick,
 }: {
   id: string;
@@ -253,7 +259,9 @@ function SortableRow({
   isDragging: boolean;
   isLastRow: boolean;
   onCaptureScreenshot?: (rowIndex: number) => void;
+  onSparkle?: (prompt: string) => void;
   projectRoot?: string;
+  sketchPath?: string;
   onImageClick: (src: string) => void;
 }){
   const {
@@ -331,7 +339,7 @@ function SortableRow({
         </div>
       </td>
       <td className="script-table-td align-top overflow-hidden">
-        <div data-tab-cell={idx * 3 + 1}>
+        <div data-tab-cell={idx * 3 + 1} className="relative group/cell">
           <MarkdownCell
             value={row.narrative}
             onChange={(v) => updateRow(idx, "narrative", v)}
@@ -339,10 +347,15 @@ function SortableRow({
             readOnly={readOnly}
             onAddRow={isLastRow && !readOnly ? () => addRow(idx) : undefined}
           />
+          {onSparkle && !readOnly && (
+            <SparkleButton onClick={() => onSparkle(
+              `Improve the narrative for row ${idx + 1} of sketch "${sketchPath ?? "current"}". Current text: "${row.narrative}". Make it more engaging and natural for spoken delivery.`
+            )} />
+          )}
         </div>
       </td>
       <td className="script-table-td align-top overflow-hidden">
-        <div data-tab-cell={idx * 3 + 2}>
+        <div data-tab-cell={idx * 3 + 2} className="relative group/cell">
           <MarkdownCell
             value={row.demo_actions}
             onChange={(v) => updateRow(idx, "demo_actions", v)}
@@ -350,6 +363,11 @@ function SortableRow({
             readOnly={readOnly}
             onAddRow={isLastRow && !readOnly ? () => addRow(idx) : undefined}
           />
+          {onSparkle && !readOnly && (
+            <SparkleButton onClick={() => onSparkle(
+              `Improve the demo actions for row ${idx + 1} of sketch "${sketchPath ?? "current"}". Current text: "${row.demo_actions}". Make the steps clearer and more specific.`
+            )} />
+          )}
         </div>
       </td>
       <td className="script-table-td align-top text-center">
@@ -788,5 +806,22 @@ function MarkdownCell({
         }
       }}
     />
+  );
+}
+
+/* ── Sparkle button — appears on hover for AI-assisted editing ── */
+
+function SparkleButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      onClick={(e) => { e.stopPropagation(); onClick(); }}
+      className="absolute top-0.5 right-0.5 p-0.5 rounded opacity-0 group-hover/cell:opacity-100 transition-opacity text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10"
+      title="Improve with AI"
+    >
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M12 2l2.09 6.26L20.18 10l-6.09 1.74L12 18l-2.09-6.26L3.82 10l6.09-1.74L12 2z" />
+        <path d="M19 15l1.04 3.13L23.18 19l-3.14.87L19 23l-1.04-3.13L14.82 19l3.14-.87L19 15z" opacity="0.6" />
+      </svg>
+    </button>
   );
 }

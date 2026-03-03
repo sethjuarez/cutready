@@ -40,6 +40,7 @@ export function SketchForm() {
   const rowsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const currentProject = useAppStore((s) => s.currentProject);
+  const sendChatPrompt = useAppStore((s) => s.sendChatPrompt);
   const projectRoot = currentProject?.root ?? "";
 
   // Pending data + path captured at edit time for flush-on-unmount
@@ -274,12 +275,29 @@ export function SketchForm() {
             <h3 className="text-xs font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">
               Planning Table
             </h3>
+            <button
+              onClick={() => sendChatPrompt(
+                localRows.length === 0
+                  ? `Generate a complete sketch plan for "${activeSketch?.title ?? "this sketch"}". ${activeSketch?.description && typeof activeSketch.description === "string" ? `Description: ${activeSketch.description}. ` : ""}Create well-structured planning rows with time, narrative, and demo_actions.`
+                  : `Review and improve the entire sketch "${activeSketchPath ?? "current"}". Refine the narrative flow, tighten timing, and make demo actions more specific. Use set_planning_rows to apply changes.`
+              )}
+              className="flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 transition-colors"
+              title={localRows.length === 0 ? "Generate plan with AI" : "Improve entire sketch with AI"}
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2l2.09 6.26L20.18 10l-6.09 1.74L12 18l-2.09-6.26L3.82 10l6.09-1.74L12 2z" />
+                <path d="M19 15l1.04 3.13L23.18 19l-3.14.87L19 23l-1.04-3.13L14.82 19l3.14-.87L19 15z" opacity="0.6" />
+              </svg>
+              {localRows.length === 0 ? "Generate" : "Improve"}
+            </button>
           </div>
           <ScriptTable
             rows={localRows}
             onChange={handleRowsChange}
             onCaptureScreenshot={handleCaptureScreenshot}
+            onSparkle={sendChatPrompt}
             projectRoot={projectRoot}
+            sketchPath={activeSketchPath ?? undefined}
           />
           {/* Always-visible add row button */}
           <button
