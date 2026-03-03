@@ -304,6 +304,7 @@ function ChatTab() {
   const notes = useAppStore((s) => s.notes);
   const storyboards = useAppStore((s) => s.storyboards);
   const activeSketchPath = useAppStore((s) => s.activeSketchPath);
+  const activeNotePath = useAppStore((s) => s.activeNotePath);
   const messages = useAppStore((s) => s.chatMessages);
   const setChatMessages = useAppStore((s) => s.setChatMessages);
   const loading = useAppStore((s) => s.chatLoading);
@@ -520,8 +521,11 @@ function ChatTab() {
     if (activeSketchPath) {
       prompt += `\n\nThe user is currently editing the sketch at: ${activeSketchPath}`;
     }
+    if (activeNotePath) {
+      prompt += `\n\nThe user is currently editing the note at: ${activeNotePath}. Use the read_note tool with this path to see its contents before making suggestions.`;
+    }
     return prompt;
-  }, [settings.aiSelectedAgent, settings.aiAgents, activeSketchPath]);
+  }, [settings.aiSelectedAgent, settings.aiAgents, activeSketchPath, activeNotePath]);
 
   const handleSend = useCallback(async (overrideText?: string, opts?: { silent?: boolean }) => {
     const text = (overrideText ?? input).trim();
@@ -882,22 +886,36 @@ function ChatTab() {
               I can help plan your demo, generate sketches, or refine your script. Use <kbd className="px-1 py-0.5 text-[10px] bg-[var(--color-surface-alt)] rounded border border-[var(--color-border)]">#</kbd> to reference files and websites.
             </p>
             <div className="flex flex-wrap gap-1.5 justify-center max-w-[260px]">
-              {[
-                "Plan a demo from my notes",
-                "Generate sketch rows",
-                "Refine my script timing",
-              ].map((suggestion) => (
-                <button
-                  key={suggestion}
-                  className="px-2.5 py-1 text-[11px] rounded-full border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:border-[var(--color-accent)] hover:bg-[var(--color-accent)]/5 transition-colors"
-                  onClick={() => {
-                    setInput(suggestion);
-                    inputRef.current?.focus();
-                  }}
-                >
-                  {suggestion}
-                </button>
-              ))}
+              {(() => {
+                const suggestions = activeNotePath
+                  ? [
+                      "Improve this note",
+                      "Generate sketch from my notes",
+                      "Refine my script timing",
+                    ]
+                  : [
+                      "Plan a demo from my notes",
+                      "Generate sketch rows",
+                      "Refine my script timing",
+                    ];
+                return suggestions.map((suggestion) => (
+                  <button
+                    key={suggestion}
+                    className="px-2.5 py-1 text-[11px] rounded-full border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:border-[var(--color-accent)] hover:bg-[var(--color-accent)]/5 transition-colors"
+                    onClick={() => {
+                      // Auto-add active note as reference for note-specific suggestions
+                      if (activeNotePath && suggestion === "Improve this note") {
+                        const noteTitle = activeNotePath.replace(/\.md$/, "").split("/").pop() ?? activeNotePath;
+                        setReferences([{ type: "note", path: activeNotePath, title: noteTitle }]);
+                      }
+                      setInput(suggestion);
+                      inputRef.current?.focus();
+                    }}
+                  >
+                    {suggestion}
+                  </button>
+                ));
+              })()}
             </div>
           </div>
         )}
