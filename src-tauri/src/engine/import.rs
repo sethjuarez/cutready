@@ -36,10 +36,15 @@ pub fn docx_to_markdown(data: &[u8], project_root: &Path) -> Result<String, Stri
     let mut archive = match zip::ZipArchive::new(cursor) {
         Ok(a) => a,
         Err(_) => {
-            // Not a ZIP — likely an old .doc binary format. Extract readable text.
+            // Not a valid ZIP — could be old .doc format or a protected/encrypted .docx
             return doc_binary_to_markdown(data);
         }
     };
+
+    // Verify it's actually a .docx by checking for word/document.xml
+    if archive.by_name("word/document.xml").is_err() {
+        return Err("This file appears to be protected or encrypted. Please open it in Word, remove protection (File → Info → Protect Document), save as a new .docx, and try again.".to_string());
+    }
 
     let prefix = format!("docx-{}", chrono::Utc::now().format("%Y%m%d%H%M%S"));
 
