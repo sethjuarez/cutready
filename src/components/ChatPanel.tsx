@@ -775,14 +775,8 @@ function ChatTab() {
         ))}
 
         {loading && (
-          <div className="flex gap-2.5 px-3.5 py-2.5">
-            <div className="w-6 h-6 rounded-full bg-[var(--color-accent)]/15 flex items-center justify-center shrink-0 mt-0.5 text-[var(--color-accent)]">
-              <IconSparkles size={12} />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-[11px] font-semibold text-[var(--color-text-secondary)] mb-0.5">CutReady</div>
-              <span className="text-xs text-[var(--color-text-secondary)] italic">Thinking…</span>
-            </div>
+          <div className="px-3.5 py-2">
+            <span className="text-xs text-[var(--color-text-secondary)] italic">Thinking…</span>
           </div>
         )}
 
@@ -1063,13 +1057,9 @@ function ChatTab() {
 function MessageRow({ message }: { message: ChatMessage }) {
   if (message.role === "user") {
     return (
-      <div className="flex gap-2.5 px-3.5 py-2.5 hover:bg-[var(--color-surface-alt)]/50 transition-colors">
-        <div className="w-6 h-6 rounded-full bg-[var(--color-surface-alt)] flex items-center justify-center shrink-0 mt-0.5 text-[var(--color-text-secondary)]">
-          <span className="text-[10px] font-bold">U</span>
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="text-[11px] font-semibold text-[var(--color-text-secondary)] mb-0.5">You</div>
-          <div className="text-[13px] text-[var(--color-text)] whitespace-pre-wrap break-words leading-[1.6]">{message.content}</div>
+      <div className="px-3.5 py-2">
+        <div className="bg-[var(--color-surface-alt)] rounded-lg px-3 py-2 text-[13px] text-[var(--color-text)] whitespace-pre-wrap break-words leading-[1.6]">
+          {message.content}
         </div>
       </div>
     );
@@ -1077,7 +1067,7 @@ function MessageRow({ message }: { message: ChatMessage }) {
 
   if (message.role === "assistant" && message.tool_calls && message.tool_calls.length > 0) {
     return (
-      <div className="px-3.5 py-1 ml-[34px] space-y-1">
+      <div className="px-3.5 py-1 space-y-1">
         {message.tool_calls.map((tc) => (
           <ToolCallRow key={tc.id} toolCall={tc} />
         ))}
@@ -1091,15 +1081,9 @@ function MessageRow({ message }: { message: ChatMessage }) {
 
   if (message.role === "assistant") {
     return (
-      <div className="flex gap-2.5 px-3.5 py-2.5 hover:bg-[var(--color-surface-alt)]/50 transition-colors">
-        <div className="w-6 h-6 rounded-full bg-[var(--color-accent)]/15 flex items-center justify-center shrink-0 mt-0.5 text-[var(--color-accent)]">
-          <IconSparkles size={12} />
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="text-[11px] font-semibold text-[var(--color-text-secondary)] mb-0.5">CutReady</div>
-          <div className="text-[13px] text-[var(--color-text)] leading-[1.6]">
-            <MarkdownContent content={message.content || ""} />
-          </div>
+      <div className="px-3.5 py-2">
+        <div className="text-[13px] text-[var(--color-text)] leading-[1.6]">
+          <MarkdownContent content={message.content || ""} />
         </div>
       </div>
     );
