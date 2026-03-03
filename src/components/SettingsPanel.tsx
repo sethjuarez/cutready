@@ -9,6 +9,7 @@ interface ModelInfo {
   id: string;
   created?: number;
   owned_by?: string;
+  capabilities?: Record<string, string>;
 }
 
 interface TokenResponse {

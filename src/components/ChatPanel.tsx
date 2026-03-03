@@ -1500,9 +1500,14 @@ function ModelPickerDropdown({
           model: settings.aiModel || "unused",
           bearer_token: settings.aiAuthMode === "azure_oauth" ? settings.aiAccessToken : null,
         };
-        const result = await invoke<{ id: string; name: string }[]>("list_models", { config });
+        const result = await invoke<{ id: string; name: string; capabilities?: Record<string, string> }[]>("list_models", { config });
         if (!cancelled) {
-          const ids = result.map((m) => m.id || m.name);
+          // In chat context, only show chat-capable models
+          const chatModels = result.filter((m) => {
+            if (!m.capabilities) return true; // no capabilities info = include (OpenAI, etc.)
+            return m.capabilities.chat_completion === "true";
+          });
+          const ids = chatModels.map((m) => m.id || m.name);
           modelCache.key = cacheKey;
           modelCache.models = ids;
           modelCache.ts = Date.now();

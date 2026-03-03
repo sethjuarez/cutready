@@ -256,6 +256,9 @@ pub struct ModelInfo {
     pub created: Option<u64>,
     #[serde(default)]
     pub owned_by: Option<String>,
+    /// Capability flags from the deployment (e.g., "chat_completion", "embeddings").
+    #[serde(default)]
+    pub capabilities: Option<std::collections::HashMap<String, String>>,
 }
 
 // ---------------------------------------------------------------------------
@@ -488,6 +491,7 @@ impl LlmClient {
                             id: d.id,
                             created: None,
                             owned_by: d.model,
+                            capabilities: None,
                         })
                         .collect(),
                 );
@@ -515,6 +519,7 @@ impl LlmClient {
                             id: m.name,
                             created: None,
                             owned_by: m.model_name,
+                            capabilities: m.capabilities,
                         })
                         .collect(),
                 );
@@ -533,6 +538,7 @@ impl LlmClient {
                             owned_by: d.properties
                                 .and_then(|p| p.model)
                                 .map(|m| m.name),
+                            capabilities: None,
                         })
                         .collect(),
                 );
