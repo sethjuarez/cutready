@@ -172,13 +172,13 @@ export function ChatPanel() {
 
   return (
     <div className="flex flex-col h-full bg-[var(--color-surface)]">
-      {/* Tab bar — toolbar style with icon buttons */}
-      <div className="flex items-center gap-0.5 px-2 h-[34px] bg-[var(--color-surface-alt)] border-b border-[var(--color-border)] shrink-0">
+      {/* Tab bar — underline tabs like VS Code panel tabs */}
+      <div className="flex items-stretch border-b border-[var(--color-border)] shrink-0">
         <button
-          className={`flex items-center gap-1.5 px-2.5 h-[26px] rounded text-[11px] font-medium transition-all ${
+          className={`flex items-center gap-1.5 px-3 py-2 text-[11px] font-medium transition-colors border-b-2 -mb-px ${
             activeTab === "chat"
-              ? "bg-[var(--color-surface)] text-[var(--color-text)] shadow-sm border border-[var(--color-border)]"
-              : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)]/50"
+              ? "border-[var(--color-accent)] text-[var(--color-text)]"
+              : "border-transparent text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:border-[var(--color-text-secondary)]/30"
           }`}
           onClick={() => setActiveTab("chat")}
         >
@@ -186,10 +186,10 @@ export function ChatPanel() {
           Chat
         </button>
         <button
-          className={`flex items-center gap-1.5 px-2.5 h-[26px] rounded text-[11px] font-medium transition-all ${
+          className={`flex items-center gap-1.5 px-3 py-2 text-[11px] font-medium transition-colors border-b-2 -mb-px ${
             activeTab === "history"
-              ? "bg-[var(--color-surface)] text-[var(--color-text)] shadow-sm border border-[var(--color-border)]"
-              : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)]/50"
+              ? "border-[var(--color-accent)] text-[var(--color-text)]"
+              : "border-transparent text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:border-[var(--color-text-secondary)]/30"
           }`}
           onClick={() => setActiveTab("history")}
         >
