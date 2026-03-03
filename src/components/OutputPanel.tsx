@@ -139,14 +139,14 @@ function ActivityRow({ entry }: { entry: ActivityEntry }) {
     : "text-[var(--color-text-secondary)]";
 
   return (
-    <div className={`flex items-start gap-1.5 py-0.5 ${colorCls}`}>
+    <div className="flex items-start gap-1.5 py-0.5">
       <span className="shrink-0 text-[var(--color-text-secondary)] tabular-nums">
         {entry.timestamp.toLocaleTimeString()}
       </span>
       <ActivityIcon source={entry.source} level={entry.level} />
       <span className="shrink-0 text-[var(--color-text-secondary)]">{entry.source}</span>
       <span
-        className={`text-[var(--color-text)] min-w-0 ${expanded ? "whitespace-pre-wrap break-words" : "truncate"} ${isTruncatable ? "cursor-pointer hover:text-[var(--color-accent)]" : ""}`}
+        className={`${colorCls} min-w-0 ${expanded ? "whitespace-pre-wrap break-words" : "truncate"} ${isTruncatable ? "cursor-pointer hover:text-[var(--color-accent)]" : ""}`}
         onClick={isTruncatable ? () => setExpanded(!expanded) : undefined}
         title={isTruncatable ? (expanded ? "Click to collapse" : "Click to expand") : undefined}
       >
