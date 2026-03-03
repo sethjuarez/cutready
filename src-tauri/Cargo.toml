@@ -33,6 +33,9 @@ base64 = "0.22"
 sha2 = "0.10"
 rand = "0.9"
 urlencoding = "2"
+zip = "2"
+quick-xml = "0.37"
+pdf-extract = "0.8"
 
 # Tauri plugins
 tauri-plugin-shell = "2"

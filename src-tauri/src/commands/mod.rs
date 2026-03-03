@@ -2,6 +2,7 @@ pub mod agent;
 pub mod animation;
 pub mod automation;
 pub mod export;
+pub mod import;
 pub mod interaction;
 pub mod note;
 pub mod project;
