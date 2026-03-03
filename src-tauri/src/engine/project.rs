@@ -144,12 +144,9 @@ pub fn read_sketch(path: &Path) -> Result<Sketch, ProjectError> {
 }
 
 /// Delete a sketch file and auto-commit.
-pub fn delete_sketch(path: &Path, project_root: &Path) -> Result<(), ProjectError> {
+pub fn delete_sketch(path: &Path, _project_root: &Path) -> Result<(), ProjectError> {
     if path.exists() {
         std::fs::remove_file(path).map_err(|e| ProjectError::Io(e.to_string()))?;
-    }
-    if project_root.join(".git").exists() {
-        let _ = versioning::commit_snapshot(project_root, "Delete sketch", None);
     }
     Ok(())
 }
@@ -207,12 +204,9 @@ pub fn read_storyboard(path: &Path) -> Result<Storyboard, ProjectError> {
 }
 
 /// Delete a storyboard file and auto-commit.
-pub fn delete_storyboard(path: &Path, project_root: &Path) -> Result<(), ProjectError> {
+pub fn delete_storyboard(path: &Path, _project_root: &Path) -> Result<(), ProjectError> {
     if path.exists() {
         std::fs::remove_file(path).map_err(|e| ProjectError::Io(e.to_string()))?;
-    }
-    if project_root.join(".git").exists() {
-        let _ = versioning::commit_snapshot(project_root, "Delete storyboard", None);
     }
     Ok(())
 }
@@ -323,12 +317,9 @@ pub fn write_note(path: &Path, content: &str) -> Result<(), ProjectError> {
 }
 
 /// Delete a note file and auto-commit.
-pub fn delete_note(path: &Path, project_root: &Path) -> Result<(), ProjectError> {
+pub fn delete_note(path: &Path, _project_root: &Path) -> Result<(), ProjectError> {
     if path.exists() {
         std::fs::remove_file(path).map_err(|e| ProjectError::Io(e.to_string()))?;
-    }
-    if project_root.join(".git").exists() {
-        let _ = versioning::commit_snapshot(project_root, "Delete note", None);
     }
     Ok(())
 }
