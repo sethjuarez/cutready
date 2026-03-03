@@ -52,6 +52,8 @@ pub fn all_tools() -> Vec<ToolDefinition> {
                 "type": "object",
                 "properties": {
                     "path": { "type": "string", "description": "Relative path to the sketch. Use a path from list_project_files to update, or a new filename like 'my-sketch.sk' to create" },
+                    "title": { "type": "string", "description": "Title for the sketch (optional, used when creating a new sketch)" },
+                    "description": { "type": "string", "description": "Brief description of the sketch content and purpose (optional)" },
                     "rows": {
                         "type": "array",
                         "items": {
@@ -237,15 +239,16 @@ fn exec_set_planning_rows(root: &Path, args: &Value) -> String {
     let mut sketch = match project::read_sketch(&path) {
         Ok(s) => s,
         Err(_) => {
-            // New sketch — derive title from filename
-            let title = path
-                .file_stem()
-                .map(|s| {
-                    s.to_string_lossy()
-                        .replace('-', " ")
-                        .replace('_', " ")
-                })
-                .unwrap_or_else(|| "Untitled".into());
+            // New sketch — use provided title or derive from filename
+            let title = args
+                .get("title")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| {
+                    path.file_stem()
+                        .map(|s| s.to_string_lossy().replace('-', " ").replace('_', " "))
+                        .unwrap_or_else(|| "Untitled".into())
+                });
             crate::models::sketch::Sketch {
                 title,
                 description: serde_json::Value::Null,
@@ -256,6 +259,14 @@ fn exec_set_planning_rows(root: &Path, args: &Value) -> String {
             }
         }
     };
+
+    // Apply optional title/description updates (works for both new and existing sketches)
+    if let Some(t) = args.get("title").and_then(|v| v.as_str()) {
+        sketch.title = t.to_string();
+    }
+    if let Some(d) = args.get("description").and_then(|v| v.as_str()) {
+        sketch.description = serde_json::Value::String(d.to_string());
+    }
 
     let count = new_rows.len();
     sketch.rows = new_rows;
