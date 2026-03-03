@@ -646,10 +646,7 @@ function ChatTab() {
             if (prev.some((r) => r.path === url)) return prev;
             return [...prev, { type: "web", path: url, title: url, webStatus: "loading" }];
           });
-          // Remove #web:URL + trailing space from input
-          const before = val.slice(0, hashIndex);
-          const after = val.slice(hashIndex + 1 + webMatch[0].length);
-          setInput(before + after);
+          // Keep #web:URL text in the input — just close autocomplete
           setShowAutocomplete(false);
           // Fetch content in background
           invoke<string>("fetch_url_content", { url }).then((content) => {
