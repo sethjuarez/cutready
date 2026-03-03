@@ -1,6 +1,34 @@
 import { useState } from "react";
 import { useAppStore, type ActivityEntry } from "../stores/appStore";
 
+/** Format activity log as plain text and copy to clipboard / save to file. */
+async function exportActivity(entries: ActivityEntry[]) {
+  if (entries.length === 0) return;
+  const lines = entries.map(
+    (e) =>
+      `[${e.timestamp.toISOString()}] [${e.level.toUpperCase().padEnd(7)}] [${e.source}] ${e.content}`
+  );
+  const text = lines.join("\n");
+
+  // Try clipboard first
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    // Clipboard may not be available in all contexts — fall through to download
+  }
+
+  // Also trigger a file download
+  const blob = new Blob([text], { type: "text/plain" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `cutready-activity-${new Date().toISOString().replace(/[:.]/g, "-")}.log`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 type OutputTab = "activity" | "problems";
 
 interface OutputPanelProps {
@@ -37,6 +65,17 @@ export function OutputPanel({ onCollapse }: OutputPanelProps) {
           </TabButton>
         </div>
         <div className="flex items-center gap-1">
+          <button
+            onClick={() => exportActivity(outputs)}
+            className="p-1 rounded text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-alt)] transition-colors"
+            title="Export activity log"
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
+          </button>
           <button
             onClick={clearActivityLog}
             className="p-1 rounded text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-alt)] transition-colors"
