@@ -959,15 +959,17 @@ function ChatTab() {
         {references.length > 0 && (
           <div className="px-2.5 pt-2 space-y-1">
             <div className="flex flex-wrap gap-1">
-              {references.map((ref) => (
+              {references.map((ref) => {
+                const c = typeColors(ref.type);
+                return (
                 <span
                   key={ref.path}
                   className={`inline-flex items-center gap-1 px-1.5 py-0.5 text-[11px] rounded border transition-colors ${
                     ref.type === "web" && ref.webStatus === "loading"
-                      ? "bg-[var(--color-surface)] text-[var(--color-text-secondary)] border-[var(--color-border)] animate-pulse"
+                      ? `${c.bg} ${c.text} ${c.border} animate-pulse`
                       : ref.type === "web" && ref.webStatus === "error"
                         ? "bg-red-400/10 text-red-400 border-red-400/30"
-                        : "bg-[var(--color-surface)] text-[var(--color-text)] border-[var(--color-border)] hover:border-[var(--color-accent)]/40"
+                        : `${c.bg} ${c.text} ${c.border}`
                   }`}
                 >
                   <FileTypeIcon type={ref.type} />
@@ -992,7 +994,8 @@ function ChatTab() {
                     </svg>
                   </button>
                 </span>
-              ))}
+                );
+              })}
             </div>
             {/* Web content preview */}
             {expandedWebRef && (() => {
@@ -1272,11 +1275,12 @@ function UserContent({ content }: { content: string }) {
         const refMatch = ref.match(/^#(note|sketch|storyboard):(.+)$/);
         if (refMatch) {
           const [, type, path] = refMatch;
+          const c = typeColors(type);
           const title = path.replace(/\.\w+$/, "").split("/").pop() ?? path;
           parts.push(
             <span
               key={`${match!.index}-${i}`}
-              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[var(--color-surface)] border border-[var(--color-border)] text-[11px] text-[var(--color-text-secondary)] font-mono align-baseline mr-0.5"
+              className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[11px] font-mono align-baseline mr-0.5 ${c.bg} ${c.text} ${c.border}`}
             >
               <FileTypeIcon type={type} />
               <span className="max-w-[140px] truncate">{title}</span>
@@ -1403,6 +1407,15 @@ function MessageRow({ message, projectRoot }: { message: ChatMessage; projectRoo
 function ToolCallsRow({ toolCalls }: { toolCalls: ToolCall[] }) {
   const [expanded, setExpanded] = useState(false);
 
+  // Determine dominant type color from the tool names
+  function toolTypeColor(name: string): string {
+    if (name.includes("note")) return "note";
+    if (name.includes("sketch") || name.includes("planning")) return "sketch";
+    if (name.includes("storyboard")) return "storyboard";
+    if (name.includes("fetch_url")) return "web";
+    return "";
+  }
+
   // Build compact one-line summary
   const names = toolCalls.map((tc) => {
     const name = tc.function.name.replace(/_/g, " ");
@@ -1415,11 +1428,13 @@ function ToolCallsRow({ toolCalls }: { toolCalls: ToolCall[] }) {
     return summary;
   });
   const label = toolCalls.length === 1 ? names[0] : `${toolCalls.length} tool calls`;
+  const dominantType = toolTypeColor(toolCalls[0]?.function.name ?? "");
+  const c = typeColors(dominantType);
 
   return (
     <div>
       <button
-        className="inline-flex items-center gap-1.5 px-2 py-0.5 text-[11px] rounded bg-[var(--color-surface-alt)] text-[var(--color-text-secondary)] border border-[var(--color-border)] hover:text-[var(--color-text)] transition-colors max-w-full"
+        className={`inline-flex items-center gap-1.5 px-2 py-0.5 text-[11px] rounded border transition-colors max-w-full ${c.bg} ${c.text} ${c.border} hover:brightness-110`}
         onClick={() => setExpanded(!expanded)}
       >
         <span className="opacity-70"><IconWrench size={11} /></span>
@@ -1617,8 +1632,25 @@ function ModelPickerDropdown({
 
 // ── Helpers ──────────────────────────────────────────────────────
 
+/** Type-specific accent colors for sketches, notes, storyboards, web, etc. */
+function typeColors(type: string): { text: string; bg: string; border: string } {
+  switch (type) {
+    case "sketch":
+      return { text: "text-purple-400", bg: "bg-purple-400/8", border: "border-purple-400/25" };
+    case "note":
+      return { text: "text-amber-400", bg: "bg-amber-400/8", border: "border-amber-400/25" };
+    case "storyboard":
+      return { text: "text-emerald-400", bg: "bg-emerald-400/8", border: "border-emerald-400/25" };
+    case "web":
+      return { text: "text-blue-400", bg: "bg-blue-400/8", border: "border-blue-400/25" };
+    default:
+      return { text: "text-[var(--color-text-secondary)]", bg: "bg-[var(--color-surface)]", border: "border-[var(--color-border)]" };
+  }
+}
+
 function FileTypeIcon({ type }: { type: string }) {
-  const cls = "shrink-0 text-[var(--color-text-secondary)]";
+  const c = typeColors(type);
+  const cls = `shrink-0 ${c.text}`;
   switch (type) {
     case "sketch":
       return <span className={cls}><SketchIcon size={12} /></span>;
