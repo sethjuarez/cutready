@@ -452,6 +452,7 @@ function ChatTab() {
 
     // Build user message with #references context
     let userContent = text;
+    let llmContent: string | null = null;
     if (references.length > 0) {
       const webRefs = references.filter((r) => r.type === "web");
       const fileRefs = references.filter((r) => r.type !== "web");
@@ -461,15 +462,21 @@ function ChatTab() {
         parts.push(`[References: ${fileRefs.map((r) => `#${r.type}:${r.path}`).join(", ")}]`);
       }
 
+      // Display-only: compact web references
+      for (const wr of webRefs) {
+        parts.push(`[Web: ${wr.path}]`);
+      }
+
+      // Build separate LLM parts with full web content
+      const llmParts = [...parts];
       for (const wr of webRefs) {
         if (wr.webContent && wr.webStatus === "ready") {
-          parts.push(`[Web: ${wr.path}]\n${wr.webContent}`);
-        } else {
-          parts.push(`[Web: ${wr.path}] (content not available)`);
+          llmParts.push(`[Web Content: ${wr.path}]\n${wr.webContent}`);
         }
       }
 
       userContent = `${parts.join("\n\n")}\n\n${text}`;
+      llmContent = `${llmParts.join("\n\n")}\n\n${text}`;
     }
 
     const userMsg: ChatMessage = { role: "user", content: userContent };
@@ -477,10 +484,13 @@ function ChatTab() {
     setChatMessages(newMessages);
     setReferences([]);
 
-    // Build full conversation with system prompt
+    // Build full conversation with system prompt — use llmContent for last message so LLM gets web content
+    const llmMessages = newMessages.map((m, i) =>
+      i === newMessages.length - 1 && llmContent ? { ...m, content: llmContent } : m
+    );
     const fullMessages: ChatMessage[] = [
       { role: "system", content: systemPrompt },
-      ...newMessages,
+      ...llmMessages,
     ];
 
     setChatLoading(true);
