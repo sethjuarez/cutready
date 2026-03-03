@@ -725,12 +725,11 @@ function MarkdownCell({
   // Preview mode — use localValue to preserve edits before debounce saves
   if (readOnly || !isEditing) {
     const rendered = renderMarkdown(localValue);
-    const hasContent = !!localValue?.trim();
     return (
       <div
         data-cell
         tabIndex={readOnly ? undefined : 0}
-        className={`md-cell-preview min-h-[1.5rem] rounded outline-none transition-colors ${!readOnly ? "cursor-text focus:ring-1 focus:ring-[var(--color-accent)]/40" : ""} ${hasContent ? "md-cell-clamp" : ""}`}
+        className={`md-cell-preview min-h-[1.5rem] rounded outline-none transition-colors ${!readOnly ? "cursor-text focus:ring-1 focus:ring-[var(--color-accent)]/40" : ""}`}
         onClick={() => {
           if (!readOnly) setIsEditing(true);
         }}

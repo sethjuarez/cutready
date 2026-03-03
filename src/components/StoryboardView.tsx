@@ -14,6 +14,8 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { invoke } from "@tauri-apps/api/core";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { useAppStore } from "../stores/appStore";
 import { SketchPickerItem } from "./SketchCard";
 import { ScriptTable } from "./ScriptTable";
@@ -56,9 +58,25 @@ export function StoryboardView() {
   const loadingRef = useRef<Set<string>>(new Set());
   const [collapsedItems, setCollapsedItems] = useState<Set<number>>(new Set());
   const [showMonitorPicker, setShowMonitorPicker] = useState(false);
+  const [editingDesc, setEditingDesc] = useState(false);
+  const [localDesc, setLocalDesc] = useState(activeStoryboard?.description ?? "");
+  const descRef = useRef<HTMLTextAreaElement>(null);
   const [availableMonitors, setAvailableMonitors] = useState<MonitorInfo[]>([]);
 
   const sketchMap = new Map(sketches.map((s) => [s.path, s]));
+
+  // Sync local desc when storyboard changes
+  useEffect(() => {
+    setLocalDesc(activeStoryboard?.description ?? "");
+    setEditingDesc(false);
+  }, [activeStoryboard?.description]);
+
+  useEffect(() => {
+    if (editingDesc && descRef.current) {
+      descRef.current.focus();
+      descRef.current.selectionStart = descRef.current.value.length;
+    }
+  }, [editingDesc]);
 
   // Eagerly load all referenced sketches
   useEffect(() => {
@@ -250,17 +268,41 @@ export function StoryboardView() {
             </div>
           )}
         </div>
-        <textarea
-          defaultValue={activeStoryboard.description}
-          onBlur={(e) => {
-            if (e.target.value !== activeStoryboard.description) {
-              updateStoryboard({ description: e.target.value });
-            }
-          }}
-          placeholder="Describe this storyboard..."
-          rows={2}
-          className="w-full text-sm bg-transparent text-[var(--color-text-secondary)] placeholder:text-[var(--color-text-secondary)]/40 outline-none border-none resize-none mb-8"
-        />
+        {/* Description — markdown preview, click to edit */}
+        <div className="relative group/desc mb-8">
+          {editingDesc ? (
+            <textarea
+              ref={descRef}
+              value={localDesc}
+              onChange={(e) => {
+                setLocalDesc(e.target.value);
+                updateStoryboard({ description: e.target.value });
+              }}
+              onBlur={() => setEditingDesc(false)}
+              placeholder="Describe this storyboard..."
+              rows={3}
+              className="w-full text-sm bg-transparent text-[var(--color-text)] placeholder:text-[var(--color-text-secondary)]/40 outline-none border border-[var(--color-border)] rounded-lg px-3 py-2 resize-none focus:ring-1 focus:ring-[var(--color-accent)]/40 transition-colors"
+              autoFocus
+            />
+          ) : (
+            <div
+              tabIndex={0}
+              onClick={() => setEditingDesc(true)}
+              onFocus={() => setEditingDesc(true)}
+              className="min-h-[2rem] rounded-lg px-3 py-2 text-sm cursor-text border border-transparent hover:border-[var(--color-border)] transition-colors"
+            >
+              {localDesc ? (
+                <div className="prose-desc text-[var(--color-text-secondary)] leading-relaxed">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{localDesc}</ReactMarkdown>
+                </div>
+              ) : (
+                <span className="text-[var(--color-text-secondary)]/40">
+                  Describe this storyboard...
+                </span>
+              )}
+            </div>
+          )}
+        </div>
 
         {/* Items */}
         {activeStoryboard.items.length === 0 ? (
@@ -467,7 +509,9 @@ function ExpandableSketchCard({
 
       {/* Description (from full sketch if loaded) */}
       {fullSketch && typeof fullSketch.description === "string" && fullSketch.description.trim() && (
-        <p className="text-sm text-[var(--color-text-secondary)] mb-2 leading-relaxed">{fullSketch.description}</p>
+        <div className="prose-desc text-sm text-[var(--color-text-secondary)] mb-2 leading-relaxed">
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>{fullSketch.description}</ReactMarkdown>
+        </div>
       )}
 
       {/* Table — collapsible */}

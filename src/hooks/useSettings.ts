@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect } from "react";
+import { create } from "zustand";
 import { LazyStore } from "@tauri-apps/plugin-store";
 
 export interface AgentPreset {
@@ -72,52 +73,64 @@ const defaultSettings: AppSettings = {
 
 const STORE_PATH = "settings.json";
 
+interface SettingsStore {
+  settings: AppSettings;
+  loaded: boolean;
+  _store: LazyStore | null;
+  _loadSettings: () => Promise<void>;
+  updateSetting: <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => Promise<void>;
+}
+
+export const useSettingsStore = create<SettingsStore>((set, get) => ({
+  settings: defaultSettings,
+  loaded: false,
+  _store: null,
+
+  _loadSettings: async () => {
+    if (get().loaded) return;
+    const store = new LazyStore(STORE_PATH);
+    set({ _store: store });
+
+    const result = { ...defaultSettings };
+    for (const key of Object.keys(defaultSettings) as (keyof AppSettings)[]) {
+      const val = await store.get(key);
+      if (val !== null && val !== undefined) {
+        (result as Record<string, unknown>)[key] = val;
+      }
+    }
+
+    // Migrate legacy fields
+    if (!result.aiApiKey && result.llmApiKey) {
+      result.aiApiKey = result.llmApiKey;
+      result.aiEndpoint = result.llmEndpoint || "";
+      result.aiModel = result.llmDeployment || "";
+      result.aiProvider = "azure_openai";
+    }
+
+    set({ settings: result, loaded: true });
+  },
+
+  updateSetting: async (key, value) => {
+    set((state) => ({ settings: { ...state.settings, [key]: value } }));
+    const store = get()._store;
+    if (store) {
+      await store.set(key, value);
+      await store.save();
+    }
+  },
+}));
+
 /**
- * Hook for reading and writing application settings via tauri-plugin-store.
- * Settings persist across restarts.
+ * Hook for reading and writing application settings.
+ * Uses a shared zustand store — all consumers see updates immediately.
  */
 export function useSettings() {
-  const [settings, setSettings] = useState<AppSettings>(defaultSettings);
-  const [loaded, setLoaded] = useState(false);
-  const storeRef = useRef<LazyStore | null>(null);
+  const settings = useSettingsStore((s) => s.settings);
+  const loaded = useSettingsStore((s) => s.loaded);
+  const updateSetting = useSettingsStore((s) => s.updateSetting);
+  const loadSettings = useSettingsStore((s) => s._loadSettings);
 
-  useEffect(() => {
-    const load = async () => {
-      const store = new LazyStore(STORE_PATH);
-      storeRef.current = store;
-
-      const result = { ...defaultSettings };
-      for (const key of Object.keys(defaultSettings) as (keyof AppSettings)[]) {
-        const val = await store.get(key);
-        if (val !== null && val !== undefined) {
-          (result as Record<string, unknown>)[key] = val;
-        }
-      }
-
-      // Migrate legacy fields
-      if (!result.aiApiKey && result.llmApiKey) {
-        result.aiApiKey = result.llmApiKey;
-        result.aiEndpoint = result.llmEndpoint || "";
-        result.aiModel = result.llmDeployment || "";
-        result.aiProvider = "azure_openai";
-      }
-
-      setSettings(result);
-      setLoaded(true);
-    };
-    load();
-  }, []);
-
-  const updateSetting = useCallback(
-    async <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => {
-      setSettings((prev) => ({ ...prev, [key]: value }));
-      if (storeRef.current) {
-        await storeRef.current.set(key, value);
-        await storeRef.current.save();
-      }
-    },
-    [],
-  );
+  useEffect(() => { loadSettings(); }, [loadSettings]);
 
   return { settings, updateSetting, loaded };
 }

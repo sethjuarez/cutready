@@ -115,32 +115,6 @@ html {
   border-bottom-right-radius: 0.5rem;
 }
 
-/* Collapsed markdown cell preview — clamp to 3 lines with fade */
-.md-cell-clamp {
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  position: relative;
-}
-.md-cell-clamp::after {
-  content: "";
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 1.2em;
-  background: linear-gradient(transparent, var(--color-surface-alt));
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 0.15s;
-}
-/* Only show fade when content is actually clamped (heuristic: has enough text) */
-.md-cell-clamp:has(p + p)::after,
-.md-cell-clamp:has(br)::after {
-  opacity: 1;
-}
-
 /* ── Markdown Cell (Planning Table) ──────────────────────── */
 
 .md-cell-preview {
