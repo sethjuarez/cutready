@@ -503,7 +503,7 @@ Keep responses concise and actionable. Use markdown formatting.`;
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto min-h-0 py-2">
+      <div className="flex-1 overflow-y-auto min-h-0 py-2 bg-[var(--color-surface-inset)]">
         {messages.length === 0 && !loading && (
           <div className="flex flex-col items-center justify-center h-full text-center px-4">
             <div className="w-10 h-10 rounded-full bg-[var(--color-accent)]/10 flex items-center justify-center mb-3 text-[var(--color-accent)]">
@@ -562,7 +562,7 @@ Keep responses concise and actionable. Use markdown formatting.`;
       </div>
 
       {/* Input area — VS Code Copilot chat style */}
-      <div className="shrink-0 mx-2.5 mb-2.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-alt)] transition-colors focus-within:border-[var(--color-accent)]">
+      <div className="shrink-0 mx-2.5 mb-2.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] shadow-sm transition-colors focus-within:border-[var(--color-accent)]">
         {/* Reference chips (shown above textarea like VS Code) */}
         {references.length > 0 && (
           <div className="flex flex-wrap gap-1 px-2.5 pt-2">
