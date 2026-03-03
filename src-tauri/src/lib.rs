@@ -169,6 +169,7 @@ pub fn run() {
             commands::note::update_note,
             commands::note::delete_note,
             commands::note::list_notes,
+            commands::note::save_pasted_image,
             commands::import::import_docx,
             commands::import::import_pdf,
             commands::import::import_pptx,

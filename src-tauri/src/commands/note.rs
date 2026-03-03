@@ -72,3 +72,39 @@ pub async fn list_notes(state: State<'_, AppState>) -> Result<Vec<NoteSummary>, 
     let root = project_root(&state)?;
     project::scan_notes(&root).map_err(|e| e.to_string())
 }
+
+/// Save a base64-encoded image to the project's screenshots directory.
+/// Returns the relative path (e.g. ".cutready/screenshots/pasted-1234.png").
+#[tauri::command]
+pub async fn save_pasted_image(
+    base64_data: String,
+    extension: String,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    let root = project_root(&state)?;
+    let dir = root.join(".cutready").join("screenshots");
+    std::fs::create_dir_all(&dir).map_err(|e| format!("Failed to create screenshots dir: {e}"))?;
+
+    let data = base64_decode(&base64_data)?;
+    let ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis();
+    let ext = match extension.as_str() {
+        "jpeg" | "jpg" => "jpg",
+        "gif" => "gif",
+        "webp" => "webp",
+        _ => "png",
+    };
+    let filename = format!("pasted-{ts}.{ext}");
+    let abs_path = dir.join(&filename);
+    std::fs::write(&abs_path, &data).map_err(|e| format!("Failed to write image: {e}"))?;
+    Ok(format!(".cutready/screenshots/{filename}"))
+}
+
+fn base64_decode(input: &str) -> Result<Vec<u8>, String> {
+    use base64::Engine;
+    base64::engine::general_purpose::STANDARD
+        .decode(input)
+        .map_err(|e| format!("Invalid base64: {e}"))
+}

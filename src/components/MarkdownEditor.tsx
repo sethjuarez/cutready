@@ -14,6 +14,13 @@ import { languages } from "@codemirror/language-data";
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { EditorView } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
+import {
+  clipboardHasHtml,
+  htmlToMarkdown,
+  getClipboardImageBlob,
+  blobToBase64,
+} from "../services/richPaste";
+import { invoke } from "@tauri-apps/api/core";
 
 /** Syntax highlighting style — applies inline styling to markdown tokens. */
 const markdownHighlightStyle = HighlightStyle.define([
@@ -83,15 +90,91 @@ export interface MarkdownEditorProps {
   placeholder?: string;
   /** Stable key to force remount (e.g., file path). */
   editorKey?: string;
+  /** Whether to save pasted images to project (requires open project). */
+  saveImages?: boolean;
 }
 
-export function MarkdownEditor({ value, onChange, placeholder, editorKey }: MarkdownEditorProps) {
+/**
+ * CodeMirror extension: intercept paste events to convert HTML → Markdown.
+ * Handles Word documents, web pages, and pasted images.
+ */
+function richPasteExtension(saveImages: boolean) {
+  return EditorView.domEventHandlers({
+    paste(event: ClipboardEvent, view: EditorView) {
+      const clip = event.clipboardData;
+      if (!clip) return false;
+
+      // Case 1: HTML content (Word, web pages, rich text apps)
+      if (clipboardHasHtml(clip)) {
+        const html = clip.getData("text/html");
+        if (!html) return false;
+
+        // Prevent default paste — we'll insert our own content
+        event.preventDefault();
+
+        // Convert async — insert placeholder then replace
+        htmlToMarkdown(html, { saveImages }).then(({ markdown: md }) => {
+          const { from, to } = view.state.selection.main;
+          view.dispatch({
+            changes: { from, to, insert: md },
+            selection: { anchor: from + md.length },
+          });
+        }).catch((err) => {
+          console.error("Rich paste failed, falling back to plain text:", err);
+          // Fallback: insert plain text
+          const plain = clip.getData("text/plain");
+          if (plain) {
+            const { from, to } = view.state.selection.main;
+            view.dispatch({
+              changes: { from, to, insert: plain },
+              selection: { anchor: from + plain.length },
+            });
+          }
+        });
+
+        return true;
+      }
+
+      // Case 2: Image paste (screenshots, snipping tool)
+      const imageBlob = getClipboardImageBlob(clip);
+      if (imageBlob && saveImages) {
+        event.preventDefault();
+
+        const ext = imageBlob.type.split("/")[1] || "png";
+        blobToBase64(imageBlob).then(async (base64) => {
+          try {
+            const relativePath = await invoke<string>("save_pasted_image", {
+              base64Data: base64,
+              extension: ext,
+            });
+            const md = `![](${relativePath})`;
+            const { from, to } = view.state.selection.main;
+            view.dispatch({
+              changes: { from, to, insert: md },
+              selection: { anchor: from + md.length },
+            });
+          } catch (err) {
+            console.error("Failed to save pasted image:", err);
+          }
+        });
+
+        return true;
+      }
+
+      // Default: let CodeMirror handle plain text paste
+      return false;
+    },
+  });
+}
+
+export function MarkdownEditor({ value, onChange, placeholder, editorKey, saveImages = true }: MarkdownEditorProps) {
   const extensions = useMemo(() => [
     markdown({ base: markdownLanguage, codeLanguages: languages }),
     syntaxHighlighting(markdownHighlightStyle),
     EditorView.lineWrapping,
     editorTheme,
-  ], []);
+    richPasteExtension(saveImages),
+  ], [saveImages]);
 
   return (
     <CodeMirror
