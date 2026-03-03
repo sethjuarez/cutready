@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useAppStore } from "../stores/appStore";
 import { useSettings } from "../hooks/useSettings";
 import { VersionHistory } from "./VersionHistory";
+import { SketchIcon, StoryboardIcon, NoteIcon } from "./Icons";
 import type { ChatMessage, ToolCall } from "../types/sketch";
 
 // ── Types ────────────────────────────────────────────────────────
@@ -87,33 +88,6 @@ function IconPlus({ size = 14 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M5 12h14" /><path d="M12 5v14" />
-    </svg>
-  );
-}
-
-function IconSketch({ size = 12 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 20h9" />
-      <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
-    </svg>
-  );
-}
-
-function IconNote({ size = 12 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M16 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8Z" />
-      <path d="M15 3v4a2 2 0 0 0 2 2h4" />
-    </svg>
-  );
-}
-
-function IconStoryboard({ size = 12 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" />
-      <rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" />
     </svg>
   );
 }
@@ -1111,11 +1085,11 @@ function FileTypeIcon({ type }: { type: string }) {
   const cls = "shrink-0 text-[var(--color-text-secondary)]";
   switch (type) {
     case "sketch":
-      return <span className={cls}><IconSketch /></span>;
+      return <span className={cls}><SketchIcon size={12} /></span>;
     case "note":
-      return <span className={cls}><IconNote /></span>;
+      return <span className={cls}><NoteIcon size={12} /></span>;
     case "storyboard":
-      return <span className={cls}><IconStoryboard /></span>;
+      return <span className={cls}><StoryboardIcon size={12} /></span>;
     default:
       return <span className={cls}><IconFile /></span>;
   }
