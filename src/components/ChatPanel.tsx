@@ -481,6 +481,14 @@ function ChatTab() {
     ];
 
     setChatLoading(true);
+    // Log the send to activity
+    addActivityEntries([{
+      id: crypto.randomUUID(),
+      timestamp: new Date(),
+      source: "💬 chat",
+      content: `Sent: "${userContent.slice(0, 100)}${userContent.length > 100 ? "…" : ""}"`,
+      level: "info",
+    }]);
     try {
       // Build agent prompts map for sub-agent delegation
       const agentPrompts: Record<string, string> = {};
@@ -548,10 +556,27 @@ function ChatTab() {
         displayMessages.push({ role: "assistant", content: result.response });
       }
 
+      // Log response to activity
+      addActivityEntries([{
+        id: crypto.randomUUID(),
+        timestamp: new Date(),
+        source: "✅ response",
+        content: `${toolMessages.length > 0 ? `${toolMessages.reduce((n, m) => n + (m.tool_calls?.length ?? 0), 0)} tool call(s) → ` : ""}${(result.response ?? "").slice(0, 120)}${(result.response ?? "").length > 120 ? "…" : ""}`,
+        level: "success",
+      }]);
+
       setChatMessages(displayMessages);
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
       setChatError(errMsg);
+      // Log error to activity
+      addActivityEntries([{
+        id: crypto.randomUUID(),
+        timestamp: new Date(),
+        source: "❌ error",
+        content: errMsg.slice(0, 200),
+        level: "error",
+      }]);
       // Keep user message visible
       setChatMessages(newMessages);
     } finally {
