@@ -61,13 +61,23 @@ pub fn all_tools() -> Vec<ToolDefinition> {
                             "properties": {
                                 "time": { "type": "string", "description": "Duration (e.g. '~30s', '1:00')" },
                                 "narrative": { "type": "string", "description": "Voiceover/narration bullets" },
-                                "demo_actions": { "type": "string", "description": "On-screen action bullets" }
+                                "demo_actions": { "type": "string", "description": "On-screen action bullets" },
+                                "screenshot": { "type": "string", "description": "Optional path to a screenshot image (relative, e.g. '.cutready/screenshots/pasted-123.png'). Use list_project_images or read the note content to find existing image paths." }
                             },
                             "required": ["time", "narrative", "demo_actions"]
                         }
                     }
                 },
                 "required": ["path", "rows"]
+            }),
+        ),
+        tool_def(
+            "list_project_images",
+            "List all images/screenshots in the project's .cutready/screenshots directory. Returns paths that can be used as screenshot values in planning rows.",
+            json!({
+                "type": "object",
+                "properties": {},
+                "required": []
             }),
         ),
         tool_def(
@@ -80,7 +90,8 @@ pub fn all_tools() -> Vec<ToolDefinition> {
                     "index": { "type": "integer", "description": "0-based row index" },
                     "time": { "type": "string", "description": "New time value (optional)" },
                     "narrative": { "type": "string", "description": "New narrative (optional)" },
-                    "demo_actions": { "type": "string", "description": "New demo actions (optional)" }
+                    "demo_actions": { "type": "string", "description": "New demo actions (optional)" },
+                    "screenshot": { "type": "string", "description": "New screenshot path (optional, e.g. '.cutready/screenshots/pasted-123.png')" }
                 },
                 "required": ["path", "index"]
             }),
@@ -136,6 +147,7 @@ pub fn execute_tool(call: &ToolCall, project_root: &Path) -> String {
         "read_sketch" => exec_read_sketch(project_root, &args),
         "set_planning_rows" => exec_set_planning_rows(project_root, &args),
         "update_planning_row" => exec_update_planning_row(project_root, &args),
+        "list_project_images" => exec_list_project_images(project_root),
         other => format!("Unknown tool: {other}"),
     }
 }
@@ -193,9 +205,13 @@ fn exec_read_sketch(root: &Path, args: &Value) -> String {
         Ok(sketch) => {
             let mut out = format!("# {}\n\n", sketch.title);
             for (i, row) in sketch.rows.iter().enumerate() {
+                let screenshot_line = match &row.screenshot {
+                    Some(path) => format!("**Screenshot:** {}\n", path),
+                    None => String::new(),
+                };
                 out.push_str(&format!(
-                    "## Row {} [{}]\n**Narrative:** {}\n**Actions:** {}\n\n",
-                    i, row.time, row.narrative, row.demo_actions
+                    "## Row {} [{}]\n**Narrative:** {}\n**Actions:** {}\n{}\n",
+                    i, row.time, row.narrative, row.demo_actions, screenshot_line
                 ));
             }
             out
@@ -229,7 +245,7 @@ fn exec_set_planning_rows(root: &Path, args: &Value) -> String {
                     .and_then(|v| v.as_str())
                     .unwrap_or("")
                     .into(),
-                screenshot: None,
+                screenshot: r.get("screenshot").and_then(|v| v.as_str()).map(|s| s.to_string()),
             })
             .collect(),
         None => return "Error: 'rows' must be an array".into(),
@@ -310,9 +326,42 @@ fn exec_update_planning_row(root: &Path, args: &Value) -> String {
     if let Some(d) = args.get("demo_actions").and_then(|v| v.as_str()) {
         row.demo_actions = d.into();
     }
+    if let Some(s) = args.get("screenshot").and_then(|v| v.as_str()) {
+        row.screenshot = Some(s.into());
+    }
 
     match project::write_sketch(&sketch, &path, root) {
         Ok(()) => format!("Updated row {} in {}", index, path.display()),
         Err(e) => format!("Error writing sketch: {e}"),
     }
+}
+
+fn exec_list_project_images(root: &Path) -> String {
+    let screenshots_dir = root.join(".cutready").join("screenshots");
+    if !screenshots_dir.exists() {
+        return "No screenshots directory found.".into();
+    }
+    let mut images = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(&screenshots_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+                if matches!(ext.to_lowercase().as_str(), "png" | "jpg" | "jpeg" | "gif" | "webp" | "svg") {
+                    if let Ok(rel) = path.strip_prefix(root) {
+                        images.push(rel.to_string_lossy().replace('\\', "/"));
+                    }
+                }
+            }
+        }
+    }
+    if images.is_empty() {
+        return "No images found in .cutready/screenshots/".into();
+    }
+    images.sort();
+    let mut out = format!("Found {} image(s):\n", images.len());
+    for img in &images {
+        out.push_str(&format!("  {}\n", img));
+    }
+    out.push_str("\nUse these paths as 'screenshot' values in set_planning_rows or update_planning_row.");
+    out
 }

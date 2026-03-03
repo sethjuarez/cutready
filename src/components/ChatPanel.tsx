@@ -503,7 +503,7 @@ function ChatTab() {
   }, [showContextPicker, contextFilter, allFiles, references]);
 
   // Available tools list
-  const availableTools = ["list_project_files", "read_note", "read_sketch", "set_planning_rows", "update_planning_row", "delegate_to_agent", "fetch_url"];
+  const availableTools = ["list_project_files", "read_note", "read_sketch", "set_planning_rows", "update_planning_row", "list_project_images", "delegate_to_agent", "fetch_url"];
 
   const buildConfig = useCallback(() => ({
     provider: settings.aiProvider,
