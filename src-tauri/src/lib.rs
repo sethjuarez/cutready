@@ -190,6 +190,8 @@ pub fn run() {
             commands::agent::azure_token_refresh,
             commands::agent::azure_browser_auth_start,
             commands::agent::azure_browser_auth_complete,
+            commands::feedback::save_feedback,
+            commands::feedback::list_feedback,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

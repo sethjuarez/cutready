@@ -1,4 +1,5 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useUpdateStore } from "../stores/updateStore";
 import { relaunch } from "@tauri-apps/plugin-process";
@@ -448,10 +449,8 @@ function FeedbackPopover() {
     ].join("\n");
     try {
       await navigator.clipboard.writeText(text);
-      // Persist to localStorage
-      const stored = JSON.parse(localStorage.getItem("cutready-feedback") || "[]");
-      stored.push(entry);
-      localStorage.setItem("cutready-feedback", JSON.stringify(stored));
+      // Persist to app data directory
+      await invoke("save_feedback", { entry }).catch(() => {});
       setCopied(true);
       setTimeout(() => {
         setCopied(false);
