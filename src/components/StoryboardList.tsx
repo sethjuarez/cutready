@@ -199,12 +199,13 @@ export function StoryboardList() {
     try {
       const { open: openDialog } = await import("@tauri-apps/plugin-dialog");
       const selected = await openDialog({
-        title: "Import as Note",
+        title: "Import Document",
         multiple: false,
         filters: [
-          { name: "Documents", extensions: ["docx", "pdf"] },
+          { name: "Documents", extensions: ["docx", "pdf", "pptx"] },
           { name: "Word (.docx)", extensions: ["docx"] },
           { name: "PDF (.pdf)", extensions: ["pdf"] },
+          { name: "PowerPoint (.pptx)", extensions: ["pptx"] },
         ],
       });
       if (!selected) return;
@@ -216,6 +217,8 @@ export function StoryboardList() {
         resultPath = await invoke<string>("import_docx", { filePath });
       } else if (ext === "pdf") {
         resultPath = await invoke<string>("import_pdf", { filePath });
+      } else if (ext === "pptx") {
+        resultPath = await invoke<string>("import_pptx", { filePath });
       } else {
         return;
       }
@@ -225,27 +228,6 @@ export function StoryboardList() {
       console.error("Import failed:", err);
     }
   }, [loadNotes, openNote]);
-
-  const handleImportSketch = useCallback(async () => {
-    try {
-      const { open: openDialog } = await import("@tauri-apps/plugin-dialog");
-      const selected = await openDialog({
-        title: "Import as Sketch",
-        multiple: false,
-        filters: [
-          { name: "PowerPoint (.pptx)", extensions: ["pptx"] },
-        ],
-      });
-      if (!selected) return;
-      const filePath = typeof selected === "string" ? selected : (selected as { path: string }).path;
-      const resultPath = await invoke<string>("import_pptx", { filePath });
-      await loadSketches();
-      closeStoryboard();
-      await openSketch(resultPath);
-    } catch (err) {
-      console.error("Import failed:", err);
-    }
-  }, [loadSketches, openSketch, closeStoryboard]);
 
   return (
     <div
@@ -386,29 +368,16 @@ export function StoryboardList() {
         <span className="text-[11px] font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">
           Sketches
         </span>
-        <div className="flex items-center gap-0.5">
-          <button
-            onClick={handleImportSketch}
-            className="p-1 rounded-md text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 transition-colors"
-            title="Import PowerPoint (.pptx)"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-              <polyline points="7 10 12 15 17 10" />
-              <line x1="12" y1="15" x2="12" y2="3" />
-            </svg>
-          </button>
-          <button
-            onClick={() => setIsCreatingSk(true)}
-            className="p-1 rounded-md text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 transition-colors"
-            title="New sketch"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="12" y1="5" x2="12" y2="19" />
-              <line x1="5" y1="12" x2="19" y2="12" />
-            </svg>
-          </button>
-        </div>
+        <button
+          onClick={() => setIsCreatingSk(true)}
+          className="p-1 rounded-md text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 transition-colors"
+          title="New sketch"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19" />
+            <line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
+        </button>
       </div>
 
       {isCreatingSk && (
@@ -489,7 +458,7 @@ export function StoryboardList() {
           <button
             onClick={handleImportNote}
             className="p-1 rounded-md text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 transition-colors"
-            title="Import document (.docx, .pdf)"
+            title="Import document (.docx, .pdf, .pptx)"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />

@@ -5,7 +5,6 @@ use std::fs;
 use tauri::State;
 
 use crate::engine::{import, project};
-use crate::models::sketch::Sketch;
 use crate::AppState;
 
 /// Helper: get the project root from current state.
@@ -74,8 +73,8 @@ pub async fn import_pdf(
     Ok(final_path)
 }
 
-/// Import a .pptx file as a sketch with planning rows.
-/// Returns the relative path of the created sketch.
+/// Import a .pptx file as a markdown note.
+/// Returns the relative path of the created note.
 #[tauri::command]
 pub async fn import_pptx(
     file_path: String,
@@ -83,7 +82,7 @@ pub async fn import_pptx(
 ) -> Result<String, String> {
     let root = project_root(&state)?;
     let data = fs::read(&file_path).map_err(|e| format!("Failed to read file: {e}"))?;
-    let (title, rows) = import::pptx_to_planning_rows(&data, &root)?;
+    let markdown = import::pptx_to_markdown(&data, &root)?;
 
     let filename = std::path::Path::new(&file_path)
         .file_stem()
@@ -94,15 +93,12 @@ pub async fn import_pptx(
         .replace(|c: char| !c.is_alphanumeric() && c != '-', "-")
         .trim_matches('-')
         .to_string();
-    let relative_path = format!("{}.sk", if slug.is_empty() { "imported-presentation" } else { &slug });
+    let relative_path = format!("{}.md", if slug.is_empty() { "imported-presentation" } else { &slug });
 
-    let final_path = find_available_path(&root, &relative_path, "sk");
+    let final_path = find_available_path(&root, &relative_path, "md");
     let abs_final = project::safe_resolve(&root, &final_path).map_err(|e| e.to_string())?;
 
-    let mut sketch = Sketch::new(title);
-    sketch.rows = rows;
-
-    project::write_sketch(&sketch, &abs_final, &root).map_err(|e| e.to_string())?;
+    project::write_note(&abs_final, &markdown).map_err(|e| e.to_string())?;
     Ok(final_path)
 }
 

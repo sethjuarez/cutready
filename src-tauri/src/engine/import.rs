@@ -4,8 +4,6 @@
 use std::io::{Cursor, Read};
 use std::path::Path;
 
-use crate::models::sketch::PlanningRow;
-
 /// Ensure the screenshots directory exists and return its path.
 fn screenshots_dir(project_root: &Path) -> Result<std::path::PathBuf, String> {
     let dir = project_root.join(".cutready").join("screenshots");
@@ -188,9 +186,9 @@ pub fn pdf_to_markdown(data: &[u8]) -> Result<String, String> {
     Ok(md.trim().to_string())
 }
 
-/// Extract slides from a .pptx file as planning rows, with embedded images.
-/// The first image per slide is saved as the row screenshot.
-pub fn pptx_to_planning_rows(data: &[u8], project_root: &Path) -> Result<(String, Vec<PlanningRow>), String> {
+/// Extract slides from a .pptx file as markdown.
+/// Each slide becomes a section with its content, speaker notes, and images.
+pub fn pptx_to_markdown(data: &[u8], project_root: &Path) -> Result<String, String> {
     let cursor = Cursor::new(data);
     let mut archive = zip::ZipArchive::new(cursor).map_err(|e| format!("Invalid .pptx: {e}"))?;
 
@@ -231,18 +229,17 @@ pub fn pptx_to_planning_rows(data: &[u8], project_root: &Path) -> Result<(String
             .unwrap_or(0)
     });
 
-    let mut presentation_title = String::new();
-    let mut rows = Vec::new();
+    let mut md = String::new();
     let mut img_counter = 0usize;
 
     for (idx, slide_name) in slide_names.iter().enumerate() {
         let slide_text = read_zip_text(&mut archive, slide_name)?;
         let body_text = extract_pptx_text(&slide_text);
 
-        // Read slide relationships to find the first image
+        // Read slide relationships to find images
         let slide_num = slide_name.trim_start_matches("ppt/slides/slide").trim_end_matches(".xml");
         let rels_name = format!("ppt/slides/_rels/slide{slide_num}.xml.rels");
-        let screenshot = if let Ok(rels_xml) = read_zip_text(&mut archive, &rels_name) {
+        let image_path = if let Ok(rels_xml) = read_zip_text(&mut archive, &rels_name) {
             find_first_image_from_rels(&rels_xml, &media_data, project_root, &prefix, &mut img_counter)
         } else {
             None
@@ -255,30 +252,58 @@ pub fn pptx_to_planning_rows(data: &[u8], project_root: &Path) -> Result<(String
             .map(|xml| extract_pptx_text(&xml))
             .unwrap_or_default();
 
-        if idx == 0 && presentation_title.is_empty() {
-            if let Some(first_line) = body_text.lines().next() {
-                presentation_title = first_line.trim().to_string();
+        let body = body_text.trim();
+        let notes = notes_text.trim();
+
+        if body.is_empty() && notes.is_empty() && image_path.is_none() {
+            continue;
+        }
+
+        // Use first line of first slide as title, rest as ## Slide N
+        if idx == 0 {
+            if let Some(first_line) = body.lines().next() {
+                md.push_str(&format!("# {}\n\n", first_line.trim()));
+                // Rest of body after the title line
+                let rest: String = body.lines().skip(1)
+                    .map(|l| l.trim())
+                    .filter(|l| !l.is_empty())
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                if !rest.is_empty() {
+                    md.push_str(&rest);
+                    md.push_str("\n\n");
+                }
+            }
+        } else {
+            // Use first line as slide heading
+            if let Some(first_line) = body.lines().next() {
+                md.push_str(&format!("## Slide {} — {}\n\n", idx + 1, first_line.trim()));
+                let rest: String = body.lines().skip(1)
+                    .map(|l| l.trim())
+                    .filter(|l| !l.is_empty())
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                if !rest.is_empty() {
+                    md.push_str(&rest);
+                    md.push_str("\n\n");
+                }
+            } else {
+                md.push_str(&format!("## Slide {}\n\n", idx + 1));
             }
         }
 
-        let narrative = body_text.trim().to_string();
-        let demo_actions = notes_text.trim().to_string();
-
-        if !narrative.is_empty() || !demo_actions.is_empty() || screenshot.is_some() {
-            rows.push(PlanningRow {
-                time: format!("~{}s", 30 + idx * 10),
-                narrative,
-                demo_actions,
-                screenshot,
-            });
+        if let Some(img) = image_path {
+            md.push_str(&format!("![slide {}]({img})\n\n", idx + 1));
         }
+
+        if !notes.is_empty() {
+            md.push_str(&format!("**Speaker Notes:** {notes}\n\n"));
+        }
+
+        md.push_str("---\n\n");
     }
 
-    if presentation_title.is_empty() {
-        presentation_title = "Imported Presentation".to_string();
-    }
-
-    Ok((presentation_title, rows))
+    Ok(md.trim().to_string())
 }
 
 // ── Helpers ──────────────────────────────────────────────────────
