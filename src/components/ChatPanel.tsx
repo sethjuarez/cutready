@@ -480,11 +480,11 @@ Keep responses concise and actionable. Use markdown formatting.`;
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full bg-[var(--color-surface-alt)]">
       {/* Top toolbar — session controls */}
       <div className="flex items-center gap-0.5 px-2 h-[30px] border-b border-[var(--color-border)] shrink-0">
         <button
-          className="flex items-center justify-center w-[26px] h-[26px] rounded text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-alt)] transition-colors"
+          className="flex items-center justify-center w-[26px] h-[26px] rounded text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-inset)] transition-colors"
           onClick={clearChat}
           title="New Chat"
         >
@@ -493,7 +493,7 @@ Keep responses concise and actionable. Use markdown formatting.`;
         <div className="flex-1" />
         {messages.length > 0 && (
           <button
-            className="flex items-center justify-center w-[26px] h-[26px] rounded text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-alt)] transition-colors"
+            className="flex items-center justify-center w-[26px] h-[26px] rounded text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-inset)] transition-colors"
             onClick={clearChat}
             title="Clear chat"
           >
