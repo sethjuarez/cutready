@@ -655,8 +655,17 @@ function ChatTab() {
       // Activity logging now handled by real-time agent-event listener
 
       // Use the backend's full conversation (with correct tool_call/tool_result ordering)
-      // but strip the system prompt for display
-      const backendMessages = result.messages.filter((m) => m.role !== "system");
+      // but strip the system prompt and restore display-friendly user message content
+      // (backend has llmContent with full web scrapes; display should use compact userContent)
+      const backendMessages = result.messages
+        .filter((m) => m.role !== "system")
+        .map((m) => {
+          // Restore display version of user messages that had web content injected for the LLM
+          if (m.role === "user" && llmContent && m.content === llmContent) {
+            return { ...m, content: userContent };
+          }
+          return m;
+        });
 
       // Log response to activity
       const toolCallCount = backendMessages.filter(
