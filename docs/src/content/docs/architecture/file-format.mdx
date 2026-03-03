@@ -1,0 +1,171 @@
+---
+title: File Formats
+description: Detailed specification of CutReady's project file formats — sketches, storyboards, notes, and ordering.
+sidebar:
+  order: 3
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+CutReady stores all project data as files on disk using simple, inspectable
+formats. This page documents the structure of each file type.
+
+## Directory Layout
+
+Projects use a **flat directory layout**. All documents live at the root of the
+project folder, though subdirectories are supported for organization:
+
+```text
+my-project/
+├── project.json
+├── .cutready-order.json
+├── .git/
+├── intro.sk
+├── features/
+│   ├── dashboard.sk
+│   └── analytics.sk
+├── demo-flow.sb
+├── research.md
+├── screenshot-001.png
+└── screenshot-002.png
+```
+
+CutReady recursively discovers `.sk`, `.sb`, and `.md` files within the
+project directory.
+
+## Sketch Files (`.sk`)
+
+Sketch files are JSON documents containing a structured planning table:
+
+```json
+{
+  "id": "uuid-string",
+  "title": "Dashboard Tour",
+  "description": "Walk through the main dashboard features",
+  "planningRows": [
+    {
+      "time": "0:00",
+      "narrative": "Welcome to the dashboard overview",
+      "actions": "Navigate to /dashboard",
+      "screenshot": "screenshot-001.png"
+    },
+    {
+      "time": "0:30",
+      "narrative": "Notice the real-time metrics panel",
+      "actions": "Hover over the metrics widget",
+      "screenshot": "screenshot-002.png"
+    }
+  ],
+  "lifecycle": "draft",
+  "metadata": {
+    "createdAt": "2025-01-15T10:30:00Z",
+    "updatedAt": "2025-01-15T14:22:00Z"
+  }
+}
+```
+
+### Sketch Fields
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | Unique identifier (UUID) |
+| `title` | string | Display name of the sketch |
+| `description` | string | Summary of what the sketch covers |
+| `planningRows` | array | Ordered list of planning row objects |
+| `lifecycle` | string | One of: `draft`, `recording-enriched`, `refined`, `final` |
+| `metadata` | object | Timestamps and other tracking data |
+
+### Planning Row Fields
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `time` | string | Target timing (e.g., `"0:30"`, `"1:15"`) |
+| `narrative` | string | Voiceover script text |
+| `actions` | string | Demo action descriptions |
+| `screenshot` | string | Filename of the reference screenshot (relative path) |
+
+## Storyboard Files (`.sb`)
+
+Storyboard files define an ordered sequence of sketch references with optional
+section groupings:
+
+```json
+{
+  "id": "uuid-string",
+  "title": "Product Launch Demo",
+  "description": "Complete demo flow for the product launch event",
+  "items": [
+    { "type": "sketch", "path": "intro.sk" },
+    {
+      "type": "section",
+      "title": "Core Features",
+      "items": [
+        { "type": "sketch", "path": "features/dashboard.sk" },
+        { "type": "sketch", "path": "features/analytics.sk" }
+      ]
+    },
+    { "type": "sketch", "path": "closing.sk" }
+  ],
+  "metadata": {
+    "createdAt": "2025-01-15T10:30:00Z",
+    "updatedAt": "2025-01-15T16:00:00Z"
+  }
+}
+```
+
+Storyboards **reference** sketches by relative file path. Sketches can exist
+independently or be referenced by multiple storyboards.
+
+## Notes (`.md`)
+
+Notes are **plain markdown files** with no special structure. They're stored
+alongside sketches and storyboards and can be edited with CutReady's built-in
+CodeMirror-based markdown editor.
+
+## Sidebar Ordering (`.cutready-order.json`)
+
+This file persists the user's preferred document order in the sidebar:
+
+```json
+{
+  "order": [
+    "intro.sk",
+    "demo-flow.sb",
+    "features/dashboard.sk",
+    "features/analytics.sk",
+    "research.md"
+  ]
+}
+```
+
+When a user drag-and-drops documents in the sidebar, the new order is written
+to this file. Documents not listed in the order file appear at the end.
+
+## Version History (`.git/`)
+
+Each project contains an embedded git repository managed by **gitoxide (gix)**:
+
+- Snapshots are stored as git commits
+- The full document state is committed on each save (`Ctrl+S`)
+- The commit graph powers the visual timeline in the Version History panel
+- No external git installation is required
+
+<Aside type="tip">
+  Because project files are plain JSON and markdown, you can inspect or
+  edit them with any text editor. CutReady will pick up external changes
+  the next time you open the project.
+</Aside>
+
+## Project Manifest (`project.json`)
+
+The root-level manifest identifies the directory as a CutReady project:
+
+```json
+{
+  "name": "Product Demo Q1",
+  "createdAt": "2025-01-15T10:30:00Z"
+}
+```
+
+CutReady checks for this file when opening a folder to confirm it's a valid
+project.

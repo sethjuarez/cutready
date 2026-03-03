@@ -1,0 +1,127 @@
+---
+title: AI Integration
+description: Architecture of CutReady's LLM integration — providers, function calling, agents, and prompt design.
+sidebar:
+  order: 2
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+CutReady's AI features are powered by a pluggable LLM backend that supports
+streaming responses, function calling, and multiple agent configurations.
+
+## Provider Architecture
+
+The Rust backend defines an `LlmProvider` trait that abstracts over different
+LLM services:
+
+```rust
+#[async_trait]
+trait LlmProvider: Send + Sync {
+    async fn complete(&self, messages: &[Message]) -> Result<String>;
+    async fn complete_structured<T: DeserializeOwned>(
+        &self, messages: &[Message], schema: &JsonSchema
+    ) -> Result<T>;
+}
+```
+
+This trait enables swapping providers without changing the rest of the
+application. Currently supported:
+
+| Provider | Auth Method | Notes |
+| --- | --- | --- |
+| **Azure OpenAI** | OAuth (Azure AD) or API key | Default provider, uses Azure Foundry API |
+| **OpenAI** | API key | Direct OpenAI API access |
+
+## Azure Foundry API
+
+The default Azure provider connects via the Azure Foundry API with:
+
+- **OAuth authentication** — Azure AD token flow with Tenant ID and Client ID
+- **Streaming** — Server-sent events for real-time response streaming
+- **Model selection** — Configurable model name (e.g., `gpt-4o`)
+
+API endpoint, credentials, and model are configured in **Settings → AI
+Provider**.
+
+## Function Calling (Tool Use)
+
+The AI assistant uses **function calling** to interact with the user's project.
+Tool definitions are sent as part of the system prompt, and the model invokes
+them as needed during conversation.
+
+### Available Tools
+
+| Tool | Parameters | Purpose |
+| --- | --- | --- |
+| `read_sketch` | sketch path | Read the current sketch's content |
+| `set_planning_rows` | rows array | Replace all planning rows in a sketch |
+| `update_planning_row` | index, row data | Update a single planning row |
+| `list_project_files` | — | List all files in the project directory |
+| `read_note` | note path | Read a markdown note's content |
+| `fetch_url_content` | URL | Fetch content from a web URL for reference |
+
+### Tool Execution Flow
+
+1. The model returns a `tool_call` in its response
+2. The frontend dispatches the tool call to the Rust backend via Tauri commands
+3. The backend executes the operation (file read, write, or HTTP fetch)
+4. The result is returned to the model as a tool response message
+5. The model continues generating its response with the tool result
+
+## Prompt Design
+
+### System Prompts
+
+Each agent has a **system prompt** that defines its personality and behavior:
+
+- **Planner** — Focused on demo structure, timing, and logical flow
+- **Writer** — Focused on engaging narration and natural voiceover language
+- **Editor** — Focused on precision, making minimal targeted changes
+
+System prompts include the tool definitions (JSON schema) so the model knows
+what tools are available and how to invoke them.
+
+### Silent Mode
+
+Sparkle button actions use **silent mode** (`silent: true` flag) on
+`sendChatPrompt()`. In silent mode:
+
+- The prompt is not displayed in the chat panel
+- The response is not shown as a chat message
+- Tool calls execute normally and update the sketch
+- Actions are logged only in the Activity Panel
+
+This keeps the chat history focused on intentional conversations.
+
+## Agent Configuration
+
+### Built-in Agents
+
+The three built-in agents (Planner, Writer, Editor) ship with CutReady and
+have read-only system prompts that are tuned for their respective tasks.
+
+### Custom Agents
+
+Users can define custom agents in **Settings → Agents** with:
+
+- **Name** — Display name in the agent selector
+- **System prompt** — Custom instructions that define the agent's behavior
+
+Custom agents use the same tool set and model as built-in agents, but with a
+different system prompt that shapes the AI's approach.
+
+<Aside type="note">
+  The `LlmProvider` trait is designed to support a future **GitHub Copilot SDK**
+  backend, enabling Copilot-powered AI features without separate API keys.
+</Aside>
+
+## Streaming Architecture
+
+Responses are streamed from the LLM to the frontend via **Tauri Channels**:
+
+1. The frontend sends a chat message via a Tauri command
+2. The Rust backend opens a streaming connection to the LLM API
+3. Response chunks are forwarded through a Tauri Channel to the frontend
+4. The frontend renders tokens as they arrive for a responsive feel
+5. Tool calls are detected mid-stream and executed before continuing

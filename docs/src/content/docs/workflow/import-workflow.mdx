@@ -1,0 +1,120 @@
+---
+title: Importing Existing Materials
+description: Bring slide decks, Word documents, and PDFs into your CutReady project as reference notes.
+sidebar:
+  order: 3
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+If you already have demo scripts, slide decks, or research documents, CutReady
+can import them directly into your project. Imported files become markdown notes
+that you can reference, search, and feed to the AI assistant.
+
+## Importing a Slide Deck
+
+PowerPoint decks are a natural starting point for demo planning. Each slide
+becomes a section in the generated note.
+
+<Steps>
+
+1. **Click Import** in the StoryboardList sidebar.
+
+2. **Select your `.pptx` file** from the file picker.
+
+3. **Review the generated note** — CutReady creates a markdown note with slide
+   titles as headings, body text as paragraphs, and speaker notes included
+   below each slide.
+
+4. **Check extracted images** — Any embedded images from the deck are saved to
+   your project directory and linked in the note.
+
+</Steps>
+
+<Aside type="tip">
+  After importing a slide deck, ask the AI assistant to transform it into
+  planning rows: _"Read the imported deck and create a sketch plan based on
+  each slide."_
+</Aside>
+
+## Importing a Word Document
+
+Word documents (`.docx`) are fully parsed with headings, paragraphs, and
+embedded images preserved.
+
+<Steps>
+
+1. **Click Import** in the sidebar.
+
+2. **Select your `.docx` or `.doc` file.**
+
+3. **Review the result** — Modern `.docx` files retain heading hierarchy, bold,
+   italic, and list formatting. Legacy `.doc` files are imported as plain text.
+
+</Steps>
+
+For legacy `.doc` files, only text content is extracted. If formatting is
+critical, consider converting to `.docx` first.
+
+## Importing a PDF
+
+PDF import works best for text-heavy documents. Layout-dependent content
+(tables, multi-column layouts) may not convert perfectly.
+
+<Steps>
+
+1. **Click Import** in the sidebar.
+
+2. **Select your `.pdf` file.**
+
+3. **Review the extracted text** — Content is extracted page-by-page and
+   assembled into a markdown note.
+
+</Steps>
+
+<Aside type="note">
+  Scanned PDFs and image-based PDFs are not currently supported for text
+  extraction. Use a document with selectable text for best results.
+</Aside>
+
+## Handling Protected Documents
+
+Some documents have DRM protection or restricted edit/copy permissions. When
+CutReady encounters a protected file:
+
+- A **warning dialog** explains that the document is protected
+- Automated extraction is blocked to respect permissions
+- A **clipboard fallback** is offered:
+
+<Steps>
+
+1. **Open the document** in its native application (Word, Acrobat, etc.)
+
+2. **Copy the content** you need to the clipboard.
+
+3. **Create a new note** in CutReady and paste the content.
+
+</Steps>
+
+This approach respects document permissions while still letting you work with
+the material.
+
+## Using Imported Notes
+
+Once imported, notes appear in the sidebar alongside sketches and storyboards.
+Here are some ways to work with them:
+
+- **Reference in chat** — Type `#` in the AI chat input to autocomplete the
+  note name and include it as context
+- **Side-by-side editing** — Keep the imported note open in one tab while
+  editing a sketch in another
+- **AI transformation** — Ask the assistant to read the note and generate
+  planning rows from it
+- **Research reference** — Use imported documents as background material
+  while you write the sketch manually
+
+<Aside type="tip">
+  Import multiple documents into the same project. The AI can cross-reference
+  them when building your demo plan — for example, combining a slide deck's
+  structure with a Word doc's detailed talking points.
+</Aside>

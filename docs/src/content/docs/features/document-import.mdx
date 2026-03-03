@@ -1,0 +1,113 @@
+---
+title: Document Import
+description: Import Word documents, PDFs, and PowerPoint presentations into CutReady projects.
+sidebar:
+  order: 10
+---
+
+import { Aside, Badge } from '@astrojs/starlight/components';
+
+<Badge text="Available" variant="success" />
+
+CutReady can import external documents into your project as **notes**, making
+it easy to bring in existing slide decks, scripts, and reference materials
+without manual copy-paste.
+
+## Supported Formats
+
+| Format | Extension | Import Method |
+| --- | --- | --- |
+| **Word (modern)** | `.docx` | Full extraction — headings, paragraphs, embedded images |
+| **Word (legacy)** | `.doc` | Text extraction fallback (binary format) |
+| **PDF** | `.pdf` | Text extraction via pdf-extract |
+| **PowerPoint** | `.pptx` | Slides → sections with headings, body text, speaker notes, images |
+
+## How to Import
+
+Click the **Import** button in the StoryboardList sidebar. A file picker opens
+where you can select one or more supported documents. CutReady processes each
+file and creates a markdown note in your project.
+
+## Format-Specific Conversion
+
+### Word Documents (.docx)
+
+Modern Word documents are fully parsed:
+
+- **Headings** are converted to markdown heading levels (`#`, `##`, etc.)
+- **Paragraphs** become standard markdown text
+- **Embedded images** are extracted, saved to the project directory, and
+  referenced with markdown image syntax
+- Bold, italic, and list formatting is preserved
+
+### Legacy Word Documents (.doc)
+
+The older binary `.doc` format has limited support:
+
+- **Text content** is extracted as plain paragraphs
+- Formatting and images are not preserved
+- This is a best-effort fallback for legacy documents
+
+### PDF Files (.pdf)
+
+PDF import extracts readable text content:
+
+- Text is extracted page-by-page using the **pdf-extract** crate
+- Layout-dependent formatting (columns, tables) may not convert perfectly
+- Scanned/image-based PDFs require OCR (not currently supported)
+
+### PowerPoint Presentations (.pptx)
+
+Slide decks receive the richest conversion:
+
+- Each **slide** becomes a section in the output note
+- **Slide titles** become markdown headings
+- **Body text** is extracted as paragraphs
+- **Speaker notes** are included below each slide's content
+- **Embedded images** are extracted and saved to the project directory
+
+<Aside type="tip">
+  Importing a slide deck is a great starting point for a demo sketch. Import
+  it as a note, then use the AI assistant to help transform slides into
+  planning table rows.
+</Aside>
+
+## Image Extraction
+
+When a document contains embedded images (Word or PowerPoint), CutReady:
+
+1. Extracts each image from the document archive
+2. Saves it to the project's screenshot directory
+3. Inserts a markdown image reference in the generated note
+
+Images are named with a prefix matching the source document for easy
+identification.
+
+## DRM-Protected Documents
+
+Some documents may have DRM protection or restricted permissions that prevent
+programmatic extraction. When CutReady detects a protected document:
+
+- A warning is displayed explaining the restriction
+- A **clipboard fallback workflow** is offered — copy the content manually and
+  paste it into a new note
+- No content is extracted without proper permissions
+
+<Aside type="caution">
+  DRM-protected documents cannot be imported automatically. Use the clipboard
+  fallback to bring in content from protected files.
+</Aside>
+
+## Backend Commands
+
+Document import is handled by dedicated Tauri commands:
+
+| Command | Format |
+| --- | --- |
+| `import_docx` | Word documents (.docx and .doc) |
+| `import_pdf` | PDF files |
+| `import_pptx` | PowerPoint presentations |
+
+Each command accepts a file path and the current project path, processes the
+document, and returns the generated markdown content along with any extracted
+image paths.

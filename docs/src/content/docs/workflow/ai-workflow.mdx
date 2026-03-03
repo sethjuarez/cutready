@@ -1,0 +1,132 @@
+---
+title: AI-Assisted Workflow
+description: End-to-end guide to using the AI assistant for planning, writing, and refining demos.
+sidebar:
+  order: 2
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+import Screenshot from '../../../components/Screenshot.astro';
+
+The AI assistant integrates into every stage of sketch planning. This guide
+walks through the complete workflow for using AI to build and refine your demo
+content.
+
+<Screenshot src="/cutready/images/sketch-with-chat.png" alt="AI assistant with sketch editor" caption="Using the AI assistant to plan and refine a demo sketch" />
+
+## Starting a Conversation
+
+<Steps>
+
+1. **Open a sketch** — Navigate to an existing sketch or create a new one.
+
+2. **Open the chat panel** — The AI assistant panel appears alongside the editor.
+
+3. **Describe your demo** — Tell the assistant what your demo should cover.
+   Be specific about the product, audience, and key features.
+
+</Steps>
+
+The AI reads your sketch context (title, description, existing rows) and
+responds with relevant suggestions.
+
+## Generating Planning Rows
+
+Ask the AI to generate a complete demo plan:
+
+> _"Create a planning table for a 3-minute demo of our dashboard's analytics
+> features. Focus on the chart builder and export tools."_
+
+The AI uses the `set_planning_rows` tool to populate the planning table with
+time estimates, narrative text, and demo action descriptions. Review the
+generated rows and iterate:
+
+> _"Make the intro shorter and add a step showing the filter panel."_
+
+The AI uses `update_planning_row` to make targeted adjustments without
+rewriting the entire table.
+
+## Using Sparkle Buttons
+
+For quick improvements without typing a prompt:
+
+- Click ✨ on the **planning table** to generate rows (if empty) or improve
+  existing rows (if populated)
+- Click ✨ on **individual cells** to refine narrative or action text
+- Click ✨ on the **title** or **description** for a quick rewrite
+
+Sparkle actions are logged in the Activity Panel rather than cluttering the
+chat history.
+
+<Aside type="tip">
+  Combine sparkle buttons with chat for an efficient workflow: use sparkle for
+  quick polishing, then chat for structural changes or creative direction.
+</Aside>
+
+## Reviewing AI Changes
+
+After the AI makes changes, verify them using:
+
+- **The editor** — Changes appear immediately in the sketch form
+- **Activity Panel** — Shows a log of every tool call with parameters
+- **Version history** — Save a snapshot before and after AI edits so you can
+  compare or roll back
+
+## Incorporating Reference Materials
+
+If you have existing documents (slide decks, scripts, meeting notes), import
+them first, then reference them in the conversation:
+
+<Steps>
+
+1. **Import the document** — Use the Import button to bring in a `.docx`,
+   `.pdf`, or `.pptx` file as a project note.
+
+2. **Reference it in chat** — Type `#` to autocomplete the note name, or
+   ask the AI directly: _"Read the imported slide deck and use it to build
+   planning rows."_
+
+3. **The AI reads the note** — Using the `read_note` tool, it processes the
+   imported content and incorporates it into your sketch.
+
+</Steps>
+
+## Choosing the Right Agent
+
+Select the agent that matches your current task:
+
+| Agent | When to use |
+| --- | --- |
+| **Planner** | Starting from scratch, building structure, organizing flow |
+| **Writer** | Polishing narrative text, making scripts engaging and natural |
+| **Editor** | Fixing specific cells, making precise surgical changes |
+
+Switch agents mid-conversation using the agent selector. Each agent maintains
+the conversation context, so you don't lose history when switching.
+
+<Aside type="note">
+  Custom agents defined in Settings also appear in the agent selector. These
+  are useful for specialized tasks like writing for a technical audience or
+  following a particular brand voice.
+</Aside>
+
+## Typical Workflow
+
+A common end-to-end pattern:
+
+<Steps>
+
+1. **Sketch basics** — Set the title, description, and a few rough rows manually.
+
+2. **Ask the Planner** — _"Flesh out this plan with timing and actions."_
+
+3. **Sparkle the narrative** — Click ✨ on narrative cells to polish voiceover
+   text.
+
+4. **Switch to Writer** — _"Make the narration more conversational and engaging."_
+
+5. **Save a version** — Press `Ctrl+S` to snapshot the AI-improved sketch.
+
+6. **Review in Activity Panel** — Scan the log to confirm all changes look right.
+
+</Steps>
