@@ -102,8 +102,8 @@ export function NoteEditor() {
           </div>
         </div>
       ) : (
-        <div className="flex-1 overflow-auto px-6 py-6">
-          <div className="max-w-3xl mx-auto prose-desc text-sm text-[var(--color-text)] leading-relaxed">
+        <div className="flex-1 overflow-auto px-6">
+          <div className="max-w-3xl mx-auto py-6 prose-desc text-sm text-[var(--color-text)] leading-relaxed">
             {activeNoteContent ? (
               <ReactMarkdown remarkPlugins={[remarkGfm]}>{activeNoteContent}</ReactMarkdown>
             ) : (
