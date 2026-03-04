@@ -82,6 +82,15 @@ export function SketchForm() {
     pendingTitleRef.current = null;
   }, [activeSketchPath, activeSketch]);
 
+  // Keep localStorage in sync so the standalone preview window can pick up changes
+  useEffect(() => {
+    localStorage.setItem(PREVIEW_DATA_KEY, JSON.stringify({
+      rows: localRows,
+      projectRoot,
+      title: localTitle || "Untitled Sketch",
+    }));
+  }, [localRows, projectRoot, localTitle]);
+
   const handleTitleChange = useCallback(
     (value: string) => {
       setLocalTitle(value);

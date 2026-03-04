@@ -36,6 +36,17 @@ export function StandalonePreview() {
     } catch (e) {
       console.error("[StandalonePreview] Failed to load preview data:", e);
     }
+
+    // Listen for live updates from the main window
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === DATA_KEY && e.newValue) {
+        try {
+          setData(JSON.parse(e.newValue));
+        } catch { /* ignore */ }
+      }
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
   }, []);
 
   const handleClose = async () => {
