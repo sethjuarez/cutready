@@ -208,9 +208,38 @@ pub fn pull_remote(
     // Check if fast-forward is possible
     let can_ff = repo.graph_descendant_of(remote_oid, local_oid)?;
     if !can_ff {
-        // Diverged — cannot fast-forward
+        // Diverged — try three-way merge instead of failing
         let (ahead, behind) = repo.graph_ahead_behind(local_oid, remote_oid)?;
-        return Ok(PullResult::Diverged { ahead, behind });
+
+        // Attempt three-way merge using the merge engine
+        let merge_result = crate::engine::versioning_merge::merge_timelines(
+            project_dir,
+            &remote_ref,
+            &local_ref,
+        );
+
+        match merge_result {
+            Ok(crate::engine::versioning_merge::MergeResult::Clean { commit_id }) => {
+                return Ok(PullResult::Merged { commits: behind, commit_id });
+            }
+            Ok(crate::engine::versioning_merge::MergeResult::Conflicts { conflicts }) => {
+                return Ok(PullResult::Conflicts {
+                    ahead,
+                    behind,
+                    conflicts,
+                });
+            }
+            Ok(crate::engine::versioning_merge::MergeResult::Nothing) => {
+                return Ok(PullResult::UpToDate);
+            }
+            Ok(crate::engine::versioning_merge::MergeResult::FastForward { .. }) => {
+                // Shouldn't happen since we checked, but handle gracefully
+                return Ok(PullResult::FastForward { commits: behind });
+            }
+            Err(_e) => {
+                return Ok(PullResult::Diverged { ahead, behind });
+            }
+        }
     }
 
     // Fast-forward: move local branch ref + checkout
@@ -232,7 +261,15 @@ pub enum PullResult {
     UpToDate,
     /// Fast-forwarded N commits.
     FastForward { commits: usize },
-    /// Branches have diverged — cannot fast-forward.
+    /// Branches diverged but merge was clean — created merge commit.
+    Merged { commits: usize, commit_id: String },
+    /// Branches have diverged and merge has conflicts — needs resolution.
+    Conflicts {
+        ahead: usize,
+        behind: usize,
+        conflicts: Vec<crate::engine::versioning_merge::ConflictFile>,
+    },
+    /// Branches have diverged — merge failed (fallback).
     Diverged { ahead: usize, behind: usize },
 }
 

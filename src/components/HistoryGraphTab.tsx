@@ -184,6 +184,32 @@ export function HistoryGraphTab() {
                   />
                 )}
 
+                {/* Remote tip indicator */}
+                {row.node.is_remote_tip && (
+                  <g>
+                    <rect
+                      x={x + r + 3}
+                      y={y - 7}
+                      width={38}
+                      height={14}
+                      rx={3}
+                      fill="var(--color-surface)"
+                      stroke="var(--color-border)"
+                      strokeWidth={0.5}
+                    />
+                    <text
+                      x={x + r + 7}
+                      y={y + 1}
+                      dominantBaseline="middle"
+                      className="text-[7px]"
+                      fill="var(--color-text-secondary)"
+                      fontWeight={500}
+                    >
+                      origin
+                    </text>
+                  </g>
+                )}
+
                 {/* Commit message */}
                 <text
                   x={graphWidth + TEXT_LEFT_OFFSET}

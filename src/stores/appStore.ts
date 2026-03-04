@@ -1530,17 +1530,30 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       try {
         token = await invoke<string | null>("get_github_token");
       } catch { /* ignore */ }
-      const result = await invoke<{ type: string; ahead?: number; behind?: number; commits?: number }>(
+      const result = await invoke<{ type: string; ahead?: number; behind?: number; commits?: number; commit_id?: string; conflicts?: any[] }>(
         "pull_git_remote",
         { remoteName: currentRemote.name, branch: active.name, token },
       );
-      if (result.type === "Diverged") {
-        set({ syncError: `Timelines have diverged (${result.ahead} local, ${result.behind} remote). Manual merge required.` });
+      if (result.type === "Conflicts" && result.conflicts) {
+        // Pull resulted in merge conflicts — enter merge mode
+        set({
+          isMerging: true,
+          mergeSource: `${currentRemote.name}/${active.name}`,
+          mergeTarget: active.name,
+          mergeConflicts: result.conflicts,
+          syncError: null,
+        });
+      } else if (result.type === "Diverged") {
+        set({ syncError: `Timelines have diverged (${result.ahead} local, ${result.behind} remote). Merge failed.` });
       }
+      // Merged and FastForward are handled automatically
       await get().refreshSyncStatus();
       await get().loadGraphData();
       await get().loadTimelines();
       await get().loadVersions();
+      await get().loadSketches();
+      await get().loadStoryboards();
+      await get().loadNotes();
     } catch (err) {
       set({ syncError: String(err) });
     } finally {
