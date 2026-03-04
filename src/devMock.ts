@@ -128,7 +128,15 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
     case "list_timelines":
       return [{ name: "main", label: "main", is_active: true, snapshot_count: 2, color_index: 0 }];
     case "get_graph":
-      return [];
+    case "get_timeline_graph":
+      return [
+        { id: "def456", message: "Added feature section", timestamp: "2025-01-15T11:00:00Z", timeline: "main", parents: ["abc123"], lane: 0, is_head: true, is_branch_tip: true, is_remote_tip: false },
+        { id: "abc123", message: "Initial draft", timestamp: "2025-01-15T10:00:00Z", timeline: "main", parents: [], lane: 0, is_head: false, is_branch_tip: false, is_remote_tip: false },
+      ];
+    case "has_unsaved_changes":
+      return false;
+    case "is_rewound":
+      return false;
     case "create_snapshot":
       return "new-snapshot-id";
     case "get_sidebar_order":
@@ -228,6 +236,27 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
       ];
     case "delete_project_image":
     case "delete_orphaned_images":
+      return null;
+    // Remote/versioning commands
+    case "add_git_remote":
+    case "remove_git_remote":
+      return null;
+    case "list_git_remotes":
+      return [];
+    case "detect_git_remote":
+      return null;
+    case "fetch_git_remote":
+    case "push_git_remote":
+      return null;
+    case "get_sync_status":
+      return { ahead: 0, behind: 0 };
+    case "get_github_token":
+      return null;
+    case "pull_git_remote":
+      return { type: "UpToDate" };
+    case "list_remote_branches":
+      return [];
+    case "checkout_remote_branch":
       return null;
     default:
       // Handle tauri-plugin-store commands

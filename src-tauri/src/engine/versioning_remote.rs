@@ -182,6 +182,119 @@ pub fn push_remote(
     Ok(())
 }
 
+// ─── Pull (fast-forward merge) ──────────────────────────────────
+
+/// Pull from remote: fetch + fast-forward merge.
+/// Returns an error if the merge is not a simple fast-forward.
+pub fn pull_remote(
+    project_dir: &Path,
+    remote_name: &str,
+    branch: &str,
+    token: Option<&str>,
+) -> Result<PullResult, RemoteError> {
+    // Step 1: fetch
+    fetch_remote(project_dir, remote_name, token)?;
+
+    let repo = Repository::open(project_dir)?;
+    let remote_ref = format!("refs/remotes/{}/{}", remote_name, branch);
+    let remote_oid = match repo.refname_to_id(&remote_ref) {
+        Ok(oid) => oid,
+        Err(_) => return Ok(PullResult::UpToDate),
+    };
+
+    let local_ref = format!("refs/heads/{}", branch);
+    let local_oid = match repo.refname_to_id(&local_ref) {
+        Ok(oid) => oid,
+        Err(_) => return Err(RemoteError::Other(format!("Local branch '{}' not found", branch))),
+    };
+
+    if local_oid == remote_oid {
+        return Ok(PullResult::UpToDate);
+    }
+
+    // Check if fast-forward is possible
+    let can_ff = repo.graph_descendant_of(remote_oid, local_oid)?;
+    if !can_ff {
+        // Diverged — cannot fast-forward
+        let (ahead, behind) = repo.graph_ahead_behind(local_oid, remote_oid)?;
+        return Ok(PullResult::Diverged { ahead, behind });
+    }
+
+    // Fast-forward: move local branch ref + checkout
+    let remote_commit = repo.find_commit(remote_oid)?;
+    let mut local_branch_ref = repo.find_reference(&local_ref)?;
+    local_branch_ref.set_target(remote_oid, &format!("pull: fast-forward to {}", &remote_oid.to_string()[..8]))?;
+    repo.set_head(&local_ref)?;
+    repo.checkout_head(Some(git2::build::CheckoutBuilder::new().force()))?;
+
+    Ok(PullResult::FastForward {
+        commits: repo.graph_ahead_behind(remote_oid, local_oid).map(|(a, _)| a).unwrap_or(0),
+    })
+}
+
+/// Result of a pull operation.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(tag = "type")]
+pub enum PullResult {
+    /// Already up to date.
+    UpToDate,
+    /// Fast-forwarded N commits.
+    FastForward { commits: usize },
+    /// Branches have diverged — cannot fast-forward.
+    Diverged { ahead: usize, behind: usize },
+}
+
+// ─── Remote branches ────────────────────────────────────────────
+
+/// List branches available on the remote (after fetching).
+pub fn list_remote_branches(
+    project_dir: &Path,
+    remote_name: &str,
+) -> Result<Vec<String>, RemoteError> {
+    let repo = Repository::open(project_dir)?;
+    let prefix = format!("refs/remotes/{}/", remote_name);
+    let mut branches = Vec::new();
+    for reference in repo.references()? {
+        let reference = reference?;
+        if let Some(name) = reference.name() {
+            if name.starts_with(&prefix) && !name.ends_with("/HEAD") {
+                let branch_name = name.strip_prefix(&prefix).unwrap_or(name);
+                branches.push(branch_name.to_string());
+            }
+        }
+    }
+    Ok(branches)
+}
+
+// ─── Checkout remote branch ─────────────────────────────────────
+
+/// Check out a remote branch as a new local tracking branch.
+pub fn checkout_remote_branch(
+    project_dir: &Path,
+    remote_name: &str,
+    branch: &str,
+) -> Result<(), RemoteError> {
+    let repo = Repository::open(project_dir)?;
+    let remote_ref = format!("refs/remotes/{}/{}", remote_name, branch);
+    let remote_oid = repo.refname_to_id(&remote_ref)?;
+    let commit = repo.find_commit(remote_oid)?;
+
+    // Create local branch pointing to the same commit
+    repo.branch(branch, &commit, false)
+        .map_err(|e| RemoteError::Other(format!("Branch '{}' already exists locally: {}", branch, e)))?;
+
+    // Set upstream tracking
+    let mut local_branch = repo.find_branch(branch, git2::BranchType::Local)?;
+    local_branch.set_upstream(Some(&format!("{}/{}", remote_name, branch)))?;
+
+    // Switch to it
+    let local_ref = format!("refs/heads/{}", branch);
+    repo.set_head(&local_ref)?;
+    repo.checkout_head(Some(git2::build::CheckoutBuilder::new().force()))?;
+
+    Ok(())
+}
+
 // ─── Tests ──────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -341,5 +454,78 @@ mod tests {
         let status = get_ahead_behind(local_dir.path(), "main", "origin").unwrap();
         assert_eq!(status.ahead, 1);
         assert_eq!(status.behind, 0);
+    }
+
+    #[test]
+    fn test_pull_fast_forward() {
+        let (remote_dir, local_dir) = setup_repos();
+
+        // Push initial commit to remote
+        make_commit(local_dir.path(), "initial");
+        push_remote(local_dir.path(), "origin", "main", None).unwrap();
+
+        // Clone a second copy
+        let clone_dir = TempDir::new().unwrap();
+        let clone_url = format!("file:///{}", remote_dir.path().display().to_string().replace('\\', "/"));
+        Repository::clone(&clone_url, clone_dir.path()).unwrap();
+
+        // Make 2 more commits in original and push
+        make_commit(local_dir.path(), "second");
+        make_commit(local_dir.path(), "third");
+        push_remote(local_dir.path(), "origin", "main", None).unwrap();
+
+        // Pull in clone should fast-forward
+        let result = pull_remote(clone_dir.path(), "origin", "main", None).unwrap();
+        match result {
+            PullResult::FastForward { .. } => {} // expected
+            other => panic!("Expected FastForward, got {:?}", other),
+        }
+
+        // Should now be up to date
+        let status = get_ahead_behind(clone_dir.path(), "main", "origin").unwrap();
+        assert_eq!(status.ahead, 0);
+        assert_eq!(status.behind, 0);
+    }
+
+    #[test]
+    fn test_pull_already_up_to_date() {
+        let (remote_dir, local_dir) = setup_repos();
+        make_commit(local_dir.path(), "initial");
+        push_remote(local_dir.path(), "origin", "main", None).unwrap();
+
+        let clone_dir = TempDir::new().unwrap();
+        let clone_url = format!("file:///{}", remote_dir.path().display().to_string().replace('\\', "/"));
+        Repository::clone(&clone_url, clone_dir.path()).unwrap();
+
+        // Pull with nothing new
+        let result = pull_remote(clone_dir.path(), "origin", "main", None).unwrap();
+        match result {
+            PullResult::UpToDate => {} // expected
+            other => panic!("Expected UpToDate, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_list_remote_branches() {
+        let (remote_dir, local_dir) = setup_repos();
+        make_commit(local_dir.path(), "initial");
+        push_remote(local_dir.path(), "origin", "main", None).unwrap();
+
+        // Create and push a second branch
+        {
+            let repo = Repository::open(local_dir.path()).unwrap();
+            let head = repo.head().unwrap().peel_to_commit().unwrap();
+            repo.branch("feature", &head, false).unwrap();
+        }
+        push_remote(local_dir.path(), "origin", "feature", None).unwrap();
+
+        // Fetch in a clone to get remote tracking branches
+        let clone_dir = TempDir::new().unwrap();
+        let clone_url = format!("file:///{}", remote_dir.path().display().to_string().replace('\\', "/"));
+        Repository::clone(&clone_url, clone_dir.path()).unwrap();
+
+        let branches = list_remote_branches(clone_dir.path(), "origin").unwrap();
+        assert!(branches.contains(&"main".to_string()));
+        assert!(branches.contains(&"feature".to_string()));
     }
 }

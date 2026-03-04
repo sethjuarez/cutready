@@ -24,7 +24,7 @@ interface AuthCodeFlowInit {
   port: number;
 }
 
-type SettingsTab = "general" | "ai" | "agents" | "display" | "images" | "feedback";
+type SettingsTab = "general" | "ai" | "agents" | "display" | "images" | "feedback" | "repository";
 
 const inputClass =
   "px-3 py-2 rounded-lg bg-[var(--color-surface-alt)] border border-[var(--color-border)] text-sm text-[var(--color-text)] placeholder:text-[var(--color-text-secondary)]/50 focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]/40";
@@ -136,6 +136,7 @@ export function SettingsPanel() {
         <button className={tabBtnClass(activeTab === "agents")} onClick={() => setActiveTab("agents")}>Agents</button>
         <button className={tabBtnClass(activeTab === "images")} onClick={() => setActiveTab("images")}>Images</button>
         <button className={tabBtnClass(activeTab === "feedback")} onClick={() => setActiveTab("feedback")}>Feedback</button>
+        <button className={tabBtnClass(activeTab === "repository")} onClick={() => setActiveTab("repository")}>Repository</button>
       </div>
 
       {/* Tab content */}
@@ -174,6 +175,9 @@ export function SettingsPanel() {
       )}
       {activeTab === "feedback" && (
         <FeedbackListTab />
+      )}
+      {activeTab === "repository" && (
+        <RepositoryTab settings={settings} updateSetting={updateSetting} />
       )}
     </div>
   );
@@ -1044,3 +1048,171 @@ function FeedbackListTab() {
   );
 }
 
+// ── Repository Tab ────────────────────────────────────────────────
+
+function RepositoryTab({ settings, updateSetting }: {
+  settings: ReturnType<typeof useSettings>["settings"];
+  updateSetting: ReturnType<typeof useSettings>["updateSetting"];
+}) {
+  const [testStatus, setTestStatus] = useState<"idle" | "testing" | "success" | "error">("idle");
+  const [testMessage, setTestMessage] = useState("");
+  const [detectedRemote, setDetectedRemote] = useState<{ name: string; url: string } | null>(null);
+
+  useEffect(() => {
+    invoke("detect_git_remote")
+      .then((info) => {
+        if (info && typeof info === "object" && "url" in (info as Record<string, unknown>)) {
+          const remote = info as { name: string; url: string };
+          setDetectedRemote(remote);
+          if (!settings.repoRemoteUrl) {
+            updateSetting("repoRemoteUrl", remote.url);
+          }
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleTestConnection = async () => {
+    setTestStatus("testing");
+    setTestMessage("");
+    try {
+      const remotes = await invoke("list_git_remotes") as { name: string; url: string }[];
+      const hasOrigin = remotes.some((r) => r.name === "origin");
+      if (hasOrigin) {
+        setTestStatus("success");
+        setTestMessage("Remote is configured and accessible.");
+      } else if (settings.repoRemoteUrl) {
+        await invoke("add_git_remote", { name: "origin", url: settings.repoRemoteUrl });
+        setTestStatus("success");
+        setTestMessage("Remote 'origin' added successfully.");
+      } else {
+        setTestStatus("error");
+        setTestMessage("Enter a remote URL first.");
+      }
+    } catch (err) {
+      setTestStatus("error");
+      setTestMessage(String(err));
+    }
+  };
+
+  const authOptions = [
+    { value: "gh_cli", label: "GitHub CLI (gh)", desc: "Uses your existing GitHub CLI login. Recommended." },
+    { value: "pat", label: "Personal Access Token", desc: "Enter a GitHub PAT manually." },
+    { value: "ssh", label: "SSH Key", desc: "Uses SSH keys from ~/.ssh/." },
+  ];
+
+  return (
+    <div className="flex flex-col gap-6">
+      <p className="text-xs text-[var(--color-text-secondary)]">
+        Connect to a GitHub repository to collaborate with others. Your snapshots and timelines sync as git commits and branches.
+      </p>
+
+      {detectedRemote && !settings.repoRemoteUrl && (
+        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[var(--color-accent)]/10 border border-[var(--color-accent)]/20 text-xs text-[var(--color-accent)]">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><path d="M12 16v-4M12 8h.01" /></svg>
+          Detected remote: <strong>{detectedRemote.url}</strong>
+          <button
+            onClick={() => updateSetting("repoRemoteUrl", detectedRemote.url)}
+            className="ml-auto text-[var(--color-accent)] underline hover:no-underline"
+          >
+            Use this
+          </button>
+        </div>
+      )}
+
+      <fieldset className="flex flex-col gap-2">
+        <label className="text-sm font-medium text-[var(--color-text)]">Remote URL</label>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={settings.repoRemoteUrl}
+            onChange={(e) => updateSetting("repoRemoteUrl", e.target.value)}
+            placeholder="https://github.com/user/repo.git"
+            className={inputClass + " flex-1"}
+          />
+          <button
+            onClick={handleTestConnection}
+            disabled={testStatus === "testing"}
+            className="px-3 py-2 rounded-lg text-xs font-medium bg-[var(--color-accent)] text-white hover:opacity-90 transition-opacity disabled:opacity-50"
+          >
+            {testStatus === "testing" ? "Testing\u2026" : "Test"}
+          </button>
+        </div>
+        {testStatus === "success" && (
+          <p className="text-xs text-emerald-600 dark:text-emerald-400">{testMessage}</p>
+        )}
+        {testStatus === "error" && (
+          <p className="text-xs text-red-600 dark:text-red-400">{testMessage}</p>
+        )}
+      </fieldset>
+
+      <fieldset className="flex flex-col gap-3">
+        <label className="text-sm font-medium text-[var(--color-text)]">Authentication</label>
+        <div className="flex flex-col gap-2">
+          {authOptions.map((opt) => (
+            <label
+              key={opt.value}
+              className={`flex items-start gap-3 px-3 py-2.5 rounded-lg border cursor-pointer transition-colors ${
+                settings.repoAuthMethod === opt.value
+                  ? "border-[var(--color-accent)] bg-[var(--color-accent)]/5"
+                  : "border-[var(--color-border)] hover:border-[var(--color-text-secondary)]/30"
+              }`}
+            >
+              <input
+                type="radio"
+                name="repoAuth"
+                value={opt.value}
+                checked={settings.repoAuthMethod === opt.value}
+                onChange={() => updateSetting("repoAuthMethod", opt.value)}
+                className="mt-0.5 accent-[var(--color-accent)]"
+              />
+              <div>
+                <span className="text-sm font-medium text-[var(--color-text)]">{opt.label}</span>
+                <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">{opt.desc}</p>
+              </div>
+            </label>
+          ))}
+        </div>
+      </fieldset>
+
+      {settings.repoAuthMethod === "pat" && (
+        <fieldset className="flex flex-col gap-2">
+          <label className="text-sm font-medium text-[var(--color-text)]">Personal Access Token</label>
+          <input
+            type="password"
+            value={settings.repoToken}
+            onChange={(e) => updateSetting("repoToken", e.target.value)}
+            placeholder="ghp_xxxxxxxxxxxx"
+            className={inputClass}
+          />
+          <p className="text-xs text-[var(--color-text-secondary)]">
+            Create a token at github.com/settings/tokens with &quot;repo&quot; scope.
+          </p>
+        </fieldset>
+      )}
+
+      <fieldset className="flex flex-col gap-2">
+        <label className="text-sm font-medium text-[var(--color-text)]">Git Identity</label>
+        <p className="text-xs text-[var(--color-text-secondary)] mb-1">
+          Name and email used for your snapshots. Leave empty to use system git config.
+        </p>
+        <div className="grid grid-cols-2 gap-3">
+          <input
+            type="text"
+            value={settings.repoAuthorName}
+            onChange={(e) => updateSetting("repoAuthorName", e.target.value)}
+            placeholder="Name"
+            className={inputClass}
+          />
+          <input
+            type="email"
+            value={settings.repoAuthorEmail}
+            onChange={(e) => updateSetting("repoAuthorEmail", e.target.value)}
+            placeholder="email@example.com"
+            className={inputClass}
+          />
+        </div>
+      </fieldset>
+    </div>
+  );
+}

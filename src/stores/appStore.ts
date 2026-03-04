@@ -19,6 +19,8 @@ import type {
   NoteSummary,
   ChatMessage,
   ChatSessionSummary,
+  RemoteInfo,
+  SyncStatus,
 } from "../types/sketch";
 
 /** The panels / views available in the app. */
@@ -146,6 +148,16 @@ interface AppStoreState {
   hasStash: boolean;
   /** Whether we are viewing a rewound snapshot (prev-tip exists). */
   isRewound: boolean;
+
+  // ── Remote sync ─────────────────────────────────────────
+  /** Detected/configured remote, null if none. */
+  currentRemote: RemoteInfo | null;
+  /** Ahead/behind counts vs remote tracking branch. */
+  syncStatus: SyncStatus | null;
+  /** Whether a fetch/push/pull is in progress. */
+  isSyncing: boolean;
+  /** Last error from a sync operation. */
+  syncError: string | null;
 
   // ── Sidebar order ────────────────────────────────────────
   /** Sidebar display order manifest (paths per category). */
@@ -335,6 +347,26 @@ interface AppStoreState {
   /** Open snapshot name prompt (and ensure panel is visible). */
   promptSnapshot: () => void;
 
+  // ── Remote sync actions ────────────────────────────────────
+  /** Detect configured remote for the project. */
+  detectRemote: () => Promise<void>;
+  /** Fetch from the remote. */
+  fetchFromRemote: () => Promise<void>;
+  /** Push current timeline to the remote. */
+  pushToRemote: () => Promise<void>;
+  /** Pull from remote (fast-forward merge). */
+  pullFromRemote: () => Promise<void>;
+  /** Sync: fetch then push (or pull if behind). */
+  syncWithRemote: () => Promise<void>;
+  /** Refresh the ahead/behind sync status. */
+  refreshSyncStatus: () => Promise<void>;
+  /** List branches available on the remote. */
+  loadRemoteBranches: () => Promise<string[]>;
+  /** Checkout a remote-only branch as a local tracking branch. */
+  checkoutRemoteTimeline: (branch: string) => Promise<void>;
+  /** Publish (push) the current local-only timeline to the remote. */
+  publishTimeline: () => Promise<void>;
+
   // ── Sidebar order actions ──────────────────────────────────
 
   /** Load sidebar order manifest from project. */
@@ -435,6 +467,10 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   isDirty: false,
   hasStash: false,
   isRewound: false,
+  currentRemote: null,
+  syncStatus: null,
+  isSyncing: false,
+  syncError: null,
   sidebarOrder: null,
 
   profiles: [],
@@ -597,6 +633,12 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await get().loadStoryboards();
       await get().loadNotes();
       await get().loadSidebarOrder();
+      // Auto-detect remote and fetch in background (non-blocking)
+      get().detectRemote().then(() => {
+        if (get().currentRemote) {
+          get().fetchFromRemote().catch(() => {});
+        }
+      });
     } catch (err) {
       console.error("Failed to open project:", err);
       set({ error: String(err) });
@@ -634,6 +676,10 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       isDirty: false,
       hasStash: false,
       isRewound: false,
+      currentRemote: null,
+      syncStatus: null,
+      isSyncing: false,
+      syncError: null,
       sidebarOrder: null,
       openTabs: [],
       activeTabId: null,
@@ -1257,6 +1303,195 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
 
   promptSnapshot: () => {
     set({ snapshotPromptOpen: true });
+  },
+
+  // ── Remote sync actions ────────────────────────────────────
+
+  detectRemote: async () => {
+    try {
+      const info = await invoke<RemoteInfo | null>("detect_git_remote");
+      set({ currentRemote: info ?? null });
+      if (info) {
+        await get().refreshSyncStatus();
+      }
+    } catch {
+      set({ currentRemote: null });
+    }
+  },
+
+  fetchFromRemote: async () => {
+    const { currentRemote } = get();
+    if (!currentRemote) return;
+    set({ isSyncing: true, syncError: null });
+    try {
+      // Try gh CLI token first, then no token (SSH/credential helper)
+      let token: string | null = null;
+      try {
+        token = await invoke<string | null>("get_github_token");
+      } catch { /* ignore */ }
+      await invoke("fetch_git_remote", {
+        remoteName: currentRemote.name,
+        token,
+      });
+      await get().refreshSyncStatus();
+      await get().loadGraphData();
+      await get().loadTimelines();
+    } catch (err) {
+      set({ syncError: String(err) });
+    } finally {
+      set({ isSyncing: false });
+    }
+  },
+
+  pushToRemote: async () => {
+    const { currentRemote, timelines } = get();
+    if (!currentRemote) return;
+    const active = timelines.find((t) => t.is_active);
+    if (!active) return;
+    set({ isSyncing: true, syncError: null });
+    try {
+      let token: string | null = null;
+      try {
+        token = await invoke<string | null>("get_github_token");
+      } catch { /* ignore */ }
+      await invoke("push_git_remote", {
+        remoteName: currentRemote.name,
+        branch: active.name,
+        token,
+      });
+      await get().refreshSyncStatus();
+    } catch (err) {
+      set({ syncError: String(err) });
+    } finally {
+      set({ isSyncing: false });
+    }
+  },
+
+  syncWithRemote: async () => {
+    // Guard: if dirty, ask user to save first
+    if (get().isDirty) {
+      set({ syncError: "Save your changes before syncing." });
+      return;
+    }
+    // Fetch first to get latest state
+    await get().fetchFromRemote();
+    const updated = get().syncStatus;
+    if (!updated) return;
+    // If behind, pull first
+    if (updated.behind > 0) {
+      await get().pullFromRemote();
+    }
+    // If ahead (and not diverged), push
+    const afterPull = get().syncStatus;
+    if (afterPull && afterPull.ahead > 0 && afterPull.behind === 0) {
+      await get().pushToRemote();
+    }
+  },
+
+  pullFromRemote: async () => {
+    const { currentRemote, timelines, isDirty } = get();
+    if (!currentRemote) return;
+    if (isDirty) {
+      set({ syncError: "Save your changes before pulling." });
+      return;
+    }
+    const active = timelines.find((t) => t.is_active);
+    if (!active) return;
+    set({ isSyncing: true, syncError: null });
+    try {
+      let token: string | null = null;
+      try {
+        token = await invoke<string | null>("get_github_token");
+      } catch { /* ignore */ }
+      const result = await invoke<{ type: string; ahead?: number; behind?: number; commits?: number }>(
+        "pull_git_remote",
+        { remoteName: currentRemote.name, branch: active.name, token },
+      );
+      if (result.type === "Diverged") {
+        set({ syncError: `Timelines have diverged (${result.ahead} local, ${result.behind} remote). Manual merge required.` });
+      }
+      await get().refreshSyncStatus();
+      await get().loadGraphData();
+      await get().loadTimelines();
+      await get().loadVersions();
+    } catch (err) {
+      set({ syncError: String(err) });
+    } finally {
+      set({ isSyncing: false });
+    }
+  },
+
+  loadRemoteBranches: async () => {
+    const { currentRemote } = get();
+    if (!currentRemote) return [];
+    try {
+      return await invoke<string[]>("list_remote_branches", {
+        remoteName: currentRemote.name,
+      });
+    } catch {
+      return [];
+    }
+  },
+
+  checkoutRemoteTimeline: async (branch: string) => {
+    const { currentRemote } = get();
+    if (!currentRemote) return;
+    try {
+      await invoke("checkout_remote_branch", {
+        remoteName: currentRemote.name,
+        branch,
+      });
+      await get().loadTimelines();
+      await get().loadSketches();
+      await get().loadStoryboards();
+      await get().loadGraphData();
+      await get().loadVersions();
+    } catch (err) {
+      console.error("Failed to checkout remote timeline:", err);
+    }
+  },
+
+  publishTimeline: async () => {
+    const { currentRemote, timelines } = get();
+    if (!currentRemote) return;
+    const active = timelines.find((t) => t.is_active);
+    if (!active) return;
+    set({ isSyncing: true, syncError: null });
+    try {
+      let token: string | null = null;
+      try {
+        token = await invoke<string | null>("get_github_token");
+      } catch { /* ignore */ }
+      await invoke("push_git_remote", {
+        remoteName: currentRemote.name,
+        branch: active.name,
+        token,
+      });
+      await get().refreshSyncStatus();
+    } catch (err) {
+      set({ syncError: String(err) });
+    } finally {
+      set({ isSyncing: false });
+    }
+  },
+
+  refreshSyncStatus: async () => {
+    const { currentRemote, timelines } = get();
+    if (!currentRemote) return;
+    const active = timelines.find((t) => t.is_active);
+    if (!active) {
+      set({ syncStatus: null });
+      return;
+    }
+    try {
+      const status = await invoke<SyncStatus>("get_sync_status", {
+        branch: active.name,
+        remoteName: currentRemote.name,
+      });
+      set({ syncStatus: status });
+    } catch {
+      set({ syncStatus: null });
+    }
   },
 
   // ── Sidebar order actions ──────────────────────────────────

@@ -47,6 +47,17 @@ export interface AppSettings {
   displayEditorWidth: string;
   /** Font family: "system" | "sans" | "serif" | "mono" (default "system"). */
   displayFontFamily: string;
+  /* ── Repository / remote settings ────────────── */
+  /** Git remote URL (e.g. https://github.com/user/repo.git). */
+  repoRemoteUrl: string;
+  /** Auth method: "gh_cli" | "pat" | "ssh" (default "gh_cli"). */
+  repoAuthMethod: string;
+  /** Personal Access Token (when repoAuthMethod is "pat"). */
+  repoToken: string;
+  /** Git author name for commits. */
+  repoAuthorName: string;
+  /** Git author email for commits. */
+  repoAuthorEmail: string;
   // Legacy fields (migrated on load)
   llmApiKey?: string;
   llmEndpoint?: string;
@@ -73,6 +84,11 @@ const defaultSettings: AppSettings = {
   displayRowColors: "vivid",
   displayEditorWidth: "centered",
   displayFontFamily: "system",
+  repoRemoteUrl: "",
+  repoAuthMethod: "gh_cli",
+  repoToken: "",
+  repoAuthorName: "",
+  repoAuthorEmail: "",
 };
 
 const STORE_PATH = "settings.json";

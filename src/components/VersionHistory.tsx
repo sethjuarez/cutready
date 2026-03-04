@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAppStore } from "../stores/appStore";
 import { SnapshotGraph } from "./SnapshotGraph";
+import { SyncBar } from "./SyncBar";
+import { TimelineSelector } from "./TimelineSelector";
 
 export function VersionHistory() {
   const graphNodes = useAppStore((s) => s.graphNodes);
@@ -18,6 +20,8 @@ export function VersionHistory() {
   const [pendingNavTarget, setPendingNavTarget] = useState<string | null>(null);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [discarding, setDiscarding] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showSearch, setShowSearch] = useState(false);
 
   // Build a label map: timeline name → { label, color_index }
   const timelineMap = new Map(
@@ -75,9 +79,12 @@ export function VersionHistory() {
     <div className={`flex flex-col h-full ${borderClass} border-[var(--color-border)]`}>
       {/* Header */}
       <div className="flex items-center justify-between px-3 h-9 shrink-0 border-b border-[var(--color-border)]">
-        <span className="text-xs font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">
-          Snapshots
-        </span>
+        <div className="flex items-center gap-1">
+          <span className="text-xs font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">
+            Snapshots
+          </span>
+          <TimelineSelector />
+        </div>
         <div className="flex items-center gap-0.5">
           {isDirty && !pendingNavTarget && (
             <button
@@ -95,6 +102,15 @@ export function VersionHistory() {
             </button>
           )}
           <button
+            onClick={() => { setShowSearch(!showSearch); if (showSearch) setSearchQuery(""); }}
+            className={`p-1 rounded transition-colors ${showSearch ? "text-[var(--color-accent)]" : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"}`}
+            title="Search snapshots"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+          </button>
+          <button
             onClick={() => useAppStore.setState({ snapshotPromptOpen: true })}
             className="group/btn flex items-center gap-1 p-1 rounded text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] transition-colors"
             title="Save Project Snapshot (Ctrl+S)"
@@ -110,6 +126,23 @@ export function VersionHistory() {
           </button>
         </div>
       </div>
+
+      {/* Search bar */}
+      {showSearch && (
+        <div className="px-3 py-1.5 border-b border-[var(--color-border)]">
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Filter snapshots…"
+            className="w-full px-2 py-1 rounded text-[10px] bg-[var(--color-surface-alt)] border border-[var(--color-border)] text-[var(--color-text)] placeholder:text-[var(--color-text-secondary)]/50 outline-none focus:border-[var(--color-accent)]"
+            autoFocus
+          />
+        </div>
+      )}
+
+      {/* Sync Bar — only visible when remote is configured */}
+      <SyncBar />
 
       {/* Discard confirmation */}
       {confirmDiscard && (
@@ -168,13 +201,20 @@ export function VersionHistory() {
       <div className="flex-1 overflow-y-auto">
         <div className="py-1">
           <SnapshotGraph
-            nodes={graphNodes}
+            nodes={searchQuery
+              ? graphNodes.filter((n) => n.message.toLowerCase().includes(searchQuery.toLowerCase()))
+              : graphNodes}
             isDirty={isDirty}
             isRewound={isRewound}
             timelineMap={timelineMap}
             hasMultipleTimelines={timelines.length > 1}
             onNodeClick={handleNodeClick}
           />
+          {searchQuery && graphNodes.length > 0 && graphNodes.filter((n) => n.message.toLowerCase().includes(searchQuery.toLowerCase())).length === 0 && (
+            <div className="px-4 py-6 text-center text-[10px] text-[var(--color-text-secondary)]">
+              No snapshots match "{searchQuery}"
+            </div>
+          )}
         </div>
       </div>
     </div>

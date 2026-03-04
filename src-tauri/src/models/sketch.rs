@@ -223,6 +223,9 @@ pub struct GraphNode {
     /// Whether this is a branch tip (for showing branch markers on shared commits).
     #[serde(default)]
     pub is_branch_tip: bool,
+    /// Whether this commit is the tip of a remote tracking branch (e.g., origin/main).
+    #[serde(default)]
+    pub is_remote_tip: bool,
 }
 
 /// Lightweight summary for listing notes (.md files) in the sidebar.

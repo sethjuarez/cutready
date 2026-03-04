@@ -646,6 +646,7 @@ pub fn get_timeline_graph(project_dir: &Path) -> Result<Vec<GraphNode>, Versioni
                 lane: timeline.color_index,
                 is_head: head_oid.map_or(false, |h| h == oid),
                 is_branch_tip: is_tip,
+                is_remote_tip: false,
             });
             is_tip = false;
 
@@ -670,6 +671,7 @@ pub fn get_timeline_graph(project_dir: &Path) -> Result<Vec<GraphNode>, Versioni
                     lane: *lane,
                     is_head: false,
                     is_branch_tip: true,
+                    is_remote_tip: false,
                 });
             }
         }
@@ -708,6 +710,7 @@ pub fn get_timeline_graph(project_dir: &Path) -> Result<Vec<GraphNode>, Versioni
                 lane: active_lane,
                 is_head: false,
                 is_branch_tip: false,
+                is_remote_tip: false,
             });
 
             current = commit.parent_ids().next().map(|id| id.detach());
@@ -722,6 +725,25 @@ pub fn get_timeline_graph(project_dir: &Path) -> Result<Vec<GraphNode>, Versioni
             if head_node.timeline != active.name {
                 head_node.timeline = active.name.clone();
                 head_node.lane = active.color_index;
+            }
+        }
+    }
+
+    // Mark nodes that are tips of remote tracking branches (e.g., origin/main).
+    // Uses git2 because gix remote ref resolution is complex.
+    if let Ok(g2_repo) = git2::Repository::open(project_dir) {
+        if let Ok(refs) = g2_repo.references() {
+            for reference in refs.flatten() {
+                if let Some(name) = reference.name() {
+                    if name.starts_with("refs/remotes/") && !name.ends_with("/HEAD") {
+                        if let Some(oid) = reference.target() {
+                            let oid_str = oid.to_string();
+                            if let Some(node) = nodes.iter_mut().find(|n| n.id == oid_str) {
+                                node.is_remote_tip = true;
+                            }
+                        }
+                    }
+                }
             }
         }
     }

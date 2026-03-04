@@ -1,0 +1,193 @@
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useAppStore } from "../stores/appStore";
+
+/**
+ * TimelineSelector — dropdown for switching timelines (branches).
+ * Borrowed from GitHub Desktop's branch switcher pattern.
+ * Shows active timeline with sync badge, dropdown for all timelines.
+ */
+export function TimelineSelector() {
+  const timelines = useAppStore((s) => s.timelines);
+  const switchTimeline = useAppStore((s) => s.switchTimeline);
+  const createTimeline = useAppStore((s) => s.createTimeline);
+  const deleteTimeline = useAppStore((s) => s.deleteTimeline);
+  const isDirty = useAppStore((s) => s.isDirty);
+  const graphNodes = useAppStore((s) => s.graphNodes);
+
+  const [open, setOpen] = useState(false);
+  const [filter, setFilter] = useState("");
+  const [newName, setNewName] = useState("");
+  const [showNew, setShowNew] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const filterRef = useRef<HTMLInputElement>(null);
+
+  const active = timelines.find((t) => t.is_active);
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
+    const handle = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setOpen(false);
+        setFilter("");
+        setShowNew(false);
+      }
+    };
+    window.addEventListener("mousedown", handle);
+    return () => window.removeEventListener("mousedown", handle);
+  }, [open]);
+
+  // Focus filter when opening
+  useEffect(() => {
+    if (open) filterRef.current?.focus();
+  }, [open]);
+
+  const handleSwitch = useCallback(async (name: string) => {
+    if (isDirty) {
+      // If dirty, let the store's switchTimeline handle it (it prompts)
+      useAppStore.setState({ snapshotPromptOpen: true });
+      return;
+    }
+    await switchTimeline(name);
+    setOpen(false);
+    setFilter("");
+  }, [isDirty, switchTimeline]);
+
+  const handleCreate = useCallback(async () => {
+    if (!newName.trim()) return;
+    // Find HEAD commit
+    const head = graphNodes.find((n) => n.is_head);
+    if (!head) return;
+    await createTimeline(head.id, newName.trim());
+    setNewName("");
+    setShowNew(false);
+    setOpen(false);
+  }, [newName, graphNodes, createTimeline]);
+
+  const handleDelete = useCallback(async (name: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (window.confirm(`Delete timeline "${name}"? This cannot be undone.`)) {
+      await deleteTimeline(name);
+    }
+  }, [deleteTimeline]);
+
+  // Only show if we have more than 1 timeline (or always show for discoverability)
+  if (timelines.length <= 1 && !active) return null;
+
+  const filtered = timelines.filter((t) =>
+    t.label.toLowerCase().includes(filter.toLowerCase())
+  );
+
+  return (
+    <div className="relative" ref={dropdownRef}>
+      {/* Trigger button */}
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex items-center gap-1.5 px-2 py-1 rounded text-[10px] text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-border)]/50 transition-colors max-w-[140px]"
+        title={`Timeline: ${active?.label ?? "main"}`}
+      >
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+          <line x1="6" y1="3" x2="6" y2="15" />
+          <circle cx="18" cy="6" r="3" />
+          <circle cx="6" cy="18" r="3" />
+          <path d="M18 9a9 9 0 0 1-9 9" />
+        </svg>
+        <span className="truncate">{active?.label ?? "main"}</span>
+        <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 opacity-50">
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+      </button>
+
+      {/* Dropdown */}
+      {open && (
+        <div className="absolute top-full left-0 mt-1 w-56 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] shadow-lg z-50 overflow-hidden">
+          {/* Search filter */}
+          {timelines.length > 3 && (
+            <div className="px-2 pt-2">
+              <input
+                ref={filterRef}
+                value={filter}
+                onChange={(e) => setFilter(e.target.value)}
+                placeholder="Filter timelines…"
+                className="w-full px-2 py-1 rounded text-[10px] bg-[var(--color-bg)] border border-[var(--color-border)] text-[var(--color-text)] placeholder:text-[var(--color-text-secondary)]/50 outline-none focus:border-[var(--color-accent)]"
+              />
+            </div>
+          )}
+
+          {/* Timeline list */}
+          <div className="max-h-48 overflow-y-auto py-1">
+            {filtered.map((t) => (
+              <button
+                key={t.name}
+                onClick={() => t.is_active ? setOpen(false) : handleSwitch(t.name)}
+                className={`w-full flex items-center gap-2 px-3 py-1.5 text-left text-[11px] transition-colors ${
+                  t.is_active
+                    ? "bg-[var(--color-accent)]/10 text-[var(--color-accent)] font-medium"
+                    : "text-[var(--color-text)] hover:bg-[var(--color-border)]/30"
+                }`}
+              >
+                {t.is_active && (
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                )}
+                <span className="truncate flex-1">{t.label}</span>
+                <span className="text-[9px] text-[var(--color-text-secondary)]">
+                  {t.snapshot_count}
+                </span>
+                {!t.is_active && timelines.length > 1 && (
+                  <button
+                    onClick={(e) => handleDelete(t.name, e)}
+                    className="opacity-0 group-hover:opacity-100 hover:text-red-400 p-0.5"
+                    title="Delete timeline"
+                  >
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                    </svg>
+                  </button>
+                )}
+              </button>
+            ))}
+            {filtered.length === 0 && (
+              <div className="px-3 py-2 text-[10px] text-[var(--color-text-secondary)]">
+                No timelines match "{filter}"
+              </div>
+            )}
+          </div>
+
+          {/* New timeline */}
+          <div className="border-t border-[var(--color-border)]">
+            {showNew ? (
+              <div className="flex items-center gap-1.5 px-2 py-2">
+                <input
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleCreate()}
+                  placeholder="Timeline name…"
+                  className="flex-1 px-2 py-1 rounded text-[10px] bg-[var(--color-bg)] border border-[var(--color-border)] text-[var(--color-text)] placeholder:text-[var(--color-text-secondary)]/50 outline-none focus:border-[var(--color-accent)]"
+                  autoFocus
+                />
+                <button
+                  onClick={handleCreate}
+                  className="px-2 py-1 rounded text-[10px] font-medium bg-[var(--color-accent)] text-white hover:opacity-90 transition-opacity"
+                >
+                  Create
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setShowNew(true)}
+                className="w-full flex items-center gap-2 px-3 py-2 text-[11px] text-[var(--color-accent)] hover:bg-[var(--color-accent)]/5 transition-colors"
+              >
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
+                New Timeline
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

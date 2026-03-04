@@ -265,6 +265,58 @@ pub async fn get_sync_status(
         .map_err(|e| e.to_string())
 }
 
+/// Try to get a GitHub token from the `gh` CLI.
+#[tauri::command]
+pub async fn get_github_token() -> Result<Option<String>, String> {
+    match std::process::Command::new("gh")
+        .args(["auth", "token"])
+        .output()
+    {
+        Ok(output) if output.status.success() => {
+            let token = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if token.is_empty() {
+                Ok(None)
+            } else {
+                Ok(Some(token))
+            }
+        }
+        _ => Ok(None),
+    }
+}
+
+#[tauri::command]
+pub async fn pull_git_remote(
+    remote_name: String,
+    branch: String,
+    token: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<versioning_remote::PullResult, String> {
+    let root = project_root(&state)?;
+    versioning_remote::pull_remote(&root, &remote_name, &branch, token.as_deref())
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn list_remote_branches(
+    remote_name: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<String>, String> {
+    let root = project_root(&state)?;
+    versioning_remote::list_remote_branches(&root, &remote_name)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn checkout_remote_branch(
+    remote_name: String,
+    branch: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let root = project_root(&state)?;
+    versioning_remote::checkout_remote_branch(&root, &remote_name, &branch)
+        .map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 pub async fn save_editor_state(
     commit_id: String,

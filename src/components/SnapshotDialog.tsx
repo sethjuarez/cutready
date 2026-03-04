@@ -19,6 +19,19 @@ export function SnapshotDialog() {
   const [saving, setSaving] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // Auto-generate a snapshot name when the dialog opens
+  useEffect(() => {
+    if (snapshotPromptOpen && !label) {
+      const now = new Date();
+      const h = now.getHours();
+      const m = String(now.getMinutes()).padStart(2, "0");
+      const period = h < 12 ? "morning" : h < 17 ? "afternoon" : "evening";
+      const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+      const day = dayNames[now.getDay()];
+      setLabel(`${day} ${period} ${h % 12 || 12}:${m}`);
+    }
+  }, [snapshotPromptOpen]);
+
   const close = useCallback(() => {
     useAppStore.setState({ snapshotPromptOpen: false, pendingNavAfterSave: null });
     setLabel("");
@@ -48,11 +61,13 @@ export function SnapshotDialog() {
     }
   }, [label, forkLabel, isRewound, saveVersion, loadGraphData, loadTimelines, close]);
 
-  // Auto-focus input when opened
+  // Auto-focus and select input when opened
   useEffect(() => {
     if (snapshotPromptOpen) {
-      // Small delay to let the DOM render
-      requestAnimationFrame(() => inputRef.current?.focus());
+      requestAnimationFrame(() => {
+        inputRef.current?.focus();
+        inputRef.current?.select();
+      });
     }
   }, [snapshotPromptOpen]);
 

@@ -87,6 +87,19 @@ export interface GraphNode {
   lane: number;
   is_head: boolean;
   is_branch_tip?: boolean;
+  is_remote_tip?: boolean;
+}
+
+/** Remote repository info. */
+export interface RemoteInfo {
+  name: string;
+  url: string;
+}
+
+/** Sync status: how many commits ahead/behind the remote. */
+export interface SyncStatus {
+  ahead: number;
+  behind: number;
 }
 
 /** Lightweight summary for listing notes (.md files). */
