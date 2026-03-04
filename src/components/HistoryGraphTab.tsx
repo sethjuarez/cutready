@@ -101,80 +101,28 @@ function computeLayout(
     }
   }
 
-  /* 3. Git-style rail lane assignment */
-  const cols: (string | null)[] = [];
+  /* 3. Timeline-based lane assignment — each timeline gets a fixed lane */
   const nodeCol = new Map<string, number>();
-  const freeCol = () => {
-    const i = cols.indexOf(null);
-    if (i >= 0) return i;
-    cols.push(null);
-    return cols.length - 1;
-  };
-
-  for (const node of sorted) {
-    const expecting: number[] = [];
-    for (let c = 0; c < cols.length; c++) {
-      if (cols[c] === node.id) expecting.push(c);
-    }
-    let col: number;
-    if (expecting.length > 0) {
-      col = expecting[0];
-      for (let i = 1; i < expecting.length; i++) cols[expecting[i]] = null;
-    } else {
-      col = freeCol();
-    }
-    cols[col] = node.parents.length > 0 ? node.parents[0] : null;
-    for (let p = 1; p < node.parents.length; p++) {
-      const pid = node.parents[p];
-      if (!cols.includes(pid)) cols[freeCol()] = pid;
-    }
-    nodeCol.set(node.id, col);
-  }
-
-  /* 3b. Reorder columns: active branch lane 0, others by creation time */
-  // Find each timeline's primary column (most nodes) and earliest commit
-  const tlColCounts = new Map<string, Map<number, number>>();
   const tlCreation = new Map<string, number>();
-  for (const node of sorted) {
-    const c = nodeCol.get(node.id)!;
-    if (!tlColCounts.has(node.timeline)) tlColCounts.set(node.timeline, new Map());
-    const m = tlColCounts.get(node.timeline)!;
-    m.set(c, (m.get(c) ?? 0) + 1);
+  for (const node of deduped) {
     const ts = new Date(node.timestamp).getTime();
     const prev = tlCreation.get(node.timeline);
     if (prev === undefined || ts < prev) tlCreation.set(node.timeline, ts);
   }
-  const tlPrimaryCol = new Map<string, number>();
-  for (const [tl, counts] of tlColCounts) {
-    let bestCol = 0, bestN = 0;
-    for (const [c, n] of counts) { if (n > bestN) { bestN = n; bestCol = c; } }
-    tlPrimaryCol.set(tl, bestCol);
-  }
 
-  // Build desired column order: active timeline's col first, then by creation time
+  // Active timeline → lane 0, others sorted by creation time
   const activeTl = [...timelineMap.values()].find((t) => t.is_active)?.name;
-  const activeCol = activeTl ? tlPrimaryCol.get(activeTl) : undefined;
-
-  const usedCols = [...new Set(Array.from(nodeCol.values()))].sort((a, b) => a - b);
-  // Find dominant timeline for each column
-  const colDom = new Map<number, string>();
-  for (const col of usedCols) {
-    let bestTl = "", bestN = 0;
-    for (const [tl, m] of tlColCounts) {
-      const n = m.get(col) ?? 0;
-      if (n > bestN) { bestN = n; bestTl = tl; }
-    }
-    colDom.set(col, bestTl);
-  }
-
-  const sortedCols = [...usedCols].sort((a, b) => {
-    if (a === activeCol) return -1;
-    if (b === activeCol) return 1;
-    return (tlCreation.get(colDom.get(a) ?? "") ?? 0) - (tlCreation.get(colDom.get(b) ?? "") ?? 0);
+  const tlOrder = [...tlCreation.keys()].sort((a, b) => {
+    if (a === activeTl) return -1;
+    if (b === activeTl) return 1;
+    return (tlCreation.get(a) ?? 0) - (tlCreation.get(b) ?? 0);
   });
-  const colRemap = new Map<number, number>();
-  sortedCols.forEach((oldCol, newIdx) => colRemap.set(oldCol, newIdx));
-  for (const [id, c] of nodeCol) nodeCol.set(id, colRemap.get(c) ?? c);
+  const timelineLane = new Map<string, number>();
+  tlOrder.forEach((tl, i) => timelineLane.set(tl, i));
+
+  for (const node of sorted) {
+    nodeCol.set(node.id, timelineLane.get(node.timeline) ?? 0);
+  }
 
   /* 4. Coordinates */
   const maxCol = Math.max(0, ...Array.from(nodeCol.values()));
@@ -215,10 +163,10 @@ function computeLayout(
   const laneGap = dir === "vertical" ? LANE_GAP_V : LANE_GAP_H;
   const graphLanes = PAD + (maxCol + 1) * laneGap;
   const graphLen = PAD + maxRow * ROW_GAP;
-  const labelPad = dir === "vertical" ? 360 : 60;
+  const badgePad = 100;
 
-  const w = dir === "vertical" ? graphLanes + labelPad : graphLen + PAD + labelPad;
-  const h = dir === "vertical" ? graphLen + PAD + 20 : graphLanes + 140;
+  const w = dir === "vertical" ? graphLanes + badgePad : graphLen + PAD * 2;
+  const h = dir === "vertical" ? graphLen + PAD * 2 : graphLanes + badgePad;
 
   return { nodes: layoutNodes, edges, width: w, height: h };
 }
@@ -259,6 +207,7 @@ export function HistoryGraphTab() {
   const zoomRef = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(null);
 
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
+  const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number } | null>(null);
   const [dir, setDir] = useState<LayoutDir>("vertical");
 
   useEffect(() => { loadGraphData(); loadTimelines(); }, [loadGraphData, loadTimelines]);
@@ -282,12 +231,6 @@ export function HistoryGraphTab() {
     () => computeLayout(graphNodes, timelineMap, dir),
     [graphNodes, timelineMap, dir],
   );
-
-  // Text label x-offset (vertical mode): right of rightmost lane
-  const textX = useMemo(() => {
-    const maxCol = layout.nodes.reduce((m, n) => Math.max(m, n.col), 0);
-    return PAD + (maxCol + 1) * LANE_GAP_V + 12;
-  }, [layout]);
 
   /* d3 zoom — Ctrl+wheel to zoom, drag to pan */
   useEffect(() => {
@@ -442,7 +385,7 @@ export function HistoryGraphTab() {
       </div>
 
       {/* Graph — d3-zoomed SVG */}
-      <div ref={containerRef} className="flex-1 overflow-hidden">
+      <div ref={containerRef} className="flex-1 overflow-hidden relative">
         <svg ref={svgRef} width="100%" height="100%" className="select-none" style={{ cursor: "grab" }}>
           <g ref={gRef}>
             {/* Edges */}
@@ -461,11 +404,22 @@ export function HistoryGraphTab() {
               return (
                 <g
                   key={node.id}
-                  onMouseEnter={() => setHoveredNode(node.id)}
-                  onMouseLeave={() => setHoveredNode(null)}
+                  onMouseEnter={(e) => {
+                    setHoveredNode(node.id);
+                    const rect = containerRef.current?.getBoundingClientRect();
+                    if (rect) setTooltipPos({ x: e.clientX - rect.left + 12, y: e.clientY - rect.top - 8 });
+                  }}
+                  onMouseMove={(e) => {
+                    const rect = containerRef.current?.getBoundingClientRect();
+                    if (rect) setTooltipPos({ x: e.clientX - rect.left + 12, y: e.clientY - rect.top - 8 });
+                  }}
+                  onMouseLeave={() => { setHoveredNode(null); setTooltipPos(null); }}
                   onClick={(e) => { e.stopPropagation(); handleNodeClick(node); }}
                   style={{ cursor: "pointer" }}
                 >
+                  {/* Hit area (larger invisible circle for easier hovering) */}
+                  <circle cx={x} cy={y} r={r + 6} fill="transparent" />
+
                   <circle
                     cx={x} cy={y} r={isHov ? r + 2 : r}
                     fill={isHead ? color : "var(--color-surface)"}
@@ -486,69 +440,50 @@ export function HistoryGraphTab() {
                     </g>
                   )}
 
-                  {/* Branch badges */}
+                  {/* Branch badges (compact, near node) */}
                   {bl.map((label, bi) => {
                     const bw = label.length * 5.5 + 12;
-                    if (dir === "vertical") {
-                      return (
-                        <g key={label}>
-                          <rect x={textX - 2} y={y - ROW_GAP / 2 + 2 + bi * 16} width={bw} height={14} rx={4} fill={color} opacity={0.15} />
-                          <text x={textX + 4} y={y - ROW_GAP / 2 + 11 + bi * 16} fontSize={8} fill={color} fontWeight={600}
-                            fontFamily="var(--font-mono, monospace)">{label}</text>
-                        </g>
-                      );
-                    }
-                    const bx = x - bw / 2;
+                    const bx = dir === "vertical" ? x + r + 6 : x - bw / 2;
+                    const by = dir === "vertical" ? y - 7 + bi * 16 : y - r - 16 - bi * 16;
                     return (
                       <g key={label}>
-                        <rect x={bx} y={y - r - 16 - bi * 16} width={bw} height={14} rx={4} fill={color} opacity={0.15} />
-                        <text x={bx + 6} y={y - r - 6 - bi * 16} fontSize={8} fill={color} fontWeight={600}
+                        <rect x={bx} y={by} width={bw} height={14} rx={4} fill={color} opacity={0.15} />
+                        <text x={bx + 6} y={by + 10} fontSize={8} fill={color} fontWeight={600}
                           fontFamily="var(--font-mono, monospace)">{label}</text>
                       </g>
                     );
                   })}
-
-                  {/* Commit message */}
-                  {dir === "vertical" ? (
-                    <text x={textX} y={y + 1} dominantBaseline="middle" fontSize={10}
-                      fill={isHead ? "var(--color-text)" : "var(--color-text-secondary)"}
-                      fontWeight={isHead ? 600 : 400}>
-                      {node.message.length > 48 ? node.message.substring(0, 48) + "…" : node.message}
-                    </text>
-                  ) : (
-                    <text
-                      x={x + r + 4} y={y + r + 4}
-                      fontSize={8}
-                      fill={isHead ? "var(--color-text)" : "var(--color-text-secondary)"}
-                      fontWeight={isHead ? 600 : 400}
-                      transform={`rotate(35, ${x + r + 4}, ${y + r + 4})`}
-                    >
-                      {node.message.length > 28 ? node.message.substring(0, 28) + "…" : node.message}
-                    </text>
-                  )}
-
-                  {/* Timestamp (vertical) */}
-                  {dir === "vertical" && (
-                    <text x={textX + 310} y={y + 1} dominantBaseline="middle" fontSize={8}
-                      fill="var(--color-text-secondary)" opacity={0.5}>
-                      {formatTimestamp(node.timestamp)}
-                    </text>
-                  )}
-
-                  {/* Hash on hover */}
-                  <text
-                    x={x}
-                    y={dir === "vertical" ? y + r + 10 : y - r - 3}
-                    textAnchor="middle" fontSize={7}
-                    fill="var(--color-text-secondary)" opacity={isHov ? 0.8 : 0}
-                    fontFamily="var(--font-mono, monospace)">
-                    {node.id.substring(0, 7)}
-                  </text>
                 </g>
               );
             })}
           </g>
         </svg>
+
+        {/* Hover tooltip */}
+        {hoveredNode && tooltipPos && (() => {
+          const ln = layout.nodes.find((n) => n.node.id === hoveredNode);
+          if (!ln) return null;
+          const { node } = ln;
+          const color = lc(ln.colorIndex);
+          return (
+            <div
+              className="absolute pointer-events-none z-50 max-w-xs"
+              style={{ left: tooltipPos.x, top: tooltipPos.y }}
+            >
+              <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg shadow-lg px-3 py-2">
+                <p className="text-xs font-semibold text-[var(--color-text)] leading-tight">{node.message}</p>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="text-[9px] font-mono text-[var(--color-text-secondary)]">{node.id.substring(0, 7)}</span>
+                  <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: color }} />
+                  <span className="text-[9px] text-[var(--color-text-secondary)]">{formatTimestamp(node.timestamp)}</span>
+                </div>
+                {node.author && (
+                  <p className="text-[9px] text-[var(--color-text-secondary)] mt-0.5">{node.author}</p>
+                )}
+              </div>
+            </div>
+          );
+        })()}
       </div>
     </div>
   );
