@@ -1,6 +1,6 @@
 import { useAppStore } from "../stores/appStore";
 import type { EditorTab } from "../stores/appStore";
-import { SketchIcon, StoryboardIcon, NoteIcon } from "./Icons";
+import { SketchIcon, StoryboardIcon, NoteIcon, HistoryIcon } from "./Icons";
 
 /**
  * TabBar — horizontal row of open document tabs.
@@ -46,7 +46,11 @@ function Tab({
   onSelect: () => void;
   onClose: () => void;
 }) {
-  const typeLabel = tab.type === "sketch" ? "Sketch" : tab.type === "storyboard" ? "Storyboard" : "Note";
+  const typeLabel =
+    tab.type === "sketch" ? "Sketch"
+    : tab.type === "storyboard" ? "Storyboard"
+    : tab.type === "history" ? "History"
+    : "Note";
 
   /* Explicit RGB so inline styles always resolve (CSS vars don't work in all inline contexts) */
   const typeClasses =
@@ -54,9 +58,15 @@ function Tab({
       ? { bar: "bg-[var(--color-accent)]", icon: "text-[var(--color-accent)]", tint: "bg-[var(--color-accent)]" }
       : tab.type === "storyboard"
         ? { bar: "bg-emerald-500", icon: "text-emerald-500", tint: "bg-emerald-500" }
-        : { bar: "bg-rose-500", icon: "text-rose-500", tint: "bg-rose-500" };
+        : tab.type === "history"
+          ? { bar: "bg-sky-500", icon: "text-sky-500", tint: "bg-sky-500" }
+          : { bar: "bg-rose-500", icon: "text-rose-500", tint: "bg-rose-500" };
 
-  const TabIcon = tab.type === "sketch" ? SketchIcon : tab.type === "storyboard" ? StoryboardIcon : NoteIcon;
+  const TabIcon =
+    tab.type === "sketch" ? SketchIcon
+    : tab.type === "storyboard" ? StoryboardIcon
+    : tab.type === "history" ? HistoryIcon
+    : NoteIcon;
 
   return (
     <div

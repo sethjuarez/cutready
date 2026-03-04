@@ -72,3 +72,26 @@ export function NoteIcon({ size = 14, className = "" }: IconProps) {
     </svg>
   );
 }
+
+/** History icon — branching graph, representing the DAG timeline view. */
+export function HistoryIcon({ size = 14, className = "" }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <circle cx="6" cy="6" r="2.5" />
+      <circle cx="18" cy="10" r="2.5" />
+      <circle cx="6" cy="18" r="2.5" />
+      <path d="M6 8.5v7" />
+      <path d="M6 8.5c0 3 4 4.5 9.5 4" />
+    </svg>
+  );
+}
