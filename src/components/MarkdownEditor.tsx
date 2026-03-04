@@ -39,10 +39,9 @@ const editorTheme = EditorView.theme({
     padding: "2px 0",
   },
   ".cm-cursor": { borderLeftColor: "var(--color-accent)" },
-  ".cm-activeLine": { backgroundColor: "var(--color-surface-alt)" },
+  ".cm-activeLine": { backgroundColor: "color-mix(in srgb, var(--color-text) 4%, transparent)" },
   ".cm-selectionBackground, &.cm-focused .cm-selectionBackground": {
-    backgroundColor: "var(--color-accent) !important",
-    opacity: "0.15",
+    backgroundColor: "color-mix(in srgb, var(--color-accent) 18%, transparent) !important",
   },
   ".cm-gutters": { display: "none" },
   "&.cm-focused": { outline: "none" },
