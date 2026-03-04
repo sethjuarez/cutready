@@ -169,33 +169,24 @@ export function TimelineSelector() {
                   {t.snapshot_count} {t.snapshot_count === 1 ? "snap" : "snaps"}
                 </span>
                 {!t.is_active && t.name !== "main" && timelines.length > 1 && (
-                  <span className="absolute right-2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity bg-[var(--color-surface)] pl-1 rounded">
+                  <span className="absolute right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-[var(--color-surface)] pl-1 rounded">
                     <button
                       onClick={(e) => handleMerge(t.name, t.label, e)}
-                      className="hover:text-green-500 p-0.5"
-                      title={`Combine into ${active?.label ?? "Main"}`}
+                      className="text-[9px] px-1.5 py-0.5 rounded hover:bg-green-500/15 hover:text-green-500 transition-colors"
                     >
-                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M8 18L5 15l3-3" /><path d="M5 15h7a4 4 0 0 0 4-4V4" /><line x1="16" y1="4" x2="16" y2="4.01" />
-                      </svg>
+                      Merge
                     </button>
                     <button
                       onClick={(e) => handlePromote(t.name, t.label, e)}
-                      className="hover:text-[var(--color-accent)] p-0.5"
-                      title="Promote to Main"
+                      className="text-[9px] px-1.5 py-0.5 rounded hover:bg-[var(--color-accent)]/15 hover:text-[var(--color-accent)] transition-colors"
                     >
-                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <polyline points="17 11 12 6 7 11" /><line x1="12" y1="18" x2="12" y2="6" />
-                      </svg>
+                      Promote
                     </button>
                     <button
                       onClick={(e) => handleDelete(t.name, e)}
-                      className="hover:text-red-400 p-0.5"
-                      title="Delete timeline"
+                      className="text-[9px] px-1.5 py-0.5 rounded hover:bg-red-400/15 hover:text-red-400 transition-colors"
                     >
-                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-                      </svg>
+                      ✕
                     </button>
                   </span>
                 )}
