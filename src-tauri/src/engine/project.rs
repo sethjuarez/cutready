@@ -558,6 +558,52 @@ pub fn delete_chat_session(path: &Path) -> Result<(), ProjectError> {
 // ── Sidebar order manifest ──────────────────────────────────────────
 
 const ORDER_FILE: &str = ".cutready-order.json";
+const WORKSPACE_FILE: &str = ".cutready/workspace.json";
+
+/// Workspace state persisted across app restarts.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default)]
+pub struct WorkspaceState {
+    #[serde(default)]
+    pub open_tabs: Vec<WorkspaceTab>,
+    #[serde(default)]
+    pub active_tab_id: Option<String>,
+    #[serde(default)]
+    pub chat_session_path: Option<String>,
+}
+
+/// A persisted editor tab.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct WorkspaceTab {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub tab_type: String,
+    pub path: String,
+    pub title: String,
+}
+
+/// Read workspace state. Returns default (empty) if missing.
+pub fn read_workspace_state(project_root: &Path) -> WorkspaceState {
+    let path = project_root.join(WORKSPACE_FILE);
+    if let Ok(data) = std::fs::read_to_string(&path) {
+        serde_json::from_str(&data).unwrap_or_default()
+    } else {
+        WorkspaceState::default()
+    }
+}
+
+/// Write workspace state.
+pub fn write_workspace_state(
+    project_root: &Path,
+    ws: &WorkspaceState,
+) -> Result<(), ProjectError> {
+    let path = project_root.join(WORKSPACE_FILE);
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| ProjectError::Io(e.to_string()))?;
+    }
+    let data =
+        serde_json::to_string_pretty(ws).map_err(|e| ProjectError::Serialize(e.to_string()))?;
+    std::fs::write(&path, data).map_err(|e| ProjectError::Io(e.to_string()))
+}
 
 /// Read the sidebar ordering manifest. Returns default (empty) if missing.
 pub fn read_sidebar_order(project_root: &Path) -> SidebarOrder {

@@ -538,12 +538,16 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     return { sidebarPosition: pos };
   }),
 
-  // Persist open tabs to localStorage for session restore
+  // Persist workspace state (tabs + chat session) to .cutready/workspace.json
   _persistTabs: () => {
-    const { openTabs, activeTabId } = get();
-    try {
-      localStorage.setItem("cutready:openTabs", JSON.stringify({ openTabs, activeTabId }));
-    } catch { /* quota exceeded — ignore */ }
+    const { openTabs, activeTabId, chatSessionPath } = get();
+    invoke("set_workspace_state", {
+      workspace: {
+        open_tabs: openTabs.map((t) => ({ id: t.id, type: t.type, path: t.path, title: t.title })),
+        active_tab_id: activeTabId,
+        chat_session_path: chatSessionPath,
+      },
+    }).catch(() => {});
   },
 
   openTab: (tab) => {
@@ -669,33 +673,31 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await get().loadStoryboards();
       await get().loadNotes();
       await get().loadSidebarOrder();
-      // Restore open tabs from previous session
+      // Restore workspace state (open tabs + chat session) from disk
       try {
-        const raw = localStorage.getItem("cutready:openTabs");
-        if (raw) {
-          const saved = JSON.parse(raw) as { openTabs?: EditorTab[]; activeTabId?: string | null };
-          const { sketches, storyboards, notes } = get();
-          const validTabs = (saved.openTabs ?? []).filter((t) => {
+        const ws = await invoke<{ open_tabs: { id: string; type: string; path: string; title: string }[]; active_tab_id: string | null; chat_session_path: string | null }>("get_workspace_state");
+        const { sketches, storyboards, notes } = get();
+        const validTabs: EditorTab[] = (ws.open_tabs ?? [])
+          .map((t) => ({ id: t.id, type: t.type as EditorTab["type"], path: t.path, title: t.title }))
+          .filter((t) => {
             if (t.type === "sketch") return sketches.some((s) => s.path === t.path);
             if (t.type === "storyboard") return storyboards.some((s) => s.path === t.path);
             if (t.type === "note") return notes.some((n) => n.path === t.path);
             return false;
           });
-          if (validTabs.length > 0) {
-            const activeId = validTabs.find((t) => t.id === saved.activeTabId) ? saved.activeTabId! : validTabs[0].id;
-            set({ openTabs: validTabs, activeTabId: activeId });
-            const active = validTabs.find((t) => t.id === activeId);
-            if (active?.type === "sketch") await get().openSketch(active.path);
-            else if (active?.type === "storyboard") await get().openStoryboard(active.path);
-            else if (active?.type === "note") await get().openNote(active.path);
-          }
+        if (validTabs.length > 0) {
+          const activeId = validTabs.find((t) => t.id === ws.active_tab_id) ? ws.active_tab_id! : validTabs[0].id;
+          set({ openTabs: validTabs, activeTabId: activeId });
+          const active = validTabs.find((t) => t.id === activeId);
+          if (active?.type === "sketch") await get().openSketch(active.path);
+          else if (active?.type === "storyboard") await get().openStoryboard(active.path);
+          else if (active?.type === "note") await get().openNote(active.path);
         }
-      } catch { /* ignore corrupted data */ }
-      // Restore last chat session
-      const savedSession = localStorage.getItem("cutready:chatSessionPath");
-      if (savedSession) {
-        get().loadChatSession(savedSession).catch(() => {});
-      }
+        // Restore last chat session
+        if (ws.chat_session_path) {
+          get().loadChatSession(ws.chat_session_path).catch(() => {});
+        }
+      } catch { /* first launch or corrupted — ignore */ }
       // Auto-detect remote and fetch in background (non-blocking)
       get().detectRemote().then(() => {
         if (get().currentRemote) {
@@ -713,8 +715,6 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   closeProject: () => {
     invoke("close_project").catch(console.error);
     localStorage.removeItem("cutready:lastProject");
-    localStorage.removeItem("cutready:openTabs");
-    localStorage.removeItem("cutready:chatSessionPath");
     set({
       currentProject: null,
       view: "home",
@@ -1081,7 +1081,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       chatError: null,
       activityLog: [],
     });
-    localStorage.setItem("cutready:chatSessionPath", sessionPath);
+    get()._persistTabs();
   },
 
   loadChatSession: async (sessionPath) => {
@@ -1095,7 +1095,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         chatSessionPath: sessionPath,
         chatError: null,
       });
-      localStorage.setItem("cutready:chatSessionPath", sessionPath);
+      get()._persistTabs();
     } catch (err) {
       console.error("Failed to load chat session:", err);
     }

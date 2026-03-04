@@ -196,3 +196,22 @@ pub async fn set_sidebar_order(
     let root = project_root(&state)?;
     project::write_sidebar_order(&root, &order).map_err(|e| e.to_string())
 }
+
+/// Get workspace state (open tabs, active tab, chat session) for the current project.
+#[tauri::command]
+pub async fn get_workspace_state(
+    state: State<'_, AppState>,
+) -> Result<project::WorkspaceState, String> {
+    let root = project_root(&state)?;
+    Ok(project::read_workspace_state(&root))
+}
+
+/// Save workspace state for the current project.
+#[tauri::command]
+pub async fn set_workspace_state(
+    workspace: project::WorkspaceState,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let root = project_root(&state)?;
+    project::write_workspace_state(&root, &workspace).map_err(|e| e.to_string())
+}

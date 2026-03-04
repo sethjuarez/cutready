@@ -141,6 +141,8 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
       return "new-snapshot-id";
     case "get_sidebar_order":
       return { storyboards: [], sketches: [], notes: [] };
+    case "get_workspace_state":
+      return { open_tabs: [], active_tab_id: null, chat_session_path: null };
     case "list_chat_sessions":
       return [];
     case "save_chat_session":
@@ -212,6 +214,7 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
     case "get_sketch":
       return MOCK_SKETCH;
     case "set_sidebar_order":
+    case "set_workspace_state":
     case "update_sketch":
     case "update_sketch_title":
       return null;
