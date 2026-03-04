@@ -20,6 +20,7 @@ interface LayoutNode {
   y: number;
   colorIndex: number;
   branchLabels: string[];
+  showLabel: boolean;
 }
 
 interface LayoutEdge {
@@ -29,7 +30,8 @@ interface LayoutEdge {
 
 /* ── Constants ────────────────────────────────────────────────────── */
 
-const ROW_GAP = 36;
+const ROW_GAP_V = 36;
+const ROW_GAP_H = 56;
 const LANE_GAP_V = 24;
 const LANE_GAP_H = 48;
 const PAD = 32;
@@ -127,6 +129,7 @@ function computeLayout(
   }
 
   /* 4. Coordinates — row 0 at top (vertical) / left (horizontal) */
+  const rowGap = dir === "vertical" ? ROW_GAP_V : ROW_GAP_H;
   const maxCol = Math.max(0, ...Array.from(nodeCol.values()));
   const maxRow = sorted.length - 1;
 
@@ -136,11 +139,45 @@ function computeLayout(
     const colorIndex = tInfo?.color_index ?? col;
 
     const [x, y] = dir === "vertical"
-      ? [PAD + col * LANE_GAP_V, PAD + row * ROW_GAP]
-      : [PAD + row * ROW_GAP, PAD + col * LANE_GAP_H];
+      ? [PAD + col * LANE_GAP_V, PAD + row * rowGap]
+      : [PAD + row * rowGap, PAD + col * LANE_GAP_H];
 
-    return { node, col, row, x, y, colorIndex, branchLabels: tipLabels.get(node.id) ?? [] };
+    return { node, col, row, x, y, colorIndex, branchLabels: tipLabels.get(node.id) ?? [], showLabel: true };
   });
+
+  /* 4b. Label collision detection — hide labels that would overlap */
+  if (dir === "horizontal") {
+    // Group by lane, check horizontal distance between consecutive labels
+    const byLane = new Map<number, LayoutNode[]>();
+    for (const ln of layoutNodes) {
+      if (!byLane.has(ln.col)) byLane.set(ln.col, []);
+      byLane.get(ln.col)!.push(ln);
+    }
+    const MIN_H_DIST = 52; // minimum px between angled label origins
+    for (const [, laneNodes] of byLane) {
+      laneNodes.sort((a, b) => a.x - b.x);
+      let lastShownX = -Infinity;
+      for (const ln of laneNodes) {
+        if (ln.x - lastShownX < MIN_H_DIST && !ln.node.is_head && ln.branchLabels.length === 0) {
+          ln.showLabel = false;
+        } else {
+          lastShownX = ln.x;
+        }
+      }
+    }
+  } else {
+    // Vertical: labels in text column — check vertical distance
+    const MIN_V_DIST = 14; // minimum px between labels
+    let lastShownY = -Infinity;
+    const sortedByY = [...layoutNodes].sort((a, b) => a.y - b.y);
+    for (const ln of sortedByY) {
+      if (ln.y - lastShownY < MIN_V_DIST && !ln.node.is_head && ln.branchLabels.length === 0) {
+        ln.showLabel = false;
+      } else {
+        lastShownY = ln.y;
+      }
+    }
+  }
 
   /* 5. Edge paths (d3 link generators) */
   const nodePos = new Map<string, { x: number; y: number; colorIndex: number }>();
@@ -164,8 +201,8 @@ function computeLayout(
   /* 6. Bounds */
   const laneGap = dir === "vertical" ? LANE_GAP_V : LANE_GAP_H;
   const graphLanes = PAD + (maxCol + 1) * laneGap;
-  const graphLen = PAD + maxRow * ROW_GAP;
-  const textOffset = graphLanes + 12; // x where vertical labels start
+  const graphLen = PAD + maxRow * rowGap;
+  const textOffset = graphLanes + 12;// x where vertical labels start
 
   const w = dir === "vertical" ? textOffset + 280 : graphLen + PAD * 2;
   const h = dir === "vertical" ? graphLen + PAD * 2 : graphLanes + 120;
@@ -442,10 +479,10 @@ export function HistoryGraphTab() {
                     </g>
                   )}
 
-                  {/* Branch badges (compact, near node) */}
+                  {/* Branch badges */}
                   {bl.map((label, bi) => {
                     const bw = label.length * 5.5 + 12;
-                    const bx = dir === "vertical" ? x + r + 6 : x - bw / 2;
+                    const bx = dir === "vertical" ? layout.textOffset - 2 : x - bw / 2;
                     const by = dir === "vertical" ? y - 7 + bi * 16 : y - r - 16 - bi * 16;
                     return (
                       <g key={label}>
@@ -456,8 +493,8 @@ export function HistoryGraphTab() {
                     );
                   })}
 
-                  {/* Truncated commit message label */}
-                  {dir === "vertical" ? (
+                  {/* Truncated commit message label (hidden when overlapping) */}
+                  {ln.showLabel && (dir === "vertical" ? (
                     <text x={layout.textOffset} y={y + 1} dominantBaseline="middle" fontSize={9}
                       fill={isHead ? "var(--color-text)" : "var(--color-text-secondary)"}
                       fontWeight={isHead ? 600 : 400} opacity={0.85}>
@@ -473,7 +510,7 @@ export function HistoryGraphTab() {
                     >
                       {node.message.length > 20 ? node.message.substring(0, 20) + "…" : node.message}
                     </text>
-                  )}
+                  ))}
                 </g>
               );
             })}
