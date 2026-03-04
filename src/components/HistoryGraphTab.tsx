@@ -45,11 +45,11 @@ const lc = (i: number) => LANE_COLORS[i % LANE_COLORS.length];
 /* ── Tangled Tree Layout Engine ───────────────────────────────────── */
 
 /** Tuning knobs (pixel values). */
-const PADDING = 20;
-const NODE_HEIGHT_BASE = 22;
-const NODE_WIDTH = 120;
+const PADDING = 32;
+const NODE_HEIGHT_BASE = 36;
+const NODE_WIDTH = 160;
 const BUNDLE_WIDTH = 14;
-const LEVEL_PAD = 16;
+const LEVEL_PAD = 24;
 const METRO_D = 4;
 const ARC_R = 16;
 const MIN_FAMILY_H = 22;
@@ -445,6 +445,11 @@ export function HistoryGraphTab() {
 
     const zoom = d3.zoom<SVGSVGElement, unknown>()
       .scaleExtent([0.1, 5])
+      .filter((event) => {
+        // Allow programmatic zoom, drag/pan, and Ctrl+wheel
+        if (event.type === "wheel") return event.ctrlKey || event.metaKey;
+        return true;
+      })
       .on("zoom", (event) => { g.attr("transform", event.transform.toString()); });
 
     zoomRef.current = zoom;
@@ -479,7 +484,17 @@ export function HistoryGraphTab() {
     );
   }, [layout]);
 
-  const toggleDir = useCallback(() => {
+  const handleZoomIn = useCallback(() => {
+    if (!svgRef.current || !zoomRef.current) return;
+    d3.select(svgRef.current).transition().duration(200).call(zoomRef.current.scaleBy, 1.4);
+  }, []);
+
+  const handleZoomOut = useCallback(() => {
+    if (!svgRef.current || !zoomRef.current) return;
+    d3.select(svgRef.current).transition().duration(200).call(zoomRef.current.scaleBy, 0.7);
+  }, []);
+
+  const toggleDir= useCallback(() => {
     setDir((d) => (d === "vertical" ? "horizontal" : "vertical"));
   }, []);
 
@@ -542,6 +557,24 @@ export function HistoryGraphTab() {
           </svg>
           Fit
         </button>
+
+        {/* Zoom +/− */}
+        <div className="flex items-center border border-[var(--color-border)] rounded overflow-hidden">
+          <button
+            onClick={handleZoomOut}
+            className="px-1.5 py-1 text-[10px] text-[var(--color-text-secondary)] hover:bg-[var(--color-border)] transition-colors"
+            title="Zoom out"
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="5" y1="12" x2="19" y2="12" /></svg>
+          </button>
+          <button
+            onClick={handleZoomIn}
+            className="px-1.5 py-1 text-[10px] text-[var(--color-text-secondary)] hover:bg-[var(--color-border)] transition-colors border-l border-[var(--color-border)]"
+            title="Zoom in"
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+          </button>
+        </div>
 
         {/* Legend */}
         <div className="flex items-center gap-3 ml-2">
