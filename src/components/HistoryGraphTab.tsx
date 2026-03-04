@@ -439,6 +439,9 @@ export function HistoryGraphTab() {
               const isHead = node.is_head;
               const isHov = hoveredNode === node.id;
               const r = isHead ? HEAD_R : NODE_R;
+              const labelX = bl.length > 0
+                ? layout.textOffset + (bl[0].length * 5.5 + 16)
+                : layout.textOffset;
 
               return (
                 <g
@@ -456,7 +459,7 @@ export function HistoryGraphTab() {
                   onClick={(e) => { e.stopPropagation(); handleNodeClick(node); }}
                   style={{ cursor: "pointer" }}
                 >
-                  {/* Hit area (larger invisible circle for easier hovering) */}
+                  {/* Hit area */}
                   <circle cx={x} cy={y} r={r + 6} fill="transparent" />
 
                   <circle
@@ -479,12 +482,24 @@ export function HistoryGraphTab() {
                     </g>
                   )}
 
-                  {/* Branch badges + commit label in text column */}
+                  {/* Connector line from node to label (vertical mode) */}
+                  {dir === "vertical" && ln.showLabel && (
+                    <line
+                      x1={x + r + 2} y1={y}
+                      x2={layout.textOffset - 6} y2={y}
+                      stroke={color} strokeWidth={0.5} opacity={0.25}
+                    />
+                  )}
+
+                  {/* Branch badges — opaque bg so they render above edges */}
                   {dir === "vertical" && bl.length > 0 && bl.map((label, bi) => {
                     const bw = label.length * 5.5 + 12;
                     return (
                       <g key={label}>
-                        <rect x={layout.textOffset - 2} y={y - 7 + bi * 16} width={bw} height={14} rx={4} fill={color} opacity={0.15} />
+                        <rect x={layout.textOffset - 4} y={y - 8 + bi * 16} width={bw + 4} height={16} rx={4}
+                          fill="var(--color-bg)" />
+                        <rect x={layout.textOffset - 2} y={y - 7 + bi * 16} width={bw} height={14} rx={4}
+                          fill={color} opacity={0.2} />
                         <text x={layout.textOffset + 4} y={y + 3 + bi * 16} fontSize={8} fill={color} fontWeight={600}
                           fontFamily="var(--font-mono, monospace)">{label}</text>
                       </g>
@@ -493,20 +508,23 @@ export function HistoryGraphTab() {
                   {dir === "horizontal" && bl.map((label, bi) => {
                     const bw = label.length * 5.5 + 12;
                     const bx = x - bw / 2;
+                    const by = y - r - 16 - bi * 16;
                     return (
                       <g key={label}>
-                        <rect x={bx} y={y - r - 16 - bi * 16} width={bw} height={14} rx={4} fill={color} opacity={0.15} />
-                        <text x={bx + 6} y={y - r - 6 - bi * 16} fontSize={8} fill={color} fontWeight={600}
+                        <rect x={bx - 2} y={by - 1} width={bw + 4} height={16} rx={4}
+                          fill="var(--color-bg)" />
+                        <rect x={bx} y={by} width={bw} height={14} rx={4}
+                          fill={color} opacity={0.2} />
+                        <text x={bx + 6} y={by + 10} fontSize={8} fill={color} fontWeight={600}
                           fontFamily="var(--font-mono, monospace)">{label}</text>
                       </g>
                     );
                   })}
 
-                  {/* Truncated commit message label (hidden when overlapping) */}
+                  {/* Commit message label */}
                   {ln.showLabel && (dir === "vertical" ? (
                     <text
-                      x={bl.length > 0 ? layout.textOffset + (bl[0].length * 5.5 + 16) : layout.textOffset}
-                      y={y + 1} dominantBaseline="middle" fontSize={9}
+                      x={labelX} y={y + 1} dominantBaseline="middle" fontSize={9}
                       fill={isHead ? "var(--color-text)" : "var(--color-text-secondary)"}
                       fontWeight={isHead ? 600 : 400} opacity={0.85}>
                       {node.message.length > 30 ? node.message.substring(0, 30) + "…" : node.message}
