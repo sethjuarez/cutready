@@ -228,6 +228,8 @@ interface AppStoreState {
   setActiveTab: (tabId: string) => void;
   /** Reorder tabs. */
   reorderTabs: (tabIds: string[]) => void;
+  /** @internal Persist open tabs to localStorage. */
+  _persistTabs: () => void;
 
   // ── Project actions ───────────────────────────────────────
 
@@ -536,6 +538,14 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     return { sidebarPosition: pos };
   }),
 
+  // Persist open tabs to localStorage for session restore
+  _persistTabs: () => {
+    const { openTabs, activeTabId } = get();
+    try {
+      localStorage.setItem("cutready:openTabs", JSON.stringify({ openTabs, activeTabId }));
+    } catch { /* quota exceeded — ignore */ }
+  },
+
   openTab: (tab) => {
     const { openTabs, view } = get();
     const existing = openTabs.find((t) => t.path === tab.path && t.type === tab.type);
@@ -550,6 +560,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     if (view === "settings" || view === "home") {
       set({ view: "sketch" });
     }
+    get()._persistTabs();
   },
   closeTab: (tabId) => {
     const { openTabs, activeTabId } = get();
@@ -581,6 +592,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     } else {
       set({ activeSketchPath: null, activeSketch: null, activeStoryboardPath: null, activeStoryboard: null, activeNotePath: null, activeNoteContent: null });
     }
+    get()._persistTabs();
   },
   setActiveTab: (tabId) => {
     const { openTabs } = get();
@@ -597,6 +609,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       set({ activeSketchPath: null, activeSketch: null, activeStoryboardPath: null, activeStoryboard: null });
       get().openNote(tab.path);
     }
+    get()._persistTabs();
   },
   reorderTabs: (tabIds) => {
     const { openTabs } = get();
@@ -604,6 +617,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       .map((id) => openTabs.find((t) => t.id === id))
       .filter(Boolean) as EditorTab[];
     set({ openTabs: reordered });
+    get()._persistTabs();
   },
 
   // ── Project actions ───────────────────────────────────────
@@ -655,6 +669,28 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await get().loadStoryboards();
       await get().loadNotes();
       await get().loadSidebarOrder();
+      // Restore open tabs from previous session
+      try {
+        const raw = localStorage.getItem("cutready:openTabs");
+        if (raw) {
+          const saved = JSON.parse(raw) as { openTabs?: EditorTab[]; activeTabId?: string | null };
+          const { sketches, storyboards, notes } = get();
+          const validTabs = (saved.openTabs ?? []).filter((t) => {
+            if (t.type === "sketch") return sketches.some((s) => s.path === t.path);
+            if (t.type === "storyboard") return storyboards.some((s) => s.path === t.path);
+            if (t.type === "note") return notes.some((n) => n.path === t.path);
+            return false;
+          });
+          if (validTabs.length > 0) {
+            const activeId = validTabs.find((t) => t.id === saved.activeTabId) ? saved.activeTabId! : validTabs[0].id;
+            set({ openTabs: validTabs, activeTabId: activeId });
+            const active = validTabs.find((t) => t.id === activeId);
+            if (active?.type === "sketch") await get().openSketch(active.path);
+            else if (active?.type === "storyboard") await get().openStoryboard(active.path);
+            else if (active?.type === "note") await get().openNote(active.path);
+          }
+        }
+      } catch { /* ignore corrupted data */ }
       // Auto-detect remote and fetch in background (non-blocking)
       get().detectRemote().then(() => {
         if (get().currentRemote) {
@@ -672,6 +708,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   closeProject: () => {
     invoke("close_project").catch(console.error);
     localStorage.removeItem("cutready:lastProject");
+    localStorage.removeItem("cutready:openTabs");
     set({
       currentProject: null,
       view: "home",
