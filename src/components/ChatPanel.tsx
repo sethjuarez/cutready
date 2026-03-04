@@ -26,7 +26,7 @@ interface FileReference {
   webStatus?: "loading" | "ready" | "error";
 }
 
-type SecondaryTab = "chat" | "sessions" | "saves";
+type SecondaryTab = "chat" | "sessions" | "snapshots";
 
 // ── Built-in Agent Presets ───────────────────────────────────────
 
@@ -266,53 +266,86 @@ function useDropdownMaxHeight(
 
 // ── Main Panel ───────────────────────────────────────────────────
 
+const TAB_DEFS: { id: SecondaryTab; label: string; icon: (s: number) => React.ReactNode }[] = [
+  { id: "chat", label: "Chat", icon: (s) => <IconSparkles size={s} /> },
+  { id: "sessions", label: "Chats", icon: (s) => <IconHistory size={s} /> },
+  { id: "snapshots", label: "Snapshots", icon: (s) => <IconSave size={s} /> },
+];
+
+const TAB_ORDER_KEY = "cutready:panel-tab-order";
+
+function loadTabOrder(): SecondaryTab[] {
+  try {
+    const raw = localStorage.getItem(TAB_ORDER_KEY);
+    if (raw) {
+      const arr = JSON.parse(raw) as SecondaryTab[];
+      // Validate — must contain exactly the known tabs
+      const ids = TAB_DEFS.map((t) => t.id);
+      if (arr.length === ids.length && ids.every((id) => arr.includes(id))) return arr;
+    }
+  } catch { /* ignore */ }
+  return TAB_DEFS.map((t) => t.id);
+}
+
 export function ChatPanel() {
   const [activeTab, setActiveTab] = useState<SecondaryTab>("chat");
+  const [tabOrder, setTabOrder] = useState<SecondaryTab[]>(loadTabOrder);
+  const dragRef = useRef<SecondaryTab | null>(null);
+  const [dragOver, setDragOver] = useState<SecondaryTab | null>(null);
+
+  const reorder = useCallback((from: SecondaryTab, to: SecondaryTab) => {
+    if (from === to) return;
+    setTabOrder((prev) => {
+      const next = [...prev];
+      const fi = next.indexOf(from);
+      const ti = next.indexOf(to);
+      next.splice(fi, 1);
+      next.splice(ti, 0, from);
+      localStorage.setItem(TAB_ORDER_KEY, JSON.stringify(next));
+      return next;
+    });
+  }, []);
+
+  const orderedTabs = useMemo(
+    () => tabOrder.map((id) => TAB_DEFS.find((t) => t.id === id)!),
+    [tabOrder],
+  );
 
   return (
     <div className="flex flex-col h-full bg-[var(--color-surface-inset)]">
-      {/* Tab bar — underline tabs like VS Code panel tabs */}
+      {/* Tab bar — draggable underline tabs */}
       <div className="flex items-stretch border-b border-[var(--color-border)] shrink-0">
-        <button
-          className={`flex items-center gap-1.5 px-3 py-2 text-[11px] font-medium transition-colors border-b-2 -mb-px ${
-            activeTab === "chat"
-              ? "border-[var(--color-accent)] text-[var(--color-text)]"
-              : "border-transparent text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:border-[var(--color-text-secondary)]/30"
-          }`}
-          onClick={() => setActiveTab("chat")}
-        >
-          <IconSparkles size={12} />
-          Chat
-        </button>
-        <button
-          className={`flex items-center gap-1.5 px-3 py-2 text-[11px] font-medium transition-colors border-b-2 -mb-px ${
-            activeTab === "sessions"
-              ? "border-[var(--color-accent)] text-[var(--color-text)]"
-              : "border-transparent text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:border-[var(--color-text-secondary)]/30"
-          }`}
-          onClick={() => setActiveTab("sessions")}
-        >
-          <IconHistory size={12} />
-          Chats
-        </button>
-        <button
-          className={`flex items-center gap-1.5 px-3 py-2 text-[11px] font-medium transition-colors border-b-2 -mb-px ${
-            activeTab === "saves"
-              ? "border-[var(--color-accent)] text-[var(--color-text)]"
-              : "border-transparent text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:border-[var(--color-text-secondary)]/30"
-          }`}
-          onClick={() => setActiveTab("saves")}
-        >
-          <IconSave size={12} />
-          Saves
-        </button>
+        {orderedTabs.map((tab) => (
+          <button
+            key={tab.id}
+            draggable
+            onDragStart={() => { dragRef.current = tab.id; }}
+            onDragOver={(e) => { e.preventDefault(); setDragOver(tab.id); }}
+            onDragLeave={() => setDragOver(null)}
+            onDrop={() => {
+              if (dragRef.current) reorder(dragRef.current, tab.id);
+              dragRef.current = null;
+              setDragOver(null);
+            }}
+            onDragEnd={() => { dragRef.current = null; setDragOver(null); }}
+            className={`flex items-center gap-1.5 px-3 py-2 text-[11px] font-medium transition-colors border-b-2 -mb-px cursor-grab active:cursor-grabbing ${
+              activeTab === tab.id
+                ? "border-[var(--color-accent)] text-[var(--color-text)]"
+                : "border-transparent text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:border-[var(--color-text-secondary)]/30"
+            } ${dragOver === tab.id && dragRef.current !== tab.id ? "bg-[var(--color-accent)]/10" : ""}`}
+            onClick={() => setActiveTab(tab.id)}
+          >
+            {tab.icon(12)}
+            {tab.label}
+          </button>
+        ))}
       </div>
 
       {/* Tab content */}
       <div className="flex-1 min-h-0">
         {activeTab === "chat" && <ChatTab />}
         {activeTab === "sessions" && <ChatHistory onOpenSession={() => setActiveTab("chat")} />}
-        {activeTab === "saves" && <VersionHistory />}
+        {activeTab === "snapshots" && <VersionHistory />}
       </div>
     </div>
   );
