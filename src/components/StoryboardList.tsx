@@ -38,7 +38,7 @@ function SortableSidebarItem({ id, children }: { id: string; children: React.Rea
     opacity: isDragging ? 0.4 : 1,
   };
   return (
-    <div ref={setNodeRef} style={style} {...attributes}>
+    <div ref={setNodeRef} style={style} {...attributes} className="group/item">
       <div className="flex items-center">
         {/* Drag handle */}
         <div
