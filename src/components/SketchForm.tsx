@@ -270,7 +270,7 @@ export function SketchForm() {
                   `Improve the title of sketch "${activeSketchPath ?? "current"}". Current title: "${localTitle}". Suggest a more compelling, concise title. IMPORTANT: Only update the title — do NOT change the description or any rows. Use set_planning_rows with the improved title but keep the existing description and all rows exactly as they are.`,
                   { silent: true }
                 )}
-                className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover/title:opacity-100 p-1 rounded text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 transition-all"
+                className="absolute right-1 top-1/2 -translate-y-1/2 opacity-60 hover:opacity-100 p-1 rounded text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 transition-all"
                 title="Improve title with AI"
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
@@ -372,7 +372,7 @@ export function SketchForm() {
                 `Improve the description of sketch "${activeSketchPath ?? "current"}". Current description: "${localDesc}". Make it clearer and more informative. IMPORTANT: Only update the description — do NOT change the title or any rows. Use set_planning_rows with the improved description but keep the existing title and all rows exactly as they are.`,
                 { silent: true }
               )}
-              className="absolute right-2 top-2 opacity-0 group-hover/desc:opacity-100 p-1 rounded text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 transition-all"
+              className="absolute right-2 top-2 opacity-60 hover:opacity-100 p-1 rounded text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 transition-all"
               title="Improve description with AI"
             >
               <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">

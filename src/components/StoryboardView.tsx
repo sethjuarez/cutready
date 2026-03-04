@@ -310,7 +310,7 @@ export function StoryboardView() {
                 `Improve the description of the storyboard "${activeStoryboard.title}". Current description: "${localDesc}". Write a clearer, more compelling description that summarizes the demo flow. Keep it concise (2-3 sentences). Note: there is no tool to update storyboard descriptions directly — just reply with the improved text and I'll paste it in.`,
                 { silent: true }
               )}
-              className="absolute right-1 top-1 opacity-0 group-hover/desc:opacity-100 p-1 rounded text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 transition-all"
+              className="absolute right-1 top-1 opacity-60 hover:opacity-100 p-1 rounded text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 transition-all"
               title="Improve description with AI"
             >
               <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">

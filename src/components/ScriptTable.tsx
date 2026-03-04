@@ -923,7 +923,7 @@ function SparkleButton({ onClick }: { onClick: () => void }) {
   return (
     <button
       onClick={(e) => { e.stopPropagation(); onClick(); }}
-      className="absolute top-0.5 right-0.5 p-0.5 rounded opacity-0 group-hover/cell:opacity-100 transition-opacity text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10"
+      className="absolute top-0.5 right-0.5 p-0.5 rounded opacity-50 hover:opacity-100 transition-opacity text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10"
       title="Improve with AI"
     >
       <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
