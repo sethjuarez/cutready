@@ -10,6 +10,7 @@ export function VersionHistory() {
   const isDirty = useAppStore((s) => s.isDirty);
   const isRewound = useAppStore((s) => s.isRewound);
   const checkDirty = useAppStore((s) => s.checkDirty);
+  const openTab = useAppStore((s) => s.openTab);
   const checkRewound = useAppStore((s) => s.checkRewound);
   const navigateToSnapshot = useAppStore((s) => s.navigateToSnapshot);
   const discardChanges = useAppStore((s) => s.discardChanges);
@@ -112,6 +113,18 @@ export function VersionHistory() {
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
             </svg>
+          </button>
+          <button
+            onClick={() => openTab({ type: "history", path: "__history__", title: "History" })}
+            className="group/btn flex items-center gap-1 p-1 rounded text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] transition-colors"
+            title="Open full history graph"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+              <circle cx="12" cy="12" r="3" /><line x1="12" y1="3" x2="12" y2="9" /><line x1="12" y1="15" x2="12" y2="21" />
+            </svg>
+            <span className="max-w-0 overflow-hidden group-hover/btn:max-w-[10rem] transition-all duration-200 whitespace-nowrap text-[10px]">
+              History
+            </span>
           </button>
           <button
             onClick={() => useAppStore.setState({ snapshotPromptOpen: true })}

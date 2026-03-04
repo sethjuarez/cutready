@@ -1,7 +1,7 @@
 /**
  * Tests for merge UI components and store actions.
  */
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 import type { ConflictFile, MergeResult } from "../types/sketch";
 
 // Mock the MergeConflictPanel's helper functions directly

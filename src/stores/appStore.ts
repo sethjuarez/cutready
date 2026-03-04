@@ -55,7 +55,7 @@ export interface SidebarOrder {
 /** An open tab in the editor area. */
 export interface EditorTab {
   id: string;
-  type: "sketch" | "storyboard" | "note";
+  type: "sketch" | "storyboard" | "note" | "history";
   path: string;
   title: string;
 }
@@ -639,6 +639,8 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     } else if (tab.type === "note") {
       set({ activeSketchPath: null, activeSketch: null, activeStoryboardPath: null, activeStoryboard: null });
       get().openNote(tab.path);
+    } else if (tab.type === "history") {
+      set({ activeSketchPath: null, activeSketch: null, activeStoryboardPath: null, activeStoryboard: null, activeNotePath: null, activeNoteContent: null });
     }
     get()._persistTabs();
   },

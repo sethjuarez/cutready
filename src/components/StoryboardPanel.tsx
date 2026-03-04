@@ -6,6 +6,7 @@ import { NoteEditor } from "./NoteEditor";
 import { ChatPanel } from "./ChatPanel";
 import { ResizeHandle } from "./ResizeHandle";
 import { TabBar } from "./TabBar";
+import { HistoryGraphTab } from "./HistoryGraphTab";
 
 /**
  * StoryboardPanel — center content area for sketch/storyboard workflow.
@@ -19,6 +20,11 @@ export function StoryboardPanel() {
   const activeNotePath = useAppStore((s) => s.activeNotePath);
   const showVersionHistory = useAppStore((s) => s.showVersionHistory);
   const sidebarPosition = useAppStore((s) => s.sidebarPosition);
+  const openTabs = useAppStore((s) => s.openTabs);
+  const activeTabId = useAppStore((s) => s.activeTabId);
+
+  const activeTab = openTabs.find((t) => t.id === activeTabId);
+  const isHistoryTab = activeTab?.type === "history";
 
   const [secondaryWidth, setSecondaryWidth] = useState(340);
   const secondaryOnLeft = sidebarPosition === "right";
@@ -52,7 +58,9 @@ export function StoryboardPanel() {
         <TabBar />
 
         {/* Content */}
-        {activeSketch ? (
+        {isHistoryTab ? (
+          <HistoryGraphTab />
+        ) : activeSketch ? (
           <SketchForm />
         ) : activeStoryboard ? (
           <StoryboardView />
