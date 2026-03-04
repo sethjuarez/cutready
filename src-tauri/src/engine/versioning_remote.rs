@@ -221,7 +221,6 @@ pub fn pull_remote(
     }
 
     // Fast-forward: move local branch ref + checkout
-    let remote_commit = repo.find_commit(remote_oid)?;
     let mut local_branch_ref = repo.find_reference(&local_ref)?;
     local_branch_ref.set_target(remote_oid, &format!("pull: fast-forward to {}", &remote_oid.to_string()[..8]))?;
     repo.set_head(&local_ref)?;
@@ -291,6 +290,36 @@ pub fn checkout_remote_branch(
     let local_ref = format!("refs/heads/{}", branch);
     repo.set_head(&local_ref)?;
     repo.checkout_head(Some(git2::build::CheckoutBuilder::new().force()))?;
+
+    Ok(())
+}
+
+// ─── Clone from URL ─────────────────────────────────────────────
+
+/// Clone a repository from a URL into the given destination directory.
+pub fn clone_from_url(
+    url: &str,
+    dest: &Path,
+    token: Option<&str>,
+) -> Result<(), RemoteError> {
+    let mut callbacks = RemoteCallbacks::new();
+    callbacks.credentials(|_url, username_from_url, allowed| {
+        if allowed.contains(git2::CredentialType::SSH_KEY) {
+            let user = username_from_url.unwrap_or("git");
+            return Cred::ssh_key_from_agent(user);
+        }
+        if let Some(tok) = token {
+            return Cred::userpass_plaintext(tok, "");
+        }
+        Cred::default()
+    });
+
+    let mut fetch_opts = FetchOptions::new();
+    fetch_opts.remote_callbacks(callbacks);
+
+    let mut builder = git2::build::RepoBuilder::new();
+    builder.fetch_options(fetch_opts);
+    builder.clone(url, dest)?;
 
     Ok(())
 }

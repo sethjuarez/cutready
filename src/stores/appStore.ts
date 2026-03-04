@@ -21,6 +21,7 @@ import type {
   ChatSessionSummary,
   RemoteInfo,
   SyncStatus,
+  DiffEntry,
 } from "../types/sketch";
 
 /** The panels / views available in the app. */
@@ -158,6 +159,14 @@ interface AppStoreState {
   isSyncing: boolean;
   /** Last error from a sync operation. */
   syncError: string | null;
+
+  // ── Bookmarks & diff ──────────────────────────────────────
+  /** Set of bookmarked snapshot commit IDs. */
+  bookmarkedSnapshots: Set<string>;
+  /** Currently selected diff result (file changes between two snapshots). */
+  diffResult: DiffEntry[] | null;
+  /** The two commit IDs being compared for diff. */
+  diffSelection: { from: string; to: string } | null;
 
   // ── Sidebar order ────────────────────────────────────────
   /** Sidebar display order manifest (paths per category). */
@@ -367,6 +376,16 @@ interface AppStoreState {
   /** Publish (push) the current local-only timeline to the remote. */
   publishTimeline: () => Promise<void>;
 
+  // ── Diff & bookmarks ──────────────────────────────────────
+  /** Compare two snapshots and return file-level diffs. */
+  diffSnapshots: (fromCommit: string, toCommit: string) => Promise<DiffEntry[]>;
+  /** Toggle a bookmark on a snapshot node. */
+  toggleBookmark: (commitId: string) => void;
+  /** Check for large files before pushing. Returns list of (path, size). */
+  checkLargeFiles: () => Promise<Array<[string, number]>>;
+  /** Clone a repository from a GitHub URL. */
+  cloneFromUrl: (url: string, destPath: string) => Promise<boolean>;
+
   // ── Sidebar order actions ──────────────────────────────────
 
   /** Load sidebar order manifest from project. */
@@ -471,6 +490,9 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   syncStatus: null,
   isSyncing: false,
   syncError: null,
+  bookmarkedSnapshots: new Set<string>(),
+  diffResult: null,
+  diffSelection: null,
   sidebarOrder: null,
 
   profiles: [],
@@ -680,6 +702,9 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       syncStatus: null,
       isSyncing: false,
       syncError: null,
+      bookmarkedSnapshots: new Set<string>(),
+      diffResult: null,
+      diffSelection: null,
       sidebarOrder: null,
       openTabs: [],
       activeTabId: null,
@@ -1363,6 +1388,13 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     if (!active) return;
     set({ isSyncing: true, syncError: null });
     try {
+      // Large-file check before push
+      const largeFiles = await get().checkLargeFiles();
+      if (largeFiles.length > 0) {
+        const names = largeFiles.map(([p, s]) => `${p} (${(s / 1024 / 1024).toFixed(1)} MB)`).join(", ");
+        set({ syncError: `Large files detected: ${names}. Remove or add to .gitignore before pushing.`, isSyncing: false });
+        return;
+      }
       let token: string | null = null;
       try {
         token = await invoke<string | null>("get_github_token");
@@ -1504,6 +1536,57 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       set({ syncStatus: status });
     } catch {
       set({ syncStatus: null });
+    }
+  },
+
+  // ── Diff & bookmarks ──────────────────────────────────────
+
+  diffSnapshots: async (fromCommit, toCommit) => {
+    try {
+      const entries = await invoke<DiffEntry[]>("diff_snapshots", { fromCommit, toCommit });
+      set({ diffResult: entries, diffSelection: { from: fromCommit, to: toCommit } });
+      return entries;
+    } catch (err) {
+      console.error("Failed to diff snapshots:", err);
+      return [];
+    }
+  },
+
+  toggleBookmark: (commitId) => {
+    const next = new Set(get().bookmarkedSnapshots);
+    if (next.has(commitId)) {
+      next.delete(commitId);
+    } else {
+      next.add(commitId);
+    }
+    set({ bookmarkedSnapshots: next });
+  },
+
+  checkLargeFiles: async () => {
+    try {
+      return await invoke<Array<[string, number]>>("check_large_files", { thresholdMb: 50 });
+    } catch {
+      return [];
+    }
+  },
+
+  cloneFromUrl: async (url, destPath) => {
+    set({ loading: true });
+    try {
+      let token: string | null = null;
+      try {
+        token = await invoke<string | null>("get_github_token");
+      } catch { /* ignore */ }
+      await invoke("clone_from_url", { url, dest: destPath, token });
+      // Open the cloned project
+      await get().openProject(destPath);
+      return true;
+    } catch (err) {
+      console.error("Failed to clone:", err);
+      set({ error: String(err) });
+      return false;
+    } finally {
+      set({ loading: false });
     }
   },
 

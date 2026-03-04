@@ -636,6 +636,9 @@ pub fn get_timeline_graph(project_dir: &Path) -> Result<Vec<GraphNode>, Versioni
                 .map_err(|e| VersioningError::Git(e.to_string()))?;
             let timestamp = gix_time_to_chrono(time);
             let parents: Vec<String> = commit.parent_ids().map(|id| id.to_string()).collect();
+            let author = commit.author()
+                .map(|a| a.name.to_string())
+                .unwrap_or_default();
 
             nodes.push(GraphNode {
                 id: oid.to_string(),
@@ -647,6 +650,7 @@ pub fn get_timeline_graph(project_dir: &Path) -> Result<Vec<GraphNode>, Versioni
                 is_head: head_oid.map_or(false, |h| h == oid),
                 is_branch_tip: is_tip,
                 is_remote_tip: false,
+                author,
             });
             is_tip = false;
 
@@ -672,6 +676,7 @@ pub fn get_timeline_graph(project_dir: &Path) -> Result<Vec<GraphNode>, Versioni
                     is_head: false,
                     is_branch_tip: true,
                     is_remote_tip: false,
+                    author: existing.author,
                 });
             }
         }
@@ -700,6 +705,9 @@ pub fn get_timeline_graph(project_dir: &Path) -> Result<Vec<GraphNode>, Versioni
                 .map_err(|e| VersioningError::Git(e.to_string()))?;
             let timestamp = gix_time_to_chrono(time);
             let parents: Vec<String> = commit.parent_ids().map(|id| id.to_string()).collect();
+            let author = commit.author()
+                .map(|a| a.name.to_string())
+                .unwrap_or_default();
 
             nodes.push(GraphNode {
                 id: oid.to_string(),
@@ -711,6 +719,7 @@ pub fn get_timeline_graph(project_dir: &Path) -> Result<Vec<GraphNode>, Versioni
                 is_head: false,
                 is_branch_tip: false,
                 is_remote_tip: false,
+                author,
             });
 
             current = commit.parent_ids().next().map(|id| id.detach());
@@ -752,6 +761,96 @@ pub fn get_timeline_graph(project_dir: &Path) -> Result<Vec<GraphNode>, Versioni
     nodes.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
 
     Ok(nodes)
+}
+
+/// A single file change between two snapshots.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct DiffEntry {
+    pub path: String,
+    /// "added", "deleted", "modified"
+    pub status: String,
+    /// Number of lines added.
+    pub additions: u32,
+    /// Number of lines removed.
+    pub deletions: u32,
+}
+
+/// Compare two snapshots and return a list of file-level changes.
+pub fn diff_snapshots(
+    project_dir: &Path,
+    from_commit: &str,
+    to_commit: &str,
+) -> Result<Vec<DiffEntry>, VersioningError> {
+    let repo = git2::Repository::open(project_dir)
+        .map_err(|e| VersioningError::Git(e.to_string()))?;
+
+    let from_oid = git2::Oid::from_str(from_commit)
+        .map_err(|e| VersioningError::Git(e.to_string()))?;
+    let to_oid = git2::Oid::from_str(to_commit)
+        .map_err(|e| VersioningError::Git(e.to_string()))?;
+
+    let from_tree = repo.find_commit(from_oid)
+        .map_err(|e| VersioningError::Git(e.to_string()))?
+        .tree()
+        .map_err(|e| VersioningError::Git(e.to_string()))?;
+    let to_tree = repo.find_commit(to_oid)
+        .map_err(|e| VersioningError::Git(e.to_string()))?
+        .tree()
+        .map_err(|e| VersioningError::Git(e.to_string()))?;
+
+    let diff = repo.diff_tree_to_tree(Some(&from_tree), Some(&to_tree), None)
+        .map_err(|e| VersioningError::Git(e.to_string()))?;
+
+    let mut entries: Vec<DiffEntry> = Vec::new();
+    let num_deltas = diff.deltas().len();
+    for i in 0..num_deltas {
+        let delta = diff.deltas().nth(i).unwrap();
+        let path = delta.new_file().path()
+            .or_else(|| delta.old_file().path())
+            .unwrap_or(Path::new(""))
+            .to_string_lossy()
+            .to_string();
+        let status = match delta.status() {
+            git2::Delta::Added => "added",
+            git2::Delta::Deleted => "deleted",
+            _ => "modified",
+        };
+        entries.push(DiffEntry {
+            path,
+            status: status.to_string(),
+            additions: 0,
+            deletions: 0,
+        });
+    }
+
+    // Count line additions/deletions per file using print
+    let entry_count = entries.len();
+    let mut current_file: usize = 0;
+    diff.print(git2::DiffFormat::Patch, |delta, _hunk, line| {
+        // Find which entry this delta corresponds to
+        let dpath = delta.new_file().path()
+            .or_else(|| delta.old_file().path())
+            .unwrap_or(Path::new(""))
+            .to_string_lossy()
+            .to_string();
+        // Update current_file index
+        for j in current_file..entry_count {
+            if entries[j].path == dpath {
+                current_file = j;
+                break;
+            }
+        }
+        if current_file < entry_count {
+            match line.origin() {
+                '+' => entries[current_file].additions += 1,
+                '-' => entries[current_file].deletions += 1,
+                _ => {}
+            }
+        }
+        true
+    }).map_err(|e| VersioningError::Git(e.to_string()))?;
+
+    Ok(entries)
 }
 
 // ── Internal helpers ────────────────────────────────────────────────
@@ -1977,5 +2076,58 @@ mod tests {
         let tls = list_timelines(tmp.path()).unwrap();
         assert_eq!(tls.len(), 3, "Should have 3 timelines, got {:?}",
             tls.iter().map(|t| &t.name).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn test_diff_snapshots() {
+        let tmp = setup_project_dir();
+        init_project_repo(tmp.path()).unwrap();
+
+        // Create and commit initial file
+        std::fs::write(tmp.path().join("test.sk"), r#"{"title":"Hello"}"#).unwrap();
+        let id1 = commit_snapshot(tmp.path(), "Initial", None).unwrap();
+
+        // Modify and add a new file
+        std::fs::write(tmp.path().join("test.sk"), r#"{"title":"Hello World","rows":[]}"#).unwrap();
+        std::fs::write(tmp.path().join("new.md"), "# New file").unwrap();
+        let id2 = commit_snapshot(tmp.path(), "Changes", None).unwrap();
+
+        let diff = diff_snapshots(tmp.path(), &id1, &id2).unwrap();
+        assert!(!diff.is_empty(), "Diff should have entries");
+
+        let modified = diff.iter().find(|e| e.path == "test.sk");
+        assert!(modified.is_some(), "test.sk should be modified");
+        assert_eq!(modified.unwrap().status, "modified");
+
+        let added = diff.iter().find(|e| e.path == "new.md");
+        assert!(added.is_some(), "new.md should be added");
+        assert_eq!(added.unwrap().status, "added");
+    }
+
+    #[test]
+    fn test_diff_identical_snapshots() {
+        let tmp = setup_project_dir();
+        init_project_repo(tmp.path()).unwrap();
+
+        std::fs::write(tmp.path().join("test.sk"), r#"{"title":"Hello"}"#).unwrap();
+        let id1 = commit_snapshot(tmp.path(), "Same", None).unwrap();
+
+        let diff = diff_snapshots(tmp.path(), &id1, &id1).unwrap();
+        assert!(diff.is_empty(), "Diff of same commit should be empty");
+    }
+
+    #[test]
+    fn test_graph_nodes_have_author() {
+        let tmp = setup_project_dir();
+        init_project_repo(tmp.path()).unwrap();
+
+        std::fs::write(tmp.path().join("a.sk"), "content").unwrap();
+        commit_snapshot(tmp.path(), "test author", None).unwrap();
+
+        let graph = get_timeline_graph(tmp.path()).unwrap();
+        assert!(!graph.is_empty());
+        for node in &graph {
+            assert!(!node.author.is_empty(), "Author should not be empty for node: {}", node.message);
+        }
     }
 }

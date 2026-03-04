@@ -1,0 +1,52 @@
+import { useAppStore } from "../stores/appStore";
+
+/**
+ * SnapshotDiffPanel — shows file-level changes between two snapshots.
+ * Rendered below the graph when a diff is active.
+ */
+export function SnapshotDiffPanel() {
+  const diffResult = useAppStore((s) => s.diffResult);
+  const diffSelection = useAppStore((s) => s.diffSelection);
+
+  if (!diffResult || !diffSelection) return null;
+
+  const totalAdded = diffResult.reduce((s, e) => s + e.additions, 0);
+  const totalRemoved = diffResult.reduce((s, e) => s + e.deletions, 0);
+
+  return (
+    <div className="border-t border-[var(--color-border)] bg-[var(--color-surface)]">
+      <div className="flex items-center justify-between px-3 py-1.5">
+        <span className="text-[10px] font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">
+          Diff: {diffSelection.from.slice(0, 7)} → {diffSelection.to.slice(0, 7)}
+        </span>
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] text-emerald-500">+{totalAdded}</span>
+          <span className="text-[10px] text-red-400">-{totalRemoved}</span>
+          <button
+            onClick={() => useAppStore.setState({ diffResult: null, diffSelection: null })}
+            className="text-[10px] text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors"
+          >✕</button>
+        </div>
+      </div>
+      <div className="max-h-40 overflow-y-auto">
+        {diffResult.map((entry) => (
+          <div key={entry.path} className="flex items-center gap-2 px-3 py-1 text-[10px] hover:bg-[var(--color-border)]/20">
+            <span className={`shrink-0 w-1.5 h-1.5 rounded-full ${
+              entry.status === "added" ? "bg-emerald-500" :
+              entry.status === "deleted" ? "bg-red-400" :
+              "bg-amber-400"
+            }`} />
+            <span className="flex-1 truncate text-[var(--color-text)]">{entry.path}</span>
+            {entry.additions > 0 && <span className="text-emerald-500">+{entry.additions}</span>}
+            {entry.deletions > 0 && <span className="text-red-400">-{entry.deletions}</span>}
+          </div>
+        ))}
+        {diffResult.length === 0 && (
+          <div className="px-3 py-4 text-center text-[10px] text-[var(--color-text-secondary)]">
+            No changes between these snapshots
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

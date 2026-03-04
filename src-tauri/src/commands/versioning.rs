@@ -349,3 +349,56 @@ pub async fn is_rewound(state: State<'_, AppState>) -> Result<bool, String> {
     let root = project_root(&state)?;
     Ok(versioning::is_rewound(&root))
 }
+
+#[tauri::command]
+pub async fn diff_snapshots(
+    from_commit: String,
+    to_commit: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<versioning::DiffEntry>, String> {
+    let root = project_root(&state)?;
+    versioning::diff_snapshots(&root, &from_commit, &to_commit)
+        .map_err(|e| e.to_string())
+}
+
+/// Check for large files (>50MB) in the working tree.
+#[tauri::command]
+pub async fn check_large_files(
+    threshold_mb: u64,
+    state: State<'_, AppState>,
+) -> Result<Vec<(String, u64)>, String> {
+    let root = project_root(&state)?;
+    let threshold_bytes = threshold_mb * 1024 * 1024;
+    let mut large: Vec<(String, u64)> = Vec::new();
+    fn walk(dir: &std::path::Path, root: &std::path::Path, threshold: u64, out: &mut Vec<(String, u64)>) {
+        let Ok(entries) = std::fs::read_dir(dir) else { return };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let name = path.file_name().unwrap_or_default().to_string_lossy();
+            if name.starts_with('.') || name == "target" || name == "node_modules" {
+                continue;
+            }
+            if path.is_dir() {
+                walk(&path, root, threshold, out);
+            } else if let Ok(meta) = path.metadata() {
+                if meta.len() > threshold {
+                    let rel = path.strip_prefix(root).unwrap_or(&path);
+                    out.push((rel.to_string_lossy().to_string(), meta.len()));
+                }
+            }
+        }
+    }
+    walk(&root, &root, threshold_bytes, &mut large);
+    Ok(large)
+}
+
+#[tauri::command]
+pub async fn clone_from_url(
+    url: String,
+    dest: String,
+    token: Option<String>,
+) -> Result<(), String> {
+    let dest_path = std::path::PathBuf::from(&dest);
+    versioning_remote::clone_from_url(&url, &dest_path, token.as_deref())
+        .map_err(|e| e.to_string())
+}

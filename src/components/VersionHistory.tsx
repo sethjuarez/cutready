@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAppStore } from "../stores/appStore";
 import { SnapshotGraph } from "./SnapshotGraph";
+import { SnapshotDiffPanel } from "./SnapshotDiffPanel";
 import { SyncBar } from "./SyncBar";
 import { TimelineSelector } from "./TimelineSelector";
 
@@ -220,6 +221,9 @@ export function VersionHistory() {
           )}
         </div>
       </div>
+
+      {/* Diff panel — shows file changes between two selected snapshots */}
+      <SnapshotDiffPanel />
     </div>
   );
 }

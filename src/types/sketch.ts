@@ -88,6 +88,8 @@ export interface GraphNode {
   is_head: boolean;
   is_branch_tip?: boolean;
   is_remote_tip?: boolean;
+  /** Author name (for collaborator info). */
+  author?: string;
 }
 
 /** Remote repository info. */
@@ -100,6 +102,15 @@ export interface RemoteInfo {
 export interface SyncStatus {
   ahead: number;
   behind: number;
+}
+
+/** A file change between two snapshots. */
+export interface DiffEntry {
+  path: string;
+  /** "added" | "deleted" | "modified" */
+  status: string;
+  additions: number;
+  deletions: number;
 }
 
 /** Lightweight summary for listing notes (.md files). */

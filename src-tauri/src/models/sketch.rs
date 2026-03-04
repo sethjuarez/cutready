@@ -226,6 +226,9 @@ pub struct GraphNode {
     /// Whether this commit is the tip of a remote tracking branch (e.g., origin/main).
     #[serde(default)]
     pub is_remote_tip: bool,
+    /// Author name of this commit.
+    #[serde(default)]
+    pub author: String,
 }
 
 /// Lightweight summary for listing notes (.md files) in the sidebar.

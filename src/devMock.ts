@@ -130,8 +130,8 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
     case "get_graph":
     case "get_timeline_graph":
       return [
-        { id: "def456", message: "Added feature section", timestamp: "2025-01-15T11:00:00Z", timeline: "main", parents: ["abc123"], lane: 0, is_head: true, is_branch_tip: true, is_remote_tip: false },
-        { id: "abc123", message: "Initial draft", timestamp: "2025-01-15T10:00:00Z", timeline: "main", parents: [], lane: 0, is_head: false, is_branch_tip: false, is_remote_tip: false },
+        { id: "def456", message: "Added feature section", timestamp: "2025-01-15T11:00:00Z", timeline: "main", parents: ["abc123"], lane: 0, is_head: true, is_branch_tip: true, is_remote_tip: false, author: "You" },
+        { id: "abc123", message: "Initial draft", timestamp: "2025-01-15T10:00:00Z", timeline: "main", parents: [], lane: 0, is_head: false, is_branch_tip: false, is_remote_tip: false, author: "You" },
       ];
     case "has_unsaved_changes":
       return false;
@@ -257,6 +257,15 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
     case "list_remote_branches":
       return [];
     case "checkout_remote_branch":
+      return null;
+    case "diff_snapshots":
+      return [
+        { path: "sketches/demo-introduction.sk", status: "modified", additions: 5, deletions: 2 },
+        { path: "notes/script.md", status: "added", additions: 12, deletions: 0 },
+      ];
+    case "check_large_files":
+      return [];
+    case "clone_from_url":
       return null;
     default:
       // Handle tauri-plugin-store commands

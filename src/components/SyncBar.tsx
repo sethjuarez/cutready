@@ -18,6 +18,8 @@ export function SyncBar() {
   const pullFromRemote = useAppStore((s) => s.pullFromRemote);
   const syncWithRemote = useAppStore((s) => s.syncWithRemote);
   const { settings } = useSettings();
+  const timelines = useAppStore((s) => s.timelines);
+  const activeTimeline = timelines.find((t) => t.is_active);
 
   // Detect remote on mount (if the user configured one in settings or one exists in git)
   useEffect(() => {
@@ -57,6 +59,15 @@ export function SyncBar() {
     actionLabel = "Pull";
     actionFn = pullFromRemote;
   }
+
+  // Compute PR URL — only for non-main branches with a GitHub remote
+  const prUrl = (() => {
+    if (!currentRemote?.url || !activeTimeline) return null;
+    if (activeTimeline.name === "main" || activeTimeline.name === "master") return null;
+    const match = currentRemote.url.match(/github\.com[/:]([^/]+\/[^/.]+)/);
+    if (!match) return null;
+    return `https://github.com/${match[1]}/compare/${activeTimeline.name}?expand=1`;
+  })();
 
   return (
     <div className="px-3 py-2 border-b border-[var(--color-border)] bg-[var(--color-surface)]/50">
@@ -135,6 +146,17 @@ export function SyncBar() {
             {isSyncing ? "Syncing\u2026" : actionLabel}
           </button>
         )}
+
+        {/* Open PR button — shown for non-main branches */}
+        {currentRemote?.url && prUrl && (
+          <button
+            onClick={() => window.open(prUrl, "_blank")}
+            className="px-2 py-0.5 rounded text-[10px] text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] hover:bg-[var(--color-accent)]/5 transition-colors"
+            title="Open Pull Request on GitHub"
+          >
+            PR
+          </button>
+        )}
       </div>
 
       {/* Conflict / diverge banner */}
@@ -152,8 +174,21 @@ export function SyncBar() {
 
       {/* General error message (non-diverge) */}
       {syncError && !syncError.includes("diverged") && (
-        <div className="mt-1.5 text-[10px] text-red-500 dark:text-red-400 truncate" title={syncError}>
-          {syncError}
+        <div className="mt-1.5 flex items-center gap-1.5 text-[10px] text-red-500 dark:text-red-400" title={syncError}>
+          {(syncError.includes("network") || syncError.includes("resolve host") || syncError.includes("Could not resolve") || syncError.includes("timed out")) ? (
+            <>
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+                <line x1="1" y1="1" x2="23" y2="23" /><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55" /><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39" /><path d="M10.71 5.05A16 16 0 0 1 22.56 9" /><path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88" /><path d="M8.53 16.11a6 6 0 0 1 6.95 0" /><line x1="12" y1="20" x2="12.01" y2="20" />
+              </svg>
+              <span className="truncate">Offline — changes saved locally</span>
+            </>
+          ) : (
+            <span className="truncate">{syncError}</span>
+          )}
+          <button
+            onClick={() => useAppStore.setState({ syncError: null })}
+            className="ml-auto shrink-0 opacity-60 hover:opacity-100"
+          >✕</button>
         </div>
       )}
     </div>
