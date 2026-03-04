@@ -303,6 +303,21 @@ export function StoryboardView() {
               )}
             </div>
           )}
+          {/* Description sparkle */}
+          {localDesc && (
+            <button
+              onClick={() => sendChatPrompt(
+                `Improve the description of the storyboard "${activeStoryboard.title}". Current description: "${localDesc}". Write a clearer, more compelling description that summarizes the demo flow. Keep it concise (2-3 sentences). Note: there is no tool to update storyboard descriptions directly — just reply with the improved text and I'll paste it in.`,
+                { silent: true }
+              )}
+              className="absolute right-1 top-1 opacity-0 group-hover/desc:opacity-100 p-1 rounded text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 transition-all"
+              title="Improve description with AI"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2l2.09 6.26L20.18 10l-6.09 1.74L12 18l-2.09-6.26L3.82 10l6.09-1.74L12 2z" />
+              </svg>
+            </button>
+          )}
         </div>
 
         {/* AI actions */}
