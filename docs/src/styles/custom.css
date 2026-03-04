@@ -37,16 +37,28 @@
 /* Feature cards on the landing page */
 .feature-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 1.5rem;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
   margin-block: 2rem;
+}
+
+@media (max-width: 768px) {
+  .feature-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 480px) {
+  .feature-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .feature-card {
   background: var(--sl-color-bg-nav);
   border: 1px solid var(--sl-color-hairline);
   border-radius: 0.75rem;
-  padding: 1.5rem;
+  padding: 1.25rem;
   transition: border-color 0.2s, box-shadow 0.2s;
 }
 
@@ -57,12 +69,15 @@
 
 .feature-card h3 {
   margin-top: 0;
-  font-size: var(--sl-text-lg);
+  margin-bottom: 0.5rem;
+  font-size: var(--sl-text-base);
 }
 
 .feature-card p {
-  font-size: var(--sl-text-sm);
+  font-size: var(--sl-text-xs);
   color: var(--sl-color-text-accent);
+  margin: 0;
+  line-height: 1.5;
 }
 
 /* Phase badge styles */
