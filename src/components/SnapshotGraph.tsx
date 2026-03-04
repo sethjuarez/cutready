@@ -260,7 +260,8 @@ export function SnapshotGraph({
       const px = laneX(parentLane);
       const cy = rowCy(i);
       const py = rowCy(pi);
-      const color = lc(childLane);
+      const edgeTlInfo = timelineMap.get(row.node.timeline);
+      const color = lc(edgeTlInfo?.colorIndex ?? childLane);
 
       if (childLane === parentLane) {
         // Same lane: straight vertical line
@@ -366,10 +367,10 @@ export function SnapshotGraph({
         const node = row.node!;
         const dl = row.laneIdx;
         const x = laneX(dl);
-        const color = lc(dl);
+        const tlInfo = timelineMap.get(node.timeline);
+        const color = lc(tlInfo?.colorIndex ?? dl);
         const r = node.is_head ? HEAD_R : NODE_R;
         const isHov = hovered === node.id;
-        const tlInfo = timelineMap.get(node.timeline);
         const tlLabel = tlInfo?.label ?? node.timeline;
         const nodeAliases = aliases.get(node.id);
 
