@@ -440,7 +440,7 @@ export function HistoryGraphTab() {
               const isHov = hoveredNode === node.id;
               const r = isHead ? HEAD_R : NODE_R;
               const labelX = bl.length > 0
-                ? layout.textOffset + (Math.min(bl[0].length, 12) * 4.5 + 8)
+                ? layout.textOffset + (Math.min(bl[0].length, 12) * 5 + 14)
                 : layout.textOffset;
 
               return (
@@ -491,20 +491,29 @@ export function HistoryGraphTab() {
                     />
                   )}
 
-                  {/* Branch name — small text near node */}
+                  {/* Branch name badge — soft colored background */}
                   {bl.length > 0 && bl.map((label, bi) => {
                     const truncLabel = label.length > 12 ? label.substring(0, 12) + "…" : label;
+                    const bw = truncLabel.length * 5 + 10;
                     if (dir === "vertical") {
                       return (
-                        <text key={label} x={layout.textOffset} y={y + 3 + bi * 11}
-                          fontSize={7} fill={color} opacity={0.7} fontWeight={600}
-                          fontFamily="var(--font-mono, monospace)">{truncLabel}</text>
+                        <g key={label}>
+                          <rect x={layout.textOffset - 2} y={y - 7 + bi * 16} width={bw} height={14} rx={3}
+                            fill={color} opacity={0.15} />
+                          <text x={layout.textOffset + 3} y={y + 3 + bi * 16} fontSize={7.5} fill={color} opacity={0.85}
+                            fontWeight={600} fontFamily="var(--font-mono, monospace)">{truncLabel}</text>
+                        </g>
                       );
                     } else {
+                      const bx = x - bw / 2;
+                      const by = y - r - 14 - bi * 16;
                       return (
-                        <text key={label} x={x} y={y - r - 4 - bi * 10}
-                          fontSize={7} fill={color} opacity={0.7} fontWeight={600}
-                          textAnchor="middle" fontFamily="var(--font-mono, monospace)">{truncLabel}</text>
+                        <g key={label}>
+                          <rect x={bx} y={by} width={bw} height={14} rx={3}
+                            fill={color} opacity={0.15} />
+                          <text x={bx + 5} y={by + 10} fontSize={7.5} fill={color} opacity={0.85}
+                            fontWeight={600} fontFamily="var(--font-mono, monospace)">{truncLabel}</text>
+                        </g>
                       );
                     }
                   })}
