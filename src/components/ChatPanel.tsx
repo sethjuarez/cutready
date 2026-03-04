@@ -268,7 +268,7 @@ function useDropdownMaxHeight(
 
 const TAB_DEFS: { id: SecondaryTab; label: string; icon: (s: number) => React.ReactNode }[] = [
   { id: "chat", label: "Chat", icon: (s) => <IconSparkles size={s} /> },
-  { id: "sessions", label: "Chats", icon: (s) => <IconHistory size={s} /> },
+  { id: "sessions", label: "Sessions", icon: (s) => <IconHistory size={s} /> },
   { id: "snapshots", label: "Snapshots", icon: (s) => <IconSave size={s} /> },
 ];
 

@@ -502,18 +502,28 @@ pub struct ChatSession {
 /// Scan for .chat files in the project.
 pub fn scan_chat_sessions(project_root: &Path) -> Result<Vec<ChatSessionSummary>, ProjectError> {
     let mut summaries = Vec::new();
-    scan_files_recursive(project_root, project_root, "chat", &mut |rel_path, abs_path| {
-        if let Ok(data) = std::fs::read_to_string(abs_path) {
-            if let Ok(session) = serde_json::from_str::<ChatSession>(&data) {
-                summaries.push(ChatSessionSummary {
-                    path: rel_path.to_string(),
-                    title: session.title,
-                    message_count: session.messages.len(),
-                    updated_at: session.updated_at,
-                });
+    let chats_dir = project_root.join(".chats");
+    if chats_dir.exists() {
+        let entries = std::fs::read_dir(&chats_dir).map_err(|e| ProjectError::Io(e.to_string()))?;
+        for entry in entries {
+            let entry = entry.map_err(|e| ProjectError::Io(e.to_string()))?;
+            let path = entry.path();
+            if path.extension().is_some_and(|ext| ext == "chat") {
+                if let Ok(data) = std::fs::read_to_string(&path) {
+                    if let Ok(session) = serde_json::from_str::<ChatSession>(&data) {
+                        if let Ok(rel) = path.strip_prefix(project_root) {
+                            summaries.push(ChatSessionSummary {
+                                path: rel.to_string_lossy().replace('\\', "/"),
+                                title: session.title,
+                                message_count: session.messages.len(),
+                                updated_at: session.updated_at,
+                            });
+                        }
+                    }
+                }
             }
         }
-    })?;
+    }
     summaries.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
     Ok(summaries)
 }
