@@ -13,6 +13,7 @@ import { OutputPanel } from "./OutputPanel";
 import { CommandPalette } from "./CommandPalette";
 import { TitleBar } from "./TitleBar";
 import { SnapshotDialog } from "./SnapshotDialog";
+import { MergeConflictPanel } from "./MergeConflictPanel";
 import { commandRegistry, useCommands } from "../services/commandRegistry";
 
 export function AppLayout() {
@@ -28,6 +29,7 @@ export function AppLayout() {
   const toggleOutput = useAppStore((s) => s.toggleOutput);
   const showVersionHistory = useAppStore((s) => s.showVersionHistory);
   const toggleVersionHistory = useAppStore((s) => s.toggleVersionHistory);
+  const isMerging = useAppStore((s) => s.isMerging);
 
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [recentCommands, setRecentCommands] = useState<string[]>([]);
@@ -196,7 +198,7 @@ export function AppLayout() {
             {/* Upper: main content */}
             <div className="flex-1 min-h-0">
               {view === "home" && <div className="h-full overflow-y-auto"><HomePanel /></div>}
-              {view === "sketch" && <StoryboardPanel />}
+              {view === "sketch" && (isMerging ? <MergeConflictPanel /> : <StoryboardPanel />)}
               {view === "editor" && <div className="h-full overflow-y-auto"><ScriptEditorPanel /></div>}
               {view === "recording" && <div className="h-full overflow-y-auto"><RecordingPanel /></div>}
               {view === "settings" && <div className="h-full overflow-y-auto"><SettingsPanel /></div>}

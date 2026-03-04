@@ -12,6 +12,7 @@ export function TimelineSelector() {
   const createTimeline = useAppStore((s) => s.createTimeline);
   const deleteTimeline = useAppStore((s) => s.deleteTimeline);
   const promoteTimeline = useAppStore((s) => s.promoteTimeline);
+  const mergeTimelines = useAppStore((s) => s.mergeTimelines);
   const isDirty = useAppStore((s) => s.isDirty);
   const graphNodes = useAppStore((s) => s.graphNodes);
 
@@ -80,6 +81,24 @@ export function TimelineSelector() {
     }
   }, [promoteTimeline]);
 
+  const handleMerge = useCallback(async (sourceName: string, sourceLabel: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const targetLabel = active?.label ?? "Main";
+    if (window.confirm(`Combine "${sourceLabel}" into "${targetLabel}"? This will merge all changes.`)) {
+      try {
+        const result = await mergeTimelines(sourceName, active?.name ?? "main");
+        if (result.status === "clean" || result.status === "fast_forward") {
+          setOpen(false);
+        } else if (result.status === "conflicts") {
+          setOpen(false);
+          // UI will show MergeConflictPanel automatically via store state
+        }
+      } catch (err) {
+        console.error("Merge failed:", err);
+      }
+    }
+  }, [mergeTimelines, active]);
+
   // Only show if we have more than 1 timeline (or always show for discoverability)
   if (timelines.length <= 1 && !active) return null;
 
@@ -146,6 +165,15 @@ export function TimelineSelector() {
                 </span>
                 {!t.is_active && t.name !== "main" && timelines.length > 1 && (
                   <span className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      onClick={(e) => handleMerge(t.name, t.label, e)}
+                      className="hover:text-green-500 p-0.5"
+                      title={`Combine into ${active?.label ?? "Main"}`}
+                    >
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M8 18L5 15l3-3" /><path d="M5 15h7a4 4 0 0 0 4-4V4" /><line x1="16" y1="4" x2="16" y2="4.01" />
+                      </svg>
+                    </button>
                     <button
                       onClick={(e) => handlePromote(t.name, t.label, e)}
                       className="hover:text-[var(--color-accent)] p-0.5"
