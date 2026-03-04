@@ -351,6 +351,8 @@ interface AppStoreState {
   switchTimeline: (name: string) => Promise<void>;
   /** Delete a non-active timeline. */
   deleteTimeline: (name: string) => Promise<void>;
+  /** Promote a fork timeline to become the new main. */
+  promoteTimeline: (name: string) => Promise<void>;
   /** Load full graph data for SVG rendering. */
   loadGraphData: () => Promise<void>;
   /** Toggle version history sidebar. */
@@ -1294,11 +1296,6 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   },
 
   createTimeline: async (fromCommitId, name) => {
-    // Branching requires a remote — solo users stay linear
-    if (!get().currentRemote) {
-      console.warn("Timelines require a remote. Configure one in Settings → Repository.");
-      return;
-    }
     try {
       await invoke("create_timeline", { fromCommitId, name });
       await get().loadSketches();
@@ -1330,10 +1327,6 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   },
 
   switchTimeline: async (name) => {
-    if (!get().currentRemote) {
-      console.warn("Timelines require a remote.");
-      return;
-    }
     try {
       await invoke("switch_timeline", { name });
       await get().loadSketches();
@@ -1356,16 +1349,28 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   },
 
   deleteTimeline: async (name) => {
-    if (!get().currentRemote) {
-      console.warn("Timelines require a remote.");
-      return;
-    }
     try {
       await invoke("delete_timeline", { name });
       await get().loadTimelines();
       await get().loadGraphData();
     } catch (err) {
       console.error("Failed to delete timeline:", err);
+    }
+  },
+
+  promoteTimeline: async (name) => {
+    try {
+      await invoke("promote_timeline", { name });
+      await get().loadSketches();
+      await get().loadStoryboards();
+      await get().loadNotes();
+      await get().loadTimelines();
+      await get().loadVersions();
+      await get().loadGraphData();
+      await get().checkDirty();
+      await get().checkRewound();
+    } catch (err) {
+      console.error("Failed to promote timeline:", err);
     }
   },
 

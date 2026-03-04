@@ -11,6 +11,7 @@ export function TimelineSelector() {
   const switchTimeline = useAppStore((s) => s.switchTimeline);
   const createTimeline = useAppStore((s) => s.createTimeline);
   const deleteTimeline = useAppStore((s) => s.deleteTimeline);
+  const promoteTimeline = useAppStore((s) => s.promoteTimeline);
   const isDirty = useAppStore((s) => s.isDirty);
   const graphNodes = useAppStore((s) => s.graphNodes);
 
@@ -71,6 +72,14 @@ export function TimelineSelector() {
     }
   }, [deleteTimeline]);
 
+  const handlePromote = useCallback(async (name: string, label: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (window.confirm(`Promote "${label}" to Main? The current Main will be preserved as a separate timeline.`)) {
+      await promoteTimeline(name);
+      setOpen(false);
+    }
+  }, [promoteTimeline]);
+
   // Only show if we have more than 1 timeline (or always show for discoverability)
   if (timelines.length <= 1 && !active) return null;
 
@@ -120,7 +129,7 @@ export function TimelineSelector() {
               <button
                 key={t.name}
                 onClick={() => t.is_active ? setOpen(false) : handleSwitch(t.name)}
-                className={`w-full flex items-center gap-2 px-3 py-1.5 text-left text-[11px] transition-colors ${
+                className={`group w-full flex items-center gap-2 px-3 py-1.5 text-left text-[11px] transition-colors ${
                   t.is_active
                     ? "bg-[var(--color-accent)]/10 text-[var(--color-accent)] font-medium"
                     : "text-[var(--color-text)] hover:bg-[var(--color-border)]/30"
@@ -135,16 +144,27 @@ export function TimelineSelector() {
                 <span className="text-[9px] text-[var(--color-text-secondary)]">
                   {t.snapshot_count}
                 </span>
-                {!t.is_active && timelines.length > 1 && (
-                  <button
-                    onClick={(e) => handleDelete(t.name, e)}
-                    className="opacity-0 group-hover:opacity-100 hover:text-red-400 p-0.5"
-                    title="Delete timeline"
-                  >
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-                    </svg>
-                  </button>
+                {!t.is_active && t.name !== "main" && timelines.length > 1 && (
+                  <span className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      onClick={(e) => handlePromote(t.name, t.label, e)}
+                      className="hover:text-[var(--color-accent)] p-0.5"
+                      title="Promote to Main"
+                    >
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="17 11 12 6 7 11" /><line x1="12" y1="18" x2="12" y2="6" />
+                      </svg>
+                    </button>
+                    <button
+                      onClick={(e) => handleDelete(t.name, e)}
+                      className="hover:text-red-400 p-0.5"
+                      title="Delete timeline"
+                    >
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                      </svg>
+                    </button>
+                  </span>
                 )}
               </button>
             ))}

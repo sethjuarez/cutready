@@ -86,7 +86,7 @@ export function VersionHistory() {
           <span className="text-xs font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">
             Snapshots
           </span>
-          {hasRemote && <TimelineSelector />}
+          {timelines.length > 1 && <TimelineSelector />}
         </div>
         <div className="flex items-center gap-0.5">
           {isDirty && !pendingNavTarget && (
@@ -210,7 +210,7 @@ export function VersionHistory() {
             isDirty={isDirty}
             isRewound={isRewound}
             timelineMap={timelineMap}
-            hasMultipleTimelines={hasRemote && timelines.length > 1}
+            hasMultipleTimelines={timelines.length > 1}
             showRemoteBadges={hasRemote}
             onNodeClick={handleNodeClick}
           />

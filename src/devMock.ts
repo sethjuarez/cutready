@@ -215,6 +215,7 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
       return MOCK_SKETCH;
     case "set_sidebar_order":
     case "set_workspace_state":
+    case "promote_timeline":
     case "update_sketch":
     case "update_sketch_title":
       return null;

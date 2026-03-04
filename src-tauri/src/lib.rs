@@ -151,6 +151,7 @@ pub fn run() {
             commands::versioning::list_timelines,
             commands::versioning::switch_timeline,
             commands::versioning::delete_timeline,
+            commands::versioning::promote_timeline,
             commands::versioning::get_timeline_graph,
             commands::versioning::navigate_to_snapshot,
             commands::versioning::has_stash,

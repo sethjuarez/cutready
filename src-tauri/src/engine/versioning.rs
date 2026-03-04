@@ -582,6 +582,70 @@ pub fn delete_timeline(project_dir: &Path, name: &str) -> Result<(), VersioningE
     Ok(())
 }
 
+/// Promote a fork timeline to become the new "main".
+/// The current main becomes a named fork ("Previous main").
+pub fn promote_timeline(project_dir: &Path, timeline_name: &str) -> Result<(), VersioningError> {
+    if timeline_name == MAIN_BRANCH {
+        return Err(VersioningError::Git("Main is already the main timeline".into()));
+    }
+
+    let repo = open_repo(project_dir)?;
+    let fork_ref = format!("{}{}", TIMELINE_PREFIX, timeline_name);
+
+    // Get the fork's tip
+    let fork_tip = repo
+        .find_reference(&fork_ref)
+        .map_err(|e| VersioningError::Git(format!("Timeline '{}' not found: {}", timeline_name, e)))?
+        .id()
+        .detach();
+
+    // Get main's current tip
+    let main_ref = format!("refs/heads/{}", MAIN_BRANCH);
+    let main_tip = repo
+        .find_reference(&main_ref)
+        .map_err(|e| VersioningError::Git(format!("Main branch not found: {}", e)))?
+        .id()
+        .detach();
+
+    // Save old main as a named fork
+    let timestamp = chrono::Utc::now().format("%H%M%S").to_string();
+    let old_main_slug = format!("prev-main-{}", timestamp);
+    let old_main_ref = format!("{}{}", TIMELINE_PREFIX, old_main_slug);
+
+    repo.reference(
+        old_main_ref.as_str(),
+        main_tip,
+        gix::refs::transaction::PreviousValue::MustNotExist,
+        "Demoted from main",
+    )
+    .map_err(|e| VersioningError::Git(e.to_string()))?;
+
+    // Get the old fork's label for the promoted timeline
+    let labels = load_timeline_labels(project_dir);
+    let fork_label = labels.get(timeline_name).cloned().unwrap_or_else(|| timeline_name.to_string());
+
+    // Label the demoted main
+    save_timeline_label(project_dir, &old_main_slug, &format!("Previous main (before {})", fork_label))?;
+
+    // Move main ref to fork's tip
+    reset_branch_ref(&repo, MAIN_BRANCH, fork_tip)?;
+
+    // Delete the fork ref (it's now main)
+    if let Ok(reference) = repo.find_reference(&fork_ref) {
+        let _ = reference.delete();
+    }
+    remove_timeline_label(project_dir, timeline_name);
+
+    // Clear prev-tip if it exists
+    clear_prev_tip(project_dir);
+
+    // Switch HEAD to main and checkout
+    set_head_to_branch(&repo, &main_ref)?;
+    checkout_version(project_dir, &fork_tip.to_string())?;
+
+    Ok(())
+}
+
 /// Get the full timeline graph — all commits across all timelines.
 pub fn get_timeline_graph(project_dir: &Path) -> Result<Vec<GraphNode>, VersioningError> {
     let repo = open_repo(project_dir)?;
@@ -2129,5 +2193,77 @@ mod tests {
         for node in &graph {
             assert!(!node.author.is_empty(), "Author should not be empty for node: {}", node.message);
         }
+    }
+
+    #[test]
+    fn test_promote_timeline_swaps_refs() {
+        let tmp = setup_project_dir();
+        init_project_repo(tmp.path()).unwrap();
+
+        // Create two commits on main
+        std::fs::write(tmp.path().join("main.sk"), r#"{"title":"Main v1","rows":[]}"#).unwrap();
+        let id1 = commit_snapshot(tmp.path(), "first commit", None).unwrap();
+        std::fs::write(tmp.path().join("main.sk"), r#"{"title":"Main v2","rows":[]}"#).unwrap();
+        let _id2 = commit_snapshot(tmp.path(), "second commit", None).unwrap();
+
+        // Navigate back to first commit (creates prev-tip)
+        navigate_to_snapshot(tmp.path(), &id1).unwrap();
+
+        // Make changes and save → should create a fork
+        std::fs::write(tmp.path().join("fork.sk"), r#"{"title":"Fork","rows":[]}"#).unwrap();
+        let _fork_id = commit_snapshot(tmp.path(), "fork commit", Some("My Fork")).unwrap();
+
+        // Should have main + a fork timeline
+        let timelines = list_timelines(tmp.path()).unwrap();
+        assert!(timelines.len() >= 2, "Should have main + fork, got: {:?}", timelines.iter().map(|t| &t.name).collect::<Vec<_>>());
+        let fork_name = timelines.iter().find(|t| t.name != MAIN_BRANCH).unwrap().name.clone();
+
+        // Promote the fork
+        promote_timeline(tmp.path(), &fork_name).unwrap();
+
+        // Main should now contain fork.sk
+        let timelines_after = list_timelines(tmp.path()).unwrap();
+        let main = timelines_after.iter().find(|t| t.name == MAIN_BRANCH).unwrap();
+        assert!(main.is_active, "Main should be active after promote");
+        assert!(tmp.path().join("fork.sk").exists(), "fork.sk should exist after promote");
+
+        // Old main should exist as a named fork
+        let old_main = timelines_after.iter().find(|t| t.name.starts_with("prev-main-"));
+        assert!(old_main.is_some(), "Old main should be preserved as a named fork");
+    }
+
+    #[test]
+    fn test_promote_timeline_clears_prev_tip() {
+        let tmp = setup_project_dir();
+        init_project_repo(tmp.path()).unwrap();
+
+        std::fs::write(tmp.path().join("a.sk"), r#"{"title":"A","rows":[]}"#).unwrap();
+        let id1 = commit_snapshot(tmp.path(), "first", None).unwrap();
+        std::fs::write(tmp.path().join("b.sk"), r#"{"title":"B","rows":[]}"#).unwrap();
+        let _id2 = commit_snapshot(tmp.path(), "second", None).unwrap();
+
+        // Rewind and save (creates fork + prev-tip)
+        navigate_to_snapshot(tmp.path(), &id1).unwrap();
+        std::fs::write(tmp.path().join("c.sk"), r#"{"title":"C","rows":[]}"#).unwrap();
+        let _fork_id = commit_snapshot(tmp.path(), "fork", None).unwrap();
+
+        let timelines = list_timelines(tmp.path()).unwrap();
+        let fork_name = timelines.iter().find(|t| t.name != MAIN_BRANCH).unwrap().name.clone();
+
+        // Promote should clear prev-tip
+        promote_timeline(tmp.path(), &fork_name).unwrap();
+        assert!(!prev_tip_path(tmp.path()).exists(), "prev-tip should be cleared after promote");
+    }
+
+    #[test]
+    fn test_promote_nonexistent_fails() {
+        let tmp = setup_project_dir();
+        init_project_repo(tmp.path()).unwrap();
+
+        std::fs::write(tmp.path().join("a.sk"), "content").unwrap();
+        commit_snapshot(tmp.path(), "init", None).unwrap();
+
+        let result = promote_timeline(tmp.path(), "does-not-exist");
+        assert!(result.is_err(), "Should fail for nonexistent timeline");
     }
 }

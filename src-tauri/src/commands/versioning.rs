@@ -166,6 +166,15 @@ pub async fn delete_timeline(
 }
 
 #[tauri::command]
+pub async fn promote_timeline(
+    name: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let root = project_root(&state)?;
+    versioning::promote_timeline(&root, &name).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub async fn get_timeline_graph(
     state: State<'_, AppState>,
 ) -> Result<Vec<crate::models::sketch::GraphNode>, String> {
