@@ -6,9 +6,12 @@ sidebar:
 ---
 
 import { Aside, Steps } from '@astrojs/starlight/components';
+import Screenshot from '../../../components/Screenshot.astro';
 
 Every demo in CutReady lives inside a **project** — a folder on your filesystem
 that holds sketches, storyboards, notes, screenshots, and version history.
+
+<Screenshot src="/cutready/images/file-tree-view.png" alt="Project file tree" caption="The sidebar shows all project files — sketches (.sk), storyboards (.sb), and notes (.md)" />
 
 ## Creating a New Project
 
@@ -55,7 +58,7 @@ my-demo-project/
 | Extension | Type | Description |
 | --- | --- | --- |
 | `.sk` | Sketch | Structured planning table with narrative, actions, and screenshots |
-| `.sb` | Storyboard | Ordered sequence of sketch references with optional sections |
+| `.sb` | Storyboard | Ordered sequence of sketch references |
 | `.md` | Note | Free-form markdown document |
 | `.png` / `.jpg` | Screenshot | Reference images captured from screen |
 

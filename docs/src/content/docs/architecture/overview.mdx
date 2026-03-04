@@ -6,6 +6,9 @@ sidebar:
 ---
 
 import { Aside } from '@astrojs/starlight/components';
+import Screenshot from '../../../components/Screenshot.astro';
+
+<Screenshot src="/cutready/images/app-overview.png" alt="CutReady application overview" caption="CutReady's main interface with sidebar, sketch editor, and chat panel" />
 
 ## High-Level Architecture
 
@@ -75,7 +78,7 @@ The Rust backend handles:
 |--------|---------------|
 | `project.rs` | Project CRUD, recent projects, sidebar persistence |
 | `sketch.rs` | Sketch document CRUD, list summaries |
-| `storyboard.rs` | Storyboard CRUD, section management |
+| `storyboard.rs` | Storyboard CRUD, sketch ordering |
 | `note.rs` | Markdown note CRUD |
 | `interaction.rs` | Browser profile detection, recording sessions |
 | `screenshot.rs` | Monitor detection, screen/region capture |

@@ -39,7 +39,7 @@ const MOCK_NOTES: NoteSummary[] = [
 ];
 
 const MOCK_STORYBOARDS: StoryboardSummary[] = [
-  { path: "storyboards/full-demo.sb", title: "Full Demo Flow", sketch_count: 3, created_at: "2025-01-15T09:00:00Z", updated_at: "2025-01-15T12:30:00Z" },
+  { path: "storyboards/full-demo.sb", title: "Full Demo Flow", sketch_count: 2, created_at: "2025-01-15T09:00:00Z", updated_at: "2025-01-15T12:30:00Z" },
 ];
 
 const MOCK_NOTE_CONTENT = `# Script Draft
@@ -93,6 +93,7 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
       return null;
     case "list_notes":
       return MOCK_NOTES;
+    case "get_note":
     case "read_note":
       return MOCK_NOTE_CONTENT;
     case "save_note":
@@ -103,8 +104,18 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
       return null;
     case "list_storyboards":
       return MOCK_STORYBOARDS;
+    case "get_storyboard":
     case "read_storyboard":
-      return { title: "Full Demo Flow", description: "", items: [], created_at: "2025-01-15T09:00:00Z", updated_at: "2025-01-15T12:30:00Z" };
+      return {
+        title: "Full Demo Flow",
+        description: "End-to-end walkthrough of the platform's key features",
+        items: [
+          { type: "sketch_ref", path: "sketches/demo-introduction.sk" },
+          { type: "sketch_ref", path: "sketches/feature-deep-dive.sk" },
+        ],
+        created_at: "2025-01-15T09:00:00Z",
+        updated_at: "2025-01-15T12:30:00Z",
+      };
     case "create_storyboard":
       return "storyboards/new.sb";
     case "delete_storyboard":
@@ -195,6 +206,28 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
     case "set_sidebar_order":
     case "update_sketch":
     case "update_sketch_title":
+      return null;
+    case "list_feedback":
+      return [
+        { category: "bug", feedback: "The sketch editor sometimes loses focus when switching tabs quickly.", date: "2025-01-15T14:00:00Z" },
+        { category: "feature", feedback: "Would love to see a timer overlay during recording.", date: "2025-01-15T10:30:00Z" },
+        { category: "general", feedback: "Great app! The AI suggestions are really helpful for structuring demos.", date: "2025-01-14T16:00:00Z" },
+      ];
+    case "save_feedback":
+    case "clear_feedback":
+      return null;
+    case "list_monitors":
+      return [{ id: 0, name: "Primary Monitor", width: 1920, height: 1080, x: 0, y: 0, is_primary: true }];
+    case "capture_screenshot":
+      return null;
+    case "list_project_images":
+      return [
+        { path: ".cutready/screenshots/screenshot-001.png", size: 245000, referencedBy: ["sketches/demo-introduction.sk"] },
+        { path: ".cutready/screenshots/screenshot-002.png", size: 180000, referencedBy: ["sketches/demo-introduction.sk", "notes/script-draft.md"] },
+        { path: ".cutready/screenshots/pasted-1705312000.png", size: 95000, referencedBy: [] },
+      ];
+    case "delete_project_image":
+    case "delete_orphaned_images":
       return null;
     default:
       // Handle tauri-plugin-store commands

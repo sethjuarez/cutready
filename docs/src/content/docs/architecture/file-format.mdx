@@ -86,8 +86,7 @@ Sketch files are JSON documents containing a structured planning table:
 
 ## Storyboard Files (`.sb`)
 
-Storyboard files define an ordered sequence of sketch references with optional
-section groupings:
+Storyboard files define an ordered sequence of sketch references:
 
 ```json
 {
@@ -95,16 +94,10 @@ section groupings:
   "title": "Product Launch Demo",
   "description": "Complete demo flow for the product launch event",
   "items": [
-    { "type": "sketch", "path": "intro.sk" },
-    {
-      "type": "section",
-      "title": "Core Features",
-      "items": [
-        { "type": "sketch", "path": "features/dashboard.sk" },
-        { "type": "sketch", "path": "features/analytics.sk" }
-      ]
-    },
-    { "type": "sketch", "path": "closing.sk" }
+    { "type": "sketch_ref", "path": "intro.sk" },
+    { "type": "sketch_ref", "path": "features/dashboard.sk" },
+    { "type": "sketch_ref", "path": "features/analytics.sk" },
+    { "type": "sketch_ref", "path": "closing.sk" }
   ],
   "metadata": {
     "createdAt": "2025-01-15T10:30:00Z",

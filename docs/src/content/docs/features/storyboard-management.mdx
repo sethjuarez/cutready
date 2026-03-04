@@ -1,6 +1,6 @@
 ---
 title: Storyboards
-description: Sequence sketches into cohesive demo flows with sections and drag-and-drop ordering.
+description: Sequence sketches into cohesive demo flows with drag-and-drop ordering.
 sidebar:
   order: 4
 ---
@@ -24,7 +24,7 @@ Think of it like a movie:
 | | **Sketch** | **Storyboard** |
 |---|---|---|
 | **What it is** | A single scene | A sequence of scenes |
-| **Contains** | Title + planning table (time, narrative, actions, screenshots) | Title + ordered list of sketch references + sections |
+| **Contains** | Title + planning table (time, narrative, actions, screenshots) | Title + ordered list of sketch references |
 | **File** | `.sk` | `.sb` |
 | **Purpose** | Plan one segment of a demo | Organize an entire demo flow |
 | **Editing** | Full inline editing of table rows | References sketches — click through to edit |
@@ -33,21 +33,17 @@ A sketch is the **building block**. A storyboard is the **assembly**.
 
 ## Storyboard Structure
 
-A storyboard contains an ordered list of **items**, which can be:
-
-- **Sketch references** — pointers to `.sk` files in your project
-- **Sections** — named groups that organize sketches under headers
+A storyboard contains an ordered list of **sketch references** — pointers to
+`.sk` files in your project.
 
 ```
 Product Launch Demo (storyboard)
-├── intro.sk                         ← sketch reference
-├── Getting Started (section)
-│   ├── install-setup.sk
-│   └── first-run.sk
-├── Core Features (section)
-│   ├── dashboard-tour.sk
-│   └── api-walkthrough.sk
-└── closing-cta.sk                   ← sketch reference
+├── intro.sk
+├── install-setup.sk
+├── first-run.sk
+├── dashboard-tour.sk
+├── api-walkthrough.sk
+└── closing-cta.sk
 ```
 
 Sketches can exist independently or be referenced by multiple storyboards.
@@ -71,7 +67,6 @@ From the storyboard editor:
 ## Organizing
 
 - **Drag and drop** sketches to reorder them within the storyboard
-- **Add sections** to group related sketches under named headers
 - **Collapse/expand** individual sketches to show or hide their planning tables
 - Each sketch card shows its title, lifecycle state badge, and row count
 
