@@ -479,13 +479,12 @@ function ChatTab() {
           const isSuccess = !resultText.startsWith("Error");
           if (isSuccess && (toolName === "set_planning_rows" || toolName === "update_planning_row")) {
             loadSketches();
-            // Open the sketch using the relative path from tool args
-            if (toolName === "set_planning_rows") {
-              try {
-                const args = JSON.parse(pendingToolArgsRef.current[toolName] ?? "{}");
-                if (args.path) openSketch(args.path);
-              } catch { /* ignore parse errors */ }
-            }
+            try {
+              const args = JSON.parse(pendingToolArgsRef.current[toolName] ?? "{}");
+              const sketchPath = args.path ?? useAppStore.getState().activeSketchPath;
+              if (sketchPath) openSketch(sketchPath);
+            } catch { /* ignore parse errors */ }
+            window.dispatchEvent(new CustomEvent("cutready:ai-sketch-updated"));
           }
           if (isSuccess && toolName === "update_note") {
             loadNotes();

@@ -40,6 +40,7 @@ export function SketchForm() {
   const [showMonitorPicker, setShowMonitorPicker] = useState(false);
   const [availableMonitors, setAvailableMonitors] = useState<MonitorInfo[]>([]);
   const [editingDesc, setEditingDesc] = useState(false);
+  const [aiUpdatedFlash, setAiUpdatedFlash] = useState(false);
   const [localDesc, setLocalDesc] = useState(
     typeof activeSketch?.description === "string" ? activeSketch.description : ""
   );
@@ -81,6 +82,16 @@ export function SketchForm() {
     pendingRowsRef.current = null;
     pendingTitleRef.current = null;
   }, [activeSketchPath, activeSketch]);
+
+  // Listen for AI sketch updates to show a brief flash indicator
+  useEffect(() => {
+    const handler = () => {
+      setAiUpdatedFlash(true);
+      setTimeout(() => setAiUpdatedFlash(false), 3000);
+    };
+    window.addEventListener("cutready:ai-sketch-updated", handler);
+    return () => window.removeEventListener("cutready:ai-sketch-updated", handler);
+  }, []);
 
   // Keep localStorage in sync so the standalone preview window can pick up changes
   useEffect(() => {
@@ -254,6 +265,14 @@ export function SketchForm() {
             </svg>
             Back to storyboard
           </button>
+        )}
+
+        {/* AI updated indicator */}
+        {aiUpdatedFlash && (
+          <div className="mb-4 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[var(--color-accent)]/10 border border-[var(--color-accent)]/20 text-xs text-[var(--color-accent)] animate-pulse">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.09 6.26L20.18 10l-6.09 1.74L12 18l-2.09-6.26L3.82 10l6.09-1.74L12 2z" /></svg>
+            Updated by AI
+          </div>
         )}
 
         {/* Details section */}
