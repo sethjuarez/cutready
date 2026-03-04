@@ -22,6 +22,9 @@ import type {
   RemoteInfo,
   SyncStatus,
   DiffEntry,
+  ConflictFile,
+  MergeResult,
+  FileResolution,
 } from "../types/sketch";
 
 /** The panels / views available in the app. */
@@ -159,6 +162,16 @@ interface AppStoreState {
   isSyncing: boolean;
   /** Last error from a sync operation. */
   syncError: string | null;
+
+  // ── Merge ──────────────────────────────────────────────────
+  /** Whether a merge is in progress (conflicts being resolved). */
+  isMerging: boolean;
+  /** Source timeline for the in-progress merge. */
+  mergeSource: string | null;
+  /** Target timeline for the in-progress merge. */
+  mergeTarget: string | null;
+  /** Conflict files from the merge engine (empty = clean merge). */
+  mergeConflicts: ConflictFile[];
 
   // ── Bookmarks & diff ──────────────────────────────────────
   /** Set of bookmarked snapshot commit IDs. */
@@ -390,6 +403,14 @@ interface AppStoreState {
   /** Clone a repository from a GitHub URL. */
   cloneFromUrl: (url: string, destPath: string) => Promise<boolean>;
 
+  // ── Merge actions ────────────────────────────────────────
+  /** Merge source timeline into target timeline. */
+  mergeTimelines: (source: string, target: string) => Promise<MergeResult>;
+  /** Apply user-provided conflict resolutions and create merge commit. */
+  applyMergeResolution: (resolutions: FileResolution[]) => Promise<string>;
+  /** Cancel an in-progress merge. */
+  cancelMerge: () => void;
+
   // ── Sidebar order actions ──────────────────────────────────
 
   /** Load sidebar order manifest from project. */
@@ -494,6 +515,10 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   syncStatus: null,
   isSyncing: false,
   syncError: null,
+  isMerging: false,
+  mergeSource: null,
+  mergeTarget: null,
+  mergeConflicts: [],
   bookmarkedSnapshots: new Set<string>(),
   diffResult: null,
   diffSelection: null,
@@ -747,6 +772,10 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       syncStatus: null,
       isSyncing: false,
       syncError: null,
+      isMerging: false,
+      mergeSource: null,
+      mergeTarget: null,
+      mergeConflicts: [],
       bookmarkedSnapshots: new Set<string>(),
       diffResult: null,
       diffSelection: null,
@@ -1639,6 +1668,79 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     } finally {
       set({ loading: false });
     }
+  },
+
+  // ── Merge actions ─────────────────────────────────────────
+
+  mergeTimelines: async (source, target) => {
+    try {
+      const result = await invoke<MergeResult>("merge_timelines", {
+        sourceTimeline: source,
+        targetTimeline: target,
+      });
+
+      if (result.status === "conflicts") {
+        // Enter merge mode with conflicts for user resolution
+        set({
+          isMerging: true,
+          mergeSource: source,
+          mergeTarget: target,
+          mergeConflicts: result.conflicts,
+        });
+      } else if (result.status === "clean" || result.status === "fast_forward") {
+        // Merge succeeded — refresh everything
+        await get().loadTimelines();
+        await get().loadGraphData();
+        await get().loadSketches();
+        await get().loadStoryboards();
+        await get().loadNotes();
+      }
+
+      return result;
+    } catch (err) {
+      console.error("Merge failed:", err);
+      throw err;
+    }
+  },
+
+  applyMergeResolution: async (resolutions) => {
+    const { mergeSource, mergeTarget } = get();
+    if (!mergeSource || !mergeTarget) throw new Error("No merge in progress");
+
+    try {
+      const commitId = await invoke<string>("apply_merge_resolution", {
+        sourceTimeline: mergeSource,
+        targetTimeline: mergeTarget,
+        resolutions,
+      });
+
+      // Exit merge mode and refresh
+      set({
+        isMerging: false,
+        mergeSource: null,
+        mergeTarget: null,
+        mergeConflicts: [],
+      });
+      await get().loadTimelines();
+      await get().loadGraphData();
+      await get().loadSketches();
+      await get().loadStoryboards();
+      await get().loadNotes();
+
+      return commitId;
+    } catch (err) {
+      console.error("Apply merge resolution failed:", err);
+      throw err;
+    }
+  },
+
+  cancelMerge: () => {
+    set({
+      isMerging: false,
+      mergeSource: null,
+      mergeTarget: null,
+      mergeConflicts: [],
+    });
   },
 
   // ── Sidebar order actions ──────────────────────────────────

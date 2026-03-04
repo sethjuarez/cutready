@@ -411,3 +411,33 @@ pub async fn clone_from_url(
     versioning_remote::clone_from_url(&url, &dest_path, token.as_deref())
         .map_err(|e| e.to_string())
 }
+
+// ─── Merge operations ───────────────────────────────────────────
+
+#[tauri::command]
+pub async fn merge_timelines(
+    source_timeline: String,
+    target_timeline: String,
+    state: State<'_, AppState>,
+) -> Result<crate::engine::versioning_merge::MergeResult, String> {
+    let root = project_root(&state)?;
+    crate::engine::versioning_merge::merge_timelines(&root, &source_timeline, &target_timeline)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn apply_merge_resolution(
+    source_timeline: String,
+    target_timeline: String,
+    resolutions: Vec<crate::engine::versioning_merge::FileResolution>,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    let root = project_root(&state)?;
+    crate::engine::versioning_merge::apply_merge_resolution(
+        &root,
+        &source_timeline,
+        &target_timeline,
+        resolutions,
+    )
+    .map_err(|e| e.to_string())
+}

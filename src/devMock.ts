@@ -286,6 +286,10 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
       return [];
     case "clone_from_url":
       return null;
+    case "merge_timelines":
+      return { status: "clean", commit_id: "merge-abc123" };
+    case "apply_merge_resolution":
+      return "resolved-merge-abc123";
     default:
       // Handle tauri-plugin-store commands
       if (cmd.startsWith("plugin:store|")) {

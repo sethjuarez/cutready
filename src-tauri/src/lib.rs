@@ -161,6 +161,8 @@ pub fn run() {
             commands::versioning::diff_snapshots,
             commands::versioning::check_large_files,
             commands::versioning::clone_from_url,
+            commands::versioning::merge_timelines,
+            commands::versioning::apply_merge_resolution,
             commands::versioning::add_git_remote,
             commands::versioning::remove_git_remote,
             commands::versioning::list_git_remotes,

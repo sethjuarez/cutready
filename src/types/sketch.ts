@@ -152,3 +152,42 @@ export interface ChatSession {
   created_at: string;
   updated_at: string;
 }
+
+// ── Merge types ──────────────────────────────────────────────
+
+export type ConflictFileType = "sketch" | "storyboard" | "note" | "other";
+
+export interface FieldConflict {
+  field_path: string;
+  ours: unknown;
+  theirs: unknown;
+  ancestor: unknown;
+}
+
+export interface TextConflictRegion {
+  start_line: number;
+  ours_lines: string[];
+  theirs_lines: string[];
+  ancestor_lines: string[];
+}
+
+export interface ConflictFile {
+  path: string;
+  file_type: ConflictFileType;
+  ours: string;
+  theirs: string;
+  ancestor: string;
+  field_conflicts: FieldConflict[];
+  text_conflicts: TextConflictRegion[];
+}
+
+export type MergeResult =
+  | { status: "clean"; commit_id: string }
+  | { status: "conflicts"; conflicts: ConflictFile[] }
+  | { status: "fast_forward"; commit_id: string }
+  | { status: "nothing" };
+
+export interface FileResolution {
+  path: string;
+  content: string;
+}
