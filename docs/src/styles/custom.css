@@ -38,6 +38,7 @@
 .feature-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
+  align-items: stretch;
   gap: 1rem;
   margin-block: 2rem;
 }
@@ -60,6 +61,8 @@
   border-radius: 0.75rem;
   padding: 1.25rem;
   transition: border-color 0.2s, box-shadow 0.2s;
+  height: 100%;
+  margin: 0 !important;
 }
 
 .feature-card:hover {
@@ -125,6 +128,7 @@
 .workflow-steps {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
+  align-items: stretch;
   gap: 1rem;
   margin-block: 2rem;
   counter-reset: step;
@@ -148,6 +152,8 @@
   border-radius: 0.75rem;
   padding: 1.25rem;
   position: relative;
+  height: 100%;
+  margin: 0 !important;
 }
 
 .workflow-step::before {
