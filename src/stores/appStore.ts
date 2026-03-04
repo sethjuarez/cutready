@@ -173,9 +173,7 @@ interface AppStoreState {
   /** Conflict files from the merge engine (empty = clean merge). */
   mergeConflicts: ConflictFile[];
 
-  // ── Bookmarks & diff ──────────────────────────────────────
-  /** Set of bookmarked snapshot commit IDs. */
-  bookmarkedSnapshots: Set<string>;
+  // ── Diff ──────────────────────────────────────────────────
   /** Currently selected diff result (file changes between two snapshots). */
   diffResult: DiffEntry[] | null;
   /** The two commit IDs being compared for diff. */
@@ -393,11 +391,9 @@ interface AppStoreState {
   /** Publish (push) the current local-only timeline to the remote. */
   publishTimeline: () => Promise<void>;
 
-  // ── Diff & bookmarks ──────────────────────────────────────
+  // ── Diff ──────────────────────────────────────────────────
   /** Compare two snapshots and return file-level diffs. */
   diffSnapshots: (fromCommit: string, toCommit: string) => Promise<DiffEntry[]>;
-  /** Toggle a bookmark on a snapshot node. */
-  toggleBookmark: (commitId: string) => void;
   /** Check for large files before pushing. Returns list of (path, size). */
   checkLargeFiles: () => Promise<Array<[string, number]>>;
   /** Clone a repository from a GitHub URL. */
@@ -519,7 +515,6 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   mergeSource: null,
   mergeTarget: null,
   mergeConflicts: [],
-  bookmarkedSnapshots: new Set<string>(),
   diffResult: null,
   diffSelection: null,
   sidebarOrder: null,
@@ -778,7 +773,6 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       mergeSource: null,
       mergeTarget: null,
       mergeConflicts: [],
-      bookmarkedSnapshots: new Set<string>(),
       diffResult: null,
       diffSelection: null,
       sidebarOrder: null,
@@ -1645,16 +1639,6 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       console.error("Failed to diff snapshots:", err);
       return [];
     }
-  },
-
-  toggleBookmark: (commitId) => {
-    const next = new Set(get().bookmarkedSnapshots);
-    if (next.has(commitId)) {
-      next.delete(commitId);
-    } else {
-      next.add(commitId);
-    }
-    set({ bookmarkedSnapshots: next });
   },
 
   checkLargeFiles: async () => {

@@ -144,8 +144,6 @@ export function SnapshotGraph({
   nodes: rawNodes, isDirty, isRewound, timelineMap, hasMultipleTimelines, showRemoteBadges = false, onNodeClick,
 }: Props) {
   const [hovered, setHovered] = useState<string | null>(null);
-  const bookmarks = useAppStore((s) => s.bookmarkedSnapshots);
-  const toggleBookmark = useAppStore((s) => s.toggleBookmark);
   const diffSnapshots = useAppStore((s) => s.diffSnapshots);
   const diffSelection = useAppStore((s) => s.diffSelection);
   const currentRemote = useAppStore((s) => s.currentRemote);
@@ -427,12 +425,6 @@ export function SnapshotGraph({
                     {node.author}
                   </span>
                 )}
-                {/* Bookmark star */}
-                <button
-                  onClick={(e) => { e.stopPropagation(); toggleBookmark(node.id); }}
-                  className={`text-[10px] transition-colors ${bookmarks.has(node.id) ? "text-amber-400" : "opacity-0 group-hover:opacity-40 hover:!opacity-100 text-[var(--color-text-secondary)]"}`}
-                  title={bookmarks.has(node.id) ? "Remove bookmark" : "Bookmark this snapshot"}
-                >★</button>
                 {/* Diff selection indicator */}
                 {diffMode && diffFrom === node.id && (
                   <span className="text-[9px] px-1 py-px rounded-sm bg-blue-500/10 text-blue-500">comparing…</span>
