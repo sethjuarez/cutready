@@ -16,6 +16,8 @@ export function VersionHistory() {
   const sidebarPosition = useAppStore((s) => s.sidebarPosition);
   const timelines = useAppStore((s) => s.timelines);
   const loadTimelines = useAppStore((s) => s.loadTimelines);
+  const currentRemote = useAppStore((s) => s.currentRemote);
+  const hasRemote = !!currentRemote;
 
   const [pendingNavTarget, setPendingNavTarget] = useState<string | null>(null);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
@@ -83,7 +85,7 @@ export function VersionHistory() {
           <span className="text-xs font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">
             Snapshots
           </span>
-          <TimelineSelector />
+          {hasRemote && <TimelineSelector />}
         </div>
         <div className="flex items-center gap-0.5">
           {isDirty && !pendingNavTarget && (
@@ -207,7 +209,8 @@ export function VersionHistory() {
             isDirty={isDirty}
             isRewound={isRewound}
             timelineMap={timelineMap}
-            hasMultipleTimelines={timelines.length > 1}
+            hasMultipleTimelines={hasRemote && timelines.length > 1}
+            showRemoteBadges={hasRemote}
             onNodeClick={handleNodeClick}
           />
           {searchQuery && graphNodes.length > 0 && graphNodes.filter((n) => n.message.toLowerCase().includes(searchQuery.toLowerCase())).length === 0 && (

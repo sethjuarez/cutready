@@ -63,9 +63,10 @@ test.describe("Phase 0 — Snapshot UX", () => {
     await expect(page.getByText("Added feature section")).not.toBeVisible();
   });
 
-  test("timeline selector shows active timeline", async ({ page }) => {
-    // TimelineSelector should show "main"
-    await expect(page.getByText("main")).toBeVisible({ timeout: 5_000 });
+  test("timeline selector hidden when no remote configured", async ({ page }) => {
+    // Without a remote, TimelineSelector should NOT be visible (linear-only mode)
+    const branchBtn = page.locator('button[title^="Timeline:"]');
+    await expect(branchBtn).not.toBeVisible();
   });
 
   test("discard button only visible when dirty", async ({ page }) => {

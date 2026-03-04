@@ -1223,6 +1223,11 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   },
 
   createTimeline: async (fromCommitId, name) => {
+    // Branching requires a remote — solo users stay linear
+    if (!get().currentRemote) {
+      console.warn("Timelines require a remote. Configure one in Settings → Repository.");
+      return;
+    }
     try {
       await invoke("create_timeline", { fromCommitId, name });
       await get().loadSketches();
@@ -1254,6 +1259,10 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   },
 
   switchTimeline: async (name) => {
+    if (!get().currentRemote) {
+      console.warn("Timelines require a remote.");
+      return;
+    }
     try {
       await invoke("switch_timeline", { name });
       await get().loadSketches();
@@ -1276,6 +1285,10 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   },
 
   deleteTimeline: async (name) => {
+    if (!get().currentRemote) {
+      console.warn("Timelines require a remote.");
+      return;
+    }
     try {
       await invoke("delete_timeline", { name });
       await get().loadTimelines();

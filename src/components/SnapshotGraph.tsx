@@ -134,12 +134,13 @@ interface Props {
   isRewound: boolean;
   timelineMap: Map<string, TimelineInfo>;
   hasMultipleTimelines: boolean;
+  showRemoteBadges?: boolean;
   onNodeClick: (commitId: string, isHead: boolean) => void;
 }
 
 /* ── Component ────────────────────────────────────────────────────── */
 export function SnapshotGraph({
-  nodes: rawNodes, isDirty, isRewound, timelineMap, hasMultipleTimelines, onNodeClick,
+  nodes: rawNodes, isDirty, isRewound, timelineMap, hasMultipleTimelines, showRemoteBadges = false, onNodeClick,
 }: Props) {
   const [hovered, setHovered] = useState<string | null>(null);
 
@@ -414,7 +415,7 @@ export function SnapshotGraph({
                       style={{ backgroundColor: "var(--color-surface-alt)" }}>+{aLabel}</span>
                   );
                 })}
-                {node.is_remote_tip && (
+                {showRemoteBadges && node.is_remote_tip && (
                   <span className="text-[9px] px-1 py-px rounded-sm leading-tight text-emerald-600 dark:text-emerald-400 bg-emerald-500/10"
                     title="Remote tracking branch points here">origin</span>
                 )}
