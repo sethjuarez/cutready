@@ -124,10 +124,22 @@
 /* Workflow steps */
 .workflow-steps {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  grid-template-columns: repeat(5, 1fr);
   gap: 1rem;
   margin-block: 2rem;
   counter-reset: step;
+}
+
+@media (max-width: 768px) {
+  .workflow-steps {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 480px) {
+  .workflow-steps {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
 
 .workflow-step {
