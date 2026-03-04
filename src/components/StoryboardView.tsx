@@ -40,6 +40,7 @@ const PREVIEW_DATA_KEY = "cutready:preview-data";
  */
 export function StoryboardView() {
   const activeStoryboard = useAppStore((s) => s.activeStoryboard);
+  const activeStoryboardPath = useAppStore((s) => s.activeStoryboardPath);
   const sketches = useAppStore((s) => s.sketches);
   const currentProject = useAppStore((s) => s.currentProject);
   const openSketch = useAppStore((s) => s.openSketch);
@@ -307,8 +308,8 @@ export function StoryboardView() {
           <button
             onClick={() => sendChatPrompt(
               localDesc
-                ? `Improve the description of the storyboard "${activeStoryboard.title}". Current description: "${localDesc}". Write a clearer, more compelling description that summarizes the demo flow. Keep it concise (2-3 sentences). Note: there is no tool to update storyboard descriptions directly — just reply with the improved text and I'll paste it in.`
-                : `Write a description for the storyboard "${activeStoryboard.title}". Look at the sketches to understand the demo flow and write a concise (2-3 sentence) description. Note: there is no tool to update storyboard descriptions directly — just reply with the text and I'll paste it in.`,
+                ? `Improve the description of the storyboard "${activeStoryboard.title}" (path: "${activeStoryboardPath}"). Current description: "${localDesc}". Write a clearer, more compelling description that summarizes the demo flow. Keep it concise (2-3 sentences). Use the update_storyboard tool to save the new description.`
+                : `Write a description for the storyboard "${activeStoryboard.title}" (path: "${activeStoryboardPath}"). Look at the sketches to understand the demo flow and write a concise (2-3 sentence) description. Use the update_storyboard tool to save the description.`,
               { silent: true }
             )}
             className="absolute right-1 top-1 opacity-60 hover:opacity-100 p-1 rounded text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 transition-all"

@@ -402,8 +402,10 @@ function ChatTab() {
   const newChatSession = useAppStore((s) => s.newChatSession);
   const loadSketches = useAppStore((s) => s.loadSketches);
   const loadNotes = useAppStore((s) => s.loadNotes);
+  const loadStoryboards = useAppStore((s) => s.loadStoryboards);
   const openSketch = useAppStore((s) => s.openSketch);
   const openNote = useAppStore((s) => s.openNote);
+  const openStoryboard = useAppStore((s) => s.openStoryboard);
   const pendingChatPrompt = useAppStore((s) => s.pendingChatPrompt);
 
   const [input, setInput] = useState("");
@@ -494,6 +496,13 @@ function ChatTab() {
             // Signal that AI edited a note so UI can show feedback
             window.dispatchEvent(new CustomEvent("cutready:ai-note-updated"));
           }
+          if (isSuccess && toolName === "update_storyboard") {
+            loadStoryboards();
+            try {
+              const args = JSON.parse(pendingToolArgsRef.current[toolName] ?? "{}");
+              if (args.path) openStoryboard(args.path);
+            } catch { /* ignore parse errors */ }
+          }
           break;
         }
         case "agent_start":
@@ -530,7 +539,7 @@ function ChatTab() {
       }
     });
     return () => { unlisten.then((f) => f()); };
-  }, [addActivityEntries, loadSketches, loadNotes, openSketch, openNote]);
+  }, [addActivityEntries, loadSketches, loadNotes, loadStoryboards, openSketch, openNote, openStoryboard]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);

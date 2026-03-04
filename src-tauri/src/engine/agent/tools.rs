@@ -143,6 +143,19 @@ pub fn all_tools() -> Vec<ToolDefinition> {
                 "required": ["path", "content"]
             }),
         ),
+        tool_def(
+            "update_storyboard",
+            "Update the title and/or description of an existing storyboard.",
+            json!({
+                "type": "object",
+                "properties": {
+                    "path": { "type": "string", "description": "Relative path to the storyboard .sb file (from list_project_files)" },
+                    "title": { "type": "string", "description": "New title for the storyboard (optional, keeps existing if omitted)" },
+                    "description": { "type": "string", "description": "New description for the storyboard" }
+                },
+                "required": ["path"]
+            }),
+        ),
     ]
 }
 
@@ -174,6 +187,7 @@ pub fn execute_tool(call: &ToolCall, project_root: &Path) -> String {
         "list_project_images" => exec_list_project_images(project_root),
         "save_feedback" => exec_save_feedback(&args),
         "update_note" => exec_update_note(project_root, &args),
+        "update_storyboard" => exec_update_storyboard(project_root, &args),
         other => format!("Unknown tool: {other}"),
     }
 }
@@ -201,6 +215,17 @@ fn exec_list_project_files(root: &Path) -> String {
         out.push_str("Use the exact path value with read_note or update_note.\n");
         for n in &notes {
             out.push_str(&format!("- path: \"{}\" — {}\n", n.path, n.title));
+        }
+    }
+
+    if let Ok(storyboards) = project::scan_storyboards(root) {
+        out.push_str("\n## Storyboards\n");
+        out.push_str("Use the exact path value with update_storyboard.\n");
+        for sb in &storyboards {
+            out.push_str(&format!(
+                "- path: \"{}\" — {} ({} sketches)\n",
+                sb.path, sb.title, sb.sketch_count
+            ));
         }
     }
 
@@ -452,5 +477,33 @@ fn exec_update_note(root: &Path, args: &Value) -> String {
     match project::write_note(&path, content) {
         Ok(()) => format!("Updated note at {}", path.display()),
         Err(e) => format!("Error writing note: {e}"),
+    }
+}
+
+fn exec_update_storyboard(root: &Path, args: &Value) -> String {
+    let rel = match args.get("path").and_then(|v| v.as_str()) {
+        Some(p) => p,
+        None => return "Error: missing 'path' argument".into(),
+    };
+    let abs = resolve_path(root, rel);
+
+    // Read existing storyboard
+    let mut sb = match project::read_storyboard(&abs) {
+        Ok(sb) => sb,
+        Err(e) => return format!("Error reading storyboard: {e}"),
+    };
+
+    // Apply updates
+    if let Some(title) = args.get("title").and_then(|v| v.as_str()) {
+        sb.title = title.to_string();
+    }
+    if let Some(desc) = args.get("description").and_then(|v| v.as_str()) {
+        sb.description = desc.to_string();
+    }
+    sb.updated_at = chrono::Utc::now();
+
+    match project::write_storyboard(&sb, &abs, root) {
+        Ok(()) => format!("Updated storyboard \"{}\" at {}", sb.title, rel),
+        Err(e) => format!("Error writing storyboard: {e}"),
     }
 }
