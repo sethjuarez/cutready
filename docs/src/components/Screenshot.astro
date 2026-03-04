@@ -3,12 +3,20 @@ interface Props {
   src: string;
   alt: string;
   caption?: string;
+  darkSrc?: string;
 }
 
-const { src, alt, caption } = Astro.props;
+const { src, alt, caption, darkSrc } = Astro.props;
 ---
 
 <figure class="screenshot">
-  <img src={src} alt={alt} loading="lazy" />
+  {darkSrc ? (
+    <>
+      <img src={src} alt={alt} loading="lazy" class="screenshot-light" />
+      <img src={darkSrc} alt={alt} loading="lazy" class="screenshot-dark" />
+    </>
+  ) : (
+    <img src={src} alt={alt} loading="lazy" />
+  )}
   {caption && <figcaption style="padding: 0.5rem 1rem; font-size: var(--sl-text-xs); color: var(--sl-color-text-accent); text-align: center;">{caption}</figcaption>}
 </figure>

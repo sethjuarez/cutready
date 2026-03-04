@@ -110,6 +110,21 @@
   color: hsl(215, 20%, 80%);
 }
 
+/* ── Dark mode: match app's warm palette ─────────────── */
+[data-theme="dark"] {
+  --sl-color-bg: #2b2926;
+  --sl-color-bg-nav: #353230;
+  --sl-color-bg-sidebar: #302e2b;
+  --sl-color-bg-inline-code: #3e3b38;
+  --sl-color-hairline: #3e3b38;
+  --sl-color-hairline-light: #353230;
+  --sl-color-text: #e8e4df;
+  --sl-color-text-accent: #9b968e;
+  --sl-color-accent-low: hsl(254, 30%, 18%);
+  --sl-color-accent: #a49afa;
+  --sl-color-accent-high: #c4bfff;
+}
+
 /* Screenshot images */
 .screenshot {
   border: 1px solid var(--sl-color-hairline);
@@ -121,6 +136,19 @@
 
 .screenshot img {
   width: 100%;
+  display: block;
+}
+
+/* Theme-aware screenshots: light shown by default, dark hidden */
+.screenshot .screenshot-dark {
+  display: none;
+}
+
+[data-theme="dark"] .screenshot .screenshot-light {
+  display: none;
+}
+
+[data-theme="dark"] .screenshot .screenshot-dark {
   display: block;
 }
 
