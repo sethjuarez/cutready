@@ -440,7 +440,7 @@ export function HistoryGraphTab() {
               const isHov = hoveredNode === node.id;
               const r = isHead ? HEAD_R : NODE_R;
               const labelX = bl.length > 0
-                ? layout.textOffset + (bl[0].length * 5.5 + 16)
+                ? layout.textOffset + (Math.min(bl[0].length, 12) * 4.5 + 8)
                 : layout.textOffset;
 
               return (
@@ -491,34 +491,22 @@ export function HistoryGraphTab() {
                     />
                   )}
 
-                  {/* Branch badges — opaque bg so they render above edges */}
-                  {dir === "vertical" && bl.length > 0 && bl.map((label, bi) => {
-                    const bw = label.length * 5.5 + 12;
-                    return (
-                      <g key={label}>
-                        <rect x={layout.textOffset - 4} y={y - 8 + bi * 16} width={bw + 4} height={16} rx={4}
-                          fill="var(--color-bg)" />
-                        <rect x={layout.textOffset - 2} y={y - 7 + bi * 16} width={bw} height={14} rx={4}
-                          fill={color} opacity={0.2} />
-                        <text x={layout.textOffset + 4} y={y + 3 + bi * 16} fontSize={8} fill={color} fontWeight={600}
-                          fontFamily="var(--font-mono, monospace)">{label}</text>
-                      </g>
-                    );
-                  })}
-                  {dir === "horizontal" && bl.map((label, bi) => {
-                    const bw = label.length * 5.5 + 12;
-                    const bx = x - bw / 2;
-                    const by = y - r - 16 - bi * 16;
-                    return (
-                      <g key={label}>
-                        <rect x={bx - 2} y={by - 1} width={bw + 4} height={16} rx={4}
-                          fill="var(--color-bg)" />
-                        <rect x={bx} y={by} width={bw} height={14} rx={4}
-                          fill={color} opacity={0.2} />
-                        <text x={bx + 6} y={by + 10} fontSize={8} fill={color} fontWeight={600}
-                          fontFamily="var(--font-mono, monospace)">{label}</text>
-                      </g>
-                    );
+                  {/* Branch name — small text near node */}
+                  {bl.length > 0 && bl.map((label, bi) => {
+                    const truncLabel = label.length > 12 ? label.substring(0, 12) + "…" : label;
+                    if (dir === "vertical") {
+                      return (
+                        <text key={label} x={layout.textOffset} y={y + 3 + bi * 11}
+                          fontSize={7} fill={color} opacity={0.7} fontWeight={600}
+                          fontFamily="var(--font-mono, monospace)">{truncLabel}</text>
+                      );
+                    } else {
+                      return (
+                        <text key={label} x={x} y={y - r - 4 - bi * 10}
+                          fontSize={7} fill={color} opacity={0.7} fontWeight={600}
+                          textAnchor="middle" fontFamily="var(--font-mono, monospace)">{truncLabel}</text>
+                      );
+                    }
                   })}
 
                   {/* Commit message label */}
