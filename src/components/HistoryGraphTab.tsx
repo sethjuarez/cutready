@@ -67,39 +67,10 @@ function computeLayout(
   const nodeMap = new Map<string, GraphNode>();
   for (const n of deduped) nodeMap.set(n.id, n);
 
-  /* 2. Topological sort (Kahn's) — tips first */
-  const inDeg = new Map<string, number>();
-  for (const n of deduped) inDeg.set(n.id, 0);
-  for (const n of deduped) {
-    for (const pid of n.parents) {
-      if (inDeg.has(pid)) inDeg.set(pid, inDeg.get(pid)! + 1);
-    }
-  }
-
-  const ready = deduped.filter((n) => inDeg.get(n.id) === 0);
-  const sortPriority = (arr: GraphNode[]) =>
-    arr.sort((a, b) => {
-      const aa = timelineMap.get(a.timeline)?.is_active ? 0 : 1;
-      const ba = timelineMap.get(b.timeline)?.is_active ? 0 : 1;
-      if (aa !== ba) return aa - ba;
-      return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
-    });
-  sortPriority(ready);
-
-  const sorted: GraphNode[] = [];
-  while (ready.length > 0) {
-    const n = ready.shift()!;
-    sorted.push(n);
-    for (const pid of n.parents) {
-      if (!inDeg.has(pid)) continue;
-      const nd = inDeg.get(pid)! - 1;
-      inDeg.set(pid, nd);
-      if (nd === 0) {
-        ready.push(nodeMap.get(pid)!);
-        sortPriority(ready);
-      }
-    }
-  }
+  /* 2. Chronological sort — oldest first (row 0 = top/left) */
+  const sorted = [...deduped].sort((a, b) =>
+    new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+  );
 
   /* 3. Timeline-based lane assignment — each timeline gets a fixed lane */
   const nodeCol = new Map<string, number>();
@@ -124,7 +95,7 @@ function computeLayout(
     nodeCol.set(node.id, timelineLane.get(node.timeline) ?? 0);
   }
 
-  /* 4. Coordinates */
+  /* 4. Coordinates — row 0 at top (vertical) / left (horizontal) */
   const maxCol = Math.max(0, ...Array.from(nodeCol.values()));
   const maxRow = sorted.length - 1;
 
@@ -134,8 +105,8 @@ function computeLayout(
     const colorIndex = tInfo?.color_index ?? col;
 
     const [x, y] = dir === "vertical"
-      ? [PAD + col * LANE_GAP_V, PAD + (maxRow - row) * ROW_GAP]
-      : [PAD + (maxRow - row) * ROW_GAP, PAD + col * LANE_GAP_H];
+      ? [PAD + col * LANE_GAP_V, PAD + row * ROW_GAP]
+      : [PAD + row * ROW_GAP, PAD + col * LANE_GAP_H];
 
     return { node, col, row, x, y, colorIndex, branchLabels: tipLabels.get(node.id) ?? [] };
   });
