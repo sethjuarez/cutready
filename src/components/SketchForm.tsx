@@ -366,14 +366,16 @@ export function SketchForm() {
               )}
             </div>
           )}
-          {localDesc && !editingDesc && (
+          {!editingDesc && (
             <button
               onClick={() => sendChatPrompt(
-                `Improve the description of sketch "${activeSketchPath ?? "current"}". Current description: "${localDesc}". Make it clearer and more informative. IMPORTANT: Only update the description — do NOT change the title or any rows. Use set_planning_rows with the improved description but keep the existing title and all rows exactly as they are.`,
+                localDesc
+                  ? `Improve the description of sketch "${activeSketchPath ?? "current"}". Current description: "${localDesc}". Make it clearer and more informative. IMPORTANT: Only update the description — do NOT change the title or any rows. Use set_planning_rows with the improved description but keep the existing title and all rows exactly as they are.`
+                  : `Write a description for sketch "${activeSketchPath ?? "current"}" titled "${localTitle}". Look at the planning rows to understand what the sketch covers and write a concise description. IMPORTANT: Only update the description — do NOT change the title or any rows. Use set_planning_rows with the new description but keep the existing title and all rows exactly as they are.`,
                 { silent: true }
               )}
               className="absolute right-2 top-2 opacity-60 hover:opacity-100 p-1 rounded text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 transition-all"
-              title="Improve description with AI"
+              title={localDesc ? "Improve description with AI" : "Generate description with AI"}
             >
               <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M12 2l2.09 6.26L20.18 10l-6.09 1.74L12 18l-2.09-6.26L3.82 10l6.09-1.74L12 2z" />
