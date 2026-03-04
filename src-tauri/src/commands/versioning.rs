@@ -2,7 +2,7 @@
 
 use tauri::State;
 
-use crate::engine::{project, versioning};
+use crate::engine::{project, versioning, versioning_remote};
 use crate::models::script::ProjectView;
 use crate::models::sketch::VersionEntry;
 use crate::AppState;
@@ -195,6 +195,74 @@ pub async fn navigate_to_snapshot(
 pub async fn has_stash(state: State<'_, AppState>) -> Result<bool, String> {
     let root = project_root(&state)?;
     Ok(versioning::has_stash(&root))
+}
+
+// ─── Remote operations ──────────────────────────────────────────
+
+#[tauri::command]
+pub async fn add_git_remote(
+    name: String,
+    url: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let root = project_root(&state)?;
+    versioning_remote::add_remote(&root, &name, &url).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn remove_git_remote(name: String, state: State<'_, AppState>) -> Result<(), String> {
+    let root = project_root(&state)?;
+    versioning_remote::remove_remote(&root, &name).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn list_git_remotes(
+    state: State<'_, AppState>,
+) -> Result<Vec<versioning_remote::RemoteInfo>, String> {
+    let root = project_root(&state)?;
+    versioning_remote::list_remotes(&root).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn detect_git_remote(
+    state: State<'_, AppState>,
+) -> Result<Option<versioning_remote::RemoteInfo>, String> {
+    let root = project_root(&state)?;
+    versioning_remote::detect_remote(&root).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn fetch_git_remote(
+    remote_name: String,
+    token: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let root = project_root(&state)?;
+    versioning_remote::fetch_remote(&root, &remote_name, token.as_deref())
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn push_git_remote(
+    remote_name: String,
+    branch: String,
+    token: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let root = project_root(&state)?;
+    versioning_remote::push_remote(&root, &remote_name, &branch, token.as_deref())
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn get_sync_status(
+    branch: String,
+    remote_name: String,
+    state: State<'_, AppState>,
+) -> Result<versioning_remote::SyncStatus, String> {
+    let root = project_root(&state)?;
+    versioning_remote::get_ahead_behind(&root, &branch, &remote_name)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]

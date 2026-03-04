@@ -27,6 +27,7 @@ reqwest = { version = "0.12", features = ["json", "stream"] }
 tokio-stream = "0.1"
 futures-util = "0.3"
 gix = { version = "0.70", default-features = false, features = ["basic", "index"] }
+git2 = "0.20"
 xcap = "0.8"
 image = "0.25"
 base64 = "0.22"

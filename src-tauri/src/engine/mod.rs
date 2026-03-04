@@ -7,3 +7,4 @@ pub mod interaction;
 pub mod project;
 pub mod recording;
 pub mod versioning;
+pub mod versioning_remote;
