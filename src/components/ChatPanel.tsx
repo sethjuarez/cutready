@@ -5,9 +5,8 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useAppStore } from "../stores/appStore";
 import { useSettings, type AgentPreset } from "../hooks/useSettings";
-import { VersionHistory } from "./VersionHistory";
 import { SketchIcon, StoryboardIcon, NoteIcon } from "./Icons";
-import type { ChatMessage, ToolCall } from "../types/sketch";
+import type { ChatMessage, ChatSessionSummary, ToolCall } from "../types/sketch";
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -26,7 +25,7 @@ interface FileReference {
   webStatus?: "loading" | "ready" | "error";
 }
 
-type SecondaryTab = "chat" | "history";
+type SecondaryTab = "chat" | "sessions";
 
 // ── Built-in Agent Presets ───────────────────────────────────────
 
@@ -276,11 +275,11 @@ export function ChatPanel() {
         </button>
         <button
           className={`flex items-center gap-1.5 px-3 py-2 text-[11px] font-medium transition-colors border-b-2 -mb-px ${
-            activeTab === "history"
+            activeTab === "sessions"
               ? "border-[var(--color-accent)] text-[var(--color-text)]"
               : "border-transparent text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:border-[var(--color-text-secondary)]/30"
           }`}
-          onClick={() => setActiveTab("history")}
+          onClick={() => setActiveTab("sessions")}
         >
           <IconHistory size={12} />
           History
@@ -289,7 +288,7 @@ export function ChatPanel() {
 
       {/* Tab content */}
       <div className="flex-1 min-h-0">
-        {activeTab === "chat" ? <ChatTab /> : <VersionHistory />}
+        {activeTab === "chat" ? <ChatTab /> : <ChatHistory onOpenSession={() => setActiveTab("chat")} />}
       </div>
     </div>
   );
@@ -1718,4 +1717,138 @@ function FileTypeIcon({ type }: { type: string }) {
     default:
       return <span className={cls}><IconFile /></span>;
   }
+}
+
+// ── Chat History ─────────────────────────────────────────────────
+
+function ChatHistory({ onOpenSession }: { onOpenSession: () => void }) {
+  const [sessions, setSessions] = useState<ChatSessionSummary[]>([]);
+  const [loading, setLoading] = useState(true);
+  const listChatSessions = useAppStore((s) => s.listChatSessions);
+  const loadChatSession = useAppStore((s) => s.loadChatSession);
+  const deleteChatSession = useAppStore((s) => s.deleteChatSession);
+  const newChatSession = useAppStore((s) => s.newChatSession);
+  const chatSessionPath = useAppStore((s) => s.chatSessionPath);
+
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    const list = await listChatSessions();
+    // Sort by most recent first
+    list.sort((a, b) => b.updated_at.localeCompare(a.updated_at));
+    setSessions(list);
+    setLoading(false);
+  }, [listChatSessions]);
+
+  useEffect(() => { refresh(); }, [refresh]);
+
+  const handleOpen = useCallback(async (path: string) => {
+    await loadChatSession(path);
+    onOpenSession();
+  }, [loadChatSession, onOpenSession]);
+
+  const handleDelete = useCallback(async (e: React.MouseEvent, path: string) => {
+    e.stopPropagation();
+    await deleteChatSession(path);
+    refresh();
+  }, [deleteChatSession, refresh]);
+
+  const handleNewChat = useCallback(() => {
+    newChatSession();
+    onOpenSession();
+  }, [newChatSession, onOpenSession]);
+
+  const formatDate = (iso: string) => {
+    try {
+      const d = new Date(iso);
+      const now = new Date();
+      const diff = now.getTime() - d.getTime();
+      const mins = Math.floor(diff / 60000);
+      if (mins < 1) return "Just now";
+      if (mins < 60) return `${mins}m ago`;
+      const hrs = Math.floor(mins / 60);
+      if (hrs < 24) return `${hrs}h ago`;
+      const days = Math.floor(hrs / 24);
+      if (days < 7) return `${days}d ago`;
+      return d.toLocaleDateString();
+    } catch {
+      return iso;
+    }
+  };
+
+  return (
+    <div className="flex flex-col h-full">
+      {/* Header */}
+      <div className="flex items-center justify-between px-3 py-2 border-b border-[var(--color-border)]">
+        <span className="text-[11px] font-medium text-[var(--color-text-secondary)]">
+          {sessions.length} session{sessions.length !== 1 ? "s" : ""}
+        </span>
+        <button
+          onClick={handleNewChat}
+          className="flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 transition-colors"
+          title="New chat"
+        >
+          <IconPlus size={12} />
+          New Chat
+        </button>
+      </div>
+
+      {/* Session list */}
+      <div className="flex-1 overflow-y-auto">
+        {loading ? (
+          <div className="flex items-center justify-center py-8 text-[var(--color-text-secondary)] text-xs">
+            Loading…
+          </div>
+        ) : sessions.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-12 px-4 text-center gap-2">
+            <IconHistory size={24} />
+            <span className="text-[12px] text-[var(--color-text-secondary)]">No chat sessions yet</span>
+            <span className="text-[11px] text-[var(--color-text-secondary)]/60">
+              Start a conversation and it will appear here
+            </span>
+          </div>
+        ) : (
+          <div className="py-1">
+            {sessions.map((s) => {
+              const isActive = s.path === chatSessionPath;
+              return (
+                <button
+                  key={s.path}
+                  onClick={() => handleOpen(s.path)}
+                  className={`group w-full text-left px-3 py-2.5 flex items-start gap-2 transition-colors border-l-2 ${
+                    isActive
+                      ? "border-[var(--color-accent)] bg-[var(--color-accent)]/8"
+                      : "border-transparent hover:bg-[var(--color-surface-hover)]"
+                  }`}
+                >
+                  <IconSparkles size={14} />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[12px] font-medium text-[var(--color-text)] truncate leading-tight">
+                      {s.title || "Untitled chat"}
+                    </div>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className="text-[10px] text-[var(--color-text-secondary)]">
+                        {s.message_count} message{s.message_count !== 1 ? "s" : ""}
+                      </span>
+                      <span className="text-[10px] text-[var(--color-text-secondary)]/50">·</span>
+                      <span className="text-[10px] text-[var(--color-text-secondary)]">
+                        {formatDate(s.updated_at)}
+                      </span>
+                    </div>
+                  </div>
+                  {/* Delete button — visible on hover */}
+                  <button
+                    onClick={(e) => handleDelete(e, s.path)}
+                    className="shrink-0 p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-[var(--color-surface-hover)] text-[var(--color-text-secondary)] hover:text-red-400 transition-all"
+                    title="Delete session"
+                  >
+                    <IconTrash size={12} />
+                  </button>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
