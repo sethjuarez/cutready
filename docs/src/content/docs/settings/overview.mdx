@@ -18,7 +18,7 @@ in the sidebar.
 
 ## Settings Tabs
 
-Settings are organized into three tabs:
+Settings are organized into tabs:
 
 <Tabs>
 <TabItem label="General">
@@ -102,6 +102,43 @@ selector. They use the same model and tools as built-in agents.
 - **Brand Voice** — An agent that writes in your company's style guidelines
 - **Technical Writer** — An agent focused on precision and technical accuracy
 - **Concise Editor** — An agent that ruthlessly cuts unnecessary words
+
+</TabItem>
+<TabItem label="Feedback">
+
+### Feedback History
+
+View all feedback you've submitted through the title bar popover or via the
+AI assistant's `save_feedback` tool. Entries are shown newest-first with:
+
+- **Category badge** — General, Bug, Feature, or Design
+- **Date** — When the feedback was submitted
+- **Debug log indicator** — Shows if a debug log snapshot was attached
+
+### Actions
+
+Each feedback entry has hover buttons for:
+
+- **Copy** — Copy the feedback text to clipboard
+- **Create GitHub Issue** — Uses the AI to format your feedback into a
+  well-structured GitHub issue, then opens your browser to the pre-filled
+  issue creation page. Includes app version and optional debug log in a
+  collapsible section.
+
+You can also **Copy All** to get all feedback entries at once, or **Clear All**
+to reset your feedback history.
+
+</TabItem>
+<TabItem label="Images">
+
+### Image Manager
+
+Browse and manage screenshots stored in your project's `.cutready/screenshots/`
+directory. The image manager shows:
+
+- Thumbnail grid of all project images
+- Which images are referenced by sketches and notes
+- **Orphan detection** — identifies unused images that can be safely deleted
 
 </TabItem>
 </Tabs>

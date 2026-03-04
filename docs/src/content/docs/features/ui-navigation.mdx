@@ -19,7 +19,7 @@ editors, resizable panels, and a command palette.
 
 ```text
 ┌────────────────────────────────────────────────────────────┐
-│  Title Bar (window controls, panel toggles)                │
+│  Title Bar (window controls, feedback, panel toggles)      │
 ├────────┬──────────────────────────────────┬────────────────┤
 │ Side-  │  Tab Bar (open documents)        │  Chat Panel    │
 │ bar    ├──────────────────────────────────┤  (AI chat +    │
@@ -27,7 +27,7 @@ editors, resizable panels, and a command palette.
 │ icons) │  (Sketch / Record / Script /     │                │
 │        │   Settings)                      │                │
 │        ├──────────────────────────────────┤                │
-│        │  Output Panel (activity log)     │                │
+│        │  Output Panel (Activity + Debug)     │                │
 └────────┴──────────────────────────────────┴────────────────┘
 ```
 
@@ -57,13 +57,31 @@ all available commands. Start typing to filter.
 
 CutReady uses a **frameless window** with a custom title bar that includes:
 - Window controls (minimize, maximize, close)
-- Toggle buttons for sidebar and output panel
+- **Feedback button** — chat-bubble icon to submit feedback with optional debug log
+- Toggle buttons for sidebar, output panel, and chat panel
 - Drag area for moving the window
 
 ## Output Panel
 
-Toggle with **`Ctrl+\``** — a resizable bottom panel showing activity logs,
-system messages, and command output.
+Toggle with **`Ctrl+\``** — a resizable bottom panel with two tabs:
+
+- **Activity** — real-time log of AI operations, tool calls, and sparkle actions
+- **Debug** — captures JavaScript console output and Rust backend log messages
+  for diagnostics
+
+Both tabs support export (download as `.log` file) and per-tab clear.
+
+## Feedback
+
+CutReady has a built-in feedback system accessible from the title bar:
+
+- Click the 💬 icon next to the panel toggles to open the feedback popover
+- Choose a category: **General**, **Bug**, **Feature**, or **Design**
+- Optionally toggle **Include debug log** to attach diagnostic information
+- Feedback is persisted to the app data directory and viewable in
+  **Settings → Feedback**
+- From Settings, you can **copy** feedback or **create a GitHub Issue** — the
+  issue body is formatted by AI with the app version and optional debug log
 
 ## Keyboard Shortcuts
 

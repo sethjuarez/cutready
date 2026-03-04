@@ -48,12 +48,14 @@ it invokes backend tools:
 
 | Tool | What it does |
 | --- | --- |
-| `read_sketch` | Reads the current sketch contents |
-| `set_planning_rows` | Replaces all planning rows in a sketch |
-| `update_planning_row` | Updates a single row by index |
+| `read_sketch` | Reads the current sketch contents (including screenshot paths) |
+| `set_planning_rows` | Replaces all planning rows in a sketch (supports screenshots) |
+| `update_planning_row` | Updates a single row by index (supports screenshots) |
 | `list_project_files` | Lists files in the project directory |
+| `list_project_images` | Discovers available screenshots in the project |
 | `read_note` | Reads a markdown note file |
 | `fetch_url_content` | Fetches content from a URL for reference |
+| `save_feedback` | Saves user feedback to the app data directory |
 
 Tool calls happen automatically as part of the conversation. You'll see the
 results reflected in your editor in real-time.
@@ -78,6 +80,22 @@ behind the scenes:
 Type **#** in the chat input to trigger autocomplete for project file
 references. This lets you mention specific sketches, notes, or storyboards
 inline so the AI knows exactly which document you're referring to.
+
+References appear as **color-coded chips** that match the file type:
+- **Sketches** — violet
+- **Notes** — rose/pink
+- **Storyboards** — emerald/green
+- **Web URLs** — blue
+
+Referenced files are shown as **footnotes** at the end of messages, making
+it easy to see what context the AI is working with.
+
+## Feedback via Chat
+
+You can submit app feedback directly through the chat by telling the AI
+about an issue or suggestion. The assistant uses the `save_feedback` tool
+to persist your feedback to the app data directory, where it appears in
+**Settings → Feedback** alongside feedback submitted through the title bar.
 
 ## Custom Agents
 
