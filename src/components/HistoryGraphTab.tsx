@@ -4,37 +4,37 @@ import { useAppStore } from "../stores/appStore";
 import type { GraphNode, TimelineInfo } from "../types/sketch";
 
 /**
- * HistoryGraphTab — Full DAG visualization using d3 for layout, zoom/pan,
- * and smooth edge rendering. Supports vertical and horizontal orientation.
+ * HistoryGraphTab — Full DAG visualization using a tangled-tree layout
+ * (inspired by nitaku's "Tangled Tree Visualization II").
+ *
+ * Layout: level-based horizontal (or vertical), with metro-style edge bundling.
+ * Features: d3 zoom/pan, vertical/horizontal toggle, auto-fit.
  */
 
 /* ── Types ────────────────────────────────────────────────────────── */
 
 type LayoutDir = "vertical" | "horizontal";
 
-interface LayoutNode {
+/** A positioned node after tangled layout. */
+interface TangleNode {
   node: GraphNode;
-  col: number;
-  row: number;
   x: number;
   y: number;
+  height: number;
+  level: number;
   colorIndex: number;
   branchLabels: string[];
 }
 
-interface LayoutEdge {
+/** A bundled edge path. */
+interface TangleEdge {
   d: string;
   color: string;
+  /** Wider background stroke for readability? */
+  bg?: boolean;
 }
 
 /* ── Constants ────────────────────────────────────────────────────── */
-
-const NODE_GAP = 56;
-const LANE_GAP = 40;
-const PAD = 48;
-const NODE_R = 6;
-const HEAD_R = 8;
-const EDGE_W = 2.5;
 
 const LANE_COLORS = [
   "var(--color-accent)", "#10b981", "#f59e0b", "#ef4444",
@@ -42,25 +42,63 @@ const LANE_COLORS = [
 ];
 const lc = (i: number) => LANE_COLORS[i % LANE_COLORS.length];
 
-/* ── DAG Layout Engine ────────────────────────────────────────────── */
+/* ── Tangled Tree Layout Engine ───────────────────────────────────── */
 
-/**
- * Proper topological DAG layout:
- * 1. Deduplicate nodes, collect branch tip labels
- * 2. Topological sort (Kahn's) — tips first, interleaved by timestamp
- * 3. Lane assignment — git-style rail tracking
- * 4. Coordinate calculation (vertical or horizontal)
- * 5. Edge paths via d3 link generators
- */
-function computeLayout(
+/** Tuning knobs (pixel values). */
+const PADDING = 20;
+const NODE_HEIGHT_BASE = 22;
+const NODE_WIDTH = 120;
+const BUNDLE_WIDTH = 14;
+const LEVEL_PAD = 16;
+const METRO_D = 4;
+const ARC_R = 16;
+const MIN_FAMILY_H = 22;
+
+interface TNode {
+  id: string;
+  gn: GraphNode;
+  level: number;
+  parents: TNode[];
+  colorIndex: number;
+  branchLabels: string[];
+  bundle?: TBundle;
+  bundles: TBundle[][];
+  bundles_index: Record<string, TBundle[]>;
+  height: number;
+  x: number;
+  y: number;
+}
+
+interface TBundle {
+  id: string;
+  parents: TNode[];
+  level: number;
+  i: number;
+  x: number;
+  y: number;
+  links: TLink[];
+  color: string;
+}
+
+interface TLink {
+  source: TNode;
+  target: TNode;
+  bundle: TBundle;
+  xt: number; yt: number;
+  xb: number;
+  xs: number; ys: number;
+  c1: number; c2: number;
+}
+
+function constructTangleLayout(
   rawNodes: GraphNode[],
   timelineMap: Map<string, TimelineInfo>,
   dir: LayoutDir,
-): { nodes: LayoutNode[]; edges: LayoutEdge[]; width: number; height: number } {
+): { nodes: TangleNode[]; edges: TangleEdge[]; width: number; height: number } {
   if (rawNodes.length === 0)
     return { nodes: [], edges: [], width: 0, height: 0 };
 
-  /* 1. Deduplicate by ID, collect all branch-tip labels per node */
+  /* ── 1. Deduplicate, collect branch labels ──────────────────── */
   const uniqueMap = new Map<string, GraphNode>();
   const tipLabels = new Map<string, string[]>();
   for (const n of rawNodes) {
@@ -72,133 +110,268 @@ function computeLayout(
     }
   }
   const deduped = [...uniqueMap.values()];
-  const nodeMap = new Map<string, GraphNode>();
-  for (const n of deduped) nodeMap.set(n.id, n);
+  const gnMap = new Map<string, GraphNode>();
+  for (const n of deduped) gnMap.set(n.id, n);
 
-  /* 2. Topological sort — Kahn's algorithm, tips (in-degree 0) first */
-  const inDeg = new Map<string, number>();
-  for (const n of deduped) inDeg.set(n.id, 0);
+  /* ── 2. Compute depth levels (BFS from roots) ──────────────── */
+  const childrenOf = new Map<string, string[]>();
   for (const n of deduped) {
     for (const pid of n.parents) {
-      if (inDeg.has(pid)) inDeg.set(pid, inDeg.get(pid)! + 1);
+      if (!childrenOf.has(pid)) childrenOf.set(pid, []);
+      childrenOf.get(pid)!.push(n.id);
     }
   }
 
-  const ready = deduped.filter((n) => inDeg.get(n.id) === 0);
-  const sortPriority = (arr: GraphNode[]) =>
-    arr.sort((a, b) => {
-      const aa = timelineMap.get(a.timeline)?.is_active ? 0 : 1;
-      const ba = timelineMap.get(b.timeline)?.is_active ? 0 : 1;
-      if (aa !== ba) return aa - ba;
-      return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
-    });
-  sortPriority(ready);
+  // Depth = longest path from any root
+  const depth = new Map<string, number>();
+  const roots = deduped.filter((n) => n.parents.length === 0 || !n.parents.some((p) => gnMap.has(p)));
 
-  const sorted: GraphNode[] = [];
-  while (ready.length > 0) {
-    const n = ready.shift()!;
-    sorted.push(n);
-    for (const pid of n.parents) {
-      if (!inDeg.has(pid)) continue;
-      const nd = inDeg.get(pid)! - 1;
-      inDeg.set(pid, nd);
-      if (nd === 0) {
-        ready.push(nodeMap.get(pid)!);
-        sortPriority(ready);
+  // BFS/topo for longest-path depth
+  const inDeg = new Map<string, number>();
+  for (const n of deduped) {
+    let d = 0;
+    for (const pid of n.parents) { if (gnMap.has(pid)) d++; }
+    inDeg.set(n.id, d);
+  }
+  const queue = roots.map((n) => n.id);
+  for (const rid of queue) depth.set(rid, 0);
+
+  let qi = 0;
+  while (qi < queue.length) {
+    const nid = queue[qi++];
+    const nd = depth.get(nid)!;
+    for (const cid of (childrenOf.get(nid) ?? [])) {
+      const cd = depth.get(cid);
+      if (cd === undefined || nd + 1 > cd) depth.set(cid, nd + 1);
+      const rem = inDeg.get(cid)! - 1;
+      inDeg.set(cid, rem);
+      if (rem === 0) queue.push(cid);
+    }
+  }
+
+  // Group by level, sort within each level by timestamp
+  const maxDepth = Math.max(0, ...depth.values());
+  const levels: GraphNode[][] = Array.from({ length: maxDepth + 1 }, () => []);
+  for (const n of deduped) {
+    const d = depth.get(n.id) ?? 0;
+    levels[d].push(n);
+  }
+  for (const lvl of levels) {
+    lvl.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+  }
+
+  /* ── 3. Build TNode objects ────────────────────────────────── */
+  const tNodes: TNode[] = [];
+  const tIndex = new Map<string, TNode>();
+
+  for (let li = 0; li < levels.length; li++) {
+    for (const gn of levels[li]) {
+      const tInfo = timelineMap.get(gn.timeline);
+      const tn: TNode = {
+        id: gn.id,
+        gn,
+        level: li,
+        parents: [],
+        colorIndex: tInfo?.color_index ?? 0,
+        branchLabels: tipLabels.get(gn.id) ?? [],
+        bundles: [],
+        bundles_index: {},
+        height: 0,
+        x: 0, y: 0,
+      };
+      tNodes.push(tn);
+      tIndex.set(gn.id, tn);
+    }
+  }
+
+  // Objectify parents
+  for (const tn of tNodes) {
+    tn.parents = tn.gn.parents
+      .map((pid) => tIndex.get(pid))
+      .filter((p): p is TNode => p !== undefined);
+  }
+
+  /* ── 4. Compute bundles (nitaku algorithm) ─────────────────── */
+  interface LevelBundles { bundles: TBundle[] }
+  const levelBundles: LevelBundles[] = levels.map(() => ({ bundles: [] }));
+
+  for (let li = 0; li < levels.length; li++) {
+    const nodesInLevel = levels[li].map((gn) => tIndex.get(gn.id)!);
+    const index: Record<string, TBundle> = {};
+
+    for (const tn of nodesInLevel) {
+      if (tn.parents.length === 0) continue;
+      const bid = tn.parents.map((p) => p.id).sort().join("--");
+      if (bid in index) {
+        index[bid].parents = index[bid].parents.concat(tn.parents);
+      } else {
+        index[bid] = {
+          id: bid,
+          parents: tn.parents.slice(),
+          level: li,
+          i: 0,
+          x: 0, y: 0,
+          links: [],
+          color: lc(tn.colorIndex),
+        };
+      }
+      tn.bundle = index[bid];
+    }
+    const bundles = Object.values(index);
+    bundles.forEach((b, i) => { b.i = i; });
+    levelBundles[li].bundles = bundles;
+  }
+
+  const allBundles = levelBundles.flatMap((lb) => lb.bundles);
+
+  // Build links
+  const links: TLink[] = [];
+  for (const tn of tNodes) {
+    for (const p of tn.parents) {
+      if (tn.bundle) {
+        links.push({
+          source: tn, target: p, bundle: tn.bundle,
+          xt: 0, yt: 0, xb: 0, xs: 0, ys: 0, c1: 0, c2: 0,
+        });
       }
     }
   }
 
-  /* 3. Lane assignment — git-style rail tracking
-     columns[i] = the commit ID expected next in column i, or null if free */
-  const cols: (string | null)[] = [];
-  const nodeCol = new Map<string, number>();
-
-  const freeCol = () => {
-    const i = cols.indexOf(null);
-    if (i >= 0) return i;
-    cols.push(null);
-    return cols.length - 1;
-  };
-
-  for (const node of sorted) {
-    // Find column(s) that expect this commit
-    const expecting: number[] = [];
-    for (let c = 0; c < cols.length; c++) {
-      if (cols[c] === node.id) expecting.push(c);
+  // Reverse pointers
+  for (const b of allBundles) {
+    for (const p of b.parents) {
+      if (!(b.id in p.bundles_index)) p.bundles_index[b.id] = [];
+      p.bundles_index[b.id].push(b);
     }
-
-    let col: number;
-    if (expecting.length > 0) {
-      col = expecting[0];
-      // Merge convergence: free extra columns
-      for (let i = 1; i < expecting.length; i++) cols[expecting[i]] = null;
-    } else {
-      col = freeCol();
-    }
-
-    // Continue rail to first parent, or free column if root
-    cols[col] = node.parents.length > 0 ? node.parents[0] : null;
-
-    // Reserve columns for merge parents (2nd+)
-    for (let p = 1; p < node.parents.length; p++) {
-      const pid = node.parents[p];
-      if (!cols.includes(pid)) cols[freeCol()] = pid;
-    }
-
-    nodeCol.set(node.id, col);
+  }
+  for (const tn of tNodes) {
+    tn.bundles = Object.values(tn.bundles_index);
+    tn.bundles.forEach((bg, i) => bg.forEach((b) => { b.i = i; }));
   }
 
-  /* 4. Compute (x, y) coordinates */
-  const maxCol = sorted.length > 0
-    ? Math.max(0, ...Array.from(nodeCol.values()))
-    : 0;
+  for (const l of links) {
+    l.bundle.links.push(l);
+  }
 
-  const layoutNodes: LayoutNode[] = sorted.map((node, row) => {
-    const col = nodeCol.get(node.id)!;
-    const tInfo = timelineMap.get(node.timeline);
-    const colorIndex = tInfo?.color_index ?? col;
+  /* ── 5. Layout coordinates ─────────────────────────────────── */
+  for (const tn of tNodes) {
+    tn.height = (Math.max(1, tn.bundles.length) - 1) * METRO_D;
+  }
 
-    // Vertical: newest at top. Horizontal: oldest at left (reverse row).
-    const maxRow = sorted.length - 1;
-    const [x, y] = dir === "vertical"
-      ? [PAD + col * LANE_GAP, PAD + row * NODE_GAP]
-      : [PAD + (maxRow - row) * NODE_GAP, PAD + col * LANE_GAP];
+  let xOff = PADDING;
+  let yOff = PADDING;
 
-    return { node, col, row, x, y, colorIndex, branchLabels: tipLabels.get(node.id) ?? [] };
+  for (let li = 0; li < levels.length; li++) {
+    xOff += levelBundles[li].bundles.length * BUNDLE_WIDTH;
+    yOff += LEVEL_PAD;
+    const nodesInLevel = levels[li].map((gn) => tIndex.get(gn.id)!);
+    for (const tn of nodesInLevel) {
+      tn.x = tn.level * NODE_WIDTH + xOff;
+      tn.y = NODE_HEIGHT_BASE + yOff + tn.height / 2;
+      yOff += NODE_HEIGHT_BASE + tn.height;
+    }
+  }
+
+  // Bundle positions
+  let rowIdx = 0;
+  for (let li = 0; li < levels.length; li++) {
+    for (const b of levelBundles[li].bundles) {
+      b.x = b.parents[0].x + NODE_WIDTH +
+        (levelBundles[li].bundles.length - 1 - b.i) * BUNDLE_WIDTH;
+      b.y = rowIdx * NODE_HEIGHT_BASE;
+    }
+    rowIdx += levels[li].length;
+  }
+
+  // Link coordinates
+  for (const l of links) {
+    l.xt = l.target.x;
+    const bArr = l.target.bundles_index[l.bundle.id];
+    const bIdx = bArr ? bArr.indexOf(l.bundle) : 0;
+    const bCount = l.target.bundles.length;
+    l.yt = l.target.y + bIdx * METRO_D - (bCount * METRO_D) / 2 + METRO_D / 2;
+    l.xb = l.bundle.x;
+    l.xs = l.source.x;
+    l.ys = l.source.y;
+  }
+
+  // Compress vertical space
+  let yNegOff = 0;
+  for (let li = 0; li < levels.length; li++) {
+    const bs = levelBundles[li].bundles;
+    if (bs.length > 0) {
+      const minGap = Math.min(
+        ...bs.flatMap((b) =>
+          b.links.map((lk) => (lk.ys - ARC_R) - (lk.yt + ARC_R))
+        ),
+      );
+      yNegOff += Math.max(0, -MIN_FAMILY_H + minGap);
+    }
+    const nodesInLevel = levels[li].map((gn) => tIndex.get(gn.id)!);
+    for (const tn of nodesInLevel) {
+      tn.y -= yNegOff;
+    }
+  }
+
+  // Re-compute link coords after compression
+  for (const l of links) {
+    const bArr = l.target.bundles_index[l.bundle.id];
+    const bIdx = bArr ? bArr.indexOf(l.bundle) : 0;
+    const bCount = l.target.bundles.length;
+    l.yt = l.target.y + bIdx * METRO_D - (bCount * METRO_D) / 2 + METRO_D / 2;
+    l.ys = l.source.y;
+    l.c1 = l.source.level - l.target.level > 1 ? NODE_WIDTH + ARC_R : ARC_R;
+    l.c2 = ARC_R;
+  }
+
+  /* ── 6. Build output ───────────────────────────────────────── */
+  const w = Math.max(100, d3.max(tNodes, (n) => n.x)! + NODE_WIDTH + 2 * PADDING);
+  const h = Math.max(100, d3.max(tNodes, (n) => n.y)! + NODE_HEIGHT_BASE / 2 + 2 * PADDING);
+
+  // Dir transform: horizontal = default (levels left→right, nodes stacked vertically)
+  //                vertical   = swap x↔y (levels top→bottom, nodes spread horizontally)
+  const transform = (px: number, py: number): [number, number] =>
+    dir === "horizontal" ? [px, py] : [py, px];
+
+  const tangleNodes: TangleNode[] = tNodes.map((tn) => {
+    const [fx, fy] = transform(tn.x, tn.y);
+    return {
+      node: tn.gn,
+      x: fx,
+      y: fy,
+      height: tn.height,
+      level: tn.level,
+      colorIndex: tn.colorIndex,
+      branchLabels: tn.branchLabels,
+    };
   });
 
-  /* 5. Build edge paths with d3 link generators */
-  const nodePos = new Map<string, { x: number; y: number; colorIndex: number }>();
-  for (const ln of layoutNodes) nodePos.set(ln.node.id, { x: ln.x, y: ln.y, colorIndex: ln.colorIndex });
+  // Build edge paths — metro-style bundled arcs
+  const tangleEdges: TangleEdge[] = [];
+  const bundlesSeen = new Set<string>();
 
-  type LinkDatum = { source: [number, number]; target: [number, number] };
-  const linkGen = dir === "vertical"
-    ? d3.linkVertical<LinkDatum, [number, number]>().x((d) => d[0]).y((d) => d[1])
-    : d3.linkHorizontal<LinkDatum, [number, number]>().x((d) => d[0]).y((d) => d[1]);
+  for (const b of allBundles) {
+    if (bundlesSeen.has(b.id)) continue;
+    bundlesSeen.add(b.id);
 
-  const edges: LayoutEdge[] = [];
-  for (const ln of layoutNodes) {
-    for (const pid of ln.node.parents) {
-      const pp = nodePos.get(pid);
-      if (!pp) continue;
-      const d = linkGen({ source: [ln.x, ln.y], target: [pp.x, pp.y] });
-      if (d) edges.push({ d, color: lc(ln.colorIndex) });
-    }
+    const pathSegments = b.links.map((l) => {
+      if (dir === "horizontal") {
+        return `M${l.xt} ${l.yt} L${l.xb - l.c1} ${l.yt} A${l.c1} ${l.c1} 90 0 1 ${l.xb} ${l.yt + l.c1} L${l.xb} ${l.ys - l.c2} A${l.c2} ${l.c2} 90 0 0 ${l.xb + l.c2} ${l.ys} L${l.xs} ${l.ys}`;
+      } else {
+        // Vertical: swap axes in the path
+        return `M${l.yt} ${l.xt} L${l.yt} ${l.xb - l.c1} A${l.c1} ${l.c1} 90 0 0 ${l.yt + l.c1} ${l.xb} L${l.ys - l.c2} ${l.xb} A${l.c2} ${l.c2} 90 0 1 ${l.ys} ${l.xb + l.c2} L${l.ys} ${l.xs}`;
+      }
+    }).join(" ");
+
+    // Background (wider, surface color for gap effect)
+    tangleEdges.push({ d: pathSegments, color: "var(--color-bg)", bg: true });
+    // Foreground (thin, colored)
+    tangleEdges.push({ d: pathSegments, color: b.color });
   }
 
-  /* 6. Compute bounds (include space for labels) */
-  const graphRows = Math.max(sorted.length - 1, 0);
-  const graphCols = maxCol;
-  const labelPad = dir === "vertical" ? 420 : 80;
-  const w = dir === "vertical"
-    ? PAD * 2 + graphCols * LANE_GAP + labelPad
-    : PAD * 2 + graphRows * NODE_GAP + labelPad;
-  const h = dir === "vertical"
-    ? PAD * 2 + graphRows * NODE_GAP + 40
-    : PAD * 2 + graphCols * LANE_GAP + 120;
+  const [finalW, finalH] = dir === "horizontal" ? [w, h] : [h, w];
 
-  return { nodes: layoutNodes, edges, width: w, height: h };
+  return { nodes: tangleNodes, edges: tangleEdges, width: finalW, height: finalH };
 }
 
 /* ── Helpers ──────────────────────────────────────────────────────── */
@@ -223,6 +396,9 @@ function formatTimestamp(ts: string): string {
 
 /* ── Component ────────────────────────────────────────────────────── */
 
+const NODE_R = 6;
+const HEAD_R = 8;
+
 export function HistoryGraphTab() {
   const graphNodes = useAppStore((s) => s.graphNodes);
   const timelines = useAppStore((s) => s.timelines);
@@ -237,7 +413,7 @@ export function HistoryGraphTab() {
   const zoomRef = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(null);
 
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
-  const [dir, setDir] = useState<LayoutDir>("vertical");
+  const [dir, setDir] = useState<LayoutDir>("horizontal");
 
   useEffect(() => { loadGraphData(); loadTimelines(); }, [loadGraphData, loadTimelines]);
 
@@ -257,15 +433,9 @@ export function HistoryGraphTab() {
   }, [timelines]);
 
   const layout = useMemo(
-    () => computeLayout(graphNodes, timelineMap, dir),
+    () => constructTangleLayout(graphNodes, timelineMap, dir),
     [graphNodes, timelineMap, dir],
   );
-
-  // Text label x-offset (vertical mode only): right of the rightmost lane
-  const textX = useMemo(() => {
-    const maxCol = layout.nodes.reduce((m, n) => Math.max(m, n.col), 0);
-    return PAD + (maxCol + 1) * LANE_GAP + 16;
-  }, [layout]);
 
   /* d3 zoom — applied to <svg>, transforms <g> */
   useEffect(() => {
@@ -280,7 +450,6 @@ export function HistoryGraphTab() {
     zoomRef.current = zoom;
     svg.call(zoom);
 
-    // Auto-fit on mount / layout change
     const ct = containerRef.current;
     if (ct && layout.nodes.length > 0) {
       const { width: cw, height: ch } = ct.getBoundingClientRect();
@@ -395,9 +564,16 @@ export function HistoryGraphTab() {
       <div ref={containerRef} className="flex-1 overflow-hidden">
         <svg ref={svgRef} width="100%" height="100%" className="select-none" style={{ cursor: "grab" }}>
           <g ref={gRef}>
-            {/* Edges (behind nodes) */}
+            {/* Edges — background first, then colored */}
             {layout.edges.map((edge, i) => (
-              <path key={i} d={edge.d} fill="none" stroke={edge.color} strokeWidth={EDGE_W} opacity={0.45} />
+              <path
+                key={i}
+                d={edge.d}
+                fill="none"
+                stroke={edge.color}
+                strokeWidth={edge.bg ? 5 : 2}
+                opacity={edge.bg ? 1 : 0.8}
+              />
             ))}
 
             {/* Nodes */}
@@ -408,6 +584,7 @@ export function HistoryGraphTab() {
               const isHov = hoveredNode === node.id;
               const r = isHead ? HEAD_R : NODE_R;
 
+              // Node line height for metro-style rendering (reserved for future use)
               return (
                 <g
                   key={node.id}
@@ -441,50 +618,38 @@ export function HistoryGraphTab() {
                     </g>
                   )}
 
-                  {/* Branch-tip badges (above node) */}
+                  {/* Commit message label */}
+                  <text
+                    x={x + r + 6} y={y - r - 4}
+                    fontSize={10}
+                    fill={isHead ? "var(--color-text)" : "var(--color-text-secondary)"}
+                    fontWeight={isHead ? 600 : 400}
+                  >
+                    {node.message.length > 40 ? node.message.substring(0, 40) + "…" : node.message}
+                  </text>
+
+                  {/* Branch-tip badges */}
                   {bl.map((label, bi) => {
                     const bw = label.length * 5.5 + 12;
-                    const bx = x - bw / 2;
-                    const by = y - r - 18 - bi * 18;
                     return (
                       <g key={label}>
-                        <rect x={bx} y={by} width={bw} height={16} rx={4} fill={color} opacity={0.15} />
-                        <text x={bx + 6} y={by + 11} fontSize={8} fill={color} fontWeight={600}
-                          fontFamily="var(--font-mono, monospace)">{label}</text>
+                        <rect x={x + r + 4} y={y + r + 2 + bi * 18} width={bw} height={16} rx={4}
+                          fill={color} opacity={0.15} />
+                        <text x={x + r + 10} y={y + r + 13 + bi * 18} fontSize={8} fill={color}
+                          fontWeight={600} fontFamily="var(--font-mono, monospace)">{label}</text>
                       </g>
                     );
                   })}
 
-                  {/* Commit message */}
-                  {dir === "vertical" ? (
-                    <text x={textX} y={y + 1} dominantBaseline="middle" fontSize={11}
-                      fill={isHead ? "var(--color-text)" : "var(--color-text-secondary)"}
-                      fontWeight={isHead ? 600 : 400}>
-                      {node.message.length > 50 ? node.message.substring(0, 50) + "…" : node.message}
-                    </text>
-                  ) : (
-                    <text x={x} y={y + r + 16} textAnchor="middle" fontSize={9}
-                      fill={isHead ? "var(--color-text)" : "var(--color-text-secondary)"}
-                      fontWeight={isHead ? 600 : 400}>
-                      {node.message.length > 28 ? node.message.substring(0, 28) + "…" : node.message}
-                    </text>
-                  )}
-
-                  {/* Timestamp (vertical only) */}
-                  {dir === "vertical" && (
-                    <text x={textX + 350} y={y + 1} dominantBaseline="middle" fontSize={9}
-                      fill="var(--color-text-secondary)" opacity={0.6}>
-                      {formatTimestamp(node.timestamp)}
-                    </text>
-                  )}
-
                   {/* Short hash on hover */}
                   <text
-                    x={x} y={dir === "vertical" ? y + r + 12 : y - r - 4}
-                    textAnchor="middle" fontSize={7}
-                    fill="var(--color-text-secondary)" opacity={isHov ? 0.8 : 0}
-                    fontFamily="var(--font-mono, monospace)">
-                    {node.id.substring(0, 7)}
+                    x={x + r + 6} y={y + 3}
+                    fontSize={7}
+                    fill="var(--color-text-secondary)"
+                    opacity={isHov ? 0.8 : 0}
+                    fontFamily="var(--font-mono, monospace)"
+                  >
+                    {node.id.substring(0, 7)} · {formatTimestamp(node.timestamp)}
                   </text>
                 </g>
               );
