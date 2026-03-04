@@ -159,9 +159,11 @@ function computeLayout(
     const tInfo = timelineMap.get(node.timeline);
     const colorIndex = tInfo?.color_index ?? col;
 
+    // Vertical: newest at top. Horizontal: oldest at left (reverse row).
+    const maxRow = sorted.length - 1;
     const [x, y] = dir === "vertical"
       ? [PAD + col * LANE_GAP, PAD + row * NODE_GAP]
-      : [PAD + row * NODE_GAP, PAD + col * LANE_GAP];
+      : [PAD + (maxRow - row) * NODE_GAP, PAD + col * LANE_GAP];
 
     return { node, col, row, x, y, colorIndex, branchLabels: tipLabels.get(node.id) ?? [] };
   });
