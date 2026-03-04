@@ -691,6 +691,11 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
           }
         }
       } catch { /* ignore corrupted data */ }
+      // Restore last chat session
+      const savedSession = localStorage.getItem("cutready:chatSessionPath");
+      if (savedSession) {
+        get().loadChatSession(savedSession).catch(() => {});
+      }
       // Auto-detect remote and fetch in background (non-blocking)
       get().detectRemote().then(() => {
         if (get().currentRemote) {
@@ -709,6 +714,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     invoke("close_project").catch(console.error);
     localStorage.removeItem("cutready:lastProject");
     localStorage.removeItem("cutready:openTabs");
+    localStorage.removeItem("cutready:chatSessionPath");
     set({
       currentProject: null,
       view: "home",
@@ -1067,13 +1073,15 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
 
   newChatSession: () => {
     const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+    const sessionPath = `.chats/chat-${ts}.chat`;
     set({
       chatMessages: [],
-      chatSessionPath: `.chats/chat-${ts}.chat`,
+      chatSessionPath: sessionPath,
       chatLoading: false,
       chatError: null,
       activityLog: [],
     });
+    localStorage.setItem("cutready:chatSessionPath", sessionPath);
   },
 
   loadChatSession: async (sessionPath) => {
@@ -1087,6 +1095,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         chatSessionPath: sessionPath,
         chatError: null,
       });
+      localStorage.setItem("cutready:chatSessionPath", sessionPath);
     } catch (err) {
       console.error("Failed to load chat session:", err);
     }
