@@ -67,10 +67,41 @@ function computeLayout(
   const nodeMap = new Map<string, GraphNode>();
   for (const n of deduped) nodeMap.set(n.id, n);
 
-  /* 2. Chronological sort — oldest first (row 0 = top/left) */
-  const sorted = [...deduped].sort((a, b) =>
-    new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
-  );
+  /* 2. Topological sort, roots first, timestamp tiebreaker (oldest → top/left) */
+  // Build children map (reverse of parents)
+  const childrenOf = new Map<string, string[]>();
+  for (const n of deduped) {
+    for (const pid of n.parents) {
+      if (nodeMap.has(pid)) {
+        if (!childrenOf.has(pid)) childrenOf.set(pid, []);
+        childrenOf.get(pid)!.push(n.id);
+      }
+    }
+  }
+  // In-degree = number of parents within the graph
+  const inDeg = new Map<string, number>();
+  for (const n of deduped) {
+    inDeg.set(n.id, n.parents.filter((p) => nodeMap.has(p)).length);
+  }
+  // Start with root nodes (no parents), sorted oldest first
+  const tsOf = (n: GraphNode) => new Date(n.timestamp).getTime();
+  const ready = deduped.filter((n) => inDeg.get(n.id) === 0);
+  ready.sort((a, b) => tsOf(a) - tsOf(b));
+
+  const sorted: GraphNode[] = [];
+  while (ready.length > 0) {
+    const n = ready.shift()!;
+    sorted.push(n);
+    for (const kid of childrenOf.get(n.id) ?? []) {
+      if (!inDeg.has(kid)) continue;
+      const nd = inDeg.get(kid)! - 1;
+      inDeg.set(kid, nd);
+      if (nd === 0) {
+        ready.push(nodeMap.get(kid)!);
+        ready.sort((a, b) => tsOf(a) - tsOf(b));
+      }
+    }
+  }
 
   /* 3. Timeline-based lane assignment — each timeline gets a fixed lane */
   const nodeCol = new Map<string, number>();
