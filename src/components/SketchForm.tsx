@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
+import { open } from "@tauri-apps/plugin-dialog";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useAppStore } from "../stores/appStore";
@@ -172,6 +173,23 @@ export function SketchForm() {
     handleRowsChange(updated);
     setImagePickerRowIdx(null);
   }, [imagePickerRowIdx, localRows, handleRowsChange]);
+
+  const handleBrowseImage = useCallback(async (rowIndex: number) => {
+    const selected = await open({
+      multiple: false,
+      filters: [{ name: "Images", extensions: ["png", "jpg", "jpeg", "gif", "webp", "svg"] }],
+    });
+    if (!selected) return;
+    const filePath = typeof selected === "string" ? selected : selected;
+    try {
+      const relativePath = await invoke<string>("import_image", { sourcePath: filePath });
+      const updated = [...localRows];
+      updated[rowIndex] = { ...updated[rowIndex], screenshot: relativePath };
+      handleRowsChange(updated);
+    } catch (err) {
+      console.error("Failed to import image:", err);
+    }
+  }, [localRows, handleRowsChange]);
 
   /** Launch fullscreen preview on a specific monitor */
   const launchPreviewOnMonitor = useCallback(async (monitor: MonitorInfo) => {
@@ -392,6 +410,7 @@ export function SketchForm() {
             onChange={handleRowsChange}
             onCaptureScreenshot={handleCaptureScreenshot}
             onPickImage={handlePickImage}
+            onBrowseImage={handleBrowseImage}
             onSparkle={(prompt) => sendChatPrompt(prompt, { silent: true })}
             projectRoot={projectRoot}
             sketchPath={activeSketchPath ?? undefined}
@@ -463,6 +482,21 @@ export function SketchForm() {
                   ))}
                 </div>
               )}
+            </div>
+            <div className="px-3 pb-3 pt-1 border-t border-[var(--color-border)]">
+              <button
+                onClick={async () => {
+                  if (imagePickerRowIdx === null) return;
+                  setImagePickerRowIdx(null);
+                  await handleBrowseImage(imagePickerRowIdx);
+                }}
+                className="w-full flex items-center justify-center gap-1.5 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] px-3 py-2 rounded-lg border border-dashed border-[var(--color-border)] hover:border-[var(--color-accent)] hover:bg-[var(--color-accent)]/5 transition-colors"
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />
+                </svg>
+                Browse files...
+              </button>
             </div>
           </div>
         </div>

@@ -168,6 +168,35 @@ pub async fn delete_orphaned_images(state: State<'_, AppState>) -> Result<u32, S
     Ok(deleted)
 }
 
+/// Import an external image file into the project's screenshots directory.
+/// Copies the file and returns the relative path.
+#[tauri::command]
+pub async fn import_image(
+    source_path: String,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    let root = project_root(&state)?;
+    let dir = root.join(".cutready").join("screenshots");
+    std::fs::create_dir_all(&dir).map_err(|e| format!("Failed to create screenshots dir: {e}"))?;
+
+    let source = std::path::Path::new(&source_path);
+    if !source.exists() {
+        return Err(format!("Source file not found: {source_path}"));
+    }
+
+    // Preserve original filename but prefix with timestamp to avoid collisions
+    let original_name = source
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("imported.png");
+    let ts = chrono::Local::now().format("%Y%m%d_%H%M%S");
+    let filename = format!("{ts}_{original_name}");
+    let dest = dir.join(&filename);
+
+    std::fs::copy(source, &dest).map_err(|e| format!("Failed to copy image: {e}"))?;
+    Ok(format!(".cutready/screenshots/{filename}"))
+}
+
 fn base64_decode(input: &str) -> Result<Vec<u8>, String> {
     use base64::Engine;
     base64::engine::general_purpose::STANDARD

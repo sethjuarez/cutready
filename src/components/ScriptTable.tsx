@@ -49,12 +49,13 @@ interface ScriptTableProps {
   readOnly?: boolean;
   onCaptureScreenshot?: (rowIndex: number) => void;
   onPickImage?: (rowIndex: number) => void;
+  onBrowseImage?: (rowIndex: number) => void;
   onSparkle?: (prompt: string) => void;
   projectRoot?: string;
   sketchPath?: string;
 }
 
-export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreenshot, onPickImage, onSparkle, projectRoot, sketchPath }: ScriptTableProps) {
+export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreenshot, onPickImage, onBrowseImage, onSparkle, projectRoot, sketchPath }: ScriptTableProps) {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
   const focusCellAfterRender = useRef<number | null>(null);
@@ -197,6 +198,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
                   isLastRow={idx === rows.length - 1}
                   onCaptureScreenshot={onCaptureScreenshot}
                   onPickImage={onPickImage}
+                  onBrowseImage={onBrowseImage}
                   onSparkle={onSparkle}
                   projectRoot={projectRoot}
                   sketchPath={sketchPath}
@@ -269,6 +271,7 @@ function SortableRow({
   isLastRow,
   onCaptureScreenshot,
   onPickImage,
+  onBrowseImage,
   onSparkle,
   projectRoot,
   sketchPath,
@@ -285,6 +288,7 @@ function SortableRow({
   isLastRow: boolean;
   onCaptureScreenshot?: (rowIndex: number) => void;
   onPickImage?: (rowIndex: number) => void;
+  onBrowseImage?: (rowIndex: number) => void;
   onSparkle?: (prompt: string) => void;
   projectRoot?: string;
   sketchPath?: string;
@@ -478,6 +482,18 @@ function SortableRow({
                   <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
                   <circle cx="8.5" cy="8.5" r="1.5" />
                   <polyline points="21 15 16 10 5 21" />
+                </svg>
+              </button>
+            )}
+            {onBrowseImage && (
+              <button
+                onClick={() => onBrowseImage(idx)}
+                className="w-8 h-12 rounded-md border border-dashed border-[var(--color-border)] hover:border-[var(--color-accent)] hover:bg-[var(--color-accent)]/5 transition-colors flex items-center justify-center group/browse"
+                title="Browse for image file"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
+                  className="text-[var(--color-text-secondary)] group-hover/browse:text-[var(--color-accent)] transition-colors">
+                  <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />
                 </svg>
               </button>
             )}

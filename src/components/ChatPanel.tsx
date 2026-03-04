@@ -405,6 +405,8 @@ function ChatTab() {
               const args = JSON.parse(pendingToolArgsRef.current[toolName] ?? "{}");
               if (args.path) openNote(args.path);
             } catch { /* ignore parse errors */ }
+            // Signal that AI edited a note so UI can show feedback
+            window.dispatchEvent(new CustomEvent("cutready:ai-note-updated"));
           }
           break;
         }

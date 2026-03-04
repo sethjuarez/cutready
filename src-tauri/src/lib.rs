@@ -181,6 +181,7 @@ pub fn run() {
             commands::note::list_project_images,
             commands::note::delete_project_image,
             commands::note::delete_orphaned_images,
+            commands::note::import_image,
             commands::import::import_docx,
             commands::import::import_pdf,
             commands::import::import_pptx,
