@@ -8,6 +8,7 @@ import { useAppStore } from "../stores/appStore";
 import { ScriptTable } from "./ScriptTable";
 import { ScreenCaptureOverlay } from "./ScreenCaptureOverlay";
 import { SketchPreview } from "./SketchPreview";
+import { exportSketchToWord } from "../utils/exportToWord";
 import type { PlanningRow } from "../types/sketch";
 
 interface MonitorInfo {
@@ -309,7 +310,20 @@ export function SketchForm() {
             )}
           </div>
           {localRows.length > 0 && (
-            <div className="relative">
+            <div className="relative flex items-center gap-2">
+              <button
+                onClick={() => activeSketch && exportSketchToWord(activeSketch)}
+                className="flex items-center gap-1.5 shrink-0 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] px-3 py-1.5 rounded-lg border border-[var(--color-border)] hover:border-[var(--color-accent)]/40 hover:bg-[var(--color-accent)]/5 transition-colors"
+                title="Export to Word (.docx)"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+                  <polyline points="14 2 14 8 20 8" />
+                  <line x1="12" y1="18" x2="12" y2="12" />
+                  <polyline points="9 15 12 18 15 15" />
+                </svg>
+                Word
+              </button>
               <button
                 onClick={handlePreviewClick}
                 className="flex items-center gap-1.5 shrink-0 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] px-3 py-1.5 rounded-lg border border-[var(--color-border)] hover:border-[var(--color-accent)]/40 hover:bg-[var(--color-accent)]/5 transition-colors"

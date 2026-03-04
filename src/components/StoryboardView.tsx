@@ -20,6 +20,7 @@ import rehypeRaw from "rehype-raw";
 import { useAppStore } from "../stores/appStore";
 import { SketchPickerItem } from "./SketchCard";
 import { ScriptTable } from "./ScriptTable";
+import { exportStoryboardToWord } from "../utils/exportToWord";
 import type { Sketch, SketchSummary } from "../types/sketch";
 import type { PreviewSlide } from "./SketchPreview";
 
@@ -228,7 +229,34 @@ export function StoryboardView() {
             placeholder="Storyboard title..."
           />
           {activeStoryboard.items.length > 0 && (
-            <div className="relative">
+            <div className="relative flex items-center gap-2">
+              <button
+                onClick={() => {
+                  if (!activeStoryboard) return;
+                  exportStoryboardToWord(activeStoryboard, async (paths) => {
+                    const map = new Map<string, Sketch>();
+                    await Promise.all(paths.map(async (p) => {
+                      const cached = sketchCache.get(p);
+                      if (cached) { map.set(p, cached); return; }
+                      try {
+                        const sk = await invoke<Sketch>("get_sketch", { relativePath: p });
+                        map.set(p, sk);
+                      } catch { /* skip missing */ }
+                    }));
+                    return map;
+                  });
+                }}
+                className="flex items-center gap-1.5 shrink-0 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] px-3 py-1.5 rounded-lg border border-[var(--color-border)] hover:border-[var(--color-accent)]/40 hover:bg-[var(--color-accent)]/5 transition-colors"
+                title="Export to Word (.docx)"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+                  <polyline points="14 2 14 8 20 8" />
+                  <line x1="12" y1="18" x2="12" y2="12" />
+                  <polyline points="9 15 12 18 15 15" />
+                </svg>
+                Word
+              </button>
               <button
                 onClick={handlePreviewClick}
                 className="flex items-center gap-1.5 shrink-0 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] px-3 py-1.5 rounded-lg border border-[var(--color-border)] hover:border-[var(--color-accent)]/40 hover:bg-[var(--color-accent)]/5 transition-colors"
