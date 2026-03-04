@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex};
 
-use tauri::Emitter;
+use tauri::{Emitter, Manager};
 
 use models::script::ProjectView;
 use models::session::CapturedAction;
@@ -203,6 +203,19 @@ pub fn run() {
             commands::feedback::list_feedback,
             commands::feedback::clear_feedback,
         ])
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::Destroyed = event {
+                if window.label() == "main" {
+                    // Close preview and capture windows when main window closes
+                    let app = window.app_handle();
+                    for label in &["preview", "capture"] {
+                        if let Some(w) = app.get_webview_window(label) {
+                            let _ = w.destroy();
+                        }
+                    }
+                }
+            }
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
