@@ -17,14 +17,14 @@ jobs:
       - name: Get version from tag
         id: version
         run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
-      - name: Create draft release
+      - name: Create release
         id: create
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
           name: 'CutReady v${{ steps.version.outputs.VERSION }}'
           body: 'See the assets to download and install this version.'
-          draft: true
+          draft: false
           prerelease: false
 
   build:
