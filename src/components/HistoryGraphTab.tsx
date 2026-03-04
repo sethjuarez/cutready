@@ -130,6 +130,40 @@ function computeLayout(
     nodeCol.set(node.id, col);
   }
 
+  /* 3b. Reorder columns so oldest branch is leftmost (vertical) / topmost (horizontal) */
+  const timelineCreation = new Map<string, number>();
+  for (const node of sorted) {
+    const ts = new Date(node.timestamp).getTime();
+    const prev = timelineCreation.get(node.timeline);
+    if (prev === undefined || ts < prev) timelineCreation.set(node.timeline, ts);
+  }
+
+  // Dominant timeline per column (whichever has most nodes)
+  const colTlCounts = new Map<number, Map<string, number>>();
+  for (const node of sorted) {
+    const c = nodeCol.get(node.id)!;
+    if (!colTlCounts.has(c)) colTlCounts.set(c, new Map());
+    const m = colTlCounts.get(c)!;
+    m.set(node.timeline, (m.get(node.timeline) ?? 0) + 1);
+  }
+  const colDominant = new Map<number, string>();
+  for (const [c, counts] of colTlCounts) {
+    let best = "", bestN = 0;
+    for (const [tl, n] of counts) { if (n > bestN) { bestN = n; best = tl; } }
+    colDominant.set(c, best);
+  }
+
+  // Sort used columns by their dominant timeline's creation time
+  const usedCols = [...new Set(Array.from(nodeCol.values()))].sort((a, b) => a - b);
+  const sortedCols = [...usedCols].sort((a, b) => {
+    const tA = timelineCreation.get(colDominant.get(a) ?? "") ?? 0;
+    const tB = timelineCreation.get(colDominant.get(b) ?? "") ?? 0;
+    return tA - tB;
+  });
+  const colRemap = new Map<number, number>();
+  sortedCols.forEach((oldCol, newIdx) => colRemap.set(oldCol, newIdx));
+  for (const [id, c] of nodeCol) nodeCol.set(id, colRemap.get(c) ?? c);
+
   /* 4. Coordinates */
   const maxCol = Math.max(0, ...Array.from(nodeCol.values()));
   const maxRow = sorted.length - 1;
