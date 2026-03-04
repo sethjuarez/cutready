@@ -4,17 +4,17 @@ head:
   - tag: title
     content: CutReady — Demo Video Production Tool
 description: |
-  CutReady is a desktop app that turns rough demo walkthroughs into 
-  polished, production-ready video packages.
+  CutReady is a desktop app for planning and organizing demo videos 
+  with AI-powered sketch editing, storyboards, and markdown notes.
 template: splash
 editUrl: false
 lastUpdated: false
 hero:
-  title: From sketch to screen, demo-ready.
+  title: Plan your demos with AI.
   tagline: |
-    CutReady is a desktop application that helps you plan, capture, and produce 
-    polished demo videos — from initial storyboard sketches through browser recording 
-    to final export.
+    CutReady is a desktop application for planning demo videos — sketch out scenes 
+    with structured planning tables, organize them into storyboards, and use AI 
+    to refine your narrative and actions.
   image:
     html: <img src="/cutready/cutready.svg" alt="CutReady" width="280" height="280" />
   actions:
@@ -35,20 +35,20 @@ import WorkflowSteps from '../../components/WorkflowSteps.astro';
 import WorkflowStep from '../../components/WorkflowStep.astro';
 
 <WorkflowSteps>
-  <WorkflowStep title="Sketch">
-    Plan your demo with a rich editor — add narrative, actions, and reference screenshots.
+  <WorkflowStep title="Plan">
+    Create sketches with 4-column planning tables — narrative, actions, timing, and screenshots.
   </WorkflowStep>
-  <WorkflowStep title="Record">
-    Capture browser interactions automatically with Playwright-powered recording.
+  <WorkflowStep title="Organize">
+    Group sketches into storyboards with sections and drag-and-drop ordering.
+  </WorkflowStep>
+  <WorkflowStep title="Write">
+    Use markdown notes and document import to build reference material.
   </WorkflowStep>
   <WorkflowStep title="Refine">
-    AI agent cleans up actions, generates narration, and stabilizes selectors.
+    AI agents and sparkle buttons improve your narrative, actions, and structure.
   </WorkflowStep>
-  <WorkflowStep title="Produce">
-    Replay and record lossless video with synchronized audio tracks.
-  </WorkflowStep>
-  <WorkflowStep title="Export">
-    Package into FCPXML timelines for DaVinci Resolve or other editors.
+  <WorkflowStep title="Iterate">
+    Version history with branching lets you experiment without losing work.
   </WorkflowStep>
 </WorkflowSteps>
 
@@ -56,20 +56,29 @@ import WorkflowStep from '../../components/WorkflowStep.astro';
   <FeatureCard icon="/cutready/icons/planning.svg" title="Sketch Planning">
     4-column planning tables with narrative, actions, timing, and screenshot capture.
   </FeatureCard>
-  <FeatureCard icon="/cutready/icons/browser.svg" title="Browser Recording">
-    Automated Chrome/Edge interaction capture with profile detection.
+  <FeatureCard icon="/cutready/icons/storyboard.svg" title="Storyboard Management">
+    Sequence sketches into demo flows with sections and drag-and-drop ordering.
+  </FeatureCard>
+  <FeatureCard icon="/cutready/icons/notes.svg" title="Markdown Notes">
+    Built-in markdown editor with live preview, AI cleanup, and smart rich paste.
+  </FeatureCard>
+  <FeatureCard icon="/cutready/icons/planning.svg" title="AI Assistant">
+    Chat with built-in AI agents using color-coded file references and tool calls.
+  </FeatureCard>
+  <FeatureCard icon="/cutready/icons/planning.svg" title="Sparkle Buttons">
+    One-click AI improvements for titles, descriptions, and planning rows.
   </FeatureCard>
   <FeatureCard icon="/cutready/icons/capture.svg" title="Screen Capture">
     Multi-monitor screenshot support with region selection and lightbox preview.
   </FeatureCard>
-  <FeatureCard icon="/cutready/icons/storyboard.svg" title="Storyboard Management">
-    Sequence sketches into demo flows with sections and drag-and-drop ordering.
+  <FeatureCard icon="/cutready/icons/notes.svg" title="Document Import">
+    Import Word, PDF, and PowerPoint files as project reference material.
   </FeatureCard>
   <FeatureCard icon="/cutready/icons/history.svg" title="Version History">
     Git-backed document versioning with visual timeline graph and branching.
   </FeatureCard>
-  <FeatureCard icon="/cutready/icons/notes.svg" title="Markdown Notes">
-    Built-in markdown editor with live preview, AI cleanup, and smart rich paste conversion.
+  <FeatureCard icon="/cutready/icons/command.svg" title="Feedback & Debug">
+    Built-in feedback with debug log capture and GitHub Issue creation.
   </FeatureCard>
   <FeatureCard icon="/cutready/icons/crossplatform.svg" title="Cross-Platform">
     Built with Tauri v2 — runs natively on Windows, macOS, and Linux.
@@ -77,16 +86,7 @@ import WorkflowStep from '../../components/WorkflowStep.astro';
   <FeatureCard icon="/cutready/icons/command.svg" title="Command Palette">
     Quick access to all commands with Ctrl+Shift+P keyboard shortcut.
   </FeatureCard>
-  <FeatureCard icon="/cutready/icons/planning.svg" title="AI Assistant">
-    Chat with built-in AI agents using color-coded file references and tool calls.
-  </FeatureCard>
-  <FeatureCard icon="/cutready/icons/notes.svg" title="Document Import">
-    Import Word, PDF, and PowerPoint files as project reference material.
-  </FeatureCard>
-  <FeatureCard icon="/cutready/icons/planning.svg" title="Sparkle Buttons">
-    One-click AI improvements for titles, descriptions, and planning rows.
-  </FeatureCard>
-  <FeatureCard icon="/cutready/icons/command.svg" title="Feedback & Debug">
-    Built-in feedback system with debug log capture and GitHub Issue creation.
+  <FeatureCard icon="/cutready/icons/browser.svg" title="Browser Recording">
+    Automated Chrome/Edge interaction capture with profile detection.
   </FeatureCard>
 </FeatureGrid>
