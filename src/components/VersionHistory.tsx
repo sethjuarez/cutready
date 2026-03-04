@@ -27,6 +27,12 @@ export function VersionHistory() {
   const [searchQuery, setSearchQuery] = useState("");
   const [showSearch, setShowSearch] = useState(false);
 
+  // Filter to only the active timeline for a clean linear view
+  const activeTimeline = timelines.find((t) => t.is_active);
+  const activeNodes = activeTimeline
+    ? graphNodes.filter((n) => n.timeline === activeTimeline.name)
+    : graphNodes;
+
   // Build a label map: timeline name → { label, color_index }
   const timelineMap = new Map(
     timelines.map((t) => [t.name, { label: t.label, colorIndex: t.color_index }])
@@ -213,13 +219,13 @@ export function VersionHistory() {
         </div>
       )}
 
-      {/* Unified graph — all timelines */}
+      {/* Active branch — linear snapshot list */}
       <div className="flex-1 overflow-y-auto">
         <div className="py-1">
           <SnapshotGraph
             nodes={searchQuery
-              ? graphNodes.filter((n) => n.message.toLowerCase().includes(searchQuery.toLowerCase()))
-              : graphNodes}
+              ? activeNodes.filter((n) => n.message.toLowerCase().includes(searchQuery.toLowerCase()))
+              : activeNodes}
             isDirty={isDirty}
             isRewound={isRewound}
             timelineMap={timelineMap}
@@ -227,7 +233,7 @@ export function VersionHistory() {
             showRemoteBadges={hasRemote}
             onNodeClick={handleNodeClick}
           />
-          {searchQuery && graphNodes.length > 0 && graphNodes.filter((n) => n.message.toLowerCase().includes(searchQuery.toLowerCase())).length === 0 && (
+          {searchQuery && activeNodes.length > 0 && activeNodes.filter((n) => n.message.toLowerCase().includes(searchQuery.toLowerCase())).length === 0 && (
             <div className="px-4 py-6 text-center text-[10px] text-[var(--color-text-secondary)]">
               No snapshots match "{searchQuery}"
             </div>
