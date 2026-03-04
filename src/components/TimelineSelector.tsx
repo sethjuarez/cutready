@@ -148,7 +148,7 @@ export function TimelineSelector() {
               <button
                 key={t.name}
                 onClick={() => t.is_active ? setOpen(false) : handleSwitch(t.name)}
-                className={`group w-full flex items-center gap-2 px-3 py-1.5 text-left text-[11px] transition-colors ${
+                className={`group w-full flex items-center gap-2 px-3 py-1.5 text-left text-[11px] transition-colors relative ${
                   t.is_active
                     ? "bg-[var(--color-accent)]/10 text-[var(--color-accent)] font-medium"
                     : "text-[var(--color-text)] hover:bg-[var(--color-border)]/30"
@@ -165,11 +165,11 @@ export function TimelineSelector() {
                   )}
                 </span>
                 <span className="truncate flex-1">{t.label}</span>
-                <span className="text-[9px] text-[var(--color-text-secondary)] tabular-nums">
+                <span className="text-[9px] text-[var(--color-text-secondary)] tabular-nums ml-auto">
                   {t.snapshot_count} {t.snapshot_count === 1 ? "snap" : "snaps"}
                 </span>
                 {!t.is_active && t.name !== "main" && timelines.length > 1 && (
-                  <span className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <span className="absolute right-2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity bg-[var(--color-surface)] pl-1 rounded">
                     <button
                       onClick={(e) => handleMerge(t.name, t.label, e)}
                       className="hover:text-green-500 p-0.5"
