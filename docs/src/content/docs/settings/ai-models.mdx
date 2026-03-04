@@ -1,0 +1,173 @@
+---
+title: Adding AI Models
+description: How to configure AI model providers in CutReady, with a focus on Microsoft AI Foundry.
+sidebar:
+  order: 2
+---
+
+import { Aside, Badge, Steps, Tabs, TabItem } from '@astrojs/starlight/components';
+
+<Badge text="v0.3.0" variant="note" />
+
+CutReady uses large language models (LLMs) to power its AI assistant — planning
+sketches, writing narratives, improving descriptions, and managing your demo
+project. This guide covers how to connect CutReady to a model provider.
+
+## Supported Providers
+
+| Provider | Endpoint Format | Auth Methods |
+| --- | --- | --- |
+| **Azure OpenAI** | `https://your-resource.openai.azure.com` | API Key, Azure OAuth |
+| **Microsoft AI Foundry** | `https://your-hub.services.ai.azure.com/api/projects/your-project` | API Key, Azure OAuth |
+| **OpenAI** | `https://api.openai.com` (default) | API Key |
+
+<Aside type="tip">
+  **Microsoft AI Foundry** is the recommended and most tested path. It gives you
+  access to a wide catalog of models (GPT-4o, GPT-4o-mini, and more) through a
+  single project endpoint.
+</Aside>
+
+## Microsoft AI Foundry (Recommended)
+
+AI Foundry provides a unified endpoint for accessing multiple model deployments.
+CutReady auto-detects Foundry endpoints (`.services.ai.azure.com`) and adjusts
+its API calls accordingly.
+
+### Prerequisites
+
+- An Azure subscription
+- An AI Foundry hub and project ([create one here](https://ai.azure.com))
+- At least one model deployed in your project (e.g., `gpt-4o`)
+
+### Setup Steps
+
+<Steps>
+
+1. **Get your project endpoint**
+
+   In the [AI Foundry portal](https://ai.azure.com), navigate to your project.
+   Copy the endpoint URL — it looks like:
+
+   ```
+   https://your-hub.services.ai.azure.com/api/projects/your-project
+   ```
+
+2. **Open CutReady Settings**
+
+   Click the **gear icon** (⚙️) in the sidebar, then select the **AI Provider** tab.
+
+3. **Select Azure OpenAI as the provider**
+
+   CutReady uses the Azure OpenAI provider for Foundry endpoints — it auto-detects
+   the Foundry format from the URL.
+
+4. **Paste your endpoint**
+
+   Enter the full Foundry project endpoint URL in the **Endpoint** field.
+
+5. **Choose authentication**
+
+   <Tabs>
+   <TabItem label="API Key (Simplest)">
+
+   - Set **Authentication** to **API Key**
+   - Paste your Foundry project API key (found in the AI Foundry portal under
+     your project's **Keys and Endpoint** section)
+
+   </TabItem>
+   <TabItem label="Azure OAuth (Recommended)">
+
+   - Set **Authentication** to **Sign in with Azure (Entra ID)**
+   - Enter your **Tenant ID** and **Client ID**
+   - Click **Sign in with Azure** and complete the login flow
+   - CutReady will obtain and refresh tokens automatically
+
+   </TabItem>
+   </Tabs>
+
+6. **Select a model**
+
+   Click **Refresh** next to the model dropdown. CutReady will query your Foundry
+   project for available deployments. Select the model you want to use
+   (e.g., `gpt-4o`).
+
+</Steps>
+
+<Aside type="caution">
+  Make sure your deployed model supports **chat completions** and **function
+  calling** (tool use). Models like `gpt-4o` and `gpt-4o-mini` work well.
+  Embedding-only or image-only models will not work with CutReady's AI assistant.
+</Aside>
+
+### How Foundry Detection Works
+
+CutReady automatically detects Foundry endpoints by checking if the URL contains
+`.services.ai.azure.com`. When detected, it:
+
+- Uses the Foundry-compatible chat completions path
+- Queries the Foundry deployments API for available models
+- Filters to chat-capable models when populating the model dropdown
+
+No special configuration is needed — just paste the Foundry endpoint and CutReady
+handles the rest.
+
+## Azure OpenAI (Standard)
+
+For standard Azure OpenAI resources (not Foundry):
+
+<Steps>
+
+1. **Get your resource endpoint** from the Azure portal (e.g.,
+   `https://your-resource.openai.azure.com`)
+2. Set **Provider** to **Azure OpenAI**
+3. Paste the endpoint URL
+4. Choose **API Key** or **Azure OAuth** for authentication
+5. Click **Refresh** to load deployed models and select one
+
+</Steps>
+
+## OpenAI (Direct)
+
+For direct OpenAI API access:
+
+<Steps>
+
+1. Set **Provider** to **OpenAI**
+2. Leave the endpoint blank (defaults to `https://api.openai.com`)
+3. Paste your **OpenAI API key**
+4. Click **Refresh** to load available models
+
+</Steps>
+
+## Recommended Models
+
+| Model | Best For | Notes |
+| --- | --- | --- |
+| **gpt-4o** | Best quality | Recommended for planning and writing |
+| **gpt-4o-mini** | Faster responses | Good for quick edits and iterations |
+
+<Aside type="note">
+  CutReady requires models that support **function calling** (tool use). This
+  is how the AI assistant interacts with your project — reading sketches,
+  updating notes, modifying planning rows, etc.
+</Aside>
+
+## Troubleshooting
+
+### "No models found"
+
+- Verify your endpoint URL is correct
+- Check that you have at least one model deployed
+- Ensure your API key or OAuth token has permission to list deployments
+
+### "Authentication failed"
+
+- For API Key: verify the key is correct and not expired
+- For OAuth: check that your Tenant ID and Client ID are correct, and that
+  the app registration has the required permissions
+
+### Model not responding
+
+- Check the debug panel (click the bug icon in the title bar) for error details
+- Ensure the selected model supports chat completions
+- Verify your Azure subscription/OpenAI account has available quota
