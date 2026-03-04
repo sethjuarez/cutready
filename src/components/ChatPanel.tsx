@@ -5,6 +5,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useAppStore } from "../stores/appStore";
 import { useSettings, type AgentPreset } from "../hooks/useSettings";
+import { VersionHistory } from "./VersionHistory";
 import { SketchIcon, StoryboardIcon, NoteIcon } from "./Icons";
 import type { ChatMessage, ChatSessionSummary, ToolCall } from "../types/sketch";
 
@@ -25,7 +26,7 @@ interface FileReference {
   webStatus?: "loading" | "ready" | "error";
 }
 
-type SecondaryTab = "chat" | "sessions";
+type SecondaryTab = "chat" | "sessions" | "saves";
 
 // ── Built-in Agent Presets ───────────────────────────────────────
 
@@ -183,6 +184,16 @@ function IconPlus({ size = 14 }: { size?: number }) {
   );
 }
 
+function IconSave({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+      <polyline points="17 21 17 13 7 13 7 21" />
+      <polyline points="7 3 7 8 15 8" />
+    </svg>
+  );
+}
+
 function IconPaperclip({ size = 14 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -282,13 +293,26 @@ export function ChatPanel() {
           onClick={() => setActiveTab("sessions")}
         >
           <IconHistory size={12} />
-          History
+          Chats
+        </button>
+        <button
+          className={`flex items-center gap-1.5 px-3 py-2 text-[11px] font-medium transition-colors border-b-2 -mb-px ${
+            activeTab === "saves"
+              ? "border-[var(--color-accent)] text-[var(--color-text)]"
+              : "border-transparent text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:border-[var(--color-text-secondary)]/30"
+          }`}
+          onClick={() => setActiveTab("saves")}
+        >
+          <IconSave size={12} />
+          Saves
         </button>
       </div>
 
       {/* Tab content */}
       <div className="flex-1 min-h-0">
-        {activeTab === "chat" ? <ChatTab /> : <ChatHistory onOpenSession={() => setActiveTab("chat")} />}
+        {activeTab === "chat" && <ChatTab />}
+        {activeTab === "sessions" && <ChatHistory onOpenSession={() => setActiveTab("chat")} />}
+        {activeTab === "saves" && <VersionHistory />}
       </div>
     </div>
   );
