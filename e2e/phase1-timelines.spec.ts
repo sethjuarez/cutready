@@ -1,0 +1,81 @@
+/**
+ * Phase 1 E2E tests — Timeline Switcher (solo mode).
+ * Validates that timelines work without a remote configured.
+ */
+import { test, expect } from "@playwright/test";
+
+test.describe("Phase 1 — Solo Timeline Switcher", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto("/");
+    await page.waitForSelector("#root", { timeout: 10_000 });
+    await page.getByText("mock-project", { exact: true }).click();
+    await page.waitForSelector('[title="Settings"]', { timeout: 5_000 });
+    await page.getByText("Demo Introduction").first().click();
+    await page.waitForTimeout(500);
+    await page.locator('[title="Toggle Secondary Panel"]').click();
+    await page.waitForTimeout(300);
+    await page.getByRole("button", { name: "Snapshots" }).click();
+    await page.waitForTimeout(500);
+  });
+
+  test("timeline selector hidden with single timeline", async ({ page }) => {
+    // Default mock has 1 timeline → selector hidden
+    const branchBtn = page.locator('button[title^="Timeline:"]');
+    await expect(branchBtn).not.toBeVisible();
+
+    await page.screenshot({
+      path: "e2e/screenshots/v0.5.0/snapshots-panel-solo.png",
+    });
+  });
+
+  test("timeline selector visible with multiple timelines", async ({ page }) => {
+    // Override list_timelines to return 2 timelines, then reload timelines
+    await page.evaluate(() => {
+      (window as any).__MOCK_OVERRIDES__["list_timelines"] = [
+        { name: "main", label: "Main", is_active: true, snapshot_count: 3, color_index: 0 },
+        { name: "timeline/fork-143022", label: "New direction", is_active: false, snapshot_count: 1, color_index: 1 },
+      ];
+    });
+    // Re-trigger timeline load by switching to Snapshots tab again
+    await page.getByRole("button", { name: "Chat" }).click();
+    await page.waitForTimeout(200);
+    await page.getByRole("button", { name: "Snapshots" }).click();
+    await page.waitForTimeout(500);
+
+    const branchBtn = page.locator('button[title^="Timeline:"]');
+    await expect(branchBtn).toBeVisible({ timeout: 3_000 });
+
+    // Open the dropdown
+    await branchBtn.click();
+    await page.waitForTimeout(300);
+
+    await page.screenshot({
+      path: "e2e/screenshots/v0.5.0/timeline-switcher-solo.png",
+    });
+  });
+
+  test("snapshot save dialog shows fork prompt when rewound", async ({ page }) => {
+    // Override is_rewound to return true
+    await page.evaluate(() => {
+      (window as any).__MOCK_OVERRIDES__["is_rewound"] = true;
+      (window as any).__MOCK_OVERRIDES__["has_unsaved_changes"] = true;
+    });
+    // Re-enter Snapshots to pick up the rewound state
+    await page.getByRole("button", { name: "Chat" }).click();
+    await page.waitForTimeout(200);
+    await page.getByRole("button", { name: "Snapshots" }).click();
+    await page.waitForTimeout(500);
+
+    // Ctrl+S opens the snapshot dialog
+    await page.keyboard.press("Control+s");
+    await page.waitForTimeout(500);
+
+    // Expect the fork naming input
+    const forkInput = page.locator('input[placeholder="Name this line of thinking..."]');
+    await expect(forkInput).toBeVisible({ timeout: 3_000 });
+
+    await page.screenshot({
+      path: "e2e/screenshots/v0.5.0/fork-created-from-rewound.png",
+    });
+  });
+});

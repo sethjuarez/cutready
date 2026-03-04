@@ -73,8 +73,23 @@ const mockSettingsStore: Record<string, unknown> = {
   aiAgents: [],
 };
 
+/**
+ * Mock overrides — set from E2E tests via `window.__MOCK_OVERRIDES__`.
+ * Keys are command names, values are the return values.
+ */
+const _overrides: Record<string, unknown> = {};
+
+// Expose for E2E tests to set overrides
+if (typeof window !== "undefined") {
+  (window as any).__MOCK_OVERRIDES__ = _overrides;
+}
+
 /** Mock handler for Tauri invoke calls */
 function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
+  // Check for E2E overrides first
+  const overrides = (typeof window !== "undefined" && (window as any).__MOCK_OVERRIDES__) || _overrides;
+  if (cmd in overrides) return overrides[cmd];
+
   switch (cmd) {
     case "open_project":
     case "get_project":
