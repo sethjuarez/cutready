@@ -366,7 +366,7 @@ export function StoryboardView() {
                           sketch={sketchMap.get(item.path) ?? makePlaceholder(item.path)}
                           fullSketch={sketchCache.get(item.path)}
                           onOpen={() => openSketch(item.path)}
-                          onRemove={() => removeFromStoryboard(idx)}
+                          onRemove={() => { if (confirm("Remove this sketch from the storyboard?")) removeFromStoryboard(idx); }}
                           projectRoot={currentProject?.root}
                           dragListeners={dragListeners}
                           collapsed={collapsedItems.has(idx)}

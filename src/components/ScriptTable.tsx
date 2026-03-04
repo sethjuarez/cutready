@@ -59,6 +59,43 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
   const [activeId, setActiveId] = useState<string | null>(null);
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
   const focusCellAfterRender = useRef<number | null>(null);
+  const [undoToast, setUndoToast] = useState<string | null>(null);
+  const undoToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ── Undo stack ──
+  const undoStack = useRef<PlanningRow[][]>([]);
+  const MAX_UNDO = 30;
+
+  const pushUndo = useCallback(() => {
+    undoStack.current = [...undoStack.current.slice(-(MAX_UNDO - 1)), structuredClone(rowsRef.current)];
+  }, []);
+
+  const popUndo = useCallback(() => {
+    if (undoStack.current.length === 0) return;
+    const prev = undoStack.current.pop()!;
+    onChange(prev);
+  }, [onChange]);
+
+  // Ctrl+Z handler
+  useEffect(() => {
+    if (readOnly) return;
+    const handleKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "z" && !e.shiftKey) {
+        if (undoStack.current.length > 0) {
+          e.preventDefault();
+          popUndo();
+        }
+      }
+    };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [readOnly, popUndo]);
+
+  const showUndoToast = useCallback((msg: string) => {
+    setUndoToast(msg);
+    if (undoToastTimer.current) clearTimeout(undoToastTimer.current);
+    undoToastTimer.current = setTimeout(() => setUndoToast(null), 4000);
+  }, []);
 
   useEffect(() => {
     if (!lightboxSrc) return;
@@ -106,32 +143,36 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
 
   const updateRow = useCallback(
     (index: number, field: keyof PlanningRow, value: string) => {
+      pushUndo();
       const updated = rowsRef.current.map((r, i) =>
         i === index ? { ...r, [field]: value } : r,
       );
       onChange(updated);
     },
-    [onChange],
+    [onChange, pushUndo],
   );
 
   const addRow = useCallback(
     (afterIndex: number) => {
+      pushUndo();
       const updated = [...rowsRef.current];
       updated.splice(afterIndex + 1, 0, emptyRow());
       // Schedule focus on the new row's Time cell
       focusCellAfterRender.current = (afterIndex + 1) * 3;
       onChange(updated);
     },
-    [onChange],
+    [onChange, pushUndo],
   );
 
   const deleteRow = useCallback(
     (index: number) => {
       if (rowsRef.current.length <= 1) return;
+      pushUndo();
       const updated = rowsRef.current.filter((_, i) => i !== index);
       onChange(updated);
+      showUndoToast("Row deleted — Ctrl+Z to undo");
     },
-    [onChange],
+    [onChange, pushUndo, showUndoToast],
   );
 
   const handleDragEnd = useCallback(
@@ -142,12 +183,13 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
       const oldIndex = rowIds.indexOf(active.id as string);
       const newIndex = rowIds.indexOf(over.id as string);
       if (oldIndex === -1 || newIndex === -1) return;
+      pushUndo();
       const updated = [...rowsRef.current];
       const [moved] = updated.splice(oldIndex, 1);
       updated.splice(newIndex, 0, moved);
       onChange(updated);
     },
-    [onChange, rowIds],
+    [onChange, rowIds, pushUndo],
   );
 
   const activeIdx = activeId ? rowIds.indexOf(activeId) : -1;
@@ -250,6 +292,25 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
               <line x1="18" y1="6" x2="6" y2="18" />
               <line x1="6" y1="6" x2="18" y2="18" />
             </svg>
+          </button>
+        </div>
+      )}
+
+      {/* Undo toast */}
+      {undoToast && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[9999] flex items-center gap-2 px-3 py-2 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] shadow-lg text-[12px] text-[var(--color-text)]">
+          <span>{undoToast}</span>
+          <button
+            onClick={() => { popUndo(); setUndoToast(null); }}
+            className="px-2 py-0.5 rounded text-[11px] font-medium text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 transition-colors"
+          >
+            Undo
+          </button>
+          <button
+            onClick={() => setUndoToast(null)}
+            className="p-0.5 text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors"
+          >
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
           </button>
         </div>
       )}
