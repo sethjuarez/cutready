@@ -3,6 +3,21 @@ import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  useSortable,
+  horizontalListSortingStrategy,
+  arrayMove,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { useAppStore } from "../stores/appStore";
 import { useSettings, type AgentPreset } from "../hooks/useSettings";
 import { VersionHistory } from "./VersionHistory";
@@ -279,7 +294,6 @@ function loadTabOrder(): SecondaryTab[] {
     const raw = localStorage.getItem(TAB_ORDER_KEY);
     if (raw) {
       const arr = JSON.parse(raw) as SecondaryTab[];
-      // Validate — must contain exactly the known tabs
       const ids = TAB_DEFS.map((t) => t.id);
       if (arr.length === ids.length && ids.every((id) => arr.includes(id))) return arr;
     }
@@ -287,59 +301,75 @@ function loadTabOrder(): SecondaryTab[] {
   return TAB_DEFS.map((t) => t.id);
 }
 
+function SortableTab({ tab, isActive, onClick }: { tab: typeof TAB_DEFS[number]; isActive: boolean; onClick: () => void }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: tab.id });
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.4 : 1,
+  };
+
+  return (
+    <button
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      className={`flex items-center gap-1.5 px-3 py-2 text-[11px] font-medium transition-colors border-b-2 -mb-px cursor-grab active:cursor-grabbing ${
+        isActive
+          ? "border-[var(--color-accent)] text-[var(--color-text)]"
+          : "border-transparent text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:border-[var(--color-text-secondary)]/30"
+      }`}
+      onClick={onClick}
+    >
+      {tab.icon(12)}
+      {tab.label}
+    </button>
+  );
+}
+
 export function ChatPanel() {
   const [activeTab, setActiveTab] = useState<SecondaryTab>("chat");
   const [tabOrder, setTabOrder] = useState<SecondaryTab[]>(loadTabOrder);
-  const dragRef = useRef<SecondaryTab | null>(null);
-  const [dragOver, setDragOver] = useState<SecondaryTab | null>(null);
 
-  const reorder = useCallback((from: SecondaryTab, to: SecondaryTab) => {
-    if (from === to) return;
-    setTabOrder((prev) => {
-      const next = [...prev];
-      const fi = next.indexOf(from);
-      const ti = next.indexOf(to);
-      next.splice(fi, 1);
-      next.splice(ti, 0, from);
-      localStorage.setItem(TAB_ORDER_KEY, JSON.stringify(next));
-      return next;
-    });
-  }, []);
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+  );
 
   const orderedTabs = useMemo(
     () => tabOrder.map((id) => TAB_DEFS.find((t) => t.id === id)!),
     [tabOrder],
   );
 
+  const handleDragEnd = useCallback((event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    setTabOrder((prev) => {
+      const oldIndex = prev.indexOf(active.id as SecondaryTab);
+      const newIndex = prev.indexOf(over.id as SecondaryTab);
+      const next = arrayMove(prev, oldIndex, newIndex);
+      localStorage.setItem(TAB_ORDER_KEY, JSON.stringify(next));
+      return next;
+    });
+  }, []);
+
   return (
     <div className="flex flex-col h-full bg-[var(--color-surface-inset)]">
       {/* Tab bar — draggable underline tabs */}
-      <div className="flex items-stretch border-b border-[var(--color-border)] shrink-0">
-        {orderedTabs.map((tab) => (
-          <button
-            key={tab.id}
-            draggable
-            onDragStart={() => { dragRef.current = tab.id; }}
-            onDragOver={(e) => { e.preventDefault(); setDragOver(tab.id); }}
-            onDragLeave={() => setDragOver(null)}
-            onDrop={() => {
-              if (dragRef.current) reorder(dragRef.current, tab.id);
-              dragRef.current = null;
-              setDragOver(null);
-            }}
-            onDragEnd={() => { dragRef.current = null; setDragOver(null); }}
-            className={`flex items-center gap-1.5 px-3 py-2 text-[11px] font-medium transition-colors border-b-2 -mb-px cursor-grab active:cursor-grabbing ${
-              activeTab === tab.id
-                ? "border-[var(--color-accent)] text-[var(--color-text)]"
-                : "border-transparent text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:border-[var(--color-text-secondary)]/30"
-            } ${dragOver === tab.id && dragRef.current !== tab.id ? "bg-[var(--color-accent)]/10" : ""}`}
-            onClick={() => setActiveTab(tab.id)}
-          >
-            {tab.icon(12)}
-            {tab.label}
-          </button>
-        ))}
-      </div>
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        <SortableContext items={tabOrder} strategy={horizontalListSortingStrategy}>
+          <div className="flex items-stretch border-b border-[var(--color-border)] shrink-0">
+            {orderedTabs.map((tab) => (
+              <SortableTab
+                key={tab.id}
+                tab={tab}
+                isActive={activeTab === tab.id}
+                onClick={() => setActiveTab(tab.id)}
+              />
+            ))}
+          </div>
+        </SortableContext>
+      </DndContext>
 
       {/* Tab content */}
       <div className="flex-1 min-h-0">
