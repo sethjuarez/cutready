@@ -48,9 +48,9 @@ function computeLayout(
   rawNodes: GraphNode[],
   timelineMap: Map<string, TimelineInfo>,
   dir: LayoutDir,
-): { nodes: LayoutNode[]; edges: LayoutEdge[]; width: number; height: number } {
+): { nodes: LayoutNode[]; edges: LayoutEdge[]; width: number; height: number; textOffset: number } {
   if (rawNodes.length === 0)
-    return { nodes: [], edges: [], width: 0, height: 0 };
+    return { nodes: [], edges: [], width: 0, height: 0, textOffset: PAD };
 
   /* 1. Deduplicate, collect branch labels */
   const uniqueMap = new Map<string, GraphNode>();
@@ -163,12 +163,12 @@ function computeLayout(
   const laneGap = dir === "vertical" ? LANE_GAP_V : LANE_GAP_H;
   const graphLanes = PAD + (maxCol + 1) * laneGap;
   const graphLen = PAD + maxRow * ROW_GAP;
-  const badgePad = 100;
+  const textOffset = graphLanes + 12; // x where vertical labels start
 
-  const w = dir === "vertical" ? graphLanes + badgePad : graphLen + PAD * 2;
-  const h = dir === "vertical" ? graphLen + PAD * 2 : graphLanes + badgePad;
+  const w = dir === "vertical" ? textOffset + 280 : graphLen + PAD * 2;
+  const h = dir === "vertical" ? graphLen + PAD * 2 : graphLanes + 120;
 
-  return { nodes: layoutNodes, edges, width: w, height: h };
+  return { nodes: layoutNodes, edges, width: w, height: h, textOffset };
 }
 
 /* ── Helpers ──────────────────────────────────────────────────────── */
@@ -453,6 +453,25 @@ export function HistoryGraphTab() {
                       </g>
                     );
                   })}
+
+                  {/* Truncated commit message label */}
+                  {dir === "vertical" ? (
+                    <text x={layout.textOffset} y={y + 1} dominantBaseline="middle" fontSize={9}
+                      fill={isHead ? "var(--color-text)" : "var(--color-text-secondary)"}
+                      fontWeight={isHead ? 600 : 400} opacity={0.85}>
+                      {node.message.length > 36 ? node.message.substring(0, 36) + "…" : node.message}
+                    </text>
+                  ) : (
+                    <text
+                      x={x + r + 4} y={y + r + 4}
+                      fontSize={8}
+                      fill={isHead ? "var(--color-text)" : "var(--color-text-secondary)"}
+                      fontWeight={isHead ? 600 : 400} opacity={0.85}
+                      transform={`rotate(30, ${x + r + 4}, ${y + r + 4})`}
+                    >
+                      {node.message.length > 20 ? node.message.substring(0, 20) + "…" : node.message}
+                    </text>
+                  )}
                 </g>
               );
             })}
