@@ -30,7 +30,8 @@ interface LayoutEdge {
 /* ── Constants ────────────────────────────────────────────────────── */
 
 const ROW_GAP = 36;
-const LANE_GAP = 24;
+const LANE_GAP_V = 24;
+const LANE_GAP_H = 48;
 const PAD = 32;
 const NODE_R = 5;
 const HEAD_R = 7;
@@ -130,35 +131,46 @@ function computeLayout(
     nodeCol.set(node.id, col);
   }
 
-  /* 3b. Reorder columns so oldest branch is leftmost (vertical) / topmost (horizontal) */
-  const timelineCreation = new Map<string, number>();
-  for (const node of sorted) {
-    const ts = new Date(node.timestamp).getTime();
-    const prev = timelineCreation.get(node.timeline);
-    if (prev === undefined || ts < prev) timelineCreation.set(node.timeline, ts);
-  }
-
-  // Dominant timeline per column (whichever has most nodes)
-  const colTlCounts = new Map<number, Map<string, number>>();
+  /* 3b. Reorder columns: active branch lane 0, others by creation time */
+  // Find each timeline's primary column (most nodes) and earliest commit
+  const tlColCounts = new Map<string, Map<number, number>>();
+  const tlCreation = new Map<string, number>();
   for (const node of sorted) {
     const c = nodeCol.get(node.id)!;
-    if (!colTlCounts.has(c)) colTlCounts.set(c, new Map());
-    const m = colTlCounts.get(c)!;
-    m.set(node.timeline, (m.get(node.timeline) ?? 0) + 1);
+    if (!tlColCounts.has(node.timeline)) tlColCounts.set(node.timeline, new Map());
+    const m = tlColCounts.get(node.timeline)!;
+    m.set(c, (m.get(c) ?? 0) + 1);
+    const ts = new Date(node.timestamp).getTime();
+    const prev = tlCreation.get(node.timeline);
+    if (prev === undefined || ts < prev) tlCreation.set(node.timeline, ts);
   }
-  const colDominant = new Map<number, string>();
-  for (const [c, counts] of colTlCounts) {
-    let best = "", bestN = 0;
-    for (const [tl, n] of counts) { if (n > bestN) { bestN = n; best = tl; } }
-    colDominant.set(c, best);
+  const tlPrimaryCol = new Map<string, number>();
+  for (const [tl, counts] of tlColCounts) {
+    let bestCol = 0, bestN = 0;
+    for (const [c, n] of counts) { if (n > bestN) { bestN = n; bestCol = c; } }
+    tlPrimaryCol.set(tl, bestCol);
   }
 
-  // Sort used columns by their dominant timeline's creation time
+  // Build desired column order: active timeline's col first, then by creation time
+  const activeTl = [...timelineMap.values()].find((t) => t.is_active)?.name;
+  const activeCol = activeTl ? tlPrimaryCol.get(activeTl) : undefined;
+
   const usedCols = [...new Set(Array.from(nodeCol.values()))].sort((a, b) => a - b);
+  // Find dominant timeline for each column
+  const colDom = new Map<number, string>();
+  for (const col of usedCols) {
+    let bestTl = "", bestN = 0;
+    for (const [tl, m] of tlColCounts) {
+      const n = m.get(col) ?? 0;
+      if (n > bestN) { bestN = n; bestTl = tl; }
+    }
+    colDom.set(col, bestTl);
+  }
+
   const sortedCols = [...usedCols].sort((a, b) => {
-    const tA = timelineCreation.get(colDominant.get(a) ?? "") ?? 0;
-    const tB = timelineCreation.get(colDominant.get(b) ?? "") ?? 0;
-    return tA - tB;
+    if (a === activeCol) return -1;
+    if (b === activeCol) return 1;
+    return (tlCreation.get(colDom.get(a) ?? "") ?? 0) - (tlCreation.get(colDom.get(b) ?? "") ?? 0);
   });
   const colRemap = new Map<number, number>();
   sortedCols.forEach((oldCol, newIdx) => colRemap.set(oldCol, newIdx));
@@ -174,8 +186,8 @@ function computeLayout(
     const colorIndex = tInfo?.color_index ?? col;
 
     const [x, y] = dir === "vertical"
-      ? [PAD + col * LANE_GAP, PAD + (maxRow - row) * ROW_GAP]
-      : [PAD + (maxRow - row) * ROW_GAP, PAD + col * LANE_GAP];
+      ? [PAD + col * LANE_GAP_V, PAD + (maxRow - row) * ROW_GAP]
+      : [PAD + (maxRow - row) * ROW_GAP, PAD + col * LANE_GAP_H];
 
     return { node, col, row, x, y, colorIndex, branchLabels: tipLabels.get(node.id) ?? [] };
   });
@@ -200,12 +212,13 @@ function computeLayout(
   }
 
   /* 6. Bounds */
-  const graphLanes = PAD + (maxCol + 1) * LANE_GAP;
+  const laneGap = dir === "vertical" ? LANE_GAP_V : LANE_GAP_H;
+  const graphLanes = PAD + (maxCol + 1) * laneGap;
   const graphLen = PAD + maxRow * ROW_GAP;
   const labelPad = dir === "vertical" ? 360 : 60;
 
   const w = dir === "vertical" ? graphLanes + labelPad : graphLen + PAD + labelPad;
-  const h = dir === "vertical" ? graphLen + PAD + 20 : graphLanes + 80;
+  const h = dir === "vertical" ? graphLen + PAD + 20 : graphLanes + 140;
 
   return { nodes: layoutNodes, edges, width: w, height: h };
 }
@@ -273,7 +286,7 @@ export function HistoryGraphTab() {
   // Text label x-offset (vertical mode): right of rightmost lane
   const textX = useMemo(() => {
     const maxCol = layout.nodes.reduce((m, n) => Math.max(m, n.col), 0);
-    return PAD + (maxCol + 1) * LANE_GAP + 12;
+    return PAD + (maxCol + 1) * LANE_GAP_V + 12;
   }, [layout]);
 
   /* d3 zoom — Ctrl+wheel to zoom, drag to pan */
@@ -355,13 +368,8 @@ export function HistoryGraphTab() {
   /* ── Render ───────────────────────────────────────── */
   return (
     <div className="flex flex-col h-full bg-[var(--color-bg)]">
-      {/* Header */}
-      <div className="flex items-center gap-3 px-4 py-2 border-b border-[var(--color-border)] bg-[var(--color-surface)] shrink-0">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <circle cx="6" cy="6" r="2.5" /><circle cx="18" cy="10" r="2.5" /><circle cx="6" cy="18" r="2.5" />
-          <path d="M6 8.5v7" /><path d="M6 8.5c0 3 4 4.5 9.5 4" />
-        </svg>
-        <h2 className="text-sm font-semibold text-[var(--color-text)]">History</h2>
+      {/* Toolbar */}
+      <div className="flex items-center gap-3 px-4 py-1.5 border-b border-[var(--color-border)] bg-[var(--color-surface)] shrink-0">
         <span className="text-[10px] text-[var(--color-text-secondary)]">
           {layout.nodes.length} snapshot{layout.nodes.length !== 1 ? "s" : ""} · {timelines.length} timeline{timelines.length !== 1 ? "s" : ""}
         </span>
@@ -508,10 +516,14 @@ export function HistoryGraphTab() {
                       {node.message.length > 48 ? node.message.substring(0, 48) + "…" : node.message}
                     </text>
                   ) : (
-                    <text x={x} y={y + r + 14} textAnchor="middle" fontSize={8}
+                    <text
+                      x={x + r + 4} y={y + r + 4}
+                      fontSize={8}
                       fill={isHead ? "var(--color-text)" : "var(--color-text-secondary)"}
-                      fontWeight={isHead ? 600 : 400}>
-                      {node.message.length > 24 ? node.message.substring(0, 24) + "…" : node.message}
+                      fontWeight={isHead ? 600 : 400}
+                      transform={`rotate(35, ${x + r + 4}, ${y + r + 4})`}
+                    >
+                      {node.message.length > 28 ? node.message.substring(0, 28) + "…" : node.message}
                     </text>
                   )}
 
