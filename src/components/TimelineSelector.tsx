@@ -112,7 +112,7 @@ export function TimelineSelector() {
       <button
         onClick={() => setOpen(!open)}
         className="flex items-center gap-1.5 px-2 py-1 rounded text-[10px] text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-border)]/50 transition-colors max-w-[140px]"
-        title={`Timeline: ${active?.label ?? "main"}`}
+        title={`Branch: ${active?.label ?? "main"}`}
       >
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
           <line x1="6" y1="3" x2="6" y2="15" />
@@ -136,7 +136,7 @@ export function TimelineSelector() {
                 ref={filterRef}
                 value={filter}
                 onChange={(e) => setFilter(e.target.value)}
-                placeholder="Filter timelines…"
+                placeholder="Filter branches…"
                 className="w-full px-2 py-1 rounded text-[10px] bg-[var(--color-bg)] border border-[var(--color-border)] text-[var(--color-text)] placeholder:text-[var(--color-text-secondary)]/50 outline-none focus:border-[var(--color-accent)]"
               />
             </div>
@@ -154,14 +154,19 @@ export function TimelineSelector() {
                     : "text-[var(--color-text)] hover:bg-[var(--color-border)]/30"
                 }`}
               >
-                {t.is_active && (
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                )}
+                {/* Consistent icon area */}
+                <span className="w-[10px] shrink-0 flex items-center justify-center">
+                  {t.is_active ? (
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                  ) : (
+                    <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-text-secondary)]/30" />
+                  )}
+                </span>
                 <span className="truncate flex-1">{t.label}</span>
-                <span className="text-[9px] text-[var(--color-text-secondary)]">
-                  {t.snapshot_count}
+                <span className="text-[9px] text-[var(--color-text-secondary)] tabular-nums">
+                  {t.snapshot_count} {t.snapshot_count === 1 ? "snap" : "snaps"}
                 </span>
                 {!t.is_active && t.name !== "main" && timelines.length > 1 && (
                   <span className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -198,7 +203,7 @@ export function TimelineSelector() {
             ))}
             {filtered.length === 0 && (
               <div className="px-3 py-2 text-[10px] text-[var(--color-text-secondary)]">
-                No timelines match "{filter}"
+                No branches match "{filter}"
               </div>
             )}
           </div>
@@ -211,7 +216,7 @@ export function TimelineSelector() {
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleCreate()}
-                  placeholder="Timeline name…"
+                  placeholder="Branch name…"
                   className="flex-1 px-2 py-1 rounded text-[10px] bg-[var(--color-bg)] border border-[var(--color-border)] text-[var(--color-text)] placeholder:text-[var(--color-text-secondary)]/50 outline-none focus:border-[var(--color-accent)]"
                   autoFocus
                 />
@@ -230,7 +235,7 @@ export function TimelineSelector() {
                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                   <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
                 </svg>
-                New Timeline
+                New Branch
               </button>
             )}
           </div>
