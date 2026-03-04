@@ -419,40 +419,63 @@ function SortableRow({
               className="w-full h-full object-cover"
             />
             {!readOnly && (
-              <div className="absolute inset-0 bg-black/50 opacity-0 group-hover/ss:opacity-100 transition-opacity flex items-center justify-center gap-1" onClick={(e) => e.stopPropagation()}>
+              <div className="absolute inset-0 bg-black/50 opacity-0 group-hover/ss:opacity-100 transition-opacity flex items-center justify-center gap-0.5 flex-wrap" onClick={(e) => e.stopPropagation()}>
+                {/* View */}
                 <button
                   onClick={() => {
                     const src = projectRoot ? convertFileSrc(`${projectRoot}/${row.screenshot}`) : row.screenshot!;
                     onImageClick(src);
                   }}
                   className="p-0.5 text-white/80 hover:text-white"
-                  title="Preview"
+                  title="View image"
                 >
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="11" cy="11" r="8" />
-                    <line x1="21" y1="21" x2="16.65" y2="16.65" />
-                    <line x1="11" y1="8" x2="11" y2="14" />
-                    <line x1="8" y1="11" x2="14" y2="11" />
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
                   </svg>
                 </button>
+                {/* Re-capture */}
                 <button
                   onClick={() => onCaptureScreenshot?.(idx)}
                   className="p-0.5 text-white/80 hover:text-white"
-                  title="Re-capture"
+                  title="Re-capture screenshot"
                 >
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z" />
                     <circle cx="12" cy="13" r="4" />
                   </svg>
                 </button>
+                {/* Pick from project */}
+                {onPickImage && (
+                  <button
+                    onClick={() => onPickImage(idx)}
+                    className="p-0.5 text-white/80 hover:text-white"
+                    title="Pick from project images"
+                  >
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><circle cx="8.5" cy="8.5" r="1.5" /><polyline points="21 15 16 10 5 21" />
+                    </svg>
+                  </button>
+                )}
+                {/* Browse filesystem */}
+                {onBrowseImage && (
+                  <button
+                    onClick={() => onBrowseImage(idx)}
+                    className="p-0.5 text-white/80 hover:text-white"
+                    title="Browse for image file"
+                  >
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />
+                    </svg>
+                  </button>
+                )}
+                {/* Remove */}
                 <button
                   onClick={() => updateRow(idx, "screenshot", "")}
                   className="p-0.5 text-white/80 hover:text-red-400"
                   title="Remove screenshot"
                 >
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <line x1="18" y1="6" x2="6" y2="18" />
-                    <line x1="6" y1="6" x2="18" y2="18" />
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
                   </svg>
                 </button>
               </div>
