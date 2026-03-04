@@ -131,6 +131,18 @@ pub fn all_tools() -> Vec<ToolDefinition> {
                 "required": ["category", "feedback"]
             }),
         ),
+        tool_def(
+            "update_note",
+            "Update the full content of an existing note, or create a new note. Use this to clean up, restructure, or rewrite note content.",
+            json!({
+                "type": "object",
+                "properties": {
+                    "path": { "type": "string", "description": "Relative path to the note. Use a path from list_project_files to update, or a new filename like 'my-note.md' to create" },
+                    "content": { "type": "string", "description": "The full markdown content for the note" }
+                },
+                "required": ["path", "content"]
+            }),
+        ),
     ]
 }
 
@@ -161,6 +173,7 @@ pub fn execute_tool(call: &ToolCall, project_root: &Path) -> String {
         "update_planning_row" => exec_update_planning_row(project_root, &args),
         "list_project_images" => exec_list_project_images(project_root),
         "save_feedback" => exec_save_feedback(&args),
+        "update_note" => exec_update_note(project_root, &args),
         other => format!("Unknown tool: {other}"),
     }
 }
@@ -185,7 +198,7 @@ fn exec_list_project_files(root: &Path) -> String {
 
     if let Ok(notes) = project::scan_notes(root) {
         out.push_str("\n## Notes\n");
-        out.push_str("Use the exact path value with read_note.\n");
+        out.push_str("Use the exact path value with read_note or update_note.\n");
         for n in &notes {
             out.push_str(&format!("- path: \"{}\" — {}\n", n.path, n.title));
         }
@@ -414,5 +427,30 @@ fn exec_save_feedback(args: &Value) -> String {
             Err(e) => format!("Error writing feedback: {e}"),
         },
         Err(e) => format!("Serialization error: {e}"),
+    }
+}
+
+fn exec_update_note(root: &Path, args: &Value) -> String {
+    let path = match args.get("path").and_then(|v| v.as_str()) {
+        Some(p) => resolve_path(root, p),
+        None => return "Error: missing 'path' argument".into(),
+    };
+    let content = match args.get("content").and_then(|v| v.as_str()) {
+        Some(c) => c,
+        None => return "Error: missing 'content' argument".into(),
+    };
+
+    // Ensure parent directories exist for new notes
+    if let Some(parent) = path.parent() {
+        if !parent.exists() {
+            if let Err(e) = std::fs::create_dir_all(parent) {
+                return format!("Error creating directories: {e}");
+            }
+        }
+    }
+
+    match project::write_note(&path, content) {
+        Ok(()) => format!("Updated note at {}", path.display()),
+        Err(e) => format!("Error writing note: {e}"),
     }
 }

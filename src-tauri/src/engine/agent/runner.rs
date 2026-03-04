@@ -28,6 +28,9 @@ pub enum AgentEvent {
     /// A text delta streamed from the LLM.
     #[serde(rename = "delta")]
     Delta { content: String },
+    /// A reasoning/thinking delta streamed from the LLM.
+    #[serde(rename = "thinking")]
+    Thinking { content: String },
     /// Status update (thinking, calling tools, etc.)
     #[serde(rename = "status")]
     Status { message: String },
@@ -132,6 +135,11 @@ fn run_with_depth<'a>(
 
                 for chunk in chunks {
                     for choice in &chunk.choices {
+                        if let Some(text) = choice.delta.reasoning_content.as_deref() {
+                            emit(AgentEvent::Thinking {
+                                content: text.to_string(),
+                            });
+                        }
                         if let Some(text) = choice.delta.content.as_deref() {
                             content_acc.push_str(text);
                             emit(AgentEvent::Delta {

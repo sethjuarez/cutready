@@ -79,6 +79,10 @@ pub fn run() {
         .plugin(
             tauri_plugin_log::Builder::new()
                 .level(log::LevelFilter::Info)
+                .filter(|metadata| {
+                    // Suppress noisy tao windowing system warnings
+                    !metadata.target().starts_with("tao::")
+                })
                 .targets([
                     tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Stdout),
                     tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Webview),

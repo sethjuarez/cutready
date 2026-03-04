@@ -315,7 +315,9 @@ function ChatTab() {
   const chatSessionPath = useAppStore((s) => s.chatSessionPath);
   const newChatSession = useAppStore((s) => s.newChatSession);
   const loadSketches = useAppStore((s) => s.loadSketches);
+  const loadNotes = useAppStore((s) => s.loadNotes);
   const openSketch = useAppStore((s) => s.openSketch);
+  const openNote = useAppStore((s) => s.openNote);
   const pendingChatPrompt = useAppStore((s) => s.pendingChatPrompt);
 
   const [input, setInput] = useState("");
@@ -330,6 +332,7 @@ function ChatTab() {
   const [showAgentPicker, setShowAgentPicker] = useState(false);
   const [expandedWebRef, setExpandedWebRef] = useState<string | null>(null);
   const [streamingText, setStreamingText] = useState<string>("");
+  const [streamingThinking, setStreamingThinking] = useState<string>("");
   const [streamingStatus, setStreamingStatus] = useState<string>("");
 
   // Auto-create a session path on first mount if none exists
@@ -339,6 +342,7 @@ function ChatTab() {
 
   // Listen for streaming agent events from the backend
   const streamingRef = useRef("");
+  const thinkingRef = useRef("");
   const pendingToolArgsRef = useRef<Record<string, string>>({});
   useEffect(() => {
     const unlisten = listen<{ type: string; content?: string; message?: string; name?: string; arguments?: string; result?: string; response?: string; agent_id?: string; task?: string }>("agent-event", (event) => {
@@ -347,6 +351,10 @@ function ChatTab() {
         case "delta":
           streamingRef.current += ev.content ?? "";
           setStreamingText(streamingRef.current);
+          break;
+        case "thinking":
+          thinkingRef.current += ev.content ?? "";
+          setStreamingThinking(thinkingRef.current);
           break;
         case "status":
           setStreamingStatus(ev.message ?? "");
@@ -391,6 +399,13 @@ function ChatTab() {
               } catch { /* ignore parse errors */ }
             }
           }
+          if (isSuccess && toolName === "update_note") {
+            loadNotes();
+            try {
+              const args = JSON.parse(pendingToolArgsRef.current[toolName] ?? "{}");
+              if (args.path) openNote(args.path);
+            } catch { /* ignore parse errors */ }
+          }
           break;
         }
         case "agent_start":
@@ -427,7 +442,7 @@ function ChatTab() {
       }
     });
     return () => { unlisten.then((f) => f()); };
-  }, [addActivityEntries, loadSketches, openSketch]);
+  }, [addActivityEntries, loadSketches, loadNotes, openSketch, openNote]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -455,10 +470,10 @@ function ChatTab() {
     return allAgents.find((a) => a.id === id) ?? BUILT_IN_AGENTS[0];
   }, [settings.aiSelectedAgent, allAgents]);
 
-  // Auto-scroll to bottom on new messages
+  // Auto-scroll to bottom on new messages and streaming updates
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  }, [messages, streamingText]);
 
   // Click-outside to close pickers
   useEffect(() => {
@@ -528,7 +543,7 @@ function ChatTab() {
   }, [settings.aiSelectedAgent, settings.aiAgents, activeSketchPath, activeNotePath]);
 
   const handleSend = useCallback(async (overrideText?: string, opts?: { silent?: boolean }) => {
-    const text = (overrideText ?? input).trim();
+    const text = (overrideText ?? input).trim().replace(/\r\n/g, "\n");
     if (!text) return;
     const silent = opts?.silent ?? false;
 
@@ -598,7 +613,9 @@ function ChatTab() {
 
     setChatLoading(true);
     streamingRef.current = "";
+    thinkingRef.current = "";
     setStreamingText("");
+    setStreamingThinking("");
     setStreamingStatus("Connecting…");
     // Log the send to activity
     addActivityEntries([{
@@ -699,8 +716,10 @@ function ChatTab() {
     } finally {
       setChatLoading(false);
       setStreamingText("");
+      setStreamingThinking("");
       setStreamingStatus("");
       streamingRef.current = "";
+      thinkingRef.current = "";
     }
   }, [input, loading, messages, references, systemPrompt, buildConfig, setChatMessages, setChatLoading, setChatError, addActivityEntries, settings.aiAgents]);
 
@@ -933,6 +952,16 @@ function ChatTab() {
 
         {loading && (
           <div className="px-3.5 py-2">
+            {streamingThinking && (
+              <details className="mb-2 text-xs border border-[var(--color-border)] rounded-md overflow-hidden">
+                <summary className="px-2.5 py-1.5 cursor-pointer text-[var(--color-text-secondary)] bg-[var(--color-surface-alt)] hover:bg-[var(--color-border)] select-none flex items-center gap-1.5">
+                  <span className="opacity-60">💭</span> Thinking{!streamingText && <span className="inline-block w-1 h-3 bg-[var(--color-accent)] animate-pulse ml-1 rounded-sm" />}
+                </summary>
+                <div className="px-2.5 py-2 text-[var(--color-text-secondary)] leading-[1.5] whitespace-pre-wrap max-h-48 overflow-y-auto">
+                  {streamingThinking}
+                </div>
+              </details>
+            )}
             {streamingText ? (
               <div className="text-[13px] text-[var(--color-text)] leading-[1.6]">
                 <MarkdownContent content={streamingText} projectRoot={currentProject?.root} />

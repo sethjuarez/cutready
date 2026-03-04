@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useAppStore } from "../stores/appStore";
@@ -150,6 +150,28 @@ export function SketchForm() {
   const handleCaptureCancel = useCallback(() => {
     setCaptureRowIdx(null);
   }, []);
+
+  // Image picker state
+  const [imagePickerRowIdx, setImagePickerRowIdx] = useState<number | null>(null);
+  const [projectImages, setProjectImages] = useState<{ path: string; size: number }[]>([]);
+
+  const handlePickImage = useCallback(async (rowIndex: number) => {
+    setImagePickerRowIdx(rowIndex);
+    try {
+      const images = await invoke<{ path: string; size: number; referencedBy: string[] }[]>("list_project_images");
+      setProjectImages(images.map((i) => ({ path: i.path, size: i.size })));
+    } catch {
+      setProjectImages([]);
+    }
+  }, []);
+
+  const handleImagePicked = useCallback((imagePath: string) => {
+    if (imagePickerRowIdx === null) return;
+    const updated = [...localRows];
+    updated[imagePickerRowIdx] = { ...updated[imagePickerRowIdx], screenshot: imagePath };
+    handleRowsChange(updated);
+    setImagePickerRowIdx(null);
+  }, [imagePickerRowIdx, localRows, handleRowsChange]);
 
   /** Launch fullscreen preview on a specific monitor */
   const launchPreviewOnMonitor = useCallback(async (monitor: MonitorInfo) => {
@@ -369,6 +391,7 @@ export function SketchForm() {
             rows={localRows}
             onChange={handleRowsChange}
             onCaptureScreenshot={handleCaptureScreenshot}
+            onPickImage={handlePickImage}
             onSparkle={(prompt) => sendChatPrompt(prompt, { silent: true })}
             projectRoot={projectRoot}
             sketchPath={activeSketchPath ?? undefined}
@@ -402,6 +425,47 @@ export function SketchForm() {
           onCapture={handleCaptureComplete}
           onCancel={handleCaptureCancel}
         />
+      )}
+
+      {/* Image picker overlay */}
+      {imagePickerRowIdx !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setImagePickerRowIdx(null)}>
+          <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl shadow-2xl max-w-md w-full max-h-[60vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--color-border)]">
+              <span className="text-sm font-medium text-[var(--color-text)]">Pick an image</span>
+              <button onClick={() => setImagePickerRowIdx(null)} className="text-[var(--color-text-secondary)] hover:text-[var(--color-text)]">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-3">
+              {projectImages.length === 0 ? (
+                <div className="text-center text-sm text-[var(--color-text-secondary)] py-8">No images in project</div>
+              ) : (
+                <div className="grid grid-cols-3 gap-2">
+                  {projectImages.map((img) => (
+                    <button
+                      key={img.path}
+                      onClick={() => handleImagePicked(img.path)}
+                      className="rounded-lg border border-[var(--color-border)] hover:border-[var(--color-accent)] overflow-hidden transition-colors group"
+                      title={img.path}
+                    >
+                      <img
+                        src={projectRoot ? convertFileSrc(`${projectRoot}/${img.path}`) : img.path}
+                        alt={img.path.split("/").pop() ?? ""}
+                        className="w-full aspect-video object-cover"
+                      />
+                      <div className="px-1.5 py-1 text-[10px] text-[var(--color-text-secondary)] group-hover:text-[var(--color-accent)] truncate">
+                        {img.path.split("/").pop()}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Presentation preview */}

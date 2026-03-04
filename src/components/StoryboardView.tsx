@@ -49,6 +49,7 @@ export function StoryboardView() {
   const reorderStoryboardItems = useAppStore((s) => s.reorderStoryboardItems);
   const updateStoryboard = useAppStore((s) => s.updateStoryboard);
   const loadSketches = useAppStore((s) => s.loadSketches);
+  const sendChatPrompt = useAppStore((s) => s.sendChatPrompt);
 
   const [showPicker, setShowPicker] = useState<number | null>(null);
   const [pickerSearch, setPickerSearch] = useState("");
@@ -269,7 +270,7 @@ export function StoryboardView() {
           )}
         </div>
         {/* Description — markdown preview, click to edit */}
-        <div className="relative group/desc mb-8">
+        <div className="relative group/desc mb-2">
           {editingDesc ? (
             <textarea
               ref={descRef}
@@ -302,6 +303,32 @@ export function StoryboardView() {
               )}
             </div>
           )}
+        </div>
+
+        {/* AI actions */}
+        <div className="flex items-center gap-1.5 mb-8">
+          <button
+            onClick={() => sendChatPrompt(
+              `Review the storyboard "${activeStoryboard.title}" and suggest improvements. List the current sketches, then recommend any changes to ordering, pacing, or suggest new sketches that would strengthen the demo flow. Read each sketch first to understand the content.`,
+              { silent: true }
+            )}
+            className="flex items-center gap-1 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] px-2 py-1 rounded-md hover:bg-[var(--color-accent)]/10 transition-colors"
+            title="Review storyboard with AI"
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.09 6.26L20.18 10l-6.09 1.74L12 18l-2.09-6.26L3.82 10l6.09-1.74L12 2z" /></svg>
+            Review flow
+          </button>
+          <button
+            onClick={() => sendChatPrompt(
+              `Generate a new sketch for the storyboard "${activeStoryboard.title}". Look at the existing sketches to understand the demo flow, then create a new sketch that would complement them. Pick an appropriate name and generate 3-5 planning rows.`,
+              { silent: true }
+            )}
+            className="flex items-center gap-1 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] px-2 py-1 rounded-md hover:bg-[var(--color-accent)]/10 transition-colors"
+            title="Generate a new sketch with AI"
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.09 6.26L20.18 10l-6.09 1.74L12 18l-2.09-6.26L3.82 10l6.09-1.74L12 2z" /></svg>
+            Generate sketch
+          </button>
         </div>
 
         {/* Items */}

@@ -167,6 +167,7 @@ pub struct StreamChoice {
 pub struct StreamDelta {
     pub role: Option<String>,
     pub content: Option<String>,
+    pub reasoning_content: Option<String>,
     pub tool_calls: Option<Vec<StreamToolCall>>,
 }
 

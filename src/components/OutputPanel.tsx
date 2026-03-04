@@ -146,8 +146,8 @@ function ActivityRow({ entry }: { entry: ActivityEntry }) {
   const [expanded, setExpanded] = useState(false);
   const isTruncatable = entry.content.length > 80;
   const colorCls =
-    entry.level === "error" ? "text-red-400"
-    : entry.level === "warn" ? "text-amber-400"
+    entry.level === "error" ? "text-red-500 dark:text-red-400"
+    : entry.level === "warn" ? "text-amber-700 dark:text-amber-400"
     : "text-[var(--color-text)]";
 
   return (
