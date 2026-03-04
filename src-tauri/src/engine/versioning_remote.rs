@@ -64,13 +64,6 @@ pub fn list_remotes(project_dir: &Path) -> Result<Vec<RemoteInfo>, RemoteError> 
     Ok(out)
 }
 
-/// Get the URL for a specific remote.
-pub fn get_remote_url(project_dir: &Path, name: &str) -> Result<String, RemoteError> {
-    let repo = Repository::open(project_dir)?;
-    let remote = repo.find_remote(name)?;
-    Ok(remote.url().unwrap_or("").to_string())
-}
-
 /// Auto-detect the first configured remote (usually "origin").
 pub fn detect_remote(project_dir: &Path) -> Result<Option<RemoteInfo>, RemoteError> {
     let remotes = list_remotes(project_dir)?;
@@ -390,9 +383,9 @@ mod tests {
         assert_eq!(remotes[0].name, "origin");
         assert_eq!(remotes[0].url, "https://github.com/test/repo.git");
 
-        // Get URL
-        let url = get_remote_url(dir.path(), "origin").unwrap();
-        assert_eq!(url, "https://github.com/test/repo.git");
+        // Verify URL via list_remotes
+        let remotes2 = list_remotes(dir.path()).unwrap();
+        assert_eq!(remotes2[0].url, "https://github.com/test/repo.git");
 
         // Remove it
         remove_remote(dir.path(), "origin").unwrap();

@@ -67,22 +67,6 @@ impl ChatMessage {
             tool_call_id: None,
         }
     }
-    pub fn assistant(content: &str) -> Self {
-        Self {
-            role: "assistant".into(),
-            content: Some(content.into()),
-            tool_calls: None,
-            tool_call_id: None,
-        }
-    }
-    pub fn assistant_with_tool_calls(tool_calls: Vec<ToolCall>) -> Self {
-        Self {
-            role: "assistant".into(),
-            content: None,
-            tool_calls: Some(tool_calls),
-            tool_call_id: None,
-        }
-    }
     pub fn tool_result(tool_call_id: &str, content: &str) -> Self {
         Self {
             role: "tool".into(),
@@ -148,6 +132,7 @@ pub struct ChatCompletionResponse {
 #[derive(Debug, Deserialize)]
 pub struct Choice {
     pub message: ChatMessage,
+    #[allow(dead_code)]
     pub finish_reason: Option<String>,
 }
 
@@ -165,6 +150,7 @@ pub struct StreamChoice {
 
 #[derive(Debug, Deserialize)]
 pub struct StreamDelta {
+    #[allow(dead_code)]
     pub role: Option<String>,
     pub content: Option<String>,
     pub reasoning_content: Option<String>,

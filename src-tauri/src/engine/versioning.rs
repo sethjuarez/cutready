@@ -1556,7 +1556,7 @@ mod tests {
         std::fs::write(tmp.path().join("start.sk"), sketch_new).unwrap();
         assert!(has_unsaved_changes(tmp.path()).unwrap(), "Should be dirty after editing");
 
-        let id4 = commit_snapshot(tmp.path(), "new direction", None).unwrap();
+        let _id4 = commit_snapshot(tmp.path(), "new direction", None).unwrap();
         assert!(!has_unsaved_changes(tmp.path()).unwrap(), "Should be clean after saving");
 
         // Fork should now exist (new direction goes on the fork, main keeps original)
