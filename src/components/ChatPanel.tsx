@@ -315,7 +315,7 @@ function SortableTab({ tab, isActive, onClick }: { tab: typeof TAB_DEFS[number];
       style={style}
       {...attributes}
       {...listeners}
-      className={`flex items-center gap-1.5 px-3 py-2 text-[11px] font-medium transition-colors border-b-2 -mb-px cursor-grab active:cursor-grabbing ${
+      className={`flex items-center gap-1.5 px-3 py-2 text-[11px] font-medium transition-colors border-b-2 -mb-px ${
         isActive
           ? "border-[var(--color-accent)] text-[var(--color-text)]"
           : "border-transparent text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:border-[var(--color-text-secondary)]/30"
