@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import rehypeRaw from "rehype-raw";
 import { ResizeHandle } from "./ResizeHandle";
 import type { PlanningRow } from "../types/sketch";
 
@@ -233,7 +234,7 @@ export function SketchPreview({ rows, projectRoot, title, onClose, slides: slide
                 ) : activeTab === "narrative" ? (
                   row!.narrative ? (
                     <div className="prose-desc text-sm text-[var(--color-text)] leading-relaxed">
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{row!.narrative}</ReactMarkdown>
+                      <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>{row!.narrative}</ReactMarkdown>
                     </div>
                   ) : (
                     <span className="text-sm text-[var(--color-text-secondary)] italic">No narrative</span>
@@ -241,7 +242,7 @@ export function SketchPreview({ rows, projectRoot, title, onClose, slides: slide
                 ) : (
                   row!.demo_actions ? (
                     <div className="prose-desc text-sm text-[var(--color-text)] leading-relaxed">
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{row!.demo_actions}</ReactMarkdown>
+                      <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>{row!.demo_actions}</ReactMarkdown>
                     </div>
                   ) : (
                     <span className="text-sm text-[var(--color-text-secondary)] italic">No actions</span>

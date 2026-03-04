@@ -3,6 +3,7 @@ import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import rehypeRaw from "rehype-raw";
 import { useAppStore } from "../stores/appStore";
 import { ScriptTable } from "./ScriptTable";
 import { ScreenCaptureOverlay } from "./ScreenCaptureOverlay";
@@ -385,7 +386,7 @@ export function SketchForm() {
             >
               {localDesc ? (
                 <div className="prose-desc text-[var(--color-text)] leading-relaxed">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{localDesc}</ReactMarkdown>
+                  <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>{localDesc}</ReactMarkdown>
                 </div>
               ) : (
                 <span className="text-[var(--color-text-secondary)]/40">
