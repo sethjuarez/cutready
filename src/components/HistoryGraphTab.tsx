@@ -479,15 +479,24 @@ export function HistoryGraphTab() {
                     </g>
                   )}
 
-                  {/* Branch badges */}
-                  {bl.map((label, bi) => {
+                  {/* Branch badges + commit label in text column */}
+                  {dir === "vertical" && bl.length > 0 && bl.map((label, bi) => {
                     const bw = label.length * 5.5 + 12;
-                    const bx = dir === "vertical" ? layout.textOffset - 2 : x - bw / 2;
-                    const by = dir === "vertical" ? y - 7 + bi * 16 : y - r - 16 - bi * 16;
                     return (
                       <g key={label}>
-                        <rect x={bx} y={by} width={bw} height={14} rx={4} fill={color} opacity={0.15} />
-                        <text x={bx + 6} y={by + 10} fontSize={8} fill={color} fontWeight={600}
+                        <rect x={layout.textOffset - 2} y={y - 7 + bi * 16} width={bw} height={14} rx={4} fill={color} opacity={0.15} />
+                        <text x={layout.textOffset + 4} y={y + 3 + bi * 16} fontSize={8} fill={color} fontWeight={600}
+                          fontFamily="var(--font-mono, monospace)">{label}</text>
+                      </g>
+                    );
+                  })}
+                  {dir === "horizontal" && bl.map((label, bi) => {
+                    const bw = label.length * 5.5 + 12;
+                    const bx = x - bw / 2;
+                    return (
+                      <g key={label}>
+                        <rect x={bx} y={y - r - 16 - bi * 16} width={bw} height={14} rx={4} fill={color} opacity={0.15} />
+                        <text x={bx + 6} y={y - r - 6 - bi * 16} fontSize={8} fill={color} fontWeight={600}
                           fontFamily="var(--font-mono, monospace)">{label}</text>
                       </g>
                     );
@@ -495,10 +504,12 @@ export function HistoryGraphTab() {
 
                   {/* Truncated commit message label (hidden when overlapping) */}
                   {ln.showLabel && (dir === "vertical" ? (
-                    <text x={layout.textOffset} y={y + 1} dominantBaseline="middle" fontSize={9}
+                    <text
+                      x={bl.length > 0 ? layout.textOffset + (bl[0].length * 5.5 + 16) : layout.textOffset}
+                      y={y + 1} dominantBaseline="middle" fontSize={9}
                       fill={isHead ? "var(--color-text)" : "var(--color-text-secondary)"}
                       fontWeight={isHead ? 600 : 400} opacity={0.85}>
-                      {node.message.length > 36 ? node.message.substring(0, 36) + "…" : node.message}
+                      {node.message.length > 30 ? node.message.substring(0, 30) + "…" : node.message}
                     </text>
                   ) : (
                     <text
