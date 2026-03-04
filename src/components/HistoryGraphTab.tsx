@@ -140,7 +140,7 @@ function computeLayout(
     const colorIndex = tInfo?.color_index ?? col;
 
     const [x, y] = dir === "vertical"
-      ? [PAD + col * LANE_GAP, PAD + row * ROW_GAP]
+      ? [PAD + col * LANE_GAP, PAD + (maxRow - row) * ROW_GAP]
       : [PAD + (maxRow - row) * ROW_GAP, PAD + col * LANE_GAP];
 
     return { node, col, row, x, y, colorIndex, branchLabels: tipLabels.get(node.id) ?? [] };
