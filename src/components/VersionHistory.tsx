@@ -27,11 +27,37 @@ export function VersionHistory() {
   const [searchQuery, setSearchQuery] = useState("");
   const [showSearch, setShowSearch] = useState(false);
 
-  // Filter to only the active timeline for a clean linear view
+  // Show active branch + its ancestor history from the originating branch
   const activeTimeline = timelines.find((t) => t.is_active);
-  const activeNodes = activeTimeline
-    ? graphNodes.filter((n) => n.timeline === activeTimeline.name)
-    : graphNodes;
+  const activeNodes = (() => {
+    if (!activeTimeline) return graphNodes;
+    const branchNodes = graphNodes.filter((n) => n.timeline === activeTimeline.name);
+    const nodeMap = new Map(graphNodes.map((n) => [n.id, n]));
+    const branchIds = new Set(branchNodes.map((n) => n.id));
+
+    // Walk parent chain from fork points to collect ancestor commits
+    const ancestorIds = new Set<string>();
+    const frontier: string[] = [];
+    for (const n of branchNodes) {
+      for (const pid of n.parents) {
+        if (!branchIds.has(pid) && nodeMap.has(pid)) frontier.push(pid);
+      }
+    }
+    while (frontier.length > 0) {
+      const id = frontier.pop()!;
+      if (ancestorIds.has(id)) continue;
+      ancestorIds.add(id);
+      const node = nodeMap.get(id);
+      if (node) {
+        for (const pid of node.parents) {
+          if (!ancestorIds.has(pid) && nodeMap.has(pid)) frontier.push(pid);
+        }
+      }
+    }
+
+    const ancestors = graphNodes.filter((n) => ancestorIds.has(n.id));
+    return [...branchNodes, ...ancestors];
+  })();
 
   // Build a label map: timeline name → { label, color_index }
   const timelineMap = new Map(
