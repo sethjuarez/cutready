@@ -503,6 +503,16 @@ function ChatTab() {
               if (args.path) openStoryboard(args.path);
             } catch { /* ignore parse errors */ }
           }
+          if (isSuccess && toolName === "create_note") {
+            loadNotes();
+            try {
+              const args = JSON.parse(pendingToolArgsRef.current[toolName] ?? "{}");
+              const filename = args.filename?.trim()?.replace(/[/\\]/g, "-");
+              const safeName = filename?.endsWith(".md") ? filename : `${filename}.md`;
+              if (safeName) openNote(safeName);
+            } catch { /* ignore parse errors */ }
+            window.dispatchEvent(new CustomEvent("cutready:ai-note-updated"));
+          }
           break;
         }
         case "agent_start":

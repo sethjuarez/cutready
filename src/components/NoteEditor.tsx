@@ -31,6 +31,7 @@ export function NoteEditor() {
   const [mode, setMode] = useState<"edit" | "preview">("edit");
   const [aiCleaning, setAiCleaning] = useState(false);
   const [aiUpdatedFlash, setAiUpdatedFlash] = useState(false);
+  const [richPasteBusy, setRichPasteBusy] = useState(false);
 
   // Listen for AI note updates to show a brief flash indicator
   useEffect(() => {
@@ -40,6 +41,15 @@ export function NoteEditor() {
     };
     window.addEventListener("cutready:ai-note-updated", handler);
     return () => window.removeEventListener("cutready:ai-note-updated", handler);
+  }, []);
+
+  // Listen for rich paste busy state
+  useEffect(() => {
+    const handler = (e: Event) => {
+      setRichPasteBusy((e as CustomEvent).detail === true);
+    };
+    window.addEventListener("cutready:rich-paste-busy", handler);
+    return () => window.removeEventListener("cutready:rich-paste-busy", handler);
   }, []);
 
   // Async getter for AI config — refreshes OAuth token on demand
@@ -237,6 +247,16 @@ export function NoteEditor() {
         <div className="mx-6 mb-2 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[var(--color-accent)]/10 border border-[var(--color-accent)]/20 text-xs text-[var(--color-accent)] animate-pulse">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.09 6.26L20.18 10l-6.09 1.74L12 18l-2.09-6.26L3.82 10l6.09-1.74L12 2z" /></svg>
           Updated by AI
+        </div>
+      )}
+
+      {/* Rich paste busy indicator */}
+      {richPasteBusy && (
+        <div className="mx-6 mb-2 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-600 dark:text-amber-400">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="animate-spin">
+            <circle cx="12" cy="12" r="10" strokeDasharray="31.4 31.4" strokeLinecap="round" />
+          </svg>
+          Converting pasted content…
         </div>
       )}
 

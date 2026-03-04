@@ -89,6 +89,7 @@ function richPasteExtension(
 
         // Prevent default paste — we'll insert our own content
         event.preventDefault();
+        window.dispatchEvent(new CustomEvent("cutready:rich-paste-busy", { detail: true }));
 
         // Get fresh AI config (with refreshed token) then convert
         getAiConfig().then((aiConfig) =>
@@ -114,6 +115,8 @@ function richPasteExtension(
               selection: { anchor: from + plain.length },
             });
           }
+        }).finally(() => {
+          window.dispatchEvent(new CustomEvent("cutready:rich-paste-busy", { detail: false }));
         });
 
         return true;

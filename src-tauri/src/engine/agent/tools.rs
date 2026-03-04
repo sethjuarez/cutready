@@ -133,14 +133,26 @@ pub fn all_tools() -> Vec<ToolDefinition> {
         ),
         tool_def(
             "update_note",
-            "Update the full content of an existing note, or create a new note. Use this to clean up, restructure, or rewrite note content.",
+            "Update the full content of an existing note. Use this to clean up, restructure, or rewrite note content.",
             json!({
                 "type": "object",
                 "properties": {
-                    "path": { "type": "string", "description": "Relative path to the note. Use a path from list_project_files to update, or a new filename like 'my-note.md' to create" },
+                    "path": { "type": "string", "description": "Relative path to the note (from list_project_files)" },
                     "content": { "type": "string", "description": "The full markdown content for the note" }
                 },
                 "required": ["path", "content"]
+            }),
+        ),
+        tool_def(
+            "create_note",
+            "Create a brand new note in the project. Use this when the user asks you to write something down, take notes, create a document, or save information from the conversation as a note.",
+            json!({
+                "type": "object",
+                "properties": {
+                    "filename": { "type": "string", "description": "Filename for the note (e.g. 'meeting-notes.md', 'ideas.md'). Will be created in the project root." },
+                    "content": { "type": "string", "description": "The full markdown content for the note" }
+                },
+                "required": ["filename", "content"]
             }),
         ),
         tool_def(
@@ -187,6 +199,7 @@ pub fn execute_tool(call: &ToolCall, project_root: &Path) -> String {
         "list_project_images" => exec_list_project_images(project_root),
         "save_feedback" => exec_save_feedback(&args),
         "update_note" => exec_update_note(project_root, &args),
+        "create_note" => exec_create_note(project_root, &args),
         "update_storyboard" => exec_update_storyboard(project_root, &args),
         other => format!("Unknown tool: {other}"),
     }
@@ -505,5 +518,36 @@ fn exec_update_storyboard(root: &Path, args: &Value) -> String {
     match project::write_storyboard(&sb, &abs, root) {
         Ok(()) => format!("Updated storyboard \"{}\" at {}", sb.title, rel),
         Err(e) => format!("Error writing storyboard: {e}"),
+    }
+}
+
+fn exec_create_note(root: &Path, args: &Value) -> String {
+    let filename = match args.get("filename").and_then(|v| v.as_str()) {
+        Some(f) => f,
+        None => return "Error: missing 'filename' argument".into(),
+    };
+    let content = match args.get("content").and_then(|v| v.as_str()) {
+        Some(c) => c,
+        None => return "Error: missing 'content' argument".into(),
+    };
+
+    // Sanitize: ensure it ends with .md and has no path separators
+    let safe_name = filename
+        .trim()
+        .replace(['/', '\\'], "-");
+    let safe_name = if safe_name.ends_with(".md") {
+        safe_name
+    } else {
+        format!("{safe_name}.md")
+    };
+
+    let path = resolve_path(root, &safe_name);
+    if path.exists() {
+        return format!("Error: note '{}' already exists. Use update_note to modify it.", safe_name);
+    }
+
+    match project::write_note(&path, content) {
+        Ok(()) => format!("Created note '{}' successfully", safe_name),
+        Err(e) => format!("Error creating note: {e}"),
     }
 }
