@@ -213,8 +213,9 @@ fn tool_def(name: &str, description: &str, parameters: Value) -> ToolDefinition 
 /// Execute a single tool call and return the result as a string.
 pub fn execute_tool(call: &ToolCall, project_root: &Path) -> String {
     let args: Value = serde_json::from_str(&call.function.arguments).unwrap_or(json!({}));
+    let start = std::time::Instant::now();
 
-    match call.function.name.as_str() {
+    let result = match call.function.name.as_str() {
         "list_project_files" => exec_list_project_files(project_root),
         "read_note" => exec_read_note(project_root, &args),
         "read_sketch" => exec_read_sketch(project_root, &args),
@@ -228,7 +229,10 @@ pub fn execute_tool(call: &ToolCall, project_root: &Path) -> String {
         "recall_memory" => exec_recall_memory(project_root, &args),
         "save_memory" => exec_save_memory(project_root, &args),
         other => format!("Unknown tool: {other}"),
-    }
+    };
+
+    log::debug!("[tool] {} → {}chars in {:?}", call.function.name, result.len(), start.elapsed());
+    result
 }
 
 fn resolve_path(project_root: &Path, rel: &str) -> PathBuf {

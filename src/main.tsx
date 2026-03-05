@@ -19,6 +19,38 @@ if (import.meta.env.DEV && !(window as any).__TAURI_INTERNALS__) {
   installDevMocks();
 }
 
+// Dev-mode: pipe JS errors to Rust log plugin → writes to dev-trace log file
+if (import.meta.env.DEV && (window as any).__TAURI_INTERNALS__) {
+  import("@tauri-apps/plugin-log").then(({ error: logError, warn: logWarn, info: logInfo, debug: logDebug }) => {
+    window.addEventListener("error", (e) => {
+      logError(`[JS] ${e.message} at ${e.filename}:${e.lineno}:${e.colno}`);
+    });
+    window.addEventListener("unhandledrejection", (e) => {
+      logError(`[JS:unhandled] ${e.reason}`);
+    });
+    const origConsoleError = console.error;
+    console.error = (...args: any[]) => {
+      origConsoleError.apply(console, args);
+      logError(`[console.error] ${args.map(String).join(" ")}`);
+    };
+    const origConsoleWarn = console.warn;
+    console.warn = (...args: any[]) => {
+      origConsoleWarn.apply(console, args);
+      logWarn(`[console.warn] ${args.map(String).join(" ")}`);
+    };
+    const origConsoleLog = console.log;
+    console.log = (...args: any[]) => {
+      origConsoleLog.apply(console, args);
+      logInfo(`[console.log] ${args.map(String).join(" ")}`);
+    };
+    const origConsoleInfo = console.info;
+    console.info = (...args: any[]) => {
+      origConsoleInfo.apply(console, args);
+      logDebug(`[console.info] ${args.map(String).join(" ")}`);
+    };
+  });
+}
+
 // Detect capture window mode via initialization script flag
 // (set by Rust open_capture_window via WebviewWindowBuilder::initialization_script)
 declare global {

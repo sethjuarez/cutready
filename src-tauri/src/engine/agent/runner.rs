@@ -189,6 +189,7 @@ fn run_with_depth<'a>(
 ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<AgentResult, String>> + Send + 'a>> {
     Box::pin(async move {
         let tool_defs = tools::all_tools();
+        log::info!("[agent] starting run (depth={}, {} messages, budget={}chars)", depth, messages.len(), client.context_char_budget());
 
         for round in 0..MAX_TOOL_ROUNDS {
             // Drain any pending user messages before calling the LLM
@@ -208,7 +209,12 @@ fn run_with_depth<'a>(
             });
 
             // Trim conversation to fit within model's context window
-            trim_to_context_window(&mut messages, client.context_char_budget());
+            let budget = client.context_char_budget();
+            let pre_len = messages.len();
+            trim_to_context_window(&mut messages, budget);
+            if messages.len() < pre_len {
+                log::debug!("[agent] trimmed {} → {} messages (budget={})", pre_len, messages.len(), budget);
+            }
 
             // Use streaming to get real-time text output
             let stream_result = client
@@ -218,6 +224,7 @@ fn run_with_depth<'a>(
             let mut stream = match stream_result {
                 Ok(s) => s,
                 Err(e) => {
+                    log::error!("[agent] stream error round {}: {}", round, e);
                     emit(AgentEvent::Error { message: e.clone() });
                     return Err(e);
                 }
@@ -311,6 +318,7 @@ fn run_with_depth<'a>(
                 .collect();
 
             let has_tool_calls = !tool_calls.is_empty();
+            log::debug!("[agent] round {} complete: {}chars content, {} tool calls, finish={:?}", round, content_acc.len(), tool_calls.len(), finish_reason);
 
             // Build the assistant message
             let assistant_msg = ChatMessage {
@@ -347,6 +355,7 @@ fn run_with_depth<'a>(
             });
 
             for call in &tool_calls {
+                log::info!("[agent] tool call: {}({})", call.function.name, &call.function.arguments[..call.function.arguments.len().min(200)]);
                 emit(AgentEvent::ToolCall {
                     name: call.function.name.clone(),
                     arguments: call.function.arguments.clone(),

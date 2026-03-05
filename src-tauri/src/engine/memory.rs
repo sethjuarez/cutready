@@ -136,6 +136,7 @@ pub fn save_memory(
 /// Search memories by keyword. Returns matching entries sorted by relevance.
 pub fn recall(project_root: &Path, query: &str) -> Vec<MemoryEntry> {
     let store = load(project_root);
+    log::debug!("[memory] recall query='{}' across {} memories", query, store.memories.len());
     let query_lower = query.to_lowercase();
     let keywords: Vec<&str> = query_lower.split_whitespace().collect();
 
@@ -170,7 +171,9 @@ pub fn recall(project_root: &Path, query: &str) -> Vec<MemoryEntry> {
         .collect();
 
     scored.sort_by(|a, b| b.0.cmp(&a.0));
-    scored.into_iter().map(|(_, m)| m.clone()).take(10).collect()
+    let results: Vec<MemoryEntry> = scored.into_iter().map(|(_, m)| m.clone()).take(10).collect();
+    log::debug!("[memory] recall returned {} results", results.len());
+    results
 }
 
 /// Get all core memories (for system prompt injection).

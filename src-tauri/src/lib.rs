@@ -79,19 +79,36 @@ pub fn run() {
                 .with_denylist(&["capture", "preview"])
                 .build(),
         )
-        .plugin(
-            tauri_plugin_log::Builder::new()
+        .plugin({
+            let mut builder = tauri_plugin_log::Builder::new()
                 .level(log::LevelFilter::Info)
                 .filter(|metadata| {
                     // Suppress noisy tao windowing system warnings
                     !metadata.target().starts_with("tao::")
-                })
-                .targets([
+                });
+
+            #[cfg(debug_assertions)]
+            {
+                builder = builder
+                    .level(log::LevelFilter::Debug)
+                    .targets([
+                        tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Stdout),
+                        tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Webview),
+                        tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::LogDir {
+                            file_name: Some("dev-trace".into()),
+                        }),
+                    ]);
+            }
+            #[cfg(not(debug_assertions))]
+            {
+                builder = builder.targets([
                     tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Stdout),
                     tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Webview),
-                ])
-                .build(),
-        )
+                ]);
+            }
+
+            builder.build()
+        })
         .plugin(tauri_plugin_single_instance::init(|_app, _args, _cwd| {}))
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())

@@ -667,6 +667,8 @@ impl LlmClient {
             stream: Some(true),
         };
 
+        log::info!("[llm] chat_stream → {} ({} messages, {} tools)", self.config.model, messages.len(), tools.map_or(0, |t| t.len()));
+
         let resp = self
             .http
             .post(&self.chat_url())
@@ -681,6 +683,7 @@ impl LlmClient {
             let text = resp.text().await.unwrap_or_default();
             // Log the full API error for debugging (truncate at 2000 chars for sanity)
             let detail = if text.len() > 2000 { &text[..2000] } else { &text };
+            log::error!("[llm] API error {}: {}", status, detail);
             return Err(format!("Chat stream error ({status}): {detail}"));
         }
 
