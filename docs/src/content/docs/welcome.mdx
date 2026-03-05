@@ -9,9 +9,9 @@ import { Aside, Badge } from '@astrojs/starlight/components';
 import Screenshot from '../../components/Screenshot.astro';
 
 <Aside type="caution" title="Early Access">
-  CutReady is in active development (v0.1.0). Sketch planning, browser recording,
-  screen capture, storyboard management, AI assistant, document import, and sparkle
-  buttons are functional. Video production and export are coming soon.
+  CutReady is in active development (v0.5.0). Sketch planning, storyboards, AI assistant,
+  version history with timelines and merging, remote sync via GitHub, and a full
+  collaboration workflow are all functional. Video production and export are coming soon.
 </Aside>
 
 <Screenshot src="/cutready/images/app-home.png" darkSrc="/cutready/images/app-home-dark.png" alt="CutReady home screen" caption="CutReady home screen — create or open a project to get started" />
@@ -57,7 +57,7 @@ CutReady is built on modern, cross-platform technologies:
 - **Zustand** — Centralized state management
 - **Playwright** — Browser automation engine
 - **CodeMirror** — Markdown editing
-- **gitoxide (gix)** — Pure-Rust git for version history
+- **gix + git2** — Pure-Rust git for version history, libgit2 for remote operations
 - **Azure OpenAI** — AI assistant and sparkle button intelligence
 
 ## Next Steps

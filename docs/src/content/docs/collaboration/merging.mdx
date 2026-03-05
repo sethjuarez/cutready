@@ -1,0 +1,97 @@
+---
+title: Merging & Conflicts
+description: Combine timelines and resolve conflicts when changes overlap.
+sidebar:
+  order: 2
+---
+
+import { Aside, Badge } from '@astrojs/starlight/components';
+import Screenshot from '../../../components/Screenshot.astro';
+
+<Badge text="Available" variant="success" />
+
+When you have multiple timelines, you'll eventually want to **merge** them —
+combining changes from one timeline into another. CutReady handles this with
+a three-way merge engine that understands your project's file types.
+
+## Starting a Merge
+
+1. Open the **timeline selector** dropdown in the Snapshots panel
+2. Hover over the timeline you want to merge
+3. Click **Merge** — this combines the hovered timeline into your active timeline
+
+<Aside type="note">
+  Merge always goes **into** the currently active timeline. If you're on Main
+  and merge Experiment, the result lands on Main.
+</Aside>
+
+## Clean Merges
+
+If the two timelines changed different files — or different parts of the same
+file — the merge completes automatically:
+
+- A success toast appears: *"Combined Experiment into Main — 3 files merged"*
+- The merged snapshot appears at the top of your graph
+- The source timeline can optionally be kept or deleted
+
+## Conflict Resolution
+
+When both timelines changed the **same fields** in the same file, CutReady
+opens the **Merge Conflict Panel** — a dedicated UI for resolving each conflict.
+
+<Screenshot src="/cutready/images/merge-conflict-panel.png" darkSrc="/cutready/images/merge-conflict-panel-dark.png" alt="Merge conflict panel" caption="The conflict resolution panel showing per-file conflicts with resolution options" />
+
+### How Conflicts Work
+
+CutReady performs a **three-way merge** using the common ancestor of both
+timelines. This means it can automatically resolve most changes — only truly
+overlapping edits require your input.
+
+**For sketch files (.sk):** Conflicts are detected at the **field level**.
+If both timelines changed the title of the same sketch, you'll see that specific
+field as a conflict. Other fields that only one timeline changed are auto-resolved.
+
+**For note files (.md):** Conflicts are detected at the **line level**, similar
+to traditional code merge. Overlapping paragraphs are highlighted with both
+versions shown.
+
+**For storyboard files (.sb):** Conflicts can occur on metadata fields (title,
+description) or on the items array when both timelines reordered the sketch sequence.
+
+### Resolving Conflicts
+
+For each conflicting file, you have three choices:
+
+| Option | What it does |
+|--------|-------------|
+| **Keep Main** | Use the version from your active timeline |
+| **Keep Theirs** | Use the version from the incoming timeline |
+| **Edit** | Open a custom editor to write your own resolution |
+
+The conflict panel shows each file with its conflicting fields. Non-conflicting
+fields are dimmed and labeled "auto-resolved" — you only need to decide on the
+overlapping changes.
+
+### Completing the Merge
+
+Once all conflicts are resolved, click **Apply & Combine**:
+- A merge commit is created with two parents (one from each timeline)
+- The merged result appears as the latest snapshot on your active timeline
+- The source timeline remains available unless you choose to delete it
+
+### Aborting a Merge
+
+Click **Cancel** at any time during conflict resolution to abort. This restores
+your project to the exact state before the merge began — no changes are made.
+
+<Aside type="tip">
+  If you're unsure about a merge, create a snapshot first. That way you have a
+  clean restore point regardless of how the merge turns out.
+</Aside>
+
+## Merge from Remote
+
+When pulling changes from a remote repository, CutReady uses the same merge
+engine. If remote changes conflict with your local work, the Merge Conflict
+Panel opens with "remote" as the incoming source. See
+[Remote Sync](/cutready/collaboration/remote-sync/) for details.

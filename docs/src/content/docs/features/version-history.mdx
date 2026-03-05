@@ -6,65 +6,17 @@ sidebar:
 ---
 
 import { Aside, Badge } from '@astrojs/starlight/components';
-import Screenshot from '../../../components/Screenshot.astro';
 
 <Badge text="Available" variant="success" />
 
-CutReady includes a full version history system backed by **gitoxide (gix)**,
-a pure-Rust git implementation. Every save creates a snapshot that you can
-browse, compare, and restore.
+Version history has been expanded into a full **Collaboration** section. See:
 
-<Screenshot src="/cutready/images/app-overview.png" darkSrc="/cutready/images/app-overview-dark.png" alt="CutReady app with version history" caption="The sketch editor with version history panel accessible from the right sidebar" />
-
-## How It Works
-
-The version history lives in the **right sidebar panel** of the sketch editor.
-It shows a visual **snapshot graph** — a DAG (directed acyclic graph)
-visualization of your document history.
-
-### Saving Versions
-
-Press `Ctrl+S` to save a version:
-1. A dialog appears asking for a **label** (e.g., "Added intro section")
-2. The current state is committed to the project's internal git repository
-3. A new node appears in the snapshot graph
-
-### Visual Timeline
-
-The snapshot graph displays:
-- **Nodes** for each saved version, arranged chronologically
-- **Edges** connecting parent-child versions
-- **Branch points** where history diverged
-- **Current position** highlighted in the graph
-- **Dirty state indicator** when unsaved changes exist
-
-## Restoring Versions
-
-Click any node in the snapshot graph to preview that version. From there you can:
-
-- **Restore** — Replace the current document with the selected version
-- **Fork** — Create a new branch from the selected point
-- **Stash** — Temporarily save unsaved changes before switching
+- **[Version History & Timelines](/cutready/collaboration/version-history/)** — Snapshots, branching, and timeline management
+- **[Merging & Conflicts](/cutready/collaboration/merging/)** — Three-way merge engine and conflict resolution
+- **[History Graph](/cutready/collaboration/history-graph/)** — Interactive DAG visualization
+- **[Remote Sync](/cutready/collaboration/remote-sync/)** — GitHub remote integration
 
 <Aside type="tip">
-  Restoring a version doesn't destroy history. The restore itself becomes a 
-  new snapshot, so you can always go back to any previous state.
+  The Collaboration section covers everything from saving your first snapshot
+  to syncing with a team via GitHub.
 </Aside>
-
-## Editor State Persistence
-
-CutReady preserves your editor state across sessions:
-- Scroll position
-- Cursor location  
-- Open tabs and active document
-- Sidebar width and visibility
-
-This state is saved separately from document content and restored when
-you reopen a project.
-
-## Technical Details
-
-- Snapshots are stored in a `.snapshots/` directory within the project
-- Each snapshot is a git commit with the document JSON as the tree content
-- The graph is computed from the commit DAG using `gix`
-- No external git installation required — it's all built into the app

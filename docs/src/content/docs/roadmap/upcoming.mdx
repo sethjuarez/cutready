@@ -12,29 +12,35 @@ import { Aside, Badge } from '@astrojs/starlight/components';
   listed here are not yet available unless marked otherwise.
 </Aside>
 
-## Current Release (v0.2.0)
+## Current Release (v0.5.0)
 
-The current release includes a full demo planning workflow with AI assistance:
+The current release includes a full demo planning workflow with AI assistance
+and collaboration features:
 
 - ✅ **Project management** — Create, open, and organize projects
-- ✅ **Sketch editor** — 4-column planning tables with inline editing and nested lists
+- ✅ **Sketch editor** — 4-column planning tables with inline editing, card-style rows, and screenshots
 - ✅ **Screen capture** — Multi-monitor screenshots with region selection
 - ✅ **Storyboard management** — Drag-and-drop organization of sketch sequences
 - ✅ **Version history** — Git-backed snapshots with visual timeline graph and branching
+- ✅ **Timelines & branching** — Fork, promote, and switch between project directions
+- ✅ **Three-way merge engine** — Combine timelines with field-level conflict detection
+- ✅ **Conflict resolution UI** — Inline resolver for sketch, note, and storyboard conflicts
+- ✅ **History graph** — Full DAG visualization of all timelines, forks, and merges
+- ✅ **Remote sync** — Push/pull/sync with GitHub remotes via git2
 - ✅ **Markdown notes** — CodeMirror editor with AI cleanup, rich paste, and live preview
 - ✅ **Browser recording** — Playwright-based interaction capture (Windows)
 - ✅ **Command palette** — Keyboard-driven command access
 - ✅ **Cross-platform builds** — Windows, macOS (ARM + Intel), Linux
-- ✅ **AI assistant** — 3 built-in agents, custom agents, and color-coded file references
+- ✅ **AI assistant** — 3 built-in agents (Planner, Writer, Editor), custom agents, and color-coded file references
 - ✅ **Sparkle (✨) buttons** — One-click AI improvements for titles, descriptions, and rows
 - ✅ **Document import** — Word, PDF, and PowerPoint import as project notes
 - ✅ **Activity panel** — Color-coded AI operation logs
 - ✅ **Debug panel** — Captures JS console and Rust backend logs for diagnostics
 - ✅ **Azure AI Foundry integration** — With OAuth support and deployed model discovery
 - ✅ **Feedback system** — Title bar popover with debug log attachment, settings history, and AI-formatted GitHub Issue creation
-- ✅ **Type-specific colors** — Sketches (violet), Notes (rose), Storyboards (emerald) throughout the UI
 - ✅ **Smart rich paste** — AI-powered HTML-to-markdown conversion for Word and web content
 - ✅ **Auto-update** — Built-in update mechanism via Tauri updater
+- ✅ **Display settings** — Text size, row density, color palette, and editor width preferences
 
 ## Upcoming: AI Refinement <Badge text="In Progress" variant="note" />
 
@@ -93,7 +99,6 @@ Planned capabilities:
 
 ## Future Considerations
 
-- **Code signing** — macOS notarization and Windows EV certificates
-- **Cloud sync** — Optional project synchronization
-- **Team collaboration** — Shared projects and review workflows
+- **Code signing** — macOS notarization ✅ and Windows EV certificates
 - **Plugin system** — Extensible architecture for custom actions
+- **Real-time collaboration** — Simultaneous multi-user editing (beyond async remote sync)

@@ -1,0 +1,70 @@
+---
+title: Repository Settings
+description: Configure remote sync, authentication, and git identity.
+sidebar:
+  order: 3
+---
+
+import { Aside, Badge } from '@astrojs/starlight/components';
+import Screenshot from '../../../components/Screenshot.astro';
+
+<Badge text="Available" variant="success" />
+
+The **Repository** tab in Settings configures remote sync for your project.
+This is where you connect to a GitHub repository, set authentication, and
+configure your git identity.
+
+## Remote URL
+
+Enter the HTTPS or SSH URL of your GitHub repository:
+
+```
+https://github.com/your-username/your-project.git
+```
+
+Click **Test Connection** to verify CutReady can reach the remote with your
+chosen authentication method.
+
+## Authentication
+
+Choose how CutReady authenticates with your remote:
+
+### GitHub CLI (Recommended)
+
+If you have the [GitHub CLI](https://cli.github.com/) installed and authenticated
+(`gh auth login`), CutReady automatically uses your credentials. This is the
+simplest option — no tokens or keys to manage.
+
+### Personal Access Token (PAT)
+
+Generate a [fine-grained token](https://github.com/settings/tokens?type=beta)
+with **Contents: Read and write** permission for your repository. Paste it
+into the token field.
+
+### SSH Key
+
+CutReady uses your system SSH keys via libgit2. Make sure your SSH key is
+added to your GitHub account and available in your system's SSH agent.
+
+## Git Identity
+
+Set the **name** and **email** that appear on your snapshots. This is
+especially useful when collaborating — your identity shows on the
+snapshots you create.
+
+<Aside type="note">
+  The git identity is per-project. If you work on multiple projects with
+  different identities (personal vs. work), each can have its own settings.
+</Aside>
+
+## When to Configure
+
+You only need repository settings if you want to:
+
+- **Back up** your project to GitHub
+- **Sync** across multiple devices
+- **Collaborate** with others on the same project
+- **Open pull requests** from timelines
+
+If you're working solo on a single machine, you can skip this entirely —
+CutReady's snapshot and timeline features work fully offline.

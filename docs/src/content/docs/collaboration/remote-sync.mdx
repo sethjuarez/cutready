@@ -1,0 +1,115 @@
+---
+title: Remote Sync
+description: Push and pull your project to a GitHub remote for backup and collaboration.
+sidebar:
+  order: 4
+---
+
+import { Aside, Badge } from '@astrojs/starlight/components';
+import Screenshot from '../../../components/Screenshot.astro';
+
+<Badge text="Available" variant="success" />
+
+CutReady can sync your project with a **GitHub remote repository**, enabling
+backup, multi-device workflows, and team collaboration. Remote sync is entirely
+optional — solo users who don't need it see zero additional UI.
+
+## Setting Up a Remote
+
+1. Open **Settings** → **Repository** tab
+2. Enter your remote URL (e.g., `https://github.com/you/your-project.git`)
+3. Choose an authentication method
+4. Click **Test Connection** to verify
+
+### Authentication Methods
+
+| Method | Description |
+|--------|------------|
+| **GitHub CLI (gh)** | Recommended. Uses your existing `gh auth` credentials |
+| **Personal Access Token** | Enter a GitHub PAT with repo scope |
+| **SSH Key** | Uses your system SSH keys via libgit2 |
+
+<Aside type="tip">
+  The GitHub CLI method is the easiest — if you have `gh` installed and 
+  authenticated, CutReady picks up your credentials automatically.
+</Aside>
+
+## The Sync Bar
+
+Once a remote is configured, a **Sync Bar** appears in the Snapshots panel
+showing your connection status and sync state:
+
+- **↑ N unpublished** — Local snapshots not yet pushed to remote
+- **↓ N incoming** — Remote snapshots not yet pulled
+- **Up to date** — Local and remote are in sync
+
+### Sync Actions
+
+| Button | When it appears | What it does |
+|--------|----------------|-------------|
+| **Sync** | Unpublished + incoming | Pushes local, then pulls remote |
+| **Push** | Only unpublished | Sends local snapshots to remote |
+| **Pull** | Only incoming | Fetches remote snapshots |
+| **Fetch** | Always | Checks for remote changes without applying them |
+
+## Publishing Timelines
+
+Local timelines are just that — local. To share a timeline with collaborators
+or back it up to the remote:
+
+1. Switch to the timeline you want to publish
+2. The Sync Bar shows *"Timeline 'X' is local only"*
+3. Click **Publish Timeline** to push it as a remote branch
+
+Once published, the timeline syncs like Main — push/pull/sync all work.
+
+## Pulling with Conflicts
+
+When pulling remote changes that conflict with your local work, CutReady
+opens the same **Merge Conflict Panel** used for timeline merging:
+
+- Remote changes appear as "theirs"
+- Your local changes appear as "ours"
+- Resolution works identically — keep yours, keep theirs, or edit
+
+See [Merging & Conflicts](/cutready/collaboration/merging/) for the full
+conflict resolution workflow.
+
+## Auto-Fetch
+
+CutReady automatically fetches from the remote:
+
+- **On project open** — Checks for new remote changes immediately
+- **Every 5 minutes** — Periodic background fetch keeps counts fresh
+
+Auto-fetch only downloads metadata — it doesn't modify your local files.
+You always explicitly choose when to pull or sync.
+
+## Opening a Pull Request
+
+For published non-main timelines, CutReady offers an **Open Pull Request**
+button that opens your browser to create a PR on GitHub. This integrates
+your CutReady workflow with standard GitHub collaboration.
+
+## Offline Resilience
+
+CutReady works fully offline — all project data is local. When you're
+offline:
+
+- Saving, branching, merging, and all local operations work normally
+- The Sync Bar shows a disconnected state
+- When connectivity returns, a simple Sync catches up
+
+## Progressive Disclosure
+
+CutReady uses **progressive disclosure** for remote features:
+
+| User Type | What They See |
+|-----------|--------------|
+| **Solo** (no remote) | Just the Snapshots panel — Save, Discard, Navigate |
+| **Timelines** (no remote) | Timeline selector + graph, no sync UI |
+| **Collaborator** (remote configured) | Full Sync Bar + publishing + timeline sync |
+
+No git terminology appears in the default UI. CutReady uses "snapshots" not
+"commits", "timelines" not "branches", "publish" not "push", and "sync" not
+"fetch/pull".

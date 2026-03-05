@@ -30,6 +30,11 @@ export default defineConfig({
           autogenerate: { directory: "features" },
         },
         {
+          label: "Collaboration",
+          autogenerate: { directory: "collaboration" },
+          badge: { text: "New", variant: "success" },
+        },
+        {
           label: "Workflow",
           autogenerate: { directory: "workflow" },
         },
