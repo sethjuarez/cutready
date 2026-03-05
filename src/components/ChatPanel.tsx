@@ -634,6 +634,7 @@ function ChatTab() {
     model: settings.aiModel || "unused",
     bearer_token: settings.aiAuthMode === "azure_oauth" ? settings.aiAccessToken : null,
     context_length: settings.aiContextLength || null,
+    vision_mode: settings.aiVisionMode || "off",
   }), [settings]);
 
   // Build system prompt from selected agent

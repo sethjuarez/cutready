@@ -11,7 +11,7 @@ use std::sync::{Arc, Mutex};
 use futures_util::StreamExt;
 
 use crate::engine::agent::llm::{
-    ChatMessage, FunctionCall, LlmClient, StreamToolCall, ToolCall,
+    ChatMessage, ContentPart, FunctionCall, LlmClient, MessageContent, StreamToolCall, ToolCall,
 };
 use crate::engine::agent::{tools, web};
 
@@ -25,7 +25,7 @@ const MAX_DELEGATION_DEPTH: usize = 2;
 /// Estimate the character cost of a message slice.
 fn estimate_chars(msgs: &[ChatMessage]) -> usize {
     msgs.iter().map(|m| {
-        let content_len = m.content.as_ref().map_or(0, |c| c.len());
+        let content_len = m.content.as_ref().map_or(0, |c| c.char_len());
         let tool_len = m.tool_calls.as_ref().map_or(0, |tc| {
             tc.iter().map(|t| t.function.name.len() + t.function.arguments.len()).sum()
         });
@@ -43,16 +43,14 @@ pub fn summarize_dropped(dropped: &[ChatMessage]) -> String {
     for msg in dropped {
         match msg.role.as_str() {
             "user" => {
-                if let Some(content) = &msg.content {
-                    // Keep first 200 chars of each user message
-                    let truncated = if content.len() > 200 { &content[..200] } else { content };
+                if let Some(text) = msg.text() {
+                    let truncated = if text.len() > 200 { &text[..200] } else { text };
                     summary_parts.push(format!("• User asked: {truncated}"));
                 }
             }
             "assistant" => {
-                if let Some(content) = &msg.content {
-                    // Keep first 200 chars of assistant responses
-                    let truncated = if content.len() > 200 { &content[..200] } else { content };
+                if let Some(text) = msg.text() {
+                    let truncated = if text.len() > 200 { &text[..200] } else { text };
                     summary_parts.push(format!("• Assistant: {truncated}"));
                 }
                 if let Some(tool_calls) = &msg.tool_calls {
@@ -164,6 +162,15 @@ pub struct AgentResult {
     pub response: String,
 }
 
+/// Configuration for vision/image support in tool execution.
+#[derive(Debug, Clone)]
+pub struct VisionConfig {
+    /// Whether vision is enabled (user setting AND model support).
+    pub enabled: bool,
+    /// Whether to include sketch screenshots (vs notes only).
+    pub include_sketches: bool,
+}
+
 /// Run the agentic loop with streaming and event emission.
 pub async fn run(
     client: &LlmClient,
@@ -171,10 +178,11 @@ pub async fn run(
     project_root: &Path,
     agent_prompts: &HashMap<String, String>,
     pending: &Arc<Mutex<Vec<String>>>,
+    vision: &VisionConfig,
     emit: impl Fn(AgentEvent) + Send + Sync + 'static,
 ) -> Result<AgentResult, String> {
     let emit = Arc::new(emit);
-    run_with_depth(client, messages, project_root, agent_prompts, pending, 0, emit).await
+    run_with_depth(client, messages, project_root, agent_prompts, pending, 0, vision, emit).await
 }
 
 /// Internal runner with depth tracking for sub-agent delegation.
@@ -185,6 +193,7 @@ fn run_with_depth<'a>(
     agent_prompts: &'a HashMap<String, String>,
     pending: &'a Arc<Mutex<Vec<String>>>,
     depth: usize,
+    vision: &'a VisionConfig,
     emit: Arc<dyn Fn(AgentEvent) + Send + Sync + 'static>,
 ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<AgentResult, String>> + Send + 'a>> {
     Box::pin(async move {
@@ -326,7 +335,7 @@ fn run_with_depth<'a>(
                 content: if content_acc.is_empty() {
                     None
                 } else {
-                    Some(content_acc.clone())
+                    Some(MessageContent::Text(content_acc.clone()))
                 },
                 tool_calls: if has_tool_calls {
                     Some(tool_calls.clone())
@@ -369,20 +378,42 @@ fn run_with_depth<'a>(
                         agent_prompts,
                         pending,
                         depth,
+                        vision,
                         emit.clone(),
                     )
                     .await
                 } else if call.function.name == "fetch_url" {
                     exec_fetch_url(call).await
                 } else {
-                    tools::execute_tool(call, project_root)
+                    tools::execute_tool(call, project_root, vision.enabled)
+                };
+
+                // Check for embedded vision images in the tool result
+                let (clean_result, vision_parts) = if let Some(marker_pos) = result.find("\n[VISION_IMAGES]") {
+                    let text = result[..marker_pos].to_string();
+                    let images_section = &result[marker_pos + "\n[VISION_IMAGES]".len()..];
+                    let parts: Vec<ContentPart> = images_section.lines()
+                        .filter_map(|line| serde_json::from_str::<ContentPart>(line).ok())
+                        .collect();
+                    (text, parts)
+                } else {
+                    (result.clone(), Vec::new())
                 };
 
                 emit(AgentEvent::ToolResult {
                     name: call.function.name.clone(),
-                    result: result.clone(),
+                    result: clean_result.clone(),
                 });
-                messages.push(ChatMessage::tool_result(&call.id, &result));
+                messages.push(ChatMessage::tool_result(&call.id, &clean_result));
+
+                // If tool returned images, inject as a user message with vision content
+                if !vision_parts.is_empty() {
+                    log::info!("[agent] injecting {} images from tool result", vision_parts.len());
+                    messages.push(ChatMessage::user_with_images(
+                        "[Images from the tool result above — analyze these along with the text.]",
+                        vision_parts,
+                    ));
+                }
             }
         }
 
@@ -398,6 +429,7 @@ async fn exec_delegation(
     agent_prompts: &HashMap<String, String>,
     pending: &Arc<Mutex<Vec<String>>>,
     depth: usize,
+    vision: &VisionConfig,
     emit: Arc<dyn Fn(AgentEvent) + Send + Sync + 'static>,
 ) -> String {
     if depth >= MAX_DELEGATION_DEPTH {
@@ -433,7 +465,7 @@ async fn exec_delegation(
         task: message.to_string(),
     });
 
-    let result = match run_with_depth(client, sub_messages, project_root, agent_prompts, pending, depth + 1, emit.clone()).await {
+    let result = match run_with_depth(client, sub_messages, project_root, agent_prompts, pending, depth + 1, vision, emit.clone()).await {
         Ok(result) => format!("[Agent '{}' responded:]\n\n{}", agent_id, result.response),
         Err(e) => format!("Error from agent '{}': {}", agent_id, e),
     };

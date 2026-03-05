@@ -60,6 +60,8 @@ export interface AppSettings {
   repoAuthorEmail: string;
   /** API-reported context window (tokens) for the selected model. */
   aiContextLength: number;
+  /** Vision mode: "off", "notes", or "notes_and_sketches". */
+  aiVisionMode: "off" | "notes" | "notes_and_sketches";
   // Legacy fields (migrated on load)
   llmApiKey?: string;
   llmEndpoint?: string;
@@ -92,6 +94,7 @@ const defaultSettings: AppSettings = {
   repoAuthorName: "",
   repoAuthorEmail: "",
   aiContextLength: 0,
+  aiVisionMode: "notes_and_sketches",
 };
 
 const STORE_PATH = "settings.json";

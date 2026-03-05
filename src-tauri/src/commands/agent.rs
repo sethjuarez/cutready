@@ -21,6 +21,9 @@ pub struct ProviderConfig {
     /// API-reported context window (tokens) for the selected model.
     #[serde(default)]
     pub context_length: Option<usize>,
+    /// Vision mode: "off", "notes", "notes_and_sketches".
+    #[serde(default)]
+    pub vision_mode: Option<String>,
 }
 
 impl From<ProviderConfig> for LlmConfig {
@@ -98,10 +101,16 @@ pub async fn agent_chat_with_tools(
 
     let prompts = agent_prompts.unwrap_or_default();
     let reported_context = config.context_length;
+    let vision_mode = config.vision_mode.clone().unwrap_or_else(|| "off".into());
     let client = LlmClient::new(config.into());
     if let Some(ctx) = reported_context {
         client.set_reported_context_length(ctx);
     }
+
+    // Determine effective vision: user setting AND model capability
+    let vision_enabled = vision_mode != "off" && client.supports_vision();
+    let include_sketches = vision_mode == "notes_and_sketches";
+    let vision = runner::VisionConfig { enabled: vision_enabled, include_sketches };
 
     let emit_handle = app.clone();
     let result = runner::run(
@@ -110,6 +119,7 @@ pub async fn agent_chat_with_tools(
         &project_root,
         &prompts,
         &pending,
+        &vision,
         move |event: AgentEvent| {
             let _ = emit_handle.emit("agent-event", &event);
         },

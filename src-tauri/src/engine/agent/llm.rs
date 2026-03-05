@@ -36,14 +36,94 @@ pub struct LlmConfig {
 }
 
 // ---------------------------------------------------------------------------
-// Chat message types (OpenAI-compatible)
+// Chat message types (OpenAI-compatible, with multimodal support)
 // ---------------------------------------------------------------------------
+
+/// A single content part in a multimodal message.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type")]
+pub enum ContentPart {
+    #[serde(rename = "text")]
+    Text { text: String },
+    #[serde(rename = "image_url")]
+    ImageUrl { image_url: ImageUrlData },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ImageUrlData {
+    /// Either a URL or a `data:image/png;base64,...` data URI.
+    pub url: String,
+    /// "low" (512px, 85 tokens) or "high" (full res). Default "low" for cost.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+}
+
+/// Message content that can be either a plain string or a multimodal array.
+/// Serializes as a plain JSON string for text-only (backward compat) or
+/// as an array of content parts for multimodal messages.
+#[derive(Debug, Clone)]
+pub enum MessageContent {
+    Text(String),
+    Parts(Vec<ContentPart>),
+}
+
+impl MessageContent {
+    /// Get the text content (ignoring images).
+    pub fn text(&self) -> &str {
+        match self {
+            MessageContent::Text(s) => s,
+            MessageContent::Parts(parts) => {
+                for p in parts {
+                    if let ContentPart::Text { text } = p {
+                        return text;
+                    }
+                }
+                ""
+            }
+        }
+    }
+
+    /// Estimated character length (text only, images counted as fixed overhead).
+    pub fn char_len(&self) -> usize {
+        match self {
+            MessageContent::Text(s) => s.len(),
+            MessageContent::Parts(parts) => parts.iter().map(|p| match p {
+                ContentPart::Text { text } => text.len(),
+                ContentPart::ImageUrl { .. } => 200, // ~85 tokens at low detail
+            }).sum(),
+        }
+    }
+}
+
+impl Serialize for MessageContent {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        match self {
+            MessageContent::Text(s) => serializer.serialize_str(s),
+            MessageContent::Parts(parts) => parts.serialize(serializer),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for MessageContent {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let value = serde_json::Value::deserialize(deserializer)?;
+        match value {
+            serde_json::Value::String(s) => Ok(MessageContent::Text(s)),
+            serde_json::Value::Array(_) => {
+                let parts: Vec<ContentPart> = serde_json::from_value(value)
+                    .map_err(serde::de::Error::custom)?;
+                Ok(MessageContent::Parts(parts))
+            }
+            _ => Err(serde::de::Error::custom("content must be a string or array")),
+        }
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatMessage {
     pub role: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub content: Option<String>,
+    pub content: Option<MessageContent>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_calls: Option<Vec<ToolCall>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -54,7 +134,7 @@ impl ChatMessage {
     pub fn system(content: &str) -> Self {
         Self {
             role: "system".into(),
-            content: Some(content.into()),
+            content: Some(MessageContent::Text(content.into())),
             tool_calls: None,
             tool_call_id: None,
         }
@@ -62,7 +142,17 @@ impl ChatMessage {
     pub fn user(content: &str) -> Self {
         Self {
             role: "user".into(),
-            content: Some(content.into()),
+            content: Some(MessageContent::Text(content.into())),
+            tool_calls: None,
+            tool_call_id: None,
+        }
+    }
+    pub fn user_with_images(text: &str, parts: Vec<ContentPart>) -> Self {
+        let mut all_parts = vec![ContentPart::Text { text: text.into() }];
+        all_parts.extend(parts);
+        Self {
+            role: "user".into(),
+            content: Some(MessageContent::Parts(all_parts)),
             tool_calls: None,
             tool_call_id: None,
         }
@@ -70,10 +160,14 @@ impl ChatMessage {
     pub fn tool_result(tool_call_id: &str, content: &str) -> Self {
         Self {
             role: "tool".into(),
-            content: Some(content.into()),
+            content: Some(MessageContent::Text(content.into())),
             tool_calls: None,
             tool_call_id: Some(tool_call_id.into()),
         }
+    }
+    /// Get text content as a string reference (convenience).
+    pub fn text(&self) -> Option<&str> {
+        self.content.as_ref().map(|c| c.text())
     }
 }
 
@@ -281,6 +375,25 @@ impl LlmClient {
     /// Record the API-reported context window for the selected model.
     pub fn set_reported_context_length(&self, tokens: usize) {
         *self.reported_context_length.lock().unwrap() = Some(tokens);
+    }
+
+    /// Whether the model supports vision (image) inputs.
+    pub fn supports_vision(&self) -> bool {
+        let model = self.config.model.to_lowercase();
+        // GPT-4o, GPT-4.1, GPT-5.x all support vision
+        model.contains("gpt-4o")
+            || model.contains("gpt-4.1")
+            || model.contains("gpt-5")
+            // GPT-4-turbo with vision
+            || model.contains("gpt-4-turbo")
+            || model.contains("gpt-4-vision")
+            // Claude 3.5+ and Claude 4 support vision
+            || model.contains("claude-3-5") || model.contains("claude-3.5")
+            || model.contains("claude-4")
+            // Gemini supports vision
+            || model.contains("gemini")
+            // o-series reasoning models with vision
+            || model.starts_with("o1") || model.starts_with("o3") || model.starts_with("o4")
     }
 
     /// Return a conservative character budget for the model's context window.
@@ -865,5 +978,72 @@ mod tests {
         client.set_reported_context_length(200_000);
         // 200k * 0.75 * 4 = 600,000 chars
         assert_eq!(client.context_char_budget(), 600_000);
+    }
+
+    #[test]
+    fn message_content_text_serializes_as_string() {
+        let msg = ChatMessage::user("hello world");
+        let json = serde_json::to_string(&msg).unwrap();
+        assert!(json.contains(r#""content":"hello world""#));
+        // Round-trip
+        let deserialized: ChatMessage = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.text(), Some("hello world"));
+    }
+
+    #[test]
+    fn message_content_parts_serializes_as_array() {
+        let msg = ChatMessage::user_with_images("describe this", vec![
+            ContentPart::ImageUrl {
+                image_url: ImageUrlData {
+                    url: "data:image/png;base64,abc123".into(),
+                    detail: Some("low".into()),
+                },
+            },
+        ]);
+        let json = serde_json::to_string(&msg).unwrap();
+        assert!(json.contains(r#""type":"text""#));
+        assert!(json.contains(r#""type":"image_url""#));
+        assert!(json.contains("abc123"));
+        // Round-trip
+        let deserialized: ChatMessage = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.text(), Some("describe this"));
+        if let Some(MessageContent::Parts(parts)) = &deserialized.content {
+            assert_eq!(parts.len(), 2); // text + image
+        } else {
+            panic!("expected Parts");
+        }
+    }
+
+    #[test]
+    fn message_content_char_len() {
+        let text = MessageContent::Text("hello".into());
+        assert_eq!(text.char_len(), 5);
+
+        let parts = MessageContent::Parts(vec![
+            ContentPart::Text { text: "hello".into() },
+            ContentPart::ImageUrl {
+                image_url: ImageUrlData { url: "data:...".into(), detail: None },
+            },
+        ]);
+        assert_eq!(parts.char_len(), 205); // 5 + 200 (image overhead)
+    }
+
+    #[test]
+    fn vision_detection() {
+        assert!(make_client("gpt-4o").supports_vision());
+        assert!(make_client("gpt-4o-mini").supports_vision());
+        assert!(make_client("gpt-4.1").supports_vision());
+        assert!(make_client("gpt-5.2").supports_vision());
+        assert!(make_client("claude-3-5-sonnet").supports_vision());
+        assert!(make_client("claude-4-opus").supports_vision());
+        assert!(make_client("gemini-1.5-pro").supports_vision());
+        assert!(make_client("o1-preview").supports_vision());
+        assert!(make_client("o3-mini").supports_vision());
+        // Non-vision models
+        assert!(!make_client("gpt-3.5-turbo").supports_vision());
+        assert!(!make_client("gpt-4").supports_vision()); // base GPT-4 (no turbo/vision)
+        assert!(!make_client("deepseek-r1").supports_vision());
+        assert!(!make_client("phi-4").supports_vision());
+        assert!(!make_client("my-custom-model").supports_vision());
     }
 }

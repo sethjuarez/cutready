@@ -7,9 +7,120 @@ use std::path::{Path, PathBuf};
 
 use serde_json::{json, Value};
 
-use crate::engine::agent::llm::{FunctionDefinition, ToolCall, ToolDefinition};
+use crate::engine::agent::llm::{ContentPart, FunctionDefinition, ImageUrlData, ToolCall, ToolDefinition};
 use crate::engine::project;
 use crate::models::sketch::PlanningRow;
+
+// ---------------------------------------------------------------------------
+// Image extraction and encoding for vision-capable models
+// ---------------------------------------------------------------------------
+
+/// Maximum image file size to encode (5MB).
+const MAX_IMAGE_BYTES: u64 = 5 * 1024 * 1024;
+/// Maximum number of images to include per tool result.
+const MAX_IMAGES_PER_RESULT: usize = 5;
+
+/// MIME type from file extension.
+fn mime_from_ext(ext: &str) -> &'static str {
+    match ext.to_lowercase().as_str() {
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        "webp" => "image/webp",
+        "svg" => "image/svg+xml",
+        _ => "application/octet-stream",
+    }
+}
+
+/// Extract image references from markdown content and encode them as base64 ContentParts.
+/// Returns (cleaned_text, image_parts).
+pub fn extract_and_encode_images(markdown: &str, root: &Path) -> (String, Vec<ContentPart>) {
+    let mut parts = Vec::new();
+    let mut cleaned = String::with_capacity(markdown.len());
+
+    // Regex-free line-by-line scan for ![...](path) patterns
+    for line in markdown.lines() {
+        let mut pos = 0;
+        let bytes = line.as_bytes();
+        let mut line_cleaned = String::new();
+        let mut found_image = false;
+
+        while pos < bytes.len() {
+            if bytes[pos] == b'!' && pos + 1 < bytes.len() && bytes[pos + 1] == b'[' {
+                // Potential image: ![alt](path)
+                if let Some(close_bracket) = line[pos + 2..].find(']') {
+                    let after_bracket = pos + 2 + close_bracket + 1;
+                    if after_bracket < bytes.len() && bytes[after_bracket] == b'(' {
+                        if let Some(close_paren) = line[after_bracket + 1..].find(')') {
+                            let img_path_str = &line[after_bracket + 1..after_bracket + 1 + close_paren];
+                            // Try to encode the image
+                            if let Some(part) = encode_image_file(root, img_path_str) {
+                                if parts.len() < MAX_IMAGES_PER_RESULT {
+                                    parts.push(part);
+                                    found_image = true;
+                                }
+                            }
+                            // Skip the image reference in cleaned text
+                            pos = after_bracket + 1 + close_paren + 1;
+                            continue;
+                        }
+                    }
+                }
+            }
+            line_cleaned.push(bytes[pos] as char);
+            pos += 1;
+        }
+
+        if found_image && line_cleaned.trim().is_empty() {
+            // Skip lines that were just images
+            continue;
+        }
+        cleaned.push_str(&line_cleaned);
+        cleaned.push('\n');
+    }
+
+    (cleaned.trim_end().to_string(), parts)
+}
+
+/// Encode a single image file as a base64 data URI ContentPart.
+fn encode_image_file(root: &Path, rel_path: &str) -> Option<ContentPart> {
+    let path = root.join(rel_path);
+    if !path.exists() || !path.is_file() {
+        return None;
+    }
+
+    // Check size
+    let metadata = std::fs::metadata(&path).ok()?;
+    if metadata.len() > MAX_IMAGE_BYTES {
+        log::debug!("[vision] skipping {} ({}MB > 5MB limit)", rel_path, metadata.len() / 1024 / 1024);
+        return None;
+    }
+
+    let ext = path.extension()?.to_str()?;
+    let mime = mime_from_ext(ext);
+    if mime == "application/octet-stream" {
+        return None;
+    }
+
+    let data = std::fs::read(&path).ok()?;
+    use base64::Engine;
+    let b64 = base64::engine::general_purpose::STANDARD.encode(&data);
+    let data_uri = format!("data:{mime};base64,{b64}");
+
+    log::debug!("[vision] encoded {} ({} bytes → {} b64 chars)", rel_path, data.len(), b64.len());
+
+    Some(ContentPart::ImageUrl {
+        image_url: ImageUrlData {
+            url: data_uri,
+            detail: Some("low".into()),
+        },
+    })
+}
+
+/// Encode a single image path (e.g., sketch screenshot) as a ContentPart.
+pub fn encode_image_at_path(root: &Path, rel_path: &str) -> Option<ContentPart> {
+    encode_image_file(root, rel_path)
+}
 
 // ---------------------------------------------------------------------------
 // Tool registry
@@ -211,14 +322,14 @@ fn tool_def(name: &str, description: &str, parameters: Value) -> ToolDefinition 
 // ---------------------------------------------------------------------------
 
 /// Execute a single tool call and return the result as a string.
-pub fn execute_tool(call: &ToolCall, project_root: &Path) -> String {
+pub fn execute_tool(call: &ToolCall, project_root: &Path, vision_enabled: bool) -> String {
     let args: Value = serde_json::from_str(&call.function.arguments).unwrap_or(json!({}));
     let start = std::time::Instant::now();
 
     let result = match call.function.name.as_str() {
         "list_project_files" => exec_list_project_files(project_root),
-        "read_note" => exec_read_note(project_root, &args),
-        "read_sketch" => exec_read_sketch(project_root, &args),
+        "read_note" => exec_read_note(project_root, &args, vision_enabled),
+        "read_sketch" => exec_read_sketch(project_root, &args, vision_enabled),
         "set_planning_rows" => exec_set_planning_rows(project_root, &args),
         "update_planning_row" => exec_update_planning_row(project_root, &args),
         "list_project_images" => exec_list_project_images(project_root),
@@ -279,18 +390,35 @@ fn exec_list_project_files(root: &Path) -> String {
     }
 }
 
-fn exec_read_note(root: &Path, args: &Value) -> String {
+fn exec_read_note(root: &Path, args: &Value, vision_enabled: bool) -> String {
     let path = match args.get("path").and_then(|v| v.as_str()) {
         Some(p) => resolve_path(root, p),
         None => return "Error: missing 'path' argument".into(),
     };
     match project::read_note(&path) {
-        Ok(content) => content,
+        Ok(content) => {
+            if vision_enabled {
+                let (text, image_parts) = extract_and_encode_images(&content, root);
+                if !image_parts.is_empty() {
+                    // Embed base64 image data as JSON in the tool result so the runner
+                    // can reconstruct multimodal content for the next LLM call.
+                    let images_json: Vec<String> = image_parts.iter().filter_map(|p| {
+                        serde_json::to_string(p).ok()
+                    }).collect();
+                    log::info!("[vision] read_note: {} images extracted", images_json.len());
+                    format!("{text}\n\n[VISION_IMAGES]{}", images_json.join("\n"))
+                } else {
+                    content
+                }
+            } else {
+                content
+            }
+        }
         Err(e) => format!("Error reading note: {e}"),
     }
 }
 
-fn exec_read_sketch(root: &Path, args: &Value) -> String {
+fn exec_read_sketch(root: &Path, args: &Value, vision_enabled: bool) -> String {
     let path = match args.get("path").and_then(|v| v.as_str()) {
         Some(p) => resolve_path(root, p),
         None => return "Error: missing 'path' argument".into(),
@@ -298,9 +426,17 @@ fn exec_read_sketch(root: &Path, args: &Value) -> String {
     match project::read_sketch(&path) {
         Ok(sketch) => {
             let mut out = format!("# {}\n\n", sketch.title);
+            let mut image_parts: Vec<ContentPart> = Vec::new();
             for (i, row) in sketch.rows.iter().enumerate() {
                 let screenshot_line = match &row.screenshot {
-                    Some(path) => format!("**Screenshot:** {}\n", path),
+                    Some(img_path) => {
+                        if vision_enabled {
+                            if let Some(part) = encode_image_at_path(root, img_path) {
+                                image_parts.push(part);
+                            }
+                        }
+                        format!("**Screenshot:** {}\n", img_path)
+                    }
                     None => String::new(),
                 };
                 out.push_str(&format!(
@@ -308,7 +444,15 @@ fn exec_read_sketch(root: &Path, args: &Value) -> String {
                     i, row.time, row.narrative, row.demo_actions, screenshot_line
                 ));
             }
-            out
+            if vision_enabled && !image_parts.is_empty() {
+                let images_json: Vec<String> = image_parts.iter().filter_map(|p| {
+                    serde_json::to_string(p).ok()
+                }).collect();
+                log::info!("[vision] read_sketch: {} screenshots extracted", images_json.len());
+                format!("{out}\n[VISION_IMAGES]{}", images_json.join("\n"))
+            } else {
+                out
+            }
         }
         Err(e) => format!("Error reading sketch: {e}"),
     }

@@ -621,6 +621,23 @@ function AIProviderTab({ settings, updateSetting, isAzure, isOAuth, hasToken, ca
           <p className="text-xs text-red-500">{modelError}</p>
         )}
       </fieldset>
+
+      {/* Vision Mode */}
+      <fieldset className="flex flex-col gap-2">
+        <label className="text-sm font-medium">Image Vision</label>
+        <select
+          value={settings.aiVisionMode || "notes_and_sketches"}
+          onChange={(e) => updateSetting("aiVisionMode", e.target.value as "off" | "notes" | "notes_and_sketches")}
+          className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-3 py-1.5 text-sm"
+        >
+          <option value="off">Off — text only</option>
+          <option value="notes">Notes only — images in markdown notes</option>
+          <option value="notes_and_sketches">Notes + Sketches — all project images</option>
+        </select>
+        <p className="text-xs text-[var(--color-text-secondary)]">
+          When enabled and the model supports vision, images referenced in notes and sketches are sent to the AI.
+        </p>
+      </fieldset>
     </div>
   );
 }
