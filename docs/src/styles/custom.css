@@ -139,6 +139,13 @@
   display: block;
 }
 
+.screenshot .screenshot-link {
+  display: block;
+  cursor: zoom-in;
+  border: none;
+  text-decoration: none;
+}
+
 /* Theme-aware screenshots: light shown by default, dark hidden */
 .screenshot .screenshot-dark {
   display: none;
@@ -150,6 +157,51 @@
 
 [data-theme="dark"] .screenshot .screenshot-dark {
   display: block;
+}
+
+/* Lightbox overlay (CSS-only with :target) */
+.screenshot-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.85);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease;
+  padding: 2rem;
+}
+
+.screenshot-lightbox:target {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.screenshot-lightbox img {
+  max-width: 95vw;
+  max-height: 90vh;
+  object-fit: contain;
+  border-radius: 0.5rem;
+  box-shadow: 0 8px 48px rgba(0, 0, 0, 0.5);
+}
+
+.screenshot-lightbox-close {
+  position: absolute;
+  top: 1rem;
+  right: 1.5rem;
+  font-size: 2.5rem;
+  color: #fff;
+  text-decoration: none;
+  line-height: 1;
+  z-index: 10000;
+  opacity: 0.7;
+  transition: opacity 0.15s;
+}
+
+.screenshot-lightbox-close:hover {
+  opacity: 1;
 }
 
 /* Workflow steps */

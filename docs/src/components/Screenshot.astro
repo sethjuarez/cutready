@@ -7,16 +7,37 @@ interface Props {
 }
 
 const { src, alt, caption, darkSrc } = Astro.props;
+const lightboxId = `lb-${src.replace(/[^a-zA-Z0-9]/g, '-')}`;
+const darkLightboxId = darkSrc ? `lb-${darkSrc.replace(/[^a-zA-Z0-9]/g, '-')}` : '';
 ---
 
 <figure class="screenshot">
   {darkSrc ? (
     <>
-      <img src={src} alt={alt} loading="lazy" class="screenshot-light" />
-      <img src={darkSrc} alt={alt} loading="lazy" class="screenshot-dark" />
+      <a href={`#${lightboxId}`} class="screenshot-link screenshot-light">
+        <img src={src} alt={alt} loading="lazy" />
+      </a>
+      <a href={`#${darkLightboxId}`} class="screenshot-link screenshot-dark">
+        <img src={darkSrc} alt={alt} loading="lazy" />
+      </a>
     </>
   ) : (
-    <img src={src} alt={alt} loading="lazy" />
+    <a href={`#${lightboxId}`} class="screenshot-link">
+      <img src={src} alt={alt} loading="lazy" />
+    </a>
   )}
   {caption && <figcaption style="padding: 0.5rem 1rem; font-size: var(--sl-text-xs); color: var(--sl-color-text-accent); text-align: center;">{caption}</figcaption>}
 </figure>
+
+<!-- Lightbox overlays -->
+<div id={lightboxId} class="screenshot-lightbox">
+  <a href="#!" class="screenshot-lightbox-close" aria-label="Close">&times;</a>
+  <img src={src} alt={alt} />
+</div>
+
+{darkSrc && (
+  <div id={darkLightboxId} class="screenshot-lightbox">
+    <a href="#!" class="screenshot-lightbox-close" aria-label="Close">&times;</a>
+    <img src={darkSrc} alt={alt} />
+  </div>
+)}
