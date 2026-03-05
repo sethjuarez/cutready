@@ -200,17 +200,11 @@
 /* Workflow steps */
 .workflow-steps {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
   align-items: stretch;
-  gap: 1rem;
+  gap: 1.5rem;
   margin-block: 2rem;
   counter-reset: step;
-}
-
-@media (max-width: 768px) {
-  .workflow-steps {
-    grid-template-columns: repeat(3, 1fr);
-  }
 }
 
 @media (max-width: 480px) {
