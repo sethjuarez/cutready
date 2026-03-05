@@ -32,6 +32,7 @@ export function TitleBar({
     try { return getCurrentWindow(); } catch { return null; }
   })();
   const [maximized, setMaximized] = useState(false);
+  const projectName = useAppStore((s) => s.currentProject?.name);
 
   useEffect(() => {
     if (!appWindow) return;
@@ -90,6 +91,14 @@ export function TitleBar({
         >
           CutReady
         </span>
+        {projectName && (
+          <span
+            data-tauri-drag-region
+            className="text-sm text-[var(--color-text-secondary)] font-normal ml-1.5"
+          >
+            — {projectName}
+          </span>
+        )}
       </div>
 
       {/* Center: Command center */}

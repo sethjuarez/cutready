@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import type { Theme } from "../hooks/useTheme";
 
 interface StatusBarProps {
@@ -6,6 +7,15 @@ interface StatusBarProps {
 }
 
 export function StatusBar({ theme, onToggleTheme }: StatusBarProps) {
+  const [version, setVersion] = useState("");
+
+  useEffect(() => {
+    import("@tauri-apps/api/app")
+      .then(({ getVersion }) => getVersion())
+      .then(setVersion)
+      .catch(() => setVersion("dev"));
+  }, []);
+
   return (
     <div
       className="no-select fixed bottom-0 left-0 right-0 z-50 flex items-center justify-between bg-[var(--color-surface)]/80 backdrop-blur-md border-t border-[var(--color-border)] px-3 text-xs text-[var(--color-text-secondary)]"
@@ -19,8 +29,11 @@ export function StatusBar({ theme, onToggleTheme }: StatusBarProps) {
         </span>
       </div>
 
-      {/* Right: theme toggle */}
+      {/* Right: version + theme toggle */}
       <div className="flex items-center gap-2">
+        {version && (
+          <span className="opacity-60">v{version}</span>
+        )}
         <button
           onClick={onToggleTheme}
           className="flex items-center gap-1.5 px-2 py-0.5 rounded-md hover:bg-[var(--color-surface-alt)] transition-colors"
