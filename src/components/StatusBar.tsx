@@ -12,7 +12,7 @@ export function StatusBar({ theme, onToggleTheme }: StatusBarProps) {
   useEffect(() => {
     import("@tauri-apps/api/app")
       .then(({ getVersion }) => getVersion())
-      .then(setVersion)
+      .then((v) => setVersion(import.meta.env.DEV ? `${v}-dev` : v))
       .catch(() => setVersion("dev"));
   }, []);
 
