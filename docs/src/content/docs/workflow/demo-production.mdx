@@ -8,122 +8,88 @@ sidebar:
 import { Aside, Badge, Steps } from '@astrojs/starlight/components';
 import WorkflowSteps from '../../../components/WorkflowSteps.astro';
 import WorkflowStep from '../../../components/WorkflowStep.astro';
-
 import Screenshot from '../../../components/Screenshot.astro';
 
-CutReady provides a structured, multi-phase workflow for producing demo videos.
-Each phase builds on the previous one, transforming rough plans into polished
-video output.
+CutReady provides a structured workflow for planning, versioning, and
+collaborating on demo videos. The current release (v0.5.0) focuses on the
+**planning and collaboration** phases, with automated recording and production
+coming in future releases.
 
 <Screenshot src="/cutready/images/storyboard-full.png" darkSrc="/cutready/images/storyboard-full-dark.png" alt="Storyboard production view" caption="A storyboard organizing multiple sketches into a complete demo flow" />
 
-## Overview
+## Current Workflow
 
 <WorkflowSteps>
-  <WorkflowStep title="Sketch">
-    Plan your demo structure with narrative, actions, and reference screenshots.
+  <WorkflowStep title="Plan">
+    Build sketches with narrative, actions, and reference screenshots.
   </WorkflowStep>
-  <WorkflowStep title="Record">
-    Capture browser interactions using automated Playwright-based recording.
+  <WorkflowStep title="Organise">
+    Group sketches into storyboards and arrange the demo flow.
   </WorkflowStep>
-  <WorkflowStep title="Refine">
-    AI agent processes captured actions into a clean, reproducible script.
+  <WorkflowStep title="Iterate">
+    Use AI assistants and sparkle buttons to refine your content.
   </WorkflowStep>
-  <WorkflowStep title="Produce">
-    Replay the polished script while recording lossless video and audio.
+  <WorkflowStep title="Version">
+    Save snapshots, branch timelines, and merge changes.
   </WorkflowStep>
-  <WorkflowStep title="Export">
-    Package everything into FCPXML timelines for professional video editing.
+  <WorkflowStep title="Share">
+    Push to a GitHub remote so teammates can review and contribute.
   </WorkflowStep>
 </WorkflowSteps>
 
-## Phase 0: Sketch <Badge text="Available" variant="success" />
+## Phase 1: Plan <Badge text="Available" variant="success" />
 
 <Steps>
-1. Create a new project folder
-2. Import reference documents (Word, PDF, PowerPoint)
-3. Add sketches with the 4-column planning table
+1. Create a new project folder (or open an existing one)
+2. Import reference documents — Word, PDF, or PowerPoint become markdown notes
+3. Add sketches with the 4-column planning table (Time, Narrative, Actions, Screenshot)
 4. Capture reference screenshots for each step
-5. Use AI assistant to generate and refine planning rows
-6. Polish with sparkle buttons
-7. Organize sketches into storyboards
-8. Save versions as you iterate on the plan
+5. Use AI chat or sparkle buttons to generate and refine planning rows
+6. Organise sketches into storyboards for multi-section demos
 </Steps>
 
-**Key features used:** Sketch Editor, Screen Capture, Storyboard Management, Version History
+**Key features:** [Sketch Editor](/cutready/features/sketch-editor/), [Notes & Markdown](/cutready/features/notes-markdown/), [Storyboard Management](/cutready/features/storyboard-management/), [AI-Assisted Workflow](/cutready/workflow/ai-workflow/), [Importing Materials](/cutready/workflow/import-workflow/)
 
-## Phase 1: Record <Badge text="Experimental" variant="caution" />
+## Phase 2: Version & Collaborate <Badge text="Available" variant="success" />
 
-<Aside type="caution" title="Experimental">
-  Browser recording is functional but not fully validated. It works best on 
-  Windows with Chrome. Cross-platform support is in progress.
-</Aside>
+CutReady uses a built-in Git engine (gix + git2) to track every change. You can
+branch, merge, and sync without leaving the app.
 
 <Steps>
-1. Select a browser profile (Chrome or Edge)
-2. Choose recording mode (free-form or step-by-step)
-3. Perform your demo while CutReady captures every interaction
-4. Review the captured action stream
-5. Re-record individual steps if needed
+1. **Save snapshots** — `Ctrl+S` commits the current state with a message
+2. **Create timelines** — Branch off to explore alternatives without losing your original
+3. **Switch timelines** — Jump between branches using the timeline selector
+4. **Merge changes** — Three-way merge engine handles sketch fields and note lines
+5. **Resolve conflicts** — Side-by-side conflict UI for the cases where auto-merge can't decide
+6. **Review history** — Visual history graph shows branches, merges, and contributors
+7. **Push to GitHub** — Sync your project via HTTPS or SSH so teammates can collaborate
 </Steps>
 
-**Key features used:** Browser Recording, Action Stream, Profile Detection
+**Key features:** [Version History](/cutready/collaboration/version-history/), [Merging](/cutready/collaboration/merging/), [History Graph](/cutready/collaboration/history-graph/), [Remote Sync](/cutready/collaboration/remote-sync/)
 
-## Phase 2: Refine <Badge text="In Progress" variant="note" />
+## Phase 3: Record <Badge text="Coming Soon" variant="note" />
 
-<Aside type="note" title="In Development">
-  AI refinement is in progress. The AI chat assistant and sparkle buttons are
-  available for sketch-level refinement. Full recording-to-script AI processing
-  is still being developed.
+<Aside type="note" title="Coming Soon">
+  Browser recording is under active development. See the
+  [Browser Recording](/cutready/features/browser-recording/) page for details
+  on what's planned.
 </Aside>
 
-The AI agent can currently:
+This phase will add automated capture of browser interactions:
 
-- Generate and improve planning row content via sparkle buttons
-- Refine titles, descriptions, and narrative text
-- Chat-based sketch manipulation through built-in agents
+- Launch Chrome or Edge with your existing profile and sessions
+- Record clicks, typing, navigation, and scrolling as ActionCards
+- Choose free-form recording or step-by-step mode guided by sketch rows
+- Review and re-record individual steps
 
-Coming soon:
+## Phase 4: Produce & Export <Badge text="Planned" variant="caution" />
 
-- Clean up redundant or accidental actions
-- Stabilize CSS selectors for reliability
-- Generate narration text from the demo flow
-- Suggest timing adjustments and animations
-- Map recorded actions back to sketch rows
-
-## Phase 3: Review <Badge text="In Progress" variant="note" />
-
-<Aside type="note" title="In Development">
-  The script editor UI exists but is currently showing an empty state. 
-  Full editing capabilities are being built.
+<Aside type="caution" title="Planned">
+  Automated replay and video export are planned for a future release.
 </Aside>
 
-The Script Editor will provide:
-- Row-by-row editing of the captured/refined script
-- Accept, reject, or re-record individual steps
-- Modify selectors, timing, and text inputs
-- Preview actions before committing changes
+Future releases will complete the pipeline:
 
-## Phase 4: Produce <Badge text="Planned" variant="caution" />
-
-<Aside type="caution" title="Coming Soon">
-  Video production via automated replay is planned for a future release.
-</Aside>
-
-This phase will:
-- Replay the finalized action sequence in a controlled browser
-- Record lossless video (FFV1 codec in MKV container) via FFmpeg
-- Capture system audio and narration tracks separately
-- Generate frame-accurate timing metadata
-
-## Phase 5: Export <Badge text="Planned" variant="caution" />
-
-<Aside type="caution" title="Coming Soon">
-  FCPXML export for professional video editors is planned for a future release.
-</Aside>
-
-Export will produce:
-- **FCPXML 1.9** timeline for DaVinci Resolve
-- Organized output folder with video, audio, and metadata
-- Multi-track support (screen recording, narration, system audio)
-- Chapter markers aligned with sketch rows
+- **Replay** — Execute the finalised action sequence in a controlled browser
+- **Capture** — Record lossless video (FFV1/MKV) and separate audio tracks via FFmpeg
+- **Export** — Generate FCPXML 1.9 timelines for DaVinci Resolve with chapter markers aligned to sketch rows
