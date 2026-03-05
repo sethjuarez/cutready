@@ -240,6 +240,64 @@ pub async fn update_chat_summary(
     Ok(())
 }
 
+/// List all memories in the current project.
+#[tauri::command]
+pub async fn list_memories(
+    state: tauri::State<'_, AppState>,
+) -> Result<Vec<crate::engine::memory::MemoryEntry>, String> {
+    let root = {
+        let guard = state.current_project.lock().unwrap();
+        guard.as_ref().ok_or("No project open")?.root.clone()
+    };
+    Ok(crate::engine::memory::load(&root).memories)
+}
+
+/// Delete a memory by index.
+#[tauri::command]
+pub async fn delete_memory(
+    index: usize,
+    state: tauri::State<'_, AppState>,
+) -> Result<(), String> {
+    let root = {
+        let guard = state.current_project.lock().unwrap();
+        guard.as_ref().ok_or("No project open")?.root.clone()
+    };
+    crate::engine::memory::delete_memory(&root, index)
+}
+
+/// Update a memory's content by index.
+#[tauri::command]
+pub async fn update_memory(
+    index: usize,
+    content: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<(), String> {
+    let root = {
+        let guard = state.current_project.lock().unwrap();
+        guard.as_ref().ok_or("No project open")?.root.clone()
+    };
+    crate::engine::memory::update_memory(&root, index, &content)
+}
+
+/// Clear memories by category (or all if no category provided).
+#[tauri::command]
+pub async fn clear_memories(
+    category: Option<String>,
+    state: tauri::State<'_, AppState>,
+) -> Result<usize, String> {
+    let root = {
+        let guard = state.current_project.lock().unwrap();
+        guard.as_ref().ok_or("No project open")?.root.clone()
+    };
+    let cat = category.map(|c| match c.as_str() {
+        "core" => crate::engine::memory::MemoryCategory::Core,
+        "archival" => crate::engine::memory::MemoryCategory::Archival,
+        "insight" => crate::engine::memory::MemoryCategory::Insight,
+        _ => crate::engine::memory::MemoryCategory::Archival,
+    });
+    crate::engine::memory::clear_memories(&root, cat)
+}
+
 // ---------------------------------------------------------------------------
 // Azure Device Code OAuth
 // ---------------------------------------------------------------------------

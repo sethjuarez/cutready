@@ -25,7 +25,7 @@ interface AuthCodeFlowInit {
   port: number;
 }
 
-type SettingsTab = "general" | "ai" | "agents" | "display" | "images" | "feedback" | "repository";
+type SettingsTab = "general" | "ai" | "agents" | "memory" | "display" | "images" | "feedback" | "repository";
 
 const inputClass =
   "px-3 py-2 rounded-lg bg-[var(--color-surface-alt)] border border-[var(--color-border)] text-sm text-[var(--color-text)] placeholder:text-[var(--color-text-secondary)]/50 focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]/40";
@@ -135,6 +135,7 @@ export function SettingsPanel() {
         <button className={tabBtnClass(activeTab === "display")} onClick={() => setActiveTab("display")}>Display</button>
         <button className={tabBtnClass(activeTab === "ai")} onClick={() => setActiveTab("ai")}>AI Provider</button>
         <button className={tabBtnClass(activeTab === "agents")} onClick={() => setActiveTab("agents")}>Agents</button>
+        <button className={tabBtnClass(activeTab === "memory")} onClick={() => setActiveTab("memory")}>Memory</button>
         <button className={tabBtnClass(activeTab === "images")} onClick={() => setActiveTab("images")}>Images</button>
         <button className={tabBtnClass(activeTab === "feedback")} onClick={() => setActiveTab("feedback")}>Feedback</button>
         <button className={tabBtnClass(activeTab === "repository")} onClick={() => setActiveTab("repository")}>Repository</button>
@@ -170,6 +171,9 @@ export function SettingsPanel() {
       )}
       {activeTab === "agents" && (
         <AgentsTab settings={settings} updateSetting={updateSetting} />
+      )}
+      {activeTab === "memory" && (
+        <MemoryTab />
       )}
       {activeTab === "images" && (
         <ImageManagerTab />
@@ -1217,6 +1221,213 @@ function RepositoryTab({ settings, updateSetting }: {
           />
         </div>
       </fieldset>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Memory Tab
+// ---------------------------------------------------------------------------
+
+interface MemoryItem {
+  category: string;
+  content: string;
+  created_at: string;
+  tags: string[];
+}
+
+function MemoryTab() {
+  const [memories, setMemories] = useState<MemoryItem[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [filter, setFilter] = useState<"all" | "core" | "archival" | "insight">("all");
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [editContent, setEditContent] = useState("");
+
+  const loadMemories = async () => {
+    setLoading(true);
+    try {
+      const result = await invoke<MemoryItem[]>("list_memories");
+      setMemories(result);
+    } catch {
+      setMemories([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { loadMemories(); }, []);
+
+  const filtered = filter === "all"
+    ? memories
+    : memories.filter((m) => m.category === filter);
+
+  const handleDelete = async (globalIndex: number) => {
+    try {
+      await invoke("delete_memory", { index: globalIndex });
+      await loadMemories();
+    } catch (e) {
+      console.error("Failed to delete memory:", e);
+    }
+  };
+
+  const handleUpdate = async (globalIndex: number) => {
+    try {
+      await invoke("update_memory", { index: globalIndex, content: editContent });
+      setEditingIndex(null);
+      setEditContent("");
+      await loadMemories();
+    } catch (e) {
+      console.error("Failed to update memory:", e);
+    }
+  };
+
+  const handleClear = async (category?: string) => {
+    try {
+      await invoke("clear_memories", { category: category || null });
+      await loadMemories();
+    } catch (e) {
+      console.error("Failed to clear memories:", e);
+    }
+  };
+
+  const categoryBadge = (cat: string) => {
+    const colors: Record<string, string> = {
+      core: "bg-purple-500/20 text-purple-400",
+      archival: "bg-blue-500/20 text-blue-400",
+      insight: "bg-amber-500/20 text-amber-400",
+    };
+    return colors[cat] || "bg-gray-500/20 text-gray-400";
+  };
+
+  const globalIndex = (item: MemoryItem) => memories.indexOf(item);
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-sm font-medium">AI Memory</h3>
+          <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">
+            {memories.length} {memories.length === 1 ? "memory" : "memories"} stored
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={loadMemories}
+            className="px-2 py-1 text-xs rounded border border-[var(--color-border)] hover:bg-[var(--color-surface-alt)] transition-colors"
+            title="Refresh"
+          >
+            ↻
+          </button>
+          {memories.length > 0 && (
+            <button
+              onClick={() => handleClear()}
+              className="px-2 py-1 text-xs rounded border border-red-500/30 text-red-400 hover:bg-red-500/10 transition-colors"
+            >
+              Clear All
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Category filter */}
+      <div className="flex gap-1">
+        {(["all", "core", "archival", "insight"] as const).map((cat) => {
+          const count = cat === "all" ? memories.length : memories.filter((m) => m.category === cat).length;
+          return (
+            <button
+              key={cat}
+              onClick={() => setFilter(cat)}
+              className={`px-2.5 py-1 text-xs rounded-full transition-colors ${
+                filter === cat
+                  ? "bg-[var(--color-accent)]/20 text-[var(--color-accent)]"
+                  : "text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-alt)]"
+              }`}
+            >
+              {cat === "all" ? "All" : cat.charAt(0).toUpperCase() + cat.slice(1)} ({count})
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Memory list */}
+      {loading ? (
+        <p className="text-xs text-[var(--color-text-secondary)] py-4 text-center">Loading…</p>
+      ) : filtered.length === 0 ? (
+        <div className="text-center py-8 text-[var(--color-text-secondary)]">
+          <p className="text-sm">No memories yet</p>
+          <p className="text-xs mt-1">The AI assistant will save memories as you chat.</p>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-1.5 max-h-[400px] overflow-y-auto">
+          {filtered.map((m) => {
+            const idx = globalIndex(m);
+            const isEditing = editingIndex === idx;
+            return (
+              <div
+                key={idx}
+                className="group flex flex-col gap-1 p-2.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-alt)] hover:border-[var(--color-text-secondary)]/30 transition-colors"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className={`px-1.5 py-0.5 text-[10px] rounded-full font-medium ${categoryBadge(m.category)}`}>
+                      {m.category}
+                    </span>
+                    {m.tags.length > 0 && (
+                      <span className="text-[10px] text-[var(--color-text-secondary)] truncate">
+                        {m.tags.join(", ")}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                    <button
+                      onClick={() => {
+                        if (isEditing) {
+                          setEditingIndex(null);
+                        } else {
+                          setEditingIndex(idx);
+                          setEditContent(m.content);
+                        }
+                      }}
+                      className="px-1.5 py-0.5 text-[10px] rounded hover:bg-[var(--color-accent)]/10 text-[var(--color-text-secondary)]"
+                    >
+                      {isEditing ? "Cancel" : "Edit"}
+                    </button>
+                    <button
+                      onClick={() => handleDelete(idx)}
+                      className="px-1.5 py-0.5 text-[10px] rounded hover:bg-red-500/10 text-red-400"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+                {isEditing ? (
+                  <div className="flex gap-1.5 mt-1">
+                    <input
+                      type="text"
+                      value={editContent}
+                      onChange={(e) => setEditContent(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") handleUpdate(idx); if (e.key === "Escape") setEditingIndex(null); }}
+                      className="flex-1 px-2 py-1 text-xs rounded bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text)] focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)]/40"
+                      autoFocus
+                    />
+                    <button
+                      onClick={() => handleUpdate(idx)}
+                      className="px-2 py-1 text-xs rounded bg-[var(--color-accent)]/20 text-[var(--color-accent)] hover:bg-[var(--color-accent)]/30"
+                    >
+                      Save
+                    </button>
+                  </div>
+                ) : (
+                  <p className="text-xs text-[var(--color-text)] leading-relaxed">{m.content}</p>
+                )}
+                <span className="text-[10px] text-[var(--color-text-secondary)]/50">
+                  {new Date(m.created_at).toLocaleDateString()}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

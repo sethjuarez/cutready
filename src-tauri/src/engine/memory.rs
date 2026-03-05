@@ -241,6 +241,39 @@ pub fn format_recall_results(results: &[MemoryEntry]) -> String {
     out
 }
 
+/// Delete a memory by index. Returns an error if the index is out of bounds.
+pub fn delete_memory(project_root: &Path, index: usize) -> Result<(), String> {
+    let mut store = load(project_root);
+    if index >= store.memories.len() {
+        return Err(format!("Memory index {} out of bounds ({})", index, store.memories.len()));
+    }
+    store.memories.remove(index);
+    save(project_root, &store)
+}
+
+/// Update a memory's content by index.
+pub fn update_memory(project_root: &Path, index: usize, content: &str) -> Result<(), String> {
+    let mut store = load(project_root);
+    if index >= store.memories.len() {
+        return Err(format!("Memory index {} out of bounds ({})", index, store.memories.len()));
+    }
+    store.memories[index].content = content.to_string();
+    save(project_root, &store)
+}
+
+/// Delete all memories of a given category, or all memories if None.
+pub fn clear_memories(project_root: &Path, category: Option<MemoryCategory>) -> Result<usize, String> {
+    let mut store = load(project_root);
+    let before = store.memories.len();
+    match category {
+        Some(cat) => store.memories.retain(|m| m.category != cat),
+        None => store.memories.clear(),
+    }
+    let removed = before - store.memories.len();
+    save(project_root, &store)?;
+    Ok(removed)
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------

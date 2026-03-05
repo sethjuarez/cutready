@@ -172,6 +172,14 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
       return null;
     case "update_chat_summary":
       return null;
+    case "list_memories":
+      return [];
+    case "delete_memory":
+      return null;
+    case "update_memory":
+      return null;
+    case "clear_memories":
+      return 0;
     case "list_models":
       return ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-35-turbo", "o1-preview"];
     case "agent_chat_with_tools": {
