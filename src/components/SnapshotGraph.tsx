@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo } from "react";
 import type { GraphNode } from "../types/sketch";
 import { useAppStore } from "../stores/appStore";
 
@@ -144,21 +144,7 @@ export function SnapshotGraph({
   nodes: rawNodes, isDirty, isRewound, timelineMap, hasMultipleTimelines, showRemoteBadges = false, onNodeClick,
 }: Props) {
   const [hovered, setHovered] = useState<string | null>(null);
-  const diffSnapshots = useAppStore((s) => s.diffSnapshots);
-  const diffSelection = useAppStore((s) => s.diffSelection);
   const currentRemote = useAppStore((s) => s.currentRemote);
-  const [diffMode, setDiffMode] = useState(false);
-  const [diffFrom, setDiffFrom] = useState<string | null>(null);
-
-  const handleDiffClick = useCallback((commitId: string) => {
-    if (!diffFrom) {
-      setDiffFrom(commitId);
-    } else {
-      diffSnapshots(diffFrom, commitId);
-      setDiffFrom(null);
-      setDiffMode(false);
-    }
-  }, [diffFrom, diffSnapshots]);
 
   /* ── Separate primary nodes from alias nodes ──── */
   const { primaryNodes, aliases } = useMemo(() => {
@@ -425,10 +411,6 @@ export function SnapshotGraph({
                   <span className="text-[9px] text-[var(--color-text-secondary)]/40" title={`by ${node.author}`}>
                     {node.author}
                   </span>
-                )}
-                {/* Diff selection indicator */}
-                {diffMode && diffFrom === node.id && (
-                  <span className="text-[9px] px-1 py-px rounded-sm bg-blue-500/10 text-blue-500">comparing…</span>
                 )}
                 {hasMultipleTimelines && (
                   <span className="text-[9px] px-1 py-px rounded-sm leading-tight"
