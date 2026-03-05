@@ -1110,6 +1110,19 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   },
 
   newChatSession: () => {
+    // Archive the previous session if it had messages
+    const { chatMessages, chatSessionPath } = get();
+    if (chatSessionPath && chatMessages.length > 1) {
+      const userMsgs = chatMessages.filter((m) => m.role === "user");
+      const summary = userMsgs.map((m) => m.content?.slice(0, 100)).filter(Boolean).join("; ");
+      if (summary) {
+        invoke("archive_chat_session", {
+          sessionId: chatSessionPath,
+          summary: `Topics discussed: ${summary}`,
+        }).catch(() => {});
+      }
+    }
+
     const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
     const sessionPath = `.chats/chat-${ts}.chat`;
     set({

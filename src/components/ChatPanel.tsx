@@ -636,10 +636,22 @@ function ChatTab() {
   }), [settings]);
 
   // Build system prompt from selected agent
+  const [memoryContext, setMemoryContext] = useState("");
+
+  // Load memory context when project opens
+  useEffect(() => {
+    invoke<string>("get_memory_context")
+      .then(setMemoryContext)
+      .catch(() => setMemoryContext(""));
+  }, [activeSketchPath]);
+
   const systemPrompt = useMemo(() => {
     const agentId = settings.aiSelectedAgent || "planner";
     const customAgents = settings.aiAgents || [];
     let prompt = resolveAgentPrompt(agentId, customAgents);
+    if (memoryContext) {
+      prompt += `\n${memoryContext}`;
+    }
     if (activeSketchPath) {
       prompt += `\n\nThe user is currently editing the sketch at: ${activeSketchPath}`;
     }
@@ -647,7 +659,7 @@ function ChatTab() {
       prompt += `\n\nThe user is currently editing the note at: ${activeNotePath}. Use the read_note tool with this path to see its contents before making suggestions.`;
     }
     return prompt;
-  }, [settings.aiSelectedAgent, settings.aiAgents, activeSketchPath, activeNotePath]);
+  }, [settings.aiSelectedAgent, settings.aiAgents, activeSketchPath, activeNotePath, memoryContext]);
 
   const handleSend = useCallback(async (overrideText?: string, opts?: { silent?: boolean }) => {
     const text = (overrideText ?? input).trim().replace(/\r\n/g, "\n");

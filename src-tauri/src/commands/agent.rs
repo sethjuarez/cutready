@@ -190,6 +190,36 @@ pub async fn delete_chat_session(
 }
 
 // ---------------------------------------------------------------------------
+// Memory system
+// ---------------------------------------------------------------------------
+
+/// Get core memories formatted for injection into the system prompt.
+#[tauri::command]
+pub async fn get_memory_context(
+    state: tauri::State<'_, AppState>,
+) -> Result<String, String> {
+    let root = {
+        let guard = state.current_project.lock().unwrap();
+        guard.as_ref().ok_or("No project open")?.root.clone()
+    };
+    Ok(crate::engine::memory::format_for_system_prompt(&root))
+}
+
+/// Save a session summary to archival memory (called when chat session ends).
+#[tauri::command]
+pub async fn archive_chat_session(
+    session_id: String,
+    summary: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<(), String> {
+    let root = {
+        let guard = state.current_project.lock().unwrap();
+        guard.as_ref().ok_or("No project open")?.root.clone()
+    };
+    crate::engine::memory::archive_session(&root, &summary, &session_id)
+}
+
+// ---------------------------------------------------------------------------
 // Azure Device Code OAuth
 // ---------------------------------------------------------------------------
 

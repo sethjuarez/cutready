@@ -28,7 +28,6 @@ tokio-stream = "0.1"
 futures-util = "0.3"
 gix = { version = "0.70", default-features = false, features = ["basic", "index"] }
 git2 = "0.20"
-openssl-sys = { version = "0.9", features = ["vendored"] }
 xcap = "0.8"
 image = "0.25"
 base64 = "0.22"
@@ -51,6 +50,10 @@ tauri-plugin-single-instance = "2"
 tauri-plugin-process = "2"
 tauri-plugin-updater = "2"
 scraper = "0.25.0"
+
+# Vendor OpenSSL on macOS to support cross-compilation (ARM → Intel)
+[target.'cfg(target_os = "macos")'.dependencies]
+openssl-sys = { version = "0.9", features = ["vendored"] }
 
 [dev-dependencies]
 tempfile = "3"

@@ -18,8 +18,114 @@ use crate::engine::agent::{tools, web};
 /// Maximum tool-call rounds to prevent infinite loops.
 const MAX_TOOL_ROUNDS: usize = 10;
 
-/// Maximum depth for sub-agent delegation.
+/// Maximum delegation depth for sub-agents.
 const MAX_DELEGATION_DEPTH: usize = 2;
+
+/// Rough character budget for messages sent to the API.
+/// ~120k chars ≈ ~30k tokens, safe for most models (128k context).
+/// We use chars as a cheap proxy — no tokenizer dependency needed.
+const MAX_CONTEXT_CHARS: usize = 120_000;
+
+/// Estimate the character cost of a message slice.
+fn estimate_chars(msgs: &[ChatMessage]) -> usize {
+    msgs.iter().map(|m| {
+        let content_len = m.content.as_ref().map_or(0, |c| c.len());
+        let tool_len = m.tool_calls.as_ref().map_or(0, |tc| {
+            tc.iter().map(|t| t.function.name.len() + t.function.arguments.len()).sum()
+        });
+        let tool_id_len = m.tool_call_id.as_ref().map_or(0, |id| id.len());
+        content_len + tool_len + tool_id_len + 20
+    }).sum()
+}
+
+/// Build a compact memory summary from messages that are about to be dropped.
+/// Extracts key user requests, assistant decisions, and tool actions without
+/// needing an LLM call.
+fn summarize_dropped(dropped: &[ChatMessage]) -> String {
+    let mut summary_parts: Vec<String> = Vec::new();
+
+    for msg in dropped {
+        match msg.role.as_str() {
+            "user" => {
+                if let Some(content) = &msg.content {
+                    // Keep first 200 chars of each user message
+                    let truncated = if content.len() > 200 { &content[..200] } else { content };
+                    summary_parts.push(format!("• User asked: {truncated}"));
+                }
+            }
+            "assistant" => {
+                if let Some(content) = &msg.content {
+                    // Keep first 200 chars of assistant responses
+                    let truncated = if content.len() > 200 { &content[..200] } else { content };
+                    summary_parts.push(format!("• Assistant: {truncated}"));
+                }
+                if let Some(tool_calls) = &msg.tool_calls {
+                    for tc in tool_calls {
+                        summary_parts.push(format!("• Called tool: {}", tc.function.name));
+                    }
+                }
+            }
+            "tool" => {
+                // Skip tool results — they're verbose and the tool call name is enough
+            }
+            _ => {}
+        }
+    }
+
+    if summary_parts.is_empty() {
+        return String::new();
+    }
+
+    // Cap the summary itself at ~4000 chars
+    let mut result = String::from("[Earlier conversation summary]\n");
+    for part in &summary_parts {
+        if result.len() + part.len() > 4000 {
+            result.push_str("\n• ... (older messages omitted)");
+            break;
+        }
+        result.push_str(part);
+        result.push('\n');
+    }
+    result
+}
+
+/// Trim messages to fit within the character budget, preserving context
+/// via a compact summary of dropped messages.
+///
+/// Strategy:
+/// 1. Keep system messages at the front
+/// 2. If over budget, extract the oldest non-system messages
+/// 3. Summarize them into a single "memory" user message
+/// 4. Insert the summary after system messages, before recent conversation
+fn trim_to_context_window(messages: &mut Vec<ChatMessage>) {
+    if estimate_chars(messages) <= MAX_CONTEXT_CHARS {
+        return;
+    }
+
+    // Split into system prefix and conversation
+    let system_end = messages.iter().position(|m| m.role != "system").unwrap_or(messages.len());
+    let system_msgs: Vec<ChatMessage> = messages.drain(..system_end).collect();
+    let system_chars = estimate_chars(&system_msgs);
+    // Reserve space for the summary message (~4k chars max)
+    let budget = MAX_CONTEXT_CHARS.saturating_sub(system_chars).saturating_sub(5000);
+
+    // Collect messages to drop from the front
+    let mut dropped: Vec<ChatMessage> = Vec::new();
+    while estimate_chars(messages) > budget && messages.len() > 2 {
+        dropped.push(messages.remove(0));
+    }
+
+    // Build summary of what was dropped
+    let summary = summarize_dropped(&dropped);
+
+    // Reassemble: system + summary + recent conversation
+    let recent = std::mem::take(messages);
+    *messages = system_msgs;
+    if !summary.is_empty() {
+        messages.push(ChatMessage::user(&summary));
+    }
+    messages.extend(recent);
+}
 
 /// Events emitted during the agent loop.
 #[derive(Debug, Clone, serde::Serialize)]
@@ -104,6 +210,9 @@ fn run_with_depth<'a>(
                     format!("Thinking… (round {})", round + 1)
                 },
             });
+
+            // Trim conversation to fit within context window
+            trim_to_context_window(&mut messages);
 
             // Use streaming to get real-time text output
             let stream_result = client

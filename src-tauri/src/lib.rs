@@ -213,6 +213,8 @@ pub fn run() {
             commands::agent::get_chat_session,
             commands::agent::save_chat_session,
             commands::agent::delete_chat_session,
+            commands::agent::get_memory_context,
+            commands::agent::archive_chat_session,
             commands::agent::azure_device_code_start,
             commands::agent::azure_device_code_poll,
             commands::agent::azure_token_refresh,

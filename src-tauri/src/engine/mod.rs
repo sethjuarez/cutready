@@ -4,6 +4,7 @@ pub mod automation;
 pub mod export;
 pub mod import;
 pub mod interaction;
+pub mod memory;
 pub mod project;
 pub mod recording;
 pub mod versioning;

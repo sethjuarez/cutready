@@ -166,6 +166,10 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
       return { title: "New Chat", messages: [], created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
     case "delete_chat_session":
       return null;
+    case "get_memory_context":
+      return "";
+    case "archive_chat_session":
+      return null;
     case "list_models":
       return ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-35-turbo", "o1-preview"];
     case "agent_chat_with_tools": {

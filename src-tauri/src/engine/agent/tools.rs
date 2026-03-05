@@ -168,6 +168,30 @@ pub fn all_tools() -> Vec<ToolDefinition> {
                 "required": ["path"]
             }),
         ),
+        tool_def(
+            "recall_memory",
+            "Search your memory for information from past conversations, saved facts, or session summaries. Use this when the user references something from a previous discussion, or when you need context about prior decisions. The search uses keyword matching — be specific.",
+            json!({
+                "type": "object",
+                "properties": {
+                    "query": { "type": "string", "description": "Keywords to search for in memories (e.g. 'user preference narration style', 'login flow demo')" }
+                },
+                "required": ["query"]
+            }),
+        ),
+        tool_def(
+            "save_memory",
+            "Save an important fact, decision, or preference to memory so you can recall it in future conversations. Use 'core' for persistent facts about the user or project (e.g. preferences, tech stack, team info). Use 'insight' for decisions or conclusions from the current conversation.",
+            json!({
+                "type": "object",
+                "properties": {
+                    "category": { "type": "string", "enum": ["core", "insight"], "description": "Memory category: 'core' for persistent facts, 'insight' for session-specific conclusions" },
+                    "content": { "type": "string", "description": "The fact, preference, or insight to remember" },
+                    "tags": { "type": "array", "items": { "type": "string" }, "description": "Optional tags for easier recall (e.g. ['preference', 'narration'] or ['demo', 'login'])" }
+                },
+                "required": ["category", "content"]
+            }),
+        ),
     ]
 }
 
@@ -201,6 +225,8 @@ pub fn execute_tool(call: &ToolCall, project_root: &Path) -> String {
         "update_note" => exec_update_note(project_root, &args),
         "create_note" => exec_create_note(project_root, &args),
         "update_storyboard" => exec_update_storyboard(project_root, &args),
+        "recall_memory" => exec_recall_memory(project_root, &args),
+        "save_memory" => exec_save_memory(project_root, &args),
         other => format!("Unknown tool: {other}"),
     }
 }
@@ -549,5 +575,44 @@ fn exec_create_note(root: &Path, args: &Value) -> String {
     match project::write_note(&path, content) {
         Ok(()) => format!("Created note '{}' successfully", safe_name),
         Err(e) => format!("Error creating note: {e}"),
+    }
+}
+
+fn exec_recall_memory(root: &Path, args: &Value) -> String {
+    let query = match args.get("query").and_then(|v| v.as_str()) {
+        Some(q) => q,
+        None => return "Error: missing 'query' argument".into(),
+    };
+
+    let results = crate::engine::memory::recall(root, query);
+    crate::engine::memory::format_recall_results(&results)
+}
+
+fn exec_save_memory(root: &Path, args: &Value) -> String {
+    let category = match args.get("category").and_then(|v| v.as_str()) {
+        Some("core") => crate::engine::memory::MemoryCategory::Core,
+        Some("insight") => crate::engine::memory::MemoryCategory::Insight,
+        Some(other) => return format!("Error: unknown category '{other}'. Use 'core' or 'insight'."),
+        None => return "Error: missing 'category' argument".into(),
+    };
+
+    let content = match args.get("content").and_then(|v| v.as_str()) {
+        Some(c) => c,
+        None => return "Error: missing 'content' argument".into(),
+    };
+
+    let tags: Vec<String> = args
+        .get("tags")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                .collect()
+        })
+        .unwrap_or_default();
+
+    match crate::engine::memory::save_memory(root, category, content, tags) {
+        Ok(()) => format!("Memory saved: {content}"),
+        Err(e) => format!("Error saving memory: {e}"),
     }
 }

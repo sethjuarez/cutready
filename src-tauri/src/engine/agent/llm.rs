@@ -613,7 +613,9 @@ impl LlmClient {
         if !resp.status().is_success() {
             let status = resp.status();
             let text = resp.text().await.unwrap_or_default();
-            return Err(format!("Chat stream error ({status}): {text}"));
+            // Log the full API error for debugging (truncate at 2000 chars for sanity)
+            let detail = if text.len() > 2000 { &text[..2000] } else { &text };
+            return Err(format!("Chat stream error ({status}): {detail}"));
         }
 
         let stream = resp.bytes_stream().map(|chunk_result| {
