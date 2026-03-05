@@ -170,6 +170,8 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
       return "";
     case "archive_chat_session":
       return null;
+    case "update_chat_summary":
+      return null;
     case "list_models":
       return ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-35-turbo", "o1-preview"];
     case "agent_chat_with_tools": {

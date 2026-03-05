@@ -223,7 +223,21 @@ pub async fn archive_chat_session(
         let guard = state.current_project.lock().unwrap();
         guard.as_ref().ok_or("No project open")?.root.clone()
     };
+    // Clear the pending summary since we're archiving now
+    *state.last_chat_summary.lock().unwrap() = None;
     crate::engine::memory::archive_session(&root, &summary, &session_id)
+}
+
+/// Update the current chat summary (called periodically by frontend).
+/// Stored in AppState so the Rust-side window close handler can archive it.
+#[tauri::command]
+pub async fn update_chat_summary(
+    session_id: String,
+    summary: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<(), String> {
+    *state.last_chat_summary.lock().unwrap() = Some((session_id, summary));
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------

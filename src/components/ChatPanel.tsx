@@ -646,22 +646,19 @@ function ChatTab() {
       .catch(() => setMemoryContext(""));
   }, [activeSketchPath]);
 
-  // Archive chat session on window close (covers app quit without "New Chat")
+  // Keep Rust-side chat summary in sync so window close can archive reliably.
+  // Updates whenever messages change (debounced by React's batching).
   useEffect(() => {
-    const handleBeforeUnload = () => {
-      if (messages.length > 1) {
-        const userMsgs = messages.filter((m) => m.role === "user");
-        const summary = userMsgs.map((m) => m.content?.slice(0, 100)).filter(Boolean).join("; ");
-        if (summary) {
-          invoke("archive_chat_session", {
-            sessionId: chatSessionPath || "unknown",
-            summary: `Topics discussed: ${summary}`,
-          }).catch(() => {});
-        }
+    if (messages.length > 1 && chatSessionPath) {
+      const userMsgs = messages.filter((m) => m.role === "user");
+      const summary = userMsgs.map((m) => m.content?.slice(0, 100)).filter(Boolean).join("; ");
+      if (summary) {
+        invoke("update_chat_summary", {
+          sessionId: chatSessionPath,
+          summary: `Topics discussed: ${summary}`,
+        }).catch(() => {});
       }
-    };
-    window.addEventListener("beforeunload", handleBeforeUnload);
-    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+    }
   }, [messages, chatSessionPath]);
 
   const systemPrompt = useMemo(() => {

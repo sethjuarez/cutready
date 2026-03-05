@@ -53,6 +53,8 @@ pub struct AppState {
     pub browser: Arc<tokio::sync::Mutex<Option<BrowserConnection>>>,
     /// Pending chat messages queued by the user while the agent loop is running.
     pub pending_chat_messages: Arc<Mutex<Vec<String>>>,
+    /// Last chat session summary (updated by frontend, archived on window close).
+    pub last_chat_summary: Mutex<Option<(String, String)>>, // (session_id, summary)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -61,6 +63,7 @@ pub fn run() {
         current_project: Mutex::new(None),
         browser: Arc::new(tokio::sync::Mutex::new(None)),
         pending_chat_messages: Arc::new(Mutex::new(Vec::new())),
+        last_chat_summary: Mutex::new(None),
     };
 
     tauri::Builder::default()
@@ -215,6 +218,7 @@ pub fn run() {
             commands::agent::delete_chat_session,
             commands::agent::get_memory_context,
             commands::agent::archive_chat_session,
+            commands::agent::update_chat_summary,
             commands::agent::azure_device_code_start,
             commands::agent::azure_device_code_poll,
             commands::agent::azure_token_refresh,
@@ -225,8 +229,20 @@ pub fn run() {
             commands::feedback::clear_feedback,
         ])
         .on_window_event(|window, event| {
-            if let tauri::WindowEvent::Destroyed = event {
-                if window.label() == "main" {
+            match event {
+                tauri::WindowEvent::CloseRequested { .. } if window.label() == "main" => {
+                    // Archive any pending chat summary before the window closes
+                    let app = window.app_handle();
+                    if let Some(state) = app.try_state::<AppState>() {
+                        let summary = state.last_chat_summary.lock().unwrap().take();
+                        let root = state.current_project.lock().unwrap()
+                            .as_ref().map(|p| p.root.clone());
+                        if let (Some((session_id, text)), Some(root)) = (summary, root) {
+                            let _ = crate::engine::memory::archive_session(&root, &text, &session_id);
+                        }
+                    }
+                }
+                tauri::WindowEvent::Destroyed if window.label() == "main" => {
                     // Close preview and capture windows when main window closes
                     let app = window.app_handle();
                     for label in &["preview", "capture"] {
@@ -235,6 +251,7 @@ pub fn run() {
                         }
                     }
                 }
+                _ => {}
             }
         })
         .run(tauri::generate_context!())
