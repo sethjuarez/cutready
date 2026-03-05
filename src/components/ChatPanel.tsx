@@ -1946,10 +1946,13 @@ function ChatHistory({ onOpenSession }: { onOpenSession: () => void }) {
             {sessions.map((s) => {
               const isActive = s.path === chatSessionPath;
               return (
-                <button
+                <div
                   key={s.path}
+                  role="button"
+                  tabIndex={0}
                   onClick={() => handleOpen(s.path)}
-                  className={`group w-full text-left px-3 py-2.5 flex items-start gap-2 transition-colors border-l-2 ${
+                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") handleOpen(s.path); }}
+                  className={`group w-full text-left px-3 py-2.5 flex items-start gap-2 transition-colors border-l-2 cursor-pointer ${
                     isActive
                       ? "border-[var(--color-accent)] bg-[var(--color-accent)]/8"
                       : "border-transparent hover:bg-[var(--color-surface-hover)]"
@@ -1978,7 +1981,7 @@ function ChatHistory({ onOpenSession }: { onOpenSession: () => void }) {
                   >
                     <IconTrash size={12} />
                   </button>
-                </button>
+                </div>
               );
             })}
           </div>
