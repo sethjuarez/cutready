@@ -1,0 +1,32 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Docs build artifacts
+docs/dist/
+docs/.astro/
+docs/node_modules/
+
+# Rust / Cargo
+target/
+src-tauri/target/
+
+# Tauri generated
+src-tauri/gen/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# IDE
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
