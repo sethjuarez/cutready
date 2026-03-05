@@ -265,9 +265,15 @@ pub struct LlmClient {
 
 impl LlmClient {
     pub fn new(config: LlmConfig) -> Self {
+        // Disable connection pooling — Azure gateways can return cryptic
+        // errors when reusing connections after SSE streams.
+        let http = reqwest::Client::builder()
+            .pool_max_idle_per_host(0)
+            .build()
+            .unwrap_or_else(|_| reqwest::Client::new());
         Self {
             config,
-            http: reqwest::Client::new(),
+            http,
             reported_context_length: std::sync::Mutex::new(None),
         }
     }
