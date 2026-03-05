@@ -805,6 +805,7 @@ function FeedbackListTab() {
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
   const [issuePending, setIssuePending] = useState<number | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<number | null>(null);
 
   useEffect(() => {
     invoke("list_feedback")
@@ -840,6 +841,16 @@ function FeedbackListTab() {
   const clearAll = async () => {
     await invoke("clear_feedback").catch(() => {});
     setEntries([]);
+  };
+
+  const deleteSingle = async (realIndex: number) => {
+    try {
+      await invoke("delete_feedback", { index: realIndex });
+      setEntries((prev) => prev.filter((_, i) => i !== realIndex));
+    } catch (e) {
+      console.error("Failed to delete feedback:", e);
+    }
+    setConfirmDelete(null);
   };
 
   /** Build a simple fallback issue (no LLM). */
@@ -996,7 +1007,10 @@ function FeedbackListTab() {
 
       {entries.length > 0 && (
         <div className="space-y-2 max-h-[400px] overflow-y-auto">
-          {[...entries].reverse().map((entry, i) => (
+          {[...entries].reverse().map((entry, i) => {
+            const realIndex = entries.length - 1 - i;
+            const isConfirming = confirmDelete === realIndex;
+            return (
             <div
               key={i}
               className="group relative px-3 py-2.5 rounded-lg bg-[var(--color-surface-alt)] border border-[var(--color-border)]"
@@ -1019,13 +1033,41 @@ function FeedbackListTab() {
                   Debug log attached ({entry.debug_log.split("\n").length} lines)
                 </div>
               )}
+              {/* Confirm delete inline */}
+              {isConfirming && (
+                <div className="mt-2 flex items-center gap-2 p-2 rounded bg-red-500/10 border border-red-500/20">
+                  <span className="text-[11px] text-red-400 flex-1">Delete this feedback?</span>
+                  <button
+                    onClick={() => deleteSingle(realIndex)}
+                    className="px-2 py-0.5 text-[11px] rounded bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors"
+                  >
+                    Delete
+                  </button>
+                  <button
+                    onClick={() => setConfirmDelete(null)}
+                    className="px-2 py-0.5 text-[11px] rounded text-[var(--color-text-secondary)] hover:bg-[var(--color-surface)] transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              )}
+              {/* Action buttons — hover to reveal */}
               <button
                 onClick={() => copySingle(entry)}
-                className="absolute top-2 right-9 opacity-0 group-hover:opacity-100 p-1 rounded text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)] transition-all"
+                className="absolute top-2 right-16 opacity-0 group-hover:opacity-100 p-1 rounded text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)] transition-all"
                 title="Copy this item"
               >
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <rect x="9" y="9" width="13" height="13" rx="2" ry="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                </svg>
+              </button>
+              <button
+                onClick={() => setConfirmDelete(isConfirming ? null : realIndex)}
+                className="absolute top-2 right-9 opacity-0 group-hover:opacity-100 p-1 rounded text-[var(--color-text-secondary)] hover:text-red-400 hover:bg-[var(--color-surface)] transition-all"
+                title="Delete this item"
+              >
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 6h18M8 6V4h8v2M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
                 </svg>
               </button>
               <button
@@ -1049,7 +1091,8 @@ function FeedbackListTab() {
                 )}
               </button>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

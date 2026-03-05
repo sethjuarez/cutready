@@ -1082,7 +1082,15 @@ function ChatTab() {
         )}
 
         {messages.map((msg, i) => (
-          <MessageRow key={i} message={msg} projectRoot={currentProject?.root} />
+          <MessageRow
+            key={i}
+            message={msg}
+            projectRoot={currentProject?.root}
+            onDelete={msg.role === "user" ? () => {
+              const updated = messages.filter((_, idx) => idx !== i);
+              setChatMessages(updated);
+            } : undefined}
+          />
         ))}
 
         {loading && (
@@ -1530,11 +1538,22 @@ function WebRefChip({ url }: { url: string }) {
 
 // ── Message Row (VS Code Copilot chat style) ────────────────────
 
-function MessageRow({ message, projectRoot }: { message: ChatMessage; projectRoot?: string }) {
+function MessageRow({ message, projectRoot, onDelete }: { message: ChatMessage; projectRoot?: string; onDelete?: () => void }) {
   if (message.role === "user") {
     return (
-      <div className="px-3.5 py-2 flex justify-end">
-        <div className="bg-[var(--color-accent)]/15 rounded-xl rounded-br-sm px-3 py-2 text-[13px] text-[var(--color-text)] whitespace-pre-wrap break-words leading-[1.6] max-w-[85%]">
+      <div className="group px-3.5 py-2 flex justify-end items-start gap-1.5">
+        {onDelete && (
+          <button
+            onClick={onDelete}
+            className="shrink-0 mt-2 p-1 rounded opacity-0 group-hover:opacity-100 text-[var(--color-text-secondary)] hover:text-red-400 hover:bg-red-500/10 transition-all"
+            title="Remove message"
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M18 6L6 18M6 6l12 12" />
+            </svg>
+          </button>
+        )}
+        <div className="bg-[var(--color-accent)]/15 border border-[var(--color-accent)]/20 rounded-xl rounded-br-sm px-3 py-2 text-[13px] text-[var(--color-text)] whitespace-pre-wrap break-words leading-[1.6] max-w-[85%]">
           <UserContent content={message.content || ""} />
         </div>
       </div>

@@ -71,3 +71,27 @@ pub fn clear_feedback(app: tauri::AppHandle) -> Result<(), String> {
     }
     Ok(())
 }
+
+/// Delete a single feedback entry by index.
+#[tauri::command]
+pub fn delete_feedback(app: tauri::AppHandle, index: usize) -> Result<(), String> {
+    let data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Could not resolve app data dir: {e}"))?;
+    let path = data_dir.join("feedback.json");
+    if !path.exists() {
+        return Err("No feedback file found".into());
+    }
+    let content = fs::read_to_string(&path).map_err(|e| format!("Read error: {e}"))?;
+    let mut entries: Vec<FeedbackEntry> =
+        serde_json::from_str(&content).map_err(|e| format!("Parse error: {e}"))?;
+    if index >= entries.len() {
+        return Err(format!("Index {} out of bounds ({})", index, entries.len()));
+    }
+    entries.remove(index);
+    let json = serde_json::to_string_pretty(&entries)
+        .map_err(|e| format!("Serialization error: {e}"))?;
+    fs::write(&path, json).map_err(|e| format!("Could not write feedback: {e}"))?;
+    Ok(())
+}
