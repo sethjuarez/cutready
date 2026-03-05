@@ -96,7 +96,7 @@ export function TitleBar({
             data-tauri-drag-region
             className="text-sm text-[var(--color-text-secondary)] font-normal ml-1.5"
           >
-            — {projectName}
+            / {projectName}
           </span>
         )}
       </div>
