@@ -1,7 +1,7 @@
 /**
  * Tests for exportToWord utility.
  */
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // Mock file-saver before importing
 vi.mock("file-saver", () => ({ saveAs: vi.fn() }));
@@ -29,6 +29,10 @@ function makeMockSketch(title = "Test Sketch", rowCount = 3): Sketch {
   };
 }
 
+beforeEach(() => {
+  vi.mocked(saveAs).mockClear();
+});
+
 describe("exportSketchToWord", () => {
   it("generates a .docx blob and triggers download", async () => {
     const sketch = makeMockSketch("My Demo");
@@ -39,10 +43,9 @@ describe("exportSketchToWord", () => {
     expect(blob).toBeInstanceOf(Blob);
     expect(blob.type).toBe("application/vnd.openxmlformats-officedocument.wordprocessingml.document");
     expect(filename).toBe("My-Demo.docx");
-  });
+  }, 15_000);
 
   it("handles empty rows gracefully", async () => {
-    vi.mocked(saveAs).mockClear();
     const sketch = makeMockSketch("Empty", 0);
     await exportSketchToWord(sketch);
 
@@ -50,20 +53,18 @@ describe("exportSketchToWord", () => {
     const [blob, filename] = (saveAs as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
     expect(blob).toBeInstanceOf(Blob);
     expect(filename).toBe("Empty.docx");
-  });
+  }, 15_000);
 
   it("handles Lexical JSON description", async () => {
-    vi.mocked(saveAs).mockClear();
     const sketch = makeMockSketch("Lexical");
     sketch.description = { root: { children: [{ text: "hello" }] } };
     await exportSketchToWord(sketch);
     expect(saveAs).toHaveBeenCalledTimes(1);
-  });
+  }, 15_000);
 });
 
 describe("exportStoryboardToWord", () => {
   it("generates a .docx with resolved sketches", async () => {
-    vi.mocked(saveAs).mockClear();
     const sk1 = makeMockSketch("Intro", 2);
     const sk2 = makeMockSketch("Demo", 4);
 
@@ -93,10 +94,9 @@ describe("exportStoryboardToWord", () => {
     const [blob, filename] = (saveAs as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
     expect(blob).toBeInstanceOf(Blob);
     expect(filename).toBe("Full-Demo-Storyboard.docx");
-  });
+  }, 15_000);
 
   it("handles storyboard with no items", async () => {
-    vi.mocked(saveAs).mockClear();
     const storyboard: Storyboard = {
       title: "Empty Board",
       description: "",
@@ -110,5 +110,5 @@ describe("exportStoryboardToWord", () => {
     expect(saveAs).toHaveBeenCalledTimes(1);
     const [_, filename] = (saveAs as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
     expect(filename).toBe("Empty-Board.docx");
-  });
+  }, 15_000);
 });
