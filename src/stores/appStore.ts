@@ -1134,8 +1134,9 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         chatError: null,
       });
       get()._persistTabs();
-    } catch (err) {
-      console.error("Failed to load chat session:", err);
+    } catch {
+      // Session file doesn't exist (e.g., new session with no messages yet) — start fresh
+      get().newChatSession();
     }
   },
 
