@@ -1,14 +1,24 @@
 /**
  * Screenshot capture script for CutReady documentation.
  * Captures every unique screenshot at 1920×1080 in both light and dark mode.
+ * CSS zoom 1.25× is applied so UI elements are easily readable in docs.
  * 
  * Usage: npx playwright test e2e/capture-doc-screenshots.spec.ts
  */
 import { test, expect, type Page } from "@playwright/test";
 
 const IMG_DIR = "docs/public/images/";
+const ZOOM = 1.25; // Like Ctrl+= in Chrome — makes UI elements larger
 
 // ── Helpers ──────────────────────────────────────────────
+
+/** Apply CSS zoom so the UI is visually larger in screenshots */
+async function applyZoom(page: Page) {
+  await page.evaluate((z) => {
+    (document.body.style as any).zoom = `${z}`;
+  }, ZOOM);
+  await page.waitForTimeout(100);
+}
 
 async function setupApp(page: Page, opts?: { panels?: boolean }) {
   await page.goto("/");
@@ -16,6 +26,7 @@ async function setupApp(page: Page, opts?: { panels?: boolean }) {
   // Click mock-project to enter the workspace
   await page.getByText("mock-project", { exact: true }).click();
   await page.waitForTimeout(600);
+  await applyZoom(page);
 }
 
 async function setupAppWithPanels(page: Page) {
@@ -23,6 +34,7 @@ async function setupAppWithPanels(page: Page) {
   await page.waitForSelector("#root", { timeout: 10_000 });
   await page.getByText("mock-project", { exact: true }).click();
   await page.waitForTimeout(600);
+  await applyZoom(page);
   // Show secondary panel (hidden by default in fresh session)
   await page.getByRole("button", { name: "Toggle Secondary Panel" }).click();
   await page.waitForTimeout(300);
@@ -32,6 +44,7 @@ async function setupAppWithPanels(page: Page) {
 async function goHome(page: Page) {
   await page.goto("/");
   await page.waitForSelector("#root", { timeout: 10_000 });
+  await applyZoom(page);
 }
 
 async function setOverrides(page: Page, overrides: Record<string, unknown>) {
