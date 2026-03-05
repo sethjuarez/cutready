@@ -651,29 +651,55 @@ impl LlmClient {
         messages: &[ChatMessage],
         tools: Option<&[ToolDefinition]>,
     ) -> Result<impl futures_util::Stream<Item = Result<Vec<StreamChunk>, String>>, String> {
-        let body = ChatCompletionRequest {
-            model: match self.config.provider {
-                LlmProvider::Openai => Some(self.config.model.clone()),
-                LlmProvider::AzureOpenai => {
-                    if self.is_foundry() {
-                        Some(self.config.model.clone())
-                    } else {
-                        None
-                    }
+        let model_field = match self.config.provider {
+            LlmProvider::Openai => Some(self.config.model.clone()),
+            LlmProvider::AzureOpenai => {
+                if self.is_foundry() {
+                    Some(self.config.model.clone())
+                } else {
+                    None
                 }
-            },
-            messages: messages.to_vec(),
-            tools: tools.map(|t| t.to_vec()),
-            stream: Some(true),
+            }
         };
+        let tool_defs = tools.map(|t| t.to_vec());
 
-        log::info!("[llm] chat_stream → {} ({} messages, {} tools)", self.config.model, messages.len(), tools.map_or(0, |t| t.len()));
+        let mut final_messages = messages.to_vec();
+
+        // Serialize to measure body size
+        let mut body_json = serde_json::to_string(&ChatCompletionRequest {
+            model: model_field.clone(),
+            messages: final_messages.clone(),
+            tools: tool_defs.clone(),
+            stream: Some(true),
+        }).map_err(|e| format!("Failed to serialize request: {e}"))?;
+
+        log::info!("[llm] chat_stream → {} ({} messages, {} tools, {}KB body)",
+            self.config.model, final_messages.len(),
+            tools.map_or(0, |t| t.len()), body_json.len() / 1024);
+
+        // Azure gateway rejects bodies over ~4MB with cryptic IIS errors.
+        const MAX_BODY_BYTES: usize = 3 * 1024 * 1024; // 3MB safety margin
+        if body_json.len() > MAX_BODY_BYTES {
+            log::warn!("[llm] body {}KB exceeds {}KB — trimming", body_json.len() / 1024, MAX_BODY_BYTES / 1024);
+            while final_messages.len() > 2 && body_json.len() > MAX_BODY_BYTES {
+                // Drop the second message (preserve system prompt at [0])
+                final_messages.remove(1);
+                body_json = serde_json::to_string(&ChatCompletionRequest {
+                    model: model_field.clone(),
+                    messages: final_messages.clone(),
+                    tools: tool_defs.clone(),
+                    stream: Some(true),
+                }).unwrap_or_default();
+            }
+            log::info!("[llm] trimmed to {} messages ({}KB)", final_messages.len(), body_json.len() / 1024);
+        }
 
         let resp = self
             .http
             .post(&self.chat_url())
             .headers(self.auth_headers())
-            .json(&body)
+            .header(reqwest::header::CONTENT_TYPE, "application/json")
+            .body(body_json)
             .send()
             .await
             .map_err(|e| format!("Stream request failed: {e}"))?;
@@ -681,7 +707,6 @@ impl LlmClient {
         if !resp.status().is_success() {
             let status = resp.status();
             let text = resp.text().await.unwrap_or_default();
-            // Log the full API error for debugging (truncate at 2000 chars for sanity)
             let detail = if text.len() > 2000 { &text[..2000] } else { &text };
             log::error!("[llm] API error {}: {}", status, detail);
             return Err(format!("Chat stream error ({status}): {detail}"));

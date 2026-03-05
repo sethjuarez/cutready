@@ -83,8 +83,9 @@ pub fn run() {
             let mut builder = tauri_plugin_log::Builder::new()
                 .level(log::LevelFilter::Info)
                 .filter(|metadata| {
-                    // Suppress noisy tao windowing system warnings
                     !metadata.target().starts_with("tao::")
+                        && !metadata.target().starts_with("tauri_plugin_updater")
+                        && !metadata.target().starts_with("reqwest::connect")
                 });
 
             #[cfg(debug_assertions)]
