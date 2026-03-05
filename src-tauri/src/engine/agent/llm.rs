@@ -265,6 +265,46 @@ impl LlmClient {
         }
     }
 
+    /// Return a conservative character budget for the model's context window.
+    /// Uses ~4 chars/token as a rough proxy (no tokenizer dependency).
+    pub fn context_char_budget(&self) -> usize {
+        let model = self.config.model.to_lowercase();
+
+        // Map well-known model families to their context windows (in tokens),
+        // then convert to a char budget at ~75% utilization (leave room for output).
+        let token_limit: usize = if model.contains("gpt-4o") || model.contains("gpt-4.1") || model.contains("gpt-5") {
+            128_000
+        } else if model.contains("gpt-4-turbo") || model.contains("gpt-4-1106") || model.contains("gpt-4-0125") {
+            128_000
+        } else if model.contains("gpt-35-turbo-16k") || model.contains("gpt-3.5-turbo-16k") {
+            16_384
+        } else if model.contains("gpt-35") || model.contains("gpt-3.5") {
+            4_096
+        } else if model.contains("gpt-4") {
+            8_192
+        } else if model.contains("claude-3-5") || model.contains("claude-3.5") || model.contains("claude-4") {
+            200_000
+        } else if model.contains("claude") {
+            100_000
+        } else if model.contains("o1") || model.contains("o3") || model.contains("o4") {
+            128_000
+        } else if model.contains("gemini") {
+            128_000
+        } else if model.contains("mistral-large") || model.contains("mistral-medium") {
+            32_000
+        } else if model.contains("mistral") {
+            8_000
+        } else {
+            // Conservative default for unknown models
+            32_000
+        };
+
+        // Use 75% of context for input, leave 25% for output
+        // ~4 chars per token as a rough approximation
+        let usable_tokens = token_limit * 3 / 4;
+        usable_tokens * 4
+    }
+
     /// Detect whether the endpoint is Azure AI Foundry (`.services.ai.azure.com`).
     fn is_foundry(&self) -> bool {
         self.config.endpoint.contains(".services.ai.azure.com")
@@ -656,4 +696,51 @@ fn decode_jwt_audience(token: &str) -> Option<String> {
     val.get("aud")
         .and_then(|a| a.as_str())
         .map(|s| s.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_client(model: &str) -> LlmClient {
+        LlmClient::new(LlmConfig {
+            provider: LlmProvider::Openai,
+            endpoint: "https://api.openai.com".into(),
+            api_key: "test".into(),
+            model: model.into(),
+            bearer_token: None,
+        })
+    }
+
+    #[test]
+    fn context_budget_varies_by_model() {
+        let gpt4o = make_client("gpt-4o");
+        let gpt35 = make_client("gpt-35-turbo");
+        let claude = make_client("claude-3.5-sonnet");
+        let unknown = make_client("my-custom-model");
+
+        // GPT-4o should have a much larger budget than GPT-3.5
+        assert!(gpt4o.context_char_budget() > gpt35.context_char_budget() * 2);
+        // Claude should have the largest budget
+        assert!(claude.context_char_budget() > gpt4o.context_char_budget());
+        // Unknown defaults to a conservative budget
+        assert!(unknown.context_char_budget() < gpt4o.context_char_budget());
+        assert!(unknown.context_char_budget() > 0);
+    }
+
+    #[test]
+    fn context_budget_gpt4o_reasonable() {
+        let client = make_client("gpt-4o");
+        let budget = client.context_char_budget();
+        // 128k tokens * 0.75 * 4 chars = 384,000 chars
+        assert_eq!(budget, 384_000);
+    }
+
+    #[test]
+    fn context_budget_small_model() {
+        let client = make_client("gpt-35-turbo");
+        let budget = client.context_char_budget();
+        // 4096 tokens * 0.75 * 4 chars = 12,288 chars
+        assert_eq!(budget, 12_288);
+    }
 }

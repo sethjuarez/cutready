@@ -21,10 +21,6 @@ const MAX_TOOL_ROUNDS: usize = 10;
 /// Maximum delegation depth for sub-agents.
 const MAX_DELEGATION_DEPTH: usize = 2;
 
-/// Rough character budget for messages sent to the API.
-/// ~120k chars ≈ ~30k tokens, safe for most models (128k context).
-/// We use chars as a cheap proxy — no tokenizer dependency needed.
-const MAX_CONTEXT_CHARS: usize = 120_000;
 
 /// Estimate the character cost of a message slice.
 fn estimate_chars(msgs: &[ChatMessage]) -> usize {
@@ -97,8 +93,8 @@ fn summarize_dropped(dropped: &[ChatMessage]) -> String {
 /// 2. If over budget, extract the oldest non-system messages
 /// 3. Summarize them into a single "memory" user message
 /// 4. Insert the summary after system messages, before recent conversation
-fn trim_to_context_window(messages: &mut Vec<ChatMessage>) {
-    if estimate_chars(messages) <= MAX_CONTEXT_CHARS {
+fn trim_to_context_window(messages: &mut Vec<ChatMessage>, max_chars: usize) {
+    if estimate_chars(messages) <= max_chars {
         return;
     }
 
@@ -107,7 +103,7 @@ fn trim_to_context_window(messages: &mut Vec<ChatMessage>) {
     let system_msgs: Vec<ChatMessage> = messages.drain(..system_end).collect();
     let system_chars = estimate_chars(&system_msgs);
     // Reserve space for the summary message (~4k chars max)
-    let budget = MAX_CONTEXT_CHARS.saturating_sub(system_chars).saturating_sub(5000);
+    let budget = max_chars.saturating_sub(system_chars).saturating_sub(5000);
 
     // Collect messages to drop from the front
     let mut dropped: Vec<ChatMessage> = Vec::new();
@@ -211,8 +207,8 @@ fn run_with_depth<'a>(
                 },
             });
 
-            // Trim conversation to fit within context window
-            trim_to_context_window(&mut messages);
+            // Trim conversation to fit within model's context window
+            trim_to_context_window(&mut messages, client.context_char_budget());
 
             // Use streaming to get real-time text output
             let stream_result = client
