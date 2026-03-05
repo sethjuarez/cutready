@@ -20,7 +20,7 @@ test.describe("Phase 1 — Solo Timeline Switcher", () => {
 
   test("timeline selector hidden with single timeline", async ({ page }) => {
     // Default mock has 1 timeline → selector hidden
-    const branchBtn = page.locator('button[title^="Timeline:"]');
+    const branchBtn = page.locator('button[title^="Branch:"]');
     await expect(branchBtn).not.toBeVisible();
 
     await page.screenshot({
@@ -42,7 +42,7 @@ test.describe("Phase 1 — Solo Timeline Switcher", () => {
     await page.getByRole("button", { name: "Snapshots" }).click();
     await page.waitForTimeout(500);
 
-    const branchBtn = page.locator('button[title^="Timeline:"]');
+    const branchBtn = page.locator('button[title^="Branch:"]');
     await expect(branchBtn).toBeVisible({ timeout: 3_000 });
 
     // Open the dropdown
