@@ -678,20 +678,51 @@ impl LlmClient {
             tools.map_or(0, |t| t.len()), body_json.len() / 1024);
 
         // Azure gateway rejects bodies over ~4MB with cryptic IIS errors.
+        // When trimming, summarize dropped messages into working memory so the
+        // LLM retains context about what was discussed earlier.
         const MAX_BODY_BYTES: usize = 3 * 1024 * 1024; // 3MB safety margin
         if body_json.len() > MAX_BODY_BYTES {
-            log::warn!("[llm] body {}KB exceeds {}KB — trimming", body_json.len() / 1024, MAX_BODY_BYTES / 1024);
-            while final_messages.len() > 2 && body_json.len() > MAX_BODY_BYTES {
-                // Drop the second message (preserve system prompt at [0])
-                final_messages.remove(1);
-                body_json = serde_json::to_string(&ChatCompletionRequest {
+            log::warn!("[llm] body {}KB exceeds {}KB — compacting with memory summary", body_json.len() / 1024, MAX_BODY_BYTES / 1024);
+            use crate::engine::agent::runner::summarize_dropped;
+
+            // Split: system prefix + conversation
+            let sys_end = final_messages.iter().position(|m| m.role != "system").unwrap_or(final_messages.len());
+            let system_msgs: Vec<ChatMessage> = final_messages.drain(..sys_end).collect();
+
+            // Drop oldest conversation messages until under budget
+            let mut dropped: Vec<ChatMessage> = Vec::new();
+            loop {
+                let trial = ChatCompletionRequest {
                     model: model_field.clone(),
-                    messages: final_messages.clone(),
+                    messages: [system_msgs.clone(), final_messages.clone()].concat(),
                     tools: tool_defs.clone(),
                     stream: Some(true),
-                }).unwrap_or_default();
+                };
+                let size = serde_json::to_string(&trial).map(|s| s.len()).unwrap_or(0);
+                if size <= MAX_BODY_BYTES || final_messages.len() <= 2 {
+                    break;
+                }
+                dropped.push(final_messages.remove(0));
             }
-            log::info!("[llm] trimmed to {} messages ({}KB)", final_messages.len(), body_json.len() / 1024);
+
+            // Summarize what was dropped and inject as a memory message
+            let summary = summarize_dropped(&dropped);
+            let mut reassembled = system_msgs;
+            if !summary.is_empty() {
+                reassembled.push(ChatMessage::user(&summary));
+            }
+            reassembled.extend(final_messages);
+            final_messages = reassembled;
+
+            body_json = serde_json::to_string(&ChatCompletionRequest {
+                model: model_field.clone(),
+                messages: final_messages.clone(),
+                tools: tool_defs.clone(),
+                stream: Some(true),
+            }).unwrap_or_default();
+
+            log::info!("[llm] compacted: dropped {} msgs → summary, now {} messages ({}KB)",
+                dropped.len(), final_messages.len(), body_json.len() / 1024);
         }
 
         let resp = self

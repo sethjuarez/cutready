@@ -37,7 +37,7 @@ fn estimate_chars(msgs: &[ChatMessage]) -> usize {
 /// Build a compact memory summary from messages that are about to be dropped.
 /// Extracts key user requests, assistant decisions, and tool actions without
 /// needing an LLM call.
-fn summarize_dropped(dropped: &[ChatMessage]) -> String {
+pub fn summarize_dropped(dropped: &[ChatMessage]) -> String {
     let mut summary_parts: Vec<String> = Vec::new();
 
     for msg in dropped {
