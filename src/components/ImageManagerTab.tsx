@@ -220,7 +220,7 @@ function ImageCard({
             ))}
           </div>
         ) : (
-          <div className="text-xs text-amber-500">Orphaned — not referenced by any note</div>
+          <div className="text-xs text-amber-500">Orphaned — not referenced by any file</div>
         )}
 
         <button

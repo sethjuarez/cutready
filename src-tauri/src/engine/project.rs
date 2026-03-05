@@ -349,6 +349,14 @@ pub fn delete_note(path: &Path, project_root: &Path) -> Result<(), ProjectError>
             }
         }
     });
+    // Also check sketch files for screenshot references
+    let _ = scan_files_recursive(project_root, project_root, "sk", &mut |_rel, abs| {
+        if let Ok(other_content) = std::fs::read_to_string(abs) {
+            for img in extract_sketch_screenshot_refs(&other_content) {
+                all_referenced.insert(img);
+            }
+        }
+    });
 
     // Delete images only referenced by the deleted note
     for img_path in &images_in_note {
@@ -408,9 +416,29 @@ fn extract_screenshot_refs(content: &str) -> Vec<String> {
     refs
 }
 
+/// Extract `.cutready/screenshots/...` image paths from sketch JSON content.
+///
+/// Parses the `"screenshot"` field from each planning row in the sketch.
+fn extract_sketch_screenshot_refs(content: &str) -> Vec<String> {
+    let mut refs = Vec::new();
+    if let Ok(val) = serde_json::from_str::<serde_json::Value>(content) {
+        if let Some(rows) = val.get("rows").and_then(|r| r.as_array()) {
+            for row in rows {
+                if let Some(ss) = row.get("screenshot").and_then(|s| s.as_str()) {
+                    let ss = ss.replace('\\', "/");
+                    if ss.contains(".cutready/screenshots/") {
+                        refs.push(ss);
+                    }
+                }
+            }
+        }
+    }
+    refs
+}
+
 /// List all images in .cutready/screenshots/ with their reference info.
 ///
-/// For each image, scans all .md notes to find which ones reference it.
+/// For each image, scans all .md notes and .sk sketches to find which ones reference it.
 pub fn list_images_with_refs(project_root: &Path) -> Result<Vec<ImageRefInfo>, ProjectError> {
     let ss_dir = project_root.join(".cutready").join("screenshots");
     if !ss_dir.exists() {
@@ -434,15 +462,28 @@ pub fn list_images_with_refs(project_root: &Path) -> Result<Vec<ImageRefInfo>, P
         return Ok(Vec::new());
     }
 
-    // Build a map of image path → list of notes that reference it
+    // Build a map of image path → list of files that reference it
     let mut ref_map: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
     for (img, _) in &images {
         ref_map.insert(img.clone(), Vec::new());
     }
 
+    // Scan markdown notes for image references
     scan_files_recursive(project_root, project_root, "md", &mut |rel_path, abs_path| {
         if let Ok(content) = std::fs::read_to_string(abs_path) {
             let refs = extract_screenshot_refs(&content);
+            for img_ref in refs {
+                if let Some(referrers) = ref_map.get_mut(&img_ref) {
+                    referrers.push(rel_path.to_string());
+                }
+            }
+        }
+    })?;
+
+    // Scan sketch files for screenshot field references
+    scan_files_recursive(project_root, project_root, "sk", &mut |rel_path, abs_path| {
+        if let Ok(content) = std::fs::read_to_string(abs_path) {
+            let refs = extract_sketch_screenshot_refs(&content);
             for img_ref in refs {
                 if let Some(referrers) = ref_map.get_mut(&img_ref) {
                     referrers.push(rel_path.to_string());
@@ -1107,5 +1148,84 @@ Some text
             1,
             "HTML img tag references should be detected"
         );
+    }
+
+    // ── extract_sketch_screenshot_refs tests ─────────────────
+
+    #[test]
+    fn extract_sketch_refs_finds_screenshot_paths() {
+        let sk = r#"{"title":"Demo","rows":[{"time":"~30s","narrative":"intro","demo_actions":"click","screenshot":".cutready/screenshots/step1.png"}]}"#;
+        let refs = extract_sketch_screenshot_refs(sk);
+        assert_eq!(refs, vec![".cutready/screenshots/step1.png"]);
+    }
+
+    #[test]
+    fn extract_sketch_refs_skips_null_screenshots() {
+        let sk = r#"{"title":"Demo","rows":[{"time":"~30s","narrative":"intro","demo_actions":"click","screenshot":null}]}"#;
+        let refs = extract_sketch_screenshot_refs(sk);
+        assert!(refs.is_empty());
+    }
+
+    #[test]
+    fn extract_sketch_refs_multiple_rows() {
+        let sk = r#"{"title":"Demo","rows":[
+            {"time":"~10s","narrative":"a","demo_actions":"a","screenshot":".cutready/screenshots/a.png"},
+            {"time":"~10s","narrative":"b","demo_actions":"b","screenshot":null},
+            {"time":"~10s","narrative":"c","demo_actions":"c","screenshot":".cutready/screenshots/c.png"}
+        ]}"#;
+        let refs = extract_sketch_screenshot_refs(sk);
+        assert_eq!(refs.len(), 2);
+        assert!(refs.iter().any(|r| r.contains("a.png")));
+        assert!(refs.iter().any(|r| r.contains("c.png")));
+    }
+
+    #[test]
+    fn list_images_with_refs_includes_sketch_references() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+
+        let ss_dir = root.join(".cutready").join("screenshots");
+        std::fs::create_dir_all(&ss_dir).unwrap();
+        std::fs::write(ss_dir.join("step1.png"), b"img").unwrap();
+
+        // Only a sketch references this image (no notes)
+        std::fs::write(
+            root.join("intro.sk"),
+            r#"{"title":"Demo","rows":[{"time":"~30s","narrative":"x","demo_actions":"y","screenshot":".cutready/screenshots/step1.png"}]}"#,
+        ).unwrap();
+
+        let result = list_images_with_refs(root).unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(
+            result[0].referenced_by.len(),
+            1,
+            "Image referenced by a sketch should NOT be reported as orphaned"
+        );
+        assert!(result[0].referenced_by[0].contains("intro.sk"));
+    }
+
+    #[test]
+    fn delete_note_keeps_images_referenced_by_sketches() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+
+        let ss_dir = root.join(".cutready").join("screenshots");
+        std::fs::create_dir_all(&ss_dir).unwrap();
+        let img = ss_dir.join("shared.png");
+        std::fs::write(&img, b"fake image").unwrap();
+
+        // A note references the image
+        let note = root.join("test.md");
+        std::fs::write(&note, "![pic](.cutready/screenshots/shared.png)").unwrap();
+
+        // A sketch also references it
+        std::fs::write(
+            root.join("demo.sk"),
+            r#"{"title":"Demo","rows":[{"time":"~30s","narrative":"x","demo_actions":"y","screenshot":".cutready/screenshots/shared.png"}]}"#,
+        ).unwrap();
+
+        delete_note(&note, root).unwrap();
+        assert!(!note.exists(), "note should be deleted");
+        assert!(img.exists(), "image referenced by sketch should be kept");
     }
 }
