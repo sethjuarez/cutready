@@ -596,7 +596,7 @@ function AIProviderTab({ settings, updateSetting, isAzure, isOAuth, hasToken, ca
                     }
                     setModels([]);
                     setModelFilter("");
-                  }}}
+                  }}
                   className={`w-full text-left px-3 py-1.5 text-sm hover:bg-[var(--color-accent)]/10 transition-colors ${
                     settings.aiModel === m.id
                       ? "text-[var(--color-accent)] font-medium"
