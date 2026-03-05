@@ -10,6 +10,7 @@ interface ModelInfo {
   created?: number;
   owned_by?: string;
   capabilities?: Record<string, string>;
+  context_length?: number;
 }
 
 interface TokenResponse {
@@ -590,9 +591,12 @@ function AIProviderTab({ settings, updateSetting, isAzure, isOAuth, hasToken, ca
                   key={m.id}
                   onClick={() => {
                     updateSetting("aiModel", m.id);
+                    if (m.context_length) {
+                      updateSetting("aiContextLength", m.context_length);
+                    }
                     setModels([]);
                     setModelFilter("");
-                  }}
+                  }}}
                   className={`w-full text-left px-3 py-1.5 text-sm hover:bg-[var(--color-accent)]/10 transition-colors ${
                     settings.aiModel === m.id
                       ? "text-[var(--color-accent)] font-medium"

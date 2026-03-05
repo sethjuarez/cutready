@@ -633,6 +633,7 @@ function ChatTab() {
     api_key: settings.aiApiKey,
     model: settings.aiModel || "unused",
     bearer_token: settings.aiAuthMode === "azure_oauth" ? settings.aiAccessToken : null,
+    context_length: settings.aiContextLength || null,
   }), [settings]);
 
   // Build system prompt from selected agent
@@ -644,6 +645,24 @@ function ChatTab() {
       .then(setMemoryContext)
       .catch(() => setMemoryContext(""));
   }, [activeSketchPath]);
+
+  // Archive chat session on window close (covers app quit without "New Chat")
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (messages.length > 1) {
+        const userMsgs = messages.filter((m) => m.role === "user");
+        const summary = userMsgs.map((m) => m.content?.slice(0, 100)).filter(Boolean).join("; ");
+        if (summary) {
+          invoke("archive_chat_session", {
+            sessionId: chatSessionPath || "unknown",
+            summary: `Topics discussed: ${summary}`,
+          }).catch(() => {});
+        }
+      }
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [messages, chatSessionPath]);
 
   const systemPrompt = useMemo(() => {
     const agentId = settings.aiSelectedAgent || "planner";

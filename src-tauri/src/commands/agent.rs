@@ -18,6 +18,9 @@ pub struct ProviderConfig {
     pub model: String,
     #[serde(default)]
     pub bearer_token: Option<String>,
+    /// API-reported context window (tokens) for the selected model.
+    #[serde(default)]
+    pub context_length: Option<usize>,
 }
 
 impl From<ProviderConfig> for LlmConfig {
@@ -94,7 +97,11 @@ pub async fn agent_chat_with_tools(
     pending.lock().unwrap().clear();
 
     let prompts = agent_prompts.unwrap_or_default();
+    let reported_context = config.context_length;
     let client = LlmClient::new(config.into());
+    if let Some(ctx) = reported_context {
+        client.set_reported_context_length(ctx);
+    }
 
     let emit_handle = app.clone();
     let result = runner::run(

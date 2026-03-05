@@ -246,6 +246,9 @@ pub struct ModelInfo {
     /// Capability flags from the deployment (e.g., "chat_completion", "embeddings").
     #[serde(default)]
     pub capabilities: Option<std::collections::HashMap<String, String>>,
+    /// Max context window in tokens (if reported by the API).
+    #[serde(default, alias = "context_window", alias = "max_model_tokens")]
+    pub context_length: Option<usize>,
 }
 
 // ---------------------------------------------------------------------------
@@ -255,6 +258,9 @@ pub struct ModelInfo {
 pub struct LlmClient {
     config: LlmConfig,
     http: reqwest::Client,
+    /// API-reported context window (tokens) for the selected model.
+    /// Set after listing models if the deployment reports it.
+    reported_context_length: std::sync::Mutex<Option<usize>>,
 }
 
 impl LlmClient {
@@ -262,12 +268,25 @@ impl LlmClient {
         Self {
             config,
             http: reqwest::Client::new(),
+            reported_context_length: std::sync::Mutex::new(None),
         }
     }
 
+    /// Record the API-reported context window for the selected model.
+    pub fn set_reported_context_length(&self, tokens: usize) {
+        *self.reported_context_length.lock().unwrap() = Some(tokens);
+    }
+
     /// Return a conservative character budget for the model's context window.
-    /// Uses ~4 chars/token as a rough proxy (no tokenizer dependency).
+    /// Prefers API-reported context length if available, otherwise uses model
+    /// name heuristics. ~4 chars/token as a rough proxy (no tokenizer dependency).
     pub fn context_char_budget(&self) -> usize {
+        // If the API told us the exact context window, use it
+        if let Some(reported) = *self.reported_context_length.lock().unwrap() {
+            let usable = reported * 3 / 4;
+            return usable * 4;
+        }
+
         let model = self.config.model.to_lowercase();
 
         // Map well-known model families to their context windows (in tokens),
@@ -286,10 +305,14 @@ impl LlmClient {
             200_000
         } else if model.contains("claude") {
             100_000
-        } else if model.contains("o1") || model.contains("o3") || model.contains("o4") {
+        } else if model.starts_with("o1") || model.starts_with("o3") || model.starts_with("o4") {
             128_000
         } else if model.contains("gemini") {
             128_000
+        } else if model.contains("deepseek") {
+            64_000
+        } else if model.contains("phi-4") || model.contains("phi-3") {
+            16_000
         } else if model.contains("mistral-large") || model.contains("mistral-medium") {
             32_000
         } else if model.contains("mistral") {
@@ -519,6 +542,7 @@ impl LlmClient {
                             created: None,
                             owned_by: d.model,
                             capabilities: None,
+                            context_length: None,
                         })
                         .collect(),
                 );
@@ -547,6 +571,7 @@ impl LlmClient {
                             created: None,
                             owned_by: m.model_name,
                             capabilities: m.capabilities,
+                            context_length: None,
                         })
                         .collect(),
                 );
@@ -566,6 +591,7 @@ impl LlmClient {
                                 .and_then(|p| p.model)
                                 .map(|m| m.name),
                             capabilities: None,
+                            context_length: None,
                         })
                         .collect(),
                 );
@@ -742,5 +768,37 @@ mod tests {
         let budget = client.context_char_budget();
         // 4096 tokens * 0.75 * 4 chars = 12,288 chars
         assert_eq!(budget, 12_288);
+    }
+
+    #[test]
+    fn context_budget_o1_starts_with_not_contains() {
+        // "o1-preview" should match as OpenAI reasoning model
+        let o1 = make_client("o1-preview");
+        assert_eq!(o1.context_char_budget(), 384_000);
+
+        // But "my-foo-o1-bar" should NOT match — falls to unknown default
+        let not_o1 = make_client("my-foo-o1-bar");
+        assert_eq!(not_o1.context_char_budget(), 96_000); // 32k default
+    }
+
+    #[test]
+    fn context_budget_deepseek_and_phi() {
+        let ds = make_client("deepseek-r1");
+        assert_eq!(ds.context_char_budget(), 192_000); // 64k * 0.75 * 4
+
+        let phi = make_client("phi-4");
+        assert_eq!(phi.context_char_budget(), 48_000); // 16k * 0.75 * 4
+    }
+
+    #[test]
+    fn reported_context_overrides_heuristic() {
+        let client = make_client("my-custom-deployment");
+        // Heuristic gives 32k default → 96,000 chars
+        assert_eq!(client.context_char_budget(), 96_000);
+
+        // API reports 200k context window
+        client.set_reported_context_length(200_000);
+        // 200k * 0.75 * 4 = 600,000 chars
+        assert_eq!(client.context_char_budget(), 600_000);
     }
 }

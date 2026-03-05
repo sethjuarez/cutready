@@ -58,6 +58,8 @@ export interface AppSettings {
   repoAuthorName: string;
   /** Git author email for commits. */
   repoAuthorEmail: string;
+  /** API-reported context window (tokens) for the selected model. */
+  aiContextLength: number;
   // Legacy fields (migrated on load)
   llmApiKey?: string;
   llmEndpoint?: string;
@@ -89,6 +91,7 @@ const defaultSettings: AppSettings = {
   repoToken: "",
   repoAuthorName: "",
   repoAuthorEmail: "",
+  aiContextLength: 0,
 };
 
 const STORE_PATH = "settings.json";
