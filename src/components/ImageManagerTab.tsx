@@ -9,6 +9,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import { useAppStore } from "../stores/appStore";
+import { SketchIcon, StoryboardIcon, NoteIcon, AlertTriangleIcon } from "./Icons";
 
 interface ImageInfo {
   path: string;
@@ -19,7 +20,7 @@ interface ImageInfo {
 interface ImageGroup {
   key: string;
   label: string;
-  icon: string;
+  icon: React.ReactNode;
   images: ImageInfo[];
   totalSize: number;
   isOrphaned: boolean;
@@ -31,11 +32,11 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function fileIcon(filename: string): string {
-  if (filename.endsWith(".sk")) return "📋";
-  if (filename.endsWith(".md")) return "📝";
-  if (filename.endsWith(".sb")) return "📑";
-  return "📄";
+function fileIcon(filename: string): React.ReactNode {
+  if (filename.endsWith(".sk")) return <SketchIcon size={14} />;
+  if (filename.endsWith(".sb")) return <StoryboardIcon size={14} />;
+  if (filename.endsWith(".md")) return <NoteIcon size={14} />;
+  return <NoteIcon size={14} />;
 }
 
 function buildGroups(images: ImageInfo[]): ImageGroup[] {
@@ -56,7 +57,7 @@ function buildGroups(images: ImageInfo[]): ImageGroup[] {
     groups.push({
       key: "__orphaned__",
       label: "Orphaned",
-      icon: "⚠️",
+      icon: <AlertTriangleIcon size={14} />,
       images: orphaned,
       totalSize: orphaned.reduce((s, i) => s + i.size, 0),
       isOrphaned: true,
@@ -271,7 +272,7 @@ function ImageSection({
         >
           ▶
         </span>
-        <span className="text-sm">{group.icon}</span>
+        <span className={`shrink-0 ${group.isOrphaned ? "text-amber-500" : "text-[var(--color-text-secondary)]"}`}>{group.icon}</span>
         <span
           className={`text-sm font-medium truncate ${
             group.isOrphaned ? "text-amber-500" : "text-[var(--color-text)]"
