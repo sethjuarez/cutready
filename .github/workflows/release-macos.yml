@@ -4,7 +4,11 @@ on:
   push:
     tags:
       - 'v*'
-      - 'cutready-v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g. v0.7.0)'
+        required: true
 
 jobs:
   build:
@@ -24,6 +28,18 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Resolve tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ inputs.tag }}"
+          else
+            TAG="${GITHUB_REF#refs/tags/}"
+          fi
+          VERSION="${TAG#v}"
+          echo "tag=${TAG}" >> $GITHUB_OUTPUT
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -50,10 +66,7 @@ jobs:
       - name: Extract changelog
         id: changelog
         run: |
-          # Handle both v* and cutready-v* tag formats
-          VERSION="${GITHUB_REF#refs/tags/}"
-          VERSION="${VERSION#cutready-}"
-          VERSION="${VERSION#v}"
+          VERSION="${{ steps.tag.outputs.version }}"
           BODY=$(sed -n "/^## \[${VERSION}\]/,/^## \[/{ /^## \[${VERSION}\]/d; /^## \[/d; p; }" CHANGELOG.md 2>/dev/null || echo "")
           if [ -z "$BODY" ]; then
             BODY="See the assets to download and install this version."
@@ -73,8 +86,8 @@ jobs:
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: 'CutReady ${{ github.ref_name }}'
+          tagName: ${{ steps.tag.outputs.tag }}
+          releaseName: 'CutReady v${{ steps.tag.outputs.version }}'
           releaseBody: ${{ steps.changelog.outputs.body }}
           releaseDraft: false
           prerelease: false
