@@ -1,5 +1,11 @@
 # Changelog
 
+## \[0.6.0]
+
+### What's Changed
+
+- [`e2a317c`](https://github.com/sethjuarez/cutready/commit/e2a317c0f9f01fa1870b0d21eaa44247d272a2a8) Added Covector-based version management with automated changelog generation and CI release workflow.
+
 Covector manages this changelog. Do not edit manually.
 Each release section is generated from `.changes/*.md` files.
 
