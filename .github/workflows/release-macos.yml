@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - 'v*'
+      - 'cutready-v*'
 
 jobs:
   build:
@@ -49,7 +50,10 @@ jobs:
       - name: Extract changelog
         id: changelog
         run: |
-          VERSION="${GITHUB_REF#refs/tags/v}"
+          # Handle both v* and cutready-v* tag formats
+          VERSION="${GITHUB_REF#refs/tags/}"
+          VERSION="${VERSION#cutready-}"
+          VERSION="${VERSION#v}"
           BODY=$(sed -n "/^## \[${VERSION}\]/,/^## \[/{ /^## \[${VERSION}\]/d; /^## \[/d; p; }" CHANGELOG.md 2>/dev/null || echo "")
           if [ -z "$BODY" ]; then
             BODY="See the assets to download and install this version."

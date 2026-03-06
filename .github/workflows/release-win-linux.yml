@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - 'v*'
+      - 'cutready-v*'
 
 jobs:
   create-release:
@@ -16,12 +17,19 @@ jobs:
       - uses: actions/checkout@v4
       - name: Get version from tag
         id: version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+        run: |
+          # Handle both v* and cutready-v* tag formats
+          VERSION="${GITHUB_REF#refs/tags/}"
+          VERSION="${VERSION#cutready-}"
+          VERSION="${VERSION#v}"
+          echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
       - name: Extract changelog
         id: changelog
         run: |
-          # Extract the section for this version from CHANGELOG.md
-          VERSION="${GITHUB_REF#refs/tags/v}"
+          # Handle both v* and cutready-v* tag formats
+          VERSION="${GITHUB_REF#refs/tags/}"
+          VERSION="${VERSION#cutready-}"
+          VERSION="${VERSION#v}"
           BODY=$(sed -n "/^## \[${VERSION}\]/,/^## \[/{ /^## \[${VERSION}\]/d; /^## \[/d; p; }" CHANGELOG.md 2>/dev/null || echo "")
           if [ -z "$BODY" ]; then
             BODY="See the assets to download and install this version."
