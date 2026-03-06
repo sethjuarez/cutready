@@ -117,6 +117,8 @@ interface AppStoreState {
   activeNotePath: string | null;
   /** The full active note content (loaded when editing). */
   activeNoteContent: string | null;
+  /** Note paths currently in preview mode (persists across tab switches). */
+  notePreviewPaths: Set<string>;
 
   // ── Chat state ──────────────────────────────────────────────
   /** Messages in the current chat session. */
@@ -304,6 +306,8 @@ interface AppStoreState {
   deleteNote: (notePath: string) => Promise<void>;
   /** Close the active note. */
   closeNote: () => void;
+  /** Set preview mode for a note path. */
+  setNotePreview: (notePath: string, preview: boolean) => void;
 
   // ── Chat actions ────────────────────────────────────────────
 
@@ -491,6 +495,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   notes: [],
   activeNotePath: null,
   activeNoteContent: null,
+  notePreviewPaths: new Set(),
   chatMessages: [],
   chatSessionPath: null,
   chatLoading: false,
@@ -1088,6 +1093,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       }
       const tab = openTabs.find((t) => t.path === notePath && t.type === "note");
       if (tab) get().closeTab(tab.id);
+      get().setNotePreview(notePath, false);
       await get().loadNotes();
     } catch (err) {
       console.error("Failed to delete note:", err);
@@ -1096,6 +1102,13 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
 
   closeNote: () => {
     set({ activeNotePath: null, activeNoteContent: null });
+  },
+
+  setNotePreview: (notePath, preview) => {
+    const next = new Set(get().notePreviewPaths);
+    if (preview) next.add(notePath);
+    else next.delete(notePath);
+    set({ notePreviewPaths: next });
   },
 
   // ── Chat actions ──────────────────────────────────────────

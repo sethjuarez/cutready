@@ -28,8 +28,13 @@ export function NoteEditor() {
   const updateNote = useAppStore((s) => s.updateNote);
   const projectRoot = useAppStore((s) => s.currentProject?.root);
   const addActivityEntries = useAppStore((s) => s.addActivityEntries);
+  const setNotePreview = useAppStore((s) => s.setNotePreview);
+  const isPreview = useAppStore((s) => activeNotePath ? s.notePreviewPaths.has(activeNotePath) : false);
   const { settings, updateSetting } = useSettings();
-  const [mode, setMode] = useState<"edit" | "preview">("edit");
+  const mode = isPreview ? "preview" : "edit";
+  const setMode = useCallback((m: "edit" | "preview") => {
+    if (activeNotePath) setNotePreview(activeNotePath, m === "preview");
+  }, [activeNotePath, setNotePreview]);
   const [aiCleaning, setAiCleaning] = useState(false);
   const [aiUpdatedFlash, setAiUpdatedFlash] = useState(false);
   const [richPasteBusy, setRichPasteBusy] = useState(false);
@@ -107,11 +112,6 @@ export function NoteEditor() {
     },
     [],
   );
-
-  // Reset to edit mode when switching notes
-  useEffect(() => {
-    setMode("edit");
-  }, [activeNotePath]);
 
   // Flush on unmount
   useEffect(() => {
