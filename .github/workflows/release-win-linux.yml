@@ -17,13 +17,26 @@ jobs:
       - name: Get version from tag
         id: version
         run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+      - name: Extract changelog
+        id: changelog
+        run: |
+          # Extract the section for this version from CHANGELOG.md
+          VERSION="${GITHUB_REF#refs/tags/v}"
+          BODY=$(sed -n "/^## \[${VERSION}\]/,/^## \[/{ /^## \[${VERSION}\]/d; /^## \[/d; p; }" CHANGELOG.md 2>/dev/null || echo "")
+          if [ -z "$BODY" ]; then
+            BODY="See the assets to download and install this version."
+          fi
+          # Use heredoc to handle multiline
+          echo "body<<EOF" >> $GITHUB_OUTPUT
+          echo "$BODY" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
       - name: Create release
         id: create
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
           name: 'CutReady v${{ steps.version.outputs.VERSION }}'
-          body: 'See the assets to download and install this version.'
+          body: ${{ steps.changelog.outputs.body }}
           draft: false
           prerelease: false
 

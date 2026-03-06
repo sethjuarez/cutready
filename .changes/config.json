@@ -1,0 +1,30 @@
+{
+  "gitSiteUrl": "https://github.com/sethjuarez/cutready/",
+  "changeTags": {
+    "feat": "New Features",
+    "fix": "Bug Fixes",
+    "enhance": "Enhancements",
+    "breaking": "Breaking Changes",
+    "changes": "What's Changed"
+  },
+  "defaultChangeTag": "changes",
+  "pkgManagers": {
+    "rust": {
+      "version": true,
+      "publish": [
+        {
+          "command": "node ../.changes/sync-version.mjs",
+          "dryRunCommand": true
+        }
+      ]
+    }
+  },
+  "packages": {
+    "cutready": {
+      "path": "./src-tauri",
+      "manager": "rust",
+      "changelogPath": "../CHANGELOG.md",
+      "postversion": "node ../.changes/sync-version.mjs"
+    }
+  }
+}
