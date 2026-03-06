@@ -296,7 +296,7 @@ function ImageSection({
             role="button"
             tabIndex={0}
           >
-            Delete all
+            Delete orphaned
           </span>
         )}
       </button>
