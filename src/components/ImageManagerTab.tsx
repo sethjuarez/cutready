@@ -1,11 +1,12 @@
 /**
  * ImageManagerTab — settings sub-tab for managing project images.
  *
- * Lists all images in .cutready/screenshots/ with thumbnails, sizes,
- * and which notes reference each image. Orphaned images (unreferenced)
- * are highlighted for easy cleanup.
+ * Groups images into collapsible sections:
+ * - ⚠️ Orphaned section at top (expanded by default, amber highlight)
+ * - One section per referencing file (notes, sketches) with image count
+ * Images referenced by multiple files appear in each section with a badge.
  */
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import { useAppStore } from "../stores/appStore";
 
@@ -15,10 +16,67 @@ interface ImageInfo {
   referencedBy: string[];
 }
 
+interface ImageGroup {
+  key: string;
+  label: string;
+  icon: string;
+  images: ImageInfo[];
+  totalSize: number;
+  isOrphaned: boolean;
+}
+
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function fileIcon(filename: string): string {
+  if (filename.endsWith(".sk")) return "📋";
+  if (filename.endsWith(".md")) return "📝";
+  if (filename.endsWith(".sb")) return "📑";
+  return "📄";
+}
+
+function buildGroups(images: ImageInfo[]): ImageGroup[] {
+  const orphaned = images.filter((img) => img.referencedBy.length === 0);
+  const fileMap = new Map<string, ImageInfo[]>();
+
+  for (const img of images) {
+    for (const ref of img.referencedBy) {
+      const list = fileMap.get(ref) || [];
+      list.push(img);
+      fileMap.set(ref, list);
+    }
+  }
+
+  const groups: ImageGroup[] = [];
+
+  if (orphaned.length > 0) {
+    groups.push({
+      key: "__orphaned__",
+      label: "Orphaned",
+      icon: "⚠️",
+      images: orphaned,
+      totalSize: orphaned.reduce((s, i) => s + i.size, 0),
+      isOrphaned: true,
+    });
+  }
+
+  const sortedFiles = [...fileMap.keys()].sort((a, b) => a.localeCompare(b));
+  for (const file of sortedFiles) {
+    const imgs = fileMap.get(file)!;
+    groups.push({
+      key: file,
+      label: file,
+      icon: fileIcon(file),
+      images: imgs,
+      totalSize: imgs.reduce((s, i) => s + i.size, 0),
+      isOrphaned: false,
+    });
+  }
+
+  return groups;
 }
 
 export function ImageManagerTab() {
@@ -26,7 +84,7 @@ export function ImageManagerTab() {
   const [images, setImages] = useState<ImageInfo[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [filter, setFilter] = useState<"all" | "orphaned" | "referenced">("all");
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
   const loadImages = useCallback(async () => {
     if (!currentProject) return;
@@ -72,14 +130,18 @@ export function ImageManagerTab() {
     }
   };
 
-  const filtered = images.filter((img) => {
-    if (filter === "orphaned") return img.referencedBy.length === 0;
-    if (filter === "referenced") return img.referencedBy.length > 0;
-    return true;
-  });
-
+  const groups = useMemo(() => buildGroups(images), [images]);
   const orphanedCount = images.filter((img) => img.referencedBy.length === 0).length;
   const totalSize = images.reduce((sum, img) => sum + img.size, 0);
+
+  const toggleSection = (key: string) => {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
 
   if (!currentProject) {
     return (
@@ -104,26 +166,10 @@ export function ImageManagerTab() {
         )}
       </div>
 
-      {/* Filter + actions bar */}
+      {/* Actions bar */}
       <div className="flex items-center gap-3">
-        <div className="flex items-stretch rounded-lg border border-[var(--color-border)] overflow-hidden text-xs">
-          {(["all", "orphaned", "referenced"] as const).map((f) => (
-            <button
-              key={f}
-              className={`px-3 py-1.5 capitalize transition-colors ${
-                filter === f
-                  ? "bg-[var(--color-accent)] text-white"
-                  : "bg-[var(--color-surface-alt)] text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"
-              }`}
-              onClick={() => setFilter(f)}
-            >
-              {f}
-            </button>
-          ))}
-        </div>
-
         <button
-          className="ml-auto px-3 py-1.5 text-xs rounded-lg bg-[var(--color-surface-alt)] border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors"
+          className="px-3 py-1.5 text-xs rounded-lg bg-[var(--color-surface-alt)] border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors"
           onClick={loadImages}
           disabled={loading}
         >
@@ -138,31 +184,138 @@ export function ImageManagerTab() {
             Delete all orphaned
           </button>
         )}
+
+        {groups.length > 1 && (
+          <div className="ml-auto flex items-center gap-2">
+            <button
+              className="px-2 py-1 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors"
+              onClick={() => setCollapsed(new Set())}
+            >
+              Expand all
+            </button>
+            <span className="text-[var(--color-border)]">·</span>
+            <button
+              className="px-2 py-1 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors"
+              onClick={() => setCollapsed(new Set(groups.map((g) => g.key)))}
+            >
+              Collapse all
+            </button>
+          </div>
+        )}
       </div>
 
       {error && (
         <div className="text-red-400 text-sm bg-red-500/10 px-3 py-2 rounded-lg">{error}</div>
       )}
 
-      {/* Image grid */}
-      {filtered.length === 0 && !loading && (
+      {/* Grouped sections */}
+      {images.length === 0 && !loading && (
         <div className="text-[var(--color-text-secondary)] text-sm py-8 text-center">
-          {images.length === 0
-            ? "No images in this project yet."
-            : `No ${filter} images found.`}
+          No images in this project yet.
         </div>
       )}
 
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-        {filtered.map((img) => (
-          <ImageCard
-            key={img.path}
-            image={img}
+      <div className="space-y-3">
+        {groups.map((group) => (
+          <ImageSection
+            key={group.key}
+            group={group}
+            isCollapsed={collapsed.has(group.key)}
+            onToggle={() => toggleSection(group.key)}
             projectRoot={currentProject.root}
-            onDelete={() => deleteImage(img.path)}
+            onDeleteImage={deleteImage}
+            onDeleteAllOrphaned={group.isOrphaned ? deleteAllOrphaned : undefined}
           />
         ))}
       </div>
+    </div>
+  );
+}
+
+function ImageSection({
+  group,
+  isCollapsed,
+  onToggle,
+  projectRoot,
+  onDeleteImage,
+  onDeleteAllOrphaned,
+}: {
+  group: ImageGroup;
+  isCollapsed: boolean;
+  onToggle: () => void;
+  projectRoot: string;
+  onDeleteImage: (path: string) => void;
+  onDeleteAllOrphaned?: () => void;
+}) {
+  return (
+    <div
+      className={`rounded-xl border overflow-hidden ${
+        group.isOrphaned
+          ? "border-amber-500/30 bg-amber-500/5"
+          : "border-[var(--color-border)] bg-[var(--color-surface)]"
+      }`}
+    >
+      {/* Section header */}
+      <button
+        className={`w-full flex items-center gap-2 px-3 py-2.5 text-left transition-colors ${
+          group.isOrphaned
+            ? "hover:bg-amber-500/10"
+            : "hover:bg-[var(--color-surface-alt)]"
+        }`}
+        onClick={onToggle}
+      >
+        <span
+          className={`text-xs transition-transform duration-200 ${
+            isCollapsed ? "" : "rotate-90"
+          }`}
+        >
+          ▶
+        </span>
+        <span className="text-sm">{group.icon}</span>
+        <span
+          className={`text-sm font-medium truncate ${
+            group.isOrphaned ? "text-amber-500" : "text-[var(--color-text)]"
+          }`}
+        >
+          {group.label}
+        </span>
+        <span className="text-xs text-[var(--color-text-secondary)] tabular-nums">
+          {group.images.length} image{group.images.length !== 1 ? "s" : ""}
+        </span>
+        <span className="text-xs text-[var(--color-text-secondary)] tabular-nums">
+          · {formatBytes(group.totalSize)}
+        </span>
+        {group.isOrphaned && onDeleteAllOrphaned && (
+          <span
+            className="ml-auto text-xs text-amber-500 hover:text-amber-400 transition-colors px-2 py-0.5 rounded hover:bg-amber-500/10"
+            onClick={(e) => {
+              e.stopPropagation();
+              onDeleteAllOrphaned();
+            }}
+            role="button"
+            tabIndex={0}
+          >
+            Delete all
+          </span>
+        )}
+      </button>
+
+      {/* Collapsible image grid */}
+      {!isCollapsed && (
+        <div className="px-3 pb-3">
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+            {group.images.map((img) => (
+              <ImageCard
+                key={img.path}
+                image={img}
+                projectRoot={projectRoot}
+                onDelete={() => onDeleteImage(img.path)}
+                contextFile={group.isOrphaned ? undefined : group.key}
+              />
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -171,14 +324,21 @@ function ImageCard({
   image,
   projectRoot,
   onDelete,
+  contextFile,
 }: {
   image: ImageInfo;
   projectRoot: string;
   onDelete: () => void;
+  contextFile?: string;
 }) {
   const isOrphaned = image.referencedBy.length === 0;
   const fileName = image.path.split("/").pop() || image.path;
   const src = convertFileSrc(`${projectRoot}/${image.path}`);
+
+  // When shown inside a file section, count how many OTHER files reference this image
+  const otherRefCount = contextFile
+    ? image.referencedBy.filter((r) => r !== contextFile).length
+    : 0;
 
   return (
     <div
@@ -209,19 +369,15 @@ function ImageCard({
           </span>
         </div>
 
-        {image.referencedBy.length > 0 ? (
+        {isOrphaned ? (
+          <div className="text-xs text-amber-500">Not referenced by any file</div>
+        ) : otherRefCount > 0 ? (
           <div className="text-xs text-[var(--color-text-secondary)]">
-            Referenced by:{" "}
-            {image.referencedBy.map((note, i) => (
-              <span key={note}>
-                {i > 0 && ", "}
-                <span className="text-[var(--color-accent)]">{note}</span>
-              </span>
-            ))}
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-[var(--color-accent)]/10 text-[var(--color-accent)]">
+              Also in {otherRefCount} other file{otherRefCount !== 1 ? "s" : ""}
+            </span>
           </div>
-        ) : (
-          <div className="text-xs text-amber-500">Orphaned — not referenced by any file</div>
-        )}
+        ) : null}
 
         <button
           className="w-full mt-1 px-2 py-1 text-xs rounded bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors"
