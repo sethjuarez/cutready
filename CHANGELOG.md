@@ -9,6 +9,18 @@
 Covector manages this changelog. Do not edit manually.
 Each release section is generated from `.changes/*.md` files.
 
+## [0.7.1](https://github.com/sethjuarez/cutready/compare/v0.7.0...v0.7.1) (2026-03-06)
+
+
+### Bug Fixes
+
+* **ci:** add actions:write permission for build dispatch ([f464232](https://github.com/sethjuarez/cutready/commit/f464232898097597423fa77b63e632ea5a77bc94))
+
+
+### Performance Improvements
+
+* **ci:** replace rust-cache with sccache for faster builds ([19eec97](https://github.com/sethjuarez/cutready/commit/19eec97d50281e8a7b0852f8a79d35bd4d5f6383))
+
 ## [0.7.0](https://github.com/sethjuarez/cutready/compare/v0.6.0...v0.7.0) (2026-03-06)
 
 
