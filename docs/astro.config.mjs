@@ -3,8 +3,7 @@ import { defineConfig } from "astro/config";
 import starlight from "@astrojs/starlight";
 
 export default defineConfig({
-  site: "https://sethjuarez.github.io",
-  base: "/cutready",
+  site: "https://cutready.io",
   integrations: [
     starlight({
       title: "CutReady",
