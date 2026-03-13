@@ -3,14 +3,21 @@
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-// Mock file-saver before importing
+// Mock Tauri dialog
+const mockSave = vi.fn();
+vi.mock("@tauri-apps/plugin-dialog", () => ({ save: (...args: unknown[]) => mockSave(...args) }));
+
+// Mock Tauri fs
+const mockWriteFile = vi.fn();
+vi.mock("@tauri-apps/plugin-fs", () => ({ writeFile: (...args: unknown[]) => mockWriteFile(...args) }));
+
+// Keep file-saver mock for backward compat (no longer used but import still exists)
 vi.mock("file-saver", () => ({ saveAs: vi.fn() }));
 
 // Mock Tauri invoke
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 
 import { exportSketchToWord, exportStoryboardToWord } from "../utils/exportToWord";
-import { saveAs } from "file-saver";
 import type { Sketch, Storyboard } from "../types/sketch";
 
 function makeMockSketch(title = "Test Sketch", rowCount = 3): Sketch {
@@ -30,36 +37,51 @@ function makeMockSketch(title = "Test Sketch", rowCount = 3): Sketch {
 }
 
 beforeEach(() => {
-  vi.mocked(saveAs).mockClear();
+  mockSave.mockReset();
+  mockWriteFile.mockReset();
+  mockSave.mockResolvedValue("/tmp/test.docx");
+  mockWriteFile.mockResolvedValue(undefined);
 });
 
 describe("exportSketchToWord", () => {
-  it("generates a .docx blob and triggers download", async () => {
+  it("shows save dialog and writes .docx file", async () => {
     const sketch = makeMockSketch("My Demo");
     await exportSketchToWord(sketch);
 
-    expect(saveAs).toHaveBeenCalledTimes(1);
-    const [blob, filename] = (saveAs as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
-    expect(blob).toBeInstanceOf(Blob);
-    expect(blob.type).toBe("application/vnd.openxmlformats-officedocument.wordprocessingml.document");
-    expect(filename).toBe("My-Demo.docx");
+    expect(mockSave).toHaveBeenCalledTimes(1);
+    expect(mockSave).toHaveBeenCalledWith({
+      defaultPath: "My-Demo.docx",
+      filters: [{ name: "Word Document", extensions: ["docx"] }],
+    });
+    expect(mockWriteFile).toHaveBeenCalledTimes(1);
+    expect(mockWriteFile.mock.calls[0][0]).toBe("/tmp/test.docx");
+    expect(mockWriteFile.mock.calls[0][1]).toBeInstanceOf(Uint8Array);
+  }, 15_000);
+
+  it("does nothing when user cancels save dialog", async () => {
+    mockSave.mockResolvedValue(null);
+    const sketch = makeMockSketch("Cancelled");
+    await exportSketchToWord(sketch);
+
+    expect(mockSave).toHaveBeenCalledTimes(1);
+    expect(mockWriteFile).not.toHaveBeenCalled();
   }, 15_000);
 
   it("handles empty rows gracefully", async () => {
     const sketch = makeMockSketch("Empty", 0);
     await exportSketchToWord(sketch);
 
-    expect(saveAs).toHaveBeenCalledTimes(1);
-    const [blob, filename] = (saveAs as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
-    expect(blob).toBeInstanceOf(Blob);
-    expect(filename).toBe("Empty.docx");
+    expect(mockSave).toHaveBeenCalledWith(
+      expect.objectContaining({ defaultPath: "Empty.docx" }),
+    );
+    expect(mockWriteFile).toHaveBeenCalledTimes(1);
   }, 15_000);
 
   it("handles Lexical JSON description", async () => {
     const sketch = makeMockSketch("Lexical");
     sketch.description = { root: { children: [{ text: "hello" }] } };
     await exportSketchToWord(sketch);
-    expect(saveAs).toHaveBeenCalledTimes(1);
+    expect(mockWriteFile).toHaveBeenCalledTimes(1);
   }, 15_000);
 });
 
@@ -90,10 +112,11 @@ describe("exportStoryboardToWord", () => {
 
     await exportStoryboardToWord(storyboard, resolver);
 
-    expect(saveAs).toHaveBeenCalledTimes(1);
-    const [blob, filename] = (saveAs as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
-    expect(blob).toBeInstanceOf(Blob);
-    expect(filename).toBe("Full-Demo-Storyboard.docx");
+    expect(mockSave).toHaveBeenCalledWith(
+      expect.objectContaining({ defaultPath: "Full-Demo-Storyboard.docx" }),
+    );
+    expect(mockWriteFile).toHaveBeenCalledTimes(1);
+    expect(mockWriteFile.mock.calls[0][0]).toBe("/tmp/test.docx");
   }, 15_000);
 
   it("handles storyboard with no items", async () => {
@@ -107,8 +130,9 @@ describe("exportStoryboardToWord", () => {
 
     await exportStoryboardToWord(storyboard, async () => new Map());
 
-    expect(saveAs).toHaveBeenCalledTimes(1);
-    const [_, filename] = (saveAs as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
-    expect(filename).toBe("Empty-Board.docx");
+    expect(mockSave).toHaveBeenCalledWith(
+      expect.objectContaining({ defaultPath: "Empty-Board.docx" }),
+    );
+    expect(mockWriteFile).toHaveBeenCalledTimes(1);
   }, 15_000);
 });

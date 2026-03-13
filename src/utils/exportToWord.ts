@@ -21,7 +21,8 @@ import {
   BorderStyle,
   ShadingType,
 } from "docx";
-import { saveAs } from "file-saver";
+import { save } from "@tauri-apps/plugin-dialog";
+import { writeFile } from "@tauri-apps/plugin-fs";
 import type { Sketch, Storyboard } from "../types/sketch";
 
 // ── Helpers ─────────────────────────────────────────────────────
@@ -142,8 +143,14 @@ export async function exportSketchToWord(sketch: Sketch): Promise<void> {
   });
 
   const blob = await Packer.toBlob(doc);
-  const filename = `${sketch.title.replace(/[^a-zA-Z0-9 ]/g, "").trim().replace(/\s+/g, "-")}.docx`;
-  saveAs(blob, filename);
+  const defaultName = `${sketch.title.replace(/[^a-zA-Z0-9 ]/g, "").trim().replace(/\s+/g, "-")}.docx`;
+  const filePath = await save({
+    defaultPath: defaultName,
+    filters: [{ name: "Word Document", extensions: ["docx"] }],
+  });
+  if (!filePath) return;
+  const buffer = await blob.arrayBuffer();
+  await writeFile(filePath, new Uint8Array(buffer));
 }
 
 // ── Storyboard → Word ───────────────────────────────────────────
@@ -206,6 +213,12 @@ export async function exportStoryboardToWord(
   });
 
   const blob = await Packer.toBlob(doc);
-  const filename = `${storyboard.title.replace(/[^a-zA-Z0-9 ]/g, "").trim().replace(/\s+/g, "-")}.docx`;
-  saveAs(blob, filename);
+  const defaultName = `${storyboard.title.replace(/[^a-zA-Z0-9 ]/g, "").trim().replace(/\s+/g, "-")}.docx`;
+  const filePath = await save({
+    defaultPath: defaultName,
+    filters: [{ name: "Word Document", extensions: ["docx"] }],
+  });
+  if (!filePath) return;
+  const buffer = await blob.arrayBuffer();
+  await writeFile(filePath, new Uint8Array(buffer));
 }
