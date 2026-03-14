@@ -577,7 +577,7 @@ function ChatTab() {
           const toolName = ev.name ?? "";
           const resultText = ev.result ?? "";
           const isSuccess = !resultText.startsWith("Error");
-          if (isSuccess && (toolName === "set_planning_rows" || toolName === "update_planning_row")) {
+          if (isSuccess && (toolName === "set_planning_rows" || toolName === "update_planning_row" || toolName === "set_row_visual")) {
             loadSketches();
             try {
               const args = JSON.parse(pendingToolArgsRef.current[toolName] ?? "{}");
@@ -724,7 +724,7 @@ function ChatTab() {
   }, [showContextPicker, contextFilter, allFiles, references]);
 
   // Available tools list
-  const availableTools = ["list_project_files", "read_note", "read_sketch", "set_planning_rows", "update_planning_row", "list_project_images", "save_feedback", "delegate_to_agent", "fetch_url"];
+  const availableTools = ["list_project_files", "read_note", "read_sketch", "set_planning_rows", "update_planning_row", "set_row_visual", "list_project_images", "save_feedback", "delegate_to_agent", "fetch_url"];
 
   const buildConfig = useCallback(() => ({
     provider: settings.aiProvider,
