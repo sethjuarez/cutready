@@ -7,7 +7,7 @@ export function ToastContainer() {
   if (toasts.length === 0) return null;
 
   return (
-    <div className="fixed left-1/2 -translate-x-1/2 z-[9999] flex flex-col gap-2 items-center" style={{ bottom: "calc(var(--statusbar-height, 24px) + 12px)" }}>
+    <div className="fixed top-4 right-4 z-[9999] flex flex-col gap-2 items-end">
       {toasts.map((t) => (
         <div
           key={t.id}
