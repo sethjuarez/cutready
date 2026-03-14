@@ -53,11 +53,12 @@ interface ScriptTableProps {
   onPickImage?: (rowIndex: number) => void;
   onBrowseImage?: (rowIndex: number) => void;
   onSparkle?: (prompt: string) => void;
+  onGenerateVisual?: (rowIndex: number) => void;
   projectRoot?: string;
   sketchPath?: string;
 }
 
-export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreenshot, onPickImage, onBrowseImage, onSparkle, projectRoot, sketchPath }: ScriptTableProps) {
+export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreenshot, onPickImage, onBrowseImage, onSparkle, onGenerateVisual, projectRoot, sketchPath }: ScriptTableProps) {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
   const focusCellAfterRender = useRef<number | null>(null);
@@ -244,6 +245,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
                   onPickImage={onPickImage}
                   onBrowseImage={onBrowseImage}
                   onSparkle={onSparkle}
+                  onGenerateVisual={onGenerateVisual}
                   projectRoot={projectRoot}
                   sketchPath={sketchPath}
                   onImageClick={setLightboxSrc}
@@ -336,6 +338,7 @@ function SortableRow({
   onPickImage,
   onBrowseImage,
   onSparkle,
+  onGenerateVisual,
   projectRoot,
   sketchPath,
   onImageClick,
@@ -353,6 +356,7 @@ function SortableRow({
   onPickImage?: (rowIndex: number) => void;
   onBrowseImage?: (rowIndex: number) => void;
   onSparkle?: (prompt: string) => void;
+  onGenerateVisual?: (rowIndex: number) => void;
   projectRoot?: string;
   sketchPath?: string;
   onImageClick: (src: string) => void;
@@ -481,6 +485,18 @@ function SortableRow({
             </Suspense>
             {!readOnly && (
               <div className="absolute inset-0 bg-black/50 opacity-0 group-hover/vis:opacity-100 transition-opacity flex items-center justify-center gap-1.5 rounded-md" onClick={(e) => e.stopPropagation()}>
+                {/* Regenerate visual */}
+                {onGenerateVisual && (
+                  <button
+                    onClick={() => onGenerateVisual(idx)}
+                    className="p-1 rounded-full bg-white/20 text-white/90 hover:bg-[var(--color-accent)]/80"
+                    title="Regenerate visual with AI"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M12 2l2.09 6.26L20.18 10l-6.09 1.74L12 18l-2.09-6.26L3.82 10l6.09-1.74L12 2z" />
+                    </svg>
+                  </button>
+                )}
                 {/* Remove visual */}
                 <button
                   onClick={() => updateRow(idx, "screenshot", "")}
@@ -605,6 +621,19 @@ function SortableRow({
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
                   className="text-[var(--color-text-secondary)] group-hover/browse:text-[var(--color-accent)] transition-colors">
                   <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />
+                </svg>
+              </button>
+            )}
+            {onGenerateVisual && (
+              <button
+                onClick={() => onGenerateVisual(idx)}
+                className="w-7 h-7 rounded-md border border-dashed border-[var(--color-accent)]/40 hover:border-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 transition-colors flex items-center justify-center group/gen"
+                title="Generate visual with AI"
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"
+                  className="text-[var(--color-accent)]/60 group-hover/gen:text-[var(--color-accent)] transition-colors">
+                  <path d="M12 2l2.09 6.26L20.18 10l-6.09 1.74L12 18l-2.09-6.26L3.82 10l6.09-1.74L12 2z" />
+                  <path d="M19 15l1.04 3.13L23.18 19l-3.14.87L19 23l-1.04-3.13L14.82 19l3.14-.87L19 15z" opacity="0.6" />
                 </svg>
               </button>
             )}
