@@ -492,8 +492,9 @@ function SortableRow({
                     className="p-1 rounded-full bg-white/20 text-white/90 hover:bg-[var(--color-accent)]/80"
                     title="Regenerate visual with AI"
                   >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M12 2l2.09 6.26L20.18 10l-6.09 1.74L12 18l-2.09-6.26L3.82 10l6.09-1.74L12 2z" />
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3z" />
+                      <path d="M20 11l.75 2.25L23 14l-2.25.75L20 17l-.75-2.25L17 14l2.25-.75L20 11z" />
                     </svg>
                   </button>
                 )}
@@ -627,13 +628,13 @@ function SortableRow({
             {onGenerateVisual && (
               <button
                 onClick={() => onGenerateVisual(idx)}
-                className="w-7 h-7 rounded-md border border-dashed border-[var(--color-accent)]/40 hover:border-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 transition-colors flex items-center justify-center group/gen"
+                className="w-7 h-7 rounded-md border border-dashed border-[var(--color-border)] hover:border-[var(--color-accent)] hover:bg-[var(--color-accent)]/5 transition-colors flex items-center justify-center group/gen"
                 title="Generate visual with AI"
               >
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"
-                  className="text-[var(--color-accent)]/60 group-hover/gen:text-[var(--color-accent)] transition-colors">
-                  <path d="M12 2l2.09 6.26L20.18 10l-6.09 1.74L12 18l-2.09-6.26L3.82 10l6.09-1.74L12 2z" />
-                  <path d="M19 15l1.04 3.13L23.18 19l-3.14.87L19 23l-1.04-3.13L14.82 19l3.14-.87L19 15z" opacity="0.6" />
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
+                  className="text-[var(--color-text-secondary)] group-hover/gen:text-[var(--color-accent)] transition-colors">
+                  <path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3z" />
+                  <path d="M20 11l.75 2.25L23 14l-2.25.75L20 17l-.75-2.25L17 14l2.25-.75L20 11z" />
                 </svg>
               </button>
             )}
