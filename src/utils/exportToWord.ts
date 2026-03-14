@@ -1,10 +1,8 @@
 /**
  * exportToWord.ts — Generate .docx files from sketches and storyboards.
  *
- * Uses the `docx` library to build structured Word documents with:
- * - Title page with storyboard/sketch name
- * - Planning table (Time | Narrative | Actions) per sketch
- * - Section headers for storyboard grouping
+ * Uses the `docx` library with Word's default Calibri theme and built-in
+ * heading styles so documents look native when opened in Word.
  */
 
 import {
@@ -17,9 +15,8 @@ import {
   TableCell,
   WidthType,
   HeadingLevel,
-  AlignmentType,
   BorderStyle,
-  ShadingType,
+  convertInchesToTwip,
 } from "docx";
 import { save } from "@tauri-apps/plugin-dialog";
 import { writeFile } from "@tauri-apps/plugin-fs";
@@ -33,31 +30,30 @@ function timestamp(): string {
   });
 }
 
+const tableBorder = {
+  top: { style: BorderStyle.SINGLE, size: 4, color: "BFBFBF" },
+  bottom: { style: BorderStyle.SINGLE, size: 4, color: "BFBFBF" },
+  left: { style: BorderStyle.SINGLE, size: 4, color: "BFBFBF" },
+  right: { style: BorderStyle.SINGLE, size: 4, color: "BFBFBF" },
+  insideHorizontal: { style: BorderStyle.SINGLE, size: 4, color: "BFBFBF" },
+  insideVertical: { style: BorderStyle.SINGLE, size: 4, color: "BFBFBF" },
+} as const;
+
 function headerCell(text: string): TableCell {
   return new TableCell({
     children: [new Paragraph({
-      children: [new TextRun({ text, bold: true, size: 20, color: "FFFFFF" })],
-      alignment: AlignmentType.CENTER,
+      children: [new TextRun({ text, bold: true })],
     })],
-    shading: { type: ShadingType.SOLID, color: "4F46E5" },
+    margins: { top: convertInchesToTwip(0.04), bottom: convertInchesToTwip(0.04), left: convertInchesToTwip(0.08), right: convertInchesToTwip(0.08) },
   });
 }
 
 function bodyCell(text: string): TableCell {
   return new TableCell({
-    children: [new Paragraph({
-      children: [new TextRun({ text: text || "—", size: 20 })],
-      spacing: { before: 40, after: 40 },
-    })],
+    children: [new Paragraph({ text: text || "—" })],
+    margins: { top: convertInchesToTwip(0.04), bottom: convertInchesToTwip(0.04), left: convertInchesToTwip(0.08), right: convertInchesToTwip(0.08) },
   });
 }
-
-const thinBorder = {
-  top: { style: BorderStyle.SINGLE, size: 1, color: "D1D5DB" },
-  bottom: { style: BorderStyle.SINGLE, size: 1, color: "D1D5DB" },
-  left: { style: BorderStyle.SINGLE, size: 1, color: "D1D5DB" },
-  right: { style: BorderStyle.SINGLE, size: 1, color: "D1D5DB" },
-} as const;
 
 function buildPlanningTable(rows: Sketch["rows"]): Table {
   const header = new TableRow({
@@ -66,16 +62,15 @@ function buildPlanningTable(rows: Sketch["rows"]): Table {
   });
 
   const dataRows = rows.map(
-    (row) =>
-      new TableRow({
-        children: [bodyCell(row.time), bodyCell(row.narrative), bodyCell(row.demo_actions)],
-      }),
+    (row) => new TableRow({
+      children: [bodyCell(row.time), bodyCell(row.narrative), bodyCell(row.demo_actions)],
+    }),
   );
 
   return new Table({
     rows: [header, ...dataRows],
     width: { size: 100, type: WidthType.PERCENTAGE },
-    borders: thinBorder,
+    borders: tableBorder,
   });
 }
 
@@ -94,56 +89,27 @@ function descriptionText(desc: unknown): string {
   return "";
 }
 
-// ── Sketch → Word ───────────────────────────────────────────────
-
-function buildSketchContent(sketch: Sketch, level: (typeof HeadingLevel)[keyof typeof HeadingLevel] = HeadingLevel.HEADING_1): (Paragraph | Table)[] {
-  const elements: (Paragraph | Table)[] = [];
-
-  elements.push(new Paragraph({
-    text: sketch.title,
-    heading: level,
-    spacing: { before: 300, after: 100 },
-  }));
-
-  const desc = descriptionText(sketch.description);
-  if (desc.trim()) {
-    elements.push(new Paragraph({
-      children: [new TextRun({ text: desc, size: 22, color: "6B7280", italics: true })],
-      spacing: { before: 100, after: 200 },
-    }));
-  }
-
-  if (sketch.rows.length > 0) {
-    elements.push(new Paragraph({
-      text: "Planning Table",
-      heading: HeadingLevel.HEADING_3,
-      spacing: { before: 200, after: 100 },
-    }));
-    elements.push(buildPlanningTable(sketch.rows));
-  }
-
-  return elements;
+function sanitizeFilename(title: string): string {
+  return title.replace(/[^a-zA-Z0-9 ]/g, "").trim().replace(/\s+/g, "-");
 }
 
-export async function exportSketchToWord(sketch: Sketch): Promise<void> {
-  const doc = new Document({
-    sections: [{
-      children: [
-        new Paragraph({ text: sketch.title, heading: HeadingLevel.TITLE, spacing: { after: 100 } }),
-        new Paragraph({
-          children: [
-            new TextRun({ text: `Generated ${timestamp()}`, color: "9CA3AF", size: 20 }),
-            new TextRun({ text: `  ·  ${sketch.rows.length} scene${sketch.rows.length !== 1 ? "s" : ""}`, color: "9CA3AF", size: 20 }),
-          ],
-          spacing: { after: 300 },
-        }),
-        ...buildSketchContent(sketch, HeadingLevel.HEADING_1),
-      ],
-    }],
-  });
+// ── Document factory ────────────────────────────────────────────
 
+function createDocument(children: (Paragraph | Table)[]): Document {
+  return new Document({
+    styles: {
+      default: {
+        document: {
+          run: { font: "Calibri", size: 22 }, // 11pt Calibri — Word default
+        },
+      },
+    },
+    sections: [{ children: children as Paragraph[] }],
+  });
+}
+
+async function saveDocument(doc: Document, defaultName: string): Promise<void> {
   const blob = await Packer.toBlob(doc);
-  const defaultName = `${sketch.title.replace(/[^a-zA-Z0-9 ]/g, "").trim().replace(/\s+/g, "-")}.docx`;
   const filePath = await save({
     defaultPath: defaultName,
     filters: [{ name: "Word Document", extensions: ["docx"] }],
@@ -153,13 +119,49 @@ export async function exportSketchToWord(sketch: Sketch): Promise<void> {
   await writeFile(filePath, new Uint8Array(buffer));
 }
 
+// ── Sketch → Word ───────────────────────────────────────────────
+
+function buildSketchContent(sketch: Sketch, level: (typeof HeadingLevel)[keyof typeof HeadingLevel] = HeadingLevel.HEADING_1): (Paragraph | Table)[] {
+  const elements: (Paragraph | Table)[] = [];
+
+  elements.push(new Paragraph({ text: sketch.title, heading: level }));
+
+  const desc = descriptionText(sketch.description);
+  if (desc.trim()) {
+    elements.push(new Paragraph({
+      children: [new TextRun({ text: desc, italics: true })],
+    }));
+  }
+
+  if (sketch.rows.length > 0) {
+    elements.push(buildPlanningTable(sketch.rows));
+  }
+
+  return elements;
+}
+
+export async function exportSketchToWord(sketch: Sketch): Promise<void> {
+  const children: (Paragraph | Table)[] = [
+    new Paragraph({ text: sketch.title, heading: HeadingLevel.TITLE }),
+    new Paragraph({
+      children: [
+        new TextRun({ text: `Generated ${timestamp()}  ·  ${sketch.rows.length} scene${sketch.rows.length !== 1 ? "s" : ""}`, italics: true }),
+      ],
+    }),
+    new Paragraph({}), // blank line
+    ...buildSketchContent(sketch, HeadingLevel.HEADING_1),
+  ];
+
+  const doc = createDocument(children);
+  await saveDocument(doc, `${sanitizeFilename(sketch.title)}.docx`);
+}
+
 // ── Storyboard → Word ───────────────────────────────────────────
 
 export async function exportStoryboardToWord(
   storyboard: Storyboard,
   resolveSketches: (paths: string[]) => Promise<Map<string, Sketch>>,
 ): Promise<void> {
-  // Collect all sketch paths
   const paths: string[] = [];
   for (const item of storyboard.items) {
     if (item.type === "sketch_ref") paths.push(item.path);
@@ -167,37 +169,31 @@ export async function exportStoryboardToWord(
   }
 
   const sketchMap = await resolveSketches([...new Set(paths)]);
-
   const children: (Paragraph | Table)[] = [];
 
-  // Title
-  children.push(new Paragraph({ text: storyboard.title, heading: HeadingLevel.TITLE, spacing: { after: 100 } }));
+  // Title + subtitle
+  children.push(new Paragraph({ text: storyboard.title, heading: HeadingLevel.TITLE }));
 
   const sketchCount = sketchMap.size;
   const totalRows = [...sketchMap.values()].reduce((s, sk) => s + sk.rows.length, 0);
   children.push(new Paragraph({
-    children: [
-      new TextRun({ text: `Generated ${timestamp()}`, color: "9CA3AF", size: 20 }),
-      new TextRun({ text: `  ·  ${sketchCount} sketch${sketchCount !== 1 ? "es" : ""}, ${totalRows} scene${totalRows !== 1 ? "s" : ""}`, color: "9CA3AF", size: 20 }),
-    ],
-    spacing: { after: 200 },
+    children: [new TextRun({
+      text: `Generated ${timestamp()}  ·  ${sketchCount} sketch${sketchCount !== 1 ? "es" : ""}, ${totalRows} scene${totalRows !== 1 ? "s" : ""}`,
+      italics: true,
+    })],
   }));
 
   if (storyboard.description?.trim()) {
-    children.push(new Paragraph({
-      children: [new TextRun({ text: storyboard.description, size: 22, color: "6B7280", italics: true })],
-      spacing: { after: 300 },
-    }));
+    children.push(new Paragraph({}));
+    children.push(new Paragraph({ text: storyboard.description }));
   }
+
+  children.push(new Paragraph({})); // blank line before content
 
   // Items in storyboard order
   for (const item of storyboard.items) {
     if (item.type === "section") {
-      children.push(new Paragraph({
-        text: item.title,
-        heading: HeadingLevel.HEADING_1,
-        spacing: { before: 400, after: 100 },
-      }));
+      children.push(new Paragraph({ text: item.title, heading: HeadingLevel.HEADING_1 }));
       for (const spath of item.sketches) {
         const sk = sketchMap.get(spath);
         if (sk) children.push(...buildSketchContent(sk, HeadingLevel.HEADING_2));
@@ -208,17 +204,6 @@ export async function exportStoryboardToWord(
     }
   }
 
-  const doc = new Document({
-    sections: [{ children: children as Paragraph[] }],
-  });
-
-  const blob = await Packer.toBlob(doc);
-  const defaultName = `${storyboard.title.replace(/[^a-zA-Z0-9 ]/g, "").trim().replace(/\s+/g, "-")}.docx`;
-  const filePath = await save({
-    defaultPath: defaultName,
-    filters: [{ name: "Word Document", extensions: ["docx"] }],
-  });
-  if (!filePath) return;
-  const buffer = await blob.arrayBuffer();
-  await writeFile(filePath, new Uint8Array(buffer));
+  const doc = createDocument(children);
+  await saveDocument(doc, `${sanitizeFilename(storyboard.title)}.docx`);
 }
