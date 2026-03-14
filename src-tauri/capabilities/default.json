@@ -25,6 +25,11 @@
     },
     "dialog:default",
     "dialog:allow-open",
+    "dialog:allow-save",
+    {
+      "identifier": "fs:allow-write-file",
+      "allow": [{ "path": "**" }]
+    },
     "store:default",
     "global-shortcut:default",
     "window-state:default",
