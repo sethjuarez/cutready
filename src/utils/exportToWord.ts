@@ -19,6 +19,7 @@ import {
   BorderStyle,
   AlignmentType,
   LevelFormat,
+  PageOrientation,
   convertInchesToTwip,
 } from "docx";
 import { save } from "@tauri-apps/plugin-dialog";
@@ -196,7 +197,14 @@ function createDocument(children: (Paragraph | Table)[]): Document {
         }],
       }],
     },
-    sections: [{ children: children as Paragraph[] }],
+    sections: [{
+      properties: {
+        page: {
+          size: { orientation: PageOrientation.LANDSCAPE },
+        },
+      },
+      children: children as Paragraph[],
+    }],
   });
 }
 
