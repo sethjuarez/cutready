@@ -25,6 +25,8 @@ import {
 } from "docx";
 import { save } from "@tauri-apps/plugin-dialog";
 import { readFile, writeFile } from "@tauri-apps/plugin-fs";
+import { renderToSvgString, type ElucimDocument } from "@elucim/dsl";
+import { svgToCanvas } from "@elucim/core";
 import type { Sketch, Storyboard } from "../types/sketch";
 
 // ── Markdown → docx primitives ──────────────────────────────────
@@ -151,6 +153,42 @@ async function readScreenshot(projectRoot: string, relativePath: string): Promis
   }
 }
 
+/** Render the last frame of an elucim visual as a PNG ImageRun for Word embedding. */
+async function captureVisualLastFrame(visual: Record<string, unknown>): Promise<ImageRun | null> {
+  try {
+    const dsl = visual as unknown as ElucimDocument;
+    const root = dsl.root as unknown as Record<string, unknown>;
+    const totalFrames = (root.durationInFrames as number) || 60;
+    const lastFrame = Math.max(0, totalFrames - 1);
+    const width = (root.width as number) || 640;
+    const height = (root.height as number) || 360;
+
+    // Headless render to SVG string at the last frame
+    const svgString = renderToSvgString(dsl, lastFrame, { width, height });
+
+    // Parse SVG string into an element for canvas conversion
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(svgString, "image/svg+xml");
+    const svgElement = doc.documentElement as unknown as SVGSVGElement;
+
+    // Rasterize SVG → canvas → PNG blob
+    const canvas = await svgToCanvas(svgElement, width * 2, height * 2);
+    const blob: Blob = await new Promise((resolve, reject) => {
+      canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("toBlob failed"))), "image/png");
+    });
+    const buffer = await blob.arrayBuffer();
+
+    return new ImageRun({
+      data: new Uint8Array(buffer),
+      transformation: { width: IMG_WIDTH, height: IMG_HEIGHT },
+      type: "png",
+    });
+  } catch (e) {
+    console.warn("[exportToWord] Failed to capture visual frame:", e);
+    return null;
+  }
+}
+
 function screenshotCell(image: ImageRun | null): TableCell {
   return new TableCell({
     children: [new Paragraph(image ? { children: [image] } : { text: "—" })],
@@ -170,14 +208,8 @@ async function buildPlanningTable(rows: Sketch["rows"], projectRoot: string): Pr
     const cells = [bodyCell(row.time), bodyCell(row.narrative), bodyCell(row.demo_actions)];
     if (hasMedia) {
       if (row.visual) {
-        // Animated visuals can't be embedded in Word — show a placeholder note
-        cells.push(new TableCell({
-          children: [new Paragraph({
-            children: [new TextRun({ text: "🎬 Animated visual", italics: true, size: 18, color: "666666" })],
-            alignment: AlignmentType.CENTER,
-          })],
-          margins: cellMargins,
-        }));
+        const img = await captureVisualLastFrame(row.visual);
+        cells.push(screenshotCell(img));
       } else {
         const img = row.screenshot ? await readScreenshot(projectRoot, row.screenshot) : null;
         cells.push(screenshotCell(img));

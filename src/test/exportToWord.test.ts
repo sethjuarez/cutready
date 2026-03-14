@@ -18,6 +18,22 @@ vi.mock("@tauri-apps/plugin-fs", () => ({
 // Mock Tauri invoke
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 
+// Mock elucim packages
+vi.mock("@elucim/dsl", () => ({
+  DslRenderer: () => null,
+  renderToSvgString: () => '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360"></svg>',
+}));
+vi.mock("@elucim/core", () => ({
+  svgToCanvas: () => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 640;
+    canvas.height = 360;
+    // Provide a toBlob that returns a minimal PNG blob
+    canvas.toBlob = (cb: BlobCallback) => cb(new Blob(["fake-png"], { type: "image/png" }));
+    return Promise.resolve(canvas);
+  },
+}));
+
 import { exportSketchToWord, exportStoryboardToWord } from "../utils/exportToWord";
 import type { Sketch, Storyboard } from "../types/sketch";
 

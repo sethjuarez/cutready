@@ -1,6 +1,14 @@
 import { describe, it, expect, vi } from "vitest";
 import { render } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+
+// Mock elucim packages before importing components
+vi.mock("@elucim/dsl", () => ({
+  DslRenderer: () => null,
+  renderToSvgString: () => '<svg></svg>',
+}));
+vi.mock("@elucim/core", () => ({ svgToCanvas: vi.fn() }));
+
 import { ScriptTable } from "../components/ScriptTable";
 import type { PlanningRow } from "../types/sketch";
 

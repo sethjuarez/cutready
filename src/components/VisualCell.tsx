@@ -1,5 +1,5 @@
 import { useRef, useCallback, useState, useEffect } from "react";
-import { DslRenderer, type ElucimDocument } from "@elucim/dsl";
+import { DslRenderer, type ElucimDocument, type DslRendererRef } from "@elucim/dsl";
 
 interface VisualCellProps {
   /** The elucim DSL document to render. */
@@ -15,12 +15,11 @@ interface VisualCellProps {
 /**
  * Renders an elucim animation inline.
  *
- * - **thumbnail**: compact w-40 h-24 container for the planning table.
- *   Hover shows play controls overlay.
- * - **full**: fills parent, used in SketchPreview.
+ * - **thumbnail**: static last-frame poster for the planning table (no animation loop).
+ * - **full**: interactive player with playback controls, used in SketchPreview.
  */
 export default function VisualCell({ visual, mode, onClick, className }: VisualCellProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
+  const rendererRef = useRef<DslRendererRef>(null);
   const [hasError, setHasError] = useState(false);
 
   // Reset error state when visual changes
@@ -29,6 +28,13 @@ export default function VisualCell({ visual, mode, onClick, className }: VisualC
   const handleClick = useCallback(() => {
     if (mode === "thumbnail" && onClick) onClick();
   }, [mode, onClick]);
+
+  const handleError = useCallback((errors: Array<{ path: string; message: string }>) => {
+    console.warn("[VisualCell] DSL validation errors:", errors);
+    setHasError(true);
+  }, []);
+
+  const dsl = visual as unknown as ElucimDocument;
 
   if (hasError) {
     return (
@@ -45,14 +51,18 @@ export default function VisualCell({ visual, mode, onClick, className }: VisualC
   if (mode === "thumbnail") {
     return (
       <div
-        ref={containerRef}
         className={`relative group/vis w-40 h-24 rounded-md bg-[var(--color-surface-alt)] border border-[var(--color-border)] overflow-hidden cursor-pointer ${className ?? ""}`}
         onClick={handleClick}
       >
-        {/* Scaled-down DslRenderer — pointer-events off so clicks pass to container */}
+        {/* Static last-frame poster — no animation loop, saves CPU */}
         <div className="w-[640px] h-[384px] origin-top-left" style={{ transform: "scale(0.25)" }}>
           <ErrorBoundary onError={() => setHasError(true)}>
-            <DslRenderer dsl={visual as unknown as ElucimDocument} style={{ width: 640, height: 384 }} />
+            <DslRenderer
+              dsl={dsl}
+              poster="last"
+              onError={handleError}
+              style={{ width: 640, height: 384 }}
+            />
           </ErrorBoundary>
         </div>
 
@@ -66,12 +76,14 @@ export default function VisualCell({ visual, mode, onClick, className }: VisualC
     );
   }
 
-  // Full mode
+  // Full mode — interactive player with controls
   return (
-    <div ref={containerRef} className={`w-full h-full flex items-center justify-center ${className ?? ""}`}>
+    <div className={`w-full h-full flex items-center justify-center ${className ?? ""}`}>
       <ErrorBoundary onError={() => setHasError(true)}>
         <DslRenderer
-          dsl={visual as unknown as ElucimDocument}
+          ref={rendererRef}
+          dsl={dsl}
+          onError={handleError}
           className="max-w-full max-h-full rounded-lg shadow-lg"
           style={{ width: "100%", height: "100%" }}
         />
