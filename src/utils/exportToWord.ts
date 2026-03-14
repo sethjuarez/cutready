@@ -3,6 +3,7 @@
  *
  * Uses the `docx` library with Word's default Calibri theme and built-in
  * heading styles so documents look native when opened in Word.
+ * Markdown in cell content (bold, italic, code, bullets) is rendered.
  */
 
 import {
@@ -22,6 +23,81 @@ import { save } from "@tauri-apps/plugin-dialog";
 import { writeFile } from "@tauri-apps/plugin-fs";
 import type { Sketch, Storyboard } from "../types/sketch";
 
+// ── Markdown → docx primitives ──────────────────────────────────
+
+/** Parse inline markdown into styled TextRuns. Handles **bold**, *italic*, `code`. */
+function parseInlineMarkdown(text: string): TextRun[] {
+  const runs: TextRun[] = [];
+  // Regex matches: `code`, ***bolditalic***, **bold**, *italic*, or plain text
+  const pattern = /(`[^`]+`|\*\*\*[^*]+\*\*\*|\*\*[^*]+\*\*|\*[^*]+\*)/g;
+  let lastIndex = 0;
+
+  for (const match of text.matchAll(pattern)) {
+    const before = text.slice(lastIndex, match.index);
+    if (before) runs.push(new TextRun({ text: before }));
+
+    const raw = match[0];
+    if (raw.startsWith("`")) {
+      runs.push(new TextRun({ text: raw.slice(1, -1), font: "Consolas", bold: true }));
+    } else if (raw.startsWith("***")) {
+      runs.push(new TextRun({ text: raw.slice(3, -3), bold: true, italics: true }));
+    } else if (raw.startsWith("**")) {
+      runs.push(new TextRun({ text: raw.slice(2, -2), bold: true }));
+    } else if (raw.startsWith("*")) {
+      runs.push(new TextRun({ text: raw.slice(1, -1), italics: true }));
+    }
+    lastIndex = match.index! + raw.length;
+  }
+
+  const tail = text.slice(lastIndex);
+  if (tail) runs.push(new TextRun({ text: tail }));
+
+  return runs.length > 0 ? runs : [new TextRun({ text: text || "—" })];
+}
+
+/** Convert a markdown string (possibly multi-line with bullets) into Paragraph[]. */
+function markdownToParagraphs(text: string): Paragraph[] {
+  if (!text?.trim()) return [new Paragraph({ text: "—" })];
+
+  const lines = text.split("\n");
+  const paragraphs: Paragraph[] = [];
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+
+    // Bullet list item: - text or * text (but not *italic*)
+    const bulletMatch = trimmed.match(/^[-*•]\s+(.+)/);
+    if (bulletMatch && !trimmed.match(/^\*[^*]+\*$/)) {
+      paragraphs.push(new Paragraph({
+        children: [
+          new TextRun({ text: "•  " }),
+          ...parseInlineMarkdown(bulletMatch[1]),
+        ],
+        indent: { left: convertInchesToTwip(0.15) },
+      }));
+    }
+    // Numbered list: 1. text
+    else if (/^\d+[.)]\s+/.test(trimmed)) {
+      const content = trimmed.replace(/^\d+[.)]\s+/, "");
+      const num = trimmed.match(/^(\d+[.)])\s/)![1];
+      paragraphs.push(new Paragraph({
+        children: [
+          new TextRun({ text: `${num} ` }),
+          ...parseInlineMarkdown(content),
+        ],
+        indent: { left: convertInchesToTwip(0.15) },
+      }));
+    }
+    // Regular paragraph
+    else {
+      paragraphs.push(new Paragraph({ children: parseInlineMarkdown(trimmed) }));
+    }
+  }
+
+  return paragraphs.length > 0 ? paragraphs : [new Paragraph({ text: "—" })];
+}
+
 // ── Helpers ─────────────────────────────────────────────────────
 
 function timestamp(): string {
@@ -39,19 +115,24 @@ const tableBorder = {
   insideVertical: { style: BorderStyle.SINGLE, size: 4, color: "BFBFBF" },
 } as const;
 
+const cellMargins = {
+  top: convertInchesToTwip(0.04),
+  bottom: convertInchesToTwip(0.04),
+  left: convertInchesToTwip(0.08),
+  right: convertInchesToTwip(0.08),
+};
+
 function headerCell(text: string): TableCell {
   return new TableCell({
-    children: [new Paragraph({
-      children: [new TextRun({ text, bold: true })],
-    })],
-    margins: { top: convertInchesToTwip(0.04), bottom: convertInchesToTwip(0.04), left: convertInchesToTwip(0.08), right: convertInchesToTwip(0.08) },
+    children: [new Paragraph({ children: [new TextRun({ text, bold: true })] })],
+    margins: cellMargins,
   });
 }
 
 function bodyCell(text: string): TableCell {
   return new TableCell({
-    children: [new Paragraph({ text: text || "—" })],
-    margins: { top: convertInchesToTwip(0.04), bottom: convertInchesToTwip(0.04), left: convertInchesToTwip(0.08), right: convertInchesToTwip(0.08) },
+    children: markdownToParagraphs(text),
+    margins: cellMargins,
   });
 }
 
@@ -128,9 +209,7 @@ function buildSketchContent(sketch: Sketch, level: (typeof HeadingLevel)[keyof t
 
   const desc = descriptionText(sketch.description);
   if (desc.trim()) {
-    elements.push(new Paragraph({
-      children: [new TextRun({ text: desc, italics: true })],
-    }));
+    elements.push(...markdownToParagraphs(desc));
   }
 
   if (sketch.rows.length > 0) {
