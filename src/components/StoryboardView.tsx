@@ -245,7 +245,10 @@ export function StoryboardView() {
                       } catch { /* skip missing */ }
                     }));
                     return map;
-                  }).then(() => useToastStore.getState().show("Export complete")).catch(err => console.error("Word export failed:", err));
+                  }).then(() => {
+                    useToastStore.getState().show("Export complete");
+                    useAppStore.getState().addActivityEntries([{ id: crypto.randomUUID(), timestamp: new Date(), source: "export", content: `Exported "${activeStoryboard.title}" to Word`, level: "success" }]);
+                  }).catch(err => console.error("Word export failed:", err));
                 }}
                 className="flex items-center gap-1.5 shrink-0 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] px-3 py-1.5 rounded-lg border border-[var(--color-border)] hover:border-[var(--color-accent)]/40 hover:bg-[var(--color-accent)]/5 transition-colors"
                 title="Export to Word (.docx)"

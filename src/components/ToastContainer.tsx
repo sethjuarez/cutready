@@ -7,11 +7,11 @@ export function ToastContainer() {
   if (toasts.length === 0) return null;
 
   return (
-    <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[9999] flex flex-col gap-2 items-center">
+    <div className="fixed left-1/2 -translate-x-1/2 z-[9999] flex flex-col gap-2 items-center" style={{ bottom: "calc(var(--statusbar-height, 24px) + 12px)" }}>
       {toasts.map((t) => (
         <div
           key={t.id}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] shadow-lg text-[12px] text-[var(--color-text)] animate-in fade-in slide-in-from-bottom-2"
+          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] shadow-lg text-[12px] text-[var(--color-text)] transition-opacity duration-300"
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
