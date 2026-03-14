@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, lazy, Suspense, type ReactNode } from "react";
 import {
   DndContext,
   closestCenter,
@@ -16,7 +16,8 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import type { PlanningRow } from "../types/sketch";
-import VisualCell from "./VisualCell";
+
+const VisualCell = lazy(() => import("./VisualCell"));
 
 /* Row accent colors — thin left stripe for visual anchoring */
 const ROW_PALETTES: Record<string, string[]> = {
@@ -471,11 +472,13 @@ function SortableRow({
         {row.visual ? (
           /* ── Elucim animated visual ── */
           <div className="relative group/vis">
-            <VisualCell
-              visual={row.visual}
-              mode="thumbnail"
-              onClick={() => onImageClick("__visual__")}
-            />
+            <Suspense fallback={<div className="w-40 h-24 rounded-md bg-[var(--color-surface-alt)] border border-[var(--color-border)] animate-pulse" />}>
+              <VisualCell
+                visual={row.visual}
+                mode="thumbnail"
+                onClick={() => onImageClick("__visual__")}
+              />
+            </Suspense>
             {!readOnly && (
               <div className="absolute inset-0 bg-black/50 opacity-0 group-hover/vis:opacity-100 transition-opacity flex items-center justify-center gap-1.5 rounded-md" onClick={(e) => e.stopPropagation()}>
                 {/* Remove visual */}

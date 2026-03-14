@@ -1,11 +1,12 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, lazy, Suspense } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
 import { ResizeHandle } from "./ResizeHandle";
 import type { PlanningRow } from "../types/sketch";
-import VisualCell from "./VisualCell";
+
+const VisualCell = lazy(() => import("./VisualCell"));
 
 const PREFS_KEY = "cutready:preview";
 
@@ -289,7 +290,9 @@ export function SketchPreview({ rows, projectRoot, title, onClose, slides: slide
               )}
             </div>
           ) : row?.visual ? (
-            <VisualCell visual={row.visual} mode="full" className="max-w-full max-h-full" />
+            <Suspense fallback={<div className="w-full max-w-2xl aspect-video rounded-lg bg-[var(--color-surface-alt)] animate-pulse" />}>
+              <VisualCell visual={row.visual} mode="full" className="max-w-full max-h-full" />
+            </Suspense>
           ) : screenshotSrc ? (
             <img
               src={screenshotSrc}

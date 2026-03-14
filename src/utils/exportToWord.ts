@@ -25,8 +25,6 @@ import {
 } from "docx";
 import { save } from "@tauri-apps/plugin-dialog";
 import { readFile, writeFile } from "@tauri-apps/plugin-fs";
-import { renderToSvgString, type ElucimDocument } from "@elucim/dsl";
-import { svgToCanvas } from "@elucim/core";
 import type { Sketch, Storyboard } from "../types/sketch";
 
 // ── Markdown → docx primitives ──────────────────────────────────
@@ -156,6 +154,11 @@ async function readScreenshot(projectRoot: string, relativePath: string): Promis
 /** Render the last frame of an elucim visual as a PNG ImageRun for Word embedding. */
 async function captureVisualLastFrame(visual: Record<string, unknown>): Promise<ImageRun | null> {
   try {
+    // Dynamic import to avoid loading react-dom/server at app startup (React 19 compat)
+    const { renderToSvgString } = await import("@elucim/dsl");
+    const { svgToCanvas } = await import("@elucim/core");
+
+    type ElucimDocument = Parameters<typeof renderToSvgString>[0];
     const dsl = visual as unknown as ElucimDocument;
     const root = dsl.root as unknown as Record<string, unknown>;
     const totalFrames = (root.durationInFrames as number) || 60;
