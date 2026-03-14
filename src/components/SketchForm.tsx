@@ -313,7 +313,7 @@ export function SketchForm() {
           {localRows.length > 0 && (
             <div className="relative flex items-center gap-2">
               <button
-                onClick={() => activeSketch && exportSketchToWord(activeSketch).then(() => {
+                onClick={() => activeSketch && exportSketchToWord(activeSketch, projectRoot).then(() => {
                   useToastStore.getState().show("Export complete");
                   useAppStore.getState().addActivityEntries([{ id: crypto.randomUUID(), timestamp: new Date(), source: "export", content: `Exported "${activeSketch.title}" to Word`, level: "success" }]);
                 }).catch(err => console.error("Word export failed:", err))}

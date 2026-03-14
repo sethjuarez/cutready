@@ -9,10 +9,11 @@ vi.mock("@tauri-apps/plugin-dialog", () => ({ save: (...args: unknown[]) => mock
 
 // Mock Tauri fs
 const mockWriteFile = vi.fn();
-vi.mock("@tauri-apps/plugin-fs", () => ({ writeFile: (...args: unknown[]) => mockWriteFile(...args) }));
-
-// Keep file-saver mock for backward compat (no longer used but import still exists)
-vi.mock("file-saver", () => ({ saveAs: vi.fn() }));
+const mockReadFile = vi.fn();
+vi.mock("@tauri-apps/plugin-fs", () => ({
+  writeFile: (...args: unknown[]) => mockWriteFile(...args),
+  readFile: (...args: unknown[]) => mockReadFile(...args),
+}));
 
 // Mock Tauri invoke
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
@@ -39,14 +40,16 @@ function makeMockSketch(title = "Test Sketch", rowCount = 3): Sketch {
 beforeEach(() => {
   mockSave.mockReset();
   mockWriteFile.mockReset();
+  mockReadFile.mockReset();
   mockSave.mockResolvedValue("/tmp/test.docx");
   mockWriteFile.mockResolvedValue(undefined);
+  mockReadFile.mockResolvedValue(new Uint8Array([0xFF, 0xD8, 0xFF])); // minimal JPEG header
 });
 
 describe("exportSketchToWord", () => {
   it("shows save dialog and writes .docx file", async () => {
     const sketch = makeMockSketch("My Demo");
-    await exportSketchToWord(sketch);
+    await exportSketchToWord(sketch, "/projects/test");
 
     expect(mockSave).toHaveBeenCalledTimes(1);
     expect(mockSave).toHaveBeenCalledWith({
@@ -61,7 +64,7 @@ describe("exportSketchToWord", () => {
   it("does nothing when user cancels save dialog", async () => {
     mockSave.mockResolvedValue(null);
     const sketch = makeMockSketch("Cancelled");
-    await exportSketchToWord(sketch);
+    await exportSketchToWord(sketch, "/projects/test");
 
     expect(mockSave).toHaveBeenCalledTimes(1);
     expect(mockWriteFile).not.toHaveBeenCalled();
@@ -69,7 +72,7 @@ describe("exportSketchToWord", () => {
 
   it("handles empty rows gracefully", async () => {
     const sketch = makeMockSketch("Empty", 0);
-    await exportSketchToWord(sketch);
+    await exportSketchToWord(sketch, "/projects/test");
 
     expect(mockSave).toHaveBeenCalledWith(
       expect.objectContaining({ defaultPath: "Empty.docx" }),
@@ -80,7 +83,7 @@ describe("exportSketchToWord", () => {
   it("handles Lexical JSON description", async () => {
     const sketch = makeMockSketch("Lexical");
     sketch.description = { root: { children: [{ text: "hello" }] } };
-    await exportSketchToWord(sketch);
+    await exportSketchToWord(sketch, "/projects/test");
     expect(mockWriteFile).toHaveBeenCalledTimes(1);
   }, 15_000);
 });
@@ -110,7 +113,7 @@ describe("exportStoryboardToWord", () => {
       return map;
     };
 
-    await exportStoryboardToWord(storyboard, resolver);
+    await exportStoryboardToWord(storyboard, "/projects/test", resolver);
 
     expect(mockSave).toHaveBeenCalledWith(
       expect.objectContaining({ defaultPath: "Full-Demo-Storyboard.docx" }),
@@ -128,7 +131,7 @@ describe("exportStoryboardToWord", () => {
       updated_at: "2025-01-01T00:00:00Z",
     };
 
-    await exportStoryboardToWord(storyboard, async () => new Map());
+    await exportStoryboardToWord(storyboard, "/projects/test", async () => new Map());
 
     expect(mockSave).toHaveBeenCalledWith(
       expect.objectContaining({ defaultPath: "Empty-Board.docx" }),

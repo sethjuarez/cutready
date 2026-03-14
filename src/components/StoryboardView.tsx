@@ -234,7 +234,7 @@ export function StoryboardView() {
               <button
                 onClick={() => {
                   if (!activeStoryboard) return;
-                  exportStoryboardToWord(activeStoryboard, async (paths) => {
+                  exportStoryboardToWord(activeStoryboard, currentProject?.root ?? "", async (paths) => {
                     const map = new Map<string, Sketch>();
                     await Promise.all(paths.map(async (p) => {
                       const cached = sketchCache.get(p);

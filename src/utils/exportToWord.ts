@@ -11,6 +11,7 @@ import {
   Packer,
   Paragraph,
   TextRun,
+  ImageRun,
   Table,
   TableRow,
   TableCell,
@@ -23,7 +24,7 @@ import {
   convertInchesToTwip,
 } from "docx";
 import { save } from "@tauri-apps/plugin-dialog";
-import { writeFile } from "@tauri-apps/plugin-fs";
+import { readFile, writeFile } from "@tauri-apps/plugin-fs";
 import type { Sketch, Storyboard } from "../types/sketch";
 
 // ── Markdown → docx primitives ──────────────────────────────────
@@ -132,17 +133,47 @@ function bodyCell(text: string): TableCell {
   });
 }
 
-function buildPlanningTable(rows: Sketch["rows"]): Table {
-  const header = new TableRow({
-    children: [headerCell("Time"), headerCell("Narrative"), headerCell("Demo Actions")],
-    tableHeader: true,
-  });
+const IMG_WIDTH = convertInchesToTwip(2.5);
+const IMG_HEIGHT = convertInchesToTwip(1.4); // ~16:9 aspect ratio
 
-  const dataRows = rows.map(
-    (row) => new TableRow({
-      children: [bodyCell(row.time), bodyCell(row.narrative), bodyCell(row.demo_actions)],
-    }),
-  );
+/** Read a screenshot file and return an ImageRun, or null on failure. */
+async function readScreenshot(projectRoot: string, relativePath: string): Promise<ImageRun | null> {
+  try {
+    const fullPath = `${projectRoot}/${relativePath}`;
+    const data = await readFile(fullPath);
+    return new ImageRun({
+      data,
+      transformation: { width: IMG_WIDTH, height: IMG_HEIGHT },
+      type: "jpg",
+    });
+  } catch {
+    return null;
+  }
+}
+
+function screenshotCell(image: ImageRun | null): TableCell {
+  return new TableCell({
+    children: [new Paragraph(image ? { children: [image] } : { text: "—" })],
+    margins: cellMargins,
+  });
+}
+
+async function buildPlanningTable(rows: Sketch["rows"], projectRoot: string): Promise<Table> {
+  const hasScreenshots = rows.some((r) => r.screenshot);
+
+  const headerCells = [headerCell("Time"), headerCell("Narrative"), headerCell("Demo Actions")];
+  if (hasScreenshots) headerCells.push(headerCell("Screenshot"));
+
+  const header = new TableRow({ children: headerCells, tableHeader: true });
+
+  const dataRows = await Promise.all(rows.map(async (row) => {
+    const cells = [bodyCell(row.time), bodyCell(row.narrative), bodyCell(row.demo_actions)];
+    if (hasScreenshots) {
+      const img = row.screenshot ? await readScreenshot(projectRoot, row.screenshot) : null;
+      cells.push(screenshotCell(img));
+    }
+    return new TableRow({ children: cells });
+  }));
 
   return new Table({
     rows: [header, ...dataRows],
@@ -221,7 +252,7 @@ async function saveDocument(doc: Document, defaultName: string): Promise<void> {
 
 // ── Sketch → Word ───────────────────────────────────────────────
 
-function buildSketchContent(sketch: Sketch, level: (typeof HeadingLevel)[keyof typeof HeadingLevel] = HeadingLevel.HEADING_1): (Paragraph | Table)[] {
+async function buildSketchContent(sketch: Sketch, projectRoot: string, level: (typeof HeadingLevel)[keyof typeof HeadingLevel] = HeadingLevel.HEADING_1): Promise<(Paragraph | Table)[]> {
   const elements: (Paragraph | Table)[] = [];
 
   elements.push(new Paragraph({ text: sketch.title, heading: level }));
@@ -232,13 +263,13 @@ function buildSketchContent(sketch: Sketch, level: (typeof HeadingLevel)[keyof t
   }
 
   if (sketch.rows.length > 0) {
-    elements.push(buildPlanningTable(sketch.rows));
+    elements.push(await buildPlanningTable(sketch.rows, projectRoot));
   }
 
   return elements;
 }
 
-export async function exportSketchToWord(sketch: Sketch): Promise<void> {
+export async function exportSketchToWord(sketch: Sketch, projectRoot: string): Promise<void> {
   const children: (Paragraph | Table)[] = [
     new Paragraph({ text: sketch.title, heading: HeadingLevel.TITLE }),
     new Paragraph({
@@ -247,7 +278,7 @@ export async function exportSketchToWord(sketch: Sketch): Promise<void> {
       ],
     }),
     new Paragraph({}), // blank line
-    ...buildSketchContent(sketch, HeadingLevel.HEADING_1),
+    ...await buildSketchContent(sketch, projectRoot, HeadingLevel.HEADING_1),
   ];
 
   const doc = createDocument(children);
@@ -258,6 +289,7 @@ export async function exportSketchToWord(sketch: Sketch): Promise<void> {
 
 export async function exportStoryboardToWord(
   storyboard: Storyboard,
+  projectRoot: string,
   resolveSketches: (paths: string[]) => Promise<Map<string, Sketch>>,
 ): Promise<void> {
   const paths: string[] = [];
@@ -294,11 +326,11 @@ export async function exportStoryboardToWord(
       children.push(new Paragraph({ text: item.title, heading: HeadingLevel.HEADING_1 }));
       for (const spath of item.sketches) {
         const sk = sketchMap.get(spath);
-        if (sk) children.push(...buildSketchContent(sk, HeadingLevel.HEADING_2));
+        if (sk) children.push(...await buildSketchContent(sk, projectRoot, HeadingLevel.HEADING_2));
       }
     } else {
       const sk = sketchMap.get(item.path);
-      if (sk) children.push(...buildSketchContent(sk, HeadingLevel.HEADING_1));
+      if (sk) children.push(...await buildSketchContent(sk, projectRoot, HeadingLevel.HEADING_1));
     }
   }
 
