@@ -159,18 +159,29 @@ function screenshotCell(image: ImageRun | null): TableCell {
 }
 
 async function buildPlanningTable(rows: Sketch["rows"], projectRoot: string): Promise<Table> {
-  const hasScreenshots = rows.some((r) => r.screenshot);
+  const hasMedia = rows.some((r) => r.screenshot || r.visual);
 
   const headerCells = [headerCell("Time"), headerCell("Narrative"), headerCell("Demo Actions")];
-  if (hasScreenshots) headerCells.push(headerCell("Screenshot"));
+  if (hasMedia) headerCells.push(headerCell("Visual / Screenshot"));
 
   const header = new TableRow({ children: headerCells, tableHeader: true });
 
   const dataRows = await Promise.all(rows.map(async (row) => {
     const cells = [bodyCell(row.time), bodyCell(row.narrative), bodyCell(row.demo_actions)];
-    if (hasScreenshots) {
-      const img = row.screenshot ? await readScreenshot(projectRoot, row.screenshot) : null;
-      cells.push(screenshotCell(img));
+    if (hasMedia) {
+      if (row.visual) {
+        // Animated visuals can't be embedded in Word — show a placeholder note
+        cells.push(new TableCell({
+          children: [new Paragraph({
+            children: [new TextRun({ text: "🎬 Animated visual", italics: true, size: 18, color: "666666" })],
+            alignment: AlignmentType.CENTER,
+          })],
+          margins: cellMargins,
+        }));
+      } else {
+        const img = row.screenshot ? await readScreenshot(projectRoot, row.screenshot) : null;
+        cells.push(screenshotCell(img));
+      }
     }
     return new TableRow({ children: cells });
   }));

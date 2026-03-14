@@ -208,6 +208,35 @@ pub fn all_tools() -> Vec<ToolDefinition> {
             }),
         ),
         tool_def(
+            "set_row_visual",
+            "Set an animated framing visual on a planning row using the elucim DSL. The visual replaces the screenshot for that row. Pass null to remove a visual.",
+            json!({
+                "type": "object",
+                "properties": {
+                    "path": { "type": "string", "description": "Relative path to the sketch" },
+                    "index": { "type": "integer", "description": "0-based row index" },
+                    "visual": {
+                        "description": "An elucim DSL document (JSON object with version and root), or null to remove",
+                        "oneOf": [
+                            {
+                                "type": "object",
+                                "properties": {
+                                    "version": { "type": "string", "enum": ["1.0"] },
+                                    "root": {
+                                        "type": "object",
+                                        "description": "Root node — a scene, player, or presentation node. Scene node: { type: 'scene', width, height, children: [...] }. Player node: { type: 'player', width, height, fps, durationInFrames, children: [...] }. Children can be: circle, rect, line, arrow, text, group, polygon, image, axes, latex, graph, matrix, barChart. Each child supports animations: fadeIn, fadeOut, draw, easing, rotation, scale, translate."
+                                    }
+                                },
+                                "required": ["version", "root"]
+                            },
+                            { "type": "null" }
+                        ]
+                    }
+                },
+                "required": ["path", "index", "visual"]
+            }),
+        ),
+        tool_def(
             "delegate_to_agent",
             "Delegate a task to another AI agent with a different specialization. The agent runs independently and returns its result. Available agents: planner, writer, editor, plus any custom agents.",
             json!({
@@ -332,6 +361,7 @@ pub fn execute_tool(call: &ToolCall, project_root: &Path, vision_enabled: bool) 
         "read_sketch" => exec_read_sketch(project_root, &args, vision_enabled),
         "set_planning_rows" => exec_set_planning_rows(project_root, &args),
         "update_planning_row" => exec_update_planning_row(project_root, &args),
+        "set_row_visual" => exec_set_row_visual(project_root, &args),
         "list_project_images" => exec_list_project_images(project_root),
         "save_feedback" => exec_save_feedback(&args),
         "update_note" => exec_update_note(project_root, &args),
@@ -484,6 +514,7 @@ fn exec_set_planning_rows(root: &Path, args: &Value) -> String {
                     .unwrap_or("")
                     .into(),
                 screenshot: r.get("screenshot").and_then(|v| v.as_str()).map(|s| s.to_string()),
+                visual: r.get("visual").cloned(),
             })
             .collect(),
         None => return "Error: 'rows' must be an array".into(),
@@ -570,6 +601,56 @@ fn exec_update_planning_row(root: &Path, args: &Value) -> String {
 
     match project::write_sketch(&sketch, &path, root) {
         Ok(()) => format!("Updated row {} in {}", index, path.display()),
+        Err(e) => format!("Error writing sketch: {e}"),
+    }
+}
+
+fn exec_set_row_visual(root: &Path, args: &Value) -> String {
+    let path = match args.get("path").and_then(|v| v.as_str()) {
+        Some(p) => resolve_path(root, p),
+        None => return "Error: missing 'path' argument".into(),
+    };
+    let index = match args.get("index").and_then(|v| v.as_u64()) {
+        Some(i) => i as usize,
+        None => return "Error: missing 'index' argument".into(),
+    };
+
+    let mut sketch = match project::read_sketch(&path) {
+        Ok(s) => s,
+        Err(e) => return format!("Error reading sketch: {e}"),
+    };
+
+    if index >= sketch.rows.len() {
+        return format!(
+            "Error: index {} out of range (sketch has {} rows)",
+            index,
+            sketch.rows.len()
+        );
+    }
+
+    let row = &mut sketch.rows[index];
+
+    // null → remove visual, object → set visual
+    match args.get("visual") {
+        Some(v) if v.is_null() => {
+            row.visual = None;
+        }
+        Some(v) if v.is_object() => {
+            row.visual = Some(v.clone());
+            // Clear screenshot since visual replaces it
+            row.screenshot = None;
+        }
+        _ => return "Error: 'visual' must be an elucim DSL document object or null".into(),
+    }
+
+    match project::write_sketch(&sketch, &path, root) {
+        Ok(()) => {
+            if sketch.rows[index].visual.is_some() {
+                format!("Set animated visual on row {} in {}", index, path.display())
+            } else {
+                format!("Removed visual from row {} in {}", index, path.display())
+            }
+        }
         Err(e) => format!("Error writing sketch: {e}"),
     }
 }

@@ -7,12 +7,14 @@ export type SketchState =
   | "refined"
   | "final";
 
-/** A row in the sketch planning table (4 columns). */
+/** A row in the sketch planning table. */
 export interface PlanningRow {
   time: string;
   narrative: string;
   demo_actions: string;
   screenshot: string | null;
+  /** Optional elucim DSL document for an animated framing visual. */
+  visual?: Record<string, unknown> | null;
 }
 
 /** A sketch — a focused scene in a demo storyboard. */

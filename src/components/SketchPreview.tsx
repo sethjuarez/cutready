@@ -5,6 +5,7 @@ import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
 import { ResizeHandle } from "./ResizeHandle";
 import type { PlanningRow } from "../types/sketch";
+import VisualCell from "./VisualCell";
 
 const PREFS_KEY = "cutready:preview";
 
@@ -287,6 +288,8 @@ export function SketchPreview({ rows, projectRoot, title, onClose, slides: slide
                 <p className="text-lg text-[var(--color-text-secondary)] whitespace-pre-wrap leading-relaxed">{slide.subtitle}</p>
               )}
             </div>
+          ) : row?.visual ? (
+            <VisualCell visual={row.visual} mode="full" className="max-w-full max-h-full" />
           ) : screenshotSrc ? (
             <img
               src={screenshotSrc}

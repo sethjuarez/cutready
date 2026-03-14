@@ -16,6 +16,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import type { PlanningRow } from "../types/sketch";
+import VisualCell from "./VisualCell";
 
 /* Row accent colors — thin left stripe for visual anchoring */
 const ROW_PALETTES: Record<string, string[]> = {
@@ -467,7 +468,30 @@ function SortableRow({
         </div>
       </td>
       <td className="script-table-td align-top text-center">
-        {row.screenshot ? (
+        {row.visual ? (
+          /* ── Elucim animated visual ── */
+          <div className="relative group/vis">
+            <VisualCell
+              visual={row.visual}
+              mode="thumbnail"
+              onClick={() => onImageClick("__visual__")}
+            />
+            {!readOnly && (
+              <div className="absolute inset-0 bg-black/50 opacity-0 group-hover/vis:opacity-100 transition-opacity flex items-center justify-center gap-1.5 rounded-md" onClick={(e) => e.stopPropagation()}>
+                {/* Remove visual */}
+                <button
+                  onClick={() => updateRow(idx, "screenshot", "")}
+                  className="p-1 rounded-full bg-white/20 text-white/90 hover:bg-red-500/80"
+                  title="Remove visual"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </button>
+              </div>
+            )}
+          </div>
+        ) : row.screenshot ? (
           <div className="relative group/ss w-40 h-24 rounded-md bg-[var(--color-surface-alt)] border border-[var(--color-border)] overflow-hidden cursor-pointer"
             onClick={() => {
               const src = projectRoot ? convertFileSrc(`${projectRoot}/${row.screenshot}`) : row.screenshot!;
