@@ -5,6 +5,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
 import { useAppStore } from "../stores/appStore";
+import { useToastStore } from "../stores/toastStore";
 import { ScriptTable } from "./ScriptTable";
 import { ScreenCaptureOverlay } from "./ScreenCaptureOverlay";
 import { SketchPreview } from "./SketchPreview";
@@ -312,7 +313,7 @@ export function SketchForm() {
           {localRows.length > 0 && (
             <div className="relative flex items-center gap-2">
               <button
-                onClick={() => activeSketch && exportSketchToWord(activeSketch).catch(err => console.error("Word export failed:", err))}
+                onClick={() => activeSketch && exportSketchToWord(activeSketch).then(() => useToastStore.getState().show("Export complete")).catch(err => console.error("Word export failed:", err))}
                 className="flex items-center gap-1.5 shrink-0 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] px-3 py-1.5 rounded-lg border border-[var(--color-border)] hover:border-[var(--color-accent)]/40 hover:bg-[var(--color-accent)]/5 transition-colors"
                 title="Export to Word (.docx)"
               >

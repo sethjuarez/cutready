@@ -4,6 +4,7 @@ import { useGlobalHotkeys } from "./hooks/useGlobalHotkeys";
 import { useDebugLog } from "./hooks/useDebugLog";
 import { StatusBar } from "./components/StatusBar";
 import { AppLayout } from "./components/AppLayout";
+import { ToastContainer } from "./components/ToastContainer";
 import { useAppStore } from "./stores/appStore";
 import { useUpdateStore } from "./stores/updateStore";
 
@@ -28,6 +29,7 @@ function App() {
     <div className="min-h-screen bg-[var(--color-surface)] text-[var(--color-text)]">
       <AppLayout />
       <StatusBar theme={theme} onToggleTheme={toggle} />
+      <ToastContainer />
     </div>
   );
 }
