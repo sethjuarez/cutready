@@ -17,6 +17,8 @@ import {
   WidthType,
   HeadingLevel,
   BorderStyle,
+  AlignmentType,
+  LevelFormat,
   convertInchesToTwip,
 } from "docx";
 import { save } from "@tauri-apps/plugin-dialog";
@@ -70,23 +72,16 @@ function markdownToParagraphs(text: string): Paragraph[] {
     const bulletMatch = trimmed.match(/^[-*•]\s+(.+)/);
     if (bulletMatch && !trimmed.match(/^\*[^*]+\*$/)) {
       paragraphs.push(new Paragraph({
-        children: [
-          new TextRun({ text: "•  " }),
-          ...parseInlineMarkdown(bulletMatch[1]),
-        ],
-        indent: { left: convertInchesToTwip(0.15) },
+        children: parseInlineMarkdown(bulletMatch[1]),
+        bullet: { level: 0 },
       }));
     }
     // Numbered list: 1. text
     else if (/^\d+[.)]\s+/.test(trimmed)) {
       const content = trimmed.replace(/^\d+[.)]\s+/, "");
-      const num = trimmed.match(/^(\d+[.)])\s/)![1];
       paragraphs.push(new Paragraph({
-        children: [
-          new TextRun({ text: `${num} ` }),
-          ...parseInlineMarkdown(content),
-        ],
-        indent: { left: convertInchesToTwip(0.15) },
+        children: parseInlineMarkdown(content),
+        numbering: { reference: "decimal-list", level: 0 },
       }));
     }
     // Regular paragraph
@@ -184,6 +179,22 @@ function createDocument(children: (Paragraph | Table)[]): Document {
           run: { font: "Calibri", size: 22 }, // 11pt Calibri — Word default
         },
       },
+    },
+    numbering: {
+      config: [{
+        reference: "decimal-list",
+        levels: [{
+          level: 0,
+          format: LevelFormat.DECIMAL,
+          text: "%1.",
+          alignment: AlignmentType.START,
+          style: {
+            paragraph: {
+              indent: { left: convertInchesToTwip(0.5), hanging: convertInchesToTwip(0.25) },
+            },
+          },
+        }],
+      }],
     },
     sections: [{ children: children as Paragraph[] }],
   });
