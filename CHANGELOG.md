@@ -9,6 +9,34 @@
 Covector manages this changelog. Do not edit manually.
 Each release section is generated from `.changes/*.md` files.
 
+## [0.8.0](https://github.com/sethjuarez/cutready/compare/v0.7.1...v0.8.0) (2026-03-15)
+
+
+### Features
+
+* add Visual agent and ✨ Generate Visual button ([c0ae278](https://github.com/sethjuarez/cutready/commit/c0ae27808a221e44adc7a428ebda52567da9ab08))
+* **ci:** add Azure Trusted Signing for Windows code signing ([7c654d6](https://github.com/sethjuarez/cutready/commit/7c654d6ee96293cbc827eac61c8a5fade1d01a44))
+* embed screenshots in Word export ([62a7563](https://github.com/sethjuarez/cutready/commit/62a756398771ca3c453cf23b12719182f982ba76))
+* integrate elucim visual system into sketch rows ([5107f46](https://github.com/sethjuarez/cutready/commit/5107f46e6074a644e30e517c19c563ea6c18d3e5))
+* show toast notification after Word export ([bf4b00f](https://github.com/sethjuarez/cutready/commit/bf4b00fb007d0067be163c2fea432078157aee62))
+* upgrade to elucim 0.4.0 with poster, ref API, and frame capture ([26043e6](https://github.com/sethjuarez/cutready/commit/26043e6593768538d7eba99e12ad0221d82038fe))
+
+
+### Bug Fixes
+
+* add dialog:allow-save and fs:allow-write-file permissions for Word export ([81290e9](https://github.com/sethjuarez/cutready/commit/81290e938bb06c1aef20b8b35e00ab972981293e))
+* **docs:** point installation link to latest release ([0813425](https://github.com/sethjuarez/cutready/commit/08134253bd24effabbcecfbfbfb793059c5876b3))
+* lazy-load elucim to fix React 19 ReactCurrentDispatcher crash ([06b16e7](https://github.com/sethjuarez/cutready/commit/06b16e75d1296f68c281623e4dfc97f6f03e0424))
+* planner agent now recommends changes instead of applying them ([53222b6](https://github.com/sethjuarez/cutready/commit/53222b6079408a329c0d887f47915100c1d271a6))
+* position toast above status bar and log export to activity ([0894628](https://github.com/sethjuarez/cutready/commit/0894628976ed250c645545dd3b06d90c86c11cc6))
+* reload sketch after set_row_visual tool so visuals appear in UI ([561ce02](https://github.com/sethjuarez/cutready/commit/561ce0242d16bd2578538e3450e431e1e0137396))
+* remove-visual button now clears the visual field instead of screenshot ([033311e](https://github.com/sethjuarez/cutready/commit/033311edc684b59afb5793e050b69d50b1d49de9))
+* render markdown formatting in Word export ([a0b1ac2](https://github.com/sethjuarez/cutready/commit/a0b1ac2c7419ca8c8e82b07dd15c364003c8feb5))
+* use 0-based index in generate-visual prompt to prevent wrong-row placement ([7ac1e69](https://github.com/sethjuarez/cutready/commit/7ac1e692660325a6588b52d0b1c7be7eb54453dd))
+* use native save dialog for Word export ([1bf18bc](https://github.com/sethjuarez/cutready/commit/1bf18bcd38e9aaec6159893e0a8f7e98294126c4))
+* use native Word bullet and numbered list formatting ([9037f56](https://github.com/sethjuarez/cutready/commit/9037f5681a4d8af3441a86c8ee0d632786166169))
+* use stroke-based sparkle icon to match Feather/Lucide style ([495e0d0](https://github.com/sethjuarez/cutready/commit/495e0d06a645d1f295553a293ef72a28d133abaa))
+
 ## [0.7.1](https://github.com/sethjuarez/cutready/compare/v0.7.0...v0.7.1) (2026-03-06)
 
 
