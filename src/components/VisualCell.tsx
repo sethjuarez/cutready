@@ -1,4 +1,4 @@
-import { useRef, useCallback, useState, useEffect } from "react";
+import { useRef, useCallback, useState, useEffect, useMemo } from "react";
 import { DslRenderer, type ElucimDocument, type DslRendererRef } from "@elucim/dsl";
 
 interface VisualCellProps {
@@ -12,15 +12,55 @@ interface VisualCellProps {
   className?: string;
 }
 
+/** Read CutReady CSS variables and build an elucim theme object. */
+function useCutReadyTheme() {
+  const [isDark, setIsDark] = useState(() =>
+    document.documentElement.classList.contains("dark"),
+  );
+
+  useEffect(() => {
+    const observer = new MutationObserver(() => {
+      setIsDark(document.documentElement.classList.contains("dark"));
+    });
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+    return () => observer.disconnect();
+  }, []);
+
+  return useMemo(() => {
+    const s = getComputedStyle(document.documentElement);
+    return {
+      foreground: s.getPropertyValue("--color-text").trim() || (isDark ? "#e8e4df" : "#2c2925"),
+      background: s.getPropertyValue("--color-surface").trim() || (isDark ? "#2b2926" : "#faf9f7"),
+      accent: s.getPropertyValue("--color-accent").trim() || (isDark ? "#a49afa" : "#6b5ce7"),
+    };
+  }, [isDark]);
+}
+
+/**
+ * Build a preview-mode DSL: hides built-in controls, auto-plays once.
+ * CutReady renders its own mini player bar instead.
+ */
+function buildPreviewDsl(dsl: ElucimDocument): ElucimDocument {
+  const root = { ...dsl.root } as Record<string, unknown>;
+  root.controls = false;
+  root.autoPlay = true;
+  root.loop = false;
+  return { ...dsl, root: root as unknown as ElucimDocument["root"] };
+}
+
 /**
  * Renders an elucim animation inline.
  *
  * - **thumbnail**: static last-frame poster for the planning table (no animation loop).
- * - **full**: interactive player with playback controls, used in SketchPreview.
+ * - **full**: interactive player filling its container with CutReady theme,
+ *   auto-plays once, with a minimal restart bar.
  */
 export default function VisualCell({ visual, mode, onClick, className }: VisualCellProps) {
   const rendererRef = useRef<DslRendererRef>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const [hasError, setHasError] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const theme = useCutReadyTheme();
 
   // Reset error state when visual changes
   useEffect(() => setHasError(false), [visual]);
@@ -35,6 +75,44 @@ export default function VisualCell({ visual, mode, onClick, className }: VisualC
   }, []);
 
   const dsl = visual as unknown as ElucimDocument;
+  const previewDsl = useMemo(() => buildPreviewDsl(dsl), [dsl]);
+
+  // Patch SVG with viewBox for responsive scaling & track play state
+  useEffect(() => {
+    if (mode !== "full") return;
+    const id = requestAnimationFrame(() => {
+      const svg = rendererRef.current?.getSvgElement();
+      if (!svg) return;
+      const w = svg.getAttribute("width") || svg.viewBox?.baseVal?.width?.toString();
+      const h = svg.getAttribute("height") || svg.viewBox?.baseVal?.height?.toString();
+      if (w && h && !svg.getAttribute("viewBox")) {
+        svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
+        svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
+        svg.style.width = "100%";
+        svg.style.height = "100%";
+        svg.removeAttribute("width");
+        svg.removeAttribute("height");
+      }
+    });
+
+    // Poll play state for the mini bar
+    setIsPlaying(true);
+    const interval = setInterval(() => {
+      const playing = rendererRef.current?.isPlaying() ?? false;
+      setIsPlaying(playing);
+    }, 250);
+
+    return () => {
+      cancelAnimationFrame(id);
+      clearInterval(interval);
+    };
+  }, [mode, visual]);
+
+  const handleRestart = useCallback(() => {
+    rendererRef.current?.seekToFrame(0);
+    rendererRef.current?.play();
+    setIsPlaying(true);
+  }, []);
 
   if (hasError) {
     return (
@@ -60,6 +138,7 @@ export default function VisualCell({ visual, mode, onClick, className }: VisualC
             <DslRenderer
               dsl={dsl}
               poster="last"
+              theme={theme}
               onError={handleError}
               style={{ width: 640, height: 384 }}
             />
@@ -76,18 +155,38 @@ export default function VisualCell({ visual, mode, onClick, className }: VisualC
     );
   }
 
-  // Full mode — interactive player with controls
+  // Full mode — auto-plays once, CutReady theme, responsive SVG, mini restart bar
   return (
-    <div className={`w-full h-full flex items-center justify-center ${className ?? ""}`}>
-      <ErrorBoundary onError={() => setHasError(true)}>
-        <DslRenderer
-          ref={rendererRef}
-          dsl={dsl}
-          onError={handleError}
-          className="max-w-full max-h-full rounded-lg shadow-lg"
-          style={{ width: "100%", height: "100%" }}
-        />
-      </ErrorBoundary>
+    <div ref={containerRef} className={`w-full h-full flex flex-col items-center justify-center ${className ?? ""}`}>
+      <div className="flex-1 w-full flex items-center justify-center min-h-0 overflow-hidden rounded-lg">
+        <ErrorBoundary onError={() => setHasError(true)}>
+          <DslRenderer
+            ref={rendererRef}
+            dsl={previewDsl}
+            theme={theme}
+            onError={handleError}
+            className="w-full h-full rounded-lg shadow-lg"
+          />
+        </ErrorBoundary>
+      </div>
+
+      {/* Mini restart bar — appears when animation finishes */}
+      {!isPlaying && (
+        <button
+          onClick={handleRestart}
+          className="mt-2 flex items-center gap-1.5 px-3 py-1.5 rounded-full
+            text-xs font-medium text-[var(--color-text-secondary)]
+            hover:text-[var(--color-accent)] bg-[var(--color-surface-alt)]
+            border border-[var(--color-border)] hover:border-[var(--color-accent)]/40
+            transition-colors shadow-sm"
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="1 4 1 10 7 10" />
+            <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+          </svg>
+          Replay
+        </button>
+      )}
     </div>
   );
 }
