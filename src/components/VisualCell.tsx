@@ -39,13 +39,27 @@ function useCutReadyTheme() {
     const fg = s.getPropertyValue("--color-text").trim() || (isDark ? "#e8e4df" : "#2c2925");
     const bg = s.getPropertyValue("--color-surface").trim() || (isDark ? "#2b2926" : "#faf9f7");
     const accent = s.getPropertyValue("--color-accent").trim() || (isDark ? "#a49afa" : "#6b5ce7");
+    const secondary = s.getPropertyValue("--color-text-secondary").trim() || (isDark ? "#a09b93" : "#78756f");
+    const surfaceAlt = s.getPropertyValue("--color-surface-alt").trim() || (isDark ? "#353230" : "#f0efed");
+    const border = s.getPropertyValue("--color-border").trim() || (isDark ? "#4a4644" : "#e2e0dd");
+
     return {
+      // Core theme keys (read by Scene via --elucim-scene-bg/fg)
       foreground: fg,
       background: bg,
       accent,
-      // These are the actual CSS var names the Scene/Player reads
       "scene-bg": bg,
       "scene-fg": fg,
+      // Semantic tokens for $token resolution in DSL color fields
+      muted: secondary,
+      surface: surfaceAlt,
+      border,
+      primary: accent,
+      secondary: isDark ? "#a78bfa" : "#7c3aed",
+      tertiary: isDark ? "#f472b6" : "#db2777",
+      success: isDark ? "#34d399" : "#16a34a",
+      warning: isDark ? "#fbbf24" : "#d97706",
+      error: isDark ? "#f87171" : "#dc2626",
     };
   }, [isDark]);
 }

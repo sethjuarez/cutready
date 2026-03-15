@@ -297,4 +297,121 @@ test.describe("VisualCell — elucim DSL rendering", () => {
     const invalidLabel = page.getByText("Invalid visual");
     await expect(invalidLabel).not.toBeVisible();
   });
+
+  test("semantic color tokens ($foreground, $accent, etc.) render without errors", async ({ page }) => {
+    // Inject a visual that uses $token syntax
+    const tokenVisual = {
+      version: "1.0",
+      root: {
+        type: "player",
+        preset: "card",
+        width: 640,
+        height: 360,
+        fps: 30,
+        durationInFrames: 60,
+        background: "$background",
+        children: [
+          {
+            type: "text",
+            x: 320,
+            y: 60,
+            content: "Token Test",
+            fontSize: 28,
+            fill: "$foreground",
+            fontWeight: "bold",
+            textAnchor: "middle",
+          },
+          {
+            type: "rect",
+            x: 100,
+            y: 120,
+            width: 200,
+            height: 80,
+            fill: "$surface",
+            stroke: "$accent",
+            strokeWidth: 2,
+            rx: 12,
+            fadeIn: 10,
+          },
+          {
+            type: "text",
+            x: 200,
+            y: 165,
+            content: "Themed Box",
+            fontSize: 16,
+            fill: "$accent",
+            textAnchor: "middle",
+            fadeIn: 10,
+          },
+          {
+            type: "arrow",
+            x1: 310,
+            y1: 160,
+            x2: 440,
+            y2: 160,
+            stroke: "$muted",
+            strokeWidth: 2,
+            headSize: 8,
+            fadeIn: 25,
+          },
+          {
+            type: "rect",
+            x: 340,
+            y: 120,
+            width: 200,
+            height: 80,
+            fill: "$surface",
+            stroke: "$success",
+            strokeWidth: 2,
+            rx: 12,
+            fadeIn: 30,
+          },
+          {
+            type: "text",
+            x: 440,
+            y: 165,
+            content: "Success",
+            fontSize: 16,
+            fill: "$success",
+            textAnchor: "middle",
+            fadeIn: 30,
+          },
+        ],
+      },
+    };
+    const sketchWithTokens = {
+      ...SKETCH_WITH_VISUAL,
+      rows: [
+        { ...SKETCH_WITH_VISUAL.rows[0], visual: tokenVisual },
+        ...SKETCH_WITH_VISUAL.rows.slice(1),
+      ],
+    };
+    await setOverrides(page, { get_sketch: sketchWithTokens });
+    await page.getByText("Demo Introduction").first().click();
+    await page.waitForTimeout(800);
+
+    // Should render without "Invalid visual" error
+    const errorBadge = page.getByText("Invalid visual");
+    await expect(errorBadge).not.toBeVisible();
+
+    // The elucim-scene should be present (SVG rendered)
+    const scene = page.locator('[data-testid="elucim-scene"]');
+    await expect(scene.first()).toBeVisible();
+
+    // Screenshot dark mode
+    await page.evaluate(() => {
+      localStorage.setItem("cutready-theme", "dark");
+      document.documentElement.classList.add("dark");
+    });
+    await page.waitForTimeout(500);
+    await page.screenshot({ path: `${IMG_DIR}visual-tokens-dark.png` });
+
+    // Screenshot light mode
+    await page.evaluate(() => {
+      localStorage.setItem("cutready-theme", "light");
+      document.documentElement.classList.remove("dark");
+    });
+    await page.waitForTimeout(500);
+    await page.screenshot({ path: `${IMG_DIR}visual-tokens-light.png` });
+  });
 });

@@ -183,8 +183,8 @@ The visual is a JSON document: \`{ "version": "1.0", "root": { ... } }\`
 - \`rotation: <degrees>\`, \`scale: <factor>\`, \`translate: [dx, dy]\` — transforms
 
 ### Design Guidelines
-- Use dark backgrounds (\`#1a1a2e\`, \`#0f172a\`, \`#1e1b2e\`) for visual impact
-- Use bright, contrasting colors for elements (\`#4fc3f7\`, \`#66bb6a\`, \`#ff7043\`, \`#ab47bc\`, \`#ffd54f\`)
+- **Use semantic color tokens** for theme-adaptive visuals (see below)
+- Use bright, contrasting colors for accent elements (brand colors can stay as literal hex)
 - Keep text concise — visuals should be glanceable, not text-heavy
 - Use fadeIn animations to progressively reveal elements (builds understanding)
 - For architecture diagrams: boxes + arrows + labels
@@ -194,7 +194,31 @@ The visual is a JSON document: \`{ "version": "1.0", "root": { ... } }\`
 - Always use \`textAnchor: "middle"\` for centered text
 - Standard duration: 60-90 frames at 30 fps (2-3 seconds)
 
-### Example
+### Semantic Color Tokens (Theme-Adaptive)
+Use \`$token\` syntax in any color field to make visuals adapt to the host app's theme (dark/light mode).
+The token resolves to a CSS variable at render time, so the same DSL works in any theme.
+
+| Token | Use For | Example |
+|-------|---------|---------|
+| \`$foreground\` | Main text, labels | \`"fill": "$foreground"\` |
+| \`$background\` | Scene/card background | \`"background": "$background"\` |
+| \`$accent\` | Primary highlights, key elements | \`"stroke": "$accent"\` |
+| \`$muted\` | Secondary text, annotations | \`"fill": "$muted"\` |
+| \`$surface\` | Card/box fill backgrounds | \`"fill": "$surface"\` |
+| \`$border\` | Box outlines, dividers | \`"stroke": "$border"\` |
+| \`$primary\` | Primary category color | \`"fill": "$primary"\` |
+| \`$secondary\` | Secondary category color | \`"stroke": "$secondary"\` |
+| \`$tertiary\` | Tertiary category color | \`"fill": "$tertiary"\` |
+| \`$success\` | Positive/success indicators | \`"fill": "$success"\` |
+| \`$warning\` | Warning/attention indicators | \`"fill": "$warning"\` |
+| \`$error\` | Error/negative indicators | \`"fill": "$error"\` |
+
+**When to use tokens vs literal hex:**
+- Use \`$foreground\`, \`$background\`, \`$surface\`, \`$border\`, \`$muted\` for structural colors (text, backgrounds, borders)
+- Use \`$accent\`, \`$primary\`, \`$secondary\`, \`$tertiary\` for categorical/thematic elements
+- Use literal hex (\`#fb7185\`, \`#4fc3f7\`) for brand-specific or creative colors that should NOT change with theme
+
+### Example (using semantic tokens)
 \`\`\`json
 {
   "version": "1.0",
@@ -203,17 +227,17 @@ The visual is a JSON document: \`{ "version": "1.0", "root": { ... } }\`
     "preset": "card",
     "fps": 30,
     "durationInFrames": 90,
-    "background": "#1a1a2e",
+    "background": "$background",
     "children": [
-      { "type": "text", "content": "Data Flow", "x": 320, "y": 40, "fontSize": 28, "fill": "#e0e0e0", "fontWeight": "bold", "textAnchor": "middle" },
-      { "type": "rect", "x": 50, "y": 100, "width": 120, "height": 60, "fill": "#1e3a5f", "stroke": "#4fc3f7", "strokeWidth": 2, "rx": 8, "fadeIn": 10 },
-      { "type": "text", "content": "Input", "x": 110, "y": 135, "fontSize": 16, "fill": "#4fc3f7", "textAnchor": "middle", "fadeIn": 10 },
-      { "type": "arrow", "x1": 180, "y1": 130, "x2": 260, "y2": 130, "stroke": "#4fc3f7", "strokeWidth": 2, "headSize": 8, "draw": 30 },
-      { "type": "rect", "x": 270, "y": 100, "width": 120, "height": 60, "fill": "#1e3a5f", "stroke": "#66bb6a", "strokeWidth": 2, "rx": 8, "fadeIn": 40 },
-      { "type": "text", "content": "Process", "x": 330, "y": 135, "fontSize": 16, "fill": "#66bb6a", "textAnchor": "middle", "fadeIn": 40 },
-      { "type": "arrow", "x1": 400, "y1": 130, "x2": 480, "y2": 130, "stroke": "#66bb6a", "strokeWidth": 2, "headSize": 8, "draw": 55 },
-      { "type": "rect", "x": 490, "y": 100, "width": 120, "height": 60, "fill": "#1e3a5f", "stroke": "#ff7043", "strokeWidth": 2, "rx": 8, "fadeIn": 65 },
-      { "type": "text", "content": "Output", "x": 550, "y": 135, "fontSize": 16, "fill": "#ff7043", "textAnchor": "middle", "fadeIn": 65 }
+      { "type": "text", "content": "Data Flow", "x": 320, "y": 40, "fontSize": 28, "fill": "$foreground", "fontWeight": "bold", "textAnchor": "middle" },
+      { "type": "rect", "x": 50, "y": 100, "width": 120, "height": 60, "fill": "$surface", "stroke": "$accent", "strokeWidth": 2, "rx": 8, "fadeIn": 10 },
+      { "type": "text", "content": "Input", "x": 110, "y": 135, "fontSize": 16, "fill": "$accent", "textAnchor": "middle", "fadeIn": 10 },
+      { "type": "arrow", "x1": 180, "y1": 130, "x2": 260, "y2": 130, "stroke": "$accent", "strokeWidth": 2, "headSize": 8, "draw": 30 },
+      { "type": "rect", "x": 270, "y": 100, "width": 120, "height": 60, "fill": "$surface", "stroke": "$success", "strokeWidth": 2, "rx": 8, "fadeIn": 40 },
+      { "type": "text", "content": "Process", "x": 330, "y": 135, "fontSize": 16, "fill": "$success", "textAnchor": "middle", "fadeIn": 40 },
+      { "type": "arrow", "x1": 400, "y1": 130, "x2": 480, "y2": 130, "stroke": "$success", "strokeWidth": 2, "headSize": 8, "draw": 55 },
+      { "type": "rect", "x": 490, "y": 100, "width": 120, "height": 60, "fill": "$surface", "stroke": "$warning", "strokeWidth": 2, "rx": 8, "fadeIn": 65 },
+      { "type": "text", "content": "Output", "x": 550, "y": 135, "fontSize": 16, "fill": "$warning", "textAnchor": "middle", "fadeIn": 65 }
     ]
   }
 }
