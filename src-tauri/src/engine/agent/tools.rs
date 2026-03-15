@@ -651,6 +651,17 @@ fn exec_set_row_visual(root: &Path, args: &Value) -> String {
             row.visual = None;
         }
         Some(v) if v.is_object() => {
+            // Auto-validate before writing — catch errors the agent missed
+            let mut errors = Vec::new();
+            validate_dsl_doc(v, &mut errors);
+            if !errors.is_empty() {
+                return format!(
+                    "Validation failed ({} error{}) — fix these before calling set_row_visual again:\n{}",
+                    errors.len(),
+                    if errors.len() == 1 { "" } else { "s" },
+                    errors.iter().map(|e| format!("  • {e}")).collect::<Vec<_>>().join("\n")
+                );
+            }
             row.visual = Some(v.clone());
             // Clear screenshot since visual replaces it
             row.screenshot = None;
@@ -754,14 +765,8 @@ fn node_type_name(v: &Value) -> &'static str {
     }
 }
 
-fn exec_validate_dsl(args: &Value) -> String {
-    let visual = match args.get("visual") {
-        Some(v) if v.is_object() => v,
-        _ => return "Error: 'visual' must be a JSON object".into(),
-    };
-
-    let mut errors = Vec::new();
-
+/// Validate a DSL document object, collecting errors into the provided Vec.
+fn validate_dsl_doc(visual: &Value, errors: &mut Vec<String>) {
     // Check version
     match visual.get("version") {
         Some(v) if v.as_str() == Some("1.0") => {}
@@ -784,15 +789,25 @@ fn exec_validate_dsl(args: &Value) -> String {
             // Validate children recursively
             if let Some(children) = root.get("children").and_then(|v| v.as_array()) {
                 for (i, child) in children.iter().enumerate() {
-                    validate_dsl_node(child, &format!("root.children[{i}]"), &mut errors);
+                    validate_dsl_node(child, &format!("root.children[{i}]"), &mut *errors);
                 }
             }
             // Validate root-level requirements
-            validate_dsl_node(root, "root", &mut errors);
+            validate_dsl_node(root, "root", &mut *errors);
         }
         Some(_) => errors.push("root: must be an object".into()),
         None => errors.push("missing required field \"root\"".into()),
     }
+}
+
+fn exec_validate_dsl(args: &Value) -> String {
+    let visual = match args.get("visual") {
+        Some(v) if v.is_object() => v,
+        _ => return "Error: 'visual' must be a JSON object".into(),
+    };
+
+    let mut errors = Vec::new();
+    validate_dsl_doc(visual, &mut errors);
 
     if errors.is_empty() {
         "Valid — no structural errors found. The DSL document looks correct.".into()

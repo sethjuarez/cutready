@@ -7,6 +7,8 @@ export interface AgentPreset {
   id: string;
   name: string;
   prompt: string;
+  /** Optional model override — if set, this agent uses a different model than the global setting. */
+  modelOverride?: string;
 }
 
 export interface AppSettings {

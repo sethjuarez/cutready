@@ -248,6 +248,7 @@ Use **semantic tokens** (\`$token\` syntax) for structural colors that must adap
   }
 }
 \`\`\``,
+    modelOverride: "gpt-5.1-codex",
   },
 ];
 
@@ -939,6 +940,8 @@ function ChatTab() {
       const config = {
         ...buildConfig(),
         bearer_token: freshBearerToken,
+        // Apply per-agent model override if the selected agent specifies one
+        ...(selectedAgent.modelOverride ? { model: selectedAgent.modelOverride } : {}),
       };
 
       // Build agent prompts map for sub-agent delegation
@@ -1465,7 +1468,10 @@ function ChatTab() {
                           }}
                         >
                           <IconSparkles size={11} />
-                          <span>{agent.name}</span>
+                          <span className="flex-1">{agent.name}</span>
+                          {agent.modelOverride && (
+                            <span className="text-[9px] text-[var(--color-text-secondary)] opacity-60">{agent.modelOverride}</span>
+                          )}
                           {selectedAgent.id === agent.id && <IconCheck size={11} />}
                         </button>
                       ))}
