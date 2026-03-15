@@ -267,6 +267,45 @@ pub struct StreamFunctionCall {
 }
 
 // ---------------------------------------------------------------------------
+// Responses API types (for codex/pro models that don't support Chat Completions)
+// ---------------------------------------------------------------------------
+
+/// Request body for the Responses API.
+#[derive(Debug, Serialize)]
+struct ResponsesApiRequest {
+    model: String,
+    input: Vec<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tools: Option<Vec<ResponsesApiToolDef>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    stream: Option<bool>,
+}
+
+/// Flattened tool definition for the Responses API (no `function` wrapper).
+#[derive(Debug, Clone, Serialize)]
+struct ResponsesApiToolDef {
+    #[serde(rename = "type")]
+    tool_type: String,
+    name: String,
+    description: String,
+    parameters: serde_json::Value,
+}
+
+/// Non-streaming response from the Responses API.
+#[derive(Debug, Deserialize)]
+struct ResponsesApiResponse {
+    output: Vec<serde_json::Value>,
+}
+
+/// Mutable state for Responses API streaming — tracks function call indices.
+#[derive(Default)]
+struct ResponsesStreamState {
+    /// Maps Responses API output_index → Chat Completions tool_call index
+    output_to_tc: std::collections::HashMap<usize, usize>,
+    next_tc_idx: usize,
+}
+
+// ---------------------------------------------------------------------------
 // Model listing types
 // ---------------------------------------------------------------------------
 
@@ -459,6 +498,357 @@ impl LlmClient {
             base[..idx].to_string()
         } else {
             base.to_string()
+        }
+    }
+
+    /// Whether the model requires the Responses API instead of Chat Completions.
+    /// Codex and Pro model variants are Responses API only.
+    pub fn needs_responses_api(&self) -> bool {
+        let model = self.config.model.to_lowercase();
+        model.contains("codex")
+            || (model.contains("gpt-5") && model.ends_with("-pro"))
+    }
+
+    /// Build the Responses API URL.
+    fn responses_url(&self) -> String {
+        match self.config.provider {
+            LlmProvider::AzureOpenai => {
+                let base = if self.is_foundry() {
+                    self.foundry_base()
+                } else {
+                    self.config.endpoint.trim_end_matches('/').to_string()
+                };
+                format!("{}/openai/v1/responses", base)
+            }
+            LlmProvider::Openai => {
+                let base = if self.config.endpoint.is_empty() {
+                    "https://api.openai.com".to_string()
+                } else {
+                    self.config.endpoint.trim_end_matches('/').to_string()
+                };
+                format!("{}/v1/responses", base)
+            }
+        }
+    }
+
+    /// Convert ChatMessage array to Responses API `input` format.
+    fn messages_to_responses_input(messages: &[ChatMessage]) -> Vec<serde_json::Value> {
+        let mut input = Vec::new();
+        for msg in messages {
+            match msg.role.as_str() {
+                "system" => {
+                    if let Some(content) = &msg.content {
+                        input.push(serde_json::json!({
+                            "role": "developer",
+                            "content": content.text()
+                        }));
+                    }
+                }
+                "user" => {
+                    if let Some(content) = &msg.content {
+                        match content {
+                            MessageContent::Text(text) => {
+                                input.push(serde_json::json!({
+                                    "role": "user",
+                                    "content": text
+                                }));
+                            }
+                            MessageContent::Parts(parts) => {
+                                let api_parts: Vec<serde_json::Value> = parts
+                                    .iter()
+                                    .map(|p| match p {
+                                        ContentPart::Text { text } => serde_json::json!({
+                                            "type": "input_text",
+                                            "text": text
+                                        }),
+                                        ContentPart::ImageUrl { image_url } => {
+                                            let mut obj = serde_json::json!({
+                                                "type": "input_image",
+                                                "image_url": image_url.url
+                                            });
+                                            if let Some(detail) = &image_url.detail {
+                                                obj["detail"] =
+                                                    serde_json::Value::String(detail.clone());
+                                            }
+                                            obj
+                                        }
+                                    })
+                                    .collect();
+                                input.push(serde_json::json!({
+                                    "role": "user",
+                                    "content": api_parts
+                                }));
+                            }
+                        }
+                    }
+                }
+                "assistant" => {
+                    if let Some(tool_calls) = &msg.tool_calls {
+                        // Emit text content before tool calls
+                        if let Some(content) = &msg.content {
+                            let text = content.text();
+                            if !text.is_empty() {
+                                input.push(serde_json::json!({
+                                    "type": "message",
+                                    "role": "assistant",
+                                    "content": [{"type": "output_text", "text": text}]
+                                }));
+                            }
+                        }
+                        // Each tool call becomes a separate function_call item
+                        for tc in tool_calls {
+                            input.push(serde_json::json!({
+                                "type": "function_call",
+                                "call_id": tc.id,
+                                "name": tc.function.name,
+                                "arguments": tc.function.arguments
+                            }));
+                        }
+                    } else if let Some(content) = &msg.content {
+                        input.push(serde_json::json!({
+                            "type": "message",
+                            "role": "assistant",
+                            "content": [{"type": "output_text", "text": content.text()}]
+                        }));
+                    }
+                }
+                "tool" => {
+                    if let (Some(call_id), Some(content)) =
+                        (&msg.tool_call_id, &msg.content)
+                    {
+                        input.push(serde_json::json!({
+                            "type": "function_call_output",
+                            "call_id": call_id,
+                            "output": content.text()
+                        }));
+                    }
+                }
+                _ => {
+                    if let Some(content) = &msg.content {
+                        input.push(serde_json::json!({
+                            "role": msg.role,
+                            "content": content.text()
+                        }));
+                    }
+                }
+            }
+        }
+        input
+    }
+
+    /// Convert ToolDefinition array to Responses API flattened format.
+    fn tools_to_responses_format(
+        tools: Option<&[ToolDefinition]>,
+    ) -> Option<Vec<ResponsesApiToolDef>> {
+        tools.map(|t| {
+            t.iter()
+                .map(|td| ResponsesApiToolDef {
+                    tool_type: "function".to_string(),
+                    name: td.function.name.clone(),
+                    description: td.function.description.clone(),
+                    parameters: td.function.parameters.clone(),
+                })
+                .collect()
+        })
+    }
+
+    /// Convert Responses API output to a ChatCompletionResponse.
+    fn responses_output_to_chat_response(
+        output: &[serde_json::Value],
+    ) -> ChatCompletionResponse {
+        let mut content_parts: Vec<String> = Vec::new();
+        let mut tool_calls: Vec<ToolCall> = Vec::new();
+
+        for item in output {
+            match item.get("type").and_then(|t| t.as_str()) {
+                Some("message") => {
+                    if let Some(arr) = item.get("content").and_then(|c| c.as_array()) {
+                        for part in arr {
+                            if part.get("type").and_then(|t| t.as_str())
+                                == Some("output_text")
+                            {
+                                if let Some(text) =
+                                    part.get("text").and_then(|t| t.as_str())
+                                {
+                                    content_parts.push(text.to_string());
+                                }
+                            }
+                        }
+                    }
+                }
+                Some("function_call") => {
+                    let call_id = item
+                        .get("call_id")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    let name = item
+                        .get("name")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    let arguments = item
+                        .get("arguments")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("{}")
+                        .to_string();
+                    tool_calls.push(ToolCall {
+                        id: call_id,
+                        call_type: "function".to_string(),
+                        function: FunctionCall { name, arguments },
+                    });
+                }
+                _ => {}
+            }
+        }
+
+        let content = if content_parts.is_empty() {
+            None
+        } else {
+            Some(MessageContent::Text(content_parts.join("")))
+        };
+
+        ChatCompletionResponse {
+            choices: vec![Choice {
+                message: ChatMessage {
+                    role: "assistant".into(),
+                    content,
+                    tool_calls: if tool_calls.is_empty() {
+                        None
+                    } else {
+                        Some(tool_calls)
+                    },
+                    tool_call_id: None,
+                },
+                finish_reason: Some("stop".into()),
+            }],
+        }
+    }
+
+    /// Parse a single Responses API SSE event into StreamChunk(s).
+    fn parse_responses_sse_event(
+        val: &serde_json::Value,
+        state: &mut ResponsesStreamState,
+    ) -> Vec<StreamChunk> {
+        let event_type = match val.get("type").and_then(|t| t.as_str()) {
+            Some(t) => t,
+            None => return vec![],
+        };
+
+        match event_type {
+            "response.output_text.delta" => {
+                if let Some(delta) = val.get("delta").and_then(|d| d.as_str()) {
+                    vec![StreamChunk {
+                        choices: vec![StreamChoice {
+                            delta: StreamDelta {
+                                role: None,
+                                content: Some(delta.to_string()),
+                                reasoning_content: None,
+                                tool_calls: None,
+                            },
+                            finish_reason: None,
+                        }],
+                    }]
+                } else {
+                    vec![]
+                }
+            }
+            "response.output_item.added" => {
+                if let Some(item) = val.get("item") {
+                    if item.get("type").and_then(|t| t.as_str())
+                        == Some("function_call")
+                    {
+                        let output_index = val
+                            .get("output_index")
+                            .and_then(|v| v.as_u64())
+                            .unwrap_or(0) as usize;
+                        let tc_idx = state.next_tc_idx;
+                        state.output_to_tc.insert(output_index, tc_idx);
+                        state.next_tc_idx += 1;
+
+                        let call_id = item
+                            .get("call_id")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_string();
+                        let name = item
+                            .get("name")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_string();
+
+                        return vec![StreamChunk {
+                            choices: vec![StreamChoice {
+                                delta: StreamDelta {
+                                    role: None,
+                                    content: None,
+                                    reasoning_content: None,
+                                    tool_calls: Some(vec![StreamToolCall {
+                                        index: tc_idx,
+                                        id: Some(call_id),
+                                        call_type: Some("function".to_string()),
+                                        function: Some(StreamFunctionCall {
+                                            name: Some(name),
+                                            arguments: None,
+                                        }),
+                                    }]),
+                                },
+                                finish_reason: None,
+                            }],
+                        }];
+                    }
+                }
+                vec![]
+            }
+            "response.function_call_arguments.delta" => {
+                let output_index = val
+                    .get("output_index")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0) as usize;
+                let tc_idx = state
+                    .output_to_tc
+                    .get(&output_index)
+                    .copied()
+                    .unwrap_or(0);
+
+                if let Some(delta) = val.get("delta").and_then(|d| d.as_str()) {
+                    vec![StreamChunk {
+                        choices: vec![StreamChoice {
+                            delta: StreamDelta {
+                                role: None,
+                                content: None,
+                                reasoning_content: None,
+                                tool_calls: Some(vec![StreamToolCall {
+                                    index: tc_idx,
+                                    id: None,
+                                    call_type: None,
+                                    function: Some(StreamFunctionCall {
+                                        name: None,
+                                        arguments: Some(delta.to_string()),
+                                    }),
+                                }]),
+                            },
+                            finish_reason: None,
+                        }],
+                    }]
+                } else {
+                    vec![]
+                }
+            }
+            "response.completed" => {
+                vec![StreamChunk {
+                    choices: vec![StreamChoice {
+                        delta: StreamDelta {
+                            role: None,
+                            content: None,
+                            reasoning_content: None,
+                            tool_calls: None,
+                        },
+                        finish_reason: Some("stop".to_string()),
+                    }],
+                }]
+            }
+            _ => vec![],
         }
     }
 
@@ -725,6 +1115,11 @@ impl LlmClient {
         messages: &[ChatMessage],
         tools: Option<&[ToolDefinition]>,
     ) -> Result<ChatCompletionResponse, String> {
+        // Codex/Pro models require the Responses API
+        if self.needs_responses_api() {
+            return self.chat_responses(messages, tools).await;
+        }
+
         let body = ChatCompletionRequest {
             model: match self.config.provider {
                 LlmProvider::Openai => Some(self.config.model.clone()),
@@ -763,61 +1158,133 @@ impl LlmClient {
             .map_err(|e| format!("Failed to parse chat response: {e}"))
     }
 
+    /// Send a non-streaming request via the Responses API (for codex/pro models).
+    async fn chat_responses(
+        &self,
+        messages: &[ChatMessage],
+        tools: Option<&[ToolDefinition]>,
+    ) -> Result<ChatCompletionResponse, String> {
+        let body = ResponsesApiRequest {
+            model: self.config.model.clone(),
+            input: Self::messages_to_responses_input(messages),
+            tools: Self::tools_to_responses_format(tools),
+            stream: None,
+        };
+
+        let url = self.responses_url();
+        log::info!(
+            "[llm] chat_responses → {} ({} input items, {} tools)",
+            self.config.model,
+            body.input.len(),
+            body.tools.as_ref().map_or(0, |t| t.len())
+        );
+
+        let resp = self
+            .http
+            .post(&url)
+            .headers(self.auth_headers())
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| format!("Responses API request failed: {e}"))?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let text = resp.text().await.unwrap_or_default();
+            return Err(format!(
+                "Responses API error ({status}) [url={url}]: {text}"
+            ));
+        }
+
+        let api_resp: ResponsesApiResponse = resp
+            .json()
+            .await
+            .map_err(|e| format!("Failed to parse Responses API response: {e}"))?;
+
+        Ok(Self::responses_output_to_chat_response(&api_resp.output))
+    }
+
     /// Send a streaming chat completion request.
     /// Returns an async stream of SSE chunks.
+    /// Automatically uses the Responses API for codex/pro models.
     pub async fn chat_stream(
         &self,
         messages: &[ChatMessage],
         tools: Option<&[ToolDefinition]>,
     ) -> Result<impl futures_util::Stream<Item = Result<Vec<StreamChunk>, String>>, String> {
-        let model_field = match self.config.provider {
-            LlmProvider::Openai => Some(self.config.model.clone()),
-            LlmProvider::AzureOpenai => {
-                if self.is_foundry() {
-                    Some(self.config.model.clone())
-                } else {
-                    None
-                }
-            }
-        };
+        let use_responses = self.needs_responses_api();
         let tool_defs = tools.map(|t| t.to_vec());
 
         let mut final_messages = messages.to_vec();
 
-        // Serialize to measure body size
-        let mut body_json = serde_json::to_string(&ChatCompletionRequest {
-            model: model_field.clone(),
-            messages: final_messages.clone(),
-            tools: tool_defs.clone(),
-            stream: Some(true),
-        }).map_err(|e| format!("Failed to serialize request: {e}"))?;
+        // Build the appropriate request body and URL
+        let serialize_body = |msgs: &[ChatMessage]| -> String {
+            if use_responses {
+                serde_json::to_string(&ResponsesApiRequest {
+                    model: String::new(), // placeholder — replaced below
+                    input: Self::messages_to_responses_input(msgs),
+                    tools: Self::tools_to_responses_format(tools),
+                    stream: Some(true),
+                })
+                .unwrap_or_default()
+            } else {
+                let model_field = match &self.config.provider {
+                    LlmProvider::Openai => Some(self.config.model.clone()),
+                    LlmProvider::AzureOpenai => {
+                        if self.is_foundry() {
+                            Some(self.config.model.clone())
+                        } else {
+                            None
+                        }
+                    }
+                };
+                serde_json::to_string(&ChatCompletionRequest {
+                    model: model_field,
+                    messages: msgs.to_vec(),
+                    tools: tool_defs.clone(),
+                    stream: Some(true),
+                })
+                .unwrap_or_default()
+            }
+        };
 
-        log::info!("[llm] chat_stream → {} ({} messages, {} tools, {}KB body)",
-            self.config.model, final_messages.len(),
-            tools.map_or(0, |t| t.len()), body_json.len() / 1024);
+        let mut body_json = serialize_body(&final_messages);
+
+        let api_label = if use_responses { "responses" } else { "chat" };
+        log::info!(
+            "[llm] chat_stream ({}) → {} ({} messages, {} tools, {}KB body)",
+            api_label,
+            self.config.model,
+            final_messages.len(),
+            tools.map_or(0, |t| t.len()),
+            body_json.len() / 1024
+        );
 
         // Azure gateway rejects bodies over ~4MB with cryptic IIS errors.
         // When trimming, summarize dropped messages into working memory so the
         // LLM retains context about what was discussed earlier.
         const MAX_BODY_BYTES: usize = 3 * 1024 * 1024; // 3MB safety margin
         if body_json.len() > MAX_BODY_BYTES {
-            log::warn!("[llm] body {}KB exceeds {}KB — compacting with memory summary", body_json.len() / 1024, MAX_BODY_BYTES / 1024);
+            log::warn!(
+                "[llm] body {}KB exceeds {}KB — compacting with memory summary",
+                body_json.len() / 1024,
+                MAX_BODY_BYTES / 1024
+            );
             use crate::engine::agent::runner::summarize_dropped;
 
             // Split: system prefix + conversation
-            let sys_end = final_messages.iter().position(|m| m.role != "system").unwrap_or(final_messages.len());
+            let sys_end = final_messages
+                .iter()
+                .position(|m| m.role != "system")
+                .unwrap_or(final_messages.len());
             let system_msgs: Vec<ChatMessage> = final_messages.drain(..sys_end).collect();
 
             // Drop oldest conversation messages until under budget
             let mut dropped: Vec<ChatMessage> = Vec::new();
             loop {
-                let trial = ChatCompletionRequest {
-                    model: model_field.clone(),
-                    messages: [system_msgs.clone(), final_messages.clone()].concat(),
-                    tools: tool_defs.clone(),
-                    stream: Some(true),
-                };
-                let size = serde_json::to_string(&trial).map(|s| s.len()).unwrap_or(0);
+                let trial_msgs =
+                    [system_msgs.clone(), final_messages.clone()].concat();
+                let size = serialize_body(&trial_msgs).len();
                 if size <= MAX_BODY_BYTES || final_messages.len() <= 2 {
                     break;
                 }
@@ -833,20 +1300,37 @@ impl LlmClient {
             reassembled.extend(final_messages);
             final_messages = reassembled;
 
-            body_json = serde_json::to_string(&ChatCompletionRequest {
-                model: model_field.clone(),
-                messages: final_messages.clone(),
-                tools: tool_defs.clone(),
-                stream: Some(true),
-            }).unwrap_or_default();
+            body_json = serialize_body(&final_messages);
 
-            log::info!("[llm] compacted: dropped {} msgs → summary, now {} messages ({}KB)",
-                dropped.len(), final_messages.len(), body_json.len() / 1024);
+            log::info!(
+                "[llm] compacted: dropped {} msgs → summary, now {} messages ({}KB)",
+                dropped.len(),
+                final_messages.len(),
+                body_json.len() / 1024
+            );
         }
+
+        // For Responses API, ensure the model field is set correctly
+        // (serialize_body used a placeholder for efficiency in the size check)
+        if use_responses {
+            body_json = serde_json::to_string(&ResponsesApiRequest {
+                model: self.config.model.clone(),
+                input: Self::messages_to_responses_input(&final_messages),
+                tools: Self::tools_to_responses_format(tools),
+                stream: Some(true),
+            })
+            .map_err(|e| format!("Failed to serialize Responses API request: {e}"))?;
+        }
+
+        let url = if use_responses {
+            self.responses_url()
+        } else {
+            self.chat_url()
+        };
 
         let resp = self
             .http
-            .post(&self.chat_url())
+            .post(&url)
             .headers(self.auth_headers())
             .header(reqwest::header::CONTENT_TYPE, "application/json")
             .body(body_json)
@@ -857,13 +1341,23 @@ impl LlmClient {
         if !resp.status().is_success() {
             let status = resp.status();
             let text = resp.text().await.unwrap_or_default();
-            let detail = if text.len() > 2000 { &text[..2000] } else { &text };
+            let detail = if text.len() > 2000 {
+                &text[..2000]
+            } else {
+                &text
+            };
             log::error!("[llm] API error {}: {}", status, detail);
             return Err(format!("Chat stream error ({status}): {detail}"));
         }
 
-        let stream = resp.bytes_stream().map(|chunk_result| {
-            let bytes = chunk_result.map_err(|e| format!("Stream read error: {e}"))?;
+        // Shared state for Responses API streaming (function call index tracking)
+        let fc_state = std::sync::Arc::new(std::sync::Mutex::new(
+            ResponsesStreamState::default(),
+        ));
+
+        let stream = resp.bytes_stream().map(move |chunk_result| {
+            let bytes =
+                chunk_result.map_err(|e| format!("Stream read error: {e}"))?;
             let text = String::from_utf8_lossy(&bytes);
 
             // SSE format: "data: {...}\n\n" — collect ALL chunks from this batch
@@ -874,8 +1368,24 @@ impl LlmClient {
                     if data == "[DONE]" {
                         continue;
                     }
-                    if let Ok(chunk) = serde_json::from_str::<StreamChunk>(data) {
-                        chunks.push(chunk);
+
+                    if use_responses {
+                        // Responses API: parse as generic JSON, dispatch by type
+                        if let Ok(val) =
+                            serde_json::from_str::<serde_json::Value>(data)
+                        {
+                            let mut state = fc_state.lock().unwrap();
+                            chunks.extend(
+                                Self::parse_responses_sse_event(&val, &mut state),
+                            );
+                        }
+                    } else {
+                        // Chat Completions: parse as StreamChunk directly
+                        if let Ok(chunk) =
+                            serde_json::from_str::<StreamChunk>(data)
+                        {
+                            chunks.push(chunk);
+                        }
                     }
                 }
             }
@@ -1045,5 +1555,338 @@ mod tests {
         assert!(!make_client("deepseek-r1").supports_vision());
         assert!(!make_client("phi-4").supports_vision());
         assert!(!make_client("my-custom-model").supports_vision());
+    }
+
+    // -----------------------------------------------------------------------
+    // Responses API detection
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn needs_responses_api_codex_models() {
+        assert!(make_client("gpt-5.1-codex").needs_responses_api());
+        assert!(make_client("gpt-5.1-codex-mini").needs_responses_api());
+        assert!(make_client("gpt-5.1-codex-max").needs_responses_api());
+        assert!(make_client("gpt-5.2-codex").needs_responses_api());
+        assert!(make_client("gpt-5.3-codex").needs_responses_api());
+        assert!(make_client("gpt-5-codex").needs_responses_api());
+        assert!(make_client("codex-mini").needs_responses_api());
+    }
+
+    #[test]
+    fn needs_responses_api_pro_models() {
+        assert!(make_client("gpt-5.4-pro").needs_responses_api());
+        assert!(make_client("gpt-5-pro").needs_responses_api());
+    }
+
+    #[test]
+    fn needs_responses_api_chat_completions_models() {
+        assert!(!make_client("gpt-5.4").needs_responses_api());
+        assert!(!make_client("gpt-5.2").needs_responses_api());
+        assert!(!make_client("gpt-5.1").needs_responses_api());
+        assert!(!make_client("gpt-5").needs_responses_api());
+        assert!(!make_client("gpt-5-mini").needs_responses_api());
+        assert!(!make_client("gpt-4.1").needs_responses_api());
+        assert!(!make_client("gpt-4o").needs_responses_api());
+        assert!(!make_client("claude-3.5-sonnet").needs_responses_api());
+        assert!(!make_client("o3-mini").needs_responses_api());
+    }
+
+    // -----------------------------------------------------------------------
+    // Responses API URL building
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn responses_url_openai() {
+        let client = make_client("gpt-5.1-codex");
+        assert_eq!(
+            client.responses_url(),
+            "https://api.openai.com/v1/responses"
+        );
+    }
+
+    #[test]
+    fn responses_url_azure() {
+        let client = LlmClient::new(LlmConfig {
+            provider: LlmProvider::AzureOpenai,
+            endpoint: "https://my-resource.openai.azure.com".into(),
+            api_key: "test".into(),
+            model: "gpt-5.1-codex".into(),
+            bearer_token: None,
+        });
+        assert_eq!(
+            client.responses_url(),
+            "https://my-resource.openai.azure.com/openai/v1/responses"
+        );
+    }
+
+    #[test]
+    fn responses_url_foundry() {
+        let client = LlmClient::new(LlmConfig {
+            provider: LlmProvider::AzureOpenai,
+            endpoint: "https://my-foundry.services.ai.azure.com/api/projects/proj1"
+                .into(),
+            api_key: "test".into(),
+            model: "gpt-5.1-codex".into(),
+            bearer_token: None,
+        });
+        assert_eq!(
+            client.responses_url(),
+            "https://my-foundry.services.ai.azure.com/openai/v1/responses"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Message translation
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn messages_to_responses_input_system_becomes_developer() {
+        let msgs = vec![ChatMessage::system("You are helpful")];
+        let input = LlmClient::messages_to_responses_input(&msgs);
+        assert_eq!(input.len(), 1);
+        assert_eq!(input[0]["role"], "developer");
+        assert_eq!(input[0]["content"], "You are helpful");
+    }
+
+    #[test]
+    fn messages_to_responses_input_user_passthrough() {
+        let msgs = vec![ChatMessage::user("Hello")];
+        let input = LlmClient::messages_to_responses_input(&msgs);
+        assert_eq!(input.len(), 1);
+        assert_eq!(input[0]["role"], "user");
+        assert_eq!(input[0]["content"], "Hello");
+    }
+
+    #[test]
+    fn messages_to_responses_input_tool_results() {
+        let msgs = vec![ChatMessage::tool_result("call_123", "result text")];
+        let input = LlmClient::messages_to_responses_input(&msgs);
+        assert_eq!(input.len(), 1);
+        assert_eq!(input[0]["type"], "function_call_output");
+        assert_eq!(input[0]["call_id"], "call_123");
+        assert_eq!(input[0]["output"], "result text");
+    }
+
+    #[test]
+    fn messages_to_responses_input_assistant_with_tool_calls() {
+        let msgs = vec![ChatMessage {
+            role: "assistant".into(),
+            content: None,
+            tool_calls: Some(vec![ToolCall {
+                id: "call_abc".into(),
+                call_type: "function".into(),
+                function: FunctionCall {
+                    name: "get_weather".into(),
+                    arguments: r#"{"city":"SF"}"#.into(),
+                },
+            }]),
+            tool_call_id: None,
+        }];
+        let input = LlmClient::messages_to_responses_input(&msgs);
+        assert_eq!(input.len(), 1);
+        assert_eq!(input[0]["type"], "function_call");
+        assert_eq!(input[0]["call_id"], "call_abc");
+        assert_eq!(input[0]["name"], "get_weather");
+    }
+
+    // -----------------------------------------------------------------------
+    // Tool definition translation
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn tools_to_responses_format_flattens() {
+        let tools = vec![ToolDefinition {
+            tool_type: "function".into(),
+            function: FunctionDefinition {
+                name: "search".into(),
+                description: "Search things".into(),
+                parameters: serde_json::json!({"type": "object"}),
+            },
+        }];
+        let result = LlmClient::tools_to_responses_format(Some(&tools)).unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].name, "search");
+        assert_eq!(result[0].description, "Search things");
+        // Verify serialized format has no "function" wrapper
+        let json = serde_json::to_value(&result[0]).unwrap();
+        assert_eq!(json["name"], "search");
+        assert!(json.get("function").is_none());
+    }
+
+    // -----------------------------------------------------------------------
+    // Response output translation
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn responses_output_to_chat_text_only() {
+        let output = vec![serde_json::json!({
+            "type": "message",
+            "role": "assistant",
+            "content": [{"type": "output_text", "text": "Hello world"}]
+        })];
+        let resp = LlmClient::responses_output_to_chat_response(&output);
+        assert_eq!(resp.choices.len(), 1);
+        assert_eq!(
+            resp.choices[0].message.text(),
+            Some("Hello world")
+        );
+        assert!(resp.choices[0].message.tool_calls.is_none());
+    }
+
+    #[test]
+    fn responses_output_to_chat_function_call() {
+        let output = vec![serde_json::json!({
+            "type": "function_call",
+            "call_id": "call_xyz",
+            "name": "set_row_visual",
+            "arguments": r#"{"doc":{}}"#
+        })];
+        let resp = LlmClient::responses_output_to_chat_response(&output);
+        let tc = resp.choices[0].message.tool_calls.as_ref().unwrap();
+        assert_eq!(tc.len(), 1);
+        assert_eq!(tc[0].id, "call_xyz");
+        assert_eq!(tc[0].function.name, "set_row_visual");
+    }
+
+    #[test]
+    fn responses_output_to_chat_mixed() {
+        let output = vec![
+            serde_json::json!({
+                "type": "message",
+                "role": "assistant",
+                "content": [{"type": "output_text", "text": "Let me search."}]
+            }),
+            serde_json::json!({
+                "type": "function_call",
+                "call_id": "call_1",
+                "name": "search",
+                "arguments": "{}"
+            }),
+        ];
+        let resp = LlmClient::responses_output_to_chat_response(&output);
+        assert_eq!(
+            resp.choices[0].message.text(),
+            Some("Let me search.")
+        );
+        let tc = resp.choices[0].message.tool_calls.as_ref().unwrap();
+        assert_eq!(tc[0].function.name, "search");
+    }
+
+    // -----------------------------------------------------------------------
+    // Streaming event parsing
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn parse_responses_sse_text_delta() {
+        let val = serde_json::json!({
+            "type": "response.output_text.delta",
+            "output_index": 0,
+            "content_index": 0,
+            "delta": "Hello "
+        });
+        let mut state = ResponsesStreamState::default();
+        let chunks = LlmClient::parse_responses_sse_event(&val, &mut state);
+        assert_eq!(chunks.len(), 1);
+        assert_eq!(
+            chunks[0].choices[0].delta.content.as_deref(),
+            Some("Hello ")
+        );
+    }
+
+    #[test]
+    fn parse_responses_sse_function_call_flow() {
+        let mut state = ResponsesStreamState::default();
+
+        // 1. Function call added
+        let added = serde_json::json!({
+            "type": "response.output_item.added",
+            "output_index": 1,
+            "item": {
+                "type": "function_call",
+                "call_id": "call_abc",
+                "name": "get_weather",
+                "arguments": ""
+            }
+        });
+        let chunks = LlmClient::parse_responses_sse_event(&added, &mut state);
+        assert_eq!(chunks.len(), 1);
+        let tc = &chunks[0].choices[0].delta.tool_calls.as_ref().unwrap()[0];
+        assert_eq!(tc.index, 0); // First tool call gets index 0
+        assert_eq!(tc.id.as_deref(), Some("call_abc"));
+        assert_eq!(
+            tc.function.as_ref().unwrap().name.as_deref(),
+            Some("get_weather")
+        );
+
+        // 2. Arguments delta
+        let delta = serde_json::json!({
+            "type": "response.function_call_arguments.delta",
+            "output_index": 1,
+            "delta": r#"{"city":"#
+        });
+        let chunks = LlmClient::parse_responses_sse_event(&delta, &mut state);
+        assert_eq!(chunks.len(), 1);
+        let tc = &chunks[0].choices[0].delta.tool_calls.as_ref().unwrap()[0];
+        assert_eq!(tc.index, 0); // Same tool call
+        assert_eq!(
+            tc.function.as_ref().unwrap().arguments.as_deref(),
+            Some(r#"{"city":"#)
+        );
+    }
+
+    #[test]
+    fn parse_responses_sse_completed() {
+        let val = serde_json::json!({"type": "response.completed"});
+        let mut state = ResponsesStreamState::default();
+        let chunks = LlmClient::parse_responses_sse_event(&val, &mut state);
+        assert_eq!(chunks.len(), 1);
+        assert_eq!(
+            chunks[0].choices[0].finish_reason.as_deref(),
+            Some("stop")
+        );
+    }
+
+    #[test]
+    fn parse_responses_sse_unknown_event_ignored() {
+        let val = serde_json::json!({
+            "type": "response.some_future_event",
+            "data": "whatever"
+        });
+        let mut state = ResponsesStreamState::default();
+        let chunks = LlmClient::parse_responses_sse_event(&val, &mut state);
+        assert!(chunks.is_empty());
+    }
+
+    #[test]
+    fn parse_responses_sse_multiple_function_calls() {
+        let mut state = ResponsesStreamState::default();
+
+        // First function call at output_index 1
+        let added1 = serde_json::json!({
+            "type": "response.output_item.added",
+            "output_index": 1,
+            "item": {"type": "function_call", "call_id": "call_1", "name": "func_a", "arguments": ""}
+        });
+        LlmClient::parse_responses_sse_event(&added1, &mut state);
+
+        // Second function call at output_index 2
+        let added2 = serde_json::json!({
+            "type": "response.output_item.added",
+            "output_index": 2,
+            "item": {"type": "function_call", "call_id": "call_2", "name": "func_b", "arguments": ""}
+        });
+        let chunks = LlmClient::parse_responses_sse_event(&added2, &mut state);
+        let tc = &chunks[0].choices[0].delta.tool_calls.as_ref().unwrap()[0];
+        assert_eq!(tc.index, 1); // Second tool call gets index 1
+
+        // Arguments for second call
+        let delta = serde_json::json!({
+            "type": "response.function_call_arguments.delta",
+            "output_index": 2,
+            "delta": "{}"
+        });
+        let chunks = LlmClient::parse_responses_sse_event(&delta, &mut state);
+        let tc = &chunks[0].choices[0].delta.tool_calls.as_ref().unwrap()[0];
+        assert_eq!(tc.index, 1); // Correctly mapped to tool call index 1
     }
 }
