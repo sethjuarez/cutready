@@ -148,14 +148,14 @@ export default function VisualCell({ visual, mode, onClick, className, controlRe
         onClick={handleClick}
       >
         {/* Static last-frame poster — no animation loop, saves CPU */}
-        <div className="w-[640px] h-[384px] origin-top-left" style={{ transform: "scale(0.25)" }}>
+        <div className="w-[960px] h-[540px] origin-top-left" style={{ transform: `scale(${160 / 960})` }}>
           <ErrorBoundary onError={() => setHasError(true)}>
             <DslRenderer
               dsl={dsl}
               poster="last"
               theme={theme}
               onError={handleError}
-              style={{ width: 640, height: 384 }}
+              style={{ width: 960, height: 540 }}
             />
           </ErrorBoundary>
         </div>

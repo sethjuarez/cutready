@@ -5,58 +5,106 @@ import { test, expect, Page } from "@playwright/test";
  * Uses mock overrides to inject sketch data with elucim DSL visuals.
  */
 
-// A valid elucim DSL document (player with card preset)
+// A valid elucim DSL document (960×540 with semantic tokens)
 const VALID_VISUAL = {
   version: "1.0",
   root: {
     type: "player",
-    preset: "card",
-    width: 640,
-    height: 360,
+    width: 960,
+    height: 540,
     fps: 30,
     durationInFrames: 90,
-    background: "#0f172a",
+    background: "$background",
     children: [
       {
         type: "rect",
-        x: 40,
-        y: 40,
-        width: 560,
-        height: 280,
-        fill: "#1e293b",
-        rx: 16,
-        stroke: "#334155",
-        strokeWidth: 2,
+        x: 30,
+        y: 24,
+        width: 900,
+        height: 492,
+        fill: "$surface",
+        rx: 20,
+        stroke: "$border",
+        strokeWidth: 1,
       },
       {
         type: "text",
-        x: 320,
-        y: 100,
+        x: 480,
+        y: 72,
         content: "Test Visual",
-        fontSize: 32,
-        fill: "#e2e8f0",
-        fontWeight: "700",
+        fontSize: 38,
+        fill: "$foreground",
+        fontWeight: "900",
         textAnchor: "middle",
-        fadeIn: 1,
+        fadeIn: 4,
       },
       {
-        type: "circle",
-        cx: 320,
-        cy: 200,
-        r: 40,
-        fill: "#6366f1",
-        fadeIn: 15,
+        type: "text",
+        x: 480,
+        y: 106,
+        content: "verifying semantic token rendering",
+        fontSize: 18,
+        fill: "$muted",
+        fontWeight: "600",
+        textAnchor: "middle",
+        fadeIn: 8,
+      },
+      {
+        type: "rect",
+        x: 80,
+        y: 150,
+        width: 240,
+        height: 100,
+        fill: "rgba(167,139,250,0.10)",
+        stroke: "#a78bfa",
+        strokeWidth: 2,
+        rx: 14,
+        fadeIn: 14,
+      },
+      {
+        type: "text",
+        x: 200,
+        y: 206,
+        content: "Token Colors",
+        fontSize: 22,
+        fill: "#a78bfa",
+        fontWeight: "700",
+        textAnchor: "middle",
+        fadeIn: 16,
       },
       {
         type: "arrow",
-        x1: 200,
-        y1: 260,
-        x2: 440,
-        y2: 260,
-        stroke: "#94a3b8",
+        x1: 340,
+        y1: 200,
+        x2: 420,
+        y2: 200,
+        stroke: "#38bdf8",
         strokeWidth: 2,
-        headSize: 8,
+        headSize: 10,
+        draw: 24,
+      },
+      {
+        type: "rect",
+        x: 440,
+        y: 150,
+        width: 240,
+        height: 100,
+        fill: "rgba(34,197,94,0.08)",
+        stroke: "#22c55e",
+        strokeWidth: 2,
+        rx: 14,
         fadeIn: 30,
+      },
+      {
+        type: "text",
+        x: 560,
+        y: 206,
+        content: "Theme Adaptive",
+        fontSize: 22,
+        fill: "#22c55e",
+        fontWeight: "700",
+        textAnchor: "middle",
+        fadeIn: 32,
       },
     ],
   },
@@ -299,79 +347,78 @@ test.describe("VisualCell — elucim DSL rendering", () => {
   });
 
   test("semantic color tokens ($foreground, $accent, etc.) render without errors", async ({ page }) => {
-    // Inject a visual that uses $token syntax
+    // Inject a visual that uses $token syntax for ALL structural colors
     const tokenVisual = {
       version: "1.0",
       root: {
         type: "player",
-        preset: "card",
-        width: 640,
-        height: 360,
+        width: 960,
+        height: 540,
         fps: 30,
         durationInFrames: 60,
         background: "$background",
         children: [
           {
             type: "text",
-            x: 320,
-            y: 60,
+            x: 480,
+            y: 80,
             content: "Token Test",
-            fontSize: 28,
+            fontSize: 34,
             fill: "$foreground",
             fontWeight: "bold",
             textAnchor: "middle",
           },
           {
             type: "rect",
-            x: 100,
-            y: 120,
-            width: 200,
-            height: 80,
+            x: 120,
+            y: 150,
+            width: 300,
+            height: 120,
             fill: "$surface",
             stroke: "$accent",
             strokeWidth: 2,
-            rx: 12,
+            rx: 14,
             fadeIn: 10,
           },
           {
             type: "text",
-            x: 200,
-            y: 165,
+            x: 270,
+            y: 218,
             content: "Themed Box",
-            fontSize: 16,
+            fontSize: 20,
             fill: "$accent",
             textAnchor: "middle",
             fadeIn: 10,
           },
           {
             type: "arrow",
-            x1: 310,
-            y1: 160,
-            x2: 440,
-            y2: 160,
+            x1: 440,
+            y1: 210,
+            x2: 530,
+            y2: 210,
             stroke: "$muted",
             strokeWidth: 2,
-            headSize: 8,
+            headSize: 10,
             fadeIn: 25,
           },
           {
             type: "rect",
-            x: 340,
-            y: 120,
-            width: 200,
-            height: 80,
+            x: 550,
+            y: 150,
+            width: 300,
+            height: 120,
             fill: "$surface",
             stroke: "$success",
             strokeWidth: 2,
-            rx: 12,
+            rx: 14,
             fadeIn: 30,
           },
           {
             type: "text",
-            x: 440,
-            y: 165,
+            x: 700,
+            y: 218,
             content: "Success",
-            fontSize: 16,
+            fontSize: 20,
             fill: "$success",
             textAnchor: "middle",
             fadeIn: 30,
@@ -394,9 +441,30 @@ test.describe("VisualCell — elucim DSL rendering", () => {
     const errorBadge = page.getByText("Invalid visual");
     await expect(errorBadge).not.toBeVisible();
 
-    // The elucim-scene should be present (SVG rendered)
-    const scene = page.locator('[data-testid="elucim-scene"]');
-    await expect(scene.first()).toBeVisible();
+    // The dsl-root should have --elucim-* CSS vars set by theme bridge
+    const dslRoot = page.locator('[data-testid="dsl-root"]').first();
+    await expect(dslRoot).toBeVisible();
+
+    const cssVars = await dslRoot.evaluate((el) => {
+      const style = el.getAttribute("style") ?? "";
+      return style;
+    });
+    console.log("dsl-root style:", cssVars);
+
+    // Verify key semantic token CSS vars are present
+    expect(cssVars).toContain("--elucim-foreground");
+    expect(cssVars).toContain("--elucim-background");
+    expect(cssVars).toContain("--elucim-muted");
+    expect(cssVars).toContain("--elucim-surface");
+    expect(cssVars).toContain("--elucim-accent");
+    expect(cssVars).toContain("--elucim-border");
+
+    // Verify the SVG text elements use var() references (resolved $tokens)
+    const svgTexts = page.locator('[data-testid="elucim-text"]');
+    const firstTextFill = await svgTexts.first().getAttribute("fill");
+    console.log("First text fill:", firstTextFill);
+    // Should be a var() reference, not a raw $token
+    expect(firstTextFill).toContain("var(--elucim-");
 
     // Screenshot dark mode
     await page.evaluate(() => {
