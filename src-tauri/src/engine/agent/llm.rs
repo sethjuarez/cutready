@@ -400,8 +400,12 @@ impl LlmClient {
     pub fn new(config: LlmConfig) -> Self {
         // Disable connection pooling — Azure gateways can return cryptic
         // errors when reusing connections after SSE streams.
+        // Connect timeout prevents hanging when the endpoint is unreachable.
+        // No overall timeout here — streaming responses can legitimately run
+        // for minutes. Non-streaming callers set per-request timeouts instead.
         let http = reqwest::Client::builder()
             .pool_max_idle_per_host(0)
+            .connect_timeout(std::time::Duration::from_secs(30))
             .build()
             .unwrap_or_else(|_| reqwest::Client::new());
         Self {
@@ -1006,6 +1010,7 @@ impl LlmClient {
             .http
             .get(url)
             .headers(self.auth_headers())
+            .timeout(std::time::Duration::from_secs(30))
             .send()
             .await
             .map_err(|e| format!("Failed to list models: {e}"))?;
@@ -1149,6 +1154,7 @@ impl LlmClient {
             .http
             .post(&url)
             .headers(self.auth_headers())
+            .timeout(std::time::Duration::from_secs(300))
             .json(&body)
             .send()
             .await
@@ -1190,6 +1196,7 @@ impl LlmClient {
             .http
             .post(&url)
             .headers(self.auth_headers())
+            .timeout(std::time::Duration::from_secs(300))
             .json(&body)
             .send()
             .await
@@ -1335,11 +1342,14 @@ impl LlmClient {
             self.chat_url()
         };
 
+        // Timeout covers only the initial connection + first response byte.
+        // Once streaming starts, chunks can arrive over minutes.
         let resp = self
             .http
             .post(&url)
             .headers(self.auth_headers())
             .header(reqwest::header::CONTENT_TYPE, "application/json")
+            .timeout(std::time::Duration::from_secs(120))
             .body(body_json)
             .send()
             .await
