@@ -1921,10 +1921,13 @@ function ModelPickerDropdown({
         };
         const result = await invoke<{ id: string; name: string; capabilities?: Record<string, string> }[]>("list_models", { config });
         if (!cancelled) {
-          // In chat context, only show chat-capable models
+          // Show chat-capable models AND Responses API models (codex/pro)
           const chatModels = result.filter((m) => {
             if (!m.capabilities) return true; // no capabilities info = include (OpenAI, etc.)
-            return m.capabilities.chat_completion === "true";
+            if (m.capabilities.chat_completion === "true") return true;
+            // Include codex/pro models — we support them via Responses API
+            const name = (m.id || m.name || "").toLowerCase();
+            return name.includes("codex") || (name.includes("gpt-5") && name.endsWith("-pro"));
           });
           const ids = chatModels.map((m) => m.id || m.name);
           modelCache.key = cacheKey;
