@@ -469,7 +469,7 @@ Row narrative: "${row?.narrative || "(empty)"}"
 Row demo actions: "${row?.demo_actions || "(empty)"}"
 
 Read the full sketch first with read_sketch to understand the overall context and visual style. Then create an elucim visual using set_row_visual with index=${rowIndex} that illustrates or frames the concept described in this row. Use the "card" preset (640×360).`;
-              sendChatPrompt(prompt, { silent: true, agent: "visual" });
+              sendChatPrompt(prompt, { silent: true, agent: "designer" });
             }}
             projectRoot={projectRoot}
             sketchPath={activeSketchPath ?? undefined}
