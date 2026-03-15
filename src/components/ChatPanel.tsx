@@ -159,7 +159,7 @@ The visual is a JSON document: \`{ "version": "1.0", "root": { ... } }\`
 ### Child Node Types
 | Node | Key Props | Use For |
 |------|-----------|---------|
-| \`text\` | x, y, text, fontSize, fill, fontWeight, textAnchor, fontFamily | Labels, titles, descriptions |
+| \`text\` | x, y, **content**, fontSize, fill, fontWeight, textAnchor, fontFamily | Labels, titles, descriptions |
 | \`rect\` | x, y, width, height, fill, stroke, strokeWidth, rx | Boxes, cards, containers |
 | \`circle\` | cx, cy, r, fill, stroke, strokeWidth | Nodes, bullets, highlights |
 | \`line\` | x1, y1, x2, y2, stroke, strokeWidth, strokeDasharray | Connections, separators |
@@ -173,9 +173,11 @@ The visual is a JSON document: \`{ "version": "1.0", "root": { ... } }\`
 | \`matrix\` | x, y, values, fontSize, fill | Matrix display |
 | \`graph\` | vertices, edges | Network graphs |
 
+**IMPORTANT:** Text nodes use \`content\` (not \`text\`) for the string value: \`{ "type": "text", "content": "Hello", ... }\`
+
 ### Animations (on any child node)
-- \`fadeIn: <frame>\` — fade in starting at this frame
-- \`fadeOut: <frame>\` — fade out starting at this frame
+- \`fadeIn: <frame>\` — fade in starting at this frame (**must be ≥ 1**, not 0; omit for instant visibility)
+- \`fadeOut: <frame>\` — fade out starting at this frame (**must be ≥ 1**)
 - \`draw: <frame>\` — draw stroke progressively (lines, arrows, circles)
 - \`easing: "easeInOut" | "easeOut" | "spring" | ...\` — animation curve
 - \`rotation: <degrees>\`, \`scale: <factor>\`, \`translate: [dx, dy]\` — transforms
@@ -203,15 +205,15 @@ The visual is a JSON document: \`{ "version": "1.0", "root": { ... } }\`
     "durationInFrames": 90,
     "background": "#1a1a2e",
     "children": [
-      { "type": "text", "text": "Data Flow", "x": 320, "y": 40, "fontSize": 28, "fill": "#e0e0e0", "fontWeight": "bold", "textAnchor": "middle", "fadeIn": 0 },
+      { "type": "text", "content": "Data Flow", "x": 320, "y": 40, "fontSize": 28, "fill": "#e0e0e0", "fontWeight": "bold", "textAnchor": "middle" },
       { "type": "rect", "x": 50, "y": 100, "width": 120, "height": 60, "fill": "#1e3a5f", "stroke": "#4fc3f7", "strokeWidth": 2, "rx": 8, "fadeIn": 10 },
-      { "type": "text", "text": "Input", "x": 110, "y": 135, "fontSize": 16, "fill": "#4fc3f7", "textAnchor": "middle", "fadeIn": 10 },
+      { "type": "text", "content": "Input", "x": 110, "y": 135, "fontSize": 16, "fill": "#4fc3f7", "textAnchor": "middle", "fadeIn": 10 },
       { "type": "arrow", "x1": 180, "y1": 130, "x2": 260, "y2": 130, "stroke": "#4fc3f7", "strokeWidth": 2, "headSize": 8, "draw": 30 },
       { "type": "rect", "x": 270, "y": 100, "width": 120, "height": 60, "fill": "#1e3a5f", "stroke": "#66bb6a", "strokeWidth": 2, "rx": 8, "fadeIn": 40 },
-      { "type": "text", "text": "Process", "x": 330, "y": 135, "fontSize": 16, "fill": "#66bb6a", "textAnchor": "middle", "fadeIn": 40 },
+      { "type": "text", "content": "Process", "x": 330, "y": 135, "fontSize": 16, "fill": "#66bb6a", "textAnchor": "middle", "fadeIn": 40 },
       { "type": "arrow", "x1": 400, "y1": 130, "x2": 480, "y2": 130, "stroke": "#66bb6a", "strokeWidth": 2, "headSize": 8, "draw": 55 },
       { "type": "rect", "x": 490, "y": 100, "width": 120, "height": 60, "fill": "#1e3a5f", "stroke": "#ff7043", "strokeWidth": 2, "rx": 8, "fadeIn": 65 },
-      { "type": "text", "text": "Output", "x": 550, "y": 135, "fontSize": 16, "fill": "#ff7043", "textAnchor": "middle", "fadeIn": 65 }
+      { "type": "text", "content": "Output", "x": 550, "y": 135, "fontSize": 16, "fill": "#ff7043", "textAnchor": "middle", "fadeIn": 65 }
     ]
   }
 }

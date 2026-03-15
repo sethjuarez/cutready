@@ -224,7 +224,7 @@ pub fn all_tools() -> Vec<ToolDefinition> {
                                     "version": { "type": "string", "enum": ["1.0"] },
                                     "root": {
                                         "type": "object",
-                                        "description": "Root node — a scene, player, or presentation node. Scene node: { type: 'scene', width, height, children: [...] }. Player node: { type: 'player', width, height, fps, durationInFrames, children: [...] }. Children can be: circle, rect, line, arrow, text, group, polygon, image, axes, latex, graph, matrix, barChart. Each child supports animations: fadeIn, fadeOut, draw, easing, rotation, scale, translate."
+                                        "description": "Root node — a scene, player, or presentation node. Scene node: { type: 'scene', width, height, children: [...] }. Player node: { type: 'player', width, height, fps, durationInFrames, children: [...] }. Children can be: circle, rect, line, arrow, text, group, polygon, image, axes, latex, graph, matrix, barChart. Text nodes use 'content' (not 'text') for the string. Animations: fadeIn (≥1), fadeOut (≥1), draw, easing. Omit fadeIn for instant visibility."
                                     }
                                 },
                                 "required": ["version", "root"]
@@ -708,9 +708,27 @@ fn validate_dsl_node(node: &Value, path: &str, errors: &mut Vec<String>) {
                 errors.push(format!("{path}: player requires durationInFrames"));
             }
         }
-        // text nodes require the text property
-        if t == "text" && !obj.contains_key("text") {
-            errors.push(format!("{path}: text node requires \"text\" property"));
+        // text nodes require the "content" property (NOT "text")
+        if t == "text" {
+            if !obj.contains_key("content") {
+                if obj.contains_key("text") {
+                    errors.push(format!("{path}: text node uses \"content\" not \"text\" for the string value"));
+                } else {
+                    errors.push(format!("{path}: text node requires a \"content\" string"));
+                }
+            }
+        }
+        // fadeIn/fadeOut/draw must be positive (≥ 1), not zero
+        for anim_prop in &["fadeIn", "fadeOut", "draw"] {
+            if let Some(v) = obj.get(*anim_prop) {
+                if let Some(n) = v.as_f64() {
+                    if n < 1.0 {
+                        errors.push(format!("{path}.{anim_prop}: must be ≥ 1 (got {n}). Omit the property for instant visibility at frame 0."));
+                    }
+                } else if !v.is_number() {
+                    errors.push(format!("{path}.{anim_prop}: must be a positive number"));
+                }
+            }
         }
     } else if path != "root" {
         // Non-root nodes must have a type

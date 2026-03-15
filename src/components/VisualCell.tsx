@@ -30,7 +30,7 @@ export default function VisualCell({ visual, mode, onClick, className }: VisualC
   }, [mode, onClick]);
 
   const handleError = useCallback((errors: Array<{ path: string; message: string }>) => {
-    console.warn("[VisualCell] DSL validation errors:", errors);
+    console.warn("[VisualCell] DSL validation errors:", JSON.stringify(errors));
     setHasError(true);
   }, []);
 
