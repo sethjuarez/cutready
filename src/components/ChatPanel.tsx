@@ -144,7 +144,8 @@ Generate beautiful, clear animated diagrams and illustrations that visually expl
 1. **Read** the full sketch with read_sketch to understand the overall flow and visual style.
 2. **Focus** on the target row's narrative and demo_actions — this is what the visual should illustrate.
 3. **Design** a visual that complements the narrative — not a literal screenshot, but a conceptual diagram or animated explanation.
-4. **Apply** the visual using set_row_visual.
+4. **Validate** the DSL by calling validate_dsl before writing. If there are errors, fix them and validate again.
+5. **Apply** the visual using set_row_visual only after validation passes.
 
 ## Elucim DSL Reference
 
@@ -582,9 +583,16 @@ function ChatTab() {
             try {
               const args = JSON.parse(pendingToolArgsRef.current[toolName] ?? "{}");
               const sketchPath = args.path ?? useAppStore.getState().activeSketchPath;
-              if (sketchPath) openSketch(sketchPath);
-            } catch { /* ignore parse errors */ }
-            window.dispatchEvent(new CustomEvent("cutready:ai-sketch-updated"));
+              if (sketchPath) {
+                openSketch(sketchPath).then(() => {
+                  window.dispatchEvent(new CustomEvent("cutready:ai-sketch-updated"));
+                });
+              } else {
+                window.dispatchEvent(new CustomEvent("cutready:ai-sketch-updated"));
+              }
+            } catch {
+              window.dispatchEvent(new CustomEvent("cutready:ai-sketch-updated"));
+            }
           }
           if (isSuccess && toolName === "update_note") {
             loadNotes();
@@ -724,7 +732,7 @@ function ChatTab() {
   }, [showContextPicker, contextFilter, allFiles, references]);
 
   // Available tools list
-  const availableTools = ["list_project_files", "read_note", "read_sketch", "set_planning_rows", "update_planning_row", "set_row_visual", "list_project_images", "save_feedback", "delegate_to_agent", "fetch_url"];
+  const availableTools = ["list_project_files", "read_note", "read_sketch", "set_planning_rows", "update_planning_row", "set_row_visual", "validate_dsl", "list_project_images", "save_feedback", "delegate_to_agent", "fetch_url"];
 
   const buildConfig = useCallback(() => ({
     provider: settings.aiProvider,

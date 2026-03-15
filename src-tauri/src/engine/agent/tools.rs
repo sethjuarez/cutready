@@ -237,6 +237,20 @@ pub fn all_tools() -> Vec<ToolDefinition> {
             }),
         ),
         tool_def(
+            "validate_dsl",
+            "Validate an elucim DSL document without writing it. Returns validation errors if the document is malformed. Always call this BEFORE set_row_visual to catch issues early.",
+            json!({
+                "type": "object",
+                "properties": {
+                    "visual": {
+                        "type": "object",
+                        "description": "The elucim DSL document to validate (JSON with version and root)"
+                    }
+                },
+                "required": ["visual"]
+            }),
+        ),
+        tool_def(
             "delegate_to_agent",
             "Delegate a task to another AI agent with a different specialization. The agent runs independently and returns its result. Available agents: planner, writer, editor, plus any custom agents.",
             json!({
@@ -362,6 +376,7 @@ pub fn execute_tool(call: &ToolCall, project_root: &Path, vision_enabled: bool) 
         "set_planning_rows" => exec_set_planning_rows(project_root, &args),
         "update_planning_row" => exec_update_planning_row(project_root, &args),
         "set_row_visual" => exec_set_row_visual(project_root, &args),
+        "validate_dsl" => exec_validate_dsl(&args),
         "list_project_images" => exec_list_project_images(project_root),
         "save_feedback" => exec_save_feedback(&args),
         "update_note" => exec_update_note(project_root, &args),
@@ -652,6 +667,119 @@ fn exec_set_row_visual(root: &Path, args: &Value) -> String {
             }
         }
         Err(e) => format!("Error writing sketch: {e}"),
+    }
+}
+
+// Valid elucim DSL root node types
+const VALID_ROOT_TYPES: &[&str] = &["scene", "player", "presentation"];
+
+// Valid elucim DSL child node types
+const VALID_NODE_TYPES: &[&str] = &[
+    "circle", "rect", "line", "arrow", "text", "group", "polygon",
+    "image", "axes", "latex", "graph", "matrix", "barChart", "slide",
+    "bezierCurve", "codeBlock",
+];
+
+fn validate_dsl_node(node: &Value, path: &str, errors: &mut Vec<String>) {
+    let obj = match node.as_object() {
+        Some(o) => o,
+        None => {
+            errors.push(format!("{path}: expected object, got {}", node_type_name(node)));
+            return;
+        }
+    };
+
+    if let Some(t) = obj.get("type").and_then(|v| v.as_str()) {
+        if !VALID_ROOT_TYPES.contains(&t) && !VALID_NODE_TYPES.contains(&t) {
+            errors.push(format!("{path}.type: unknown node type \"{t}\". Valid types: {}", VALID_NODE_TYPES.join(", ")));
+        }
+        // scene/player require width, height
+        if (t == "scene" || t == "player") && path == "root" {
+            if !obj.contains_key("width") || !obj.contains_key("height") {
+                errors.push(format!("{path}: {t} requires width and height"));
+            }
+        }
+        // player requires fps and durationInFrames
+        if t == "player" && path == "root" {
+            if !obj.contains_key("fps") {
+                errors.push(format!("{path}: player requires fps"));
+            }
+            if !obj.contains_key("durationInFrames") {
+                errors.push(format!("{path}: player requires durationInFrames"));
+            }
+        }
+        // text nodes require the text property
+        if t == "text" && !obj.contains_key("text") {
+            errors.push(format!("{path}: text node requires \"text\" property"));
+        }
+    } else if path != "root" {
+        // Non-root nodes must have a type
+        errors.push(format!("{path}: missing \"type\" property"));
+    }
+
+    // Recursively validate children
+    if let Some(children) = obj.get("children").and_then(|v| v.as_array()) {
+        for (i, child) in children.iter().enumerate() {
+            validate_dsl_node(child, &format!("{path}.children[{i}]"), errors);
+        }
+    }
+}
+
+fn node_type_name(v: &Value) -> &'static str {
+    match v {
+        Value::Null => "null",
+        Value::Bool(_) => "boolean",
+        Value::Number(_) => "number",
+        Value::String(_) => "string",
+        Value::Array(_) => "array",
+        Value::Object(_) => "object",
+    }
+}
+
+fn exec_validate_dsl(args: &Value) -> String {
+    let visual = match args.get("visual") {
+        Some(v) if v.is_object() => v,
+        _ => return "Error: 'visual' must be a JSON object".into(),
+    };
+
+    let mut errors = Vec::new();
+
+    // Check version
+    match visual.get("version") {
+        Some(v) if v.as_str() == Some("1.0") => {}
+        Some(v) => errors.push(format!("version: expected \"1.0\", got {v}")),
+        None => errors.push("missing required field \"version\" (must be \"1.0\")".into()),
+    }
+
+    // Check root
+    match visual.get("root") {
+        Some(root) if root.is_object() => {
+            // Check root type
+            match root.get("type").and_then(|v| v.as_str()) {
+                Some(t) if VALID_ROOT_TYPES.contains(&t) => {}
+                Some(t) => errors.push(format!(
+                    "root.type: \"{t}\" is not a valid root type. Must be one of: {}",
+                    VALID_ROOT_TYPES.join(", ")
+                )),
+                None => errors.push("root: missing \"type\" property".into()),
+            }
+            // Validate children recursively
+            if let Some(children) = root.get("children").and_then(|v| v.as_array()) {
+                for (i, child) in children.iter().enumerate() {
+                    validate_dsl_node(child, &format!("root.children[{i}]"), &mut errors);
+                }
+            }
+            // Validate root-level requirements
+            validate_dsl_node(root, "root", &mut errors);
+        }
+        Some(_) => errors.push("root: must be an object".into()),
+        None => errors.push("missing required field \"root\"".into()),
+    }
+
+    if errors.is_empty() {
+        "Valid — no structural errors found. The DSL document looks correct.".into()
+    } else {
+        format!("Validation failed ({} error{}):\n{}", errors.len(), if errors.len() == 1 { "" } else { "s" }, errors.iter().map(|e| format!("  • {e}")).collect::<Vec<_>>().join("\n"))
     }
 }
 
