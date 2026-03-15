@@ -1068,12 +1068,19 @@ impl LlmClient {
                             if !filter_chat_only {
                                 return true; // deployments endpoint: show all
                             }
-                            // catalog: only chat-capable models
-                            m.capabilities
+                            // catalog: include chat-capable models AND Responses API models
+                            let has_chat = m.capabilities
                                 .as_ref()
                                 .and_then(|c| c.get("chat_completion"))
                                 .map(|v| v == "true")
-                                .unwrap_or(true)
+                                .unwrap_or(true);
+                            if has_chat {
+                                return true;
+                            }
+                            // Also include codex/pro models (we support them via Responses API)
+                            let name = m.name.to_lowercase();
+                            name.contains("codex")
+                                || (name.contains("gpt-5") && name.ends_with("-pro"))
                         })
                         .map(|m| ModelInfo {
                             id: m.name,
