@@ -251,6 +251,20 @@ pub fn all_tools() -> Vec<ToolDefinition> {
             }),
         ),
         tool_def(
+            "critique_visual",
+            "Critique an elucim DSL visual for readability, layout quality, and creativity. Returns issues (problems to fix) and suggestions (creative improvements). Call this after generating a visual and before set_row_visual. Fix any issues, then call set_row_visual.",
+            json!({
+                "type": "object",
+                "properties": {
+                    "visual": {
+                        "type": "object",
+                        "description": "The elucim DSL document to critique (JSON with version and root)"
+                    }
+                },
+                "required": ["visual"]
+            }),
+        ),
+        tool_def(
             "delegate_to_agent",
             "Delegate a task to another AI agent with a different specialization. The agent runs independently and returns its result. Available agents: planner, writer, editor, plus any custom agents.",
             json!({
@@ -377,6 +391,7 @@ pub fn execute_tool(call: &ToolCall, project_root: &Path, vision_enabled: bool) 
         "update_planning_row" => exec_update_planning_row(project_root, &args),
         "set_row_visual" => exec_set_row_visual(project_root, &args),
         "validate_dsl" => exec_validate_dsl(&args),
+        "critique_visual" => exec_critique_visual(&args),
         "list_project_images" => exec_list_project_images(project_root),
         "save_feedback" => exec_save_feedback(&args),
         "update_note" => exec_update_note(project_root, &args),
@@ -1004,5 +1019,432 @@ fn exec_save_memory(root: &Path, args: &Value) -> String {
     match crate::engine::memory::save_memory(root, category, content, tags) {
         Ok(()) => format!("Memory saved: {content}"),
         Err(e) => format!("Error saving memory: {e}"),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// critique_visual — deterministic layout/readability checks + creative hints
+// ---------------------------------------------------------------------------
+
+/// Approximate bounding box for an element.
+#[derive(Debug, Clone)]
+struct BBox {
+    x: f64,
+    y: f64,
+    w: f64,
+    h: f64,
+    label: String,
+}
+
+impl BBox {
+    fn overlap_area(&self, other: &BBox) -> f64 {
+        let ox = (self.x + self.w).min(other.x + other.w) - self.x.max(other.x);
+        let oy = (self.y + self.h).min(other.y + other.h) - self.y.max(other.y);
+        if ox > 0.0 && oy > 0.0 { ox * oy } else { 0.0 }
+    }
+}
+
+/// Extract approximate bounding boxes from a flat list of nodes.
+fn extract_bboxes(children: &[Value], offset_x: f64, offset_y: f64) -> Vec<BBox> {
+    let mut boxes = Vec::new();
+    for node in children {
+        let obj = match node.as_object() { Some(o) => o, None => continue };
+        let t = obj.get("type").and_then(|v| v.as_str()).unwrap_or("");
+        match t {
+            "text" => {
+                let x = obj.get("x").and_then(|v| v.as_f64()).unwrap_or(0.0) + offset_x;
+                let y = obj.get("y").and_then(|v| v.as_f64()).unwrap_or(0.0) + offset_y;
+                let fs = obj.get("fontSize").and_then(|v| v.as_f64()).unwrap_or(16.0);
+                let content = obj.get("content").and_then(|v| v.as_str()).unwrap_or("");
+                let char_width = fs * 0.55;
+                let text_w = content.len() as f64 * char_width;
+                let text_h = fs * 1.3;
+                let anchor = obj.get("textAnchor").and_then(|v| v.as_str()).unwrap_or("start");
+                let bx = match anchor {
+                    "middle" => x - text_w / 2.0,
+                    "end" => x - text_w,
+                    _ => x,
+                };
+                let by = y - fs; // text y is baseline
+                boxes.push(BBox { x: bx, y: by, w: text_w, h: text_h, label: format!("text '{}'", truncate(content, 20)) });
+            }
+            "rect" => {
+                let x = obj.get("x").and_then(|v| v.as_f64()).unwrap_or(0.0) + offset_x;
+                let y = obj.get("y").and_then(|v| v.as_f64()).unwrap_or(0.0) + offset_y;
+                let w = obj.get("width").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                let h = obj.get("height").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                boxes.push(BBox { x, y, w, h, label: "rect".into() });
+            }
+            "circle" => {
+                let cx = obj.get("cx").and_then(|v| v.as_f64()).unwrap_or(0.0) + offset_x;
+                let cy = obj.get("cy").and_then(|v| v.as_f64()).unwrap_or(0.0) + offset_y;
+                let r = obj.get("r").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                boxes.push(BBox { x: cx - r, y: cy - r, w: 2.0 * r, h: 2.0 * r, label: "circle".into() });
+            }
+            "group" => {
+                let gx = obj.get("x").and_then(|v| v.as_f64()).unwrap_or(0.0) + offset_x;
+                let gy = obj.get("y").and_then(|v| v.as_f64()).unwrap_or(0.0) + offset_y;
+                if let Some(gc) = obj.get("children").and_then(|v| v.as_array()) {
+                    boxes.extend(extract_bboxes(gc, gx, gy));
+                }
+            }
+            _ => {} // lines, arrows don't have meaningful bounding boxes for overlap
+        }
+    }
+    boxes
+}
+
+fn truncate(s: &str, max: usize) -> String {
+    if s.len() <= max { s.to_string() } else { format!("{}…", &s[..max]) }
+}
+
+fn exec_critique_visual(args: &Value) -> String {
+    let visual = match args.get("visual") {
+        Some(v) if v.is_object() => v,
+        _ => return "Error: 'visual' must be a JSON object with version and root".into(),
+    };
+
+    let root = match visual.get("root") {
+        Some(r) if r.is_object() => r,
+        _ => return "Error: visual must have a 'root' object".into(),
+    };
+
+    let children = root.get("children").and_then(|v| v.as_array());
+    let children = match children {
+        Some(c) => c,
+        None => return "Error: root has no children array".into(),
+    };
+
+    let canvas_w = root.get("width").and_then(|v| v.as_f64()).unwrap_or(960.0);
+    let canvas_h = root.get("height").and_then(|v| v.as_f64()).unwrap_or(540.0);
+    let bg = root.get("background").and_then(|v| v.as_str()).unwrap_or("");
+
+    let mut issues: Vec<String> = Vec::new();
+    let mut suggestions: Vec<String> = Vec::new();
+
+    // Flatten children (including group contents) for analysis
+    let all_nodes = flatten_nodes(children);
+    let text_nodes = collect_text_nodes(children, 0.0, 0.0);
+    let bboxes = extract_bboxes(children, 0.0, 0.0);
+
+    // ── Issue checks ──────────────────────────────────────────────────
+
+    // 1. Element count
+    if all_nodes.len() > 25 {
+        issues.push(format!(
+            "TOO_MANY_ELEMENTS: {} elements total (max recommended: 20). Simplify — remove decorative elements or combine related items into groups.",
+            all_nodes.len()
+        ));
+    } else if all_nodes.len() > 20 {
+        suggestions.push(format!(
+            "ELEMENT_COUNT: {} elements — consider simplifying to ~15 for cleaner design.", all_nodes.len()
+        ));
+    }
+
+    // 2. Font size checks
+    for tn in &text_nodes {
+        if tn.font_size < 14.0 {
+            issues.push(format!(
+                "TINY_FONT: text '{}' has fontSize {:.0} — minimum is 14. Increase to at least 14 for annotations, 18 for labels, 32 for titles.",
+                truncate(&tn.content, 25), tn.font_size
+            ));
+        } else if tn.font_size < 18.0 && tn.content.len() < 30 {
+            // Short text that could be a label — suggest bigger
+            suggestions.push(format!(
+                "SMALL_LABEL: text '{}' is fontSize {:.0} — consider 18+ for better readability.",
+                truncate(&tn.content, 25), tn.font_size
+            ));
+        }
+    }
+
+    // 3. Token usage — mandatory tokens
+    if !bg.starts_with('$') && bg != "" {
+        issues.push(format!(
+            "MISSING_BG_TOKEN: root background is '{}' — MUST use '$background' so the visual adapts to dark/light themes.",
+            truncate(bg, 20)
+        ));
+    }
+    // Check text fills for token usage
+    let mut text_fills_without_token = 0;
+    for tn in &text_nodes {
+        if !tn.fill.starts_with('$') && !tn.fill.is_empty() {
+            text_fills_without_token += 1;
+        }
+    }
+    let total_texts = text_nodes.len();
+    if total_texts > 0 && text_fills_without_token == total_texts {
+        issues.push(
+            "NO_TEXT_TOKENS: ALL text uses hardcoded colors — at least titles and annotations should use $foreground/$muted for theme compatibility.".into()
+        );
+    } else if total_texts > 2 && text_fills_without_token as f64 / total_texts as f64 > 0.7 {
+        suggestions.push(format!(
+            "LOW_TOKEN_USAGE: {text_fills_without_token}/{total_texts} text fills are hardcoded hex — use $foreground for titles and $muted for secondary text."
+        ));
+    }
+
+    // 4. Overlap detection (text-on-text only — most impactful)
+    let text_bboxes: Vec<&BBox> = bboxes.iter().filter(|b| b.label.starts_with("text")).collect();
+    for i in 0..text_bboxes.len() {
+        for j in (i + 1)..text_bboxes.len() {
+            let a = text_bboxes[i];
+            let b = text_bboxes[j];
+            let area = a.overlap_area(b);
+            let min_area = (a.w * a.h).min(b.w * b.h);
+            if min_area > 0.0 && area / min_area > 0.3 {
+                issues.push(format!(
+                    "TEXT_OVERLAP: {} overlaps with {} — move them apart or remove one.",
+                    a.label, b.label
+                ));
+            }
+        }
+    }
+
+    // 5. Margin violations
+    let margin = 40.0;
+    for bbox in &bboxes {
+        if bbox.label.starts_with("text") {
+            if bbox.x < margin || bbox.y < margin
+                || bbox.x + bbox.w > canvas_w - margin
+                || bbox.y + bbox.h > canvas_h - margin
+            {
+                issues.push(format!(
+                    "MARGIN_VIOLATION: {} extends beyond {}px margin (at {:.0},{:.0} size {:.0}x{:.0}). Keep content inside the safe area.",
+                    bbox.label, margin, bbox.x, bbox.y, bbox.w, bbox.h
+                ));
+            }
+        }
+    }
+
+    // ── Creative suggestions ──────────────────────────────────────────
+
+    // 6. Shape variety
+    let mut type_counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    for node in &all_nodes {
+        if let Some(t) = node.get("type").and_then(|v| v.as_str()) {
+            *type_counts.entry(t.to_string()).or_insert(0) += 1;
+        }
+    }
+    let shape_types: Vec<&str> = ["rect", "circle", "arrow", "line", "polygon"]
+        .iter()
+        .filter(|t| type_counts.contains_key(**t))
+        .copied()
+        .collect();
+    if shape_types.len() == 1 {
+        suggestions.push(format!(
+            "LOW_VARIETY: only uses '{}' shapes — mix in arrows, circles, or lines for visual interest.",
+            shape_types[0]
+        ));
+    }
+
+    // 7. Animation usage
+    let has_animation = all_nodes.iter().any(|n| {
+        n.get("fadeIn").is_some() || n.get("draw").is_some() || n.get("fadeOut").is_some()
+    });
+    if !has_animation {
+        suggestions.push(
+            "NO_ANIMATION: no fadeIn/draw/fadeOut found — add staggered fadeIn for progressive reveal (e.g., fadeIn: 5, 15, 25…).".into()
+        );
+    }
+
+    // 8. Spatial distribution — check if content is clustered
+    if !bboxes.is_empty() {
+        let avg_y: f64 = bboxes.iter().map(|b| b.y + b.h / 2.0).sum::<f64>() / bboxes.len() as f64;
+        let avg_x: f64 = bboxes.iter().map(|b| b.x + b.w / 2.0).sum::<f64>() / bboxes.len() as f64;
+        if avg_y < canvas_h * 0.35 {
+            suggestions.push("TOP_HEAVY: content is concentrated in the upper third — use more vertical space.".into());
+        } else if avg_y > canvas_h * 0.65 {
+            suggestions.push("BOTTOM_HEAVY: content is concentrated in the lower third — balance the layout.".into());
+        }
+        if avg_x < canvas_w * 0.35 {
+            suggestions.push("LEFT_HEAVY: content is clustered on the left — spread across the width.".into());
+        } else if avg_x > canvas_w * 0.65 {
+            suggestions.push("RIGHT_HEAVY: content is clustered on the right — balance the layout.".into());
+        }
+    }
+
+    // 9. Color variety
+    let mut accent_colors: std::collections::HashSet<String> = std::collections::HashSet::new();
+    for node in &all_nodes {
+        for key in &["fill", "stroke"] {
+            if let Some(c) = node.get(*key).and_then(|v| v.as_str()) {
+                if c.starts_with('#') || c.starts_with("rgb") {
+                    accent_colors.insert(c.to_string());
+                }
+            }
+        }
+    }
+    if accent_colors.len() == 1 {
+        suggestions.push(
+            "MONOTONE: only 1 accent color used — add a 2nd complementary color for visual depth (e.g., pair blue with green or purple).".into()
+        );
+    }
+
+    // ── Build response ────────────────────────────────────────────────
+
+    let pass = issues.is_empty();
+    let mut response = String::new();
+
+    if pass && suggestions.is_empty() {
+        response.push_str("✓ PASS — visual looks good! Proceed with set_row_visual.\n");
+    } else if pass {
+        response.push_str("✓ PASS — no issues found, but here are some ideas to make it even better:\n\n");
+    } else {
+        response.push_str(&format!("✗ FAIL — {} issue(s) to fix:\n\n", issues.len()));
+    }
+
+    for (i, issue) in issues.iter().enumerate() {
+        response.push_str(&format!("  ISSUE {}: {}\n", i + 1, issue));
+    }
+    if !issues.is_empty() && !suggestions.is_empty() {
+        response.push('\n');
+    }
+    for (i, sug) in suggestions.iter().enumerate() {
+        response.push_str(&format!("  SUGGEST {}: {}\n", i + 1, sug));
+    }
+
+    if !pass {
+        response.push_str("\nFix the issues above, then call critique_visual again to verify.");
+    }
+
+    response
+}
+
+/// Collect text nodes with their properties for analysis.
+struct TextNodeInfo {
+    content: String,
+    font_size: f64,
+    fill: String,
+}
+
+fn collect_text_nodes(children: &[Value], offset_x: f64, offset_y: f64) -> Vec<TextNodeInfo> {
+    let mut result = Vec::new();
+    for node in children {
+        let obj = match node.as_object() { Some(o) => o, None => continue };
+        let t = obj.get("type").and_then(|v| v.as_str()).unwrap_or("");
+        if t == "text" {
+            result.push(TextNodeInfo {
+                content: obj.get("content").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                font_size: obj.get("fontSize").and_then(|v| v.as_f64()).unwrap_or(16.0),
+                fill: obj.get("fill").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+            });
+        } else if t == "group" {
+            let gx = obj.get("x").and_then(|v| v.as_f64()).unwrap_or(0.0) + offset_x;
+            let gy = obj.get("y").and_then(|v| v.as_f64()).unwrap_or(0.0) + offset_y;
+            if let Some(gc) = obj.get("children").and_then(|v| v.as_array()) {
+                result.extend(collect_text_nodes(gc, gx, gy));
+            }
+        }
+    }
+    result
+}
+
+/// Flatten all nodes (including group children) into a single list.
+fn flatten_nodes(children: &[Value]) -> Vec<&Value> {
+    let mut result = Vec::new();
+    for node in children {
+        result.push(node);
+        if let Some(gc) = node.get("children").and_then(|v| v.as_array()) {
+            result.extend(flatten_nodes(gc));
+        }
+    }
+    result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn critique_catches_tiny_fonts() {
+        let visual = json!({
+            "version": "1.0",
+            "root": {
+                "type": "player", "width": 960, "height": 540, "fps": 30, "durationInFrames": 60,
+                "background": "$background",
+                "children": [
+                    { "type": "text", "content": "Title", "x": 480, "y": 50, "fontSize": 32, "fill": "$foreground", "textAnchor": "middle" },
+                    { "type": "text", "content": "tiny annotation", "x": 480, "y": 500, "fontSize": 8, "fill": "$muted", "textAnchor": "middle" }
+                ]
+            }
+        });
+        let result = exec_critique_visual(&json!({ "visual": visual }));
+        assert!(result.contains("TINY_FONT"), "Should flag fontSize 8 as too small: {result}");
+    }
+
+    #[test]
+    fn critique_catches_missing_bg_token() {
+        let visual = json!({
+            "version": "1.0",
+            "root": {
+                "type": "player", "width": 960, "height": 540, "fps": 30, "durationInFrames": 60,
+                "background": "#0f172a",
+                "children": [
+                    { "type": "text", "content": "Hello", "x": 480, "y": 100, "fontSize": 32, "fill": "#ffffff", "textAnchor": "middle" }
+                ]
+            }
+        });
+        let result = exec_critique_visual(&json!({ "visual": visual }));
+        assert!(result.contains("MISSING_BG_TOKEN"), "Should flag hardcoded background: {result}");
+        assert!(result.contains("NO_TEXT_TOKENS"), "Should flag all-hex text fills: {result}");
+    }
+
+    #[test]
+    fn critique_catches_text_overlap() {
+        let visual = json!({
+            "version": "1.0",
+            "root": {
+                "type": "player", "width": 960, "height": 540, "fps": 30, "durationInFrames": 60,
+                "background": "$background",
+                "children": [
+                    { "type": "text", "content": "First line", "x": 480, "y": 100, "fontSize": 24, "fill": "$foreground", "textAnchor": "middle" },
+                    { "type": "text", "content": "Second line", "x": 480, "y": 105, "fontSize": 24, "fill": "$foreground", "textAnchor": "middle" }
+                ]
+            }
+        });
+        let result = exec_critique_visual(&json!({ "visual": visual }));
+        assert!(result.contains("TEXT_OVERLAP"), "Should detect overlapping text at y=100 and y=105: {result}");
+    }
+
+    #[test]
+    fn critique_passes_clean_visual() {
+        let visual = json!({
+            "version": "1.0",
+            "root": {
+                "type": "player", "width": 960, "height": 540, "fps": 30, "durationInFrames": 90,
+                "background": "$background",
+                "children": [
+                    { "type": "rect", "x": 60, "y": 60, "width": 840, "height": 420, "fill": "$surface", "stroke": "$border", "rx": 16 },
+                    { "type": "text", "content": "Title", "x": 480, "y": 120, "fontSize": 34, "fill": "$foreground", "fontWeight": "bold", "textAnchor": "middle", "fadeIn": 5 },
+                    { "type": "text", "content": "subtitle", "x": 480, "y": 155, "fontSize": 18, "fill": "$muted", "textAnchor": "middle", "fadeIn": 10 },
+                    { "type": "rect", "x": 120, "y": 200, "width": 300, "height": 120, "fill": "rgba(56,189,248,0.1)", "stroke": "#38bdf8", "strokeWidth": 2, "rx": 14, "fadeIn": 20 },
+                    { "type": "text", "content": "Feature A", "x": 270, "y": 268, "fontSize": 22, "fill": "#38bdf8", "fontWeight": "700", "textAnchor": "middle", "fadeIn": 22 },
+                    { "type": "arrow", "x1": 440, "y1": 260, "x2": 520, "y2": 260, "stroke": "#38bdf8", "strokeWidth": 2, "headSize": 10, "draw": 30 },
+                    { "type": "rect", "x": 540, "y": 200, "width": 300, "height": 120, "fill": "rgba(34,197,94,0.08)", "stroke": "#22c55e", "strokeWidth": 2, "rx": 14, "fadeIn": 35 },
+                    { "type": "text", "content": "Feature B", "x": 690, "y": 268, "fontSize": 22, "fill": "#22c55e", "fontWeight": "700", "textAnchor": "middle", "fadeIn": 37 }
+                ]
+            }
+        });
+        let result = exec_critique_visual(&json!({ "visual": visual }));
+        assert!(result.starts_with("✓ PASS"), "Clean visual should pass: {result}");
+    }
+
+    #[test]
+    fn critique_suggests_shape_variety() {
+        let visual = json!({
+            "version": "1.0",
+            "root": {
+                "type": "player", "width": 960, "height": 540, "fps": 30, "durationInFrames": 60,
+                "background": "$background",
+                "children": [
+                    { "type": "text", "content": "Title", "x": 480, "y": 80, "fontSize": 34, "fill": "$foreground", "textAnchor": "middle", "fadeIn": 5 },
+                    { "type": "rect", "x": 100, "y": 150, "width": 200, "height": 100, "fill": "$surface", "stroke": "#38bdf8", "rx": 12, "fadeIn": 10 },
+                    { "type": "rect", "x": 400, "y": 150, "width": 200, "height": 100, "fill": "$surface", "stroke": "#38bdf8", "rx": 12, "fadeIn": 20 },
+                    { "type": "rect", "x": 700, "y": 150, "width": 200, "height": 100, "fill": "$surface", "stroke": "#38bdf8", "rx": 12, "fadeIn": 30 }
+                ]
+            }
+        });
+        let result = exec_critique_visual(&json!({ "visual": visual }));
+        assert!(result.contains("LOW_VARIETY"), "Should suggest shape variety: {result}");
     }
 }

@@ -142,7 +142,8 @@ Make targeted changes to specific cells in the planning table. Be concise and ef
 2. **Focus** on the target row's narrative — this is what the visual should illustrate.
 3. **Design** a visual that communicates ONE key idea clearly. Think keynote slide, not infographic.
 4. **Validate** by calling validate_dsl. Fix any errors. Validate again until clean.
-5. **Apply** using set_row_visual only after validation passes.
+5. **Critique** by calling critique_visual. This checks readability (overlapping text, font sizes, margins), token usage (theme compatibility), and gives creative suggestions (shape variety, animation, spatial balance). Fix any ISSUES it reports. Consider its SUGGESTIONS to elevate the design.
+6. **Apply** using set_row_visual only after both validate and critique pass.
 
 ## Canvas
 Use a 960×540 player (16:9, HD). Do NOT use \`"preset": "card"\`. Always specify width/height explicitly:
@@ -758,7 +759,7 @@ function ChatTab() {
   }, [showContextPicker, contextFilter, allFiles, references]);
 
   // Available tools list
-  const availableTools = ["list_project_files", "read_note", "read_sketch", "set_planning_rows", "update_planning_row", "set_row_visual", "validate_dsl", "list_project_images", "save_feedback", "delegate_to_agent", "fetch_url"];
+  const availableTools = ["list_project_files", "read_note", "read_sketch", "set_planning_rows", "update_planning_row", "set_row_visual", "validate_dsl", "critique_visual", "list_project_images", "save_feedback", "delegate_to_agent", "fetch_url"];
 
   const buildConfig = useCallback(() => ({
     provider: settings.aiProvider,
