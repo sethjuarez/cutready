@@ -463,12 +463,12 @@ export function SketchForm() {
             onSparkle={(prompt) => sendChatPrompt(prompt, { silent: true })}
             onGenerateVisual={(rowIndex) => {
               const row = localRows[rowIndex];
-              const prompt = `Generate an animated framing visual for row ${rowIndex + 1} of sketch "${activeSketchPath ?? "current"}".
+              const prompt = `Generate an animated framing visual for sketch "${activeSketchPath ?? "current"}", row index ${rowIndex} (0-based).
 
 Row narrative: "${row?.narrative || "(empty)"}"
 Row demo actions: "${row?.demo_actions || "(empty)"}"
 
-Read the full sketch first with read_sketch to understand the overall context and visual style. Then create an elucim visual using set_row_visual that illustrates or frames the concept described in this row. Use the "card" preset (640×360).`;
+Read the full sketch first with read_sketch to understand the overall context and visual style. Then create an elucim visual using set_row_visual with index=${rowIndex} that illustrates or frames the concept described in this row. Use the "card" preset (640×360).`;
               sendChatPrompt(prompt, { silent: true, agent: "visual" });
             }}
             projectRoot={projectRoot}
