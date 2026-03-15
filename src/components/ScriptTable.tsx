@@ -178,6 +178,17 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
     [onChange, pushUndo, showUndoToast],
   );
 
+  const removeVisual = useCallback(
+    (index: number) => {
+      pushUndo();
+      const updated = rowsRef.current.map((r, i) =>
+        i === index ? { ...r, visual: null } : r,
+      );
+      onChange(updated);
+    },
+    [onChange, pushUndo],
+  );
+
   const handleDragEnd = useCallback(
     (event: DragEndEvent) => {
       const { active, over } = event;
@@ -246,6 +257,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
                   onBrowseImage={onBrowseImage}
                   onSparkle={onSparkle}
                   onGenerateVisual={onGenerateVisual}
+                  onRemoveVisual={removeVisual}
                   projectRoot={projectRoot}
                   sketchPath={sketchPath}
                   onImageClick={setLightboxSrc}
@@ -339,6 +351,7 @@ function SortableRow({
   onBrowseImage,
   onSparkle,
   onGenerateVisual,
+  onRemoveVisual,
   projectRoot,
   sketchPath,
   onImageClick,
@@ -357,6 +370,7 @@ function SortableRow({
   onBrowseImage?: (rowIndex: number) => void;
   onSparkle?: (prompt: string) => void;
   onGenerateVisual?: (rowIndex: number) => void;
+  onRemoveVisual?: (rowIndex: number) => void;
   projectRoot?: string;
   sketchPath?: string;
   onImageClick: (src: string) => void;
@@ -500,7 +514,7 @@ function SortableRow({
                 )}
                 {/* Remove visual */}
                 <button
-                  onClick={() => updateRow(idx, "screenshot", "")}
+                  onClick={() => onRemoveVisual?.(idx)}
                   className="p-1 rounded-full bg-white/20 text-white/90 hover:bg-red-500/80"
                   title="Remove visual"
                 >
