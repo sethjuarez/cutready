@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useState, lazy, Suspense } from "react";
+import { useCallback, useEffect, useState, useRef, lazy, Suspense } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
 import { ResizeHandle } from "./ResizeHandle";
 import type { PlanningRow } from "../types/sketch";
+import type { VisualControlHandle } from "./VisualCell";
 
 const VisualCell = lazy(() => import("./VisualCell"));
 
@@ -56,6 +57,8 @@ export function SketchPreview({ rows, projectRoot, title, onClose, slides: slide
   const [panelSide, setPanelSide] = useState<"left" | "right">(loadPrefs().panelSide);
   const [panelWidth, setPanelWidth] = useState(loadPrefs().panelWidth);
   const [panelVisible, setPanelVisible] = useState(loadPrefs().panelVisible);
+  const visualControlRef = useRef<VisualControlHandle | null>(null);
+  const [visualPlaying, setVisualPlaying] = useState(false);
   const total = slides.length;
   const slide = slides[currentIdx];
 
@@ -114,11 +117,20 @@ export function SketchPreview({ rows, projectRoot, title, onClose, slides: slide
     return () => window.removeEventListener("keydown", handler);
   }, [onClose, goNext, goPrev, total]);
 
+  // Poll visual play state from controlRef
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setVisualPlaying(visualControlRef.current?.isPlaying ?? false);
+    }, 300);
+    return () => clearInterval(interval);
+  }, [currentIdx]);
+
   if (!slide) return null;
 
   const isTitle = slide.type === "title";
   const row = slide.type === "row" ? slide.row : null;
   const contextLabel = slide.context;
+  const hasVisual = !!(row?.visual);
 
   const screenshotSrc = row?.screenshot && projectRoot
     ? convertFileSrc(`${projectRoot}/${row.screenshot}`)
@@ -147,6 +159,23 @@ export function SketchPreview({ rows, projectRoot, title, onClose, slides: slide
           )}
         </div>
         <div className="flex items-center gap-1">
+          {/* Replay visual button — shown when current slide has a visual */}
+          {hasVisual && !visualPlaying && (
+            <button
+              onClick={() => visualControlRef.current?.replay()}
+              className="flex items-center gap-1.5 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] transition-colors px-2 py-1 rounded-md hover:bg-[var(--color-surface-alt)]"
+              title="Replay animation"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="1 4 1 10 7 10" />
+                <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+              </svg>
+              Replay
+            </button>
+          )}
+          {hasVisual && !visualPlaying && (
+            <div className="w-px h-4 bg-[var(--color-border)]" />
+          )}
           {/* Toggle panel side */}
           <button
             onClick={toggleSide}
@@ -291,7 +320,7 @@ export function SketchPreview({ rows, projectRoot, title, onClose, slides: slide
             </div>
           ) : row?.visual ? (
             <Suspense fallback={<div className="w-full max-w-2xl aspect-video rounded-lg bg-[var(--color-surface-alt)] animate-pulse" />}>
-              <VisualCell visual={row.visual} mode="full" className="max-w-full max-h-full" />
+              <VisualCell visual={row.visual} mode="full" controlRef={visualControlRef} className="max-w-full max-h-full" />
             </Suspense>
           ) : screenshotSrc ? (
             <img

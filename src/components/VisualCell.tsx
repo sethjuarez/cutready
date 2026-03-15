@@ -10,6 +10,14 @@ interface VisualCellProps {
   onClick?: () => void;
   /** Optional CSS class name. */
   className?: string;
+  /** Ref exposed to parent for replay control (full mode). */
+  controlRef?: React.MutableRefObject<VisualControlHandle | null>;
+}
+
+/** Exposed to parent (SketchPreview) for replay button in header. */
+export interface VisualControlHandle {
+  replay: () => void;
+  isPlaying: boolean;
 }
 
 /** Read CutReady CSS variables and build an elucim theme object. */
@@ -28,23 +36,30 @@ function useCutReadyTheme() {
 
   return useMemo(() => {
     const s = getComputedStyle(document.documentElement);
+    const fg = s.getPropertyValue("--color-text").trim() || (isDark ? "#e8e4df" : "#2c2925");
+    const bg = s.getPropertyValue("--color-surface").trim() || (isDark ? "#2b2926" : "#faf9f7");
+    const accent = s.getPropertyValue("--color-accent").trim() || (isDark ? "#a49afa" : "#6b5ce7");
     return {
-      foreground: s.getPropertyValue("--color-text").trim() || (isDark ? "#e8e4df" : "#2c2925"),
-      background: s.getPropertyValue("--color-surface").trim() || (isDark ? "#2b2926" : "#faf9f7"),
-      accent: s.getPropertyValue("--color-accent").trim() || (isDark ? "#a49afa" : "#6b5ce7"),
+      foreground: fg,
+      background: bg,
+      accent,
+      // These are the actual CSS var names the Scene/Player reads
+      "scene-bg": bg,
+      "scene-fg": fg,
     };
   }, [isDark]);
 }
 
 /**
  * Build a preview-mode DSL: hides built-in controls, auto-plays once.
- * CutReady renders its own mini player bar instead.
+ * Strips root background so --elucim-scene-bg (from theme) takes effect.
  */
 function buildPreviewDsl(dsl: ElucimDocument): ElucimDocument {
   const root = { ...dsl.root } as Record<string, unknown>;
   root.controls = false;
   root.autoPlay = true;
   root.loop = false;
+  delete root.background; // Let theme --elucim-scene-bg control it
   return { ...dsl, root: root as unknown as ElucimDocument["root"] };
 }
 
@@ -52,14 +67,13 @@ function buildPreviewDsl(dsl: ElucimDocument): ElucimDocument {
  * Renders an elucim animation inline.
  *
  * - **thumbnail**: static last-frame poster for the planning table (no animation loop).
- * - **full**: interactive player filling its container with CutReady theme,
- *   auto-plays once, with a minimal restart bar.
+ * - **full**: auto-plays once, CutReady themed, scales to fill container.
+ *   Parent uses `controlRef` to render replay button elsewhere.
  */
-export default function VisualCell({ visual, mode, onClick, className }: VisualCellProps) {
+export default function VisualCell({ visual, mode, onClick, className, controlRef }: VisualCellProps) {
   const rendererRef = useRef<DslRendererRef>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
   const [hasError, setHasError] = useState(false);
-  const [isPlaying, setIsPlaying] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(true);
   const theme = useCutReadyTheme();
 
   // Reset error state when visual changes
@@ -77,42 +91,29 @@ export default function VisualCell({ visual, mode, onClick, className }: VisualC
   const dsl = visual as unknown as ElucimDocument;
   const previewDsl = useMemo(() => buildPreviewDsl(dsl), [dsl]);
 
-  // Patch SVG with viewBox for responsive scaling & track play state
+  // Poll play state and expose control handle to parent
   useEffect(() => {
     if (mode !== "full") return;
-    const id = requestAnimationFrame(() => {
-      const svg = rendererRef.current?.getSvgElement();
-      if (!svg) return;
-      const w = svg.getAttribute("width") || svg.viewBox?.baseVal?.width?.toString();
-      const h = svg.getAttribute("height") || svg.viewBox?.baseVal?.height?.toString();
-      if (w && h && !svg.getAttribute("viewBox")) {
-        svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
-        svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
-        svg.style.width = "100%";
-        svg.style.height = "100%";
-        svg.removeAttribute("width");
-        svg.removeAttribute("height");
-      }
-    });
-
-    // Poll play state for the mini bar
     setIsPlaying(true);
     const interval = setInterval(() => {
       const playing = rendererRef.current?.isPlaying() ?? false;
       setIsPlaying(playing);
     }, 250);
-
-    return () => {
-      cancelAnimationFrame(id);
-      clearInterval(interval);
-    };
+    return () => clearInterval(interval);
   }, [mode, visual]);
 
-  const handleRestart = useCallback(() => {
+  const replay = useCallback(() => {
     rendererRef.current?.seekToFrame(0);
     rendererRef.current?.play();
     setIsPlaying(true);
   }, []);
+
+  // Expose control handle to parent
+  useEffect(() => {
+    if (controlRef) {
+      controlRef.current = { replay, isPlaying };
+    }
+  }, [controlRef, replay, isPlaying]);
 
   if (hasError) {
     return (
@@ -155,38 +156,18 @@ export default function VisualCell({ visual, mode, onClick, className }: VisualC
     );
   }
 
-  // Full mode — auto-plays once, CutReady theme, responsive SVG, mini restart bar
+  // Full mode — fills container, CutReady themed, no built-in controls
   return (
-    <div ref={containerRef} className={`w-full h-full flex flex-col items-center justify-center ${className ?? ""}`}>
-      <div className="flex-1 w-full flex items-center justify-center min-h-0 overflow-hidden rounded-lg">
-        <ErrorBoundary onError={() => setHasError(true)}>
-          <DslRenderer
-            ref={rendererRef}
-            dsl={previewDsl}
-            theme={theme}
-            onError={handleError}
-            className="w-full h-full rounded-lg shadow-lg"
-          />
-        </ErrorBoundary>
-      </div>
-
-      {/* Mini restart bar — appears when animation finishes */}
-      {!isPlaying && (
-        <button
-          onClick={handleRestart}
-          className="mt-2 flex items-center gap-1.5 px-3 py-1.5 rounded-full
-            text-xs font-medium text-[var(--color-text-secondary)]
-            hover:text-[var(--color-accent)] bg-[var(--color-surface-alt)]
-            border border-[var(--color-border)] hover:border-[var(--color-accent)]/40
-            transition-colors shadow-sm"
-        >
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="1 4 1 10 7 10" />
-            <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
-          </svg>
-          Replay
-        </button>
-      )}
+    <div className={`visual-cell-full w-full h-full flex items-center justify-center ${className ?? ""}`}>
+      <ErrorBoundary onError={() => setHasError(true)}>
+        <DslRenderer
+          ref={rendererRef}
+          dsl={previewDsl}
+          theme={theme}
+          onError={handleError}
+          className="w-full h-full rounded-lg shadow-lg"
+        />
+      </ErrorBoundary>
     </div>
   );
 }
