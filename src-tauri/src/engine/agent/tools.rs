@@ -1129,16 +1129,33 @@ fn exec_critique_visual(args: &Value) -> String {
 
     // ── Issue checks ──────────────────────────────────────────────────
 
-    // 1. Element count
-    if all_nodes.len() > 25 {
+    // 1. Element count (relaxed — rich visuals are fine, 40+ is excessive)
+    if all_nodes.len() > 40 {
         issues.push(format!(
-            "TOO_MANY_ELEMENTS: {} elements total (max recommended: 20). Simplify — remove decorative elements or combine related items into groups.",
+            "TOO_MANY_ELEMENTS: {} elements total (max recommended: 35). Simplify — remove decorative elements or combine related items into groups.",
             all_nodes.len()
         ));
-    } else if all_nodes.len() > 20 {
+    } else if all_nodes.len() > 35 {
         suggestions.push(format!(
-            "ELEMENT_COUNT: {} elements — consider simplifying to ~15 for cleaner design.", all_nodes.len()
+            "ELEMENT_COUNT: {} elements — consider trimming to ~30 for cleaner design.", all_nodes.len()
         ));
+    }
+
+    // 1b. Redundant full-canvas background rectangle
+    if let Some(first) = children.first() {
+        let is_rect = first.get("type").and_then(|v| v.as_str()) == Some("rect");
+        let rx = first.get("x").and_then(|v| v.as_f64()).unwrap_or(f64::MAX);
+        let ry = first.get("y").and_then(|v| v.as_f64()).unwrap_or(f64::MAX);
+        let rw = first.get("width").and_then(|v| v.as_f64()).unwrap_or(0.0);
+        let rh = first.get("height").and_then(|v| v.as_f64()).unwrap_or(0.0);
+        if is_rect && rx <= 5.0 && ry <= 5.0 && rw >= canvas_w - 10.0 && rh >= canvas_h - 10.0 {
+            let fill = first.get("fill").and_then(|v| v.as_str()).unwrap_or("");
+            if fill.starts_with('$') && fill.contains("background") {
+                issues.push(
+                    "REDUNDANT_BG_RECT: first child is a full-canvas rect with $background fill — REMOVE it. The root 'background' property already fills the entire canvas.".into()
+                );
+            }
+        }
     }
 
     // 2. Font size checks
@@ -1210,6 +1227,38 @@ fn exec_critique_visual(args: &Value) -> String {
                 issues.push(format!(
                     "MARGIN_VIOLATION: {} extends beyond {}px margin (at {:.0},{:.0} size {:.0}x{:.0}). Keep content inside the safe area.",
                     bbox.label, margin, bbox.x, bbox.y, bbox.w, bbox.h
+                ));
+            }
+        }
+    }
+
+    // 6. Text overflow — text inside a container rect that exceeds rect bounds
+    let rect_bboxes: Vec<&BBox> = bboxes.iter().filter(|b| b.label == "rect").collect();
+    let text_bboxes_all: Vec<&BBox> = bboxes.iter().filter(|b| b.label.starts_with("text")).collect();
+    for tb in &text_bboxes_all {
+        // Check if text's center is inside any rect (= text is meant to be in that rect)
+        let text_cx = tb.x + tb.w / 2.0;
+        let text_cy = tb.y + tb.h / 2.0;
+        let mut best_rect: Option<&BBox> = None;
+        let mut best_area = f64::MAX;
+        for rb in &rect_bboxes {
+            if text_cx >= rb.x && text_cx <= rb.x + rb.w
+                && text_cy >= rb.y && text_cy <= rb.y + rb.h
+                && rb.w * rb.h < best_area
+            {
+                best_rect = Some(rb);
+                best_area = rb.w * rb.h;
+            }
+        }
+        if let Some(container) = best_rect {
+            let overshoot_left = container.x - tb.x;
+            let overshoot_right = (tb.x + tb.w) - (container.x + container.w);
+            let overshoot_bottom = (tb.y + tb.h) - (container.y + container.h);
+            let max_overshoot = overshoot_left.max(overshoot_right).max(overshoot_bottom);
+            if max_overshoot > 10.0 {
+                issues.push(format!(
+                    "TEXT_OVERFLOW: {} overflows its container rect by {:.0}px. Shorten the text, reduce fontSize, or widen the container.",
+                    tb.label, max_overshoot
                 ));
             }
         }
@@ -1446,5 +1495,41 @@ mod tests {
         });
         let result = exec_critique_visual(&json!({ "visual": visual }));
         assert!(result.contains("LOW_VARIETY"), "Should suggest shape variety: {result}");
+    }
+
+    #[test]
+    fn critique_catches_text_overflow_container() {
+        // Text "This is a very long label text" at fontSize 20 ≈ 330px wide
+        // but the container rect is only 200px wide → overflow
+        let visual = json!({
+            "version": "1.0",
+            "root": {
+                "type": "player", "width": 960, "height": 540, "fps": 30, "durationInFrames": 60,
+                "background": "$background",
+                "children": [
+                    { "type": "rect", "x": 200, "y": 150, "width": 200, "height": 80, "fill": "$surface", "stroke": "$border", "rx": 12 },
+                    { "type": "text", "content": "This is a very long label text", "x": 300, "y": 200, "fontSize": 20, "fill": "$foreground", "textAnchor": "middle" }
+                ]
+            }
+        });
+        let result = exec_critique_visual(&json!({ "visual": visual }));
+        assert!(result.contains("TEXT_OVERFLOW"), "Should detect text overflowing container: {result}");
+    }
+
+    #[test]
+    fn critique_catches_redundant_bg_rect() {
+        let visual = json!({
+            "version": "1.0",
+            "root": {
+                "type": "player", "width": 960, "height": 540, "fps": 30, "durationInFrames": 60,
+                "background": "$background",
+                "children": [
+                    { "type": "rect", "x": 0, "y": 0, "width": 960, "height": 540, "fill": "$background" },
+                    { "type": "text", "content": "Hello", "x": 480, "y": 270, "fontSize": 34, "fill": "$foreground", "textAnchor": "middle" }
+                ]
+            }
+        });
+        let result = exec_critique_visual(&json!({ "visual": visual }));
+        assert!(result.contains("REDUNDANT_BG_RECT"), "Should catch redundant background rect: {result}");
     }
 }
