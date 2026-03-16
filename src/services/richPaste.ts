@@ -407,9 +407,12 @@ export async function htmlToMarkdown(
     ].filter(Boolean).join(", ");
     log(`Rich paste: complex content detected (${features}) — using AI conversion`, "info");
 
+    // Always compute Turndown result as fallback
+    const turndownFallback = turndownConvert(cleaned);
+
     try {
       // Truncate very large HTML to avoid token limits
-      const htmlForAi = cleaned.length > 30000 ? cleaned.slice(0, 30000) + "\n<!-- truncated -->" : cleaned;
+      const htmlForAi = cleaned.length > 60000 ? cleaned.slice(0, 60000) + "\n<!-- truncated -->" : cleaned;
       const refined = await invoke<{ role: string; content: string | null }>("agent_chat", {
         config: options.aiConfig,
         messages: [
@@ -418,16 +421,23 @@ export async function htmlToMarkdown(
         ],
       });
       if (refined.content && refined.content.trim().length > 0) {
-        md = stripCodeFence(refined.content.trim());
-        log("Rich paste: AI conversion complete ✓", "success");
+        const aiResult = stripCodeFence(refined.content.trim());
+        // Guard: if AI output is much shorter than Turndown, it likely truncated
+        if (turndownFallback.length > 200 && aiResult.length < turndownFallback.length * 0.5) {
+          log(`Rich paste: AI output looks truncated (${aiResult.length} vs ${turndownFallback.length} chars) — using Turndown`, "warn");
+          md = turndownFallback;
+        } else {
+          md = aiResult;
+          log("Rich paste: AI conversion complete ✓", "success");
+        }
       } else {
         // AI returned empty — fall back to turndown
         log("Rich paste: AI returned empty, falling back to Turndown", "warn");
-        md = turndownConvert(cleaned);
+        md = turndownFallback;
       }
     } catch (e) {
       log(`Rich paste: AI conversion failed, falling back to Turndown — ${e}`, "warn");
-      md = turndownConvert(cleaned);
+      md = turndownFallback;
     }
   } else {
     // Simple pastes: Turndown conversion with optional AI cleanup
@@ -436,6 +446,7 @@ export async function htmlToMarkdown(
     // AI refinement for simple pastes
     if (options.aiConfig && md.length > 0) {
       log(`Rich paste: refining with AI model (${options.aiConfig.model})…`, "info");
+      const originalMd = md;
       try {
         const refined = await invoke<{ role: string; content: string | null }>("agent_chat", {
           config: options.aiConfig,
@@ -445,8 +456,14 @@ export async function htmlToMarkdown(
           ],
         });
         if (refined.content && refined.content.trim().length > 0) {
-          md = stripCodeFence(refined.content.trim());
-          log("Rich paste: AI refinement complete ✓", "success");
+          const aiResult = stripCodeFence(refined.content.trim());
+          // Guard: if AI output is much shorter, it likely truncated — keep original
+          if (originalMd.length > 200 && aiResult.length < originalMd.length * 0.5) {
+            log(`Rich paste: AI output looks truncated (${aiResult.length} vs ${originalMd.length} chars) — keeping Turndown result`, "warn");
+          } else {
+            md = aiResult;
+            log("Rich paste: AI refinement complete ✓", "success");
+          }
         }
       } catch (e) {
         log(`Rich paste: AI refinement failed, using basic conversion — ${e}`, "warn");
