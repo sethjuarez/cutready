@@ -1343,6 +1343,35 @@ impl LlmClient {
             self.chat_url()
         };
 
+        // Validate body is well-formed JSON before sending.
+        // serde_json::to_string should always produce valid JSON, but corrupt data
+        // in message content (e.g. from tool results) can occasionally cause issues.
+        if let Err(e) = serde_json::from_str::<serde_json::Value>(&body_json) {
+            let offset = match e.classify() {
+                serde_json::error::Category::Syntax | serde_json::error::Category::Eof => {
+                    let col = e.column();
+                    col.saturating_sub(1)
+                }
+                _ => 0,
+            };
+            let context_start = offset.saturating_sub(100);
+            let context_end = (offset + 100).min(body_json.len());
+            // Find safe char boundaries
+            let safe_start = (context_start..=offset).rev()
+                .find(|&i| body_json.is_char_boundary(i))
+                .unwrap_or(0);
+            let safe_end = (context_end..=body_json.len())
+                .find(|&i| body_json.is_char_boundary(i))
+                .unwrap_or(body_json.len());
+            log::error!(
+                "[llm] body JSON invalid at byte {}: {} — context: …{}…",
+                offset,
+                e,
+                &body_json[safe_start..safe_end]
+            );
+            return Err(format!("Request body JSON invalid at byte {offset}: {e}"));
+        }
+
         // No per-request timeout for streaming — the client-level connect_timeout
         // handles unreachable endpoints, and the stream can legitimately run for
         // many minutes as chunks arrive progressively.
@@ -1359,11 +1388,11 @@ impl LlmClient {
         if !resp.status().is_success() {
             let status = resp.status();
             let text = resp.text().await.unwrap_or_default();
-            let detail = if text.len() > 2000 {
-                &text[..2000]
-            } else {
-                &text
-            };
+            let mut end = 2000.min(text.len());
+            while end < text.len() && !text.is_char_boundary(end) {
+                end -= 1;
+            }
+            let detail = &text[..end];
             log::error!("[llm] API error {}: {}", status, detail);
             return Err(format!("Chat stream error ({status}): {detail}"));
         }
