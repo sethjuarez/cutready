@@ -579,30 +579,40 @@ function SortableRow({
       <td className="script-table-td align-top text-center">
         {row.visual ? (
           /* ── Elucim animated visual ── */
-          <div className="relative group/vis">
+          <div className="relative group/vis cursor-pointer" onClick={() => onVisualClick(row.visual!, idx)}>
             <Suspense fallback={<div className="w-40 h-24 rounded-md bg-[var(--color-surface-alt)] border border-[var(--color-border)] animate-pulse" />}>
               <VisualCell
                 visual={row.visual}
                 mode="thumbnail"
-                onClick={() => onVisualClick(row.visual!, idx)}
               />
             </Suspense>
-            {!readOnly && (
-              <div className="absolute inset-0 bg-black/50 opacity-0 group-hover/vis:opacity-100 transition-opacity flex items-center justify-center gap-1.5 rounded-md" onClick={(e) => e.stopPropagation()}>
-                {/* Regenerate visual */}
-                {onGenerateVisual && (
-                  <button
-                    onClick={() => onGenerateVisual(idx)}
-                    className="p-1 rounded-full bg-white/20 text-white/90 hover:bg-[var(--color-accent)]/80"
-                    title="Regenerate visual with AI"
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3z" />
-                      <path d="M20 11l.75 2.25L23 14l-2.25.75L20 17l-.75-2.25L17 14l2.25-.75L20 11z" />
-                    </svg>
-                  </button>
-                )}
-                {/* Remove visual */}
+            {/* Hover overlay with action buttons */}
+            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/vis:opacity-100 transition-opacity flex items-center justify-center gap-1.5 rounded-md" onClick={(e) => e.stopPropagation()}>
+              {/* Expand / preview */}
+              <button
+                onClick={() => onVisualClick(row.visual!, idx)}
+                className="p-1 rounded-full bg-white/20 text-white/90 hover:bg-white/40"
+                title="Preview visual (click to edit)"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M15 3h6v6" /><path d="M9 21H3v-6" /><path d="M21 3l-7 7" /><path d="M3 21l7-7" />
+                </svg>
+              </button>
+              {/* Regenerate visual */}
+              {!readOnly && onGenerateVisual && (
+                <button
+                  onClick={() => onGenerateVisual(idx)}
+                  className="p-1 rounded-full bg-white/20 text-white/90 hover:bg-[var(--color-accent)]/80"
+                  title="Regenerate visual with AI"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3z" />
+                    <path d="M20 11l.75 2.25L23 14l-2.25.75L20 17l-.75-2.25L17 14l2.25-.75L20 11z" />
+                  </svg>
+                </button>
+              )}
+              {/* Remove visual */}
+              {!readOnly && (
                 <button
                   onClick={() => onRemoveVisual?.(idx)}
                   className="p-1 rounded-full bg-white/20 text-white/90 hover:bg-red-500/80"
@@ -612,8 +622,8 @@ function SortableRow({
                     <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
                   </svg>
                 </button>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         ) : row.screenshot ? (
           <div className="relative group/ss w-40 h-24 rounded-md bg-[var(--color-surface-alt)] border border-[var(--color-border)] overflow-hidden cursor-pointer"
