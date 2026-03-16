@@ -9,6 +9,73 @@
 Covector manages this changelog. Do not edit manually.
 Each release section is generated from `.changes/*.md` files.
 
+## [0.8.0](https://github.com/sethjuarez/cutready/compare/v0.7.1...v0.8.0) (2026-03-16)
+
+
+### Features
+
+* 3-pass designer workflow with persisted design plans ([944fd48](https://github.com/sethjuarez/cutready/commit/944fd4863ffb49cf32b1a6bd3cec1fe7ae2989e8))
+* add critique_visual tool for Designer agent self-improvement ([725d407](https://github.com/sethjuarez/cutready/commit/725d4076e64b6c86482ce2a7d954f5a391d98782))
+* add Responses API support for codex and pro models ([8865e4c](https://github.com/sethjuarez/cutready/commit/8865e4c6653d1eeafd379543b68416d318d5667b))
+* add validate_dsl tool and fix visual refresh race condition ([43b13ed](https://github.com/sethjuarez/cutready/commit/43b13ed3d4bd5d851799662fadb9618f698f69ce))
+* add Visual agent and ✨ Generate Visual button ([c0ae278](https://github.com/sethjuarez/cutready/commit/c0ae27808a221e44adc7a428ebda52567da9ab08))
+* add visual generation instructions popup and tool panic safety ([49e01d3](https://github.com/sethjuarez/cutready/commit/49e01d37c9dc58da997a7ecb671d60fa86a318e6))
+* chunked AI paste refinement for large documents ([c58dbde](https://github.com/sethjuarez/cutready/commit/c58dbde6bad3ff674edc0e2f0bc3faed2b6bd2af))
+* **ci:** add Azure Trusted Signing for Windows code signing ([7c654d6](https://github.com/sethjuarez/cutready/commit/7c654d6ee96293cbc827eac61c8a5fade1d01a44))
+* Clone Repository button on home screen ([ce01190](https://github.com/sethjuarez/cutready/commit/ce0119069e1429967c53e5aff5de9472fd555d12))
+* Designer agent uses gpt-5.1-codex model + auto-validates DSL ([0bb7317](https://github.com/sethjuarez/cutready/commit/0bb7317b2510a97b3dd44efa82a6dde0b5b955cb))
+* embed screenshots in Word export ([62a7563](https://github.com/sethjuarez/cutready/commit/62a756398771ca3c453cf23b12719182f982ba76))
+* integrate elucim visual system into sketch rows ([5107f46](https://github.com/sethjuarez/cutready/commit/5107f46e6074a644e30e517c19c563ea6c18d3e5))
+* preview mode visual improvements — theme, responsive SVG, mini player ([026c208](https://github.com/sethjuarez/cutready/commit/026c20876c756c091796797e3c68ca0cc0004ca0))
+* rename Visual agent to Designer with improved creative prompt ([96985e2](https://github.com/sethjuarez/cutready/commit/96985e2a15c586134b3c6096942e9cdc519563b8))
+* semantic color tokens for theme-adaptive visuals ([dad498a](https://github.com/sethjuarez/cutready/commit/dad498a40302412ec6bc80059c567cc47c0ca645))
+* show toast notification after Word export ([bf4b00f](https://github.com/sethjuarez/cutready/commit/bf4b00fb007d0067be163c2fea432078157aee62))
+* structured dev trace logger (dev-trace.jsonl) ([b0e8d5b](https://github.com/sethjuarez/cutready/commit/b0e8d5bb1cf28d283e6572aaf32a25cd3727ba40))
+* upgrade to elucim 0.4.0 with poster, ref API, and frame capture ([26043e6](https://github.com/sethjuarez/cutready/commit/26043e6593768538d7eba99e12ad0221d82038fe))
+* visual preview lightbox with nudge-to-edit ([6cf4385](https://github.com/sethjuarez/cutready/commit/6cf43852069b36cec35aa1a5844ada0d0b643a81))
+
+
+### Bug Fixes
+
+* add dialog:allow-save and fs:allow-write-file permissions for Word export ([81290e9](https://github.com/sethjuarez/cutready/commit/81290e938bb06c1aef20b8b35e00ab972981293e))
+* add HTTP timeouts to prevent hanging on slow models ([c137ba5](https://github.com/sethjuarez/cutready/commit/c137ba5f0764dbe89d5d362c787c7e8b0d282d09))
+* apply model override for agent-triggered visual generation ([4231ca3](https://github.com/sethjuarez/cutready/commit/4231ca3de25122e2f9153d4e6ac602bd977995b7))
+* auto-parse stringified DSL in validate/critique/set_row tools ([234b68d](https://github.com/sethjuarez/cutready/commit/234b68d1c2eececdc5cc878de7f1024d99eb7128))
+* correct DSL property names and add E2E visual rendering tests ([0a1be59](https://github.com/sethjuarez/cutready/commit/0a1be5952bf921c186bd7c0003973d6f924fdc8f))
+* deep DSL validation and 400 error diagnostics ([a80618e](https://github.com/sethjuarez/cutready/commit/a80618e4b9c5e6deed65363cefd2361294df7b83))
+* Designer prompt rewrite + 960x540 canvas + semantic token verification ([80c43bd](https://github.com/sethjuarez/cutready/commit/80c43bd42f33d5a801ca35c6810ed94b504ec8f0))
+* **docs:** point installation link to latest release ([0813425](https://github.com/sethjuarez/cutready/commit/08134253bd24effabbcecfbfbfb793059c5876b3))
+* downgrade TEXT_OVERLAP and MARGIN_VIOLATION to suggestions ([00b9e11](https://github.com/sethjuarez/cutready/commit/00b9e1102db194a6ec066cc33e621187cd976697))
+* handle flattened DSL args in validate/critique tools ([653abbf](https://github.com/sethjuarez/cutready/commit/653abbf72dec53ef646ecaeab0ae72ad09a950a7))
+* harden against 400 JSON errors with validation and broader retry ([8895dc2](https://github.com/sethjuarez/cutready/commit/8895dc2778be78737c521c774031cd9d21f85c4e))
+* improve Designer visual quality — fill canvas, relax limits, overflow detection ([d14c0e6](https://github.com/sethjuarez/cutready/commit/d14c0e6253503bf5ed7afacbadf19be8f1e38a7e))
+* include Responses API models (codex/pro) in model dropdown ([db6794a](https://github.com/sethjuarez/cutready/commit/db6794a62c9bbcc39c916d0d8e25c23bb3d5dbf9))
+* lazy-load elucim to fix React 19 ReactCurrentDispatcher crash ([06b16e7](https://github.com/sethjuarez/cutready/commit/06b16e75d1296f68c281623e4dfc97f6f03e0424))
+* lower body size limit for Responses API to prevent 400 errors ([bca0214](https://github.com/sethjuarez/cutready/commit/bca0214ce5613716a8ecae0cdfcef9a2a33154fe))
+* make Actions prominent in visual generation prompt ([f70bd74](https://github.com/sethjuarez/cutready/commit/f70bd74e18b1a216552ad0b49ad8da799107e722))
+* make visual preview discoverable with expand button ([c0e7622](https://github.com/sethjuarez/cutready/commit/c0e762294d57c06c09206fa5b71cfd6b574f48e3))
+* planner agent now recommends changes instead of applying them ([53222b6](https://github.com/sethjuarez/cutready/commit/53222b6079408a329c0d887f47915100c1d271a6))
+* position toast above status bar and log export to activity ([0894628](https://github.com/sethjuarez/cutready/commit/0894628976ed250c645545dd3b06d90c86c11cc6))
+* preserve visual/design_plan when frontend saves rows ([e65b7af](https://github.com/sethjuarez/cutready/commit/e65b7af6c4c07c5eace6326925a3a812aac99fcd))
+* prevent AI paste refinement from truncating content ([fca1d2d](https://github.com/sethjuarez/cutready/commit/fca1d2d83ab16f382e54c40d416ac71e4ae2b39c))
+* prevent JSON decode errors from control chars and UTF-8 truncation ([55db898](https://github.com/sethjuarez/cutready/commit/55db8981fa706bdcfb60074aec15a100e7dee789))
+* preview mode — fill space, theme vars, replay in header ([4b50186](https://github.com/sethjuarez/cutready/commit/4b5018663ddcaa76a326313740bc3d9fdf880fa3))
+* prioritize user instructions in visual generation ([8639d91](https://github.com/sethjuarez/cutready/commit/8639d912d7f6474ef1519919bdd2baab2a2eb9ad))
+* reload sketch after set_row_visual tool so visuals appear in UI ([561ce02](https://github.com/sethjuarez/cutready/commit/561ce0242d16bd2578538e3450e431e1e0137396))
+* remove-visual button now clears the visual field instead of screenshot ([033311e](https://github.com/sethjuarez/cutready/commit/033311edc684b59afb5793e050b69d50b1d49de9))
+* render markdown formatting in Word export ([a0b1ac2](https://github.com/sethjuarez/cutready/commit/a0b1ac2c7419ca8c8e82b07dd15c364003c8feb5))
+* Responses API tool calls ignored due to finish_reason=stop ([bd67c88](https://github.com/sethjuarez/cutready/commit/bd67c88d57c64e4570a283db925a237bea7d4dff))
+* sanitize all message content before API serialization ([e1796a8](https://github.com/sethjuarez/cutready/commit/e1796a804a068f308905cc6f37da1b4d2acf7038))
+* show codex/pro models in chat model picker dropdown ([fa8887a](https://github.com/sethjuarez/cutready/commit/fa8887ad92d29507486729ea00d749778ad66f81))
+* use 0-based index in generate-visual prompt to prevent wrong-row placement ([7ac1e69](https://github.com/sethjuarez/cutready/commit/7ac1e692660325a6588b52d0b1c7be7eb54453dd))
+* use native save dialog for Word export ([1bf18bc](https://github.com/sethjuarez/cutready/commit/1bf18bcd38e9aaec6159893e0a8f7e98294126c4))
+* use native Word bullet and numbered list formatting ([9037f56](https://github.com/sethjuarez/cutready/commit/9037f5681a4d8af3441a86c8ee0d632786166169))
+* use read_timeout instead of request timeout for streaming ([1d8d6f0](https://github.com/sethjuarez/cutready/commit/1d8d6f062fab5644e6848145658438284d64eedb))
+* use stroke-based sparkle icon to match Feather/Lucide style ([495e0d0](https://github.com/sethjuarez/cutready/commit/495e0d06a645d1f295553a293ef72a28d133abaa))
+* visual critique reliability — UTF-8 panics, thresholds, em-dashes ([96d6291](https://github.com/sethjuarez/cutready/commit/96d6291a21f2f72459fa0906bc1de29b8976736e))
+* visual lightbox renders blank — container had no dimensions ([0263a4c](https://github.com/sethjuarez/cutready/commit/0263a4c863981c3dcdd9fbd958964817a8d69df9))
+* visuals fill canvas edge-to-edge instead of inner card ([4aea37d](https://github.com/sethjuarez/cutready/commit/4aea37d9a7a3852f63be329aa056104265daa7ec))
+
 ## [0.7.1](https://github.com/sethjuarez/cutready/compare/v0.7.0...v0.7.1) (2026-03-06)
 
 
