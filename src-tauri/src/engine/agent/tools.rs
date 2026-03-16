@@ -399,24 +399,48 @@ pub fn execute_tool(call: &ToolCall, project_root: &Path, vision_enabled: bool) 
     let args: Value = serde_json::from_str(&call.function.arguments).unwrap_or(json!({}));
     let start = std::time::Instant::now();
 
-    let result = match call.function.name.as_str() {
-        "list_project_files" => exec_list_project_files(project_root),
-        "read_note" => exec_read_note(project_root, &args, vision_enabled),
-        "read_sketch" => exec_read_sketch(project_root, &args, vision_enabled),
-        "set_planning_rows" => exec_set_planning_rows(project_root, &args),
-        "update_planning_row" => exec_update_planning_row(project_root, &args),
-        "set_row_visual" => exec_set_row_visual(project_root, &args),
-        "validate_dsl" => exec_validate_dsl(&args),
-        "critique_visual" => exec_critique_visual(&args),
-        "design_plan" => exec_design_plan(project_root, &args),
-        "list_project_images" => exec_list_project_images(project_root),
-        "save_feedback" => exec_save_feedback(&args),
-        "update_note" => exec_update_note(project_root, &args),
-        "create_note" => exec_create_note(project_root, &args),
-        "update_storyboard" => exec_update_storyboard(project_root, &args),
-        "recall_memory" => exec_recall_memory(project_root, &args),
-        "save_memory" => exec_save_memory(project_root, &args),
-        other => format!("Unknown tool: {other}"),
+    // Entry trace — if tool_exec is missing but this appears, the tool panicked
+    log::debug!("[tool] ENTER {} (args {}bytes)", call.function.name, call.function.arguments.len());
+
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        match call.function.name.as_str() {
+            "list_project_files" => exec_list_project_files(project_root),
+            "read_note" => exec_read_note(project_root, &args, vision_enabled),
+            "read_sketch" => exec_read_sketch(project_root, &args, vision_enabled),
+            "set_planning_rows" => exec_set_planning_rows(project_root, &args),
+            "update_planning_row" => exec_update_planning_row(project_root, &args),
+            "set_row_visual" => exec_set_row_visual(project_root, &args),
+            "validate_dsl" => exec_validate_dsl(&args),
+            "critique_visual" => exec_critique_visual(&args),
+            "design_plan" => exec_design_plan(project_root, &args),
+            "list_project_images" => exec_list_project_images(project_root),
+            "save_feedback" => exec_save_feedback(&args),
+            "update_note" => exec_update_note(project_root, &args),
+            "create_note" => exec_create_note(project_root, &args),
+            "update_storyboard" => exec_update_storyboard(project_root, &args),
+            "recall_memory" => exec_recall_memory(project_root, &args),
+            "save_memory" => exec_save_memory(project_root, &args),
+            other => format!("Unknown tool: {other}"),
+        }
+    }));
+
+    let result = match result {
+        Ok(r) => r,
+        Err(panic_info) => {
+            let msg = if let Some(s) = panic_info.downcast_ref::<&str>() {
+                s.to_string()
+            } else if let Some(s) = panic_info.downcast_ref::<String>() {
+                s.clone()
+            } else {
+                "unknown panic".to_string()
+            };
+            log::error!("[tool] PANIC in {}: {}", call.function.name, msg);
+            crate::util::trace::emit("tool_panic", "tools", serde_json::json!({
+                "name": call.function.name,
+                "panic": msg,
+            }));
+            format!("Error: internal tool panic: {msg}")
+        }
     };
 
     let elapsed = start.elapsed();
