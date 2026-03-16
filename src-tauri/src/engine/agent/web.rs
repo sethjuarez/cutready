@@ -128,10 +128,56 @@ fn collapse_whitespace(s: &str) -> String {
 }
 
 /// Truncate text to a maximum character length with an indicator.
+/// Uses a char boundary to avoid splitting multi-byte UTF-8 characters.
 fn truncate(s: &str, max: usize) -> String {
     if s.len() <= max {
-        s.to_string()
-    } else {
-        format!("{}…\n\n[Truncated at {} chars]", &s[..max], max)
+        return s.to_string();
+    }
+    // Find the nearest valid char boundary at or before `max`
+    let mut pos = max;
+    while pos > 0 && !s.is_char_boundary(pos) {
+        pos -= 1;
+    }
+    format!("{}…\n\n[Truncated at {} chars]", &s[..pos], pos)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn truncate_ascii() {
+        let s = "abcdefghij";
+        assert_eq!(truncate(s, 100), s);
+        let t = truncate(s, 5);
+        assert!(t.starts_with("abcde"));
+        assert!(t.contains("[Truncated"));
+    }
+
+    #[test]
+    fn truncate_multibyte_boundary() {
+        // "é" is 2 bytes, "🦀" is 4 bytes
+        let s = "aaaa🦀bbbb"; // bytes: a(1)*4 + 🦀(4) + b(1)*4 = 12
+        // Cutting at byte 5 would be inside the emoji
+        let t = truncate(s, 5);
+        // Should back up to byte 4 (after "aaaa") — not panic or corrupt
+        assert!(t.starts_with("aaaa"));
+        assert!(t.contains("[Truncated"));
+    }
+
+    #[test]
+    fn truncate_all_multibyte() {
+        let s = "🦀🦀🦀"; // 12 bytes, 3 chars
+        let t = truncate(s, 5); // byte 5 is inside second emoji
+        // Should back up to byte 4 (first emoji)
+        assert!(t.starts_with("🦀"));
+        assert!(t.contains("[Truncated"));
+    }
+
+    #[test]
+    fn collapse_whitespace_normalizes() {
+        let input = "  hello  \n\n\n  world  \n\n  end  ";
+        let result = collapse_whitespace(input);
+        assert_eq!(result, "hello\n\nworld\n\nend");
     }
 }

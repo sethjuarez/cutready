@@ -21,6 +21,15 @@ const MAX_TOOL_ROUNDS: usize = 10;
 /// Maximum delegation depth for sub-agents.
 const MAX_DELEGATION_DEPTH: usize = 2;
 
+/// Strip control characters (except \n, \r, \t) and null bytes from tool
+/// results before sending them to the API. Invalid characters can cause
+/// JSON parse errors on the server side.
+fn sanitize_for_api(s: &str) -> String {
+    s.chars()
+        .filter(|c| !c.is_control() || matches!(c, '\n' | '\r' | '\t'))
+        .collect()
+}
+
 
 /// Estimate the character cost of a message slice.
 fn estimate_chars(msgs: &[ChatMessage]) -> usize {
@@ -232,6 +241,26 @@ fn run_with_depth<'a>(
 
             let mut stream = match stream_result {
                 Ok(s) => s,
+                Err(ref e) if e.contains("400") && e.contains("JSON") => {
+                    // JSON serialization error — sanitize all message content and retry once
+                    log::warn!("[agent] 400 JSON error, sanitizing messages and retrying");
+                    emit(AgentEvent::Status { message: "Fixing message format…".into() });
+                    for msg in &mut messages {
+                        if let Some(content) = &mut msg.content {
+                            if let MessageContent::Text(t) = content {
+                                *t = sanitize_for_api(t);
+                            }
+                        }
+                    }
+                    match client.chat_stream(&messages, Some(&tool_defs)).await {
+                        Ok(s) => s,
+                        Err(e2) => {
+                            log::error!("[agent] retry also failed: {}", e2);
+                            emit(AgentEvent::Error { message: e2.clone() });
+                            return Err(e2);
+                        }
+                    }
+                }
                 Err(e) => {
                     log::error!("[agent] stream error round {}: {}", round, e);
                     emit(AgentEvent::Error { message: e.clone() });
@@ -404,7 +433,7 @@ fn run_with_depth<'a>(
                     name: call.function.name.clone(),
                     result: clean_result.clone(),
                 });
-                messages.push(ChatMessage::tool_result(&call.id, &clean_result));
+                messages.push(ChatMessage::tool_result(&call.id, &sanitize_for_api(&clean_result)));
 
                 // If tool returned images, inject as a user message with vision content
                 if !vision_parts.is_empty() {
