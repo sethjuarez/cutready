@@ -166,14 +166,23 @@ export function SketchForm() {
     if (visualPromptRow === null) return;
     const row = localRows[visualPromptRow];
     const instructions = visualInstructions.trim();
-    let prompt = `Generate an animated framing visual for sketch "${activeSketchPath ?? "current"}", row index ${visualPromptRow} (0-based).
+    let prompt: string;
+    if (instructions) {
+      prompt = `Generate an animated framing visual for sketch "${activeSketchPath ?? "current"}", row index ${visualPromptRow} (0-based).
+
+**USER INSTRUCTIONS (HIGHEST PRIORITY — follow these exactly):**
+${instructions}
+
+Row context — narrative: "${row?.narrative || "(empty)"}", demo actions: "${row?.demo_actions || "(empty)"}"
+
+Read the sketch with read_sketch for context, then design_plan, then set_row_visual (960×540 canvas). The user instructions above override any defaults.`;
+    } else {
+      prompt = `Generate an animated framing visual for sketch "${activeSketchPath ?? "current"}", row index ${visualPromptRow} (0-based).
 
 Row narrative: "${row?.narrative || "(empty)"}"
 Row demo actions: "${row?.demo_actions || "(empty)"}"
 
 Read the full sketch first with read_sketch to understand the overall context. Then call design_plan, then generate and save the visual with set_row_visual (960×540 canvas).`;
-    if (instructions) {
-      prompt += `\n\nAdditional instructions from the user:\n${instructions}`;
     }
     sendChatPrompt(prompt, { silent: true, agent: "designer" });
     setVisualPromptRow(null);
