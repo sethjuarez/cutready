@@ -23,11 +23,18 @@ function LogoMark() {
   );
 }
 
-function ActionIcon({ type }: { type: "new" | "open" }) {
+function ActionIcon({ type }: { type: "new" | "open" | "clone" }) {
   if (type === "new") {
     return (
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
         <path d="M12 5v14M5 12h14" />
+      </svg>
+    );
+  }
+  if (type === "clone") {
+    return (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M4 19.5A2.5 2.5 0 016.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z" /><path d="M12 8v6M9 11l3-3 3 3" />
       </svg>
     );
   }
@@ -73,6 +80,10 @@ export function HomePanel() {
 
   const [newName, setNewName] = useState("");
   const [showCreate, setShowCreate] = useState(false);
+  const [showClone, setShowClone] = useState(false);
+  const [cloneUrl, setCloneUrl] = useState("");
+  const [cloneToken, setCloneToken] = useState("");
+  const [cloning, setCloning] = useState(false);
 
   const slug = newName
     .trim()
@@ -124,6 +135,49 @@ export function HomePanel() {
     await openProject(selected);
   }, [openProject]);
 
+  const handleClone = useCallback(async () => {
+    const url = cloneUrl.trim();
+    if (!url) return;
+
+    // Extract repo name from URL for the folder name
+    const repoName = url.replace(/\.git$/, "").split("/").pop() || "cloned-project";
+
+    let defaultPath: string | undefined;
+    try {
+      const last = await invoke<string | null>("get_last_parent_folder");
+      if (last) defaultPath = last;
+    } catch { /* ignore */ }
+
+    const selected = await open({
+      directory: true,
+      multiple: false,
+      defaultPath,
+      title: "Choose location to clone into",
+    });
+    if (!selected) return;
+
+    const sep = selected.includes("\\") ? "\\" : "/";
+    const dest = `${selected}${sep}${repoName}`;
+
+    setCloning(true);
+    try {
+      await invoke("clone_from_url", {
+        url,
+        dest,
+        token: cloneToken.trim() || null,
+      });
+      await openProject(dest);
+      setCloneUrl("");
+      setCloneToken("");
+      setShowClone(false);
+    } catch (err) {
+      console.error("Clone failed:", err);
+      alert(`Clone failed: ${err}`);
+    } finally {
+      setCloning(false);
+    }
+  }, [cloneUrl, cloneToken, openProject]);
+
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       if (e.key === "Enter") handleCreate();
@@ -162,9 +216,9 @@ export function HomePanel() {
           </div>
 
           {/* Action cards */}
-          <div className="grid grid-cols-2 gap-3 w-full mb-6">
+          <div className="grid grid-cols-3 gap-3 w-full mb-6">
             <button
-              onClick={() => setShowCreate(true)}
+              onClick={() => { setShowCreate(true); setShowClone(false); }}
               className="group flex flex-col items-center gap-2 p-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-alt)] hover:border-[var(--color-accent)] hover:shadow-lg hover:shadow-[var(--color-accent)]/5 transition-all"
             >
               <div className="w-9 h-9 rounded-lg bg-[var(--color-accent)] text-white flex items-center justify-center group-hover:scale-110 transition-transform">
@@ -174,6 +228,20 @@ export function HomePanel() {
                 <div className="text-sm font-semibold">New Project</div>
                 <div className="text-xs text-[var(--color-text-secondary)] mt-0.5">
                   Start from scratch
+                </div>
+              </div>
+            </button>
+            <button
+              onClick={() => { setShowClone(true); setShowCreate(false); }}
+              className="group flex flex-col items-center gap-2 p-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-alt)] hover:border-[var(--color-accent)] hover:shadow-lg hover:shadow-[var(--color-accent)]/5 transition-all"
+            >
+              <div className="w-9 h-9 rounded-lg border-2 border-[var(--color-border)] text-[var(--color-text-secondary)] flex items-center justify-center group-hover:border-[var(--color-accent)] group-hover:text-[var(--color-accent)] group-hover:scale-110 transition-all">
+                <ActionIcon type="clone" />
+              </div>
+              <div>
+                <div className="text-sm font-semibold">Clone Repository</div>
+                <div className="text-xs text-[var(--color-text-secondary)] mt-0.5">
+                  From a Git URL
                 </div>
               </div>
             </button>
@@ -226,6 +294,52 @@ export function HomePanel() {
                   Folder: <span className="font-mono text-[var(--color-text)]">{slug}</span>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Clone repository inline form */}
+          {showClone && (
+            <div className="w-full mb-6 p-4 rounded-xl bg-[var(--color-surface-alt)] border border-[var(--color-accent)] shadow-lg shadow-[var(--color-accent)]/5 animate-[fadeSlideIn_0.15s_ease-out]">
+              <label className="block text-sm font-medium mb-2">Repository URL</label>
+              <input
+                type="text"
+                value={cloneUrl}
+                onChange={(e) => setCloneUrl(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleClone();
+                  if (e.key === "Escape") { setShowClone(false); setCloneUrl(""); setCloneToken(""); }
+                }}
+                placeholder="https://github.com/org/repo.git"
+                autoFocus
+                className="w-full px-3 py-2 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] text-sm text-[var(--color-text)] placeholder:text-[var(--color-text-secondary)]/50 focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]/40 mb-2"
+              />
+              <label className="block text-xs text-[var(--color-text-secondary)] mb-1">Access token (optional, for private repos)</label>
+              <input
+                type="password"
+                value={cloneToken}
+                onChange={(e) => setCloneToken(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleClone();
+                  if (e.key === "Escape") { setShowClone(false); setCloneUrl(""); setCloneToken(""); }
+                }}
+                placeholder="ghp_..."
+                className="w-full px-3 py-2 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] text-sm text-[var(--color-text)] placeholder:text-[var(--color-text-secondary)]/50 focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]/40 mb-3"
+              />
+              <div className="flex gap-2">
+                <button
+                  onClick={handleClone}
+                  disabled={!cloneUrl.trim() || cloning}
+                  className="px-4 py-2 rounded-lg bg-[var(--color-accent)] text-white text-sm font-medium hover:bg-[var(--color-accent-hover)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {cloning ? "Cloning..." : "Choose Folder & Clone"}
+                </button>
+                <button
+                  onClick={() => { setShowClone(false); setCloneUrl(""); setCloneToken(""); }}
+                  className="px-3 py-2 rounded-lg text-sm text-[var(--color-text-secondary)] hover:bg-[var(--color-surface)] transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
           )}
 
