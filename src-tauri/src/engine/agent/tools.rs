@@ -419,7 +419,22 @@ pub fn execute_tool(call: &ToolCall, project_root: &Path, vision_enabled: bool) 
         other => format!("Unknown tool: {other}"),
     };
 
-    log::debug!("[tool] {} → {}chars in {:?}", call.function.name, result.len(), start.elapsed());
+    let elapsed = start.elapsed();
+    log::debug!("[tool] {} → {}chars in {:?}", call.function.name, result.len(), elapsed);
+
+    let is_error = result.starts_with("Error:") || result.starts_with("Validation failed");
+    crate::util::trace::emit("tool_exec", "tools", serde_json::json!({
+        "name": call.function.name,
+        "duration_ms": elapsed.as_millis(),
+        "result_len": result.len(),
+        "is_error": is_error,
+        "result_preview": if is_error {
+            crate::util::trace::truncate(&result, 500)
+        } else {
+            crate::util::trace::truncate(&result, 200)
+        },
+    }));
+
     result
 }
 

@@ -1357,14 +1357,20 @@ impl LlmClient {
         let mut body_json = serialize_body(&final_messages);
 
         let api_label = if use_responses { "responses" } else { "chat" };
+        let msg_count = final_messages.len();
+        let tool_count = tools.map_or(0, |t| t.len());
+        let body_kb = body_json.len() / 1024;
         log::info!(
             "[llm] chat_stream ({}) → {} ({} messages, {} tools, {}KB body)",
-            api_label,
-            self.config.model,
-            final_messages.len(),
-            tools.map_or(0, |t| t.len()),
-            body_json.len() / 1024
+            api_label, self.config.model, msg_count, tool_count, body_kb
         );
+        crate::util::trace::emit("llm_request", "llm", serde_json::json!({
+            "api": api_label,
+            "model": self.config.model,
+            "messages": msg_count,
+            "tools": tool_count,
+            "body_kb": body_kb,
+        }));
 
         // Azure gateway rejects bodies over ~4MB with cryptic IIS errors.
         // When trimming, summarize dropped messages into working memory so the
@@ -1487,6 +1493,13 @@ impl LlmClient {
             }
             let detail = &text[..end];
             log::error!("[llm] API error {}: {}", status, detail);
+
+            crate::util::trace::emit("llm_error", "llm", serde_json::json!({
+                "status": status.as_u16(),
+                "model": self.config.model,
+                "body_len": body_json.len(),
+                "detail": crate::util::trace::truncate(detail, 500),
+            }));
 
             // On 400 errors, try to extract the byte offset from the error and
             // log the surrounding body context for debugging.

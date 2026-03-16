@@ -208,6 +208,11 @@ fn run_with_depth<'a>(
     Box::pin(async move {
         let tool_defs = tools::all_tools();
         log::info!("[agent] starting run (depth={}, {} messages, budget={}chars)", depth, messages.len(), client.context_char_budget());
+        crate::util::trace::emit("agent_start", "agent", serde_json::json!({
+            "depth": depth,
+            "messages": messages.len(),
+            "budget_chars": client.context_char_budget(),
+        }));
 
         for round in 0..MAX_TOOL_ROUNDS {
             // Drain any pending user messages before calling the LLM
@@ -242,9 +247,11 @@ fn run_with_depth<'a>(
             let mut stream = match stream_result {
                 Ok(s) => s,
                 Err(ref e) if e.contains("400") => {
-                    // 400 Bad Request — retry once (chat_stream already sanitizes
-                    // messages, but transient issues can still occur).
                     log::warn!("[agent] 400 error, retrying once: {}", e);
+                    crate::util::trace::emit("agent_retry", "agent", serde_json::json!({
+                        "round": round,
+                        "error_preview": crate::util::trace::truncate(e, 300),
+                    }));
                     emit(AgentEvent::Status { message: "Retrying request…".into() });
                     match client.chat_stream(&messages, Some(&tool_defs)).await {
                         Ok(s) => s,
@@ -351,6 +358,12 @@ fn run_with_depth<'a>(
 
             let has_tool_calls = !tool_calls.is_empty();
             log::debug!("[agent] round {} complete: {}chars content, {} tool calls, finish={:?}", round, content_acc.len(), tool_calls.len(), finish_reason);
+            crate::util::trace::emit("agent_round", "agent", serde_json::json!({
+                "round": round,
+                "content_chars": content_acc.len(),
+                "tool_calls": tool_calls.iter().map(|tc| &tc.function.name).collect::<Vec<_>>(),
+                "finish": finish_reason,
+            }));
 
             // Build the assistant message
             let assistant_msg = ChatMessage {
@@ -371,6 +384,11 @@ fn run_with_depth<'a>(
             // If no tool calls, we're done
             if !has_tool_calls || finish_reason.as_deref() == Some("stop") {
                 messages.push(assistant_msg);
+                crate::util::trace::emit("agent_done", "agent", serde_json::json!({
+                    "rounds": round + 1,
+                    "response_chars": content_acc.len(),
+                    "total_messages": messages.len(),
+                }));
                 emit(AgentEvent::Done {
                     response: content_acc.clone(),
                 });
@@ -387,7 +405,12 @@ fn run_with_depth<'a>(
             });
 
             for call in &tool_calls {
-                log::info!("[agent] tool call: {}({})", call.function.name, &call.function.arguments[..call.function.arguments.len().min(200)]);
+                let args_preview = crate::util::trace::truncate(&call.function.arguments, 200);
+                log::info!("[agent] tool call: {}({})", call.function.name, args_preview);
+                crate::util::trace::emit("tool_call", "agent", serde_json::json!({
+                    "name": call.function.name,
+                    "args_preview": args_preview,
+                }));
                 emit(AgentEvent::ToolCall {
                     name: call.function.name.clone(),
                     arguments: call.function.arguments.clone(),
@@ -427,6 +450,12 @@ fn run_with_depth<'a>(
                     name: call.function.name.clone(),
                     result: clean_result.clone(),
                 });
+                crate::util::trace::emit("tool_result", "agent", serde_json::json!({
+                    "name": call.function.name,
+                    "result_len": clean_result.len(),
+                    "result_preview": crate::util::trace::truncate(&clean_result, 300),
+                    "has_images": !vision_parts.is_empty(),
+                }));
                 messages.push(ChatMessage::tool_result(&call.id, &sanitize_for_api(&clean_result)));
 
                 // If tool returned images, inject as a user message with vision content

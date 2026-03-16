@@ -114,6 +114,9 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
+            // Initialize dev trace logger (no-op in release builds)
+            crate::util::trace::init();
+
             use tauri_plugin_global_shortcut::{
                 Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState,
             };
