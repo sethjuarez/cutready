@@ -54,13 +54,16 @@ interface ScriptTableProps {
   onBrowseImage?: (rowIndex: number) => void;
   onSparkle?: (prompt: string) => void;
   onGenerateVisual?: (rowIndex: number) => void;
+  onNudgeVisual?: (rowIndex: number, instruction: string) => void;
   projectRoot?: string;
   sketchPath?: string;
 }
 
-export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreenshot, onPickImage, onBrowseImage, onSparkle, onGenerateVisual, projectRoot, sketchPath }: ScriptTableProps) {
+export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreenshot, onPickImage, onBrowseImage, onSparkle, onGenerateVisual, onNudgeVisual, projectRoot, sketchPath }: ScriptTableProps) {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
+  const [visualLightbox, setVisualLightbox] = useState<{ visual: Record<string, unknown>; rowIndex: number } | null>(null);
+  const [nudgeInput, setNudgeInput] = useState("");
   const focusCellAfterRender = useRef<number | null>(null);
   const [undoToast, setUndoToast] = useState<string | null>(null);
   const undoToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -106,6 +109,15 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
   }, [lightboxSrc]);
+
+  useEffect(() => {
+    if (!visualLightbox) return;
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { setVisualLightbox(null); setNudgeInput(""); }
+    };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [visualLightbox]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -261,6 +273,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
                   projectRoot={projectRoot}
                   sketchPath={sketchPath}
                   onImageClick={setLightboxSrc}
+                  onVisualClick={(visual, rowIdx) => setVisualLightbox({ visual, rowIndex: rowIdx })}
                 />
               ))}
             </tbody>
@@ -302,6 +315,81 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
           />
           <button
             onClick={() => setLightboxSrc(null)}
+            className="absolute top-4 right-4 p-2 rounded-full bg-black/50 text-white/80 hover:text-white transition-colors"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </div>
+      )}
+
+      {/* Visual preview lightbox with nudge input */}
+      {visualLightbox && (
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80"
+          onClick={() => { setVisualLightbox(null); setNudgeInput(""); }}
+        >
+          <div
+            className="flex flex-col items-center gap-4 max-w-[90vw] max-h-[90vh]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Visual preview */}
+            <div className="rounded-lg overflow-hidden shadow-2xl bg-[var(--color-surface)]">
+              <Suspense fallback={<div className="w-[960px] h-[540px] bg-[var(--color-surface-alt)] animate-pulse" style={{ maxWidth: "80vw", maxHeight: "60vh" }} />}>
+                <VisualCell
+                  visual={visualLightbox.visual}
+                  mode="full"
+                  className="w-full h-full"
+                />
+              </Suspense>
+            </div>
+            {/* Nudge input */}
+            {onNudgeVisual && !readOnly && (
+              <div className="flex items-center gap-2 w-full max-w-[700px]">
+                <input
+                  type="text"
+                  value={nudgeInput}
+                  onChange={(e) => setNudgeInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && nudgeInput.trim()) {
+                      onNudgeVisual(visualLightbox.rowIndex, nudgeInput.trim());
+                      setNudgeInput("");
+                      setVisualLightbox(null);
+                    }
+                    if (e.key === "Escape") {
+                      setVisualLightbox(null);
+                      setNudgeInput("");
+                    }
+                  }}
+                  placeholder="Nudge: &quot;make the title bigger&quot;, &quot;change color to blue&quot;..."
+                  className="flex-1 px-3 py-2 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text)] text-[13px] placeholder:text-[var(--color-text-secondary)]/50 focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)]"
+                  autoFocus
+                />
+                <button
+                  onClick={() => {
+                    if (nudgeInput.trim()) {
+                      onNudgeVisual(visualLightbox.rowIndex, nudgeInput.trim());
+                      setNudgeInput("");
+                      setVisualLightbox(null);
+                    }
+                  }}
+                  disabled={!nudgeInput.trim()}
+                  className="px-3 py-2 rounded-lg bg-[var(--color-accent)] text-white text-[13px] font-medium disabled:opacity-40 hover:bg-[var(--color-accent-hover)] transition-colors"
+                >
+                  Nudge ✨
+                </button>
+              </div>
+            )}
+            {/* Row info */}
+            <div className="text-[11px] text-white/50">
+              Row {visualLightbox.rowIndex + 1} · Click outside or press Esc to close
+            </div>
+          </div>
+          {/* Close button */}
+          <button
+            onClick={() => { setVisualLightbox(null); setNudgeInput(""); }}
             className="absolute top-4 right-4 p-2 rounded-full bg-black/50 text-white/80 hover:text-white transition-colors"
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -355,6 +443,7 @@ function SortableRow({
   projectRoot,
   sketchPath,
   onImageClick,
+  onVisualClick,
 }: {
   id: string;
   row: PlanningRow;
@@ -374,6 +463,7 @@ function SortableRow({
   projectRoot?: string;
   sketchPath?: string;
   onImageClick: (src: string) => void;
+  onVisualClick: (visual: Record<string, unknown>, rowIndex: number) => void;
 }){
   const {
     attributes,
@@ -494,7 +584,7 @@ function SortableRow({
               <VisualCell
                 visual={row.visual}
                 mode="thumbnail"
-                onClick={() => onImageClick("__visual__")}
+                onClick={() => onVisualClick(row.visual!, idx)}
               />
             </Suspense>
             {!readOnly && (

@@ -497,6 +497,20 @@ The Actions describe what happens on screen — use them as visual design hints.
               setVisualPromptRow(rowIndex);
               setVisualInstructions("");
             }}
+            onNudgeVisual={(rowIndex, instruction) => {
+              const row = localRows[rowIndex];
+              const prompt = `Modify the existing visual for sketch "${activeSketchPath ?? "current"}", row index ${rowIndex} (0-based).
+
+**USER INSTRUCTIONS (HIGHEST PRIORITY):**
+${instruction}
+
+Row context:
+- **Narrative:** ${row?.narrative || "(empty)"}
+- **Actions:** ${row?.demo_actions || "(empty)"}
+
+The row already has a visual and design_plan. Read the sketch with read_sketch first, then call set_row_visual with the MODIFIED visual. Keep the existing design but apply the requested changes. Do NOT redesign from scratch.`;
+              sendChatPrompt(prompt, { silent: true, agent: "designer" });
+            }}
             projectRoot={projectRoot}
             sketchPath={activeSketchPath ?? undefined}
           />
