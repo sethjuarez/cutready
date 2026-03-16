@@ -171,7 +171,7 @@ export function SketchForm() {
 Row narrative: "${row?.narrative || "(empty)"}"
 Row demo actions: "${row?.demo_actions || "(empty)"}"
 
-Read the full sketch first with read_sketch to understand the overall context and visual style. Then create an elucim visual using set_row_visual with index=${visualPromptRow} that illustrates or frames the concept described in this row. Use the "card" preset (640×360).`;
+Read the full sketch first with read_sketch to understand the overall context. Then call design_plan, then generate and save the visual with set_row_visual (960×540 canvas).`;
     if (instructions) {
       prompt += `\n\nAdditional instructions from the user:\n${instructions}`;
     }

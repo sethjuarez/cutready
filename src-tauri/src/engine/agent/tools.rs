@@ -209,7 +209,7 @@ pub fn all_tools() -> Vec<ToolDefinition> {
         ),
         tool_def(
             "set_row_visual",
-            "Set an animated framing visual on a planning row using the elucim DSL. The visual replaces the screenshot for that row. Pass null to remove a visual.",
+            "Set an animated framing visual on a planning row using the elucim DSL. Auto-validates structure and auto-critiques layout/readability before saving. Returns validation or critique errors if the visual has issues — fix them and call again. On success, saves the visual and returns any optional suggestions. Pass null to remove a visual.",
             json!({
                 "type": "object",
                 "properties": {
@@ -237,36 +237,8 @@ pub fn all_tools() -> Vec<ToolDefinition> {
             }),
         ),
         tool_def(
-            "validate_dsl",
-            "Validate an elucim DSL document without writing it. Returns validation errors if the document is malformed. Always call this BEFORE set_row_visual to catch issues early.",
-            json!({
-                "type": "object",
-                "properties": {
-                    "visual": {
-                        "type": "object",
-                        "description": "The elucim DSL document to validate (JSON with version and root)"
-                    }
-                },
-                "required": ["visual"]
-            }),
-        ),
-        tool_def(
-            "critique_visual",
-            "Critique an elucim DSL visual for readability, layout quality, and creativity. Returns issues (problems to fix) and suggestions (creative improvements). Call this after generating a visual and before set_row_visual. Fix any issues, then call set_row_visual.",
-            json!({
-                "type": "object",
-                "properties": {
-                    "visual": {
-                        "type": "object",
-                        "description": "The elucim DSL document to critique (JSON with version and root)"
-                    }
-                },
-                "required": ["visual"]
-            }),
-        ),
-        tool_def(
             "design_plan",
-            "Save an English-language design brief for a planning row's visual. MUST be called before generating any DSL JSON. Describes layout, elements, spatial arrangement, color palette, and animation sequence in plain English. This is the conceptual planning pass of the 3-pass design workflow.",
+            "Save an English-language design brief for a planning row's visual. Call this before generating DSL JSON to think through the design. Describes layout, elements, spatial arrangement, color palette, and animation sequence in plain English.",
             json!({
                 "type": "object",
                 "properties": {
@@ -410,8 +382,6 @@ pub fn execute_tool(call: &ToolCall, project_root: &Path, vision_enabled: bool) 
             "set_planning_rows" => exec_set_planning_rows(project_root, &args),
             "update_planning_row" => exec_update_planning_row(project_root, &args),
             "set_row_visual" => exec_set_row_visual(project_root, &args),
-            "validate_dsl" => exec_validate_dsl(&args),
-            "critique_visual" => exec_critique_visual(&args),
             "design_plan" => exec_design_plan(project_root, &args),
             "list_project_images" => exec_list_project_images(project_root),
             "save_feedback" => exec_save_feedback(&args),
@@ -754,6 +724,7 @@ fn exec_set_row_visual(root: &Path, args: &Value) -> String {
     let row = &mut sketch.rows[index];
 
     // null → remove visual, object/string → set visual
+    let mut critique_note = String::new();
     match args.get("visual") {
         Some(v) if v.is_null() => {
             row.visual = None;
@@ -763,16 +734,37 @@ fn exec_set_row_visual(root: &Path, args: &Value) -> String {
                 Ok(v) => v,
                 Err(e) => return e,
             };
-            // Auto-validate before writing — catch errors the agent missed
+            // Auto-validate before writing
             let mut errors = Vec::new();
             validate_dsl_doc(&visual, &mut errors);
             if !errors.is_empty() {
                 return format!(
-                    "Validation failed ({} error{}) — fix these before calling set_row_visual again:\n{}",
+                    "Validation failed ({} error{}) — fix these and call set_row_visual again:\n{}",
                     errors.len(),
                     if errors.len() == 1 { "" } else { "s" },
                     errors.iter().map(|e| format!("  • {e}")).collect::<Vec<_>>().join("\n")
                 );
+            }
+            // Auto-critique for layout/readability issues
+            if let Ok((issues, suggestions)) = critique_visual_doc(&visual) {
+                if !issues.is_empty() {
+                    return format!(
+                        "Critique failed ({} issue{}) — fix these and call set_row_visual again:\n{}",
+                        issues.len(),
+                        if issues.len() == 1 { "" } else { "s" },
+                        issues.iter().enumerate()
+                            .map(|(i, e)| format!("  ISSUE {}: {e}", i + 1))
+                            .collect::<Vec<_>>().join("\n")
+                    );
+                }
+                if !suggestions.is_empty() {
+                    critique_note = format!(
+                        "\n\nSuggestions for next time:\n{}",
+                        suggestions.iter().enumerate()
+                            .map(|(i, s)| format!("  {}: {s}", i + 1))
+                            .collect::<Vec<_>>().join("\n")
+                    );
+                }
             }
             row.visual = Some(visual.into_owned());
             // Clear screenshot since visual replaces it
@@ -783,7 +775,7 @@ fn exec_set_row_visual(root: &Path, args: &Value) -> String {
     match project::write_sketch(&sketch, &path, root) {
         Ok(()) => {
             if sketch.rows[index].visual.is_some() {
-                format!("Set animated visual on row {} in {}", index, path.display())
+                format!("✓ Visual saved on row {} in {}{}", index, path.display(), critique_note)
             } else {
                 format!("Removed visual from row {} in {}", index, path.display())
             }
@@ -998,22 +990,6 @@ fn validate_dsl_doc(visual: &Value, errors: &mut Vec<String>) {
         }
         Some(_) => errors.push("root: must be an object".into()),
         None => errors.push("missing required field \"root\"".into()),
-    }
-}
-
-fn exec_validate_dsl(args: &Value) -> String {
-    let visual = match extract_json_object(args, "visual") {
-        Ok(v) => v,
-        Err(e) => return e,
-    };
-
-    let mut errors = Vec::new();
-    validate_dsl_doc(&visual, &mut errors);
-
-    if errors.is_empty() {
-        "Valid — no structural errors found. The DSL document looks correct.".into()
-    } else {
-        format!("Validation failed ({} error{}):\n{}", errors.len(), if errors.len() == 1 { "" } else { "s" }, errors.iter().map(|e| format!("  • {e}")).collect::<Vec<_>>().join("\n"))
     }
 }
 
@@ -1284,21 +1260,19 @@ fn truncate(s: &str, max: usize) -> String {
     if s.len() <= max { s.to_string() } else { format!("{}…", &s[..max]) }
 }
 
-fn exec_critique_visual(args: &Value) -> String {
-    let visual = match extract_json_object(args, "visual") {
-        Ok(v) => v,
-        Err(e) => return e,
-    };
-
+/// Run the critique analysis on a visual DSL document.
+/// Returns (issues, suggestions). Issues are problems that must be fixed;
+/// suggestions are optional improvements.
+fn critique_visual_doc(visual: &Value) -> Result<(Vec<String>, Vec<String>), String> {
     let root = match visual.get("root") {
         Some(r) if r.is_object() => r,
-        _ => return "Error: visual must have a 'root' object".into(),
+        _ => return Err("Error: visual must have a 'root' object".into()),
     };
 
     let children = root.get("children").and_then(|v| v.as_array());
     let children = match children {
         Some(c) => c,
-        None => return "Error: root has no children array".into(),
+        None => return Err("Error: root has no children array".into()),
     };
 
     let canvas_w = root.get("width").and_then(|v| v.as_f64()).unwrap_or(960.0);
@@ -1527,32 +1501,7 @@ fn exec_critique_visual(args: &Value) -> String {
 
     // ── Build response ────────────────────────────────────────────────
 
-    let pass = issues.is_empty();
-    let mut response = String::new();
-
-    if pass && suggestions.is_empty() {
-        response.push_str("✓ PASS — visual looks good! Proceed with set_row_visual.\n");
-    } else if pass {
-        response.push_str("✓ PASS — no issues found, but here are some ideas to make it even better:\n\n");
-    } else {
-        response.push_str(&format!("✗ FAIL — {} issue(s) to fix:\n\n", issues.len()));
-    }
-
-    for (i, issue) in issues.iter().enumerate() {
-        response.push_str(&format!("  ISSUE {}: {}\n", i + 1, issue));
-    }
-    if !issues.is_empty() && !suggestions.is_empty() {
-        response.push('\n');
-    }
-    for (i, sug) in suggestions.iter().enumerate() {
-        response.push_str(&format!("  SUGGEST {}: {}\n", i + 1, sug));
-    }
-
-    if !pass {
-        response.push_str("\nFix the issues above, then call critique_visual again to verify.");
-    }
-
-    response
+    Ok((issues, suggestions))
 }
 
 /// Collect text nodes with their properties for analysis.
@@ -1601,6 +1550,36 @@ mod tests {
     use super::*;
     use serde_json::json;
 
+    /// Helper: run validate_dsl_doc and return a result string like the old exec_validate_dsl.
+    fn run_validate(visual: &Value) -> String {
+        let mut errors = Vec::new();
+        validate_dsl_doc(visual, &mut errors);
+        if errors.is_empty() {
+            "Valid".into()
+        } else {
+            format!("Validation failed: {}", errors.join("; "))
+        }
+    }
+
+    /// Helper: run critique_visual_doc and return a result string like the old exec_critique_visual.
+    fn run_critique(visual: &Value) -> String {
+        match critique_visual_doc(visual) {
+            Ok((issues, suggestions)) => {
+                let pass = issues.is_empty();
+                let mut parts = Vec::new();
+                if pass {
+                    parts.push("✓ PASS".to_string());
+                } else {
+                    parts.push(format!("✗ FAIL ({} issues)", issues.len()));
+                }
+                for issue in &issues { parts.push(issue.clone()); }
+                for sug in &suggestions { parts.push(sug.clone()); }
+                parts.join("\n")
+            }
+            Err(e) => e,
+        }
+    }
+
     #[test]
     fn critique_catches_tiny_fonts() {
         let visual = json!({
@@ -1614,7 +1593,7 @@ mod tests {
                 ]
             }
         });
-        let result = exec_critique_visual(&json!({ "visual": visual }));
+        let result = run_critique(&visual);
         assert!(result.contains("TINY_FONT"), "Should flag fontSize 8 as too small: {result}");
     }
 
@@ -1630,7 +1609,7 @@ mod tests {
                 ]
             }
         });
-        let result = exec_critique_visual(&json!({ "visual": visual }));
+        let result = run_critique(&visual);
         assert!(result.contains("MISSING_BG_TOKEN"), "Should flag hardcoded background: {result}");
         assert!(result.contains("NO_TEXT_TOKENS"), "Should flag all-hex text fills: {result}");
     }
@@ -1648,7 +1627,7 @@ mod tests {
                 ]
             }
         });
-        let result = exec_critique_visual(&json!({ "visual": visual }));
+        let result = run_critique(&visual);
         assert!(result.contains("TEXT_OVERLAP"), "Should detect overlapping text at y=100 and y=105: {result}");
     }
 
@@ -1671,7 +1650,7 @@ mod tests {
                 ]
             }
         });
-        let result = exec_critique_visual(&json!({ "visual": visual }));
+        let result = run_critique(&visual);
         assert!(result.starts_with("✓ PASS"), "Clean visual should pass: {result}");
     }
 
@@ -1690,14 +1669,12 @@ mod tests {
                 ]
             }
         });
-        let result = exec_critique_visual(&json!({ "visual": visual }));
+        let result = run_critique(&visual);
         assert!(result.contains("LOW_VARIETY"), "Should suggest shape variety: {result}");
     }
 
     #[test]
     fn critique_catches_text_overflow_container() {
-        // Text "This is a very long label text" at fontSize 20 ≈ 330px wide
-        // but the container rect is only 200px wide → overflow
         let visual = json!({
             "version": "1.0",
             "root": {
@@ -1709,7 +1686,7 @@ mod tests {
                 ]
             }
         });
-        let result = exec_critique_visual(&json!({ "visual": visual }));
+        let result = run_critique(&visual);
         assert!(result.contains("TEXT_OVERFLOW"), "Should detect text overflowing container: {result}");
     }
 
@@ -1726,7 +1703,7 @@ mod tests {
                 ]
             }
         });
-        let result = exec_critique_visual(&json!({ "visual": visual }));
+        let result = run_critique(&visual);
         assert!(result.contains("REDUNDANT_BG_RECT"), "Should catch redundant background rect: {result}");
     }
 
@@ -1743,13 +1720,12 @@ mod tests {
                 ]
             }
         });
-        let result = exec_critique_visual(&json!({ "visual": visual }));
+        let result = run_critique(&visual);
         assert!(result.contains("INNER_CARD_RECT"), "Should catch inner card rect with margins: {result}");
     }
 
     #[test]
     fn validate_dsl_catches_bad_polygon_points() {
-        // Points as objects instead of [number, number] arrays
         let visual = json!({
             "version": "1.0",
             "root": {
@@ -1760,7 +1736,7 @@ mod tests {
                 ]
             }
         });
-        let result = exec_validate_dsl(&json!({ "visual": visual }));
+        let result = run_validate(&visual);
         assert!(result.contains("point must be [number, number]"), "Should catch object points: {result}");
     }
 
@@ -1776,7 +1752,7 @@ mod tests {
                 ]
             }
         });
-        let result = exec_validate_dsl(&json!({ "visual": visual }));
+        let result = run_validate(&visual);
         assert!(result.contains("Valid"), "Should accept valid polygon: {result}");
     }
 
@@ -1792,7 +1768,7 @@ mod tests {
                 ]
             }
         });
-        let result = exec_validate_dsl(&json!({ "visual": visual }));
+        let result = run_validate(&visual);
         assert!(result.contains("at least 3 points"), "Should require 3+ points: {result}");
     }
 
@@ -1808,7 +1784,7 @@ mod tests {
                 ]
             }
         });
-        let result = exec_validate_dsl(&json!({ "visual": visual }));
+        let result = run_validate(&visual);
         assert!(result.contains("requires \"x2\""), "Should catch missing x2: {result}");
         assert!(result.contains("requires \"y2\""), "Should catch missing y2: {result}");
     }
@@ -1825,7 +1801,7 @@ mod tests {
                 ]
             }
         });
-        let result = exec_validate_dsl(&json!({ "visual": visual }));
+        let result = run_validate(&visual);
         assert!(result.contains("requires \"x1\""), "Should catch missing x1: {result}");
     }
 
@@ -1841,28 +1817,33 @@ mod tests {
                 ]
             }
         });
-        let result = exec_validate_dsl(&json!({ "visual": visual }));
+        let result = run_validate(&visual);
         assert!(result.contains("point must be [number, number]"), "Should catch bad bezier point: {result}");
     }
 
     #[test]
-    fn validate_dsl_accepts_stringified_visual() {
-        // LLMs sometimes pass the visual as a JSON string instead of an object
+    fn extract_json_object_parses_stringified() {
         let visual_str = r#"{"version":"1.0","root":{"type":"player","width":960,"height":540,"fps":30,"durationInFrames":60,"background":"$background","children":[{"type":"text","content":"Hello","x":480,"y":270,"fontSize":34,"fill":"$foreground","textAnchor":"middle"}]}}"#;
-        let result = exec_validate_dsl(&json!({ "visual": visual_str }));
-        assert!(result.contains("Valid"), "Should auto-parse string visual: {result}");
+        let args = json!({ "visual": visual_str });
+        let result = extract_json_object(&args, "visual");
+        assert!(result.is_ok(), "Should auto-parse string visual");
+        let visual = result.unwrap();
+        let mut errors = Vec::new();
+        validate_dsl_doc(&visual, &mut errors);
+        assert!(errors.is_empty(), "Parsed visual should be valid: {errors:?}");
     }
 
     #[test]
-    fn validate_dsl_rejects_bad_string() {
-        let result = exec_validate_dsl(&json!({ "visual": "not valid json {" }));
-        assert!(result.contains("not valid JSON"), "Should report parse error: {result}");
+    fn extract_json_object_rejects_bad_string() {
+        let args = json!({ "visual": "not valid json {" });
+        let result = extract_json_object(&args, "visual");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("not valid JSON"), "Should report parse error");
     }
 
     #[test]
-    fn validate_dsl_accepts_flattened_args() {
-        // LLM passes the DSL directly as args (no "visual" wrapper)
-        let result = exec_validate_dsl(&json!({
+    fn extract_json_object_detects_flattened_dsl() {
+        let args = json!({
             "version": "1.0",
             "root": {
                 "type": "player", "width": 960, "height": 540, "fps": 30, "durationInFrames": 60,
@@ -1871,13 +1852,18 @@ mod tests {
                     { "type": "text", "content": "Hello", "x": 480, "y": 270, "fontSize": 34, "fill": "$foreground", "textAnchor": "middle" }
                 ]
             }
-        }));
-        assert!(result.contains("Valid"), "Should auto-detect flattened DSL: {result}");
+        });
+        let result = extract_json_object(&args, "visual");
+        assert!(result.is_ok(), "Should auto-detect flattened DSL");
+        let visual = result.unwrap();
+        let mut errors = Vec::new();
+        validate_dsl_doc(&visual, &mut errors);
+        assert!(errors.is_empty(), "Flattened DSL should be valid: {errors:?}");
     }
 
     #[test]
     fn critique_accepts_stringified_visual() {
-        let visual_str = serde_json::to_string(&json!({
+        let visual = json!({
             "version": "1.0",
             "root": {
                 "type": "player", "width": 960, "height": 540, "fps": 30, "durationInFrames": 60,
@@ -1886,9 +1872,8 @@ mod tests {
                     { "type": "text", "content": "Hello", "x": 480, "y": 270, "fontSize": 34, "fill": "$foreground", "textAnchor": "middle" }
                 ]
             }
-        })).unwrap();
-        let result = exec_critique_visual(&json!({ "visual": visual_str }));
-        // Should not error — critique should work on parsed string
-        assert!(!result.starts_with("Error:"), "Should auto-parse string visual: {result}");
+        });
+        let result = critique_visual_doc(&visual);
+        assert!(result.is_ok(), "Critique should succeed on valid visual");
     }
 }
