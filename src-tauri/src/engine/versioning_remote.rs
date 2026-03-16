@@ -332,13 +332,29 @@ pub fn clone_from_url(
     dest: &Path,
     token: Option<&str>,
 ) -> Result<(), RemoteError> {
+    // If no explicit token, try to get one from `gh auth token`
+    let gh_token: Option<String> = if token.is_none() {
+        std::process::Command::new("gh")
+            .args(["auth", "token"])
+            .output()
+            .ok()
+            .and_then(|o| if o.status.success() {
+                String::from_utf8(o.stdout).ok().map(|s| s.trim().to_string())
+            } else {
+                None
+            })
+    } else {
+        None
+    };
+    let effective_token: Option<&str> = token.or(gh_token.as_deref());
+
     let mut callbacks = RemoteCallbacks::new();
     callbacks.credentials(|_url, username_from_url, allowed| {
         if allowed.contains(git2::CredentialType::SSH_KEY) {
             let user = username_from_url.unwrap_or("git");
             return Cred::ssh_key_from_agent(user);
         }
-        if let Some(tok) = token {
+        if let Some(tok) = effective_token {
             return Cred::userpass_plaintext(tok, "");
         }
         Cred::default()
