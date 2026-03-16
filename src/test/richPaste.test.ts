@@ -10,7 +10,7 @@
  * - Full realistic Word document clipboard output
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { htmlToMarkdown, clipboardHasHtml, detectPasteComplexity } from "../services/richPaste";
+import { htmlToMarkdown, clipboardHasHtml, detectPasteComplexity, splitMarkdownChunks } from "../services/richPaste";
 
 // Mock Tauri invoke for image saving
 const mockInvoke = vi.fn().mockResolvedValue(".cutready/screenshots/pasted-123.png");
@@ -695,6 +695,55 @@ describe("richPaste", () => {
       const html = "<ul><li>A<ul><li>B</li></ul></li></ul>";
       const result = detectPasteComplexity(html);
       expect(result.hasNestedLists).toBe(true);
+    });
+  });
+
+  describe("splitMarkdownChunks", () => {
+    it("returns single chunk for short content", () => {
+      const md = "# Hello\n\nSome text.";
+      const chunks = splitMarkdownChunks(md, 1000);
+      expect(chunks).toEqual([md]);
+    });
+
+    it("splits at blank lines for large content", () => {
+      const section1 = "# Section 1\n\n" + "Line.\n".repeat(50);
+      const section2 = "# Section 2\n\n" + "More.\n".repeat(50);
+      const md = section1 + "\n" + section2;
+      const chunks = splitMarkdownChunks(md, 400);
+      expect(chunks.length).toBeGreaterThan(1);
+      // All original content is preserved
+      const rejoined = chunks.join("\n\n");
+      for (const keyword of ["Section 1", "Section 2", "Line.", "More."]) {
+        expect(rejoined).toContain(keyword);
+      }
+    });
+
+    it("splits at headings when possible", () => {
+      const md = "# A\n\nText A.\n\n## B\n\nText B.\n\n## C\n\nText C.";
+      const chunks = splitMarkdownChunks(md, 25);
+      expect(chunks.length).toBeGreaterThan(1);
+      // Each chunk should be non-empty
+      for (const chunk of chunks) {
+        expect(chunk.trim().length).toBeGreaterThan(0);
+      }
+    });
+
+    it("never produces empty chunks", () => {
+      const md = "\n\n\n# Title\n\nContent\n\n\n";
+      const chunks = splitMarkdownChunks(md, 10);
+      for (const chunk of chunks) {
+        expect(chunk.trim().length).toBeGreaterThan(0);
+      }
+    });
+
+    it("preserves all content across chunks", () => {
+      const lines = Array.from({ length: 100 }, (_, i) => `Line ${i + 1}: some content here`);
+      const md = lines.join("\n");
+      const chunks = splitMarkdownChunks(md, 500);
+      const rejoined = chunks.join("\n\n");
+      for (const line of lines) {
+        expect(rejoined).toContain(line);
+      }
     });
   });
 });

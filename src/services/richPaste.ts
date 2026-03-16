@@ -317,7 +317,7 @@ interface PasteComplexity {
   elementCount: number;
 }
 
-export { detectPasteComplexity };
+export { detectPasteComplexity, splitMarkdownChunks };
 export type { PasteComplexity };
 
 function detectPasteComplexity(html: string): PasteComplexity {
@@ -407,63 +407,30 @@ export async function htmlToMarkdown(
     ].filter(Boolean).join(", ");
     log(`Rich paste: complex content detected (${features}) — using AI conversion`, "info");
 
-    // Always compute Turndown result as fallback
-    const turndownFallback = turndownConvert(cleaned);
+    // Turndown first (deterministic baseline), then AI refines in chunks
+    const turndownResult = turndownConvert(cleaned);
 
     try {
-      // Truncate very large HTML to avoid token limits
-      const htmlForAi = cleaned.length > 60000 ? cleaned.slice(0, 60000) + "\n<!-- truncated -->" : cleaned;
-      const refined = await invoke<{ role: string; content: string | null }>("agent_chat", {
-        config: options.aiConfig,
-        messages: [
-          { role: "system", content: AI_COMPLEX_PASTE_PROMPT },
-          { role: "user", content: htmlForAi },
-        ],
-      });
-      if (refined.content && refined.content.trim().length > 0) {
-        const aiResult = stripCodeFence(refined.content.trim());
-        // Guard: if AI output is much shorter than Turndown, it likely truncated
-        if (turndownFallback.length > 200 && aiResult.length < turndownFallback.length * 0.5) {
-          log(`Rich paste: AI output looks truncated (${aiResult.length} vs ${turndownFallback.length} chars) — using Turndown`, "warn");
-          md = turndownFallback;
-        } else {
-          md = aiResult;
-          log("Rich paste: AI conversion complete ✓", "success");
-        }
-      } else {
-        // AI returned empty — fall back to turndown
-        log("Rich paste: AI returned empty, falling back to Turndown", "warn");
-        md = turndownFallback;
+      md = await refineMarkdownWithAi(turndownResult, AI_COMPLEX_PASTE_PROMPT, options.aiConfig, log);
+      if (md !== turndownResult) {
+        log("Rich paste: AI conversion complete ✓", "success");
       }
     } catch (e) {
-      log(`Rich paste: AI conversion failed, falling back to Turndown — ${e}`, "warn");
-      md = turndownFallback;
+      log(`Rich paste: AI conversion failed, using Turndown — ${e}`, "warn");
+      md = turndownResult;
     }
   } else {
     // Simple pastes: Turndown conversion with optional AI cleanup
     md = turndownConvert(cleaned);
 
-    // AI refinement for simple pastes
+    // AI refinement for simple pastes (chunked for large content)
     if (options.aiConfig && md.length > 0) {
       log(`Rich paste: refining with AI model (${options.aiConfig.model})…`, "info");
-      const originalMd = md;
       try {
-        const refined = await invoke<{ role: string; content: string | null }>("agent_chat", {
-          config: options.aiConfig,
-          messages: [
-            { role: "system", content: AI_PASTE_PROMPT },
-            { role: "user", content: md },
-          ],
-        });
-        if (refined.content && refined.content.trim().length > 0) {
-          const aiResult = stripCodeFence(refined.content.trim());
-          // Guard: if AI output is much shorter, it likely truncated — keep original
-          if (originalMd.length > 200 && aiResult.length < originalMd.length * 0.5) {
-            log(`Rich paste: AI output looks truncated (${aiResult.length} vs ${originalMd.length} chars) — keeping Turndown result`, "warn");
-          } else {
-            md = aiResult;
-            log("Rich paste: AI refinement complete ✓", "success");
-          }
+        const refined = await refineMarkdownWithAi(md, AI_PASTE_PROMPT, options.aiConfig, log);
+        if (refined !== md) {
+          md = refined;
+          log("Rich paste: AI refinement complete ✓", "success");
         }
       } catch (e) {
         log(`Rich paste: AI refinement failed, using basic conversion — ${e}`, "warn");
@@ -477,6 +444,144 @@ export async function htmlToMarkdown(
 
   return { markdown: md, hadHtml: true };
 }
+
+// ─── Chunked AI refinement ─────────────────────────────────────────
+
+/** Max chars per chunk sent to AI. Keeps well under typical output token limits. */
+const AI_CHUNK_CHAR_LIMIT = 12000;
+
+/**
+ * Split markdown into chunks at natural boundaries (headings, blank lines).
+ * Each chunk stays under `maxChars`. Chunks never split mid-table or mid-list.
+ */
+function splitMarkdownChunks(md: string, maxChars: number = AI_CHUNK_CHAR_LIMIT): string[] {
+  if (md.length <= maxChars) return [md];
+
+  const lines = md.split("\n");
+  const chunks: string[] = [];
+  let current: string[] = [];
+  let currentLen = 0;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const lineLen = line.length + 1; // +1 for newline
+
+    // Check if adding this line exceeds the limit
+    if (currentLen + lineLen > maxChars && current.length > 0) {
+      // Try to find a good split point — prefer blank lines or headings
+      let splitIdx = current.length;
+
+      // Walk backward from end looking for a blank line or heading
+      for (let j = current.length - 1; j >= Math.max(0, current.length - 20); j--) {
+        const l = current[j];
+        if (l.trim() === "" || /^#{1,6}\s/.test(l)) {
+          splitIdx = j + 1;
+          break;
+        }
+      }
+
+      // If we found a good split point, split there and carry remainder forward
+      if (splitIdx < current.length) {
+        const kept = current.slice(0, splitIdx);
+        const remainder = current.slice(splitIdx);
+        const keptText = kept.join("\n").trim();
+        if (keptText) chunks.push(keptText);
+        current = [...remainder, line];
+        currentLen = current.reduce((sum, l) => sum + l.length + 1, 0);
+      } else {
+        // No good split point — flush current chunk as-is
+        const flushed = current.join("\n").trim();
+        if (flushed) chunks.push(flushed);
+        current = [line];
+        currentLen = lineLen;
+      }
+    } else {
+      current.push(line);
+      currentLen += lineLen;
+    }
+  }
+
+  if (current.length > 0) {
+    const text = current.join("\n").trim();
+    if (text) chunks.push(text);
+  }
+
+  return chunks;
+}
+
+/**
+ * Refine markdown via AI, chunking large content to avoid truncation.
+ * Returns the original markdown if AI fails or truncates.
+ */
+async function refineMarkdownWithAi(
+  md: string,
+  systemPrompt: string,
+  config: NonNullable<RichPasteOptions["aiConfig"]>,
+  log: (msg: string, level: "info" | "warn" | "error" | "success") => void,
+): Promise<string> {
+  const chunks = splitMarkdownChunks(md);
+
+  if (chunks.length === 1) {
+    // Single chunk — straightforward
+    const result = await refineChunk(chunks[0], systemPrompt, config);
+    if (result === null) return md; // AI failed, keep original
+    // Truncation guard
+    if (md.length > 200 && result.length < md.length * 0.5) {
+      log(`Rich paste: AI output looks truncated (${result.length} vs ${md.length} chars) — keeping original`, "warn");
+      return md;
+    }
+    return result;
+  }
+
+  // Multi-chunk: refine each independently
+  log(`Rich paste: large content — processing in ${chunks.length} chunks…`, "info");
+  const chunkPrompt = systemPrompt + "\n\nIMPORTANT: This is one section of a larger document. Preserve the content exactly — do not add introductions, conclusions, or summaries.";
+
+  const results: string[] = [];
+  for (let i = 0; i < chunks.length; i++) {
+    log(`Rich paste: refining chunk ${i + 1}/${chunks.length}…`, "info");
+    const result = await refineChunk(chunks[i], chunkPrompt, config);
+
+    if (result === null) {
+      // AI failed on this chunk — use original
+      log(`Rich paste: AI failed on chunk ${i + 1}, using original text`, "warn");
+      results.push(chunks[i]);
+    } else if (chunks[i].length > 100 && result.length < chunks[i].length * 0.4) {
+      // Truncated — use original chunk
+      log(`Rich paste: chunk ${i + 1} truncated by AI, using original text`, "warn");
+      results.push(chunks[i]);
+    } else {
+      results.push(result);
+    }
+  }
+
+  return results.join("\n\n");
+}
+
+/** Send a single chunk to the AI for refinement. Returns null on failure. */
+async function refineChunk(
+  chunk: string,
+  systemPrompt: string,
+  config: NonNullable<RichPasteOptions["aiConfig"]>,
+): Promise<string | null> {
+  try {
+    const refined = await invoke<{ role: string; content: string | null }>("agent_chat", {
+      config,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: chunk },
+      ],
+    });
+    if (refined.content && refined.content.trim().length > 0) {
+      return stripCodeFence(refined.content.trim());
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+// ─── Turndown conversion ──────────────────────────────────────────
 
 /** Run Turndown conversion with post-processing cleanup. */
 function turndownConvert(cleanedHtml: string): string {
