@@ -169,6 +169,34 @@ impl ChatMessage {
     pub fn text(&self) -> Option<&str> {
         self.content.as_ref().map(|c| c.text())
     }
+
+    /// Strip control characters (except \n, \r, \t) and lone surrogates from all
+    /// text in this message: content text, content parts text, and tool call
+    /// arguments. This prevents JSON parse errors on the server side.
+    pub fn sanitize(&mut self) {
+        fn clean(s: &str) -> String {
+            s.chars()
+                .filter(|c| !c.is_control() || matches!(c, '\n' | '\r' | '\t'))
+                .collect()
+        }
+        if let Some(content) = &mut self.content {
+            match content {
+                MessageContent::Text(t) => *t = clean(t),
+                MessageContent::Parts(parts) => {
+                    for p in parts {
+                        if let ContentPart::Text { text } = p {
+                            *text = clean(text);
+                        }
+                    }
+                }
+            }
+        }
+        if let Some(tool_calls) = &mut self.tool_calls {
+            for tc in tool_calls {
+                tc.function.arguments = clean(&tc.function.arguments);
+            }
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1128,9 +1156,14 @@ impl LlmClient {
         messages: &[ChatMessage],
         tools: Option<&[ToolDefinition]>,
     ) -> Result<ChatCompletionResponse, String> {
+        let mut clean_messages = messages.to_vec();
+        for msg in &mut clean_messages {
+            msg.sanitize();
+        }
+
         // Codex/Pro models require the Responses API
         if self.needs_responses_api() {
-            return self.chat_responses(messages, tools).await;
+            return self.chat_responses(&clean_messages, tools).await;
         }
 
         let body = ChatCompletionRequest {
@@ -1145,7 +1178,7 @@ impl LlmClient {
                     }
                 }
             },
-            messages: messages.to_vec(),
+            messages: clean_messages,
             tools: tools.map(|t| t.to_vec()),
             stream: None,
         };
@@ -1231,6 +1264,13 @@ impl LlmClient {
         let tool_defs = tools.map(|t| t.to_vec());
 
         let mut final_messages = messages.to_vec();
+
+        // Sanitize all messages before serialization to prevent server-side
+        // JSON parse errors from control characters in tool results, user input,
+        // or model-generated content.
+        for msg in &mut final_messages {
+            msg.sanitize();
+        }
 
         // Build the appropriate request body and URL
         let serialize_body = |msgs: &[ChatMessage]| -> String {

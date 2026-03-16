@@ -242,23 +242,10 @@ fn run_with_depth<'a>(
             let mut stream = match stream_result {
                 Ok(s) => s,
                 Err(ref e) if e.contains("400") => {
-                    // 400 Bad Request — often caused by invalid characters or malformed
-                    // content in messages. Sanitize everything and retry once.
-                    log::warn!("[agent] 400 error, sanitizing messages and retrying: {}", e);
-                    emit(AgentEvent::Status { message: "Fixing message format…".into() });
-                    for msg in &mut messages {
-                        if let Some(content) = &mut msg.content {
-                            if let MessageContent::Text(t) = content {
-                                *t = sanitize_for_api(t);
-                            }
-                        }
-                        // Also sanitize tool call arguments (model may have produced bad JSON)
-                        if let Some(tool_calls) = &mut msg.tool_calls {
-                            for tc in tool_calls {
-                                tc.function.arguments = sanitize_for_api(&tc.function.arguments);
-                            }
-                        }
-                    }
+                    // 400 Bad Request — retry once (chat_stream already sanitizes
+                    // messages, but transient issues can still occur).
+                    log::warn!("[agent] 400 error, retrying once: {}", e);
+                    emit(AgentEvent::Status { message: "Retrying request…".into() });
                     match client.chat_stream(&messages, Some(&tool_defs)).await {
                         Ok(s) => s,
                         Err(e2) => {
