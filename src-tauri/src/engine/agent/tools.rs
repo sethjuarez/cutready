@@ -1370,7 +1370,8 @@ fn critique_visual_doc(visual: &Value) -> Result<(Vec<String>, Vec<String>), Str
         ));
     }
 
-    // 4. Overlap detection (text-on-text only — most impactful)
+    // 4. Overlap detection (text-on-text only — non-blocking suggestion since
+    // LLMs struggle to fix coordinate math reliably)
     let text_bboxes: Vec<&BBox> = bboxes.iter().filter(|b| b.label.starts_with("text")).collect();
     for i in 0..text_bboxes.len() {
         for j in (i + 1)..text_bboxes.len() {
@@ -1379,7 +1380,7 @@ fn critique_visual_doc(visual: &Value) -> Result<(Vec<String>, Vec<String>), Str
             let area = a.overlap_area(b);
             let min_area = (a.w * a.h).min(b.w * b.h);
             if min_area > 0.0 && area / min_area > 0.3 {
-                issues.push(format!(
+                suggestions.push(format!(
                     "TEXT_OVERLAP: {} overlaps with {} — move them apart or remove one.",
                     a.label, b.label
                 ));
@@ -1387,7 +1388,7 @@ fn critique_visual_doc(visual: &Value) -> Result<(Vec<String>, Vec<String>), Str
         }
     }
 
-    // 5. Margin violations (text only — shapes/rects can go edge-to-edge)
+    // 5. Margin violations (text only — non-blocking suggestion)
     let margin = 30.0;
     for bbox in &bboxes {
         if bbox.label.starts_with("text") {
@@ -1395,7 +1396,7 @@ fn critique_visual_doc(visual: &Value) -> Result<(Vec<String>, Vec<String>), Str
                 || bbox.x + bbox.w > canvas_w - margin
                 || bbox.y + bbox.h > canvas_h - margin
             {
-                issues.push(format!(
+                suggestions.push(format!(
                     "MARGIN_VIOLATION: {} extends beyond {}px margin (at {:.0},{:.0} size {:.0}x{:.0}). Keep content inside the safe area.",
                     bbox.label, margin, bbox.x, bbox.y, bbox.w, bbox.h
                 ));
