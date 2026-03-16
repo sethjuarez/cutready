@@ -810,6 +810,56 @@ fn validate_dsl_node(node: &Value, path: &str, errors: &mut Vec<String>) {
                 }
             }
         }
+        // polygon requires points array with ≥ 3 entries, each [number, number]
+        if t == "polygon" {
+            match obj.get("points").and_then(|v| v.as_array()) {
+                Some(pts) => {
+                    if pts.len() < 3 {
+                        errors.push(format!("{path}.points: polygon requires at least 3 points (got {})", pts.len()));
+                    }
+                    for (i, pt) in pts.iter().enumerate() {
+                        if let Some(arr) = pt.as_array() {
+                            if arr.len() != 2 || !arr[0].is_number() || !arr[1].is_number() {
+                                errors.push(format!("{path}.points[{i}]: each point must be [number, number]"));
+                            }
+                        } else {
+                            errors.push(format!("{path}.points[{i}]: each point must be [number, number], got {}", node_type_name(pt)));
+                        }
+                    }
+                }
+                None => {
+                    if obj.contains_key("points") {
+                        errors.push(format!("{path}.points: must be an array of [number, number] pairs"));
+                    } else {
+                        errors.push(format!("{path}: polygon requires a \"points\" array"));
+                    }
+                }
+            }
+        }
+        // line requires x1, y1, x2, y2 as numbers
+        if t == "line" || t == "arrow" {
+            for coord in &["x1", "y1", "x2", "y2"] {
+                match obj.get(*coord) {
+                    Some(v) if v.is_number() => {}
+                    Some(_) => errors.push(format!("{path}.{coord}: must be a number")),
+                    None => errors.push(format!("{path}: {t} requires \"{coord}\"")),
+                }
+            }
+        }
+        // bezierCurve requires points array, each [number, number]
+        if t == "bezierCurve" {
+            if let Some(pts) = obj.get("points").and_then(|v| v.as_array()) {
+                for (i, pt) in pts.iter().enumerate() {
+                    if let Some(arr) = pt.as_array() {
+                        if arr.len() != 2 || !arr[0].is_number() || !arr[1].is_number() {
+                            errors.push(format!("{path}.points[{i}]: each point must be [number, number]"));
+                        }
+                    } else {
+                        errors.push(format!("{path}.points[{i}]: each point must be [number, number], got {}", node_type_name(pt)));
+                    }
+                }
+            }
+        }
         // fadeIn/fadeOut/draw must be positive (≥ 1), not zero
         for anim_prop in &["fadeIn", "fadeOut", "draw"] {
             if let Some(v) = obj.get(*anim_prop) {
@@ -1625,5 +1675,103 @@ mod tests {
         });
         let result = exec_critique_visual(&json!({ "visual": visual }));
         assert!(result.contains("INNER_CARD_RECT"), "Should catch inner card rect with margins: {result}");
+    }
+
+    #[test]
+    fn validate_dsl_catches_bad_polygon_points() {
+        // Points as objects instead of [number, number] arrays
+        let visual = json!({
+            "version": "1.0",
+            "root": {
+                "type": "player", "width": 960, "height": 540, "fps": 30, "durationInFrames": 60,
+                "background": "$background",
+                "children": [
+                    { "type": "polygon", "points": [{"x": 0, "y": 0}, {"x": 100, "y": 0}, {"x": 50, "y": 100}], "fill": "$accent" }
+                ]
+            }
+        });
+        let result = exec_validate_dsl(&json!({ "visual": visual }));
+        assert!(result.contains("point must be [number, number]"), "Should catch object points: {result}");
+    }
+
+    #[test]
+    fn validate_dsl_accepts_valid_polygon() {
+        let visual = json!({
+            "version": "1.0",
+            "root": {
+                "type": "player", "width": 960, "height": 540, "fps": 30, "durationInFrames": 60,
+                "background": "$background",
+                "children": [
+                    { "type": "polygon", "points": [[0, 0], [100, 0], [50, 100]], "fill": "$accent" }
+                ]
+            }
+        });
+        let result = exec_validate_dsl(&json!({ "visual": visual }));
+        assert!(result.contains("Valid"), "Should accept valid polygon: {result}");
+    }
+
+    #[test]
+    fn validate_dsl_catches_polygon_too_few_points() {
+        let visual = json!({
+            "version": "1.0",
+            "root": {
+                "type": "player", "width": 960, "height": 540, "fps": 30, "durationInFrames": 60,
+                "background": "$background",
+                "children": [
+                    { "type": "polygon", "points": [[0, 0], [100, 0]], "fill": "$accent" }
+                ]
+            }
+        });
+        let result = exec_validate_dsl(&json!({ "visual": visual }));
+        assert!(result.contains("at least 3 points"), "Should require 3+ points: {result}");
+    }
+
+    #[test]
+    fn validate_dsl_catches_missing_line_coords() {
+        let visual = json!({
+            "version": "1.0",
+            "root": {
+                "type": "player", "width": 960, "height": 540, "fps": 30, "durationInFrames": 60,
+                "background": "$background",
+                "children": [
+                    { "type": "line", "x1": 0, "y1": 0, "stroke": "$foreground" }
+                ]
+            }
+        });
+        let result = exec_validate_dsl(&json!({ "visual": visual }));
+        assert!(result.contains("requires \"x2\""), "Should catch missing x2: {result}");
+        assert!(result.contains("requires \"y2\""), "Should catch missing y2: {result}");
+    }
+
+    #[test]
+    fn validate_dsl_catches_arrow_missing_coords() {
+        let visual = json!({
+            "version": "1.0",
+            "root": {
+                "type": "player", "width": 960, "height": 540, "fps": 30, "durationInFrames": 60,
+                "background": "$background",
+                "children": [
+                    { "type": "arrow", "stroke": "$foreground" }
+                ]
+            }
+        });
+        let result = exec_validate_dsl(&json!({ "visual": visual }));
+        assert!(result.contains("requires \"x1\""), "Should catch missing x1: {result}");
+    }
+
+    #[test]
+    fn validate_dsl_catches_bezier_bad_points() {
+        let visual = json!({
+            "version": "1.0",
+            "root": {
+                "type": "player", "width": 960, "height": 540, "fps": 30, "durationInFrames": 60,
+                "background": "$background",
+                "children": [
+                    { "type": "bezierCurve", "points": [[0, 0], "bad", [100, 200]], "stroke": "$foreground" }
+                ]
+            }
+        });
+        let result = exec_validate_dsl(&json!({ "visual": visual }));
+        assert!(result.contains("point must be [number, number]"), "Should catch bad bezier point: {result}");
     }
 }

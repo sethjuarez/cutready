@@ -122,7 +122,8 @@ impl<'de> Deserialize<'de> for MessageContent {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatMessage {
     pub role: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    /// Content is serialized as `null` (not omitted) when None. The OpenAI API
+    /// requires `"content": null` on assistant messages that have tool_calls.
     pub content: Option<MessageContent>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_calls: Option<Vec<ToolCall>>,
@@ -531,6 +532,51 @@ impl LlmClient {
             base[..idx].to_string()
         } else {
             base.to_string()
+        }
+    }
+
+    /// Extract byte offset from a 400 error response and log the surrounding
+    /// body context for debugging. Looks for patterns like `('body', 81960)` in
+    /// Pydantic-style errors.
+    fn log_body_context_at_error(body: &str, error_text: &str) {
+        // Parse byte offset from Pydantic error: ('body', 81960) or ("body", 81960)
+        let offset = error_text
+            .find("body")
+            .and_then(|pos| {
+                // skip past 'body' + quote + comma + space(s)
+                let rest = &error_text[pos + 4..];
+                let rest = rest.trim_start_matches(|c: char| c == '\'' || c == '"' || c == ',' || c == ' ' || c == ')');
+                // Now rest should start with the number
+                let num_end = rest.find(|c: char| !c.is_ascii_digit()).unwrap_or(rest.len());
+                if num_end > 0 {
+                    rest[..num_end].parse::<usize>().ok()
+                } else {
+                    None
+                }
+            });
+
+        if let Some(offset) = offset {
+            let start = offset.saturating_sub(200);
+            let end = (offset + 200).min(body.len());
+            // Find safe char boundaries
+            let safe_start = (start..=offset).rev()
+                .find(|&i| body.is_char_boundary(i))
+                .unwrap_or(0);
+            let safe_end = (end..=body.len())
+                .find(|&i| body.is_char_boundary(i))
+                .unwrap_or(body.len());
+            log::error!(
+                "[llm] 400 body context at byte {} (body len {}):\n<<<\n{}\n>>>",
+                offset,
+                body.len(),
+                &body[safe_start..safe_end]
+            );
+
+            // Write the full body to a temp file for post-mortem analysis
+            let tmp = std::env::temp_dir().join("cutready-400-body.json");
+            if let Ok(()) = std::fs::write(&tmp, body) {
+                log::error!("[llm] full request body saved to: {}", tmp.display());
+            }
         }
     }
 
@@ -1183,13 +1229,15 @@ impl LlmClient {
             stream: None,
         };
 
+        let body_json = serde_json::to_string(&body).unwrap_or_default();
         let url = self.chat_url();
         let resp = self
             .http
             .post(&url)
             .headers(self.auth_headers())
             .timeout(std::time::Duration::from_secs(300))
-            .json(&body)
+            .header(reqwest::header::CONTENT_TYPE, "application/json")
+            .body(body_json.as_bytes().to_vec())
             .send()
             .await
             .map_err(|e| format!("Chat request failed: {e}"))?;
@@ -1197,6 +1245,9 @@ impl LlmClient {
         if !resp.status().is_success() {
             let status = resp.status();
             let text = resp.text().await.unwrap_or_default();
+            if status == 400 {
+                Self::log_body_context_at_error(&body_json, &text);
+            }
             return Err(format!("Chat API error ({status}) [url={url}]: {text}"));
         }
 
@@ -1415,12 +1466,14 @@ impl LlmClient {
         // No per-request timeout for streaming — the client-level connect_timeout
         // handles unreachable endpoints, and the stream can legitimately run for
         // many minutes as chunks arrive progressively.
+        // Keep body_json alive for diagnostics on 400 errors.
+        let body_bytes = body_json.as_bytes().to_vec();
         let resp = self
             .http
             .post(&url)
             .headers(self.auth_headers())
             .header(reqwest::header::CONTENT_TYPE, "application/json")
-            .body(body_json)
+            .body(body_bytes)
             .send()
             .await
             .map_err(|e| format!("Stream request failed: {e}"))?;
@@ -1434,6 +1487,13 @@ impl LlmClient {
             }
             let detail = &text[..end];
             log::error!("[llm] API error {}: {}", status, detail);
+
+            // On 400 errors, try to extract the byte offset from the error and
+            // log the surrounding body context for debugging.
+            if status == 400 {
+                Self::log_body_context_at_error(&body_json, detail);
+            }
+
             return Err(format!("Chat stream error ({status}): {detail}"));
         }
 
@@ -1975,5 +2035,47 @@ mod tests {
         let chunks = LlmClient::parse_responses_sse_event(&delta, &mut state);
         let tc = &chunks[0].choices[0].delta.tool_calls.as_ref().unwrap()[0];
         assert_eq!(tc.index, 1); // Correctly mapped to tool call index 1
+    }
+
+    // -----------------------------------------------------------------------
+    // Body context extraction for 400 diagnostics
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn log_body_context_extracts_pydantic_offset() {
+        // This just verifies it doesn't panic. The actual logging goes to log::error!
+        // which won't show in tests, but the function should handle the format correctly.
+        let body = "a".repeat(100_000);
+        let error = "{'type': 'json_invalid', 'loc': ('body', 81960), 'msg': 'JSON decode error'}";
+        // Should not panic
+        LlmClient::log_body_context_at_error(&body, error);
+    }
+
+    #[test]
+    fn log_body_context_handles_no_offset() {
+        let body = "some body";
+        let error = "Unknown error";
+        // Should not panic — no offset found, nothing logged
+        LlmClient::log_body_context_at_error(&body, error);
+    }
+
+    #[test]
+    fn assistant_message_content_null_serializes() {
+        // Verify that content: None serializes as `null`, not omitted
+        let msg = ChatMessage {
+            role: "assistant".into(),
+            content: None,
+            tool_calls: Some(vec![ToolCall {
+                id: "call_1".into(),
+                call_type: "function".into(),
+                function: FunctionCall {
+                    name: "test".into(),
+                    arguments: "{}".into(),
+                },
+            }]),
+            tool_call_id: None,
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        assert!(json.contains("\"content\":null"), "content should be null, not omitted: {json}");
     }
 }
