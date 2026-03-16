@@ -50,7 +50,21 @@ pub async fn update_sketch(
         sketch.description = desc;
     }
     if let Some(r) = rows {
-        sketch.rows = r;
+        // Preserve visual and design_plan fields that may have been set by the
+        // AI agent on disk — the frontend editor doesn't manage these fields,
+        // so incoming rows may have them as None even though the file has data.
+        let mut merged = r;
+        for (i, row) in merged.iter_mut().enumerate() {
+            if let Some(existing) = sketch.rows.get(i) {
+                if row.visual.is_none() && existing.visual.is_some() {
+                    row.visual = existing.visual.clone();
+                }
+                if row.design_plan.is_none() && existing.design_plan.is_some() {
+                    row.design_plan = existing.design_plan.clone();
+                }
+            }
+        }
+        sketch.rows = merged;
     }
     sketch.updated_at = chrono::Utc::now();
 
