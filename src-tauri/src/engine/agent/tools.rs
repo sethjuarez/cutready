@@ -1219,7 +1219,7 @@ fn extract_bboxes(children: &[Value], offset_x: f64, offset_y: f64) -> Vec<BBox>
                 let fs = obj.get("fontSize").and_then(|v| v.as_f64()).unwrap_or(16.0);
                 let content = obj.get("content").and_then(|v| v.as_str()).unwrap_or("");
                 let char_width = fs * 0.55;
-                let text_w = content.len() as f64 * char_width;
+                let text_w = content.chars().count() as f64 * char_width;
                 let text_h = fs * 1.3;
                 let anchor = obj.get("textAnchor").and_then(|v| v.as_str()).unwrap_or("start");
                 let bx = match anchor {
@@ -1257,7 +1257,8 @@ fn extract_bboxes(children: &[Value], offset_x: f64, offset_y: f64) -> Vec<BBox>
 }
 
 fn truncate(s: &str, max: usize) -> String {
-    if s.len() <= max { s.to_string() } else { format!("{}…", &s[..max]) }
+    let chars: String = s.chars().take(max).collect();
+    if chars.len() < s.len() { format!("{chars}…") } else { chars }
 }
 
 /// Run the critique analysis on a visual DSL document.
@@ -1289,15 +1290,15 @@ fn critique_visual_doc(visual: &Value) -> Result<(Vec<String>, Vec<String>), Str
 
     // ── Issue checks ──────────────────────────────────────────────────
 
-    // 1. Element count (relaxed — rich visuals are fine, 40+ is excessive)
-    if all_nodes.len() > 40 {
+    // 1. Element count (relaxed — rich visuals are fine, 70+ is excessive)
+    if all_nodes.len() > 60 {
         issues.push(format!(
-            "TOO_MANY_ELEMENTS: {} elements total (max recommended: 35). Simplify — remove decorative elements or combine related items into groups.",
+            "TOO_MANY_ELEMENTS: {} elements total (max recommended: 60). Simplify — remove decorative elements or combine related items into groups.",
             all_nodes.len()
         ));
-    } else if all_nodes.len() > 35 {
+    } else if all_nodes.len() > 45 {
         suggestions.push(format!(
-            "ELEMENT_COUNT: {} elements — consider trimming to ~30 for cleaner design.", all_nodes.len()
+            "ELEMENT_COUNT: {} elements — consider trimming to ~40 for cleaner design.", all_nodes.len()
         ));
     }
 
@@ -1336,7 +1337,7 @@ fn critique_visual_doc(visual: &Value) -> Result<(Vec<String>, Vec<String>), Str
                 "TINY_FONT: text '{}' has fontSize {:.0} — minimum is 14. Increase to at least 14 for annotations, 18 for labels, 32 for titles.",
                 truncate(&tn.content, 25), tn.font_size
             ));
-        } else if tn.font_size < 18.0 && tn.content.len() < 30 {
+        } else if tn.font_size < 18.0 && tn.content.chars().count() < 30 {
             // Short text that could be a label — suggest bigger
             suggestions.push(format!(
                 "SMALL_LABEL: text '{}' is fontSize {:.0} — consider 18+ for better readability.",
@@ -1428,8 +1429,10 @@ fn critique_visual_doc(visual: &Value) -> Result<(Vec<String>, Vec<String>), Str
             let overshoot_bottom = (tb.y + tb.h) - (container.y + container.h);
             let max_overshoot = overshoot_left.max(overshoot_right).max(overshoot_bottom);
             if max_overshoot > 10.0 {
-                issues.push(format!(
-                    "TEXT_OVERFLOW: {} overflows its container rect by {:.0}px. Shorten the text, reduce fontSize, or widen the container.",
+                // Downgraded to suggestion — width estimation is approximate (monospace assumption)
+                // and produces false positives that waste LLM rounds
+                suggestions.push(format!(
+                    "TEXT_OVERFLOW: {} overflows its container rect by {:.0}px. Consider shortening the text, reducing fontSize, or widening the container.",
                     tb.label, max_overshoot
                 ));
             }

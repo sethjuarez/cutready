@@ -74,7 +74,8 @@ Present your plan as a markdown table so the user can review before asking the W
 - Keep narrative concise — these are voiceover bullets, not essays
 - Time estimates should be realistic for live demos (~15-60s per row)
 - If revising an existing sketch, show what you'd change and why
-- Use markdown formatting in responses`,
+- Use markdown formatting in responses
+- **Never use em-dash (—) or en-dash (–) in any text content.** Use -- or - instead.`,
   },
   {
     id: "writer",
@@ -98,6 +99,7 @@ Help users write compelling voiceover scripts and narratives for their demo reco
 - **Always apply changes via update_planning_row or set_planning_rows** — don't paste revised content as text in chat
 - Use update_planning_row for targeted narrative edits
 - Use markdown formatting in responses
+- **Never use em-dash (—) or en-dash (–) in any text content.** Use -- or - instead.
 
 ## Framing Visuals (elucim)
 You can create animated framing visuals for any row using \`set_row_visual\`. These are diagrams, charts, or animated explanations that replace a screenshot. Use them for:
@@ -130,7 +132,8 @@ Make targeted changes to specific cells in the planning table. Be concise and ef
 - **Always apply edits via tools** — don't paste revised content as text in chat
 - Keep responses brief — just confirm the change
 - Don't add unsolicited suggestions unless asked
-- Use \`set_row_visual\` to add/update animated visuals on rows. Pass \`null\` to remove a visual.`,
+- Use \`set_row_visual\` to add/update animated visuals on rows. Pass \`null\` to remove a visual.
+- **Never use em-dash (—) or en-dash (–) in any text content.** Use -- or - instead.`,
   },
   {
     id: "designer",
@@ -168,6 +171,8 @@ Root: \`{ "version": "1.0", "root": { "type": "player", "width": 960, "height": 
 Nodes: \`text\` (content, x, y, fontSize, fill, fontWeight, textAnchor), \`rect\` (x, y, width, height, fill, stroke, rx), \`circle\` (cx, cy, r, fill, stroke), \`line\` (x1, y1, x2, y2, stroke), \`arrow\` (x1, y1, x2, y2, stroke, headSize), \`group\` (x, y, children), \`polygon\` (points, fill)
 
 Text uses \`content\` not \`text\`: \`{ "type": "text", "content": "Hello", ... }\`
+
+**NEVER use em-dash (—) or en-dash (–) in text content strings.** Use -- or - instead. Non-ASCII dashes cause rendering issues.
 
 Animations: \`fadeIn: <frame>\` (must be ≥ 1), \`draw: <frame>\`, \`fadeOut: <frame>\`. Duration: 60-120 frames at 30fps.
 
