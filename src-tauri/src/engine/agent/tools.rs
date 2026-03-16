@@ -438,10 +438,10 @@ pub fn execute_tool(call: &ToolCall, project_root: &Path, vision_enabled: bool) 
     result
 }
 
-/// Extract a JSON object from a tool argument field. LLMs sometimes stringify
-/// the object instead of passing it inline, so this handles both cases:
-///   - `"visual": { ... }` → returns the object directly
-///   - `"visual": "{ ... }"` → parses the string as JSON and returns it
+/// Extract a JSON object from a tool argument field. Handles three LLM behaviors:
+///   1. `{"visual": { ... }}` → normal, returns the nested object
+///   2. `{"visual": "{ ... }"}` → stringified, parses and returns
+///   3. `{"version": "1.0", "root": {...}}` → flattened (LLM passed DSL as args directly)
 fn extract_json_object<'a>(args: &'a Value, key: &str) -> Result<std::borrow::Cow<'a, Value>, String> {
     match args.get(key) {
         Some(v) if v.is_object() => Ok(std::borrow::Cow::Borrowed(v)),
@@ -454,7 +454,15 @@ fn extract_json_object<'a>(args: &'a Value, key: &str) -> Result<std::borrow::Co
             }
         }
         Some(_) => Err(format!("Error: '{key}' must be a JSON object (the elucim DSL document)")),
-        None => Err(format!("Error: missing required '{key}' argument")),
+        None => {
+            // Fallback: LLM may have flattened the object into args directly.
+            // Detect DSL documents by checking for version+root fields.
+            if args.is_object() && (args.get("version").is_some() || args.get("root").is_some()) {
+                Ok(std::borrow::Cow::Borrowed(args))
+            } else {
+                Err(format!("Error: missing required '{key}' argument"))
+            }
+        }
     }
 }
 
@@ -1825,6 +1833,22 @@ mod tests {
     fn validate_dsl_rejects_bad_string() {
         let result = exec_validate_dsl(&json!({ "visual": "not valid json {" }));
         assert!(result.contains("not valid JSON"), "Should report parse error: {result}");
+    }
+
+    #[test]
+    fn validate_dsl_accepts_flattened_args() {
+        // LLM passes the DSL directly as args (no "visual" wrapper)
+        let result = exec_validate_dsl(&json!({
+            "version": "1.0",
+            "root": {
+                "type": "player", "width": 960, "height": 540, "fps": 30, "durationInFrames": 60,
+                "background": "$background",
+                "children": [
+                    { "type": "text", "content": "Hello", "x": 480, "y": 270, "fontSize": 34, "fill": "$foreground", "textAnchor": "middle" }
+                ]
+            }
+        }));
+        assert!(result.contains("Valid"), "Should auto-detect flattened DSL: {result}");
     }
 
     #[test]
