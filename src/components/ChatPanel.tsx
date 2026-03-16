@@ -164,12 +164,13 @@ Animations: \`fadeIn: <frame>\` (must be ≥ 1), \`draw: <frame>\`, \`fadeOut: <
 
 ## Layout & Readability Rules
 
-1. **Minimum font sizes:** titles ≥ 32px, labels ≥ 18px, annotations ≥ 14px.
-2. **No overlapping.** Every element must have clear space. Plan a mental grid before placing.
-3. **Margins:** keep 60px from all edges. Content area is roughly 840×420.
-4. **Spacing:** at least 20px between elements, 40px between groups.
-5. **One key concept per visual** — illustrated richly with supporting elements.
-6. **Text inside containers:** When placing text inside a rect, ensure the text fits. Approximate text width as \`chars × fontSize × 0.55\`. For a 200px-wide box, keep labels under ~18 chars at fontSize 18.
+1. **Fill the canvas edge-to-edge.** Content should use the FULL 960×540 area. Do NOT add an inner "card" rect with margins — the root background IS the canvas. Place elements across the entire width and height.
+2. **Minimum font sizes:** titles ≥ 32px, labels ≥ 18px, annotations ≥ 14px.
+3. **No overlapping.** Every element must have clear space. Plan a mental grid before placing.
+4. **Text safe area:** keep text at least 30px from edges for readability. Shapes, rects, and decorative elements CAN extend to the very edge (x: 0, y: 0).
+5. **Spacing:** at least 20px between elements, 40px between groups.
+6. **One key concept per visual** — illustrated richly with supporting elements.
+7. **Text inside containers:** When placing text inside a rect, ensure the text fits. Approximate text width as \`chars × fontSize × 0.55\`. For a 200px-wide box, keep labels under ~18 chars at fontSize 18.
 
 ## Color Rules — Semantic Tokens REQUIRED
 
@@ -194,12 +195,12 @@ Pattern: accent hex for strokes/labels, semi-transparent rgba for container fill
 ## Layout Patterns
 
 **Centered title + diagram below:**
-- Title at (480, 55), fontSize 34, fill \`$foreground\`, textAnchor "middle"
-- Subtitle at (480, 87), fontSize 16, fill \`$muted\`
-- Main content in the 60-900 x 110-490 area
+- Title at (480, 50), fontSize 34, fill \`$foreground\`, textAnchor "middle"
+- Subtitle at (480, 84), fontSize 16, fill \`$muted\`
+- Main content in the 40-920 x 110-500 area
 
 **Flow diagram (left to right):**
-- 2-4 boxes connected by arrows, evenly spaced
+- 2-4 boxes connected by arrows, spread across the full width
 - Each box: rect with \`rx: 14\`, semi-transparent fill + colored stroke
 - Label centered inside each box
 
@@ -215,22 +216,22 @@ Pattern: accent hex for strokes/labels, semi-transparent rgba for container fill
     "type": "player", "width": 960, "height": 540, "fps": 30, "durationInFrames": 90,
     "background": "$background",
     "children": [
-      { "type": "rect", "x": 30, "y": 24, "width": 900, "height": 492, "fill": "$surface", "rx": 20, "stroke": "$border", "strokeWidth": 1 },
-      { "type": "text", "content": "Microsoft Foundry", "x": 480, "y": 72, "fontSize": 38, "fill": "$foreground", "fontWeight": "900", "textAnchor": "middle", "fadeIn": 4 },
-      { "type": "text", "content": "from models to production agents", "x": 480, "y": 106, "fontSize": 18, "fill": "$muted", "fontWeight": "600", "textAnchor": "middle", "fadeIn": 8 },
-      { "type": "rect", "x": 80, "y": 150, "width": 240, "height": 100, "fill": "rgba(167,139,250,0.10)", "stroke": "#a78bfa", "strokeWidth": 2, "rx": 14, "fadeIn": 14 },
-      { "type": "text", "content": "Models", "x": 200, "y": 200, "fontSize": 22, "fill": "#a78bfa", "fontWeight": "700", "textAnchor": "middle", "fadeIn": 16 },
-      { "type": "text", "content": "GPT · Claude · Gemini", "x": 200, "y": 228, "fontSize": 14, "fill": "$muted", "textAnchor": "middle", "fadeIn": 18 },
-      { "type": "arrow", "x1": 340, "y1": 200, "x2": 400, "y2": 200, "stroke": "#38bdf8", "strokeWidth": 2, "headSize": 10, "draw": 24 },
-      { "type": "rect", "x": 420, "y": 140, "width": 280, "height": 120, "fill": "rgba(34,197,94,0.08)", "stroke": "#22c55e", "strokeWidth": 2, "rx": 14, "fadeIn": 30 },
-      { "type": "text", "content": "Foundry", "x": 560, "y": 186, "fontSize": 26, "fill": "#22c55e", "fontWeight": "800", "textAnchor": "middle", "fadeIn": 32 },
-      { "type": "text", "content": "Build  ·  Deploy  ·  Operate", "x": 560, "y": 218, "fontSize": 16, "fill": "$muted", "fontWeight": "600", "textAnchor": "middle", "fadeIn": 36 },
-      { "type": "arrow", "x1": 720, "y1": 200, "x2": 780, "y2": 200, "stroke": "#38bdf8", "strokeWidth": 2, "headSize": 10, "draw": 42 },
-      { "type": "rect", "x": 780, "y": 155, "width": 120, "height": 90, "fill": "$surface", "stroke": "$border", "strokeWidth": 1, "rx": 14, "fadeIn": 48 },
-      { "type": "text", "content": "Production", "x": 840, "y": 196, "fontSize": 18, "fill": "$foreground", "fontWeight": "700", "textAnchor": "middle", "fadeIn": 50 },
-      { "type": "text", "content": "Agent", "x": 840, "y": 220, "fontSize": 18, "fill": "$foreground", "fontWeight": "700", "textAnchor": "middle", "fadeIn": 50 },
-      { "type": "line", "x1": 80, "y1": 400, "x2": 880, "y2": 400, "stroke": "$border", "strokeWidth": 1, "fadeIn": 56 },
-      { "type": "text", "content": "secure  ·  reliable  ·  governable", "x": 480, "y": 440, "fontSize": 20, "fill": "$muted", "fontWeight": "700", "textAnchor": "middle", "fadeIn": 60 }
+      { "type": "text", "content": "Microsoft Foundry", "x": 480, "y": 68, "fontSize": 38, "fill": "$foreground", "fontWeight": "900", "textAnchor": "middle", "fadeIn": 4 },
+      { "type": "text", "content": "from models to production agents", "x": 480, "y": 104, "fontSize": 18, "fill": "$muted", "fontWeight": "600", "textAnchor": "middle", "fadeIn": 8 },
+      { "type": "line", "x1": 0, "y1": 130, "x2": 960, "y2": 130, "stroke": "$border", "strokeWidth": 1, "fadeIn": 10 },
+      { "type": "rect", "x": 40, "y": 170, "width": 240, "height": 120, "fill": "rgba(167,139,250,0.10)", "stroke": "#a78bfa", "strokeWidth": 2, "rx": 14, "fadeIn": 14 },
+      { "type": "text", "content": "Models", "x": 160, "y": 220, "fontSize": 22, "fill": "#a78bfa", "fontWeight": "700", "textAnchor": "middle", "fadeIn": 16 },
+      { "type": "text", "content": "GPT · Claude · Gemini", "x": 160, "y": 250, "fontSize": 14, "fill": "$muted", "textAnchor": "middle", "fadeIn": 18 },
+      { "type": "arrow", "x1": 300, "y1": 230, "x2": 370, "y2": 230, "stroke": "#38bdf8", "strokeWidth": 2, "headSize": 10, "draw": 24 },
+      { "type": "rect", "x": 380, "y": 160, "width": 280, "height": 140, "fill": "rgba(34,197,94,0.08)", "stroke": "#22c55e", "strokeWidth": 2, "rx": 14, "fadeIn": 30 },
+      { "type": "text", "content": "Foundry", "x": 520, "y": 216, "fontSize": 26, "fill": "#22c55e", "fontWeight": "800", "textAnchor": "middle", "fadeIn": 32 },
+      { "type": "text", "content": "Build  ·  Deploy  ·  Operate", "x": 520, "y": 248, "fontSize": 16, "fill": "$muted", "fontWeight": "600", "textAnchor": "middle", "fadeIn": 36 },
+      { "type": "arrow", "x1": 680, "y1": 230, "x2": 740, "y2": 230, "stroke": "#38bdf8", "strokeWidth": 2, "headSize": 10, "draw": 42 },
+      { "type": "rect", "x": 750, "y": 180, "width": 170, "height": 100, "fill": "$surface", "stroke": "$border", "strokeWidth": 1, "rx": 14, "fadeIn": 48 },
+      { "type": "text", "content": "Production", "x": 835, "y": 222, "fontSize": 18, "fill": "$foreground", "fontWeight": "700", "textAnchor": "middle", "fadeIn": 50 },
+      { "type": "text", "content": "Agent", "x": 835, "y": 248, "fontSize": 18, "fill": "$foreground", "fontWeight": "700", "textAnchor": "middle", "fadeIn": 50 },
+      { "type": "rect", "x": 0, "y": 400, "width": 960, "height": 140, "fill": "$surface", "fadeIn": 54 },
+      { "type": "text", "content": "secure  ·  reliable  ·  governable", "x": 480, "y": 470, "fontSize": 22, "fill": "$muted", "fontWeight": "700", "textAnchor": "middle", "fadeIn": 60 }
     ]
   }
 }
@@ -238,6 +239,7 @@ Pattern: accent hex for strokes/labels, semi-transparent rgba for container fill
 
 ## Common Mistakes — DO NOT
 - ❌ Add a background rectangle that fills the canvas — root \`background\` already does this
+- ❌ Add an inner "card" rect with margins (e.g. x:30, y:24, w:900, h:492) — use the full canvas edge-to-edge
 - ❌ Use fontSize below 14 — unreadable
 - ❌ Place text on top of other text — check y coordinates have enough spacing
 - ❌ Put long text inside a small box — text will overflow. Measure: width ≈ chars × fontSize × 0.55

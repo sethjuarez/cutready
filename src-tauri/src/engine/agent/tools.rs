@@ -1156,6 +1156,17 @@ fn exec_critique_visual(args: &Value) -> String {
                 );
             }
         }
+        // Catch inner "card" rect with margins that doesn't fill edge-to-edge
+        if is_rect && rw >= canvas_w * 0.85 && rh >= canvas_h * 0.85
+            && (rx > 10.0 || ry > 10.0)
+        {
+            let fill = first.get("fill").and_then(|v| v.as_str()).unwrap_or("");
+            if fill.starts_with('$') {
+                issues.push(
+                    "INNER_CARD_RECT: first child is a near-full-canvas rect with margins — REMOVE it. Content should fill the canvas edge-to-edge. Use the root 'background' for the base, and place elements directly without an inner card wrapper.".into()
+                );
+            }
+        }
     }
 
     // 2. Font size checks
@@ -1216,8 +1227,8 @@ fn exec_critique_visual(args: &Value) -> String {
         }
     }
 
-    // 5. Margin violations
-    let margin = 40.0;
+    // 5. Margin violations (text only — shapes/rects can go edge-to-edge)
+    let margin = 30.0;
     for bbox in &bboxes {
         if bbox.label.starts_with("text") {
             if bbox.x < margin || bbox.y < margin
@@ -1531,5 +1542,22 @@ mod tests {
         });
         let result = exec_critique_visual(&json!({ "visual": visual }));
         assert!(result.contains("REDUNDANT_BG_RECT"), "Should catch redundant background rect: {result}");
+    }
+
+    #[test]
+    fn critique_catches_inner_card_rect() {
+        let visual = json!({
+            "version": "1.0",
+            "root": {
+                "type": "player", "width": 960, "height": 540, "fps": 30, "durationInFrames": 60,
+                "background": "$background",
+                "children": [
+                    { "type": "rect", "x": 30, "y": 24, "width": 900, "height": 492, "fill": "$surface", "rx": 20, "stroke": "$border" },
+                    { "type": "text", "content": "Title", "x": 480, "y": 100, "fontSize": 34, "fill": "$foreground", "textAnchor": "middle" }
+                ]
+            }
+        });
+        let result = exec_critique_visual(&json!({ "visual": visual }));
+        assert!(result.contains("INNER_CARD_RECT"), "Should catch inner card rect with margins: {result}");
     }
 }
