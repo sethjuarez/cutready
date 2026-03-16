@@ -1376,12 +1376,16 @@ impl LlmClient {
         // Azure gateway rejects bodies over ~4MB with cryptic IIS errors.
         // When trimming, summarize dropped messages into working memory so the
         // LLM retains context about what was discussed earlier.
-        const MAX_BODY_BYTES: usize = 3 * 1024 * 1024; // 3MB safety margin
-        if body_json.len() > MAX_BODY_BYTES {
+        // Responses API has a stricter effective body size limit (~80KB observed).
+        // Chat Completions can handle much larger payloads.
+        const MAX_BODY_BYTES_RESPONSES: usize = 64 * 1024; // 64KB for Responses API
+        const MAX_BODY_BYTES_CHAT: usize = 3 * 1024 * 1024; // 3MB for Chat Completions
+        let max_body = if use_responses { MAX_BODY_BYTES_RESPONSES } else { MAX_BODY_BYTES_CHAT };
+        if body_json.len() > max_body {
             log::warn!(
                 "[llm] body {}KB exceeds {}KB — compacting with memory summary",
                 body_json.len() / 1024,
-                MAX_BODY_BYTES / 1024
+                max_body / 1024
             );
             use crate::engine::agent::runner::summarize_dropped;
 
@@ -1398,7 +1402,7 @@ impl LlmClient {
                 let trial_msgs =
                     [system_msgs.clone(), final_messages.clone()].concat();
                 let size = serialize_body(&trial_msgs).len();
-                if size <= MAX_BODY_BYTES || final_messages.len() <= 2 {
+                if size <= max_body || final_messages.len() <= 2 {
                     break;
                 }
                 dropped.push(final_messages.remove(0));
