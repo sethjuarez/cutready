@@ -37,6 +37,10 @@ pub struct PlanningRow {
     /// Optional elucim DSL document for an animated framing visual.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub visual: Option<serde_json::Value>,
+    /// English-language design brief describing layout, elements, colors, and animation intent.
+    /// Created by the Designer agent's conceptual pass before generating DSL JSON.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub design_plan: Option<String>,
 }
 
 impl PlanningRow {
@@ -47,6 +51,7 @@ impl PlanningRow {
             demo_actions: String::new(),
             screenshot: None,
             visual: None,
+            design_plan: None,
         }
     }
 }
@@ -270,6 +275,7 @@ mod tests {
             demo_actions: "Navigate, click CTA".into(),
             screenshot: Some("screenshots/step1.png".into()),
             visual: None,
+            design_plan: None,
         });
         sketch.description = serde_json::json!({"root": {"children": []}});
 
@@ -341,6 +347,7 @@ mod tests {
             demo_actions: "Navigate to /signup, click CTA".into(),
             screenshot: Some("screenshots/step1.png".into()),
             visual: None,
+            design_plan: None,
         };
         let json = serde_json::to_string(&row).unwrap();
         let parsed: PlanningRow = serde_json::from_str(&json).unwrap();

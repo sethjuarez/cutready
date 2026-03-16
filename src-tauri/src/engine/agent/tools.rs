@@ -265,6 +265,22 @@ pub fn all_tools() -> Vec<ToolDefinition> {
             }),
         ),
         tool_def(
+            "design_plan",
+            "Save an English-language design brief for a planning row's visual. MUST be called before generating any DSL JSON. Describes layout, elements, spatial arrangement, color palette, and animation sequence in plain English. This is the conceptual planning pass of the 3-pass design workflow.",
+            json!({
+                "type": "object",
+                "properties": {
+                    "path": { "type": "string", "description": "Relative path to the sketch" },
+                    "index": { "type": "integer", "description": "0-based row index" },
+                    "plan": {
+                        "type": "string",
+                        "description": "English description of the visual design: what elements to show, where they go on the 960×540 canvas, color choices, and animation sequence"
+                    }
+                },
+                "required": ["path", "index", "plan"]
+            }),
+        ),
+        tool_def(
             "delegate_to_agent",
             "Delegate a task to another AI agent with a different specialization. The agent runs independently and returns its result. Available agents: planner, writer, editor, plus any custom agents.",
             json!({
@@ -392,6 +408,7 @@ pub fn execute_tool(call: &ToolCall, project_root: &Path, vision_enabled: bool) 
         "set_row_visual" => exec_set_row_visual(project_root, &args),
         "validate_dsl" => exec_validate_dsl(&args),
         "critique_visual" => exec_critique_visual(&args),
+        "design_plan" => exec_design_plan(project_root, &args),
         "list_project_images" => exec_list_project_images(project_root),
         "save_feedback" => exec_save_feedback(&args),
         "update_note" => exec_update_note(project_root, &args),
@@ -499,9 +516,17 @@ fn exec_read_sketch(root: &Path, args: &Value, vision_enabled: bool) -> String {
                     }
                     None => String::new(),
                 };
+                let visual_line = match &row.visual {
+                    Some(_) => "**Visual:** ✓ (elucim DSL attached)\n".to_string(),
+                    None => String::new(),
+                };
+                let plan_line = match &row.design_plan {
+                    Some(plan) => format!("**Design Plan:** {}\n", plan),
+                    None => String::new(),
+                };
                 out.push_str(&format!(
-                    "## Row {} [{}]\n**Narrative:** {}\n**Actions:** {}\n{}\n",
-                    i, row.time, row.narrative, row.demo_actions, screenshot_line
+                    "## Row {} [{}]\n**Narrative:** {}\n**Actions:** {}\n{}{}{}\n",
+                    i, row.time, row.narrative, row.demo_actions, screenshot_line, visual_line, plan_line
                 ));
             }
             if vision_enabled && !image_parts.is_empty() {
@@ -545,6 +570,7 @@ fn exec_set_planning_rows(root: &Path, args: &Value) -> String {
                     .into(),
                 screenshot: r.get("screenshot").and_then(|v| v.as_str()).map(|s| s.to_string()),
                 visual: r.get("visual").cloned(),
+                design_plan: r.get("design_plan").and_then(|v| v.as_str()).map(|s| s.to_string()),
             })
             .collect(),
         None => return "Error: 'rows' must be an array".into(),
@@ -691,6 +717,46 @@ fn exec_set_row_visual(root: &Path, args: &Value) -> String {
             } else {
                 format!("Removed visual from row {} in {}", index, path.display())
             }
+        }
+        Err(e) => format!("Error writing sketch: {e}"),
+    }
+}
+
+fn exec_design_plan(root: &Path, args: &Value) -> String {
+    let path = match args.get("path").and_then(|v| v.as_str()) {
+        Some(p) => resolve_path(root, p),
+        None => return "Error: missing 'path' argument".into(),
+    };
+    let index = match args.get("index").and_then(|v| v.as_u64()) {
+        Some(i) => i as usize,
+        None => return "Error: missing 'index' argument".into(),
+    };
+    let plan = match args.get("plan").and_then(|v| v.as_str()) {
+        Some(p) => p.to_string(),
+        None => return "Error: missing 'plan' argument".into(),
+    };
+
+    let mut sketch = match project::read_sketch(&path) {
+        Ok(s) => s,
+        Err(e) => return format!("Error reading sketch: {e}"),
+    };
+
+    if index >= sketch.rows.len() {
+        return format!(
+            "Error: index {} out of range (sketch has {} rows)",
+            index,
+            sketch.rows.len()
+        );
+    }
+
+    sketch.rows[index].design_plan = Some(plan.clone());
+
+    match project::write_sketch(&sketch, &path, root) {
+        Ok(()) => {
+            format!(
+                "Design plan saved for row {}. Now generate the DSL JSON based on this plan:\n\n{}",
+                index, plan
+            )
         }
         Err(e) => format!("Error writing sketch: {e}"),
     }

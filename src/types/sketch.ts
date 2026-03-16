@@ -15,6 +15,8 @@ export interface PlanningRow {
   screenshot: string | null;
   /** Optional elucim DSL document for an animated framing visual. */
   visual?: Record<string, unknown> | null;
+  /** English-language design brief for the visual (created by Designer agent Pass 1). */
+  design_plan?: string | null;
 }
 
 /** A sketch — a focused scene in a demo storyboard. */
