@@ -787,19 +787,20 @@ impl LlmClient {
             Some(MessageContent::Text(content_parts.join("")))
         };
 
+        let has_calls = !tool_calls.is_empty();
         ChatCompletionResponse {
             choices: vec![Choice {
                 message: ChatMessage {
                     role: "assistant".into(),
                     content,
-                    tool_calls: if tool_calls.is_empty() {
-                        None
-                    } else {
+                    tool_calls: if has_calls {
                         Some(tool_calls)
+                    } else {
+                        None
                     },
                     tool_call_id: None,
                 },
-                finish_reason: Some("stop".into()),
+                finish_reason: Some(if has_calls { "tool_calls" } else { "stop" }.into()),
             }],
         }
     }

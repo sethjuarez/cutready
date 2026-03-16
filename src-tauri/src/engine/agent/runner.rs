@@ -381,8 +381,10 @@ fn run_with_depth<'a>(
                 tool_call_id: None,
             };
 
-            // If no tool calls, we're done
-            if !has_tool_calls || finish_reason.as_deref() == Some("stop") {
+            // If no tool calls, we're done.
+            // Note: Responses API always returns finish_reason="stop" even with tool calls,
+            // so we only check finish_reason when there are NO tool calls.
+            if !has_tool_calls {
                 messages.push(assistant_msg);
                 crate::util::trace::emit("agent_done", "agent", serde_json::json!({
                     "rounds": round + 1,
