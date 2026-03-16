@@ -923,11 +923,15 @@ function ChatTab() {
         }
       }
 
+      // Resolve the effective agent — override agent (from ✨ buttons) takes priority
+      const effectiveAgent = agentOverride
+        ? [...BUILT_IN_AGENTS, ...(settings.aiAgents || [])].find(a => a.id === agentOverride) ?? selectedAgent
+        : selectedAgent;
       const config = {
         ...buildConfig(),
         bearer_token: freshBearerToken,
-        // Apply per-agent model override if the selected agent specifies one
-        ...(selectedAgent.modelOverride ? { model: selectedAgent.modelOverride } : {}),
+        // Apply per-agent model override if the effective agent specifies one
+        ...(effectiveAgent.modelOverride ? { model: effectiveAgent.modelOverride } : {}),
       };
 
       // Build agent prompts map for sub-agent delegation
