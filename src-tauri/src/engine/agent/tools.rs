@@ -422,6 +422,26 @@ pub fn execute_tool(call: &ToolCall, project_root: &Path, vision_enabled: bool) 
     log::debug!("[tool] {} → {}chars in {:?}", call.function.name, result.len(), start.elapsed());
     result
 }
+
+/// Extract a JSON object from a tool argument field. LLMs sometimes stringify
+/// the object instead of passing it inline, so this handles both cases:
+///   - `"visual": { ... }` → returns the object directly
+///   - `"visual": "{ ... }"` → parses the string as JSON and returns it
+fn extract_json_object<'a>(args: &'a Value, key: &str) -> Result<std::borrow::Cow<'a, Value>, String> {
+    match args.get(key) {
+        Some(v) if v.is_object() => Ok(std::borrow::Cow::Borrowed(v)),
+        Some(Value::String(s)) => {
+            // LLM passed a stringified JSON — try to parse it
+            match serde_json::from_str::<Value>(s) {
+                Ok(v) if v.is_object() => Ok(std::borrow::Cow::Owned(v)),
+                Ok(_) => Err(format!("Error: '{key}' string parsed but is not a JSON object. Pass the DSL as a JSON object, not a string.")),
+                Err(e) => Err(format!("Error: '{key}' is a string but not valid JSON: {e}. Pass the DSL as a JSON object, not a string.")),
+            }
+        }
+        Some(_) => Err(format!("Error: '{key}' must be a JSON object (the elucim DSL document)")),
+        None => Err(format!("Error: missing required '{key}' argument")),
+    }
+}
 
 fn resolve_path(project_root: &Path, rel: &str) -> PathBuf {
     project_root.join(rel)
@@ -686,15 +706,19 @@ fn exec_set_row_visual(root: &Path, args: &Value) -> String {
 
     let row = &mut sketch.rows[index];
 
-    // null → remove visual, object → set visual
+    // null → remove visual, object/string → set visual
     match args.get("visual") {
         Some(v) if v.is_null() => {
             row.visual = None;
         }
-        Some(v) if v.is_object() => {
+        _ => {
+            let visual = match extract_json_object(args, "visual") {
+                Ok(v) => v,
+                Err(e) => return e,
+            };
             // Auto-validate before writing — catch errors the agent missed
             let mut errors = Vec::new();
-            validate_dsl_doc(v, &mut errors);
+            validate_dsl_doc(&visual, &mut errors);
             if !errors.is_empty() {
                 return format!(
                     "Validation failed ({} error{}) — fix these before calling set_row_visual again:\n{}",
@@ -703,11 +727,10 @@ fn exec_set_row_visual(root: &Path, args: &Value) -> String {
                     errors.iter().map(|e| format!("  • {e}")).collect::<Vec<_>>().join("\n")
                 );
             }
-            row.visual = Some(v.clone());
+            row.visual = Some(visual.into_owned());
             // Clear screenshot since visual replaces it
             row.screenshot = None;
         }
-        _ => return "Error: 'visual' must be an elucim DSL document object or null".into(),
     }
 
     match project::write_sketch(&sketch, &path, root) {
@@ -932,13 +955,13 @@ fn validate_dsl_doc(visual: &Value, errors: &mut Vec<String>) {
 }
 
 fn exec_validate_dsl(args: &Value) -> String {
-    let visual = match args.get("visual") {
-        Some(v) if v.is_object() => v,
-        _ => return "Error: 'visual' must be a JSON object".into(),
+    let visual = match extract_json_object(args, "visual") {
+        Ok(v) => v,
+        Err(e) => return e,
     };
 
     let mut errors = Vec::new();
-    validate_dsl_doc(visual, &mut errors);
+    validate_dsl_doc(&visual, &mut errors);
 
     if errors.is_empty() {
         "Valid — no structural errors found. The DSL document looks correct.".into()
@@ -1215,9 +1238,9 @@ fn truncate(s: &str, max: usize) -> String {
 }
 
 fn exec_critique_visual(args: &Value) -> String {
-    let visual = match args.get("visual") {
-        Some(v) if v.is_object() => v,
-        _ => return "Error: 'visual' must be a JSON object with version and root".into(),
+    let visual = match extract_json_object(args, "visual") {
+        Ok(v) => v,
+        Err(e) => return e,
     };
 
     let root = match visual.get("root") {
@@ -1773,5 +1796,36 @@ mod tests {
         });
         let result = exec_validate_dsl(&json!({ "visual": visual }));
         assert!(result.contains("point must be [number, number]"), "Should catch bad bezier point: {result}");
+    }
+
+    #[test]
+    fn validate_dsl_accepts_stringified_visual() {
+        // LLMs sometimes pass the visual as a JSON string instead of an object
+        let visual_str = r#"{"version":"1.0","root":{"type":"player","width":960,"height":540,"fps":30,"durationInFrames":60,"background":"$background","children":[{"type":"text","content":"Hello","x":480,"y":270,"fontSize":34,"fill":"$foreground","textAnchor":"middle"}]}}"#;
+        let result = exec_validate_dsl(&json!({ "visual": visual_str }));
+        assert!(result.contains("Valid"), "Should auto-parse string visual: {result}");
+    }
+
+    #[test]
+    fn validate_dsl_rejects_bad_string() {
+        let result = exec_validate_dsl(&json!({ "visual": "not valid json {" }));
+        assert!(result.contains("not valid JSON"), "Should report parse error: {result}");
+    }
+
+    #[test]
+    fn critique_accepts_stringified_visual() {
+        let visual_str = serde_json::to_string(&json!({
+            "version": "1.0",
+            "root": {
+                "type": "player", "width": 960, "height": 540, "fps": 30, "durationInFrames": 60,
+                "background": "$background",
+                "children": [
+                    { "type": "text", "content": "Hello", "x": 480, "y": 270, "fontSize": 34, "fill": "$foreground", "textAnchor": "middle" }
+                ]
+            }
+        })).unwrap();
+        let result = exec_critique_visual(&json!({ "visual": visual_str }));
+        // Should not error — critique should work on parsed string
+        assert!(!result.starts_with("Error:"), "Should auto-parse string visual: {result}");
     }
 }
