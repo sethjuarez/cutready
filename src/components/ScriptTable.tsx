@@ -335,9 +335,9 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
             className="flex flex-col items-center gap-4 max-w-[90vw] max-h-[90vh]"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Visual preview */}
-            <div className="rounded-lg overflow-hidden shadow-2xl bg-[var(--color-surface)]">
-              <Suspense fallback={<div className="w-[960px] h-[540px] bg-[var(--color-surface-alt)] animate-pulse" style={{ maxWidth: "80vw", maxHeight: "60vh" }} />}>
+            {/* Visual preview — explicit 960×540 scaled to fit viewport */}
+            <div className="rounded-lg overflow-hidden shadow-2xl bg-[var(--color-surface)]" style={{ width: "min(960px, 85vw)", aspectRatio: "960 / 540" }}>
+              <Suspense fallback={<div className="w-full h-full bg-[var(--color-surface-alt)] animate-pulse" />}>
                 <VisualCell
                   visual={visualLightbox.visual}
                   mode="full"
