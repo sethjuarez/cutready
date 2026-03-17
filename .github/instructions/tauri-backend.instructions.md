@@ -18,6 +18,7 @@ applyTo: "src-tauri/**"
 - Frameless window: `decorations: false`, `shadow: true`, 1280×800 default, 800×600 minimum.
 - Dev server: Vite on `http://localhost:1420`.
 - Frontend dist directory: `../dist` (relative to src-tauri).
+- Capabilities defined in `capabilities/default.json`.
 
 ## Command Patterns
 
@@ -37,10 +38,15 @@ async fn command_name(
 - Commands are thin — they call into `engine/` modules for business logic.
 - Use `Result<T, String>` return types (Tauri serializes the error as a string to the frontend).
 - Register all commands via `.invoke_handler(tauri::generate_handler![...])` in `lib.rs`.
+- Rust `snake_case` params auto-convert from frontend `camelCase` (e.g., `relativePath` → `relative_path`).
+
+## Path Safety
+
+**CRITICAL**: All user-provided relative paths in Tauri commands must go through `project::safe_resolve()` to prevent path traversal attacks. This function rejects `..` and `Prefix` components and verifies canonical paths when files exist on disk.
 
 ## Streaming Data (Channels)
 
-For long-running operations (recording progress, render progress, agent refinement):
+For long-running operations (recording progress, agent streaming, render progress):
 
 ```rust
 #[tauri::command]
@@ -56,48 +62,70 @@ async fn long_operation(
 
 The backend is organized as independent engines:
 
-| Engine | Module | Responsibility |
-|---|---|---|
-| Recording | `engine/recording.rs` | FFmpeg process management for screen + audio capture |
-| Automation | `engine/automation.rs` | Replay actions via Playwright sidecar + windows-rs UIA |
-| Interaction | `engine/interaction.rs` | Capture user interactions during demo recording |
-| Agent | `engine/agent/` | LLM-powered refinement pipeline (cleanup, narrative, selectors, healing) |
-| Animation | `engine/animation.rs` | ManimCE Python subprocess for motion graphics |
-| Export | `engine/export.rs` | FCPXML 1.9 generation + output folder assembly |
+| Engine | Module | Status | Responsibility |
+| --- | --- | --- | --- |
+| Project | `engine/project.rs` | ✅ | Folder-based project I/O, safe_resolve(), file scanning |
+| Versioning | `engine/versioning.rs` | ✅ | gix snapshots, branch, restore, stash, log |
+| Merge | `engine/versioning_merge.rs` | ✅ | Three-way merge for .sk/.sb/.md files |
+| Remote | `engine/versioning_remote.rs` | ✅ | Git remote sync (push/pull/fetch via `gh` CLI) |
+| Agent | `engine/agent/` | ✅ | Multi-agent AI system (runner, tools, LLM client) |
+| Import | `engine/import.rs` | ✅ | .docx/.pdf/.pptx import to sketches/notes |
+| Memory | `engine/memory.rs` | ✅ | Agent memory system (core, procedural, archival) |
+| Recording | `engine/recording.rs` | 🔲 | FFmpeg process management for screen + audio capture |
+| Automation | `engine/automation.rs` | 🔲 | Replay actions via Playwright sidecar + windows-rs UIA |
+| Interaction | `engine/interaction.rs` | 🔲 | Capture user interactions during demo recording |
+| Animation | `engine/animation.rs` | 🔲 | ManimCE Python subprocess for motion graphics |
+| Export | `engine/export.rs` | 🔲 | FCPXML 1.9 generation + output folder assembly |
 
-None of these engines are implemented yet — the project is in early scaffold phase.
+## Agent Architecture
+
+The agent system in `engine/agent/` has these modules:
+
+- **`runner.rs`** — Agent execution loop: processes tool calls, manages context window, handles compaction.
+- **`tools.rs`** — Tool definitions the agent can call (list_project_files, read_sketch, set_planning_rows, web_fetch, create_visual, etc.).
+- **`llm.rs`** — LLM API client. Auto-routes between Chat Completions API and Responses API based on model name. Handles SSE streaming, token counting, context compaction.
+- **`azure_auth.rs`** — Azure/Foundry OAuth device-code flow authentication.
+- **`web.rs`** — Web content fetching for agent `#web:` references.
+- **`mod.rs`** — Agent type definitions (Planner, Writer, Editor, Designer) with distinct system prompts.
+
+### LLM API Routing
+
+The LLM client auto-routes based on model name:
+
+- Models containing `codex` or ending with `-pro` (gpt-5 family) → **Responses API** (`/openai/v1/responses`)
+- All other models → **Chat Completions API** (`/chat/completions`)
+
+This detection and translation happens entirely in `llm.rs`. The runner and frontend are unaware of which API is used.
 
 ## Data Models
 
 Core types are in the `models/` module:
-- `Action` enum — atomic demo steps (browser and native variants)
-- `SelectorStrategy` enum — multiple selector approaches for resilient targeting
-- `Project`, `Script`, `ScriptRow` — the script table data model
-- `RecordedSession`, `CapturedAction` — raw recording output
 
-All models derive `Serialize` + `Deserialize` for JSON IPC and file storage.
+- **`sketch.rs`** — `Sketch`, `PlanningRow`, `SketchState`, `Storyboard`, `StoryboardItem`, `SketchSummary`, `StoryboardSummary`. This is the primary data model.
+- **`action.rs`** — `Action` enum for atomic demo steps (browser and native variants).
+- **`script.rs`** — `ProjectView` (the active project state), `ScriptRow`.
+- **`session.rs`** — `RecordedSession`, `CapturedAction` for raw recording output.
 
-## LLM Abstraction
+All models derive `Serialize` + `Deserialize` for JSON IPC and file storage. Use `#[serde(default)]` for backward compatibility on new fields.
 
-```rust
-#[async_trait]
-trait LlmProvider: Send + Sync {
-    async fn complete(&self, messages: &[Message]) -> Result<String>;
-    async fn complete_structured<T: DeserializeOwned>(
-        &self, messages: &[Message], schema: &JsonSchema
-    ) -> Result<T>;
-}
-```
+## Versioning (gix)
 
-- Azure OpenAI is the default provider.
-- Use structured output (`response_format: json_schema`) for all agent pipeline calls.
-- The trait is designed to also support a GitHub Copilot SDK backend in the future.
+- Uses **gix 0.70** with a tree-building approach (not index manipulation).
+- Trees built from filesystem: create blobs with `repo.write_blob()`, assemble sorted `gix::objs::tree::Entry` vectors, write tree, then commit.
+- Committer: `CutReady` / `app@cutready.local`.
+- Directories starting with `.` (including `.git`) are skipped during scanning.
 
-## Sidecar Binaries
+## Visuals Storage
 
-- **FFmpeg**: Bundled as Tauri external binary. Spawned via `tokio::process::Command`. Graceful stop via stdin `q`.
-- **Playwright sidecar**: Node.js process communicating over JSON stdin/stdout protocol.
-- Declared in `tauri.conf.json` under `bundle.externalBin`.
+Visuals (Elucim DSL JSON) are stored as external files in `.cutready/visuals/<sha256-12chars>.json`, referenced by relative path on `PlanningRow.visual` (string field). The `write_visual` and `read_visual` commands handle I/O. Legacy inline JSON objects auto-migrate on `read_sketch_with_migration()`.
+
+## Plugin Store
+
+Uses `tauri-plugin-store` v2 API:
+
+- `app.store("file.json")` returns `Arc<Store<R>>` via the `StoreExt` trait.
+- `.get()` returns `Option<JsonValue>`, `.set(key, value)`, `.save()`.
+- Used for recent projects list and last parent folder.
 
 ## Error Handling
 
@@ -107,4 +135,4 @@ trait LlmProvider: Send + Sync {
 
 ## Key Crates
 
-`tauri`, `tokio`, `serde`/`serde_json`, `reqwest` (LLM API), `quick-xml` (FCPXML), `uuid`, `chrono`, `windows` (native automation), `anyhow`, `thiserror`, `tracing`.
+`tauri`, `tokio`, `serde`/`serde_json`, `reqwest` (LLM API), `gix` (git), `quick-xml` (FCPXML), `uuid`, `chrono`, `windows` (native automation), `anyhow`, `thiserror`, `tracing`.

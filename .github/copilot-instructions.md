@@ -2,142 +2,195 @@
 
 ## What Is CutReady
 
-CutReady is a **desktop application** that collapses the entire product demo video production process into a single intelligent workflow. The user sketches a structured demo plan in a Notion-style editor, optionally records a rough demo walkthrough guided by the plan, an AI agent refines it into a production-ready script, then automation replays the polished demo while the user reads a teleprompter. Output is an organized folder with lossless video, clean audio, and an FCPXML timeline ready for DaVinci Resolve.
+CutReady is a **desktop application** for product demo video production. Users create structured demo plans (sketches) with planning tables and reference screenshots, optionally record a rough demo walkthrough, then an AI agent refines it into a production-ready script. Automation replays the polished demo while the user reads a teleprompter. Output is an organized folder with lossless video, clean audio, and an FCPXML timeline ready for DaVinci Resolve.
 
 ## Core Philosophy
 
-- **Sketch-first**: The promoted primary entry point is authoring a structured plan (sketch document) with sections, planning tables, and reference screenshots. The sketch guides the recording and evolves through the workflow.
-- **Record-first (alternative)**: Users can also jump straight into recording without a sketch. The script is an _output_ of recording + AI refinement, not just an input.
-- **Agentic refinement**: The AI doesn't just transcribe. It cleans accidental clicks, stabilizes selectors, drafts narration, estimates timing, and suggests motion animations.
-- **Self-healing replay**: When UI changes break a replay action, the agent inspects the current state and auto-heals the selector.
-- **Edit-ready output**: Not just footage. An FCPXML 1.9 timeline with video, narration, system audio, and animations on separate tracks.
+- **Sketch-first**: The primary entry point is authoring a structured plan (sketch) with sections, planning tables, screenshots, and optional visuals. The sketch guides the recording and evolves through the workflow.
+- **Record-first (alternative)**: Users can jump straight into recording without a sketch.
+- **Agentic refinement**: AI cleans accidental clicks, stabilizes selectors, drafts narration, estimates timing, suggests animations, and generates framing visuals.
+- **Self-healing replay**: When UI changes break a replay action, the agent auto-heals the selector.
+- **Edit-ready output**: FCPXML 1.9 timeline with video, narration, system audio, and animations on separate tracks.
 
-## Workflow Phases
+## Data Model
 
-0. **Sketch** — Plan the demo in a Notion-style block editor (Lexical). Structured sections with 4-column planning tables. Reference screenshots captured from browser. Automatic version history via git (gix).
-1. **Record** — Walk through the demo (browser or native app), guided by the sketch. CutReady captures every interaction as a replayable action sequence with screenshots.
-2. **Refine** — AI agent cleans actions, stabilizes selectors, generates voiceover narration, estimates timing, suggests animations.
-3. **Review & Edit** — Side-by-side diff of raw vs. refined. Script table with Time, Narrative, Demo Actions, Screenshot columns. Full editing.
-4. **Produce** — Automation replays the demo. Teleprompter displays narration. Lossless FFmpeg recording captures video + audio as separate tracks.
-5. **Export** — Organized folder + FCPXML timeline for DaVinci Resolve.
+CutReady uses a **Storyboard → Sketch** hierarchy:
+
+- **Sketch** (`.sk` files): A scene with title, description, and a planning table. Each planning table row has: Time, Narrative, Actions, Screenshot, and an optional Visual (Elucim DSL JSON stored externally in `.cutready/visuals/`).
+- **Storyboard** (`.sb` files): Sequences sketches with optional named sections. References sketches by path.
+- **Notes** (`.md` files): Markdown documents for planning, context, and AI-generated content.
+- **Sessions** (`.chats/` directory): Saved AI chat sessions with full message history.
+
+## Project Storage
+
+Projects are **portable folders**. A CutReady project IS a user-chosen folder:
+
+```text
+my-demo-project/
+├── intro.sk                    # Sketch files (JSON)
+├── setup-walkthrough.sk
+├── demo-storyboard.sb          # Storyboard files (JSON)
+├── planning-notes.md           # Markdown notes
+├── screenshots/                # Captured screenshots (PNG/JPEG)
+├── .cutready/                  # CutReady metadata
+│   ├── visuals/                # Elucim DSL visual JSON files
+│   └── settings.json           # Per-project settings
+├── .chats/                     # Saved AI chat sessions
+└── .git/                       # Git versioning (managed by gix)
+```
+
+- No central project registry — projects are opened by folder path.
+- Recent projects stored via `tauri-plugin-store` in app data.
+- All user-provided relative paths go through `project::safe_resolve()` to prevent path traversal.
 
 ## Tech Stack
 
-| Layer               | Technology                       | Notes                                                |
-| ------------------- | -------------------------------- | ---------------------------------------------------- |
-| Desktop framework   | **Tauri v2**                     | Frameless window, Rust backend, web frontend         |
-| Frontend            | **React 19 + TypeScript**        | Vite 6 bundler, Tailwind CSS 3.4                     |
-| Backend             | **Rust** (2021 edition)          | Async via Tokio, native Windows API via windows-rs   |
-| Rich text editor    | **Lexical** (Meta)               | Block editor for sketch documents, extensible nodes  |
-| Document versioning | **gix** (gitoxide)               | Pure-Rust git: commit, log, diff, restore            |
-| Screen recording    | **FFmpeg** (sidecar)             | FFV1 lossless codec in MKV, multi-track audio        |
-| Browser automation  | **Playwright** (Node.js sidecar) | Headful mode, CDP event observation for recording    |
-| Native automation   | **windows-rs + UI Automation**   | SetWinEventHook, input hooks, UIA tree queries       |
-| Motion graphics     | **ManimCE** (Python subprocess)  | Sandboxed execution, AST validation                  |
-| LLM                 | **Azure OpenAI** (pluggable)     | LlmProvider trait allows swapping providers          |
-| Timeline export     | **FCPXML 1.9**                   | Multi-track, markers, DaVinci Resolve 17+ compatible |
-| Project storage     | **Git-backed directories**       | Per-project dirs with .git, JSON docs, screenshots   |
+| Layer | Technology | Notes |
+| --- | --- | --- |
+| Desktop framework | **Tauri v2** | Frameless window, Rust backend, web frontend |
+| Frontend | **React 19 + TypeScript** | Vite 6 bundler, Tailwind CSS 3.4 |
+| Backend | **Rust** (2021 edition) | Async via Tokio, native Windows API via windows-rs |
+| State management | **Zustand** | appStore, toastStore, updateStore |
+| Drag-and-drop | **dnd-kit** | Sketch reordering in storyboards, tab reordering |
+| Versioning | **gix** (gitoxide) 0.70 | Pure-Rust git: commit, log, diff, restore, branch, merge |
+| Screen recording | **FFmpeg** (sidecar) | FFV1 lossless codec in MKV, multi-track audio |
+| Browser automation | **Playwright** (Node.js sidecar) | Headful mode, CDP event observation, E2E testing |
+| LLM | **Microsoft Foundry** | Chat Completions + Responses API, multi-agent system |
+| Visuals | **Elucim DSL** (`@elucim/dsl`) | SVG-based framing visuals with semantic color tokens |
+| Word export | **docx** | Export sketches/storyboards/notes to .docx |
+| History graph | **d3.js** | Git branch/commit visualization |
+| Timeline export | **FCPXML 1.9** | Multi-track, markers, DaVinci Resolve 17+ compatible |
+| Docs site | **Astro Starlight** | Published to GitHub Pages |
+| Versioning | **release-please** | Conventional Commits → automated semver + CHANGELOG |
 
-## Project Structure
+## Source Structure
 
 ```text
 cutready/
-├── docs/                          # North star documentation
-│   ├── NORTH_STAR.md              # Press release (the vision)
-│   ├── GUIDANCE.md                # Feature catalog by workflow phase
-│   ├── ARCHITECTURE.md            # Full technical design
-│   └── IMPLEMENTATION_PLAN.md     # Phased implementation plan
+├── docs/                          # Astro Starlight docs site + north star docs
+├── e2e/                           # Playwright E2E tests (run against web shim)
+├── playwright-sidecar/            # Playwright Node.js sidecar for browser automation
+├── scripts/                       # Build/release helper scripts
 ├── src/                           # React + TypeScript frontend
-│   ├── main.tsx                   # Entry point (loads Geist Sans font)
+│   ├── main.tsx                   # Entry point (Geist Sans font, devMock detection)
+│   ├── devMock.ts                 # Web shim — fakes Tauri backend for browser testing
 │   ├── index.css                  # CSS variables, theme tokens, global styles
 │   ├── App.tsx                    # Root component
-│   ├── hooks/
-│   │   ├── useTheme.ts            # Light/dark/system theme management
-│   │   ├── useSettings.ts         # Settings persistence
-│   │   └── useGlobalHotkeys.ts    # Global keyboard shortcuts
-│   ├── stores/
-│   │   └── appStore.ts            # Zustand app state (navigation, project)
-│   ├── types/
-│   │   ├── project.ts             # Project, Document types
-│   │   └── recording.ts           # Recording types
-│   └── components/
-│       ├── TitleBar.tsx            # Frameless window title bar + window controls
-│       ├── StatusBar.tsx           # Bottom bar with status + theme toggle
-│       ├── Sidebar.tsx             # Navigation sidebar
-│       ├── AppLayout.tsx           # Main layout shell
-│       ├── HomePanel.tsx           # Project home / dashboard
-│       ├── SettingsPanel.tsx       # Settings management
-│       ├── ScriptEditorPanel.tsx   # Script table editor
-│       ├── RecordingPanel.tsx      # Recording controls
-│       └── ActionCard.tsx          # Action display component
+│   ├── hooks/                     # useTheme, useSettings, useGlobalHotkeys, useDebugLog
+│   ├── stores/                    # Zustand: appStore, toastStore, updateStore
+│   ├── services/                  # commandRegistry, richPaste
+│   ├── utils/                     # exportToWord
+│   ├── types/                     # project.ts, sketch.ts, recording.ts
+│   ├── test/                      # Vitest unit tests
+│   └── components/                # 40+ React components (see below)
 ├── src-tauri/                     # Rust / Tauri backend
 │   ├── Cargo.toml
-│   ├── tauri.conf.json            # Tauri config (frameless, 1280×800, shadow)
-│   ├── src/
-│   │   ├── main.rs
-│   │   ├── lib.rs                 # Tauri commands + plugin registration
-│   │   ├── commands/              # Tauri command handlers (thin layer)
-│   │   │   ├── recording.rs
-│   │   │   ├── automation.rs
-│   │   │   ├── interaction.rs
-│   │   │   ├── agent.rs
-│   │   │   ├── animation.rs
-│   │   │   ├── export.rs
-│   │   │   ├── project.rs
-│   │   │   ├── document.rs        # CRUD for sketch documents (planned)
-│   │   │   └── versioning.rs      # Git operations (planned)
-│   │   ├── engine/                # Backend engines
-│   │   │   ├── recording.rs
-│   │   │   ├── automation.rs
-│   │   │   ├── interaction.rs
-│   │   │   ├── animation.rs
-│   │   │   ├── export.rs
-│   │   │   ├── project.rs
-│   │   │   ├── versioning.rs      # Git via gix (planned)
-│   │   │   └── agent/
-│   │   ├── models/
-│   │   │   ├── action.rs
-│   │   │   ├── script.rs
-│   │   │   ├── document.rs        # Document, DocumentState (planned)
-│   │   │   ├── recording.rs
-│   │   │   ├── animation.rs
-│   │   │   └── session.rs
-│   │   ├── llm/
-│   │   └── util/
-│   └── capabilities/default.json
-├── tailwind.config.ts             # Tailwind with custom color/font tokens
-├── vite.config.ts                 # Vite dev server on port 1420
-├── package.json
-└── README.md
+│   ├── tauri.conf.json
+│   ├── capabilities/default.json  # Tauri permission capabilities
+│   └── src/
+│       ├── lib.rs                 # Tauri command registration + plugin setup
+│       ├── commands/              # Tauri command handlers (15 modules)
+│       ├── engine/                # Backend engines (12 modules + agent/)
+│       ├── models/                # Data models: sketch.rs, action.rs, script.rs, session.rs
+│       └── util/                  # screenshot.rs, trace.rs
+├── tailwind.config.ts
+├── vite.config.ts
+├── vitest.config.ts
+├── playwright.config.ts
+└── package.json
 ```
 
-## Current Status
+### Key Frontend Components
 
-The project is in **active development**:
+| Component | Purpose |
+| --- | --- |
+| AppLayout | VS Code-inspired shell: activity bar, primary sidebar, editor area, secondary panel |
+| TitleBar | Frameless window title bar with drag region + window controls |
+| Sidebar / StoryboardList | Primary sidebar with project explorer (storyboards, sketches, notes) |
+| TabBar | Multi-tab editor with reorderable tabs (dnd-kit) |
+| SketchForm / ScriptTable | Sketch editing with 4-column planning table (inline markdown) |
+| ChatPanel | AI chat with multi-agent selection, tool call display, markdown rendering |
+| SnapshotGraph / HistoryGraphTab | Git history visualization (d3.js) |
+| VisualCell | Elucim DSL visual renderer with semantic color token support |
+| CommandPalette | VS Code-style command palette (Ctrl+Shift+P) |
+| ScreenCaptureOverlay / CaptureWindow | Screen region/monitor capture |
+| NoteEditor / MarkdownEditor | Markdown notes with preview |
+| SyncBar / TimelineSelector | Git remote sync and branch/timeline switching |
+| MergeConflictPanel | Three-way merge conflict resolution |
+| SnapshotDialog / SnapshotDiffPanel | Snapshot naming and diff viewing |
 
-- North star documents are complete (NORTH_STAR.md, GUIDANCE.md, ARCHITECTURE.md, IMPLEMENTATION_PLAN.md)
-- Tauri v2 app scaffolded with frameless window, dark/light/system theme, title bar, status bar
-- Sidebar navigation, home panel, settings panel, and app store (Zustand) implemented
-- Implementation Phase 0 (project scaffold) and Phase 1 (app shell + navigation) complete
-- **Next: Implementation Phase 2** — Script Sketch Editor & Document Versioning (Lexical + gix)
-- Backend engines are placeholder modules — no recording, automation, agent, or export functionality yet
+### Key Backend Modules
 
-## Design Decisions Already Made
+| Module | Status | Purpose |
+| --- | --- | --- |
+| engine/project.rs | ✅ Implemented | Folder-based project I/O, safe_resolve(), file scanning |
+| engine/versioning.rs | ✅ Implemented | gix snapshots, branch, restore, stash |
+| engine/versioning_merge.rs | ✅ Implemented | Three-way merge engine for .sk/.sb/.md |
+| engine/versioning_remote.rs | ✅ Implemented | Git remote sync (push/pull/fetch via `gh`) |
+| engine/agent/ | ✅ Implemented | Multi-agent AI system (Planner, Writer, Editor, Designer) |
+| engine/agent/llm.rs | ✅ Implemented | Foundry API client, Chat Completions + Responses API auto-routing |
+| engine/agent/runner.rs | ✅ Implemented | Agent loop with tool execution, context compaction |
+| engine/agent/tools.rs | ✅ Implemented | Agent tool definitions (read/write sketches, web fetch, visuals) |
+| engine/import.rs | ✅ Implemented | .docx/.pdf/.pptx import to sketches/notes |
+| engine/memory.rs | ✅ Implemented | Agent memory system (core, procedural, archival) |
+| engine/recording.rs | 🔲 Placeholder | FFmpeg screen recording |
+| engine/automation.rs | 🔲 Placeholder | Playwright replay automation |
+| engine/animation.rs | 🔲 Placeholder | ManimCE motion graphics |
+| engine/export.rs | 🔲 Placeholder | FCPXML timeline generation |
 
-- **Frameless window**: `decorations: false` with custom TitleBar component (drag region + window controls)
-- **Theme**: CSS custom properties in `:root` / `.dark`, toggled by adding `.dark` class to `<html>`. Uses `localStorage` key `cutready-theme`. Three modes: light, dark, system.
-- **Color palette**: Warm, soft tones (not cold zinc). Dark mode uses warm browns (#2b2926), light mode uses warm off-whites (#faf9f7). Inspired by Claude desktop app's warm aesthetic.
-- **Font**: Geist Sans via `@fontsource/geist-sans` (weights 400, 500, 600). Letter-spacing: -0.011em.
-- **Color architecture**: All colors flow through CSS variables (`--color-surface`, `--color-surface-alt`, `--color-accent`, `--color-border`, `--color-text`, `--color-text-secondary`). Components use `var(--color-*)` or Tailwind tokens (`bg-surface`, `text-accent`) instead of hardcoded color classes. This makes palette changes a single-file edit in index.css.
-- **Accent color**: Soft purple/violet in both modes (light: #6b5ce7, dark: #a49afa).
-- **IPC pattern**: Tauri Commands for request/response, Channels for streaming data, Events for broadcasts.
-- **LLM abstraction**: Pluggable `LlmProvider` trait — Azure OpenAI is the default, but the trait allows swapping to other providers.
+## Current Status (v0.9.0)
+
+**Implemented features:**
+
+- VS Code-inspired layout with activity bar, primary/secondary sidebars, multi-tab editor, command palette
+- Sketch editor with 4-column planning table, inline markdown, drag-and-drop row reordering
+- Storyboard management with sketch sequencing and named sections
+- Markdown notes with live preview
+- AI chat with 3 built-in agents (Planner, Writer, Editor) + Designer for visuals
+- Sparkle (✨) buttons for silent AI improvements on sketches and notes
+- Elucim DSL visual generation with semantic color tokens
+- Screen capture (region selection or full monitor)
+- Git-backed version history with snapshots, branching, merging
+- Git remote collaboration (push/pull/fetch via GitHub)
+- D3.js history graph visualization
+- Document import (.docx, .pdf, .pptx)
+- Word export with orientation picker and visual rasterization
+- Auto-updater with update banner
+- Feedback system
+- Docs site (Astro Starlight) published to GitHub Pages
+- E2E test suite via Playwright (web shim mode)
+
+**Not yet implemented:** Recording, automation replay, FCPXML export, ManimCE animations.
+
+## Design Decisions
+
+- **Frameless window**: `decorations: false` with custom TitleBar (drag region + window controls).
+- **VS Code-inspired layout**: Activity bar → primary sidebar → editor area → secondary panel. Inspired by VS Code and the Confluo app (`D:\projects\Confluo`).
+- **Theme**: CSS custom properties in `:root` / `.dark`, toggled by `.dark` class on `<html>`. Three modes: light, dark, system. Persisted in `localStorage` key `cutready-theme`.
+- **Color palette**: Warm, soft tones (not cold zinc). Dark: warm browns (#2b2926). Light: warm off-whites (#faf9f7).
+- **Color architecture**: All colors flow through CSS variables. Components use `var(--color-*)` or Tailwind tokens — never hardcoded color classes.
+- **Accent color**: Soft purple/violet (light: #6b5ce7, dark: #a49afa). Purple is the brand color.
+- **Font**: Geist Sans via `@fontsource/geist-sans` (400, 500, 600). Letter-spacing: -0.011em.
+- **IPC**: Tauri Commands for request/response, Channels for streaming, Events for broadcasts.
+- **LLM routing**: Auto-routes codex/pro models to Responses API, others to Chat Completions. Detection in `llm.rs`.
+- **Path safety**: All user-provided paths go through `safe_resolve()` before filesystem access.
+- **Web shim**: `devMock.ts` activated when `import.meta.env.DEV && !__TAURI_INTERNALS__`. Enables Playwright E2E testing and browser development without the Tauri shell.
+- **Command palette**: Ctrl+Shift+P — commands registered via `commandRegistry.registerMany()` in AppLayout.
+
+## Testing & Validation
+
+- **Build**: `npm run build` (tsc + vite)
+- **TypeScript check**: `npx tsc --noEmit`
+- **Rust tests**: `cd src-tauri && cargo test`
+- **Vitest**: `npx vitest run`
+- **E2E tests**: `npx playwright test` (uses web shim, no Tauri needed)
+- **Web dev mode**: `npx vite --port 1420` (runs frontend in browser with devMock backend)
+- **Docs site**: `cd docs && npm run build`
 
 ## Key Documentation
 
-For detailed information, read these docs:
-
 - [docs/NORTH_STAR.md](docs/NORTH_STAR.md) — The press release / vision
-- [docs/GUIDANCE.md](docs/GUIDANCE.md) — Complete feature catalog (what CutReady can do)
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — Technical design (engines, data models, Rust module structure, IPC patterns, sidecar architecture)
+- [docs/GUIDANCE.md](docs/GUIDANCE.md) — Feature catalog
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — Technical design
+- [User-facing docs site](https://sethjuarez.github.io/cutready) — Astro Starlight
 
