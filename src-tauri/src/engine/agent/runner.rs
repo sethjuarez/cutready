@@ -25,9 +25,48 @@ const MAX_DELEGATION_DEPTH: usize = 2;
 /// results before sending them to the API. Invalid characters can cause
 /// JSON parse errors on the server side.
 fn sanitize_for_api(s: &str) -> String {
-    s.chars()
+    // First strip inline base64 data URIs that bloat the body without adding
+    // LLM-readable value (the LLM can't interpret raw base64 image data).
+    let stripped = strip_inline_base64(s);
+    stripped.chars()
         .filter(|c| !c.is_control() || matches!(c, '\n' | '\r' | '\t'))
         .collect()
+}
+
+/// Replace inline `data:image/...;base64,...` URIs with a short placeholder.
+/// These can appear in markdown notes (pasted screenshots) and bloat the body
+/// by hundreds of KB without providing any value to the LLM (it can't decode
+/// raw base64 — images must be sent as separate content parts).
+fn strip_inline_base64(s: &str) -> String {
+    let mut result = String::with_capacity(s.len());
+    let mut remaining = s;
+    while let Some(start) = remaining.find("data:image/") {
+        result.push_str(&remaining[..start]);
+        let after = &remaining[start..];
+        // Find the base64 prefix and then the end of the base64 data
+        if let Some(b64_start) = after.find(";base64,") {
+            let data_start = b64_start + 8; // skip ";base64,"
+            // Base64 data continues until a non-base64 char (quote, paren, space, <, etc.)
+            let data_end = after[data_start..].find(|c: char| {
+                !c.is_ascii_alphanumeric() && c != '+' && c != '/' && c != '='
+            }).unwrap_or(after.len() - data_start);
+            let total_b64_len = data_end;
+            if total_b64_len > 100 {
+                // Large base64 — replace with placeholder
+                result.push_str("[base64 image removed]");
+            } else {
+                // Small data URI (icon, etc.) — keep it
+                result.push_str(&after[..data_start + data_end]);
+            }
+            remaining = &after[data_start + data_end..];
+        } else {
+            // "data:image/" without ";base64," — just keep it
+            result.push_str("data:image/");
+            remaining = &after[11..]; // skip "data:image/"
+        }
+    }
+    result.push_str(remaining);
+    result
 }
 
 
@@ -768,5 +807,47 @@ mod tests {
         assert!(msgs.iter().any(|m| {
             m.text().map_or(false, |t| t.contains("[Earlier conversation summary]"))
         }));
+    }
+
+    #[test]
+    fn strip_inline_base64_replaces_large_data_uris() {
+        let input = r#"Some text before data:image/png;base64,AAAA/BBBB+CCCC== and after"#;
+        let result = strip_inline_base64(input);
+        // 20 chars of base64 is small enough to keep
+        assert!(result.contains("data:image/png;base64,"));
+
+        // Large base64 (>100 chars) should be replaced
+        let big_b64 = "A".repeat(200);
+        let input = format!(r#"before data:image/png;base64,{big_b64}" after"#);
+        let result = strip_inline_base64(&input);
+        assert!(result.contains("[base64 image removed]"));
+        assert!(!result.contains(&big_b64));
+    }
+
+    #[test]
+    fn strip_inline_base64_preserves_non_image_data() {
+        let input = "No images here, just plain text";
+        assert_eq!(strip_inline_base64(input), input);
+    }
+
+    #[test]
+    fn strip_inline_base64_handles_multiple_images() {
+        let big = "B".repeat(200);
+        let input = format!(
+            r#"![](data:image/png;base64,{big}) text ![](data:image/jpeg;base64,{big})"#
+        );
+        let result = strip_inline_base64(&input);
+        let count = result.matches("[base64 image removed]").count();
+        assert_eq!(count, 2, "should replace both large images");
+    }
+
+    #[test]
+    fn sanitize_for_api_strips_base64_and_control_chars() {
+        let big = "C".repeat(300);
+        let input = format!("Note: data:image/png;base64,{big}) \x01hidden");
+        let result = sanitize_for_api(&input);
+        assert!(result.contains("[base64 image removed]"));
+        assert!(!result.contains(&big));
+        assert!(!result.contains('\x01'));
     }
 }

@@ -19,6 +19,13 @@ use crate::models::sketch::PlanningRow;
 const MAX_IMAGE_BYTES: u64 = 5 * 1024 * 1024;
 /// Maximum number of images to include per tool result.
 const MAX_IMAGES_PER_RESULT: usize = 5;
+/// Images are resized to fit within this dimension before base64 encoding.
+/// 768px is generous for `detail: "low"` (512px tiles, 85 tokens each).
+const MAX_IMAGE_DIMENSION: u32 = 768;
+/// Maximum base64 characters per individual image (~75KB decoded).
+const MAX_BASE64_PER_IMAGE: usize = 100_000;
+/// Total base64 budget across all images in a single tool result (~225KB decoded).
+const MAX_TOTAL_BASE64: usize = 300_000;
 
 /// MIME type from file extension.
 fn mime_from_ext(ext: &str) -> &'static str {
@@ -37,6 +44,7 @@ fn mime_from_ext(ext: &str) -> &'static str {
 pub fn extract_and_encode_images(markdown: &str, root: &Path) -> (String, Vec<ContentPart>) {
     let mut parts = Vec::new();
     let mut cleaned = String::with_capacity(markdown.len());
+    let mut total_b64 = 0usize;
 
     // Regex-free line-by-line scan for ![...](path) patterns
     for line in markdown.lines() {
@@ -53,11 +61,19 @@ pub fn extract_and_encode_images(markdown: &str, root: &Path) -> (String, Vec<Co
                     if after_bracket < bytes.len() && bytes[after_bracket] == b'(' {
                         if let Some(close_paren) = line[after_bracket + 1..].find(')') {
                             let img_path_str = &line[after_bracket + 1..after_bracket + 1 + close_paren];
-                            // Try to encode the image
-                            if let Some(part) = encode_image_file(root, img_path_str) {
-                                if parts.len() < MAX_IMAGES_PER_RESULT {
-                                    parts.push(part);
-                                    found_image = true;
+                            // Try to encode the image (respecting per-image and total budgets)
+                            if parts.len() < MAX_IMAGES_PER_RESULT && total_b64 < MAX_TOTAL_BASE64 {
+                                if let Some((part, b64_len)) = encode_image_file(root, img_path_str) {
+                                    if total_b64 + b64_len <= MAX_TOTAL_BASE64 {
+                                        total_b64 += b64_len;
+                                        parts.push(part);
+                                        found_image = true;
+                                    } else {
+                                        log::info!(
+                                            "[vision] skipping {} — would exceed total base64 budget ({} + {} > {})",
+                                            img_path_str, total_b64, b64_len, MAX_TOTAL_BASE64
+                                        );
+                                    }
                                 }
                             }
                             // Skip the image reference in cleaned text
@@ -83,7 +99,8 @@ pub fn extract_and_encode_images(markdown: &str, root: &Path) -> (String, Vec<Co
 }
 
 /// Encode a single image file as a base64 data URI ContentPart.
-fn encode_image_file(root: &Path, rel_path: &str) -> Option<ContentPart> {
+/// Returns the part and the base64 string length (for budget tracking).
+fn encode_image_file(root: &Path, rel_path: &str) -> Option<(ContentPart, usize)> {
     let path = root.join(rel_path);
     if !path.exists() || !path.is_file() {
         return None;
@@ -98,28 +115,88 @@ fn encode_image_file(root: &Path, rel_path: &str) -> Option<ContentPart> {
 
     let ext = path.extension()?.to_str()?;
     let mime = mime_from_ext(ext);
-    if mime == "application/octet-stream" {
+    if mime == "application/octet-stream" || mime == "image/svg+xml" {
+        // SVGs can't be resized with the image crate; skip them for vision
         return None;
     }
 
     let data = std::fs::read(&path).ok()?;
+
+    // Try to resize if the image is larger than MAX_IMAGE_DIMENSION
+    let final_bytes = resize_image_if_needed(&data, mime);
+
     use base64::Engine;
-    let b64 = base64::engine::general_purpose::STANDARD.encode(&data);
-    let data_uri = format!("data:{mime};base64,{b64}");
+    let b64 = base64::engine::general_purpose::STANDARD.encode(&final_bytes);
+    let b64_len = b64.len();
 
-    log::debug!("[vision] encoded {} ({} bytes → {} b64 chars)", rel_path, data.len(), b64.len());
+    if b64_len > MAX_BASE64_PER_IMAGE {
+        log::info!(
+            "[vision] skipping {} — base64 too large after resize ({} > {} chars)",
+            rel_path, b64_len, MAX_BASE64_PER_IMAGE
+        );
+        return None;
+    }
 
-    Some(ContentPart::ImageUrl {
-        image_url: ImageUrlData {
-            url: data_uri,
-            detail: Some("low".into()),
+    // Always output as PNG after resize (the image crate decodes/re-encodes)
+    let out_mime = if final_bytes.len() < data.len() { "image/png" } else { mime };
+    let data_uri = format!("data:{out_mime};base64,{b64}");
+
+    log::debug!(
+        "[vision] encoded {} ({} bytes → {} after resize → {} b64 chars)",
+        rel_path, data.len(), final_bytes.len(), b64_len
+    );
+
+    Some((
+        ContentPart::ImageUrl {
+            image_url: ImageUrlData {
+                url: data_uri,
+                detail: Some("low".into()),
+            },
         },
-    })
+        b64_len,
+    ))
+}
+
+/// Resize an image to fit within MAX_IMAGE_DIMENSION if it exceeds that.
+/// Returns the original bytes unchanged if resize isn't needed or fails.
+fn resize_image_if_needed(data: &[u8], _mime: &str) -> Vec<u8> {
+    let img = match image::load_from_memory(data) {
+        Ok(img) => img,
+        Err(e) => {
+            log::debug!("[vision] couldn't decode image for resize: {e}");
+            return data.to_vec();
+        }
+    };
+
+    let (w, h) = (img.width(), img.height());
+    if w <= MAX_IMAGE_DIMENSION && h <= MAX_IMAGE_DIMENSION {
+        return data.to_vec();
+    }
+
+    // Resize preserving aspect ratio
+    let resized = img.resize(
+        MAX_IMAGE_DIMENSION,
+        MAX_IMAGE_DIMENSION,
+        image::imageops::FilterType::Lanczos3,
+    );
+    log::info!(
+        "[vision] resized {}x{} → {}x{} (max {}px)",
+        w, h, resized.width(), resized.height(), MAX_IMAGE_DIMENSION
+    );
+
+    // Re-encode as PNG
+    let mut buf = Vec::new();
+    let mut cursor = std::io::Cursor::new(&mut buf);
+    if resized.write_to(&mut cursor, image::ImageFormat::Png).is_ok() {
+        buf
+    } else {
+        data.to_vec()
+    }
 }
 
 /// Encode a single image path (e.g., sketch screenshot) as a ContentPart.
 pub fn encode_image_at_path(root: &Path, rel_path: &str) -> Option<ContentPart> {
-    encode_image_file(root, rel_path)
+    encode_image_file(root, rel_path).map(|(part, _len)| part)
 }
 
 // ---------------------------------------------------------------------------
