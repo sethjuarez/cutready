@@ -1295,8 +1295,42 @@ impl LlmClient {
         if !resp.status().is_success() {
             let status = resp.status();
             let text = resp.text().await.unwrap_or_default();
+            let mut end = 2000.min(text.len());
+            while end < text.len() && !text.is_char_boundary(end) {
+                end -= 1;
+            }
+            let detail = &text[..end];
+
+            let lower = detail.to_lowercase();
+            let error_class = if status == 400 {
+                if lower.contains("context_length_exceeded") || lower.contains("maximum context length") {
+                    "token_limit"
+                } else if lower.contains("invalid_payload") || lower.contains("validation") {
+                    "format_error"
+                } else if lower.contains("tool call") || lower.contains("function_call") || lower.contains("call_id") {
+                    "orphaned_tool_result"
+                } else {
+                    "unknown_400"
+                }
+            } else {
+                "server_error"
+            };
+
+            log::error!(
+                "[llm] Responses API error {} [{}]: {}",
+                status, error_class, detail
+            );
+
+            crate::util::trace::emit("llm_error", "llm", serde_json::json!({
+                "status": status.as_u16(),
+                "error_class": error_class,
+                "api": "responses",
+                "model": self.config.model,
+                "detail": crate::util::trace::truncate(detail, 500),
+            }));
+
             return Err(format!(
-                "Responses API error ({status}) [url={url}]: {text}"
+                "Responses API error ({status}) [{error_class}]: {detail}"
             ));
         }
 
@@ -1381,9 +1415,12 @@ impl LlmClient {
         // Azure gateway rejects bodies over ~4MB with cryptic IIS errors.
         // When trimming, summarize dropped messages into working memory so the
         // LLM retains context about what was discussed earlier.
-        // Responses API has a stricter effective body size limit (~80KB observed).
-        // Chat Completions can handle much larger payloads.
-        const MAX_BODY_BYTES_RESPONSES: usize = 64 * 1024; // 64KB for Responses API
+        // Note: The Responses API has no documented HTTP body size limit — limits
+        // are token-based, not byte-based. Earlier 400 errors at ~80KB were caused
+        // by content issues (UTF-8 truncation, control chars) now fixed by
+        // sanitize_for_api() and JSON body validation. We keep a generous byte
+        // guard to catch pathological cases before they hit the wire.
+        const MAX_BODY_BYTES_RESPONSES: usize = 1024 * 1024; // 1MB — generous guard
         const MAX_BODY_BYTES_CHAT: usize = 3 * 1024 * 1024; // 3MB for Chat Completions
         let max_body = if use_responses { MAX_BODY_BYTES_RESPONSES } else { MAX_BODY_BYTES_CHAT };
         if body_json.len() > max_body {
@@ -1533,12 +1570,38 @@ impl LlmClient {
                 end -= 1;
             }
             let detail = &text[..end];
-            log::error!("[llm] API error {}: {}", status, detail);
+
+            // Classify the error for better diagnostics
+            let error_class = if status == 400 {
+                let lower = detail.to_lowercase();
+                if lower.contains("context_length_exceeded") || lower.contains("maximum context length") {
+                    "token_limit"
+                } else if lower.contains("invalid_payload") || lower.contains("validation") {
+                    "format_error"
+                } else if lower.contains("tool call") || lower.contains("function_call") || lower.contains("call_id") {
+                    "orphaned_tool_result"
+                } else if lower.contains("body too large") || lower.contains("content length") {
+                    "body_size"
+                } else {
+                    "unknown_400"
+                }
+            } else if status == 429 {
+                "rate_limit"
+            } else {
+                "server_error"
+            };
+
+            log::error!(
+                "[llm] API error {} [{}] ({}KB body, {} api): {}",
+                status, error_class, body_json.len() / 1024, api_label, detail
+            );
 
             crate::util::trace::emit("llm_error", "llm", serde_json::json!({
                 "status": status.as_u16(),
+                "error_class": error_class,
                 "model": self.config.model,
-                "body_len": body_json.len(),
+                "api": api_label,
+                "body_kb": body_json.len() / 1024,
                 "detail": crate::util::trace::truncate(detail, 500),
             }));
 
@@ -1548,7 +1611,7 @@ impl LlmClient {
                 Self::log_body_context_at_error(&body_json, detail);
             }
 
-            return Err(format!("Chat stream error ({status}): {detail}"));
+            return Err(format!("Chat stream error ({status}) [{error_class}]: {detail}"));
         }
 
         // Shared state for Responses API streaming (function call index tracking)
