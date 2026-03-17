@@ -45,7 +45,8 @@ fn estimate_chars(msgs: &[ChatMessage]) -> usize {
 
 /// Build a compact memory summary from messages that are about to be dropped.
 /// Extracts key user requests, assistant decisions, and tool actions without
-/// needing an LLM call.
+/// needing an LLM call. Used as a fast fallback when LLM compaction is
+/// unavailable or fails.
 pub fn summarize_dropped(dropped: &[ChatMessage]) -> String {
     let mut summary_parts: Vec<String> = Vec::new();
 
@@ -92,19 +93,119 @@ pub fn summarize_dropped(dropped: &[ChatMessage]) -> String {
     result
 }
 
+/// Use the LLM to produce a richer summary of dropped messages.
+/// Falls back to `summarize_dropped()` if the LLM call fails.
+pub async fn summarize_dropped_with_llm(
+    dropped: &[ChatMessage],
+    client: &crate::engine::agent::llm::LlmClient,
+) -> String {
+    // Build a condensed representation of dropped messages for the LLM
+    let mut context = String::with_capacity(8000);
+    for msg in dropped {
+        let role = &msg.role;
+        match role.as_str() {
+            "user" => {
+                if let Some(text) = msg.text() {
+                    let t = if text.len() > 500 { &text[..500] } else { text };
+                    context.push_str(&format!("[User]: {t}\n"));
+                }
+            }
+            "assistant" => {
+                if let Some(text) = msg.text() {
+                    let t = if text.len() > 500 { &text[..500] } else { text };
+                    context.push_str(&format!("[Assistant]: {t}\n"));
+                }
+                if let Some(tool_calls) = &msg.tool_calls {
+                    for tc in tool_calls {
+                        let args_preview = if tc.function.arguments.len() > 200 {
+                            &tc.function.arguments[..200]
+                        } else {
+                            &tc.function.arguments
+                        };
+                        context.push_str(&format!(
+                            "[Tool Call]: {}({})\n",
+                            tc.function.name, args_preview
+                        ));
+                    }
+                }
+            }
+            "tool" => {
+                if let (Some(text), Some(_call_id)) = (msg.text(), &msg.tool_call_id) {
+                    let t = if text.len() > 300 { &text[..300] } else { text };
+                    context.push_str(&format!("[Tool Result]: {t}\n"));
+                }
+            }
+            _ => {}
+        }
+        // Keep context under ~6000 chars to stay cheap
+        if context.len() > 6000 {
+            context.push_str("... (older messages omitted)\n");
+            break;
+        }
+    }
+
+    if context.is_empty() {
+        return String::new();
+    }
+
+    let prompt = format!(
+        "Summarize this earlier conversation into a concise memory note (max 1000 chars). \
+         Preserve: key decisions made, files read or modified, tool actions taken, and any \
+         important context the assistant will need to continue the conversation. \
+         Use bullet points. Do NOT include greetings or meta-commentary.\n\n{context}"
+    );
+
+    let messages = vec![
+        ChatMessage::system(
+            "You are a conversation summarizer. Produce concise, factual summaries."
+        ),
+        ChatMessage::user(&prompt),
+    ];
+
+    match tokio::time::timeout(
+        std::time::Duration::from_secs(15),
+        client.chat(&messages, None),
+    )
+    .await
+    {
+        Ok(Ok(resp)) => {
+            if let Some(text) = resp.choices.first().and_then(|c| c.message.text()) {
+                log::info!(
+                    "[agent] LLM compaction: {} dropped msgs → {}char summary",
+                    dropped.len(),
+                    text.len()
+                );
+                format!("[Earlier conversation summary — LLM-condensed]\n{text}")
+            } else {
+                log::warn!("[agent] LLM compaction returned empty, falling back");
+                summarize_dropped(dropped)
+            }
+        }
+        Ok(Err(e)) => {
+            log::warn!("[agent] LLM compaction failed ({}), falling back", e);
+            summarize_dropped(dropped)
+        }
+        Err(_) => {
+            log::warn!("[agent] LLM compaction timed out (15s), falling back");
+            summarize_dropped(dropped)
+        }
+    }
+}
+
 /// Trim messages to fit within the character budget, preserving context
 /// via a compact summary of dropped messages.
 ///
 /// Strategy:
 /// 1. Keep system messages at the front
 /// 2. If over budget, extract the oldest non-system messages
-/// 3. Summarize them into a single "memory" user message
+/// 3. Summarize them into a single "memory" user message (fast string fallback)
 /// 4. Insert the summary after system messages, before recent conversation
 ///
-/// Returns the number of messages dropped (0 if no trimming needed).
-fn trim_to_context_window(messages: &mut Vec<ChatMessage>, max_chars: usize) -> usize {
+/// Returns `(dropped_count, dropped_messages)`. The dropped messages are
+/// returned so the caller can optionally upgrade the summary via LLM.
+fn trim_to_context_window(messages: &mut Vec<ChatMessage>, max_chars: usize) -> (usize, Vec<ChatMessage>) {
     if estimate_chars(messages) <= max_chars {
-        return 0;
+        return (0, Vec::new());
     }
 
     // Split into system prefix and conversation
@@ -122,7 +223,7 @@ fn trim_to_context_window(messages: &mut Vec<ChatMessage>, max_chars: usize) -> 
 
     let dropped_count = dropped.len();
 
-    // Build summary of what was dropped
+    // Build fast string summary as initial placeholder
     let summary = summarize_dropped(&dropped);
 
     // Reassemble: system + summary + recent conversation
@@ -132,7 +233,7 @@ fn trim_to_context_window(messages: &mut Vec<ChatMessage>, max_chars: usize) -> 
         messages.push(ChatMessage::user(&summary));
     }
     messages.extend(recent);
-    dropped_count
+    (dropped_count, dropped)
 }
 
 /// Events emitted during the agent loop.
@@ -240,11 +341,28 @@ fn run_with_depth<'a>(
             // Trim conversation to fit within model's context window
             let budget = client.context_char_budget();
             let pre_len = messages.len();
-            let dropped_count = trim_to_context_window(&mut messages, budget);
+            let (dropped_count, dropped_msgs) = trim_to_context_window(&mut messages, budget);
             if dropped_count > 0 {
                 log::debug!("[agent] trimmed {} → {} messages (budget={})", pre_len, messages.len(), budget);
                 emit(AgentEvent::Status {
-                    message: format!("Compacting context — summarized {} earlier messages", dropped_count),
+                    message: format!("Compacting context — summarizing {} earlier messages…", dropped_count),
+                });
+
+                // Upgrade the fast string summary with an LLM-powered one.
+                // The string summary is already in messages as the first
+                // non-system user message. Replace it if LLM succeeds.
+                let llm_summary = summarize_dropped_with_llm(&dropped_msgs, client).await;
+                if llm_summary.contains("LLM-condensed") {
+                    // Find and replace the placeholder summary
+                    if let Some(pos) = messages.iter().position(|m| {
+                        m.role == "user" && m.text().map_or(false, |t| t.starts_with("[Earlier conversation summary]"))
+                    }) {
+                        messages[pos] = ChatMessage::user(&llm_summary);
+                    }
+                }
+
+                emit(AgentEvent::Status {
+                    message: format!("Compacted context — summarized {} earlier messages", dropped_count),
                 });
             }
 
@@ -561,5 +679,94 @@ async fn exec_fetch_url(call: &crate::engine::agent::llm::ToolCall) -> String {
     match web::fetch_and_clean(url).await {
         Ok(content) => content,
         Err(e) => format!("Error fetching URL: {e}"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::engine::agent::llm::{ChatMessage, FunctionCall, MessageContent, ToolCall};
+
+    #[test]
+    fn summarize_dropped_empty() {
+        assert_eq!(summarize_dropped(&[]), "");
+    }
+
+    #[test]
+    fn summarize_dropped_user_and_assistant() {
+        let msgs = vec![
+            ChatMessage::user("What files exist?"),
+            ChatMessage {
+                role: "assistant".into(),
+                content: Some(MessageContent::Text("Here are the files.".into())),
+                tool_calls: Some(vec![ToolCall {
+                    id: "c1".into(),
+                    call_type: "function".into(),
+                    function: FunctionCall {
+                        name: "list_files".into(),
+                        arguments: "{}".into(),
+                    },
+                }]),
+                tool_call_id: None,
+            },
+            ChatMessage::tool_result("c1", "file1.txt\nfile2.txt"),
+        ];
+        let summary = summarize_dropped(&msgs);
+        assert!(summary.contains("User asked: What files exist?"));
+        assert!(summary.contains("Assistant: Here are the files."));
+        assert!(summary.contains("Called tool: list_files"));
+        // Tool results should be skipped
+        assert!(!summary.contains("file1.txt"));
+    }
+
+    #[test]
+    fn summarize_dropped_truncates_long_messages() {
+        let long_msg = "x".repeat(500);
+        let msgs = vec![ChatMessage::user(&long_msg)];
+        let summary = summarize_dropped(&msgs);
+        // Should be truncated to 200 chars
+        assert!(summary.len() < 300);
+    }
+
+    #[test]
+    fn summarize_dropped_caps_at_4000_chars() {
+        let msgs: Vec<ChatMessage> = (0..100)
+            .map(|i| ChatMessage::user(&format!("Message number {} with some content here", i)))
+            .collect();
+        let summary = summarize_dropped(&msgs);
+        assert!(summary.len() <= 4100); // 4000 + marker
+        assert!(summary.contains("older messages omitted"));
+    }
+
+    #[test]
+    fn trim_to_context_window_no_trim_needed() {
+        let mut msgs = vec![
+            ChatMessage::system("You are helpful"),
+            ChatMessage::user("Hello"),
+        ];
+        let (dropped, dropped_msgs) = trim_to_context_window(&mut msgs, 100_000);
+        assert_eq!(dropped, 0);
+        assert!(dropped_msgs.is_empty());
+        assert_eq!(msgs.len(), 2);
+    }
+
+    #[test]
+    fn trim_to_context_window_drops_oldest() {
+        let mut msgs = vec![
+            ChatMessage::system("You are an AI assistant that helps users"),
+            ChatMessage::user(&"A".repeat(500)),
+            ChatMessage::user(&"B".repeat(500)),
+            ChatMessage::user("recent question"),
+        ];
+        // Budget smaller than total but bigger than system + 1 message
+        let (dropped, dropped_msgs) = trim_to_context_window(&mut msgs, 700);
+        assert!(dropped > 0);
+        assert!(!dropped_msgs.is_empty());
+        // System message should be preserved
+        assert_eq!(msgs[0].role, "system");
+        // Should have a summary message
+        assert!(msgs.iter().any(|m| {
+            m.text().map_or(false, |t| t.contains("[Earlier conversation summary]"))
+        }));
     }
 }
