@@ -109,6 +109,21 @@ export function StoryboardList() {
   const [newNoteTitle, setNewNoteTitle] = useState("");
   const [pendingDelete, setPendingDelete] = useState<{ type: "storyboard" | "sketch" | "note"; path: string; title: string; usedBy?: string[] } | null>(null);
 
+  // Global Escape to cancel any active creation
+  useEffect(() => {
+    const anyCreating = isCreatingSb || isCreatingSk || isCreatingNote;
+    if (!anyCreating) return;
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setIsCreatingSb(false); setNewSbTitle("");
+        setIsCreatingSk(false); setNewSkTitle("");
+        setIsCreatingNote(false); setNewNoteTitle("");
+      }
+    };
+    window.addEventListener("keydown", handleEsc);
+    return () => window.removeEventListener("keydown", handleEsc);
+  }, [isCreatingSb, isCreatingSk, isCreatingNote]);
+
   const requestDelete = useCallback(async (type: "storyboard" | "sketch" | "note", path: string, title: string) => {
     let usedBy: string[] | undefined;
     if (type === "sketch") {

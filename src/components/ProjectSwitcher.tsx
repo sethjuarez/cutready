@@ -42,6 +42,21 @@ export function ProjectSwitcher() {
     return () => window.removeEventListener("mousedown", handleClick);
   }, [isOpen]);
 
+  // Global Escape to cancel any active input state
+  useEffect(() => {
+    const anyActive = isCreating || isMigrating || renamingPath;
+    if (!anyActive) return;
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setIsCreating(false); setNewName("");
+        setIsMigrating(false); setMigrateName("");
+        setRenamingPath(null); setRenameValue("");
+      }
+    };
+    window.addEventListener("keydown", handleEsc);
+    return () => window.removeEventListener("keydown", handleEsc);
+  }, [isCreating, isMigrating, renamingPath]);
+
   // Focus input when creating, migrating, or renaming
   useEffect(() => {
     if (isCreating) inputRef.current?.focus();
