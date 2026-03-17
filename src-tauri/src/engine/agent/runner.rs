@@ -100,9 +100,11 @@ pub fn summarize_dropped(dropped: &[ChatMessage]) -> String {
 /// 2. If over budget, extract the oldest non-system messages
 /// 3. Summarize them into a single "memory" user message
 /// 4. Insert the summary after system messages, before recent conversation
-fn trim_to_context_window(messages: &mut Vec<ChatMessage>, max_chars: usize) {
+///
+/// Returns the number of messages dropped (0 if no trimming needed).
+fn trim_to_context_window(messages: &mut Vec<ChatMessage>, max_chars: usize) -> usize {
     if estimate_chars(messages) <= max_chars {
-        return;
+        return 0;
     }
 
     // Split into system prefix and conversation
@@ -118,6 +120,8 @@ fn trim_to_context_window(messages: &mut Vec<ChatMessage>, max_chars: usize) {
         dropped.push(messages.remove(0));
     }
 
+    let dropped_count = dropped.len();
+
     // Build summary of what was dropped
     let summary = summarize_dropped(&dropped);
 
@@ -128,6 +132,7 @@ fn trim_to_context_window(messages: &mut Vec<ChatMessage>, max_chars: usize) {
         messages.push(ChatMessage::user(&summary));
     }
     messages.extend(recent);
+    dropped_count
 }
 
 /// Events emitted during the agent loop.
@@ -234,9 +239,12 @@ fn run_with_depth<'a>(
             // Trim conversation to fit within model's context window
             let budget = client.context_char_budget();
             let pre_len = messages.len();
-            trim_to_context_window(&mut messages, budget);
-            if messages.len() < pre_len {
+            let dropped_count = trim_to_context_window(&mut messages, budget);
+            if dropped_count > 0 {
                 log::debug!("[agent] trimmed {} → {} messages (budget={})", pre_len, messages.len(), budget);
+                emit(AgentEvent::Status {
+                    message: format!("Compacting context — summarized {} earlier messages", dropped_count),
+                });
             }
 
             // Use streaming to get real-time text output
@@ -338,6 +346,14 @@ fn run_with_depth<'a>(
                         }
                     }
                 }
+            }
+
+            // Check if body-size compaction happened during the LLM call
+            let body_compacted = client.last_compaction_dropped.load(std::sync::atomic::Ordering::Relaxed);
+            if body_compacted > 0 {
+                emit(AgentEvent::Status {
+                    message: format!("Compacting context — summarized {} earlier messages", body_compacted),
+                });
             }
 
             // Convert accumulated stream tool calls into proper ToolCall objects

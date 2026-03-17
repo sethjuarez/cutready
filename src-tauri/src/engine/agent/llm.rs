@@ -423,6 +423,9 @@ pub struct LlmClient {
     /// API-reported context window (tokens) for the selected model.
     /// Set after listing models if the deployment reports it.
     reported_context_length: std::sync::Mutex<Option<usize>>,
+    /// Number of messages dropped during the most recent body-size compaction.
+    /// Reset to 0 before each chat_stream call; checked by the runner after.
+    pub last_compaction_dropped: std::sync::atomic::AtomicUsize,
 }
 
 impl LlmClient {
@@ -442,6 +445,7 @@ impl LlmClient {
             config,
             http,
             reported_context_length: std::sync::Mutex::new(None),
+            last_compaction_dropped: std::sync::atomic::AtomicUsize::new(0),
         }
     }
 
@@ -1312,6 +1316,7 @@ impl LlmClient {
         messages: &[ChatMessage],
         tools: Option<&[ToolDefinition]>,
     ) -> Result<impl futures_util::Stream<Item = Result<Vec<StreamChunk>, String>>, String> {
+        self.last_compaction_dropped.store(0, std::sync::atomic::Ordering::Relaxed);
         let use_responses = self.needs_responses_api();
         let tool_defs = tools.map(|t| t.to_vec());
 
@@ -1396,7 +1401,10 @@ impl LlmClient {
                 .unwrap_or(final_messages.len());
             let system_msgs: Vec<ChatMessage> = final_messages.drain(..sys_end).collect();
 
-            // Drop oldest conversation messages until under budget
+            // Drop oldest conversation messages until under budget.
+            // IMPORTANT: tool_call / tool_result pairs must be dropped together —
+            // the Responses API rejects orphaned tool results whose call_id has no
+            // matching tool_call in the conversation.
             let mut dropped: Vec<ChatMessage> = Vec::new();
             loop {
                 let trial_msgs =
@@ -1405,6 +1413,33 @@ impl LlmClient {
                 if size <= max_body || final_messages.len() <= 2 {
                     break;
                 }
+                let removed = final_messages.remove(0);
+
+                // If we just dropped an assistant message with tool_calls,
+                // also drop all immediately following tool-result messages
+                // that reference those call IDs.
+                if removed.role == "assistant" {
+                    if let Some(ref calls) = removed.tool_calls {
+                        let call_ids: std::collections::HashSet<&str> =
+                            calls.iter().map(|c| c.id.as_str()).collect();
+                        while !final_messages.is_empty()
+                            && final_messages[0].role == "tool"
+                            && final_messages[0]
+                                .tool_call_id
+                                .as_deref()
+                                .map(|id| call_ids.contains(id))
+                                .unwrap_or(false)
+                        {
+                            dropped.push(final_messages.remove(0));
+                        }
+                    }
+                }
+
+                dropped.push(removed);
+            }
+
+            // Safety sweep: remove any leading orphaned tool results
+            while !final_messages.is_empty() && final_messages[0].role == "tool" {
                 dropped.push(final_messages.remove(0));
             }
 
@@ -1425,6 +1460,7 @@ impl LlmClient {
                 final_messages.len(),
                 body_json.len() / 1024
             );
+            self.last_compaction_dropped.store(dropped.len(), std::sync::atomic::Ordering::Relaxed);
         }
 
         // For Responses API, ensure the model field is set correctly

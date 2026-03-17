@@ -571,6 +571,10 @@ function ChatTab() {
           break;
         case "status":
           setStreamingStatus(ev.message ?? "");
+          // Compaction status events get injected as visible system messages in chat
+          if (ev.message && ev.message.startsWith("Compacting context")) {
+            setChatMessages([...messages, { role: "system", content: ev.message! }]);
+          }
           addActivityEntries([{
             id: crypto.randomUUID(),
             timestamp: new Date(),
@@ -1705,7 +1709,7 @@ function MessageRow({ message, projectRoot, onDelete }: { message: ChatMessage; 
             </svg>
           </button>
         )}
-        <div className="bg-[var(--color-accent)]/15 border border-[var(--color-accent)]/20 rounded-xl rounded-br-sm px-3 py-2 text-[13px] text-[var(--color-text)] whitespace-pre-wrap break-words leading-[1.6] max-w-[85%]">
+        <div className="bg-[var(--color-accent)]/10 border border-[var(--color-accent)]/30 rounded-xl rounded-br-sm px-3 py-2 text-[13px] text-[var(--color-text)] whitespace-pre-wrap break-words leading-[1.6] max-w-[85%]">
           <UserContent content={message.content || ""} />
         </div>
       </div>
@@ -1722,6 +1726,23 @@ function MessageRow({ message, projectRoot, onDelete }: { message: ChatMessage; 
 
   if (message.role === "tool") {
     return null;
+  }
+
+  // Compaction / system events — rendered like a tool-call pill
+  if (message.role === "system" && message.content) {
+    return (
+      <div className="px-3.5 py-1">
+        <div className="inline-flex items-center gap-1.5 px-2 py-0.5 text-[11px] rounded border transition-colors bg-amber-500/10 text-amber-500 border-amber-500/25">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="opacity-70 shrink-0">
+            <path d="M4 14h16" />
+            <path d="M4 10h16" />
+            <path d="M8 6h8" />
+            <path d="M8 18h8" />
+          </svg>
+          <span className="font-medium truncate">{message.content}</span>
+        </div>
+      </div>
+    );
   }
 
   if (message.role === "assistant") {
