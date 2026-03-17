@@ -127,10 +127,18 @@ export interface NoteSummary {
 
 // ── Chat types ────────────────────────────────────────────────
 
+/** A single content part in a multimodal message (matches Rust ContentPart). */
+export interface ContentPart {
+  type: "text" | "image_url";
+  text?: string;
+  image_url?: { url: string; detail?: string };
+}
+
 /** A chat message (matches Rust ChatMessage). */
 export interface ChatMessage {
   role: string;
-  content: string | null;
+  /** May be a plain string, null, or an array of ContentPart objects for multimodal messages. */
+  content: string | ContentPart[] | null;
   tool_calls?: ToolCall[];
   tool_call_id?: string;
 }

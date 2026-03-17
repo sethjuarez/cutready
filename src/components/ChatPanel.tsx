@@ -25,6 +25,28 @@ import { VersionHistory } from "./VersionHistory";
 import { SketchIcon, StoryboardIcon, NoteIcon } from "./Icons";
 import type { ChatMessage, ChatSessionSummary, ToolCall } from "../types/sketch";
 
+// ── Helpers ──────────────────────────────────────────────────────
+
+/**
+ * Safely extract text from a ChatMessage content field.
+ * The backend may return content as a plain string OR as an array of
+ * ContentPart objects ({type: "text", text: "..."} / {type: "image_url", ...}).
+ * This normalizes both to a plain string for rendering.
+ */
+function textContent(content: ChatMessage["content"]): string {
+  if (content == null) return "";
+  if (typeof content === "string") return content;
+  // Array of content parts — extract text parts
+  if (Array.isArray(content)) {
+    return (content as Array<{ type: string; text?: string }>)
+      .filter((p) => p.type === "text" && p.text)
+      .map((p) => p.text!)
+      .join("\n");
+  }
+  // Unknown shape — coerce to string as last resort
+  return String(content);
+}
+
 // ── Types ────────────────────────────────────────────────────────
 
 interface AgentChatResult {
@@ -795,7 +817,7 @@ function ChatTab() {
   useEffect(() => {
     if (messages.length > 1 && chatSessionPath) {
       const userMsgs = messages.filter((m) => m.role === "user");
-      const summary = userMsgs.map((m) => m.content?.slice(0, 100)).filter(Boolean).join("; ");
+      const summary = userMsgs.map((m) => textContent(m.content).slice(0, 100)).filter(Boolean).join("; ");
       if (summary) {
         invoke("update_chat_summary", {
           sessionId: chatSessionPath,
@@ -1718,7 +1740,7 @@ function MessageRow({ message, projectRoot, onDelete }: { message: ChatMessage; 
           </button>
         )}
         <div className="bg-[#6b5ce7]/[0.05] border border-[#6b5ce7]/40 dark:bg-[#a49afa]/10 dark:border-[#a49afa]/40 rounded-xl rounded-br-sm px-3 py-2 text-[13px] text-[var(--color-text)] whitespace-pre-wrap break-words leading-[1.6] max-w-[85%]">
-          <UserContent content={message.content || ""} />
+          <UserContent content={textContent(message.content)} />
         </div>
       </div>
     );
@@ -1747,7 +1769,7 @@ function MessageRow({ message, projectRoot, onDelete }: { message: ChatMessage; 
             <path d="M8 6h8" />
             <path d="M8 18h8" />
           </svg>
-          <span className="font-medium truncate">{message.content}</span>
+          <span className="font-medium truncate">{textContent(message.content)}</span>
         </div>
       </div>
     );
@@ -1757,7 +1779,7 @@ function MessageRow({ message, projectRoot, onDelete }: { message: ChatMessage; 
     return (
       <div className="px-3.5 py-2">
         <div className="border-l-2 border-[var(--color-accent)]/30 pl-3 text-[13px] text-[var(--color-text)] leading-[1.6]">
-          <MarkdownContent content={message.content || ""} projectRoot={projectRoot} />
+          <MarkdownContent content={textContent(message.content)} projectRoot={projectRoot} />
         </div>
       </div>
     );
