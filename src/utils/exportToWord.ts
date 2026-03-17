@@ -175,11 +175,10 @@ async function captureVisualLastFrame(visualPath: string): Promise<ImageRun | nu
     const svgString = renderToSvgString(dsl, lastFrame, { width, height });
     console.log("[exportToWord] SVG rendered, length:", svgString.length);
 
-    // Rasterize SVG → PNG using Image + OffscreenCanvas (avoids DOM dependency)
+    // Rasterize SVG → PNG via data-URI (blob URLs blocked by Tauri CSP)
     const rasterW = width * 2;
     const rasterH = height * 2;
-    const svgBlob = new Blob([svgString], { type: "image/svg+xml;charset=utf-8" });
-    const url = URL.createObjectURL(svgBlob);
+    const dataUri = `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svgString)))}`;
 
     const buffer: ArrayBuffer = await new Promise((resolve, reject) => {
       const img = new Image();
@@ -198,15 +197,12 @@ async function captureVisualLastFrame(visualPath: string): Promise<ImageRun | nu
             },
             "image/png",
           );
-        } finally {
-          URL.revokeObjectURL(url);
+        } catch (err) {
+          reject(err);
         }
       };
-      img.onerror = (e) => {
-        URL.revokeObjectURL(url);
-        reject(new Error(`Image load failed: ${e}`));
-      };
-      img.src = url;
+      img.onerror = () => reject(new Error("Image load failed (data-uri)"));
+      img.src = dataUri;
     });
 
     console.log("[exportToWord] Visual captured, PNG size:", buffer.byteLength);
