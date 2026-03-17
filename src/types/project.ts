@@ -4,12 +4,21 @@
 export interface ProjectView {
   root: string;
   name: string;
+  /** The repo root that contains this project. Same as `root` for single-project repos. */
+  repo_root: string;
 }
 
 /** A recently opened project (stored in app data). */
 export interface RecentProject {
   path: string;
   last_opened: string;
+}
+
+/** An entry in the multi-project manifest. */
+export interface ProjectEntry {
+  path: string;
+  name: string;
+  description?: string;
 }
 
 export interface Script {

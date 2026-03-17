@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { invoke, Channel } from "@tauri-apps/api/core";
-import type { ProjectView, RecentProject } from "../types/project";
+import type { ProjectView, ProjectEntry, RecentProject } from "../types/project";
 import type {
   BrowserProfile,
   BrowserRunningStatus,
@@ -67,6 +67,10 @@ interface AppStoreState {
   currentProject: ProjectView | null;
   /** Recent projects for the home screen. */
   recentProjects: RecentProject[];
+  /** All projects in the current repo (empty for single-project repos). */
+  projects: ProjectEntry[];
+  /** Whether the current repo has multiple projects. */
+  isMultiProject: boolean;
   /** Whether an operation is in progress. */
   loading: boolean;
   /** Last error message to display in the UI. */
@@ -251,6 +255,17 @@ interface AppStoreState {
   createProject: (path: string) => Promise<void>;
   openProject: (path: string) => Promise<void>;
   closeProject: () => void;
+
+  // ── Multi-project actions ──────────────────────────────────
+
+  /** Load the list of projects in the current repo. */
+  loadProjects: () => Promise<void>;
+  /** Switch to a different project within the repo. */
+  switchProject: (projectPath: string) => Promise<void>;
+  /** Create a new project within the current repo. */
+  createProjectInRepo: (name: string, description?: string) => Promise<void>;
+  /** Delete a project from the repo. */
+  deleteProjectFromRepo: (projectPath: string, deleteFiles?: boolean) => Promise<void>;
 
   // ── Sketch actions ─────────────────────────────────────
 
@@ -474,6 +489,8 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   view: "home",
   currentProject: null,
   recentProjects: [],
+  projects: [],
+  isMultiProject: false,
   loading: false,
   error: null,
   sidebarMode: "list",
@@ -709,6 +726,8 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         activeNoteContent: null,
       });
       localStorage.setItem("cutready:lastProject", path);
+      // Load multi-project state
+      await get().loadProjects();
       await get().loadSketches();
       await get().loadStoryboards();
       await get().loadNotes();
@@ -757,6 +776,8 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     localStorage.removeItem("cutready:lastProject");
     set({
       currentProject: null,
+      projects: [],
+      isMultiProject: false,
       view: "home",
       sketches: [],
       activeSketchPath: null,
@@ -795,6 +816,84 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       openTabs: [],
       activeTabId: null,
     });
+  },
+
+  // ── Multi-project actions ──────────────────────────────────
+
+  loadProjects: async () => {
+    try {
+      const [projects, isMulti] = await Promise.all([
+        invoke<ProjectEntry[]>("list_projects"),
+        invoke<boolean>("is_multi_project"),
+      ]);
+      set({ projects, isMultiProject: isMulti });
+    } catch {
+      set({ projects: [], isMultiProject: false });
+    }
+  },
+
+  switchProject: async (projectPath) => {
+    set({ loading: true });
+    try {
+      // Save current workspace state before switching
+      const { openTabs, activeTabId, chatSessionPath } = get();
+      await invoke("set_workspace_state", {
+        workspace: {
+          open_tabs: openTabs.map((t) => ({
+            id: t.id,
+            type: t.type,
+            path: t.path,
+            title: t.title,
+          })),
+          active_tab_id: activeTabId,
+          chat_session_path: chatSessionPath,
+        },
+      }).catch(() => {});
+
+      const project = await invoke<ProjectView>("switch_project", { projectPath });
+      set({
+        currentProject: project,
+        openTabs: [],
+        activeTabId: null,
+        activeSketchPath: null,
+        activeSketch: null,
+        activeStoryboardPath: null,
+        activeStoryboard: null,
+        activeNotePath: null,
+        activeNoteContent: null,
+        chatMessages: [],
+        chatSessionPath: null,
+      });
+      await get().loadSketches();
+      await get().loadStoryboards();
+      await get().loadNotes();
+      await get().loadSidebarOrder();
+    } catch (err) {
+      console.error("Failed to switch project:", err);
+      set({ error: String(err) });
+    } finally {
+      set({ loading: false });
+    }
+  },
+
+  createProjectInRepo: async (name, description) => {
+    try {
+      await invoke("create_project_in_repo", { name, description: description ?? null });
+      await get().loadProjects();
+    } catch (err) {
+      console.error("Failed to create project:", err);
+      set({ error: String(err) });
+    }
+  },
+
+  deleteProjectFromRepo: async (projectPath, deleteFiles = false) => {
+    try {
+      await invoke("delete_project", { projectPath, deleteFiles });
+      await get().loadProjects();
+    } catch (err) {
+      console.error("Failed to delete project:", err);
+      set({ error: String(err) });
+    }
   },
 
   // ── Sketch actions ─────────────────────────────────────

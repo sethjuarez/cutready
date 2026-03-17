@@ -13,6 +13,7 @@ import type { ProjectView } from "./types/project";
 const MOCK_PROJECT: ProjectView = {
   root: "C:/mock-project",
   name: "Demo Project",
+  repo_root: "C:/mock-project",
 };
 
 const MOCK_SKETCH: Sketch = {
@@ -258,6 +259,17 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
       return [{ path: "C:/mock-project", last_opened: new Date().toISOString() }];
     case "open_project_folder":
       return MOCK_PROJECT;
+    case "list_projects":
+      return [{ path: ".", name: "Demo Project", description: null }];
+    case "is_multi_project":
+      return false;
+    case "switch_project":
+      return MOCK_PROJECT;
+    case "create_project_in_repo":
+      return { path: (args as { name: string }).name.toLowerCase().replace(/\s+/g, "-"), name: (args as { name: string }).name, description: null };
+    case "delete_project":
+    case "rename_project":
+      return null;
     case "get_sketch":
       return MOCK_SKETCH;
     case "set_sidebar_order":

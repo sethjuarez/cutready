@@ -2,7 +2,7 @@ use std::sync::{Arc, Mutex};
 
 use tauri::{Emitter, Manager};
 
-use models::script::ProjectView;
+use models::script::{ProjectView, RepoView};
 use models::session::CapturedAction;
 use util::sidecar::SidecarManager;
 
@@ -46,7 +46,10 @@ impl Drop for BrowserConnection {
 
 /// Global application state shared across Tauri commands.
 pub struct AppState {
-    /// The currently open project folder (if any).
+    /// The currently open repository (if any).
+    pub current_repo: Mutex<Option<RepoView>>,
+    /// The active project within the repo. In single-project mode, root == repo root.
+    /// All existing `project_root()` callers read from this field — no changes needed.
     pub current_project: Mutex<Option<ProjectView>>,
     /// The prepared browser connection (if any).
     /// Uses `tokio::sync::Mutex` because it's held across await points.
@@ -60,6 +63,7 @@ pub struct AppState {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let app_state = AppState {
+        current_repo: Mutex::new(None),
         current_project: Mutex::new(None),
         browser: Arc::new(tokio::sync::Mutex::new(None)),
         pending_chat_messages: Arc::new(Mutex::new(Vec::new())),
@@ -147,6 +151,12 @@ pub fn run() {
             commands::project::get_workspace_state,
             commands::project::set_workspace_state,
             commands::project::list_all_files,
+            commands::project::list_projects,
+            commands::project::is_multi_project,
+            commands::project::switch_project,
+            commands::project::create_project_in_repo,
+            commands::project::delete_project,
+            commands::project::rename_project,
             commands::sketch::create_sketch,
             commands::sketch::update_sketch,
             commands::sketch::update_sketch_title,

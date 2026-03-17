@@ -17,6 +17,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useAppStore, type SidebarOrder } from "../stores/appStore";
 import { FileTreeView } from "./FileTreeView";
 import { SketchIcon, StoryboardIcon, NoteIcon } from "./Icons";
+import { ProjectSwitcher } from "./ProjectSwitcher";
 
 /** Sort items by manifest order. Items not in the manifest go at the end. */
 function applySidebarOrder<T extends { path: string }>(items: T[], order: string[]): T[] {
@@ -273,6 +274,9 @@ export function StoryboardList() {
     <div
       className="flex flex-col h-full bg-[var(--color-surface-inset)]"
     >
+      {/* ── Project switcher (multi-project repos only) ── */}
+      <ProjectSwitcher />
+
       {/* ── Mode toggle ──────────────────────────────── */}
       <div className="flex items-center justify-between px-3 h-9 shrink-0 border-b border-[var(--color-border)]">
         <span className="text-[11px] font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">

@@ -7,7 +7,7 @@ use tauri::State;
 use tauri_plugin_store::StoreExt;
 
 use crate::engine::project;
-use crate::models::script::{ProjectView, RecentProject};
+use crate::models::script::{ProjectEntry, ProjectView, RecentProject, RepoView};
 use crate::AppState;
 
 const STORE_FILE: &str = "recent-projects.json";
@@ -29,8 +29,15 @@ pub async fn create_project_folder(
     let root = PathBuf::from(&path);
     let view = project::init_project_folder(&root).map_err(|e| e.to_string())?;
 
-    let mut current = state.current_project.lock().map_err(|e| e.to_string())?;
-    *current = Some(view.clone());
+    // Set repo view (new project = repo root is project root)
+    {
+        let mut repo_lock = state.current_repo.lock().map_err(|e| e.to_string())?;
+        *repo_lock = Some(RepoView::new(root.clone()));
+    }
+    {
+        let mut current = state.current_project.lock().map_err(|e| e.to_string())?;
+        *current = Some(view.clone());
+    }
 
     // Auto-add to recent projects
     let _ = add_to_recent_projects(&app, &path);
@@ -39,6 +46,8 @@ pub async fn create_project_folder(
 }
 
 /// Open an existing project folder.
+/// In multi-project repos, opens the repo and activates the first project.
+/// In single-project repos, behaves exactly as before (repo root = project root).
 #[tauri::command]
 pub async fn open_project_folder(
     path: String,
@@ -46,10 +55,27 @@ pub async fn open_project_folder(
     state: State<'_, AppState>,
 ) -> Result<ProjectView, String> {
     let root = PathBuf::from(&path);
-    let view = project::open_project_folder(&root).map_err(|e| e.to_string())?;
 
-    let mut current = state.current_project.lock().map_err(|e| e.to_string())?;
-    *current = Some(view.clone());
+    // Always set repo view
+    let (repo, projects) = project::open_repo(&root).map_err(|e| e.to_string())?;
+    {
+        let mut repo_lock = state.current_repo.lock().map_err(|e| e.to_string())?;
+        *repo_lock = Some(repo);
+    }
+
+    // Activate the first project (or the sole project in single-project mode)
+    let entry = projects.first().ok_or("No projects found")?;
+    let view = if entry.path == "." {
+        // Single-project mode: root IS the project
+        ProjectView::new(root.clone())
+    } else {
+        ProjectView::in_repo(root.clone(), &entry.path, entry.name.clone())
+    };
+
+    {
+        let mut current = state.current_project.lock().map_err(|e| e.to_string())?;
+        *current = Some(view.clone());
+    }
 
     // Auto-add to recent projects
     let _ = add_to_recent_projects(&app, &path);
@@ -66,11 +92,17 @@ pub async fn get_current_project(
     Ok(current.clone())
 }
 
-/// Close the current project.
+/// Close the current project and repo.
 #[tauri::command]
 pub async fn close_project(state: State<'_, AppState>) -> Result<(), String> {
-    let mut current = state.current_project.lock().map_err(|e| e.to_string())?;
-    *current = None;
+    {
+        let mut current = state.current_project.lock().map_err(|e| e.to_string())?;
+        *current = None;
+    }
+    {
+        let mut repo = state.current_repo.lock().map_err(|e| e.to_string())?;
+        *repo = None;
+    }
     Ok(())
 }
 
@@ -223,4 +255,132 @@ pub async fn list_all_files(
 ) -> Result<Vec<project::FileEntry>, String> {
     let root = project_root(&state)?;
     project::scan_all_files(&root).map_err(|e| e.to_string())
+}
+
+// ── Multi-project commands ────────────────────────────────────────
+
+/// Helper: get the repo root from current state.
+fn repo_root(state: &AppState) -> Result<PathBuf, String> {
+    let repo = state.current_repo.lock().map_err(|e| e.to_string())?;
+    let view = repo.as_ref().ok_or("No repo is currently open")?;
+    Ok(view.root.clone())
+}
+
+/// List all projects in the current repo.
+#[tauri::command]
+pub async fn list_projects(
+    state: State<'_, AppState>,
+) -> Result<Vec<ProjectEntry>, String> {
+    let root = repo_root(&state)?;
+    Ok(project::list_projects(&root))
+}
+
+/// Whether the current repo has multiple projects.
+#[tauri::command]
+pub async fn is_multi_project(
+    state: State<'_, AppState>,
+) -> Result<bool, String> {
+    let root = repo_root(&state)?;
+    Ok(project::is_multi_project(&root))
+}
+
+/// Switch to a different project within the current repo.
+#[tauri::command]
+pub async fn switch_project(
+    project_path: String,
+    state: State<'_, AppState>,
+) -> Result<ProjectView, String> {
+    let root = repo_root(&state)?;
+
+    // Validate the project exists in the manifest
+    let projects = project::list_projects(&root);
+    let entry = projects
+        .iter()
+        .find(|p| p.path == project_path)
+        .ok_or_else(|| format!("Project '{}' not found in repo", project_path))?;
+
+    let view = if entry.path == "." {
+        ProjectView::new(root)
+    } else {
+        ProjectView::in_repo(root, &entry.path, entry.name.clone())
+    };
+
+    let mut current = state.current_project.lock().map_err(|e| e.to_string())?;
+    *current = Some(view.clone());
+    Ok(view)
+}
+
+/// Create a new project within the current repo.
+#[tauri::command]
+pub async fn create_project_in_repo(
+    name: String,
+    description: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<ProjectEntry, String> {
+    let root = repo_root(&state)?;
+    project::create_project_in_repo(&root, &name, description.as_deref())
+        .map_err(|e| e.to_string())
+}
+
+/// Delete a project from the current repo manifest.
+/// If `delete_files` is true, also removes the project directory.
+#[tauri::command]
+pub async fn delete_project(
+    project_path: String,
+    delete_files: bool,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let root = repo_root(&state)?;
+
+    // Remove from manifest
+    if let Some(mut manifest) = project::read_manifest(&root) {
+        manifest.projects.retain(|p| p.path != project_path);
+        project::write_manifest(&root, &manifest).map_err(|e| e.to_string())?;
+    }
+
+    // Optionally delete the files
+    if delete_files && project_path != "." {
+        let dir = root.join(&project_path);
+        if dir.exists() {
+            std::fs::remove_dir_all(&dir).map_err(|e| e.to_string())?;
+        }
+    }
+
+    // If deleted project was active, clear it
+    {
+        let current = state.current_project.lock().map_err(|e| e.to_string())?;
+        if let Some(ref view) = *current {
+            let active_path = view
+                .root
+                .strip_prefix(&root)
+                .unwrap_or(&view.root)
+                .to_string_lossy();
+            if active_path == project_path {
+                drop(current);
+                let mut current = state.current_project.lock().map_err(|e| e.to_string())?;
+                *current = None;
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Rename a project in the manifest (does NOT rename the folder).
+#[tauri::command]
+pub async fn rename_project(
+    project_path: String,
+    new_name: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let root = repo_root(&state)?;
+
+    if let Some(mut manifest) = project::read_manifest(&root) {
+        if let Some(entry) = manifest.projects.iter_mut().find(|p| p.path == project_path) {
+            entry.name = new_name;
+        }
+        project::write_manifest(&root, &manifest).map_err(|e| e.to_string())?;
+    }
+
+    Ok(())
 }

@@ -1,20 +1,21 @@
 //! Project storage engine — folder-based projects with .sk/.sb files.
 //!
 //! A project is any folder containing `.sk` (sketch) and/or `.sb` (storyboard)
-//! files. There is no central registry — projects are opened by path.
+//! files. A repo can host one project (legacy) or many (manifest-driven).
 //!
-//!   My Demo/
-//!     ├── intro.sk             (sketch JSON)
-//!     ├── flows/
-//!     │   └── login.sk         (sketches in subfolders)
-//!     ├── full-demo.sb         (storyboard, references .sk by path)
-//!     ├── assets/              (screenshots, images)
-//!     └── .git/                (version history via gix)
+//!   my-demos/                   (repo root, has .git/)
+//!     ├── .cutready/
+//!     │   └── projects.json     (manifest listing project subdirs)
+//!     ├── login-flow/           (project 1)
+//!     │   ├── sketches/
+//!     │   └── notes/
+//!     ├── onboarding/           (project 2)
+//!     └── storyboards/          (repo-level storyboards)
 
 use std::path::{Path, PathBuf};
 
 use crate::engine::versioning;
-use crate::models::script::ProjectView;
+use crate::models::script::{ProjectEntry, ProjectManifest, ProjectView, RepoView};
 use crate::models::sketch::{
     NoteSummary, Sketch, SketchSummary, Storyboard, StoryboardSummary,
 };
@@ -111,6 +112,116 @@ pub fn open_project_folder(root: &Path) -> Result<ProjectView, ProjectError> {
     }
 
     Ok(ProjectView::new(root.to_path_buf()))
+}
+
+// ── Multi-project manifest ────────────────────────────────────────
+
+const MANIFEST_PATH: &str = ".cutready/projects.json";
+
+/// Read the project manifest from a repo root. Returns None if no manifest
+/// exists (single-project / legacy mode).
+pub fn read_manifest(repo_root: &Path) -> Option<ProjectManifest> {
+    let path = repo_root.join(MANIFEST_PATH);
+    let data = std::fs::read_to_string(&path).ok()?;
+    serde_json::from_str(&data).ok()
+}
+
+/// Write the project manifest to a repo root.
+pub fn write_manifest(repo_root: &Path, manifest: &ProjectManifest) -> Result<(), ProjectError> {
+    let path = repo_root.join(MANIFEST_PATH);
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| ProjectError::Io(e.to_string()))?;
+    }
+    let json = serde_json::to_string_pretty(manifest)
+        .map_err(|e| ProjectError::Io(e.to_string()))?;
+    std::fs::write(&path, json).map_err(|e| ProjectError::Io(e.to_string()))
+}
+
+/// Whether this repo has a multi-project manifest.
+pub fn is_multi_project(repo_root: &Path) -> bool {
+    repo_root.join(MANIFEST_PATH).exists()
+}
+
+/// List projects in a repo. If no manifest exists, returns a single entry
+/// representing the repo root itself (backward-compatible single-project mode).
+pub fn list_projects(repo_root: &Path) -> Vec<ProjectEntry> {
+    if let Some(manifest) = read_manifest(repo_root) {
+        manifest.projects
+    } else {
+        // Legacy single-project: the repo root IS the project
+        let name = repo_root
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_else(|| "Project".into());
+        vec![ProjectEntry {
+            path: ".".into(),
+            name,
+            description: None,
+        }]
+    }
+}
+
+/// Open a repo folder, detecting single vs multi-project mode.
+/// Returns the repo view and list of projects.
+pub fn open_repo(root: &Path) -> Result<(RepoView, Vec<ProjectEntry>), ProjectError> {
+    if !root.exists() || !root.is_dir() {
+        return Err(ProjectError::NotFound(root.to_string_lossy().into_owned()));
+    }
+
+    // Init git if not already a repo so snapshots work
+    if !root.join(".git").exists() {
+        versioning::init_project_repo(root).map_err(|e| ProjectError::Io(e.to_string()))?;
+        let _ = versioning::commit_snapshot(root, "Initialize project", None);
+    }
+
+    let repo = RepoView::new(root.to_path_buf());
+    let projects = list_projects(root);
+    Ok((repo, projects))
+}
+
+/// Create a new project within a multi-project repo.
+/// Creates the subdirectory and updates the manifest.
+pub fn create_project_in_repo(
+    repo_root: &Path,
+    name: &str,
+    description: Option<&str>,
+) -> Result<ProjectEntry, ProjectError> {
+    // Sanitize name to create a folder-safe path
+    let path = name
+        .to_lowercase()
+        .replace(|c: char| !c.is_alphanumeric() && c != '-' && c != '_', "-")
+        .trim_matches('-')
+        .to_string();
+
+    if path.is_empty() {
+        return Err(ProjectError::Io("Invalid project name".into()));
+    }
+
+    let project_dir = repo_root.join(&path);
+    if project_dir.exists() {
+        return Err(ProjectError::Io(format!("Directory '{}' already exists", path)));
+    }
+
+    // Create the project subdirectory structure
+    std::fs::create_dir_all(project_dir.join("sketches"))
+        .map_err(|e| ProjectError::Io(e.to_string()))?;
+    std::fs::create_dir_all(project_dir.join("notes"))
+        .map_err(|e| ProjectError::Io(e.to_string()))?;
+
+    let entry = ProjectEntry {
+        path: path.clone(),
+        name: name.to_string(),
+        description: description.map(|s| s.to_string()),
+    };
+
+    // Update manifest
+    let mut manifest = read_manifest(repo_root).unwrap_or(ProjectManifest {
+        projects: Vec::new(),
+    });
+    manifest.projects.push(entry.clone());
+    write_manifest(repo_root, &manifest)?;
+
+    Ok(entry)
 }
 
 // ── Sketch file I/O (.sk) ─────────────────────────────────────────
