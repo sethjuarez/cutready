@@ -155,16 +155,12 @@ async function readScreenshot(projectRoot: string, relativePath: string): Promis
 /** Load a visual from its file path, then render the last frame as a PNG ImageRun for Word embedding. */
 async function captureVisualLastFrame(visualPath: string): Promise<ImageRun | null> {
   try {
-    console.log("[exportToWord] Rendering visual:", visualPath);
     const visual = await invoke<Record<string, unknown>>("get_visual", { relativePath: visualPath });
-    if (!visual || !visual.root) {
-      console.warn("[exportToWord] Visual has no root:", visualPath);
-      return null;
-    }
+    if (!visual || !visual.root) return null;
 
-    const { renderToSvgString } = await import("@elucim/dsl");
+    const { renderToPng } = await import("@elucim/dsl");
 
-    type ElucimDocument = Parameters<typeof renderToSvgString>[0];
+    type ElucimDocument = Parameters<typeof renderToPng>[0];
     const dsl = visual as unknown as ElucimDocument;
     const root = dsl.root as unknown as Record<string, unknown>;
     const totalFrames = (root.durationInFrames as number) || 60;
@@ -172,43 +168,10 @@ async function captureVisualLastFrame(visualPath: string): Promise<ImageRun | nu
     const width = (root.width as number) || 640;
     const height = (root.height as number) || 360;
 
-    const svgString = renderToSvgString(dsl, lastFrame, { width, height });
-    console.log("[exportToWord] SVG rendered, length:", svgString.length);
-
-    // Rasterize SVG → PNG via data-URI (blob URLs blocked by Tauri CSP)
-    const rasterW = width * 2;
-    const rasterH = height * 2;
-    const dataUri = `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svgString)))}`;
-
-    const buffer: ArrayBuffer = await new Promise((resolve, reject) => {
-      const img = new Image();
-      img.onload = () => {
-        try {
-          const canvas = document.createElement("canvas");
-          canvas.width = rasterW;
-          canvas.height = rasterH;
-          const ctx = canvas.getContext("2d");
-          if (!ctx) { reject(new Error("No 2d context")); return; }
-          ctx.drawImage(img, 0, 0, rasterW, rasterH);
-          canvas.toBlob(
-            (b) => {
-              if (b) b.arrayBuffer().then(resolve, reject);
-              else reject(new Error("toBlob returned null"));
-            },
-            "image/png",
-          );
-        } catch (err) {
-          reject(err);
-        }
-      };
-      img.onerror = () => reject(new Error("Image load failed (data-uri)"));
-      img.src = dataUri;
-    });
-
-    console.log("[exportToWord] Visual captured, PNG size:", buffer.byteLength);
+    const pngBytes = await renderToPng(dsl, lastFrame, { width, height, scale: 2 });
 
     return new ImageRun({
-      data: new Uint8Array(buffer),
+      data: pngBytes,
       transformation: { width: IMG_WIDTH, height: IMG_HEIGHT },
       type: "png",
     });
