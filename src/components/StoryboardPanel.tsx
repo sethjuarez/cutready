@@ -69,7 +69,26 @@ export function StoryboardPanel() {
         ) : (
           <div className="flex-1 flex items-center justify-center">
             <div className="text-center">
-              <div className="text-4xl mb-4">🎬</div>
+              <svg
+                width="48"
+                height="48"
+                viewBox="0 0 128 128"
+                fill="none"
+                className="mx-auto mb-4 opacity-40"
+              >
+                <rect x="14" y="52" width="100" height="64" rx="4" fill="#574bb8" />
+                <rect
+                  x="14"
+                  y="26"
+                  width="100"
+                  height="16"
+                  rx="3"
+                  fill="#7c6fdb"
+                  transform="rotate(-14 14 42)"
+                />
+                <circle cx="14" cy="48" r="5" fill="var(--color-accent)" />
+                <path d="M48 68 L88 84 L48 100Z" fill="var(--color-accent)" />
+              </svg>
               <p className="text-sm text-[var(--color-text-secondary)]">
                 Create a sketch or storyboard to get started
               </p>
