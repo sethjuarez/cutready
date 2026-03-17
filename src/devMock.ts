@@ -272,6 +272,10 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
       return null;
     case "migrate_to_multi_project":
       return { path: (args as { existingName: string }).existingName.toLowerCase().replace(/\s+/g, "-"), name: (args as { existingName: string }).existingName, description: null };
+    case "get_workspace_settings":
+      return {};
+    case "set_workspace_settings":
+      return null;
     case "get_sketch":
       return MOCK_SKETCH;
     case "set_sidebar_order":

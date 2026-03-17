@@ -83,8 +83,8 @@ const navItems: { id: AppView; label: string; icon: ReactNode }[] = [
     ),
   },
   {
-    id: "settings",
-    label: "Settings",
+    id: "workspace",
+    label: "Workspace",
     icon: (
       <svg
         width="16"
@@ -96,8 +96,9 @@ const navItems: { id: AppView; label: string; icon: ReactNode }[] = [
         strokeLinecap="round"
         strokeLinejoin="round"
       >
-        <circle cx="12" cy="12" r="3" />
-        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+        <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+        <line x1="8" y1="21" x2="16" y2="21" />
+        <line x1="12" y1="17" x2="12" y2="21" />
       </svg>
     ),
   },
@@ -153,7 +154,7 @@ export function Sidebar() {
           .filter((item) => item.id !== "recording" && item.id !== "editor")
           .map((item) => {
           const isActive = view === item.id;
-          const requiresProject = item.id === "sketch" || item.id === "editor" || item.id === "recording";
+          const requiresProject = item.id === "sketch" || item.id === "editor" || item.id === "recording" || item.id === "workspace";
           const isDisabled = requiresProject && !currentProject;
 
           return (
@@ -187,6 +188,47 @@ export function Sidebar() {
             </button>
           );
         })}
+
+        {/* Spacer pushes settings gear to bottom */}
+        <div className="flex-1" />
+
+        {/* Global settings gear — pinned to bottom */}
+        {(() => {
+          const isActive = view === "settings";
+          return (
+            <button
+              onClick={() => setView("settings")}
+              className={`
+                flex items-center justify-center w-9 h-9 rounded-lg transition-colors relative
+                ${
+                  isActive
+                    ? "bg-[var(--color-accent)]/15 text-[var(--color-accent)]"
+                    : "text-[var(--color-text-secondary)] hover:bg-[var(--color-surface)] hover:text-[var(--color-text)]"
+                }
+              `}
+              title="Settings"
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <circle cx="12" cy="12" r="3" />
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+              </svg>
+              {isActive && (
+                <span className={`absolute top-1/4 h-1/2 w-[2px] rounded-full bg-[var(--color-accent)] ${
+                  isRight ? "right-[-6px]" : "left-[-6px]"
+                }`} />
+              )}
+            </button>
+          );
+        })()}
       </nav>
 
       {/* Right-click context menu */}

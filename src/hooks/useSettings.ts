@@ -11,7 +11,9 @@ export interface AgentPreset {
   modelOverride?: string;
 }
 
-export interface AppSettings {
+// ── Global settings (stored in Tauri app data) ────────────────────
+
+export interface GlobalSettings {
   outputDirectory: string;
   /** "azure_openai" or "openai" */
   aiProvider: string;
@@ -49,17 +51,6 @@ export interface AppSettings {
   displayEditorWidth: string;
   /** Font family: "system" | "sans" | "serif" | "mono" (default "system"). */
   displayFontFamily: string;
-  /* ── Repository / remote settings ────────────── */
-  /** Git remote URL (e.g. https://github.com/user/repo.git). */
-  repoRemoteUrl: string;
-  /** Auth method: "gh_cli" | "pat" | "ssh" (default "gh_cli"). */
-  repoAuthMethod: string;
-  /** Personal Access Token (when repoAuthMethod is "pat"). */
-  repoToken: string;
-  /** Git author name for commits. */
-  repoAuthorName: string;
-  /** Git author email for commits. */
-  repoAuthorEmail: string;
   /** API-reported context window (tokens) for the selected model. */
   aiContextLength: number;
   /** Vision mode: "off", "notes", or "notes_and_sketches". */
@@ -70,7 +61,25 @@ export interface AppSettings {
   llmDeployment?: string;
 }
 
-const defaultSettings: AppSettings = {
+// ── Workspace settings (stored per-repo in .cutready/settings.json) ──
+
+export interface WorkspaceSettings {
+  /** Git remote URL (e.g. https://github.com/user/repo.git). */
+  repoRemoteUrl: string;
+  /** Auth method: "gh_cli" | "pat" | "ssh" (default "gh_cli"). */
+  repoAuthMethod: string;
+  /** Personal Access Token (when repoAuthMethod is "pat"). */
+  repoToken: string;
+  /** Git author name for commits. */
+  repoAuthorName: string;
+  /** Git author email for commits. */
+  repoAuthorEmail: string;
+}
+
+/** Combined view for backward compatibility — consumers that need both. */
+export type AppSettings = GlobalSettings & WorkspaceSettings;
+
+const defaultGlobalSettings: GlobalSettings = {
   outputDirectory: "",
   aiProvider: "azure_openai",
   aiAuthMode: "api_key",
@@ -90,28 +99,48 @@ const defaultSettings: AppSettings = {
   displayRowColors: "vivid",
   displayEditorWidth: "centered",
   displayFontFamily: "system",
+  aiContextLength: 0,
+  aiVisionMode: "notes_and_sketches",
+};
+
+export const defaultWorkspaceSettings: WorkspaceSettings = {
   repoRemoteUrl: "",
   repoAuthMethod: "gh_cli",
   repoToken: "",
   repoAuthorName: "",
   repoAuthorEmail: "",
-  aiContextLength: 0,
-  aiVisionMode: "notes_and_sketches",
+};
+
+const defaultSettings: AppSettings = {
+  ...defaultGlobalSettings,
+  ...defaultWorkspaceSettings,
 };
 
 const STORE_PATH = "settings.json";
 
+const WORKSPACE_KEYS: (keyof WorkspaceSettings)[] = [
+  "repoRemoteUrl",
+  "repoAuthMethod",
+  "repoToken",
+  "repoAuthorName",
+  "repoAuthorEmail",
+];
+
 interface SettingsStore {
   settings: AppSettings;
   loaded: boolean;
+  workspaceLoaded: boolean;
   _store: LazyStore | null;
   _loadSettings: () => Promise<void>;
+  _loadWorkspaceSettings: () => Promise<void>;
+  _clearWorkspaceSettings: () => void;
   updateSetting: <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => Promise<void>;
 }
 
 export const useSettingsStore = create<SettingsStore>((set, get) => ({
   settings: defaultSettings,
   loaded: false,
+  workspaceLoaded: false,
   _store: null,
 
   _loadSettings: async () => {
@@ -119,8 +148,8 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
     const store = new LazyStore(STORE_PATH);
     set({ _store: store });
 
-    const result = { ...defaultSettings };
-    for (const key of Object.keys(defaultSettings) as (keyof AppSettings)[]) {
+    const result = { ...defaultGlobalSettings };
+    for (const key of Object.keys(defaultGlobalSettings) as (keyof GlobalSettings)[]) {
       const val = await store.get(key);
       if (val !== null && val !== undefined) {
         (result as Record<string, unknown>)[key] = val;
@@ -135,7 +164,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
       result.aiProvider = "azure_openai";
     }
 
-    set({ settings: result, loaded: true });
+    set({ settings: { ...get().settings, ...result }, loaded: true });
 
     // Auto-refresh OAuth token on startup if we have a refresh token
     if (result.aiAuthMode === "azure_oauth" && result.aiRefreshToken) {
@@ -149,7 +178,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
           },
         );
         if (tokenResult.access_token) {
-          const updates: Partial<AppSettings> = { aiAccessToken: tokenResult.access_token };
+          const updates: Partial<GlobalSettings> = { aiAccessToken: tokenResult.access_token };
           if (tokenResult.refresh_token) {
             updates.aiRefreshToken = tokenResult.refresh_token;
           }
@@ -168,12 +197,51 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
     }
   },
 
+  _loadWorkspaceSettings: async () => {
+    try {
+      const data = await invoke<Record<string, unknown>>("get_workspace_settings");
+      const ws = { ...defaultWorkspaceSettings };
+      for (const key of WORKSPACE_KEYS) {
+        if (data[key] !== null && data[key] !== undefined) {
+          (ws as Record<string, unknown>)[key] = data[key];
+        }
+      }
+      set((state) => ({ settings: { ...state.settings, ...ws }, workspaceLoaded: true }));
+    } catch {
+      // No workspace settings yet — use defaults
+      set((state) => ({
+        settings: { ...state.settings, ...defaultWorkspaceSettings },
+        workspaceLoaded: true,
+      }));
+    }
+  },
+
+  _clearWorkspaceSettings: () => {
+    set((state) => ({
+      settings: { ...state.settings, ...defaultWorkspaceSettings },
+      workspaceLoaded: false,
+    }));
+  },
+
   updateSetting: async (key, value) => {
     set((state) => ({ settings: { ...state.settings, [key]: value } }));
-    const store = get()._store;
-    if (store) {
-      await store.set(key, value);
-      await store.save();
+
+    if (WORKSPACE_KEYS.includes(key as keyof WorkspaceSettings)) {
+      // Workspace setting → save to repo's .cutready/settings.json
+      try {
+        const data = await invoke<Record<string, unknown>>("get_workspace_settings");
+        data[key] = value;
+        await invoke("set_workspace_settings", { settings: data });
+      } catch {
+        // No repo open — setting stored in memory only
+      }
+    } else {
+      // Global setting → save to Tauri app data
+      const store = get()._store;
+      if (store) {
+        await store.set(key, value);
+        await store.save();
+      }
     }
   },
 }));

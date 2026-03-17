@@ -934,6 +934,7 @@ pub fn delete_chat_session(path: &Path) -> Result<(), ProjectError> {
 
 const ORDER_FILE: &str = ".cutready-order.json";
 const WORKSPACE_FILE: &str = ".cutready/workspace.json";
+const REPO_SETTINGS_FILE: &str = ".cutready/settings.json";
 
 /// Workspace state persisted across app restarts.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default)]
@@ -998,6 +999,33 @@ pub fn write_sidebar_order(
     let path = project_root.join(ORDER_FILE);
     let data =
         serde_json::to_string_pretty(order).map_err(|e| ProjectError::Serialize(e.to_string()))?;
+    std::fs::write(&path, data).map_err(|e| ProjectError::Io(e.to_string()))
+}
+
+// ── Per-repo (workspace) settings ─────────────────────────────────
+
+/// Read workspace settings from the repo root. Returns the raw JSON value.
+/// The frontend owns the schema — the backend just stores/retrieves the blob.
+pub fn read_repo_settings(repo_root: &Path) -> serde_json::Value {
+    let path = repo_root.join(REPO_SETTINGS_FILE);
+    if let Ok(data) = std::fs::read_to_string(&path) {
+        serde_json::from_str(&data).unwrap_or(serde_json::Value::Object(Default::default()))
+    } else {
+        serde_json::Value::Object(Default::default())
+    }
+}
+
+/// Write workspace settings to the repo root.
+pub fn write_repo_settings(
+    repo_root: &Path,
+    settings: &serde_json::Value,
+) -> Result<(), ProjectError> {
+    let path = repo_root.join(REPO_SETTINGS_FILE);
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| ProjectError::Io(e.to_string()))?;
+    }
+    let data = serde_json::to_string_pretty(settings)
+        .map_err(|e| ProjectError::Serialize(e.to_string()))?;
     std::fs::write(&path, data).map_err(|e| ProjectError::Io(e.to_string()))
 }
 

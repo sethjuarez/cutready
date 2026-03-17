@@ -406,3 +406,24 @@ pub async fn migrate_to_multi_project(
 
     Ok(entry)
 }
+
+// ── Workspace (per-repo) settings ─────────────────────────────────
+
+/// Read workspace settings from the current repo's .cutready/settings.json.
+#[tauri::command]
+pub async fn get_workspace_settings(
+    state: State<'_, AppState>,
+) -> Result<serde_json::Value, String> {
+    let root = repo_root(&state)?;
+    Ok(project::read_repo_settings(&root))
+}
+
+/// Write workspace settings to the current repo's .cutready/settings.json.
+#[tauri::command]
+pub async fn set_workspace_settings(
+    settings: serde_json::Value,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let root = repo_root(&state)?;
+    project::write_repo_settings(&root, &settings).map_err(|e| e.to_string())
+}

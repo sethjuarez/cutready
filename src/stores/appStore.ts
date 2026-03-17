@@ -28,7 +28,7 @@ import type {
 } from "../types/sketch";
 
 /** The panels / views available in the app. */
-export type AppView = "home" | "sketch" | "editor" | "recording" | "settings";
+export type AppView = "home" | "sketch" | "editor" | "recording" | "settings" | "workspace";
 
 /** Sidebar display mode for the sketch panel. */
 export type SidebarMode = "list" | "tree";
@@ -728,6 +728,9 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       localStorage.setItem("cutready:lastProject", path);
       // Load multi-project state
       await get().loadProjects();
+      // Load workspace (per-repo) settings
+      const { useSettingsStore } = await import("../hooks/useSettings");
+      await useSettingsStore.getState()._loadWorkspaceSettings();
       await get().loadSketches();
       await get().loadStoryboards();
       await get().loadNotes();
@@ -774,6 +777,10 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   closeProject: () => {
     invoke("close_project").catch(console.error);
     localStorage.removeItem("cutready:lastProject");
+    // Clear workspace settings
+    import("../hooks/useSettings").then(({ useSettingsStore }) => {
+      useSettingsStore.getState()._clearWorkspaceSettings();
+    });
     set({
       currentProject: null,
       projects: [],

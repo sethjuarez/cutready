@@ -25,7 +25,7 @@ interface AuthCodeFlowInit {
   port: number;
 }
 
-type SettingsTab = "general" | "ai" | "agents" | "memory" | "display" | "images" | "feedback" | "repository";
+type SettingsTab = "ai" | "agents" | "memory" | "display" | "images" | "feedback" | "repository";
 
 const inputClass =
   "px-3 py-2 rounded-lg bg-[var(--color-surface-alt)] border border-[var(--color-border)] text-sm text-[var(--color-text)] placeholder:text-[var(--color-text-secondary)]/50 focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]/40";
@@ -37,9 +37,9 @@ const tabBtnClass = (active: boolean) =>
       : "border-transparent text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:border-[var(--color-text-secondary)]/30"
   }`;
 
-export function SettingsPanel() {
+export function SettingsPanel({ mode = "global" }: { mode?: "global" | "workspace" }) {
   const { settings, updateSetting, loaded } = useSettings();
-  const [activeTab, setActiveTab] = useState<SettingsTab>("general");
+  const [activeTab, setActiveTab] = useState<SettingsTab>(mode === "workspace" ? "repository" : "display");
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [loadingModels, setLoadingModels] = useState(false);
   const [modelError, setModelError] = useState("");
@@ -122,29 +122,48 @@ export function SettingsPanel() {
   const hasToken = !!settings.aiAccessToken;
   const canFetchModels = isOAuth ? hasToken : !!settings.aiApiKey;
 
+  // Tabs depend on mode
+  const globalTabs = ["display", "ai", "agents", "memory", "images", "feedback"] as const;
+  const workspaceTabs = ["repository", "ai", "agents", "display"] as const;
+  const tabs = mode === "workspace" ? workspaceTabs : globalTabs;
+  const tabLabels: Record<string, string> = {
+    display: "Display",
+    ai: "AI Provider",
+    agents: "Agents",
+    memory: "Memory",
+    images: "Images",
+    feedback: "Feedback",
+    repository: "Repository",
+  };
+
   return (
     <div className="max-w-4xl mx-auto px-6 py-10">
-      <h1 className="text-2xl font-semibold tracking-tight mb-2">Settings</h1>
+      <h1 className="text-2xl font-semibold tracking-tight mb-2">
+        {mode === "workspace" ? "Workspace Settings" : "Settings"}
+      </h1>
       <p className="text-sm text-[var(--color-text-secondary)] mb-6">
-        Configure CutReady preferences.
+        {mode === "workspace"
+          ? "Per-repo settings. Overrides apply only to this workspace."
+          : "Global preferences that apply to all projects."}
       </p>
 
       {/* Tab bar */}
       <div className="flex items-stretch border-b border-[var(--color-border)] mb-6">
-        <button className={tabBtnClass(activeTab === "general")} onClick={() => setActiveTab("general")}>General</button>
-        <button className={tabBtnClass(activeTab === "display")} onClick={() => setActiveTab("display")}>Display</button>
-        <button className={tabBtnClass(activeTab === "ai")} onClick={() => setActiveTab("ai")}>AI Provider</button>
-        <button className={tabBtnClass(activeTab === "agents")} onClick={() => setActiveTab("agents")}>Agents</button>
-        <button className={tabBtnClass(activeTab === "memory")} onClick={() => setActiveTab("memory")}>Memory</button>
-        <button className={tabBtnClass(activeTab === "images")} onClick={() => setActiveTab("images")}>Images</button>
-        <button className={tabBtnClass(activeTab === "feedback")} onClick={() => setActiveTab("feedback")}>Feedback</button>
-        <button className={tabBtnClass(activeTab === "repository")} onClick={() => setActiveTab("repository")}>Repository</button>
+        {tabs.map((tab) => (
+          <button
+            key={tab}
+            className={tabBtnClass(activeTab === tab)}
+            onClick={() => setActiveTab(tab as SettingsTab)}
+          >
+            {tabLabels[tab]}
+            {mode === "workspace" && tab !== "repository" && (
+              <span className="ml-1.5 text-[10px] text-[var(--color-text-secondary)]" title="Override global setting for this workspace">⟳</span>
+            )}
+          </button>
+        ))}
       </div>
 
       {/* Tab content */}
-      {activeTab === "general" && (
-        <GeneralTab settings={settings} updateSetting={updateSetting} />
-      )}
       {activeTab === "display" && (
         <DisplayTab settings={settings} updateSetting={updateSetting} />
       )}
@@ -184,46 +203,6 @@ export function SettingsPanel() {
       {activeTab === "repository" && (
         <RepositoryTab settings={settings} updateSetting={updateSetting} />
       )}
-    </div>
-  );
-}
-
-// ── General Tab ──────────────────────────────────────────────────
-
-function GeneralTab({ settings, updateSetting }: {
-  settings: ReturnType<typeof useSettings>["settings"];
-  updateSetting: ReturnType<typeof useSettings>["updateSetting"];
-}) {
-  return (
-    <div className="flex flex-col gap-6">
-      <fieldset className="flex flex-col gap-2">
-        <label className="text-sm font-medium">Output Directory</label>
-        <input
-          type="text"
-          value={settings.outputDirectory}
-          onChange={(e) => updateSetting("outputDirectory", e.target.value)}
-          placeholder="~/Documents/CutReady/output"
-          className={inputClass}
-        />
-        <p className="text-xs text-[var(--color-text-secondary)]">
-          Where exported packages will be saved.
-        </p>
-      </fieldset>
-
-      <fieldset className="flex flex-col gap-2">
-        <label className="text-sm font-medium">Audio Input Device</label>
-        <input
-          type="text"
-          value={settings.audioDevice}
-          onChange={(e) => updateSetting("audioDevice", e.target.value)}
-          placeholder="Microphone (USB Audio)"
-          className={inputClass}
-        />
-        <p className="text-xs text-[var(--color-text-secondary)]">
-          Device name for narration recording. Audio device enumeration will
-          be available in a future update.
-        </p>
-      </fieldset>
     </div>
   );
 }

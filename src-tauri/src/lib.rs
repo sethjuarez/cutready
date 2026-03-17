@@ -158,6 +158,8 @@ pub fn run() {
             commands::project::delete_project,
             commands::project::rename_project,
             commands::project::migrate_to_multi_project,
+            commands::project::get_workspace_settings,
+            commands::project::set_workspace_settings,
             commands::sketch::create_sketch,
             commands::sketch::update_sketch,
             commands::sketch::update_sketch_title,

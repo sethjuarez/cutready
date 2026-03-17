@@ -201,7 +201,8 @@ export function AppLayout() {
               {view === "sketch" && (isMerging ? <MergeConflictPanel /> : <StoryboardPanel />)}
               {view === "editor" && <div className="h-full overflow-y-auto"><ScriptEditorPanel /></div>}
               {view === "recording" && <div className="h-full overflow-y-auto"><RecordingPanel /></div>}
-              {view === "settings" && <div className="h-full overflow-y-auto"><SettingsPanel /></div>}
+              {view === "settings" && <div className="h-full overflow-y-auto"><SettingsPanel mode="global" /></div>}
+              {view === "workspace" && <div className="h-full overflow-y-auto"><SettingsPanel mode="workspace" /></div>}
             </div>
 
             {/* Lower: output panel (hidden on home) */}
