@@ -123,8 +123,8 @@ export function SettingsPanel({ mode = "global" }: { mode?: "global" | "workspac
   const canFetchModels = isOAuth ? hasToken : !!settings.aiApiKey;
 
   // Tabs depend on mode
-  const globalTabs = ["display", "ai", "agents", "memory", "images", "feedback"] as const;
-  const workspaceTabs = ["repository", "ai", "agents", "display"] as const;
+  const globalTabs = ["display", "ai", "agents", "images", "feedback"] as const;
+  const workspaceTabs = ["repository", "memory", "ai", "agents", "display"] as const;
   const tabs = mode === "workspace" ? workspaceTabs : globalTabs;
   const tabLabels: Record<string, string> = {
     display: "Display",
