@@ -514,7 +514,7 @@ function SortableRow({
     <>
     <tr
       ref={setNodeRef}
-      style={{ ...style, backgroundColor: rowBg }}
+      style={{ ...style, backgroundColor: isHighlighted ? undefined : rowBg }}
       className={`card-row group hover:shadow-sm ${isSorting ? "" : "transition-all"} ${isHighlighted ? "ai-highlight-row" : ""}`}
       onKeyDown={(e) => {
         if (readOnly) return;
