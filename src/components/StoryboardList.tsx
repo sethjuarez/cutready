@@ -274,9 +274,6 @@ export function StoryboardList() {
     <div
       className="flex flex-col h-full bg-[var(--color-surface-inset)]"
     >
-      {/* ── Project switcher (multi-project repos only) ── */}
-      <ProjectSwitcher />
-
       {/* ── Mode toggle ──────────────────────────────── */}
       <div className="flex items-center justify-between px-3 h-9 shrink-0 border-b border-[var(--color-border)]">
         <span className="text-[11px] font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">
@@ -316,6 +313,9 @@ export function StoryboardList() {
           </button>
         </div>
       </div>
+
+      {/* ── Project switcher (below explorer header) ── */}
+      <ProjectSwitcher />
 
       {sidebarMode === "tree" ? (
         <FileTreeView />
