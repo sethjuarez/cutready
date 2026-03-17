@@ -326,7 +326,11 @@ async function saveDocument(doc: Document, defaultName: string): Promise<void> {
   const buffer = await blob.arrayBuffer();
   await writeFile(filePath, new Uint8Array(buffer));
   // Open the exported file in the default application
-  await shellOpen(filePath).catch(() => {});
+  try {
+    await shellOpen(filePath);
+  } catch (e) {
+    console.error("[exportToWord] Failed to open file:", filePath, e);
+  }
 }
 
 // ── Note (Markdown) → Word ───────────────────────────────────────

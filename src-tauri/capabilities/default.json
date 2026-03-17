@@ -14,7 +14,10 @@
     "core:window:allow-toggle-maximize",
     "core:window:allow-start-dragging",
     "core:window:allow-is-maximized",
-    "shell:allow-open",
+    {
+      "identifier": "shell:allow-open",
+      "allow": [{ "path": "**" }]
+    },
     "fs:default",
     {
       "identifier": "fs:allow-read",
