@@ -182,6 +182,7 @@ pub struct VisionConfig {
     /// Whether vision is enabled (user setting AND model support).
     pub enabled: bool,
     /// Whether to include sketch screenshots (vs notes only).
+    #[allow(dead_code)]
     pub include_sketches: bool,
 }
 
