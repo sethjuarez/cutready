@@ -606,20 +606,28 @@ function ChatTab() {
           const toolName = ev.name ?? "";
           const resultText = ev.result ?? "";
           const isSuccess = !resultText.startsWith("Error");
-          if (isSuccess && (toolName === "set_planning_rows" || toolName === "update_planning_row" || toolName === "set_row_visual")) {
+          if (isSuccess && (toolName === "set_planning_rows" || toolName === "update_planning_row" || toolName === "set_row_visual" || toolName === "design_plan")) {
             loadSketches();
             try {
               const args = JSON.parse(pendingToolArgsRef.current[toolName] ?? "{}");
               const sketchPath = args.path ?? useAppStore.getState().activeSketchPath;
+              // Extract changed row indices for highlighting
+              const changedRows: number[] = [];
+              if (toolName === "update_planning_row" || toolName === "set_row_visual" || toolName === "design_plan") {
+                const idx = typeof args.index === "number" ? args.index : parseInt(args.index, 10);
+                if (!isNaN(idx)) changedRows.push(idx);
+              }
+              // set_planning_rows: leave changedRows empty → highlights all
+              const detail = { rows: changedRows, toolName };
               if (sketchPath) {
-                openSketch(sketchPath).then(() => {
-                  window.dispatchEvent(new CustomEvent("cutready:ai-sketch-updated"));
-                });
+                // Dispatch BEFORE openSketch so SketchForm can snapshot current state
+                window.dispatchEvent(new CustomEvent("cutready:ai-sketch-updated", { detail }));
+                openSketch(sketchPath);
               } else {
-                window.dispatchEvent(new CustomEvent("cutready:ai-sketch-updated"));
+                window.dispatchEvent(new CustomEvent("cutready:ai-sketch-updated", { detail }));
               }
             } catch {
-              window.dispatchEvent(new CustomEvent("cutready:ai-sketch-updated"));
+              window.dispatchEvent(new CustomEvent("cutready:ai-sketch-updated", { detail: { rows: [], toolName } }));
             }
           }
           if (isSuccess && toolName === "update_note") {

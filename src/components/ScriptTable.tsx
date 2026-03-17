@@ -45,6 +45,8 @@ function emptyRow(): PlanningRow {
   return { time: "", narrative: "", demo_actions: "", screenshot: null };
 }
 
+import type { RowDiff } from "../utils/textDiff";
+
 interface ScriptTableProps {
   rows: PlanningRow[];
   onChange: (rows: PlanningRow[]) => void;
@@ -57,9 +59,13 @@ interface ScriptTableProps {
   onNudgeVisual?: (rowIndex: number, instruction: string) => void;
   projectRoot?: string;
   sketchPath?: string;
+  highlightedRows?: Set<number>;
+  rowDiffs?: RowDiff[];
+  aiSnapshotRows?: PlanningRow[] | null;
+  onDismissHighlights?: () => void;
 }
 
-export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreenshot, onPickImage, onBrowseImage, onSparkle, onGenerateVisual, onNudgeVisual, projectRoot, sketchPath }: ScriptTableProps) {
+export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreenshot, onPickImage, onBrowseImage, onSparkle, onGenerateVisual, onNudgeVisual, projectRoot, sketchPath, highlightedRows, rowDiffs, aiSnapshotRows, onDismissHighlights }: ScriptTableProps) {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
   const [visualLightbox, setVisualLightbox] = useState<{ visualPath: string; rowIndex: number } | null>(null);
@@ -100,8 +106,19 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
   const showUndoToast = useCallback((msg: string) => {
     setUndoToast(msg);
     if (undoToastTimer.current) clearTimeout(undoToastTimer.current);
-    undoToastTimer.current = setTimeout(() => setUndoToast(null), 4000);
+    undoToastTimer.current = setTimeout(() => setUndoToast(null), 6000);
   }, []);
+
+  // Push to undo stack when AI edits arrive
+  useEffect(() => {
+    if (!aiSnapshotRows || !highlightedRows || highlightedRows.size === 0) return;
+    undoStack.current = [...undoStack.current.slice(-(MAX_UNDO - 1)), structuredClone(aiSnapshotRows)];
+    const rowNums = Array.from(highlightedRows).map((i) => i + 1).sort((a, b) => a - b);
+    const label = rowNums.length <= 3
+      ? `row${rowNums.length > 1 ? "s" : ""} ${rowNums.join(", ")}`
+      : `${rowNums.length} rows`;
+    showUndoToast(`Updated ${label} — Ctrl+Z to undo`);
+  }, [aiSnapshotRows, highlightedRows, showUndoToast]);
 
   useEffect(() => {
     if (!lightboxSrc) return;
@@ -274,6 +291,9 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
                   sketchPath={sketchPath}
                   onImageClick={setLightboxSrc}
                   onVisualClick={(visualPath, rowIdx) => setVisualLightbox({ visualPath, rowIndex: rowIdx })}
+                  isHighlighted={highlightedRows?.has(idx) ?? false}
+                  rowDiff={rowDiffs?.find((d) => d.rowIndex === idx)}
+                  onDismissHighlight={onDismissHighlights}
                 />
               ))}
             </tbody>
@@ -444,6 +464,9 @@ function SortableRow({
   sketchPath,
   onImageClick,
   onVisualClick,
+  isHighlighted,
+  rowDiff,
+  onDismissHighlight,
 }: {
   id: string;
   row: PlanningRow;
@@ -464,7 +487,11 @@ function SortableRow({
   sketchPath?: string;
   onImageClick: (src: string) => void;
   onVisualClick: (visualPath: string, rowIndex: number) => void;
+  isHighlighted?: boolean;
+  rowDiff?: RowDiff;
+  onDismissHighlight?: () => void;
 }){
+  const [diffExpanded, setDiffExpanded] = useState(true);
   const {
     attributes,
     listeners,
@@ -484,10 +511,11 @@ function SortableRow({
   const rowBg = idx % 2 === 0 ? "var(--color-surface-alt)" : "var(--color-surface-inset)";
 
   return (
+    <>
     <tr
       ref={setNodeRef}
       style={{ ...style, backgroundColor: rowBg }}
-      className={`card-row group hover:shadow-sm ${isSorting ? "" : "transition-all"}`}
+      className={`card-row group hover:shadow-sm ${isSorting ? "" : "transition-all"} ${isHighlighted ? "ai-highlight-row" : ""}`}
       onKeyDown={(e) => {
         if (readOnly) return;
         // Ctrl+Enter → add row below
@@ -784,6 +812,39 @@ function SortableRow({
         </td>
       )}
     </tr>
+    {/* AI diff strip — shows inline diffs below changed rows */}
+    {isHighlighted && rowDiff && diffExpanded && (
+      <tr>
+        <td colSpan={readOnly ? 4 : 6} className="p-0">
+          <div className="ai-diff-strip mx-2 mb-1 px-3 py-2 rounded-b-lg text-xs">
+            <div className="flex items-center justify-between mb-1">
+              <span className="font-medium text-[var(--color-accent)] flex items-center gap-1.5">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.09 6.26L20.18 10l-6.09 1.74L12 18l-2.09-6.26L3.82 10l6.09-1.74L12 2z" /></svg>
+                Row {idx + 1} changed
+              </span>
+              <button
+                onClick={() => { setDiffExpanded(false); onDismissHighlight?.(); }}
+                className="p-0.5 rounded hover:bg-[var(--color-border)]/30 text-[var(--color-text-secondary)]"
+              >
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 6L6 18M6 6l12 12" /></svg>
+              </button>
+            </div>
+            {rowDiff.fields.map((f) => (
+              <div key={f.field} className="mb-0.5">
+                <span className="text-[var(--color-text-secondary)] font-medium">{f.field}: </span>
+                {f.segments.map((seg, si) => (
+                  <span key={si} className={
+                    seg.type === "added" ? "ai-diff-added" :
+                    seg.type === "removed" ? "ai-diff-removed" : ""
+                  }>{seg.text}</span>
+                ))}
+              </div>
+            ))}
+          </div>
+        </td>
+      </tr>
+    )}
+    </>
   );
 }
 

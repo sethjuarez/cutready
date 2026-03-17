@@ -12,6 +12,7 @@ import { SketchPreview } from "./SketchPreview";
 import { exportSketchToWord } from "../utils/exportToWord";
 import { ExportWordButton } from "./ExportWordButton";
 import type { PlanningRow } from "../types/sketch";
+import { diffRow, type RowDiff } from "../utils/textDiff";
 
 interface MonitorInfo {
   id: number;
@@ -45,6 +46,10 @@ export function SketchForm() {
   const [availableMonitors, setAvailableMonitors] = useState<MonitorInfo[]>([]);
   const [editingDesc, setEditingDesc] = useState(false);
   const [aiUpdatedFlash, setAiUpdatedFlash] = useState(false);
+  const [highlightedRows, setHighlightedRows] = useState<Set<number>>(new Set());
+  const [rowDiffs, setRowDiffs] = useState<RowDiff[]>([]);
+  // Snapshot of rows before an AI edit lands — used for diff computation
+  const aiSnapshotRef = useRef<{ rows: PlanningRow[]; changedIndices: number[] } | null>(null);
   const [visualPromptRow, setVisualPromptRow] = useState<number | null>(null);
   const [visualInstructions, setVisualInstructions] = useState("");
   const [localDesc, setLocalDesc] = useState(
@@ -89,15 +94,81 @@ export function SketchForm() {
     pendingTitleRef.current = null;
   }, [activeSketchPath, activeSketch]);
 
-  // Listen for AI sketch updates to show a brief flash indicator
+  // Listen for AI sketch updates — snapshot current rows for diffing
   useEffect(() => {
-    const handler = () => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { rows?: number[]; toolName?: string } | undefined;
+      const changedIndices = detail?.rows ?? [];
+      // Snapshot current rows BEFORE openSketch() refreshes them
+      aiSnapshotRef.current = {
+        rows: structuredClone(localRows),
+        changedIndices,
+      };
       setAiUpdatedFlash(true);
       setTimeout(() => setAiUpdatedFlash(false), 3000);
     };
     window.addEventListener("cutready:ai-sketch-updated", handler);
     return () => window.removeEventListener("cutready:ai-sketch-updated", handler);
-  }, []);
+  }, [localRows]);
+
+  // After activeSketch updates, compute diffs against snapshot
+  useEffect(() => {
+    const snap = aiSnapshotRef.current;
+    if (!snap || !activeSketch) return;
+    aiSnapshotRef.current = null;
+
+    const oldRows = snap.rows;
+    const newRows = activeSketch.rows ?? [];
+    const indices = snap.changedIndices.length > 0
+      ? snap.changedIndices
+      : newRows.map((_, i) => i); // empty = all rows (set_planning_rows)
+
+    const diffs: RowDiff[] = [];
+    const highlighted = new Set<number>();
+
+    for (const idx of indices) {
+      const oldRow = oldRows[idx];
+      const newRow = newRows[idx];
+      if (!newRow) continue;
+      if (!oldRow) {
+        // New row added
+        highlighted.add(idx);
+        diffs.push({
+          rowIndex: idx,
+          fields: [{ field: "row", segments: [{ type: "added", text: "New row added" }] }],
+        });
+        continue;
+      }
+      const diff = diffRow(oldRow as unknown as Record<string, unknown>, newRow as unknown as Record<string, unknown>, idx);
+      if (diff) {
+        highlighted.add(idx);
+        diffs.push(diff);
+      }
+    }
+
+    // Also detect if total row count changed (rows added/removed at end)
+    if (newRows.length > oldRows.length) {
+      for (let i = oldRows.length; i < newRows.length; i++) {
+        if (!highlighted.has(i)) {
+          highlighted.add(i);
+          diffs.push({
+            rowIndex: i,
+            fields: [{ field: "row", segments: [{ type: "added", text: "New row added" }] }],
+          });
+        }
+      }
+    }
+
+    setHighlightedRows(highlighted);
+    setRowDiffs(diffs);
+
+    // Auto-clear highlights after 10 seconds
+    const timer = setTimeout(() => {
+      setHighlightedRows(new Set());
+      setRowDiffs([]);
+    }, 10_000);
+    return () => clearTimeout(timer);
+  }, [activeSketch]);
 
   // Keep localStorage in sync so the standalone preview window can pick up changes
   useEffect(() => {
@@ -508,6 +579,10 @@ The row already has a visual and design_plan. Read the sketch with read_sketch f
             }}
             projectRoot={projectRoot}
             sketchPath={activeSketchPath ?? undefined}
+            highlightedRows={highlightedRows}
+            rowDiffs={rowDiffs}
+            aiSnapshotRows={aiSnapshotRef.current?.rows ?? null}
+            onDismissHighlights={() => { setHighlightedRows(new Set()); setRowDiffs([]); }}
           />
           {/* Always-visible add row button */}
           <button
