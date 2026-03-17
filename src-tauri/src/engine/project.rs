@@ -224,6 +224,61 @@ pub fn create_project_in_repo(
     Ok(entry)
 }
 
+/// Migrate a single-project repo to multi-project by moving existing files
+/// into a named subdirectory and creating the manifest.
+///
+/// Returns the ProjectEntry for the migrated (existing) project.
+pub fn migrate_to_multi_project(
+    repo_root: &Path,
+    existing_project_name: &str,
+) -> Result<ProjectEntry, ProjectError> {
+    if is_multi_project(repo_root) {
+        return Err(ProjectError::Io("Already a multi-project repo".into()));
+    }
+
+    let path = existing_project_name
+        .to_lowercase()
+        .replace(|c: char| !c.is_alphanumeric() && c != '-' && c != '_', "-")
+        .trim_matches('-')
+        .to_string();
+
+    if path.is_empty() {
+        return Err(ProjectError::Io("Invalid project name".into()));
+    }
+
+    let target = repo_root.join(&path);
+
+    // Create the target subdirectory
+    std::fs::create_dir_all(&target).map_err(|e| ProjectError::Io(e.to_string()))?;
+
+    // Move all project files (not .git, not .cutready) into the subdirectory
+    let skip = [".git", ".cutready", &path];
+    for entry in std::fs::read_dir(repo_root).map_err(|e| ProjectError::Io(e.to_string()))? {
+        let entry = entry.map_err(|e| ProjectError::Io(e.to_string()))?;
+        let name = entry.file_name();
+        let name_str = name.to_string_lossy();
+        if skip.iter().any(|s| *s == name_str.as_ref()) {
+            continue;
+        }
+        let dest = target.join(&name);
+        std::fs::rename(entry.path(), &dest).map_err(|e| ProjectError::Io(e.to_string()))?;
+    }
+
+    let entry = ProjectEntry {
+        path: path.clone(),
+        name: existing_project_name.to_string(),
+        description: None,
+    };
+
+    // Create manifest with the single migrated project
+    let manifest = ProjectManifest {
+        projects: vec![entry.clone()],
+    };
+    write_manifest(repo_root, &manifest)?;
+
+    Ok(entry)
+}
+
 // ── Sketch file I/O (.sk) ─────────────────────────────────────────
 //
 // Sketches are stored as `.sk` files anywhere in the project tree.

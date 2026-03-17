@@ -185,6 +185,7 @@ fn add_to_recent_projects(app: &tauri::AppHandle, path: &str) -> Result<(), Stri
         RecentProject {
             path: path.to_string(),
             last_opened: Utc::now(),
+            last_active_project: None,
         },
     );
 
@@ -383,4 +384,25 @@ pub async fn rename_project(
     }
 
     Ok(())
+}
+
+/// Migrate a single-project repo to multi-project mode.
+/// Moves existing files into a named subdirectory and creates the manifest.
+#[tauri::command]
+pub async fn migrate_to_multi_project(
+    existing_name: String,
+    state: State<'_, AppState>,
+) -> Result<ProjectEntry, String> {
+    let root = repo_root(&state)?;
+    let entry = project::migrate_to_multi_project(&root, &existing_name)
+        .map_err(|e| e.to_string())?;
+
+    // Update current project to point at the new subdirectory
+    let view = ProjectView::in_repo(root, &entry.path, entry.name.clone());
+    {
+        let mut current = state.current_project.lock().map_err(|e| e.to_string())?;
+        *current = Some(view);
+    }
+
+    Ok(entry)
 }

@@ -1,5 +1,7 @@
+import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAppStore } from "../stores/appStore";
+import type { ProjectEntry } from "../types/project";
 
 /**
  * Compact project switcher dropdown. Only visible when the repo has multiple
@@ -15,9 +17,12 @@ export function ProjectSwitcher() {
 
   const [isOpen, setIsOpen] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+  const [isMigrating, setIsMigrating] = useState(false);
   const [newName, setNewName] = useState("");
+  const [migrateName, setMigrateName] = useState("");
   const dropdownRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const migrateInputRef = useRef<HTMLInputElement>(null);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -26,16 +31,18 @@ export function ProjectSwitcher() {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
         setIsOpen(false);
         setIsCreating(false);
+        setIsMigrating(false);
       }
     };
     window.addEventListener("mousedown", handleClick);
     return () => window.removeEventListener("mousedown", handleClick);
   }, [isOpen]);
 
-  // Focus input when creating
+  // Focus input when creating or migrating
   useEffect(() => {
     if (isCreating) inputRef.current?.focus();
-  }, [isCreating]);
+    if (isMigrating) migrateInputRef.current?.focus();
+  }, [isCreating, isMigrating]);
 
   const handleSwitch = useCallback(
     (path: string) => {
@@ -61,10 +68,32 @@ export function ProjectSwitcher() {
     setIsOpen(false);
   }, [newName, createProjectInRepo, loadProjects, switchProject]);
 
-  // Don't show if single project and not multi-project
-  if (!isMultiProject && projects.length <= 1) {
-    return null;
-  }
+  const handleMigrate = useCallback(async () => {
+    const name = migrateName.trim();
+    if (!name) return;
+    try {
+      await invoke<ProjectEntry>("migrate_to_multi_project", { existingName: name });
+      setMigrateName("");
+      setIsMigrating(false);
+      await loadProjects();
+      // Now show the "new project" flow
+      setIsCreating(true);
+    } catch (err) {
+      console.error("Migration failed:", err);
+    }
+  }, [migrateName, loadProjects]);
+
+  const handleNewProjectClick = useCallback(() => {
+    if (!isMultiProject) {
+      // Single-project repo: need to migrate first
+      setMigrateName(currentProject?.name ?? "");
+      setIsMigrating(true);
+    } else {
+      setIsCreating(true);
+    }
+  }, [isMultiProject, currentProject]);
+
+  // Always show — in single-project mode, the dropdown lets the user add a second project
 
   // Find the active project entry
   const activeEntry = projects.find((p) => {
@@ -139,9 +168,38 @@ export function ProjectSwitcher() {
             );
           })}
 
-          {/* Divider + New Project */}
+          {/* Divider + New Project / Migration */}
           <div className="border-t border-[var(--color-border)]">
-            {isCreating ? (
+            {isMigrating ? (
+              <div className="px-2 py-1.5">
+                <p className="text-[11px] text-[var(--color-text-secondary)] mb-1">
+                  Name the existing project before adding a new one:
+                </p>
+                <div className="flex items-center gap-1">
+                  <input
+                    ref={migrateInputRef}
+                    value={migrateName}
+                    onChange={(e) => setMigrateName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleMigrate();
+                      if (e.key === "Escape") {
+                        setIsMigrating(false);
+                        setMigrateName("");
+                      }
+                    }}
+                    placeholder="Current project name…"
+                    className="flex-1 text-[12px] px-2 py-1 bg-[var(--color-surface-alt)] border border-[var(--color-border)] rounded text-[var(--color-text)] placeholder:text-[var(--color-text-secondary)]/50 outline-none focus:border-[var(--color-accent)]"
+                  />
+                  <button
+                    onClick={handleMigrate}
+                    disabled={!migrateName.trim()}
+                    className="text-[11px] px-2 py-1 rounded bg-[var(--color-accent)] text-white disabled:opacity-40 hover:bg-[var(--color-accent-hover)] transition-colors"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            ) : isCreating ? (
               <div className="flex items-center gap-1 px-2 py-1.5">
                 <input
                   ref={inputRef}
@@ -167,7 +225,7 @@ export function ProjectSwitcher() {
               </div>
             ) : (
               <button
-                onClick={() => setIsCreating(true)}
+                onClick={handleNewProjectClick}
                 className="flex items-center gap-2 w-full px-3 py-1.5 text-left text-[12px] text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] hover:bg-[var(--color-surface-alt)] transition-colors"
               >
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

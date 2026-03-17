@@ -157,6 +157,7 @@ pub fn run() {
             commands::project::create_project_in_repo,
             commands::project::delete_project,
             commands::project::rename_project,
+            commands::project::migrate_to_multi_project,
             commands::sketch::create_sketch,
             commands::sketch::update_sketch,
             commands::sketch::update_sketch_title,

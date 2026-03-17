@@ -74,10 +74,14 @@ pub struct ProjectManifest {
 /// Entry in the recent projects list.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RecentProject {
-    /// Absolute path to the project folder.
+    /// Absolute path to the repo/project folder.
     pub path: String,
     /// When the project was last opened.
     pub last_opened: DateTime<Utc>,
+    /// In multi-project repos, the relative path of the last active project.
+    /// None for single-project repos. Used to restore the active project on re-open.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_active_project: Option<String>,
 }
 
 #[cfg(test)]
@@ -139,9 +143,26 @@ mod tests {
         let rp = RecentProject {
             path: "/home/user/demo".into(),
             last_opened: Utc::now(),
+            last_active_project: None,
         };
         let json = serde_json::to_string(&rp).unwrap();
         let parsed: RecentProject = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed.path, rp.path);
+        assert!(parsed.last_active_project.is_none());
+
+        // With last_active_project set
+        let rp2 = RecentProject {
+            path: "/home/user/demos".into(),
+            last_opened: Utc::now(),
+            last_active_project: Some("login-flow".into()),
+        };
+        let json2 = serde_json::to_string(&rp2).unwrap();
+        let parsed2: RecentProject = serde_json::from_str(&json2).unwrap();
+        assert_eq!(parsed2.last_active_project, Some("login-flow".into()));
+
+        // Backward compat: old JSON without the field still parses
+        let old_json = r#"{"path":"/old","last_opened":"2025-01-01T00:00:00Z"}"#;
+        let old: RecentProject = serde_json::from_str(old_json).unwrap();
+        assert!(old.last_active_project.is_none());
     }
 }

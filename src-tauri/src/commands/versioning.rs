@@ -7,11 +7,12 @@ use crate::models::script::ProjectView;
 use crate::models::sketch::VersionEntry;
 use crate::AppState;
 
-/// Helper: get the project root from current state.
-fn project_root(state: &AppState) -> Result<std::path::PathBuf, String> {
+/// Helper: get the repo root (where .git lives) from current state.
+/// In single-project mode, repo_root == project root.
+fn versioning_root(state: &AppState) -> Result<std::path::PathBuf, String> {
     let current = state.current_project.lock().map_err(|e| e.to_string())?;
     let view = current.as_ref().ok_or("No project is currently open")?;
-    Ok(view.root.clone())
+    Ok(view.repo_root.clone())
 }
 
 #[tauri::command]
@@ -20,13 +21,13 @@ pub async fn save_with_label(
     fork_label: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
-    let root = project_root(&state)?;
+    let root = versioning_root(&state)?;
     project::save_with_label(&root, &label, fork_label.as_deref()).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub async fn list_versions(state: State<'_, AppState>) -> Result<Vec<VersionEntry>, String> {
-    let root = project_root(&state)?;
+    let root = versioning_root(&state)?;
 
     if !root.join(".git").exists() {
         return Ok(Vec::new());
@@ -41,7 +42,7 @@ pub async fn preview_version(
     file_path: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
-    let root = project_root(&state)?;
+    let root = versioning_root(&state)?;
 
     // Default to listing changed files if no specific file requested
     let target = file_path.as_deref().unwrap_or("");
@@ -60,7 +61,7 @@ pub async fn restore_version(
     commit_id: String,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let root = project_root(&state)?;
+    let root = versioning_root(&state)?;
     versioning::restore_version(&root, &commit_id).map_err(|e| e.to_string())?;
 
     // Re-scan the project folder after restore
@@ -76,7 +77,7 @@ pub async fn checkout_version(
     commit_id: String,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let root = project_root(&state)?;
+    let root = versioning_root(&state)?;
     versioning::checkout_version(&root, &commit_id).map_err(|e| e.to_string())?;
 
     // Re-scan the project folder after checkout
@@ -89,7 +90,7 @@ pub async fn checkout_version(
 
 #[tauri::command]
 pub async fn discard_changes(state: State<'_, AppState>) -> Result<(), String> {
-    let root = project_root(&state)?;
+    let root = versioning_root(&state)?;
     versioning::discard_changes(&root).map_err(|e| e.to_string())?;
 
     // Re-scan project after discard
@@ -102,7 +103,7 @@ pub async fn discard_changes(state: State<'_, AppState>) -> Result<(), String> {
 
 #[tauri::command]
 pub async fn has_unsaved_changes(state: State<'_, AppState>) -> Result<bool, String> {
-    let root = project_root(&state)?;
+    let root = versioning_root(&state)?;
     if !root.join(".git").exists() {
         return Ok(false);
     }
@@ -111,13 +112,13 @@ pub async fn has_unsaved_changes(state: State<'_, AppState>) -> Result<bool, Str
 
 #[tauri::command]
 pub async fn stash_changes(state: State<'_, AppState>) -> Result<(), String> {
-    let root = project_root(&state)?;
+    let root = versioning_root(&state)?;
     versioning::stash_working_tree(&root).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub async fn pop_stash(state: State<'_, AppState>) -> Result<bool, String> {
-    let root = project_root(&state)?;
+    let root = versioning_root(&state)?;
     versioning::pop_stash(&root).map_err(|e| e.to_string())
 }
 
@@ -127,7 +128,7 @@ pub async fn create_timeline(
     name: String,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let root = project_root(&state)?;
+    let root = versioning_root(&state)?;
     versioning::create_timeline(&root, &from_commit_id, &name).map_err(|e| e.to_string())
 }
 
@@ -135,7 +136,7 @@ pub async fn create_timeline(
 pub async fn list_timelines(
     state: State<'_, AppState>,
 ) -> Result<Vec<crate::models::sketch::TimelineInfo>, String> {
-    let root = project_root(&state)?;
+    let root = versioning_root(&state)?;
     if !root.join(".git").exists() {
         return Ok(Vec::new());
     }
@@ -147,7 +148,7 @@ pub async fn switch_timeline(
     name: String,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let root = project_root(&state)?;
+    let root = versioning_root(&state)?;
     versioning::switch_timeline(&root, &name).map_err(|e| e.to_string())?;
     // Re-scan project
     let view = crate::models::script::ProjectView::new(root);
@@ -161,7 +162,7 @@ pub async fn delete_timeline(
     name: String,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let root = project_root(&state)?;
+    let root = versioning_root(&state)?;
     versioning::delete_timeline(&root, &name).map_err(|e| e.to_string())
 }
 
@@ -170,7 +171,7 @@ pub async fn promote_timeline(
     name: String,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let root = project_root(&state)?;
+    let root = versioning_root(&state)?;
     versioning::promote_timeline(&root, &name).map_err(|e| e.to_string())
 }
 
@@ -178,7 +179,7 @@ pub async fn promote_timeline(
 pub async fn get_timeline_graph(
     state: State<'_, AppState>,
 ) -> Result<Vec<crate::models::sketch::GraphNode>, String> {
-    let root = project_root(&state)?;
+    let root = versioning_root(&state)?;
     if !root.join(".git").exists() {
         return Ok(Vec::new());
     }
@@ -190,7 +191,7 @@ pub async fn navigate_to_snapshot(
     commit_id: String,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let root = project_root(&state)?;
+    let root = versioning_root(&state)?;
     versioning::navigate_to_snapshot(&root, &commit_id).map_err(|e| e.to_string())?;
 
     // Re-scan the project folder
@@ -202,7 +203,7 @@ pub async fn navigate_to_snapshot(
 
 #[tauri::command]
 pub async fn has_stash(state: State<'_, AppState>) -> Result<bool, String> {
-    let root = project_root(&state)?;
+    let root = versioning_root(&state)?;
     Ok(versioning::has_stash(&root))
 }
 
@@ -214,13 +215,13 @@ pub async fn add_git_remote(
     url: String,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let root = project_root(&state)?;
+    let root = versioning_root(&state)?;
     versioning_remote::add_remote(&root, &name, &url).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub async fn remove_git_remote(name: String, state: State<'_, AppState>) -> Result<(), String> {
-    let root = project_root(&state)?;
+    let root = versioning_root(&state)?;
     versioning_remote::remove_remote(&root, &name).map_err(|e| e.to_string())
 }
 
@@ -228,7 +229,7 @@ pub async fn remove_git_remote(name: String, state: State<'_, AppState>) -> Resu
 pub async fn list_git_remotes(
     state: State<'_, AppState>,
 ) -> Result<Vec<versioning_remote::RemoteInfo>, String> {
-    let root = project_root(&state)?;
+    let root = versioning_root(&state)?;
     versioning_remote::list_remotes(&root).map_err(|e| e.to_string())
 }
 
@@ -236,7 +237,7 @@ pub async fn list_git_remotes(
 pub async fn detect_git_remote(
     state: State<'_, AppState>,
 ) -> Result<Option<versioning_remote::RemoteInfo>, String> {
-    let root = project_root(&state)?;
+    let root = versioning_root(&state)?;
     versioning_remote::detect_remote(&root).map_err(|e| e.to_string())
 }
 
@@ -246,7 +247,7 @@ pub async fn fetch_git_remote(
     token: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let root = project_root(&state)?;
+    let root = versioning_root(&state)?;
     versioning_remote::fetch_remote(&root, &remote_name, token.as_deref())
         .map_err(|e| e.to_string())
 }
@@ -258,7 +259,7 @@ pub async fn push_git_remote(
     token: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let root = project_root(&state)?;
+    let root = versioning_root(&state)?;
     versioning_remote::push_remote(&root, &remote_name, &branch, token.as_deref())
         .map_err(|e| e.to_string())
 }
@@ -269,7 +270,7 @@ pub async fn get_sync_status(
     remote_name: String,
     state: State<'_, AppState>,
 ) -> Result<versioning_remote::SyncStatus, String> {
-    let root = project_root(&state)?;
+    let root = versioning_root(&state)?;
     versioning_remote::get_ahead_behind(&root, &branch, &remote_name)
         .map_err(|e| e.to_string())
 }
@@ -300,7 +301,7 @@ pub async fn pull_git_remote(
     token: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<versioning_remote::PullResult, String> {
-    let root = project_root(&state)?;
+    let root = versioning_root(&state)?;
     versioning_remote::pull_remote(&root, &remote_name, &branch, token.as_deref())
         .map_err(|e| e.to_string())
 }
@@ -310,7 +311,7 @@ pub async fn list_remote_branches(
     remote_name: String,
     state: State<'_, AppState>,
 ) -> Result<Vec<String>, String> {
-    let root = project_root(&state)?;
+    let root = versioning_root(&state)?;
     versioning_remote::list_remote_branches(&root, &remote_name)
         .map_err(|e| e.to_string())
 }
@@ -321,7 +322,7 @@ pub async fn checkout_remote_branch(
     branch: String,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let root = project_root(&state)?;
+    let root = versioning_root(&state)?;
     versioning_remote::checkout_remote_branch(&root, &remote_name, &branch)
         .map_err(|e| e.to_string())
 }
@@ -332,7 +333,7 @@ pub async fn save_editor_state(
     editor_state: String,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let root = project_root(&state)?;
+    let root = versioning_root(&state)?;
     let dir = root.join(".git").join("cutready-editor-state");
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     std::fs::write(dir.join(format!("{}.json", commit_id)), editor_state)
@@ -344,7 +345,7 @@ pub async fn load_editor_state(
     commit_id: String,
     state: State<'_, AppState>,
 ) -> Result<Option<String>, String> {
-    let root = project_root(&state)?;
+    let root = versioning_root(&state)?;
     let path = root.join(".git").join("cutready-editor-state").join(format!("{}.json", commit_id));
     if path.exists() {
         std::fs::read_to_string(&path).map(Some).map_err(|e| e.to_string())
@@ -355,7 +356,7 @@ pub async fn load_editor_state(
 
 #[tauri::command]
 pub async fn is_rewound(state: State<'_, AppState>) -> Result<bool, String> {
-    let root = project_root(&state)?;
+    let root = versioning_root(&state)?;
     Ok(versioning::is_rewound(&root))
 }
 
@@ -365,7 +366,7 @@ pub async fn diff_snapshots(
     to_commit: String,
     state: State<'_, AppState>,
 ) -> Result<Vec<versioning::DiffEntry>, String> {
-    let root = project_root(&state)?;
+    let root = versioning_root(&state)?;
     versioning::diff_snapshots(&root, &from_commit, &to_commit)
         .map_err(|e| e.to_string())
 }
@@ -376,7 +377,7 @@ pub async fn check_large_files(
     threshold_mb: u64,
     state: State<'_, AppState>,
 ) -> Result<Vec<(String, u64)>, String> {
-    let root = project_root(&state)?;
+    let root = versioning_root(&state)?;
     let threshold_bytes = threshold_mb * 1024 * 1024;
     let mut large: Vec<(String, u64)> = Vec::new();
     fn walk(dir: &std::path::Path, root: &std::path::Path, threshold: u64, out: &mut Vec<(String, u64)>) {
@@ -420,7 +421,7 @@ pub async fn merge_timelines(
     target_timeline: String,
     state: State<'_, AppState>,
 ) -> Result<crate::engine::versioning_merge::MergeResult, String> {
-    let root = project_root(&state)?;
+    let root = versioning_root(&state)?;
     crate::engine::versioning_merge::merge_timelines(&root, &source_timeline, &target_timeline)
         .map_err(|e| e.to_string())
 }
@@ -432,7 +433,7 @@ pub async fn apply_merge_resolution(
     resolutions: Vec<crate::engine::versioning_merge::FileResolution>,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
-    let root = project_root(&state)?;
+    let root = versioning_root(&state)?;
     crate::engine::versioning_merge::apply_merge_resolution(
         &root,
         &source_timeline,

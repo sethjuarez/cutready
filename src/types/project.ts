@@ -12,6 +12,8 @@ export interface ProjectView {
 export interface RecentProject {
   path: string;
   last_opened: string;
+  /** In multi-project repos, the relative path of the last active project. */
+  last_active_project?: string;
 }
 
 /** An entry in the multi-project manifest. */
