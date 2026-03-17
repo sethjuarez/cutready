@@ -198,7 +198,7 @@ function TreeNodeRow({
   activeNotePath: string | null;
   onClick: (node: TreeNode) => void;
 }) {
-  const [expanded, setExpanded] = useState(depth < 1);
+  const [expanded, setExpanded] = useState(depth < 1 && !node.name.startsWith("."));
 
   const isActive =
     (node.ext === "sk" && node.path === activeSketchPath && !activeStoryboardPath) ||
