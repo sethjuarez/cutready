@@ -155,11 +155,14 @@ async function readScreenshot(projectRoot: string, relativePath: string): Promis
 /** Load a visual from its file path, then render the last frame as a PNG ImageRun for Word embedding. */
 async function captureVisualLastFrame(visualPath: string): Promise<ImageRun | null> {
   try {
+    console.log("[exportToWord] Rendering visual:", visualPath);
     const visual = await invoke<Record<string, unknown>>("get_visual", { relativePath: visualPath });
+    if (!visual || !visual.root) {
+      console.warn("[exportToWord] Visual has no root:", visualPath);
+      return null;
+    }
 
-    // Dynamic import to avoid loading react-dom/server at app startup (React 19 compat)
     const { renderToSvgString } = await import("@elucim/dsl");
-    const { svgToCanvas } = await import("@elucim/core");
 
     type ElucimDocument = Parameters<typeof renderToSvgString>[0];
     const dsl = visual as unknown as ElucimDocument;
@@ -169,20 +172,44 @@ async function captureVisualLastFrame(visualPath: string): Promise<ImageRun | nu
     const width = (root.width as number) || 640;
     const height = (root.height as number) || 360;
 
-    // Headless render to SVG string at the last frame
     const svgString = renderToSvgString(dsl, lastFrame, { width, height });
+    console.log("[exportToWord] SVG rendered, length:", svgString.length);
 
-    // Parse SVG string into an element for canvas conversion
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(svgString, "image/svg+xml");
-    const svgElement = doc.documentElement as unknown as SVGSVGElement;
+    // Rasterize SVG → PNG using Image + OffscreenCanvas (avoids DOM dependency)
+    const rasterW = width * 2;
+    const rasterH = height * 2;
+    const svgBlob = new Blob([svgString], { type: "image/svg+xml;charset=utf-8" });
+    const url = URL.createObjectURL(svgBlob);
 
-    // Rasterize SVG → canvas → PNG blob
-    const canvas = await svgToCanvas(svgElement, width * 2, height * 2);
-    const blob: Blob = await new Promise((resolve, reject) => {
-      canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("toBlob failed"))), "image/png");
+    const buffer: ArrayBuffer = await new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const canvas = document.createElement("canvas");
+          canvas.width = rasterW;
+          canvas.height = rasterH;
+          const ctx = canvas.getContext("2d");
+          if (!ctx) { reject(new Error("No 2d context")); return; }
+          ctx.drawImage(img, 0, 0, rasterW, rasterH);
+          canvas.toBlob(
+            (b) => {
+              if (b) b.arrayBuffer().then(resolve, reject);
+              else reject(new Error("toBlob returned null"));
+            },
+            "image/png",
+          );
+        } finally {
+          URL.revokeObjectURL(url);
+        }
+      };
+      img.onerror = (e) => {
+        URL.revokeObjectURL(url);
+        reject(new Error(`Image load failed: ${e}`));
+      };
+      img.src = url;
     });
-    const buffer = await blob.arrayBuffer();
+
+    console.log("[exportToWord] Visual captured, PNG size:", buffer.byteLength);
 
     return new ImageRun({
       data: new Uint8Array(buffer),
@@ -190,7 +217,7 @@ async function captureVisualLastFrame(visualPath: string): Promise<ImageRun | nu
       type: "png",
     });
   } catch (e) {
-    console.warn("[exportToWord] Failed to capture visual frame:", e);
+    console.error("[exportToWord] Failed to capture visual frame:", visualPath, e);
     return null;
   }
 }
