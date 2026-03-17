@@ -34,7 +34,7 @@ vi.mock("@elucim/core", () => ({
   },
 }));
 
-import { exportSketchToWord, exportStoryboardToWord } from "../utils/exportToWord";
+import { exportSketchToWord, exportStoryboardToWord, exportNoteToWord } from "../utils/exportToWord";
 import type { Sketch, Storyboard } from "../types/sketch";
 
 function makeMockSketch(title = "Test Sketch", rowCount = 3): Sketch {
@@ -152,6 +152,66 @@ describe("exportStoryboardToWord", () => {
     expect(mockSave).toHaveBeenCalledWith(
       expect.objectContaining({ defaultPath: "Empty-Board.docx" }),
     );
+    expect(mockWriteFile).toHaveBeenCalledTimes(1);
+  }, 15_000);
+});
+
+describe("exportNoteToWord", () => {
+  it("exports markdown note with headings and paragraphs", async () => {
+    const md = [
+      "# Introduction",
+      "",
+      "This is a **bold** and *italic* note.",
+      "",
+      "## Section Two",
+      "",
+      "- Bullet one",
+      "- Bullet two",
+      "",
+      "1. First item",
+      "2. Second item",
+    ].join("\n");
+
+    await exportNoteToWord("My Notes", md, "/projects/test");
+
+    expect(mockSave).toHaveBeenCalledWith({
+      defaultPath: "My-Notes.docx",
+      filters: [{ name: "Word Document", extensions: ["docx"] }],
+    });
+    expect(mockWriteFile).toHaveBeenCalledTimes(1);
+    expect(mockWriteFile.mock.calls[0][1]).toBeInstanceOf(Uint8Array);
+  }, 15_000);
+
+  it("does nothing when user cancels save dialog", async () => {
+    mockSave.mockResolvedValue(null);
+    await exportNoteToWord("Cancelled", "Some content", "/projects/test");
+    expect(mockWriteFile).not.toHaveBeenCalled();
+  }, 15_000);
+
+  it("handles empty markdown gracefully", async () => {
+    await exportNoteToWord("Empty Note", "", "/projects/test");
+    expect(mockSave).toHaveBeenCalledWith(
+      expect.objectContaining({ defaultPath: "Empty-Note.docx" }),
+    );
+    expect(mockWriteFile).toHaveBeenCalledTimes(1);
+  }, 15_000);
+
+  it("handles blockquotes and horizontal rules", async () => {
+    const md = "> This is a quote\n\n---\n\nRegular text after rule.";
+    await exportNoteToWord("Quotes", md, "/projects/test");
+    expect(mockWriteFile).toHaveBeenCalledTimes(1);
+  }, 15_000);
+
+  it("handles GFM tables", async () => {
+    const md = "| Name | Value |\n| --- | --- |\n| Alpha | 100 |\n| Beta | 200 |";
+    await exportNoteToWord("Tables", md, "/projects/test");
+    expect(mockWriteFile).toHaveBeenCalledTimes(1);
+  }, 15_000);
+
+  it("handles images with fallback text when file missing", async () => {
+    mockReadFile.mockRejectedValue(new Error("Not found"));
+    const md = "![Screenshot](.cutready/screenshots/demo.png)";
+    await exportNoteToWord("With Image", md, "/projects/test");
     expect(mockWriteFile).toHaveBeenCalledTimes(1);
   }, 15_000);
 });

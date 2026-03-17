@@ -6,6 +6,7 @@ import { useAppStore } from "../stores/appStore";
 import { useSettings } from "../hooks/useSettings";
 import { MarkdownEditor } from "./MarkdownEditor";
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
+import { exportNoteToWord } from "../utils/exportToWord";
 
 const AI_NOTE_CLEANUP_PROMPT = `You are a document editor. Clean up and improve the following Markdown note.
 
@@ -38,6 +39,7 @@ export function NoteEditor() {
   const [aiCleaning, setAiCleaning] = useState(false);
   const [aiUpdatedFlash, setAiUpdatedFlash] = useState(false);
   const [richPasteBusy, setRichPasteBusy] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   // Listen for AI note updates to show a brief flash indicator
   useEffect(() => {
@@ -172,6 +174,19 @@ export function NoteEditor() {
 
   const displayTitle = activeNotePath.replace(/\.md$/, "").split("/").pop() ?? activeNotePath;
 
+  // Export note to Word
+  const handleExportToWord = async () => {
+    if (!activeNoteContent || exporting) return;
+    setExporting(true);
+    try {
+      await exportNoteToWord(displayTitle, activeNoteContent, projectRoot ?? "");
+    } catch (e) {
+      console.error("[NoteEditor] Export to Word failed:", e);
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
       {/* Title bar */}
@@ -186,6 +201,27 @@ export function NoteEditor() {
         <span className="text-[10px] text-[var(--color-text-secondary)] px-1.5 py-0.5 rounded bg-[var(--color-surface-alt)]">.md</span>
 
         <div className="ml-auto flex items-center gap-1">
+          {/* Export to Word button */}
+          <button
+            onClick={handleExportToWord}
+            disabled={exporting || !activeNoteContent}
+            className="flex items-center justify-center w-7 h-7 rounded-md text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+            title="Export to Word"
+          >
+            {exporting ? (
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="animate-spin">
+                <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+              </svg>
+            ) : (
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                <polyline points="14 2 14 8 20 8" />
+                <path d="M12 18v-6" />
+                <path d="M9 15l3 3 3-3" />
+              </svg>
+            )}
+          </button>
+
           {/* AI cleanup sparkle button */}
           <button
             onClick={handleAiCleanup}

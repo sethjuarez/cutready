@@ -296,6 +296,203 @@ async function saveDocument(doc: Document, defaultName: string): Promise<void> {
   await writeFile(filePath, new Uint8Array(buffer));
 }
 
+// ── Note (Markdown) → Word ───────────────────────────────────────
+
+/** Heading-level map: # → HEADING_1, ## → HEADING_2, etc. */
+const headingLevels: Record<number, (typeof HeadingLevel)[keyof typeof HeadingLevel]> = {
+  1: HeadingLevel.HEADING_1,
+  2: HeadingLevel.HEADING_2,
+  3: HeadingLevel.HEADING_3,
+  4: HeadingLevel.HEADING_4,
+  5: HeadingLevel.HEADING_5,
+  6: HeadingLevel.HEADING_6,
+};
+
+/**
+ * Parse a full markdown document into docx Paragraphs, handling headings,
+ * images, bullet/numbered lists, and inline formatting.
+ */
+async function markdownToDocxContent(
+  markdown: string,
+  projectRoot: string,
+): Promise<(Paragraph | Table)[]> {
+  const elements: (Paragraph | Table)[] = [];
+  const lines = markdown.split("\n");
+
+  // Collect GFM table rows
+  let tableBuffer: string[] = [];
+
+  const flushTable = () => {
+    if (tableBuffer.length < 2) {
+      // Not a valid table — emit as regular paragraphs
+      for (const tl of tableBuffer) {
+        elements.push(new Paragraph({ children: parseInlineMarkdown(tl) }));
+      }
+      tableBuffer = [];
+      return;
+    }
+
+    // Parse header and data rows, skip separator row
+    const parseRow = (row: string) =>
+      row.split("|").map((c) => c.trim()).filter((c) => c.length > 0);
+
+    const headers = parseRow(tableBuffer[0]);
+    const dataRows = tableBuffer
+      .slice(2) // skip header + separator
+      .map(parseRow);
+
+    const headerRow = new TableRow({
+      children: headers.map((h) => headerCell(h)),
+      tableHeader: true,
+    });
+
+    const rows = dataRows.map(
+      (cols) =>
+        new TableRow({
+          children: headers.map((_, i) => bodyCell(cols[i] || "")),
+        }),
+    );
+
+    elements.push(
+      new Table({
+        rows: [headerRow, ...rows],
+        width: { size: 100, type: WidthType.PERCENTAGE },
+        borders: tableBorder,
+      }),
+    );
+
+    tableBuffer = [];
+  };
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+
+    // Detect table rows (start with |)
+    if (trimmed.startsWith("|") && trimmed.endsWith("|")) {
+      // Check if separator row (all dashes/colons)
+      const isSep = /^\|[\s:|-]+\|$/.test(trimmed);
+      if (tableBuffer.length > 0 || (!isSep && trimmed.includes("|"))) {
+        tableBuffer.push(trimmed);
+        continue;
+      }
+    } else if (tableBuffer.length > 0) {
+      flushTable();
+    }
+
+    // Blank line
+    if (!trimmed) {
+      elements.push(new Paragraph({}));
+      continue;
+    }
+
+    // Heading: # through ######
+    const headingMatch = trimmed.match(/^(#{1,6})\s+(.+)/);
+    if (headingMatch) {
+      const level = headingMatch[1].length;
+      const heading = headingLevels[level] ?? HeadingLevel.HEADING_6;
+      elements.push(
+        new Paragraph({
+          children: parseInlineMarkdown(headingMatch[2]),
+          heading,
+        }),
+      );
+      continue;
+    }
+
+    // Image: ![alt](path)
+    const imgMatch = trimmed.match(/^!\[([^\]]*)\]\(([^)]+)\)/);
+    if (imgMatch) {
+      const imgPath = imgMatch[2];
+      const img = await readScreenshot(projectRoot, imgPath);
+      if (img) {
+        elements.push(new Paragraph({ children: [img] }));
+      } else {
+        elements.push(
+          new Paragraph({
+            children: [new TextRun({ text: `[Image: ${imgPath}]`, italics: true })],
+          }),
+        );
+      }
+      continue;
+    }
+
+    // Horizontal rule: --- or *** or ___
+    if (/^[-*_]{3,}$/.test(trimmed)) {
+      elements.push(
+        new Paragraph({
+          border: {
+            bottom: { style: BorderStyle.SINGLE, size: 6, color: "BFBFBF", space: 1 },
+          },
+        }),
+      );
+      continue;
+    }
+
+    // Bullet list: - text or * text (but not *italic*)
+    const bulletMatch = trimmed.match(/^[-*•]\s+(.+)/);
+    if (bulletMatch && !trimmed.match(/^\*[^*]+\*$/)) {
+      elements.push(
+        new Paragraph({
+          children: parseInlineMarkdown(bulletMatch[1]),
+          bullet: { level: 0 },
+        }),
+      );
+      continue;
+    }
+
+    // Numbered list: 1. text
+    if (/^\d+[.)]\s+/.test(trimmed)) {
+      const content = trimmed.replace(/^\d+[.)]\s+/, "");
+      elements.push(
+        new Paragraph({
+          children: parseInlineMarkdown(content),
+          numbering: { reference: "decimal-list", level: 0 },
+        }),
+      );
+      continue;
+    }
+
+    // Blockquote: > text
+    const quoteMatch = trimmed.match(/^>\s*(.*)/);
+    if (quoteMatch) {
+      elements.push(
+        new Paragraph({
+          children: [new TextRun({ text: quoteMatch[1] || "", italics: true })],
+          indent: { left: convertInchesToTwip(0.5) },
+        }),
+      );
+      continue;
+    }
+
+    // Regular paragraph
+    elements.push(new Paragraph({ children: parseInlineMarkdown(trimmed) }));
+  }
+
+  // Flush any remaining table
+  if (tableBuffer.length > 0) flushTable();
+
+  return elements;
+}
+
+export async function exportNoteToWord(
+  title: string,
+  markdown: string,
+  projectRoot: string,
+): Promise<void> {
+  const children: (Paragraph | Table)[] = [
+    new Paragraph({ text: title, heading: HeadingLevel.TITLE }),
+    new Paragraph({
+      children: [new TextRun({ text: `Exported ${timestamp()}`, italics: true })],
+    }),
+    new Paragraph({}),
+    ...await markdownToDocxContent(markdown, projectRoot),
+  ];
+
+  const doc = createDocument(children);
+  await saveDocument(doc, `${sanitizeFilename(title)}.docx`);
+}
+
 // ── Sketch → Word ───────────────────────────────────────────────
 
 async function buildSketchContent(sketch: Sketch, projectRoot: string, level: (typeof HeadingLevel)[keyof typeof HeadingLevel] = HeadingLevel.HEADING_1): Promise<(Paragraph | Table)[]> {
