@@ -68,27 +68,19 @@ export function StoryboardPanel() {
           <NoteEditor />
         ) : (
           <div className="flex-1 flex items-center justify-center">
-            <div className="text-center">
-              <svg
-                width="48"
-                height="48"
-                viewBox="0 0 128 128"
-                fill="none"
-                className="mx-auto mb-4 opacity-40"
-              >
-                <rect x="14" y="52" width="100" height="64" rx="4" fill="#574bb8" />
-                <rect
-                  x="14"
-                  y="26"
-                  width="100"
-                  height="16"
-                  rx="3"
-                  fill="#7c6fdb"
-                  transform="rotate(-14 14 42)"
+            <div className="flex flex-col items-center gap-3">
+              <div className="relative w-12 h-12">
+                <div
+                  className="absolute inset-0 rounded-xl blur-xl opacity-30"
+                  style={{ background: "linear-gradient(135deg, var(--color-accent), #e879a8)" }}
                 />
-                <circle cx="14" cy="48" r="5" fill="var(--color-accent)" />
-                <path d="M48 68 L88 84 L48 100Z" fill="var(--color-accent)" />
-              </svg>
+                <img
+                  src="/cutready.svg"
+                  alt=""
+                  className="relative w-12 h-12 drop-shadow-md opacity-50"
+                  draggable={false}
+                />
+              </div>
               <p className="text-sm text-[var(--color-text-secondary)]">
                 Create a sketch or storyboard to get started
               </p>
