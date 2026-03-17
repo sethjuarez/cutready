@@ -373,17 +373,52 @@ pub async fn rename_project(
     project_path: String,
     new_name: String,
     state: State<'_, AppState>,
-) -> Result<(), String> {
+) -> Result<String, String> {
     let root = repo_root(&state)?;
 
+    // Derive new folder-safe path from the new name
+    let new_path = new_name
+        .to_lowercase()
+        .replace(|c: char| !c.is_alphanumeric() && c != '-' && c != '_', "-")
+        .trim_matches('-')
+        .to_string();
+
+    if new_path.is_empty() {
+        return Err("Invalid project name".into());
+    }
+
+    // Rename the folder on disk if the path changed
+    if new_path != project_path {
+        let old_dir = root.join(&project_path);
+        let new_dir = root.join(&new_path);
+        if new_dir.exists() {
+            return Err(format!("Directory '{}' already exists", new_path));
+        }
+        if old_dir.exists() {
+            std::fs::rename(&old_dir, &new_dir).map_err(|e| e.to_string())?;
+        }
+    }
+
+    // Update manifest: both name and path
     if let Some(mut manifest) = project::read_manifest(&root) {
         if let Some(entry) = manifest.projects.iter_mut().find(|p| p.path == project_path) {
-            entry.name = new_name;
+            entry.name = new_name.clone();
+            entry.path = new_path.clone();
         }
         project::write_manifest(&root, &manifest).map_err(|e| e.to_string())?;
     }
 
-    Ok(())
+    // Update current project view if this is the active project
+    {
+        let mut current = state.current_project.lock().map_err(|e| e.to_string())?;
+        if let Some(ref mut view) = *current {
+            if view.root.ends_with(&project_path) {
+                *view = ProjectView::in_repo(root, &new_path, new_name);
+            }
+        }
+    }
+
+    Ok(new_path)
 }
 
 /// Migrate a single-project repo to multi-project mode.

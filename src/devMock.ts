@@ -268,8 +268,9 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
     case "create_project_in_repo":
       return { path: (args as { name: string }).name.toLowerCase().replace(/\s+/g, "-"), name: (args as { name: string }).name, description: null };
     case "delete_project":
-    case "rename_project":
       return null;
+    case "rename_project":
+      return (args as { newName: string }).newName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
     case "migrate_to_multi_project":
       return { path: (args as { existingName: string }).existingName.toLowerCase().replace(/\s+/g, "-"), name: (args as { existingName: string }).existingName, description: null };
     case "get_workspace_settings":
