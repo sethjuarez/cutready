@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useAppStore } from "../stores/appStore";
 import { open } from "@tauri-apps/plugin-dialog";
 import { invoke } from "@tauri-apps/api/core";
+import { useToastStore } from "../stores/toastStore";
 
 /* ── Decorative icon components ───────────────────────────── */
 
@@ -78,6 +79,7 @@ export function HomePanel() {
   const createProject = useAppStore((s) => s.createProject);
   const openProject = useAppStore((s) => s.openProject);
 
+  const showToast = useToastStore((s) => s.show);
   const [newName, setNewName] = useState("");
   const [showCreate, setShowCreate] = useState(false);
   const [showClone, setShowClone] = useState(false);
@@ -172,7 +174,7 @@ export function HomePanel() {
       setShowClone(false);
     } catch (err) {
       console.error("Clone failed:", err);
-      alert(`Clone failed: ${err}`);
+      showToast(`Clone failed: ${err}`, 5000);
     } finally {
       setCloning(false);
     }
