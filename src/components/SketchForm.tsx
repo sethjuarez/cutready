@@ -48,6 +48,8 @@ export function SketchForm() {
   const [aiUpdatedFlash, setAiUpdatedFlash] = useState(false);
   const [highlightedRows, setHighlightedRows] = useState<Set<number>>(new Set());
   const [rowDiffs, setRowDiffs] = useState<RowDiff[]>([]);
+  // Last AI diffs are preserved so the user can re-show them after auto-fade
+  const lastAiDiffs = useRef<{ rows: Set<number>; diffs: RowDiff[] } | null>(null);
   // Snapshot of rows before an AI edit lands — used for diff computation
   const aiSnapshotRef = useRef<{ rows: PlanningRow[]; changedIndices: number[] } | null>(null);
   const [visualPromptRow, setVisualPromptRow] = useState<number | null>(null);
@@ -161,6 +163,10 @@ export function SketchForm() {
 
     setHighlightedRows(highlighted);
     setRowDiffs(diffs);
+    // Preserve for re-show
+    if (highlighted.size > 0) {
+      lastAiDiffs.current = { rows: new Set(highlighted), diffs: [...diffs] };
+    }
 
     // Auto-clear highlights after 10 seconds
     const timer = setTimeout(() => {
@@ -583,6 +589,15 @@ The row already has a visual and design_plan. Read the sketch with read_sketch f
             rowDiffs={rowDiffs}
             aiSnapshotRows={aiSnapshotRef.current?.rows ?? null}
             onDismissHighlights={() => { setHighlightedRows(new Set()); setRowDiffs([]); }}
+            hasLastAiDiffs={highlightedRows.size === 0 && lastAiDiffs.current !== null}
+            onReShowHighlights={() => {
+              const saved = lastAiDiffs.current;
+              if (!saved) return;
+              setHighlightedRows(new Set(saved.rows));
+              setRowDiffs([...saved.diffs]);
+              // Auto-clear again after 10s
+              setTimeout(() => { setHighlightedRows(new Set()); setRowDiffs([]); }, 10_000);
+            }}
           />
           {/* Always-visible add row button */}
           <button

@@ -63,9 +63,11 @@ interface ScriptTableProps {
   rowDiffs?: RowDiff[];
   aiSnapshotRows?: PlanningRow[] | null;
   onDismissHighlights?: () => void;
+  hasLastAiDiffs?: boolean;
+  onReShowHighlights?: () => void;
 }
 
-export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreenshot, onPickImage, onBrowseImage, onSparkle, onGenerateVisual, onNudgeVisual, projectRoot, sketchPath, highlightedRows, rowDiffs, aiSnapshotRows, onDismissHighlights }: ScriptTableProps) {
+export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreenshot, onPickImage, onBrowseImage, onSparkle, onGenerateVisual, onNudgeVisual, projectRoot, sketchPath, highlightedRows, rowDiffs, aiSnapshotRows, onDismissHighlights, hasLastAiDiffs, onReShowHighlights }: ScriptTableProps) {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
   const [visualLightbox, setVisualLightbox] = useState<{ visualPath: string; rowIndex: number } | null>(null);
@@ -242,6 +244,23 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
 
   return (
     <div className={`script-table-wrapper overflow-hidden${readOnly ? "" : " my-4"}`}>
+      {/* Re-show last AI changes button */}
+      {hasLastAiDiffs && onReShowHighlights && (
+        <div className="flex justify-end px-1 pb-1.5">
+          <button
+            onClick={onReShowHighlights}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-medium rounded-md border transition-colors
+              bg-[var(--color-accent)]/8 text-[var(--color-accent)] border-[var(--color-accent)]/20
+              hover:bg-[var(--color-accent)]/15 hover:border-[var(--color-accent)]/30"
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
+              <circle cx="12" cy="12" r="3" />
+            </svg>
+            Show AI Changes
+          </button>
+        </div>
+      )}
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
