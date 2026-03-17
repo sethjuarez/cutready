@@ -25,6 +25,7 @@ import {
 } from "docx";
 import { save } from "@tauri-apps/plugin-dialog";
 import { readFile, writeFile } from "@tauri-apps/plugin-fs";
+import { open as shellOpen } from "@tauri-apps/plugin-shell";
 import { invoke } from "@tauri-apps/api/core";
 import type { Sketch, Storyboard } from "../types/sketch";
 
@@ -324,6 +325,8 @@ async function saveDocument(doc: Document, defaultName: string): Promise<void> {
   if (!filePath) return;
   const buffer = await blob.arrayBuffer();
   await writeFile(filePath, new Uint8Array(buffer));
+  // Open the exported file in the default application
+  await shellOpen(filePath).catch(() => {});
 }
 
 // ── Note (Markdown) → Word ───────────────────────────────────────
