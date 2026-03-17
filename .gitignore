@@ -30,3 +30,4 @@ src-tauri/gen/
 # OS
 .DS_Store
 Thumbs.db
+test-results/
