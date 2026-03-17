@@ -114,8 +114,8 @@ export default function VisualCell({ visualPath, mode, onClick, className, contr
     setHasError(true);
   }, []);
 
-  const dsl = visual as unknown as ElucimDocument;
-  const previewDsl = useMemo(() => buildPreviewDsl(dsl), [dsl]);
+  const dsl = visual as unknown as ElucimDocument | null;
+  const previewDsl = useMemo(() => dsl ? buildPreviewDsl(dsl) : null, [dsl]);
 
   // Poll play state and expose control handle to parent
   useEffect(() => {
@@ -153,7 +153,7 @@ export default function VisualCell({ visualPath, mode, onClick, className, contr
     );
   }
 
-  if (!visual) {
+  if (!visual || !dsl) {
     return (
       <div
         className={`flex items-center justify-center text-[10px] text-[var(--color-text-secondary)] ${
@@ -202,7 +202,7 @@ export default function VisualCell({ visualPath, mode, onClick, className, contr
       <ErrorBoundary onError={() => setHasError(true)}>
         <DslRenderer
           ref={rendererRef}
-          dsl={previewDsl}
+          dsl={previewDsl!}
           theme={theme}
           onError={handleError}
           className="w-full h-full rounded-lg shadow-lg"
