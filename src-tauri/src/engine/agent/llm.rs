@@ -3,6 +3,7 @@
 //! Supports chat completions with function calling, streaming via SSE,
 //! and an agentic tool loop that executes tool calls and feeds results back.
 
+use std::fmt::Write as _;
 use futures_util::StreamExt;
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION, CONTENT_TYPE};
 use serde::{Deserialize, Serialize};
@@ -1235,6 +1236,7 @@ impl LlmClient {
         };
 
         let body_json = serde_json::to_string(&body).unwrap_or_default();
+        let body_json = escape_non_ascii_json(&body_json);
         let url = self.chat_url();
         let resp = self
             .http
@@ -1282,12 +1284,17 @@ impl LlmClient {
             body.tools.as_ref().map_or(0, |t| t.len())
         );
 
+        let body_json = escape_non_ascii_json(
+            &serde_json::to_string(&body).unwrap_or_default()
+        );
+
         let resp = self
             .http
             .post(&url)
             .headers(self.auth_headers())
             .timeout(std::time::Duration::from_secs(300))
-            .json(&body)
+            .header(reqwest::header::CONTENT_TYPE, "application/json")
+            .body(body_json.into_bytes())
             .send()
             .await
             .map_err(|e| format!("Responses API request failed: {e}"))?;
@@ -1550,6 +1557,9 @@ impl LlmClient {
         // No per-request timeout for streaming — the client-level connect_timeout
         // handles unreachable endpoints, and the stream can legitimately run for
         // many minutes as chunks arrive progressively.
+        // Escape non-ASCII to prevent Azure gateway JSON parse failures on
+        // multi-byte UTF-8 chars (em dashes, smart quotes, etc.).
+        let body_json = escape_non_ascii_json(&body_json);
         // Keep body_json alive for diagnostics on 400 errors.
         let body_bytes = body_json.as_bytes().to_vec();
         let resp = self
@@ -1674,6 +1684,59 @@ fn decode_jwt_audience(token: &str) -> Option<String> {
     val.get("aud")
         .and_then(|a| a.as_str())
         .map(|s| s.to_string())
+}
+
+/// Escape all non-ASCII characters in a JSON string to `\uXXXX` sequences.
+///
+/// Some API endpoints (Azure OpenAI gateway) misparse multi-byte UTF-8 in
+/// JSON bodies, reporting "Expecting ',' delimiter" at em-dash positions etc.
+/// By escaping non-ASCII to `\uXXXX` (and `\uXXXX\uXXXX` surrogate pairs
+/// for characters above U+FFFF), the body becomes pure ASCII and eliminates
+/// any encoding ambiguity.
+///
+/// Only characters inside JSON string values are escaped — structural JSON
+/// syntax (`{}[]:,"`) and whitespace are never non-ASCII so they pass through.
+fn escape_non_ascii_json(json: &str) -> String {
+    let mut out = String::with_capacity(json.len());
+    let mut in_string = false;
+    let mut escape_next = false;
+
+    for ch in json.chars() {
+        if escape_next {
+            out.push(ch);
+            escape_next = false;
+            continue;
+        }
+
+        if in_string {
+            if ch == '\\' {
+                out.push(ch);
+                escape_next = true;
+            } else if ch == '"' {
+                out.push(ch);
+                in_string = false;
+            } else if !ch.is_ascii() {
+                // Escape non-ASCII as \uXXXX (or surrogate pair)
+                let code = ch as u32;
+                if code <= 0xFFFF {
+                    write!(out, "\\u{:04x}", code).unwrap();
+                } else {
+                    // Surrogate pair for characters above BMP
+                    let high = ((code - 0x10000) >> 10) + 0xD800;
+                    let low = ((code - 0x10000) & 0x3FF) + 0xDC00;
+                    write!(out, "\\u{:04x}\\u{:04x}", high, low).unwrap();
+                }
+            } else {
+                out.push(ch);
+            }
+        } else {
+            out.push(ch);
+            if ch == '"' {
+                in_string = true;
+            }
+        }
+    }
+    out
 }
 
 #[cfg(test)]
@@ -2194,5 +2257,53 @@ mod tests {
         };
         let json = serde_json::to_string(&msg).unwrap();
         assert!(json.contains("\"content\":null"), "content should be null, not omitted: {json}");
+    }
+
+    #[test]
+    fn escape_non_ascii_leaves_ascii_untouched() {
+        let input = r#"{"key":"hello world","n":42}"#;
+        assert_eq!(escape_non_ascii_json(input), input);
+    }
+
+    #[test]
+    fn escape_non_ascii_escapes_em_dash() {
+        let input = r#"{"text":"keyword matching — be specific"}"#;
+        let result = escape_non_ascii_json(input);
+        assert!(!result.contains('—'), "em dash should be escaped");
+        assert!(result.contains(r"\u2014"), "should contain \\u2014");
+        // Should be valid JSON that roundtrips
+        let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+        assert_eq!(parsed["text"].as_str().unwrap(), "keyword matching — be specific");
+    }
+
+    #[test]
+    fn escape_non_ascii_handles_escaped_quotes() {
+        let input = r#"{"text":"say \"hello\" — world"}"#;
+        let result = escape_non_ascii_json(input);
+        assert!(result.contains(r"\u2014"));
+        let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+        assert_eq!(parsed["text"].as_str().unwrap(), "say \"hello\" — world");
+    }
+
+    #[test]
+    fn escape_non_ascii_handles_emoji() {
+        // 🎬 = U+1F3AC (above BMP, needs surrogate pair)
+        let input = r#"{"text":"action 🎬 cut"}"#;
+        let result = escape_non_ascii_json(input);
+        assert!(result.is_ascii(), "all chars should be ASCII after escape");
+        let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+        assert_eq!(parsed["text"].as_str().unwrap(), "action 🎬 cut");
+    }
+
+    #[test]
+    fn escape_non_ascii_preserves_structure() {
+        let input = r#"{"msgs":[{"role":"user","content":"café — résumé"}]}"#;
+        let result = escape_non_ascii_json(input);
+        assert!(result.is_ascii());
+        let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+        assert_eq!(
+            parsed["msgs"][0]["content"].as_str().unwrap(),
+            "café — résumé"
+        );
     }
 }
