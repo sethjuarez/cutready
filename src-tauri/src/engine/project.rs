@@ -118,6 +118,42 @@ pub fn open_project_folder(root: &Path) -> Result<ProjectView, ProjectError> {
 // Sketches are stored as `.sk` files anywhere in the project tree.
 // The relative path from project root is the sketch's identity.
 
+// ── Visual file I/O ───────────────────────────────────────────────
+//
+// Visuals are elucim DSL documents stored as separate JSON files in
+// `.cutready/visuals/<hash>.json`. Rows reference them by relative path.
+
+/// Write an elucim visual to `.cutready/visuals/<hash>.json`.
+/// Returns the relative path from project root (e.g., ".cutready/visuals/a1b2c3d4e5f6.json").
+pub fn write_visual(project_root: &Path, visual: &serde_json::Value) -> Result<String, ProjectError> {
+    use sha2::{Digest, Sha256};
+
+    let json = serde_json::to_string_pretty(visual)
+        .map_err(|e| ProjectError::Serialize(e.to_string()))?;
+
+    let digest = Sha256::digest(json.as_bytes());
+    let short_hash: String = digest.iter().take(6).map(|b| format!("{b:02x}")).collect();
+    let rel_path = format!(".cutready/visuals/{short_hash}.json");
+    let abs_path = project_root.join(&rel_path);
+
+    if let Some(parent) = abs_path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| ProjectError::Io(e.to_string()))?;
+    }
+
+    std::fs::write(&abs_path, &json).map_err(|e| ProjectError::Io(e.to_string()))?;
+    Ok(rel_path)
+}
+
+/// Read an elucim visual from a relative path.
+pub fn read_visual(project_root: &Path, visual_path: &str) -> Result<serde_json::Value, ProjectError> {
+    let abs_path = safe_resolve(project_root, visual_path)?;
+    if !abs_path.exists() {
+        return Err(ProjectError::NotFound(visual_path.to_owned()));
+    }
+    let data = std::fs::read_to_string(&abs_path).map_err(|e| ProjectError::Io(e.to_string()))?;
+    serde_json::from_str(&data).map_err(|e| ProjectError::Deserialize(e.to_string()))
+}
+
 /// Write a sketch to a `.sk` file.
 pub fn write_sketch(sketch: &Sketch, path: &Path, _project_root: &Path) -> Result<(), ProjectError> {
     // Ensure parent directory exists
@@ -132,15 +168,58 @@ pub fn write_sketch(sketch: &Sketch, path: &Path, _project_root: &Path) -> Resul
     Ok(())
 }
 
-/// Read a sketch from a `.sk` file.
+/// Read a sketch from a `.sk` file, migrating any inline visuals to external files.
+///
+/// If a row's `visual` field contains a JSON object (legacy inline format),
+/// it is written to `.cutready/visuals/<hash>.json` and replaced with the path string.
+/// The `.sk` file is rewritten after migration.
 pub fn read_sketch(path: &Path) -> Result<Sketch, ProjectError> {
+    read_sketch_inner(path, None)
+}
+
+/// Read a sketch with optional migration of inline visuals.
+/// When `project_root` is provided, inline visuals are externalized to files.
+pub fn read_sketch_with_migration(path: &Path, project_root: &Path) -> Result<Sketch, ProjectError> {
+    read_sketch_inner(path, Some(project_root))
+}
+
+fn read_sketch_inner(path: &Path, project_root: Option<&Path>) -> Result<Sketch, ProjectError> {
     if !path.exists() {
         return Err(ProjectError::NotFound(
             path.to_string_lossy().into_owned(),
         ));
     }
     let data = std::fs::read_to_string(path).map_err(|e| ProjectError::Io(e.to_string()))?;
-    serde_json::from_str(&data).map_err(|e| ProjectError::Deserialize(e.to_string()))
+    let mut sketch: Sketch =
+        serde_json::from_str(&data).map_err(|e| ProjectError::Deserialize(e.to_string()))?;
+
+    // Migrate inline visuals to external files when project root is available
+    if let Some(root) = project_root {
+        let mut migrated = false;
+        for row in &mut sketch.rows {
+            if let Some(ref visual) = row.visual {
+                if visual.is_object() {
+                    match write_visual(root, visual) {
+                        Ok(rel_path) => {
+                            row.visual = Some(serde_json::Value::String(rel_path));
+                            migrated = true;
+                        }
+                        Err(e) => {
+                            eprintln!("[read_sketch] Failed to migrate inline visual: {e}");
+                        }
+                    }
+                }
+            }
+        }
+        if migrated {
+            // Rewrite .sk file with path references instead of inline blobs
+            if let Err(e) = write_sketch(&sketch, path, root) {
+                eprintln!("[read_sketch] Failed to rewrite migrated sketch: {e}");
+            }
+        }
+    }
+
+    Ok(sketch)
 }
 
 /// Delete a sketch file and auto-commit.

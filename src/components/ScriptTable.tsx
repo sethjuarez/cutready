@@ -62,7 +62,7 @@ interface ScriptTableProps {
 export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreenshot, onPickImage, onBrowseImage, onSparkle, onGenerateVisual, onNudgeVisual, projectRoot, sketchPath }: ScriptTableProps) {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
-  const [visualLightbox, setVisualLightbox] = useState<{ visual: Record<string, unknown>; rowIndex: number } | null>(null);
+  const [visualLightbox, setVisualLightbox] = useState<{ visualPath: string; rowIndex: number } | null>(null);
   const [nudgeInput, setNudgeInput] = useState("");
   const focusCellAfterRender = useRef<number | null>(null);
   const [undoToast, setUndoToast] = useState<string | null>(null);
@@ -273,7 +273,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
                   projectRoot={projectRoot}
                   sketchPath={sketchPath}
                   onImageClick={setLightboxSrc}
-                  onVisualClick={(visual, rowIdx) => setVisualLightbox({ visual, rowIndex: rowIdx })}
+                  onVisualClick={(visualPath, rowIdx) => setVisualLightbox({ visualPath, rowIndex: rowIdx })}
                 />
               ))}
             </tbody>
@@ -339,7 +339,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
             <div className="rounded-lg overflow-hidden shadow-2xl bg-[var(--color-surface)]" style={{ width: "min(960px, 85vw)", aspectRatio: "960 / 540" }}>
               <Suspense fallback={<div className="w-full h-full bg-[var(--color-surface-alt)] animate-pulse" />}>
                 <VisualCell
-                  visual={visualLightbox.visual}
+                  visualPath={visualLightbox.visualPath}
                   mode="full"
                   className="w-full h-full"
                 />
@@ -463,7 +463,7 @@ function SortableRow({
   projectRoot?: string;
   sketchPath?: string;
   onImageClick: (src: string) => void;
-  onVisualClick: (visual: Record<string, unknown>, rowIndex: number) => void;
+  onVisualClick: (visualPath: string, rowIndex: number) => void;
 }){
   const {
     attributes,
@@ -582,7 +582,7 @@ function SortableRow({
           <div className="relative group/vis cursor-pointer" onClick={() => onVisualClick(row.visual!, idx)}>
             <Suspense fallback={<div className="w-40 h-24 rounded-md bg-[var(--color-surface-alt)] border border-[var(--color-border)] animate-pulse" />}>
               <VisualCell
-                visual={row.visual}
+                visualPath={row.visual!}
                 mode="thumbnail"
               />
             </Suspense>

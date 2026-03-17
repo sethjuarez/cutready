@@ -1,9 +1,10 @@
 import { useRef, useCallback, useState, useEffect, useMemo } from "react";
 import { DslRenderer, type ElucimDocument, type DslRendererRef } from "@elucim/dsl";
+import { invoke } from "@tauri-apps/api/core";
 
 interface VisualCellProps {
-  /** The elucim DSL document to render. */
-  visual: Record<string, unknown>;
+  /** Path to the visual file (e.g., ".cutready/visuals/abc123.json"). */
+  visualPath: string;
   /** Compact thumbnail mode (for table cells) vs full-size (for preview). */
   mode: "thumbnail" | "full";
   /** Click handler (thumbnail mode only) — e.g. to open lightbox/preview. */
@@ -84,14 +85,25 @@ function buildPreviewDsl(dsl: ElucimDocument): ElucimDocument {
  * - **full**: auto-plays once, CutReady themed, scales to fill container.
  *   Parent uses `controlRef` to render replay button elsewhere.
  */
-export default function VisualCell({ visual, mode, onClick, className, controlRef }: VisualCellProps) {
+export default function VisualCell({ visualPath, mode, onClick, className, controlRef }: VisualCellProps) {
   const rendererRef = useRef<DslRendererRef>(null);
+  const [visual, setVisual] = useState<Record<string, unknown> | null>(null);
   const [hasError, setHasError] = useState(false);
   const [isPlaying, setIsPlaying] = useState(true);
   const theme = useCutReadyTheme();
 
-  // Reset error state when visual changes
-  useEffect(() => setHasError(false), [visual]);
+  // Load visual JSON from file path
+  useEffect(() => {
+    let cancelled = false;
+    setHasError(false);
+    setVisual(null);
+    if (visualPath) {
+      invoke<Record<string, unknown>>("get_visual", { relativePath: visualPath })
+        .then((data) => { if (!cancelled) setVisual(data); })
+        .catch(() => { if (!cancelled) setHasError(true); });
+    }
+    return () => { cancelled = true; };
+  }, [visualPath]);
 
   const handleClick = useCallback(() => {
     if (mode === "thumbnail" && onClick) onClick();
@@ -137,6 +149,20 @@ export default function VisualCell({ visual, mode, onClick, className, controlRe
         } rounded-md border border-red-300/30 bg-red-500/5 ${className ?? ""}`}
       >
         <span>Invalid visual</span>
+      </div>
+    );
+  }
+
+  if (!visual) {
+    return (
+      <div
+        className={`flex items-center justify-center text-[10px] text-[var(--color-text-secondary)] ${
+          mode === "thumbnail" ? "w-40 h-24" : "w-full h-full"
+        } rounded-md bg-[var(--color-surface-alt)] border border-[var(--color-border)] ${className ?? ""}`}
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="animate-spin">
+          <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+        </svg>
       </div>
     );
   }

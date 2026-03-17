@@ -152,6 +152,7 @@ pub fn run() {
             commands::sketch::sketch_used_by_storyboards,
             commands::sketch::list_sketches,
             commands::sketch::get_sketch,
+            commands::sketch::get_visual,
             commands::sketch::rename_sketch,
             commands::storyboard::create_storyboard,
             commands::storyboard::get_storyboard,

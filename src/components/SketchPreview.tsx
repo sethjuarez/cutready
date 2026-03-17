@@ -320,7 +320,7 @@ export function SketchPreview({ rows, projectRoot, title, onClose, slides: slide
             </div>
           ) : row?.visual ? (
             <Suspense fallback={<div className="w-full max-w-2xl aspect-video rounded-lg bg-[var(--color-surface-alt)] animate-pulse" />}>
-              <VisualCell visual={row.visual} mode="full" controlRef={visualControlRef} className="max-w-full max-h-full" />
+              <VisualCell visualPath={row.visual} mode="full" controlRef={visualControlRef} className="max-w-full max-h-full" />
             </Suspense>
           ) : screenshotSrc ? (
             <img

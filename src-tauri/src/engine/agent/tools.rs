@@ -766,7 +766,13 @@ fn exec_set_row_visual(root: &Path, args: &Value) -> String {
                     );
                 }
             }
-            row.visual = Some(visual.into_owned());
+            // Write visual to external file, store path reference on the row
+            match project::write_visual(root, &visual.into_owned()) {
+                Ok(rel_path) => {
+                    row.visual = Some(serde_json::Value::String(rel_path));
+                }
+                Err(e) => return format!("Error writing visual file: {e}"),
+            }
             // Clear screenshot since visual replaces it
             row.screenshot = None;
         }

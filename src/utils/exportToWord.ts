@@ -25,6 +25,7 @@ import {
 } from "docx";
 import { save } from "@tauri-apps/plugin-dialog";
 import { readFile, writeFile } from "@tauri-apps/plugin-fs";
+import { invoke } from "@tauri-apps/api/core";
 import type { Sketch, Storyboard } from "../types/sketch";
 
 // ── Markdown → docx primitives ──────────────────────────────────
@@ -151,9 +152,11 @@ async function readScreenshot(projectRoot: string, relativePath: string): Promis
   }
 }
 
-/** Render the last frame of an elucim visual as a PNG ImageRun for Word embedding. */
-async function captureVisualLastFrame(visual: Record<string, unknown>): Promise<ImageRun | null> {
+/** Load a visual from its file path, then render the last frame as a PNG ImageRun for Word embedding. */
+async function captureVisualLastFrame(visualPath: string): Promise<ImageRun | null> {
   try {
+    const visual = await invoke<Record<string, unknown>>("get_visual", { relativePath: visualPath });
+
     // Dynamic import to avoid loading react-dom/server at app startup (React 19 compat)
     const { renderToSvgString } = await import("@elucim/dsl");
     const { svgToCanvas } = await import("@elucim/core");

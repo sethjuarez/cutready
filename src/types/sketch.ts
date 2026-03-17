@@ -13,8 +13,8 @@ export interface PlanningRow {
   narrative: string;
   demo_actions: string;
   screenshot: string | null;
-  /** Optional elucim DSL document for an animated framing visual. */
-  visual?: Record<string, unknown> | null;
+  /** Path to an elucim visual file (e.g., ".cutready/visuals/abc123.json"). */
+  visual?: string | null;
   /** English-language design brief for the visual (created by Designer agent Pass 1). */
   design_plan?: string | null;
 }

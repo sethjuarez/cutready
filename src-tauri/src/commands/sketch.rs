@@ -50,21 +50,9 @@ pub async fn update_sketch(
         sketch.description = desc;
     }
     if let Some(r) = rows {
-        // Preserve visual and design_plan fields that may have been set by the
-        // AI agent on disk — the frontend editor doesn't manage these fields,
-        // so incoming rows may have them as None even though the file has data.
-        let mut merged = r;
-        for (i, row) in merged.iter_mut().enumerate() {
-            if let Some(existing) = sketch.rows.get(i) {
-                if row.visual.is_none() && existing.visual.is_some() {
-                    row.visual = existing.visual.clone();
-                }
-                if row.design_plan.is_none() && existing.design_plan.is_some() {
-                    row.design_plan = existing.design_plan.clone();
-                }
-            }
-        }
-        sketch.rows = merged;
+        // Visuals are stored as file paths (strings), so they travel with the row
+        // through all frontend editing operations. No merge logic needed.
+        sketch.rows = r;
     }
     sketch.updated_at = chrono::Utc::now();
 
@@ -124,7 +112,18 @@ pub async fn get_sketch(
     let root = project_root(&state)?;
     let abs_path = project::safe_resolve(&root, &relative_path).map_err(|e| e.to_string())?;
 
-    project::read_sketch(&abs_path).map_err(|e| e.to_string())
+    // Use migration-aware read: inline visuals → external files
+    project::read_sketch_with_migration(&abs_path, &root).map_err(|e| e.to_string())
+}
+
+/// Read a visual JSON file and return its content.
+#[tauri::command]
+pub async fn get_visual(
+    relative_path: String,
+    state: State<'_, AppState>,
+) -> Result<serde_json::Value, String> {
+    let root = project_root(&state)?;
+    project::read_visual(&root, &relative_path).map_err(|e| e.to_string())
 }
 
 #[tauri::command]

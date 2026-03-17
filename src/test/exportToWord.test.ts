@@ -15,8 +15,14 @@ vi.mock("@tauri-apps/plugin-fs", () => ({
   readFile: (...args: unknown[]) => mockReadFile(...args),
 }));
 
-// Mock Tauri invoke
-vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
+// Mock Tauri invoke — returns a minimal visual doc for get_visual calls
+const mockInvoke = vi.fn().mockImplementation((cmd: string) => {
+  if (cmd === "get_visual") {
+    return Promise.resolve({ root: { type: "group", width: 640, height: 360, durationInFrames: 60, children: [] } });
+  }
+  return Promise.resolve(undefined);
+});
+vi.mock("@tauri-apps/api/core", () => ({ invoke: (...args: unknown[]) => mockInvoke(...args), convertFileSrc: (p: string) => p }));
 
 // Mock elucim packages
 vi.mock("@elucim/dsl", () => ({
