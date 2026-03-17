@@ -102,6 +102,68 @@ pub async fn import_pptx(
     Ok(final_path)
 }
 
+/// Import a .sk (sketch) file into the current project.
+/// Validates JSON structure, copies to project, returns the relative path.
+#[tauri::command]
+pub async fn import_sketch(
+    file_path: String,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    let root = project_root(&state)?;
+    let data = fs::read_to_string(&file_path).map_err(|e| format!("Failed to read file: {e}"))?;
+
+    let sketch: crate::models::sketch::Sketch =
+        serde_json::from_str(&data).map_err(|e| format!("Invalid sketch file: {e}"))?;
+
+    let filename = std::path::Path::new(&file_path)
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("imported-sketch");
+    let slug = filename
+        .to_lowercase()
+        .replace(|c: char| !c.is_alphanumeric() && c != '-', "-")
+        .trim_matches('-')
+        .to_string();
+    let relative_path = format!("{}.sk", if slug.is_empty() { "imported-sketch" } else { &slug });
+
+    let final_path = find_available_path(&root, &relative_path, "sk");
+    let abs_final = project::safe_resolve(&root, &final_path).map_err(|e| e.to_string())?;
+
+    project::write_sketch(&sketch, &abs_final, &root).map_err(|e| e.to_string())?;
+    Ok(final_path)
+}
+
+/// Import a .sb (storyboard) file into the current project.
+/// Validates JSON structure, copies to project, returns the relative path.
+#[tauri::command]
+pub async fn import_storyboard(
+    file_path: String,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    let root = project_root(&state)?;
+    let data = fs::read_to_string(&file_path).map_err(|e| format!("Failed to read file: {e}"))?;
+
+    let storyboard: crate::models::sketch::Storyboard =
+        serde_json::from_str(&data).map_err(|e| format!("Invalid storyboard file: {e}"))?;
+
+    let filename = std::path::Path::new(&file_path)
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("imported-storyboard");
+    let slug = filename
+        .to_lowercase()
+        .replace(|c: char| !c.is_alphanumeric() && c != '-', "-")
+        .trim_matches('-')
+        .to_string();
+    let relative_path = format!("{}.sb", if slug.is_empty() { "imported-storyboard" } else { &slug });
+
+    let final_path = find_available_path(&root, &relative_path, "sb");
+    let abs_final = project::safe_resolve(&root, &final_path).map_err(|e| e.to_string())?;
+
+    project::write_storyboard(&storyboard, &abs_final, &root).map_err(|e| e.to_string())?;
+    Ok(final_path)
+}
+
 /// Find a non-conflicting filename by appending -2, -3, etc.
 fn find_available_path(root: &std::path::Path, relative_path: &str, ext: &str) -> String {
     let base = relative_path.trim_end_matches(&format!(".{ext}"));
