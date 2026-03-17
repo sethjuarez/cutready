@@ -415,7 +415,7 @@ interface AppStoreState {
   diffSnapshots: (fromCommit: string, toCommit: string) => Promise<DiffEntry[]>;
   /** Check for large files before pushing. Returns list of (path, size). */
   checkLargeFiles: () => Promise<Array<[string, number]>>;
-  /** Clone a repository from a GitHub URL. */
+  /** Clone a workspace from a GitHub URL. */
   cloneFromUrl: (url: string, destPath: string) => Promise<boolean>;
 
   // ── Merge actions ────────────────────────────────────────
@@ -728,7 +728,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       localStorage.setItem("cutready:lastProject", path);
       // Load multi-project state
       await get().loadProjects();
-      // Load workspace (per-repo) settings
+      // Load workspace settings
       const { useSettingsStore } = await import("../hooks/useSettings");
       await useSettingsStore.getState()._loadWorkspaceSettings();
       await get().loadSketches();

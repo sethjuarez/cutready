@@ -61,7 +61,7 @@ export interface GlobalSettings {
   llmDeployment?: string;
 }
 
-// ── Workspace settings (stored per-repo in .cutready/settings.json) ──
+// ── Workspace settings (stored per-workspace in .cutready/settings.json) ──
 
 export interface WorkspaceSettings {
   /** Git remote URL (e.g. https://github.com/user/repo.git). */

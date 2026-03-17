@@ -241,7 +241,7 @@ export function HomePanel() {
                 <ActionIcon type="clone" />
               </div>
               <div>
-                <div className="text-sm font-semibold">Clone Repository</div>
+                <div className="text-sm font-semibold">Clone Workspace</div>
                 <div className="text-xs text-[var(--color-text-secondary)] mt-0.5">
                   From a Git URL
                 </div>
@@ -299,10 +299,10 @@ export function HomePanel() {
             </div>
           )}
 
-          {/* Clone repository inline form */}
+          {/* Clone workspace inline form */}
           {showClone && (
             <div className="w-full mb-6 p-4 rounded-xl bg-[var(--color-surface-alt)] border border-[var(--color-accent)] shadow-lg shadow-[var(--color-accent)]/5 animate-[fadeSlideIn_0.15s_ease-out]">
-              <label className="block text-sm font-medium mb-2">Repository URL</label>
+              <label className="block text-sm font-medium mb-2">Workspace URL</label>
               <input
                 type="text"
                 value={cloneUrl}
@@ -315,7 +315,7 @@ export function HomePanel() {
                 autoFocus
                 className="w-full px-3 py-2 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] text-sm text-[var(--color-text)] placeholder:text-[var(--color-text-secondary)]/50 focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]/40 mb-2"
               />
-              <label className="block text-xs text-[var(--color-text-secondary)] mb-1">Access token (optional, for private repos)</label>
+              <label className="block text-xs text-[var(--color-text-secondary)] mb-1">Access token (optional, for private workspaces)</label>
               <input
                 type="password"
                 value={cloneToken}

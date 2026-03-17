@@ -133,7 +133,7 @@ export function SettingsPanel({ mode = "global" }: { mode?: "global" | "workspac
     memory: "Memory",
     images: "Images",
     feedback: "Feedback",
-    repository: "Repository",
+    repository: "Git Remote",
   };
 
   return (
@@ -143,7 +143,7 @@ export function SettingsPanel({ mode = "global" }: { mode?: "global" | "workspac
       </h1>
       <p className="text-sm text-[var(--color-text-secondary)] mb-6">
         {mode === "workspace"
-          ? "Per-repo settings. Overrides apply only to this workspace."
+          ? "Settings for this workspace. Overrides apply only here."
           : "Global preferences that apply to all projects."}
       </p>
 
@@ -1151,7 +1151,7 @@ function RepositoryTab({ settings, updateSetting }: {
   return (
     <div className="flex flex-col gap-6">
       <p className="text-xs text-[var(--color-text-secondary)]">
-        Connect to a GitHub repository to collaborate with others. Your snapshots and timelines sync as git commits and branches.
+        Connect to a GitHub remote to collaborate with others. Your snapshots and timelines sync as git commits and branches.
       </p>
 
       {detectedRemote && !settings.repoRemoteUrl && (

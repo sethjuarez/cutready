@@ -4,7 +4,7 @@ import { useAppStore } from "../stores/appStore";
 import type { ProjectEntry } from "../types/project";
 
 /**
- * Compact project switcher dropdown. Only visible when the repo has multiple
+ * Compact project switcher dropdown. Only visible when the workspace has multiple
  * projects (or when the user wants to add one). Sits at the top of the sidebar.
  */
 export function ProjectSwitcher() {
@@ -85,7 +85,7 @@ export function ProjectSwitcher() {
 
   const handleNewProjectClick = useCallback(() => {
     if (!isMultiProject) {
-      // Single-project repo: need to migrate first
+      // Single-project workspace: need to migrate first
       setMigrateName(currentProject?.name ?? "");
       setIsMigrating(true);
     } else {

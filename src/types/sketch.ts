@@ -96,7 +96,7 @@ export interface GraphNode {
   author?: string;
 }
 
-/** Remote repository info. */
+/** Remote git info. */
 export interface RemoteInfo {
   name: string;
   url: string;
