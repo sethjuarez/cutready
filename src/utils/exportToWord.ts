@@ -25,7 +25,7 @@ import {
 } from "docx";
 import { save } from "@tauri-apps/plugin-dialog";
 import { readFile, writeFile } from "@tauri-apps/plugin-fs";
-import { open as shellOpen } from "@tauri-apps/plugin-shell";
+import { openPath } from "@tauri-apps/plugin-opener";
 import { invoke } from "@tauri-apps/api/core";
 import type { Sketch, Storyboard } from "../types/sketch";
 
@@ -327,7 +327,7 @@ async function saveDocument(doc: Document, defaultName: string): Promise<void> {
   await writeFile(filePath, new Uint8Array(buffer));
   // Open the exported file in the default application
   try {
-    await shellOpen(filePath);
+    await openPath(filePath);
   } catch (e) {
     console.error("[exportToWord] Failed to open file:", filePath, e);
   }
