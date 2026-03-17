@@ -187,6 +187,19 @@ cutready/
 - **Web dev mode**: `npx vite --port 1420` (runs frontend in browser with devMock backend)
 - **Docs site**: `cd docs && npm run build`
 
+## Keeping Instructions Current
+
+These instruction files are living documents. **When you notice a pattern repeating** — the user correcting the same mistake, re-explaining a convention, or a new architectural decision becoming established — **update the relevant instruction file and commit the change.** Don't wait for an explicit ask.
+
+Signs an instruction update is needed:
+
+- User corrects the same thing twice (e.g., "don't use that color", "use icons not text buttons").
+- A new convention emerges from implementation (e.g., a new data model, a new IPC pattern).
+- A section says "planned" or "placeholder" but the feature is now implemented.
+- The project structure listing is missing files/modules that exist.
+
+When updating, also use `store_memory` to capture the convention for cross-session recall.
+
 ## Key Documentation
 
 - [docs/NORTH_STAR.md](docs/NORTH_STAR.md) — The press release / vision
