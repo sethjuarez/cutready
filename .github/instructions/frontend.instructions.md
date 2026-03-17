@@ -46,7 +46,7 @@ Available Tailwind tokens (from `tailwind.config.ts`):
 
 ## Layout Architecture
 
-The app uses a **VS Code-inspired** layout (also inspired by `D:\projects\Confluo`):
+The app uses a **VS Code-inspired** layout:
 
 - **Activity bar** — Vertical icon strip (left edge). Switches between views.
 - **Primary sidebar** — Project explorer with storyboards, sketches, notes tree.

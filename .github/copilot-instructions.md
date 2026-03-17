@@ -165,7 +165,7 @@ cutready/
 ## Design Decisions
 
 - **Frameless window**: `decorations: false` with custom TitleBar (drag region + window controls).
-- **VS Code-inspired layout**: Activity bar → primary sidebar → editor area → secondary panel. Inspired by VS Code and the Confluo app (`D:\projects\Confluo`).
+- **VS Code-inspired layout**: Activity bar → primary sidebar → editor area → secondary panel.
 - **Theme**: CSS custom properties in `:root` / `.dark`, toggled by `.dark` class on `<html>`. Three modes: light, dark, system. Persisted in `localStorage` key `cutready-theme`.
 - **Color palette**: Warm, soft tones (not cold zinc). Dark: warm browns (#2b2926). Light: warm off-whites (#faf9f7).
 - **Color architecture**: All colors flow through CSS variables. Components use `var(--color-*)` or Tailwind tokens — never hardcoded color classes.
