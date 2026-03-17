@@ -211,79 +211,50 @@ export function StoryboardList() {
     setIsCreatingNote(false);
   }, [newNoteTitle, createNote]);
 
-  const handleImportSketchOrStoryboard = useCallback(async () => {
+  const handleImport = useCallback(async () => {
     try {
       const { open: openDialog } = await import("@tauri-apps/plugin-dialog");
       const selected = await openDialog({
-        title: "Import Sketch or Storyboard",
+        title: "Import Files",
         multiple: true,
         filters: [
-          { name: "CutReady files", extensions: ["sk", "sb"] },
+          { name: "All supported", extensions: ["sk", "sb", "md", "docx", "doc", "pdf", "pptx"] },
           { name: "Sketches (.sk)", extensions: ["sk"] },
           { name: "Storyboards (.sb)", extensions: ["sb"] },
+          { name: "Markdown (.md)", extensions: ["md"] },
+          { name: "Documents (.docx, .pdf, .pptx)", extensions: ["docx", "doc", "pdf", "pptx"] },
         ],
       });
       if (!selected) return;
 
       const paths = Array.isArray(selected) ? selected : [selected];
+      let importedNote = "";
       for (const raw of paths) {
         const filePath = typeof raw === "string" ? raw : String(raw);
         const ext = filePath.split(".").pop()?.toLowerCase();
         if (ext === "sk") {
-          const resultPath = await invoke<string>("import_sketch", { filePath });
-          console.log("[import] Imported sketch:", resultPath);
+          await invoke<string>("import_sketch", { filePath });
         } else if (ext === "sb") {
-          const resultPath = await invoke<string>("import_storyboard", { filePath });
-          console.log("[import] Imported storyboard:", resultPath);
+          await invoke<string>("import_storyboard", { filePath });
+        } else if (ext === "md") {
+          importedNote = await invoke<string>("import_markdown", { filePath });
+        } else if (ext === "docx" || ext === "doc") {
+          importedNote = await invoke<string>("import_docx", { filePath });
+        } else if (ext === "pdf") {
+          importedNote = await invoke<string>("import_pdf", { filePath });
+        } else if (ext === "pptx") {
+          importedNote = await invoke<string>("import_pptx", { filePath });
         }
       }
       await loadSketches();
       await loadStoryboards();
-    } catch (err) {
-      console.error("[import] Import failed:", err);
-    }
-  }, [loadSketches, loadStoryboards]);
-
-  const handleImportNote = useCallback(async () => {
-    let filePath = "";
-    try {
-      const { open: openDialog } = await import("@tauri-apps/plugin-dialog");
-      const selected = await openDialog({
-        title: "Import Document",
-        multiple: false,
-        filters: [
-          { name: "Documents", extensions: ["docx", "doc", "pdf", "pptx"] },
-          { name: "Word (.docx, .doc)", extensions: ["docx", "doc"] },
-          { name: "PDF (.pdf)", extensions: ["pdf"] },
-          { name: "PowerPoint (.pptx)", extensions: ["pptx"] },
-        ],
-      });
-      if (!selected) return;
-
-      // Tauri v2 dialog may return a string or an object with a path property
-      filePath = typeof selected === "string" ? selected : String(selected);
-      console.log("[import] Selected file:", filePath);
-      const ext = filePath.split(".").pop()?.toLowerCase();
-
-      let resultPath: string;
-      if (ext === "docx" || ext === "doc") {
-        resultPath = await invoke<string>("import_docx", { filePath });
-      } else if (ext === "pdf") {
-        resultPath = await invoke<string>("import_pdf", { filePath });
-      } else if (ext === "pptx") {
-        resultPath = await invoke<string>("import_pptx", { filePath });
-      } else {
-        console.error("[import] Unsupported extension:", ext);
-        return;
-      }
-      console.log("[import] Created note:", resultPath);
       await loadNotes();
-      openNote(resultPath);
+      if (importedNote) openNote(importedNote);
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
       console.error("[import] Import failed:", errMsg);
 
-      // DRM-protected? Offer clipboard fallback
+      // DRM-protected document? Offer clipboard fallback
       if (errMsg.includes("DRM-protected") || errMsg.includes("protected or encrypted")) {
         const ok = confirm(
           "This document is protected. To import it:\n\n" +
@@ -297,10 +268,7 @@ export function StoryboardList() {
           try {
             const text = await navigator.clipboard.readText();
             if (text && text.trim().length > 0) {
-              // Derive filename from the original path
-              const name = filePath.split(/[/\\]/).pop()?.replace(/\.[^.]+$/, "") ?? "imported";
-              const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-              const notePath = `${slug || "imported"}.md`;
+              const notePath = "imported-clipboard.md";
               await invoke("create_note", { relativePath: notePath });
               await invoke("update_note", { relativePath: notePath, content: text.trim() });
               await loadNotes();
@@ -308,15 +276,13 @@ export function StoryboardList() {
             } else {
               alert("Clipboard is empty. Please copy the text from Word first.");
             }
-          } catch (clipErr) {
+          } catch {
             alert("Could not read clipboard. Please make sure you copied text from Word.");
           }
         }
-      } else {
-        alert(`Import failed: ${errMsg}`);
       }
     }
-  }, [loadNotes, openNote]);
+  }, [loadSketches, loadStoryboards, loadNotes, openNote]);
 
   return (
     <div
@@ -327,7 +293,19 @@ export function StoryboardList() {
         <span className="text-[11px] font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">
           Explorer
         </span>
-        <div className="flex items-center gap-0.5 bg-[var(--color-surface)] rounded-md p-0.5">
+        <div className="flex items-center gap-1">
+          <button
+            onClick={handleImport}
+            className="p-1 rounded-md text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 transition-colors"
+            title="Import .sk, .sb, or document"
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
+          </button>
+          <div className="flex items-center gap-0.5 bg-[var(--color-surface)] rounded-md p-0.5">
           <button
             onClick={() => setSidebarMode("list")}
             className={`p-1 rounded transition-colors ${
@@ -359,6 +337,7 @@ export function StoryboardList() {
               <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
             </svg>
           </button>
+          </div>
         </div>
       </div>
 
@@ -374,29 +353,16 @@ export function StoryboardList() {
         <span className="text-[11px] font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">
           Storyboards
         </span>
-        <div className="flex items-center gap-0.5">
-          <button
-            onClick={handleImportSketchOrStoryboard}
-            className="p-1 rounded-md text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 transition-colors"
-            title="Import .sk or .sb file"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-              <polyline points="7 10 12 15 17 10" />
-              <line x1="12" y1="15" x2="12" y2="3" />
-            </svg>
-          </button>
-          <button
-            onClick={() => setIsCreatingSb(true)}
-            className="p-1 rounded-md text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 transition-colors"
-            title="New storyboard"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="12" y1="5" x2="12" y2="19" />
-              <line x1="5" y1="12" x2="19" y2="12" />
-            </svg>
-          </button>
-        </div>
+        <button
+          onClick={() => setIsCreatingSb(true)}
+          className="p-1 rounded-md text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 transition-colors"
+          title="New storyboard"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19" />
+            <line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
+        </button>
       </div>
 
       {isCreatingSb && (
@@ -473,29 +439,16 @@ export function StoryboardList() {
         <span className="text-[11px] font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">
           Sketches
         </span>
-        <div className="flex items-center gap-0.5">
-          <button
-            onClick={handleImportSketchOrStoryboard}
-            className="p-1 rounded-md text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 transition-colors"
-            title="Import .sk or .sb file"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-              <polyline points="7 10 12 15 17 10" />
-              <line x1="12" y1="15" x2="12" y2="3" />
-            </svg>
-          </button>
-          <button
-            onClick={() => setIsCreatingSk(true)}
-            className="p-1 rounded-md text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 transition-colors"
-            title="New sketch"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="12" y1="5" x2="12" y2="19" />
-              <line x1="5" y1="12" x2="19" y2="12" />
-            </svg>
-          </button>
-        </div>
+        <button
+          onClick={() => setIsCreatingSk(true)}
+          className="p-1 rounded-md text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 transition-colors"
+          title="New sketch"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19" />
+            <line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
+        </button>
       </div>
 
       {isCreatingSk && (
@@ -572,29 +525,16 @@ export function StoryboardList() {
         <span className="text-[11px] font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">
           Notes
         </span>
-        <div className="flex items-center gap-0.5">
-          <button
-            onClick={handleImportNote}
-            className="p-1 rounded-md text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 transition-colors"
-            title="Import document (.docx, .pdf, .pptx)"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-              <polyline points="7 10 12 15 17 10" />
-              <line x1="12" y1="15" x2="12" y2="3" />
-            </svg>
-          </button>
-          <button
-            onClick={() => setIsCreatingNote(true)}
-            className="p-1 rounded-md text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 transition-colors"
-            title="New note"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="12" y1="5" x2="12" y2="19" />
-              <line x1="5" y1="12" x2="19" y2="12" />
-            </svg>
-          </button>
-        </div>
+        <button
+          onClick={() => setIsCreatingNote(true)}
+          className="p-1 rounded-md text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 transition-colors"
+          title="New note"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19" />
+            <line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
+        </button>
       </div>
 
       {isCreatingNote && (
@@ -628,7 +568,7 @@ export function StoryboardList() {
                 + New note
               </button>
               <button
-                onClick={handleImportNote}
+                onClick={handleImport}
                 className="px-3 py-1.5 text-[11px] rounded-lg border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:border-[var(--color-accent)] transition-colors"
               >
                 Import

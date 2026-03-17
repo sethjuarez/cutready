@@ -244,6 +244,7 @@ pub fn run() {
             commands::import::import_docx,
             commands::import::import_pdf,
             commands::import::import_pptx,
+            commands::import::import_markdown,
             commands::import::import_sketch,
             commands::import::import_storyboard,
             commands::agent::list_models,

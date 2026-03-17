@@ -102,6 +102,34 @@ pub async fn import_pptx(
     Ok(final_path)
 }
 
+/// Import a .md (markdown) file as a note.
+/// Returns the relative path of the created note.
+#[tauri::command]
+pub async fn import_markdown(
+    file_path: String,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    let root = project_root(&state)?;
+    let content = fs::read_to_string(&file_path).map_err(|e| format!("Failed to read file: {e}"))?;
+
+    let filename = std::path::Path::new(&file_path)
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("imported-note");
+    let slug = filename
+        .to_lowercase()
+        .replace(|c: char| !c.is_alphanumeric() && c != '-', "-")
+        .trim_matches('-')
+        .to_string();
+    let relative_path = format!("{}.md", if slug.is_empty() { "imported-note" } else { &slug });
+
+    let final_path = find_available_path(&root, &relative_path, "md");
+    let abs_final = project::safe_resolve(&root, &final_path).map_err(|e| e.to_string())?;
+
+    project::write_note(&abs_final, &content).map_err(|e| e.to_string())?;
+    Ok(final_path)
+}
+
 /// Import a .sk (sketch) file into the current project.
 /// Validates JSON structure, copies to project, returns the relative path.
 #[tauri::command]
