@@ -91,14 +91,16 @@ export function ProjectSwitcher() {
     const name = renameValue.trim();
     if (!name || !renamingPath) return;
     try {
-      await invoke("rename_project", { projectPath: renamingPath, newName: name });
+      const newPath = await invoke<string>("rename_project", { projectPath: renamingPath, newName: name });
       setRenamingPath(null);
       setRenameValue("");
       await loadProjects();
+      // Re-switch to the (possibly moved) project so currentProject updates
+      await switchProject(newPath);
     } catch (err) {
       console.error("Rename failed:", err);
     }
-  }, [renameValue, renamingPath, loadProjects]);
+  }, [renameValue, renamingPath, loadProjects, switchProject]);
 
   const handleNewProjectClick = useCallback(() => {
     if (!isMultiProject) {
