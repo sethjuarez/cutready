@@ -252,7 +252,9 @@ function sanitizeFilename(title: string): string {
 
 // ── Document factory ────────────────────────────────────────────
 
-function createDocument(children: (Paragraph | Table)[]): Document {
+export type WordOrientation = "portrait" | "landscape";
+
+function createDocument(children: (Paragraph | Table)[], orientation: WordOrientation = "landscape"): Document {
   return new Document({
     styles: {
       default: {
@@ -280,7 +282,7 @@ function createDocument(children: (Paragraph | Table)[]): Document {
     sections: [{
       properties: {
         page: {
-          size: { orientation: PageOrientation.LANDSCAPE },
+          size: { orientation: orientation === "landscape" ? PageOrientation.LANDSCAPE : PageOrientation.PORTRAIT },
         },
       },
       children: children as Paragraph[],
@@ -482,6 +484,7 @@ export async function exportNoteToWord(
   title: string,
   markdown: string,
   projectRoot: string,
+  orientation: WordOrientation = "portrait",
 ): Promise<void> {
   const children: (Paragraph | Table)[] = [
     new Paragraph({ text: title, heading: HeadingLevel.TITLE }),
@@ -492,7 +495,7 @@ export async function exportNoteToWord(
     ...await markdownToDocxContent(markdown, projectRoot),
   ];
 
-  const doc = createDocument(children);
+  const doc = createDocument(children, orientation);
   await saveDocument(doc, `${sanitizeFilename(title)}.docx`);
 }
 
@@ -515,7 +518,7 @@ async function buildSketchContent(sketch: Sketch, projectRoot: string, level: (t
   return elements;
 }
 
-export async function exportSketchToWord(sketch: Sketch, projectRoot: string): Promise<void> {
+export async function exportSketchToWord(sketch: Sketch, projectRoot: string, orientation: WordOrientation = "landscape"): Promise<void> {
   const children: (Paragraph | Table)[] = [
     new Paragraph({ text: sketch.title, heading: HeadingLevel.TITLE }),
     new Paragraph({
@@ -527,7 +530,7 @@ export async function exportSketchToWord(sketch: Sketch, projectRoot: string): P
     ...await buildSketchContent(sketch, projectRoot, HeadingLevel.HEADING_1),
   ];
 
-  const doc = createDocument(children);
+  const doc = createDocument(children, orientation);
   await saveDocument(doc, `${sanitizeFilename(sketch.title)}.docx`);
 }
 
@@ -537,6 +540,7 @@ export async function exportStoryboardToWord(
   storyboard: Storyboard,
   projectRoot: string,
   resolveSketches: (paths: string[]) => Promise<Map<string, Sketch>>,
+  orientation: WordOrientation = "landscape",
 ): Promise<void> {
   const paths: string[] = [];
   for (const item of storyboard.items) {
@@ -580,6 +584,6 @@ export async function exportStoryboardToWord(
     }
   }
 
-  const doc = createDocument(children);
+  const doc = createDocument(children, orientation);
   await saveDocument(doc, `${sanitizeFilename(storyboard.title)}.docx`);
 }
