@@ -22,6 +22,7 @@ import { useToastStore } from "../stores/toastStore";
 import { SketchPickerItem } from "./SketchCard";
 import { ScriptTable } from "./ScriptTable";
 import { exportStoryboardToWord } from "../utils/exportToWord";
+import { ExportWordButton } from "./ExportWordButton";
 import type { Sketch, SketchSummary } from "../types/sketch";
 import type { PreviewSlide } from "./SketchPreview";
 
@@ -231,10 +232,11 @@ export function StoryboardView() {
           />
           {activeStoryboard.items.length > 0 && (
             <div className="relative flex items-center gap-2">
-              <button
-                onClick={() => {
+              <ExportWordButton
+                showLabel
+                onExport={(orientation) => {
                   if (!activeStoryboard) return;
-                  exportStoryboardToWord(activeStoryboard, currentProject?.root ?? "", async (paths) => {
+                  return exportStoryboardToWord(activeStoryboard, currentProject?.root ?? "", async (paths) => {
                     const map = new Map<string, Sketch>();
                     await Promise.all(paths.map(async (p) => {
                       const cached = sketchCache.get(p);
@@ -245,22 +247,12 @@ export function StoryboardView() {
                       } catch { /* skip missing */ }
                     }));
                     return map;
-                  }).then(() => {
+                  }, orientation).then(() => {
                     useToastStore.getState().show("Export complete");
                     useAppStore.getState().addActivityEntries([{ id: crypto.randomUUID(), timestamp: new Date(), source: "export", content: `Exported "${activeStoryboard.title}" to Word`, level: "success" }]);
                   }).catch(err => console.error("Word export failed:", err));
                 }}
-                className="flex items-center gap-1.5 shrink-0 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] px-3 py-1.5 rounded-lg border border-[var(--color-border)] hover:border-[var(--color-accent)]/40 hover:bg-[var(--color-accent)]/5 transition-colors"
-                title="Export to Word (.docx)"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
-                  <polyline points="14 2 14 8 20 8" />
-                  <line x1="12" y1="18" x2="12" y2="12" />
-                  <polyline points="9 15 12 18 15 15" />
-                </svg>
-                Word
-              </button>
+              />
               <button
                 onClick={handlePreviewClick}
                 className="flex items-center gap-1.5 shrink-0 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] px-3 py-1.5 rounded-lg border border-[var(--color-border)] hover:border-[var(--color-accent)]/40 hover:bg-[var(--color-accent)]/5 transition-colors"
