@@ -9,6 +9,31 @@
 Covector manages this changelog. Do not edit manually.
 Each release section is generated from `.changes/*.md` files.
 
+## [0.9.0](https://github.com/sethjuarez/cutready/compare/v0.8.0...v0.9.0) (2026-03-17)
+
+
+### Features
+
+* auto-open Word document after export ([d559bda](https://github.com/sethjuarez/cutready/commit/d559bda7362b657dd0cce538a5b4ab326f0236f4))
+* auto-resolve GitHub token from gh CLI for clone ([8353afc](https://github.com/sethjuarez/cutready/commit/8353afc1bb089e2a5d9b26aaa0ef8f49ef4cd2c4))
+* compaction UI pill and user message border ([4f20725](https://github.com/sethjuarez/cutready/commit/4f20725116549e1edafca9318062e4bbc31f3b51))
+* export notes to Word (.docx) ([ca38242](https://github.com/sethjuarez/cutready/commit/ca38242c06503133be6c87b841e1ad4de23b59e0))
+* portrait/landscape orientation picker for Word export ([a4e90be](https://github.com/sethjuarez/cutready/commit/a4e90be5fb2a9699fdce0c14d69fcb0015d5ecf2))
+
+
+### Bug Fixes
+
+* add opener:allow-open-path permission for file opening ([bd5e800](https://github.com/sethjuarez/cutready/commit/bd5e800a9d097bc847472314660c612592378f1e))
+* add wildcard path scope to opener:allow-open-path ([2de1b2f](https://github.com/sethjuarez/cutready/commit/2de1b2f459b4f990a231fe8e4e378e039df09225))
+* light-mode visuals and 200px thumbnail size in Word export ([c5e0e73](https://github.com/sethjuarez/cutready/commit/c5e0e73c5d0fac6da29b4a948bf943357370be9f))
+* shell open scope for Word export auto-open ([410aca2](https://github.com/sethjuarez/cutready/commit/410aca21299e84dce647249cff7062790d62b7b5))
+* update @elucim/dsl to 0.8.3 — renderToPng resolves CSS vars ([818d004](https://github.com/sethjuarez/cutready/commit/818d0041fcffbb05f5ad3bfb955744e2136b9c36))
+* use @elucim/dsl renderToPng for visual Word export ([5a51a97](https://github.com/sethjuarez/cutready/commit/5a51a97e4a6aa42b84164ddb181f98036d2fb589))
+* use data-URI for SVG→PNG rasterization in Word export ([42a09db](https://github.com/sethjuarez/cutready/commit/42a09dbef51f0038bfddc4421f28380f2230016a))
+* use tauri-plugin-opener for opening local files after Word export ([714f8c6](https://github.com/sethjuarez/cutready/commit/714f8c6b5decf1f9fb115269e2b8d9d42b61e844))
+* visual export to Word — use Image+canvas instead of svgToCanvas ([ec6adb8](https://github.com/sethjuarez/cutready/commit/ec6adb819e323b65ae1d3562ddf122ad70dbbf75))
+* VisualCell crash when visual loads async — null dsl guard ([0763225](https://github.com/sethjuarez/cutready/commit/07632251bde40eb9bbac9e34b2b9f23d3c890b33))
+
 ## [0.8.0](https://github.com/sethjuarez/cutready/compare/v0.7.1...v0.8.0) (2026-03-16)
 
 
