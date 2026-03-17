@@ -33,6 +33,13 @@ export function TitleBar({
   })();
   const [maximized, setMaximized] = useState(false);
   const projectName = useAppStore((s) => s.currentProject?.name);
+  const workspaceName = useAppStore((s) => {
+    const repoRoot = s.currentProject?.repo_root;
+    if (!repoRoot) return null;
+    // Extract folder name from path (last segment)
+    return repoRoot.replace(/[/\\]+$/, "").split(/[/\\]/).pop() ?? null;
+  });
+  const isMultiProject = useAppStore((s) => s.isMultiProject);
 
   useEffect(() => {
     if (!appWindow) return;
@@ -91,12 +98,15 @@ export function TitleBar({
         >
           CutReady
         </span>
-        {projectName && (
+        {workspaceName && (
           <span
             data-tauri-drag-region
             className="text-sm text-[var(--color-text-secondary)] font-normal ml-1.5"
           >
-            / {projectName}
+            / {workspaceName}
+            {isMultiProject && projectName && (
+              <span className="text-[var(--color-text-secondary)]/60"> / {projectName}</span>
+            )}
           </span>
         )}
       </div>
