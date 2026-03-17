@@ -425,8 +425,17 @@ fn scan_all_recursive(
         let file_name = entry.file_name();
         let name = file_name.to_string_lossy();
 
-        // Skip hidden entries and internal folders
-        if name.starts_with('.') {
+        // Skip .git internals (huge pack files, not useful to browse)
+        if name == ".git" {
+            // Still show the .git folder itself, just don't recurse into it
+            if let Ok(rel) = path.strip_prefix(project_root) {
+                entries.push(FileEntry {
+                    path: rel.to_string_lossy().replace('\\', "/"),
+                    ext: String::new(),
+                    size: 0,
+                    is_dir: true,
+                });
+            }
             continue;
         }
 
