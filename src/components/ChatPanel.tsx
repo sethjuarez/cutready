@@ -1709,7 +1709,7 @@ function MessageRow({ message, projectRoot, onDelete }: { message: ChatMessage; 
             </svg>
           </button>
         )}
-        <div className="bg-[var(--color-accent)]/10 border border-[var(--color-accent)]/30 rounded-xl rounded-br-sm px-3 py-2 text-[13px] text-[var(--color-text)] whitespace-pre-wrap break-words leading-[1.6] max-w-[85%]">
+        <div className="bg-[var(--color-accent)]/10 border border-[var(--color-accent)]/50 rounded-xl rounded-br-sm px-3 py-2 text-[13px] text-[var(--color-text)] whitespace-pre-wrap break-words leading-[1.6] max-w-[85%]">
           <UserContent content={message.content || ""} />
         </div>
       </div>
