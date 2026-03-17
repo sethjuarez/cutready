@@ -379,6 +379,86 @@ pub fn scan_notes(project_root: &Path) -> Result<Vec<NoteSummary>, ProjectError>
     Ok(summaries)
 }
 
+/// Entry for the flat file listing returned by `scan_all_files`.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct FileEntry {
+    /// Relative path using forward slashes.
+    pub path: String,
+    /// File extension (lowercase, without dot) or empty for extensionless files.
+    pub ext: String,
+    /// File size in bytes.
+    pub size: u64,
+    /// Whether this is a directory.
+    pub is_dir: bool,
+}
+
+/// List all files and directories in the project, recursively.
+/// Skips hidden entries (dotfiles/dotdirs) and the `.cutready` internal folder.
+pub fn scan_all_files(project_root: &Path) -> Result<Vec<FileEntry>, ProjectError> {
+    let mut entries = Vec::new();
+    scan_all_recursive(project_root, project_root, &mut entries)?;
+    entries.sort_by(|a, b| {
+        // Directories first, then alphabetical
+        match (a.is_dir, b.is_dir) {
+            (true, false) => std::cmp::Ordering::Less,
+            (false, true) => std::cmp::Ordering::Greater,
+            _ => a.path.to_lowercase().cmp(&b.path.to_lowercase()),
+        }
+    });
+    Ok(entries)
+}
+
+fn scan_all_recursive(
+    dir: &Path,
+    project_root: &Path,
+    entries: &mut Vec<FileEntry>,
+) -> Result<(), ProjectError> {
+    if !dir.exists() {
+        return Ok(());
+    }
+
+    let read_dir = std::fs::read_dir(dir).map_err(|e| ProjectError::Io(e.to_string()))?;
+
+    for entry in read_dir {
+        let entry = entry.map_err(|e| ProjectError::Io(e.to_string()))?;
+        let path = entry.path();
+        let file_name = entry.file_name();
+        let name = file_name.to_string_lossy();
+
+        // Skip hidden entries and internal folders
+        if name.starts_with('.') {
+            continue;
+        }
+
+        let rel = match path.strip_prefix(project_root) {
+            Ok(r) => r.to_string_lossy().replace('\\', "/"),
+            Err(_) => continue,
+        };
+
+        let meta = std::fs::metadata(&path).map_err(|e| ProjectError::Io(e.to_string()))?;
+        let is_dir = meta.is_dir();
+
+        entries.push(FileEntry {
+            path: rel.clone(),
+            ext: if is_dir {
+                String::new()
+            } else {
+                path.extension()
+                    .map(|e| e.to_string_lossy().to_lowercase())
+                    .unwrap_or_default()
+            },
+            size: meta.len(),
+            is_dir,
+        });
+
+        if is_dir {
+            scan_all_recursive(&path, project_root, entries)?;
+        }
+    }
+
+    Ok(())
+}
+
 /// Read a note file as plain text.
 pub fn read_note(path: &Path) -> Result<String, ProjectError> {
     if !path.exists() {

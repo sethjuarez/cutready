@@ -215,3 +215,12 @@ pub async fn set_workspace_state(
     let root = project_root(&state)?;
     project::write_workspace_state(&root, &workspace).map_err(|e| e.to_string())
 }
+
+/// List all files and directories in the project folder.
+#[tauri::command]
+pub async fn list_all_files(
+    state: State<'_, AppState>,
+) -> Result<Vec<project::FileEntry>, String> {
+    let root = project_root(&state)?;
+    project::scan_all_files(&root).map_err(|e| e.to_string())
+}

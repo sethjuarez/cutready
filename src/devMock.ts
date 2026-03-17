@@ -98,6 +98,20 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
       return [{ path: "C:/mock-project", last_opened: new Date().toISOString() }];
     case "list_sketches":
       return MOCK_SKETCHES;
+    case "list_all_files":
+      return [
+        { path: "sketches", ext: "", size: 0, is_dir: true },
+        { path: "sketches/demo-introduction.sk", ext: "sk", size: 4200, is_dir: false },
+        { path: "sketches/feature-deep-dive.sk", ext: "sk", size: 3800, is_dir: false },
+        { path: "storyboards", ext: "", size: 0, is_dir: true },
+        { path: "storyboards/full-demo.sb", ext: "sb", size: 950, is_dir: false },
+        { path: "notes", ext: "", size: 0, is_dir: true },
+        { path: "notes/research.md", ext: "md", size: 12400, is_dir: false },
+        { path: "notes/meeting-notes.md", ext: "md", size: 8700, is_dir: false },
+        { path: "visuals", ext: "", size: 0, is_dir: true },
+        { path: "visuals/abc123def456.json", ext: "json", size: 2100, is_dir: false },
+        { path: "project.json", ext: "json", size: 350, is_dir: false },
+      ];
     case "read_sketch":
       return MOCK_SKETCH;
     case "save_sketch":

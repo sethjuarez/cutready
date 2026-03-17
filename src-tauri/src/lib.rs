@@ -146,6 +146,7 @@ pub fn run() {
             commands::project::set_sidebar_order,
             commands::project::get_workspace_state,
             commands::project::set_workspace_state,
+            commands::project::list_all_files,
             commands::sketch::create_sketch,
             commands::sketch::update_sketch,
             commands::sketch::update_sketch_title,

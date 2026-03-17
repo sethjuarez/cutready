@@ -1,117 +1,164 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { useAppStore } from "../stores/appStore";
-import type { SketchSummary, StoryboardSummary } from "../types/sketch";
-import { SketchIcon, StoryboardIcon } from "./Icons";
+import { NoteIcon, SketchIcon, StoryboardIcon } from "./Icons";
+
+// ── Types ────────────────────────────────────────────────────────
+
+interface FileEntry {
+  path: string;
+  ext: string;
+  size: number;
+  is_dir: boolean;
+}
 
 interface TreeNode {
   name: string;
-  /** Full relative path (for files only). */
-  path?: string;
-  type: "folder" | "sketch" | "storyboard";
+  path: string;
+  ext: string;
+  is_dir: boolean;
+  size: number;
   children: TreeNode[];
-  /** Title from metadata (for files). */
-  title?: string;
-  /** Extra info line. */
-  detail?: string;
 }
 
-/** Build a tree from flat lists of sketch and storyboard summaries. */
-function buildTree(
-  sketches: SketchSummary[],
-  storyboards: StoryboardSummary[],
-): TreeNode[] {
-  const root: TreeNode = { name: "", type: "folder", children: [] };
+// ── Tree building ────────────────────────────────────────────────
 
-  const ensureFolder = (parts: string[]): TreeNode => {
+function buildTree(files: FileEntry[]): TreeNode[] {
+  const root: TreeNode = { name: "", path: "", ext: "", is_dir: true, size: 0, children: [] };
+
+  for (const f of files) {
+    const segments = f.path.split("/");
     let current = root;
-    for (const part of parts) {
-      let child = current.children.find(
-        (c) => c.type === "folder" && c.name === part,
-      );
+
+    // Walk/create intermediate folders
+    for (let i = 0; i < segments.length - 1; i++) {
+      const seg = segments[i];
+      let child = current.children.find((c) => c.is_dir && c.name === seg);
       if (!child) {
-        child = { name: part, type: "folder", children: [] };
+        child = {
+          name: seg,
+          path: segments.slice(0, i + 1).join("/"),
+          ext: "",
+          is_dir: true,
+          size: 0,
+          children: [],
+        };
         current.children.push(child);
       }
       current = child;
     }
-    return current;
-  };
 
-  for (const sk of sketches) {
-    const segments = sk.path.split("/");
-    const fileName = segments.pop()!;
-    const parent = ensureFolder(segments);
-    parent.children.push({
-      name: fileName,
-      path: sk.path,
-      type: "sketch",
-      title: sk.title,
-      detail: `${sk.row_count} ${sk.row_count === 1 ? "row" : "rows"}`,
-      children: [],
-    });
-  }
-
-  for (const sb of storyboards) {
-    const segments = sb.path.split("/");
-    const fileName = segments.pop()!;
-    const parent = ensureFolder(segments);
-    parent.children.push({
-      name: fileName,
-      path: sb.path,
-      type: "storyboard",
-      title: sb.title,
-      detail: `${sb.sketch_count} ${sb.sketch_count === 1 ? "sketch" : "sketches"}`,
-      children: [],
-    });
+    // Add file/leaf (directories are already created above)
+    if (!f.is_dir) {
+      current.children.push({
+        name: segments[segments.length - 1],
+        path: f.path,
+        ext: f.ext,
+        is_dir: false,
+        size: f.size,
+        children: [],
+      });
+    }
   }
 
   // Sort: folders first, then alphabetically
   const sortNodes = (nodes: TreeNode[]) => {
     nodes.sort((a, b) => {
-      if (a.type === "folder" && b.type !== "folder") return -1;
-      if (a.type !== "folder" && b.type === "folder") return 1;
-      return a.name.localeCompare(b.name);
+      if (a.is_dir && !b.is_dir) return -1;
+      if (!a.is_dir && b.is_dir) return 1;
+      return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
     });
-    for (const n of nodes) {
-      if (n.children.length > 0) sortNodes(n.children);
-    }
+    for (const n of nodes) if (n.children.length > 0) sortNodes(n.children);
   };
   sortNodes(root.children);
 
   return root.children;
 }
 
-/**
- * FileTreeView — shows project files as a folder hierarchy.
- */
+// ── Icon helpers ─────────────────────────────────────────────────
+
+function fileIcon(ext: string) {
+  switch (ext) {
+    case "sk":
+      return <SketchIcon className="shrink-0" />;
+    case "sb":
+      return <StoryboardIcon className="shrink-0" />;
+    case "md":
+      return <NoteIcon className="shrink-0" />;
+    default:
+      return (
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 opacity-50">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+          <polyline points="14 2 14 8 20 8" />
+        </svg>
+      );
+  }
+}
+
+function formatSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes}B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)}KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
+}
+
+// ── Component ────────────────────────────────────────────────────
+
 export function FileTreeView() {
-  const sketches = useAppStore((s) => s.sketches);
-  const storyboards = useAppStore((s) => s.storyboards);
+  const [files, setFiles] = useState<FileEntry[]>([]);
+  const [loading, setLoading] = useState(true);
   const activeSketchPath = useAppStore((s) => s.activeSketchPath);
   const activeStoryboardPath = useAppStore((s) => s.activeStoryboardPath);
+  const activeNotePath = useAppStore((s) => s.activeNotePath);
   const openSketch = useAppStore((s) => s.openSketch);
   const openStoryboard = useAppStore((s) => s.openStoryboard);
   const closeStoryboard = useAppStore((s) => s.closeStoryboard);
+  const openNote = useAppStore((s) => s.openNote);
 
-  const tree = buildTree(sketches, storyboards);
+  // Reload whenever the categorized lists change (signals a file was created/deleted)
+  const sketchCount = useAppStore((s) => s.sketches.length);
+  const noteCount = useAppStore((s) => s.notes.length);
+  const storyboardCount = useAppStore((s) => s.storyboards.length);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    invoke<FileEntry[]>("list_all_files")
+      .then((result) => { if (!cancelled) setFiles(result); })
+      .catch((err) => console.error("list_all_files:", err))
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [sketchCount, noteCount, storyboardCount]);
 
   const handleClick = useCallback(
     (node: TreeNode) => {
-      if (node.type === "sketch" && node.path) {
+      if (node.is_dir) return;
+      if (node.ext === "sk") {
         closeStoryboard();
         openSketch(node.path);
-      } else if (node.type === "storyboard" && node.path) {
+      } else if (node.ext === "sb") {
         openStoryboard(node.path);
+      } else if (node.ext === "md") {
+        openNote(node.path);
       }
     },
-    [openSketch, openStoryboard, closeStoryboard],
+    [openSketch, openStoryboard, closeStoryboard, openNote],
   );
+
+  const tree = buildTree(files);
+
+  if (loading) {
+    return (
+      <div className="flex-1 flex items-center justify-center px-3">
+        <p className="text-xs text-[var(--color-text-secondary)]">Loading…</p>
+      </div>
+    );
+  }
 
   if (tree.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center px-3">
         <p className="text-xs text-[var(--color-text-secondary)] text-center">
-          No files yet. Create a sketch or storyboard to get started.
+          No files yet. Create a sketch or note to get started.
         </p>
       </div>
     );
@@ -121,11 +168,12 @@ export function FileTreeView() {
     <div className="flex-1 overflow-y-auto py-1">
       {tree.map((node) => (
         <TreeNodeRow
-          key={node.path ?? node.name}
+          key={node.path || node.name}
           node={node}
           depth={0}
           activeSketchPath={activeSketchPath}
           activeStoryboardPath={activeStoryboardPath}
+          activeNotePath={activeNotePath}
           onClick={handleClick}
         />
       ))}
@@ -133,73 +181,67 @@ export function FileTreeView() {
   );
 }
 
+// ── TreeNodeRow ──────────────────────────────────────────────────
+
 function TreeNodeRow({
   node,
   depth,
   activeSketchPath,
   activeStoryboardPath,
+  activeNotePath,
   onClick,
 }: {
   node: TreeNode;
   depth: number;
   activeSketchPath: string | null;
   activeStoryboardPath: string | null;
+  activeNotePath: string | null;
   onClick: (node: TreeNode) => void;
 }) {
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(depth < 1);
 
   const isActive =
-    (node.type === "sketch" && node.path === activeSketchPath && !activeStoryboardPath) ||
-    (node.type === "storyboard" && node.path === activeStoryboardPath);
+    (node.ext === "sk" && node.path === activeSketchPath && !activeStoryboardPath) ||
+    (node.ext === "sb" && node.path === activeStoryboardPath) ||
+    (node.ext === "md" && node.path === activeNotePath);
 
-  if (node.type === "folder") {
+  const isClickable = !node.is_dir && ["sk", "sb", "md"].includes(node.ext);
+
+  if (node.is_dir) {
     return (
       <>
         <button
           onClick={() => setExpanded((e) => !e)}
-          className="w-full flex items-center gap-1.5 px-3 py-1.5 text-left text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-alt)] transition-colors"
+          className="w-full flex items-center gap-1.5 px-3 py-1 text-left text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-alt)] transition-colors"
           style={{ paddingLeft: `${12 + depth * 16}px` }}
         >
           <svg
-            width="12"
-            height="12"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
+            width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
             className={`shrink-0 transition-transform ${expanded ? "rotate-90" : ""}`}
           >
             <polyline points="9 18 15 12 9 6" />
           </svg>
           <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="shrink-0"
+            width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0"
           >
-            {expanded ? (
-              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
-            ) : (
-              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
-            )}
+            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
           </svg>
           <span className="text-xs font-medium truncate">{node.name}</span>
+          <span className="text-[10px] text-[var(--color-text-secondary)]/50 ml-auto shrink-0">
+            {node.children.length}
+          </span>
         </button>
         {expanded &&
           node.children.map((child) => (
             <TreeNodeRow
-              key={child.path ?? child.name}
+              key={child.path || child.name}
               node={child}
               depth={depth + 1}
               activeSketchPath={activeSketchPath}
               activeStoryboardPath={activeStoryboardPath}
+              activeNotePath={activeNotePath}
               onClick={onClick}
             />
           ))}
@@ -207,28 +249,26 @@ function TreeNodeRow({
     );
   }
 
-  // File node (sketch or storyboard)
+  // File node
   return (
     <button
-      onClick={() => onClick(node)}
-      className={`w-full flex items-center gap-1.5 px-3 py-1.5 text-left transition-colors ${
+      onClick={isClickable ? () => onClick(node) : undefined}
+      className={`w-full flex items-center gap-1.5 px-3 py-1 text-left transition-colors ${
         isActive
           ? "bg-[var(--color-accent)]/10 text-[var(--color-accent)]"
-          : "text-[var(--color-text)] hover:bg-[var(--color-surface-alt)]"
+          : isClickable
+            ? "text-[var(--color-text)] hover:bg-[var(--color-surface-alt)]"
+            : "text-[var(--color-text-secondary)] opacity-60"
       }`}
-      style={{ paddingLeft: `${12 + depth * 16}px` }}
-      title={node.title ?? node.name}
+      style={{ paddingLeft: `${12 + depth * 16}px`, cursor: isClickable ? "pointer" : "default" }}
+      title={`${node.path} (${formatSize(node.size)})`}
     >
-      {/* Spacer to align with chevron above */}
       <span className="w-3 shrink-0" />
-      {node.type === "sketch" ? (
-        <SketchIcon className="shrink-0" />
-      ) : (
-        <StoryboardIcon className="shrink-0" />
-      )}
-      <div className="flex-1 min-w-0">
-        <div className="text-xs truncate">{node.name}</div>
-      </div>
+      {fileIcon(node.ext)}
+      <span className="text-xs truncate">{node.name}</span>
+      <span className="text-[10px] text-[var(--color-text-secondary)]/40 ml-auto shrink-0">
+        {formatSize(node.size)}
+      </span>
     </button>
   );
 }
