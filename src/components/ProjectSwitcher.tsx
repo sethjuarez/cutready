@@ -20,9 +20,12 @@ export function ProjectSwitcher() {
   const [isMigrating, setIsMigrating] = useState(false);
   const [newName, setNewName] = useState("");
   const [migrateName, setMigrateName] = useState("");
+  const [renamingPath, setRenamingPath] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
   const dropdownRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const migrateInputRef = useRef<HTMLInputElement>(null);
+  const renameInputRef = useRef<HTMLInputElement>(null);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -32,17 +35,19 @@ export function ProjectSwitcher() {
         setIsOpen(false);
         setIsCreating(false);
         setIsMigrating(false);
+        setRenamingPath(null);
       }
     };
     window.addEventListener("mousedown", handleClick);
     return () => window.removeEventListener("mousedown", handleClick);
   }, [isOpen]);
 
-  // Focus input when creating or migrating
+  // Focus input when creating, migrating, or renaming
   useEffect(() => {
     if (isCreating) inputRef.current?.focus();
     if (isMigrating) migrateInputRef.current?.focus();
-  }, [isCreating, isMigrating]);
+    if (renamingPath) renameInputRef.current?.focus();
+  }, [isCreating, isMigrating, renamingPath]);
 
   const handleSwitch = useCallback(
     (path: string) => {
@@ -59,7 +64,6 @@ export function ProjectSwitcher() {
     setNewName("");
     setIsCreating(false);
     await loadProjects();
-    // Switch to the newly created project
     const updatedProjects = useAppStore.getState().projects;
     const created = updatedProjects.find(
       (p) => p.name === name || p.path === name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""),
@@ -83,6 +87,19 @@ export function ProjectSwitcher() {
     }
   }, [migrateName, loadProjects]);
 
+  const handleRename = useCallback(async () => {
+    const name = renameValue.trim();
+    if (!name || !renamingPath) return;
+    try {
+      await invoke("rename_project", { projectPath: renamingPath, newName: name });
+      setRenamingPath(null);
+      setRenameValue("");
+      await loadProjects();
+    } catch (err) {
+      console.error("Rename failed:", err);
+    }
+  }, [renameValue, renamingPath, loadProjects]);
+
   const handleNewProjectClick = useCallback(() => {
     if (!isMultiProject) {
       // Single-project workspace: need to migrate first
@@ -92,8 +109,6 @@ export function ProjectSwitcher() {
       setIsCreating(true);
     }
   }, [isMultiProject, currentProject]);
-
-  // Always show — in single-project mode, the dropdown lets the user add a second project
 
   // Find the active project entry
   const activeEntry = projects.find((p) => {
@@ -146,17 +161,48 @@ export function ProjectSwitcher() {
       {isOpen && (
         <div className="absolute left-0 right-0 top-full z-50 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-b-lg shadow-lg overflow-hidden">
           {projects.map((p) => {
-            const isActive =
-              activeEntry?.path === p.path;
+            const isActive = activeEntry?.path === p.path;
+            const isRenaming = renamingPath === p.path;
+
+            if (isRenaming) {
+              return (
+                <div key={p.path} className="flex items-center gap-1 px-2 py-1">
+                  <input
+                    ref={renameInputRef}
+                    value={renameValue}
+                    onChange={(e) => setRenameValue(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleRename();
+                      if (e.key === "Escape") { setRenamingPath(null); setRenameValue(""); }
+                    }}
+                    className="flex-1 text-[12px] px-2 py-0.5 bg-[var(--color-surface-alt)] border border-[var(--color-accent)] rounded text-[var(--color-text)] outline-none"
+                  />
+                  <button
+                    onClick={handleRename}
+                    disabled={!renameValue.trim()}
+                    className="text-[11px] px-1.5 py-0.5 rounded bg-[var(--color-accent)] text-white disabled:opacity-40"
+                  >
+                    ✓
+                  </button>
+                </div>
+              );
+            }
+
             return (
               <button
                 key={p.path}
                 onClick={() => handleSwitch(p.path)}
+                onDoubleClick={(e) => {
+                  e.preventDefault();
+                  setRenamingPath(p.path);
+                  setRenameValue(p.name);
+                }}
                 className={`flex items-center gap-2 w-full px-3 py-1.5 text-left transition-colors text-[12px] ${
                   isActive
                     ? "bg-[var(--color-accent)]/10 text-[var(--color-accent)]"
                     : "text-[var(--color-text)] hover:bg-[var(--color-surface-alt)]"
                 }`}
+                title="Click to switch · Double-click to rename"
               >
                 <span className="truncate flex-1">{p.name}</span>
                 {isActive && (
@@ -171,9 +217,11 @@ export function ProjectSwitcher() {
           {/* Divider + New Project / Migration */}
           <div className="border-t border-[var(--color-border)]">
             {isMigrating ? (
-              <div className="px-2 py-1.5">
-                <p className="text-[11px] text-[var(--color-text-secondary)] mb-1">
-                  Name the existing project before adding a new one:
+              <div className="px-2 py-2">
+                <p className="text-[11px] text-[var(--color-text-secondary)] mb-1.5 leading-relaxed">
+                  <strong className="text-[var(--color-text)]">Reorganizing workspace.</strong>{" "}
+                  Your current files will move into their own project folder.
+                  Give this existing project a name:
                 </p>
                 <div className="flex items-center gap-1">
                   <input
@@ -187,7 +235,7 @@ export function ProjectSwitcher() {
                         setMigrateName("");
                       }
                     }}
-                    placeholder="Current project name…"
+                    placeholder="e.g. My Demo"
                     className="flex-1 text-[12px] px-2 py-1 bg-[var(--color-surface-alt)] border border-[var(--color-border)] rounded text-[var(--color-text)] placeholder:text-[var(--color-text-secondary)]/50 outline-none focus:border-[var(--color-accent)]"
                   />
                   <button
@@ -195,7 +243,7 @@ export function ProjectSwitcher() {
                     disabled={!migrateName.trim()}
                     className="text-[11px] px-2 py-1 rounded bg-[var(--color-accent)] text-white disabled:opacity-40 hover:bg-[var(--color-accent-hover)] transition-colors"
                   >
-                    Next
+                    Next →
                   </button>
                 </div>
               </div>
@@ -212,7 +260,7 @@ export function ProjectSwitcher() {
                       setNewName("");
                     }
                   }}
-                  placeholder="Project name…"
+                  placeholder="New project name…"
                   className="flex-1 text-[12px] px-2 py-1 bg-[var(--color-surface-alt)] border border-[var(--color-border)] rounded text-[var(--color-text)] placeholder:text-[var(--color-text-secondary)]/50 outline-none focus:border-[var(--color-accent)]"
                 />
                 <button
