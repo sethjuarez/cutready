@@ -137,6 +137,44 @@ function bodyCell(text: string): TableCell {
 const IMG_WIDTH = convertInchesToTwip(2.5);
 const IMG_HEIGHT = convertInchesToTwip(1.4); // ~16:9 aspect ratio
 
+// Thumbnail size for visuals in the planning table — max 200px wide
+const VISUAL_WIDTH = 200;
+const VISUAL_HEIGHT = 112; // ~16:9
+
+// Light-mode token map — used to replace $token refs before rendering visuals for Word
+const LIGHT_TOKENS: Record<string, string> = {
+  foreground:  "#1e293b",
+  background:  "#ffffff",
+  title:       "#0f172a",
+  subtitle:    "#475569",
+  accent:      "#4f46e5",
+  muted:       "#94a3b8",
+  surface:     "#f1f5f9",
+  border:      "#cbd5e1",
+  primary:     "#4f46e5",
+  secondary:   "#7c3aed",
+  tertiary:    "#db2777",
+  success:     "#16a34a",
+  warning:     "#d97706",
+  error:       "#dc2626",
+};
+
+/** Deep-replace $token color refs with light-mode hex values in a DSL object. */
+function toLightMode(obj: unknown): unknown {
+  if (typeof obj === "string" && obj.startsWith("$")) {
+    return LIGHT_TOKENS[obj.slice(1)] ?? obj;
+  }
+  if (Array.isArray(obj)) return obj.map(toLightMode);
+  if (obj && typeof obj === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(obj)) {
+      out[k] = toLightMode(v);
+    }
+    return out;
+  }
+  return obj;
+}
+
 /** Read a screenshot file and return an ImageRun, or null on failure. */
 async function readScreenshot(projectRoot: string, relativePath: string): Promise<ImageRun | null> {
   try {
@@ -160,8 +198,9 @@ async function captureVisualLastFrame(visualPath: string): Promise<ImageRun | nu
 
     const { renderToPng } = await import("@elucim/dsl");
 
+    // Convert to light-mode colors for print-friendly Word output
     type ElucimDocument = Parameters<typeof renderToPng>[0];
-    const dsl = visual as unknown as ElucimDocument;
+    const dsl = toLightMode(visual) as unknown as ElucimDocument;
     const root = dsl.root as unknown as Record<string, unknown>;
     const totalFrames = (root.durationInFrames as number) || 60;
     const lastFrame = Math.max(0, totalFrames - 1);
@@ -172,7 +211,7 @@ async function captureVisualLastFrame(visualPath: string): Promise<ImageRun | nu
 
     return new ImageRun({
       data: pngBytes,
-      transformation: { width: IMG_WIDTH, height: IMG_HEIGHT },
+      transformation: { width: VISUAL_WIDTH, height: VISUAL_HEIGHT },
       type: "png",
     });
   } catch (e) {
