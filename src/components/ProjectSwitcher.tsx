@@ -189,28 +189,39 @@ export function ProjectSwitcher() {
             }
 
             return (
-              <button
+              <div
                 key={p.path}
-                onClick={() => handleSwitch(p.path)}
-                onDoubleClick={(e) => {
-                  e.preventDefault();
-                  setRenamingPath(p.path);
-                  setRenameValue(p.name);
-                }}
-                className={`flex items-center gap-2 w-full px-3 py-1.5 text-left transition-colors text-[12px] ${
+                className={`group flex items-center gap-2 w-full px-3 py-1.5 text-left transition-colors text-[12px] ${
                   isActive
                     ? "bg-[var(--color-accent)]/10 text-[var(--color-accent)]"
                     : "text-[var(--color-text)] hover:bg-[var(--color-surface-alt)]"
                 }`}
-                title="Click to switch · Double-click to rename"
               >
-                <span className="truncate flex-1">{p.name}</span>
+                <button
+                  onClick={() => handleSwitch(p.path)}
+                  className="truncate flex-1 text-left"
+                >
+                  {p.name}
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setRenamingPath(p.path);
+                    setRenameValue(p.name);
+                  }}
+                  className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-[var(--color-surface)] transition-opacity"
+                  title="Rename project"
+                >
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+                  </svg>
+                </button>
                 {isActive && (
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
                     <polyline points="20 6 9 17 4 12" />
                   </svg>
                 )}
-              </button>
+              </div>
             );
           })}
 
