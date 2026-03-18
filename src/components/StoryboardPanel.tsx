@@ -7,11 +7,12 @@ import { ChatPanel } from "./ChatPanel";
 import { ResizeHandle } from "./ResizeHandle";
 import { TabBar } from "./TabBar";
 import { HistoryGraphTab } from "./HistoryGraphTab";
+import { SplitPreviewPane } from "./SplitPreviewPane";
 
 /**
  * StoryboardPanel — center content area for sketch/storyboard workflow.
  *
- * TabBar + editor content + secondary panel (Chat + VersionHistory tabs).
+ * TabBar + editor content + optional split pane + secondary panel (Chat).
  * The primary sidebar (StoryboardList) is now managed by AppLayout.
  */
 export function StoryboardPanel() {
@@ -22,11 +23,13 @@ export function StoryboardPanel() {
   const sidebarPosition = useAppStore((s) => s.sidebarPosition);
   const openTabs = useAppStore((s) => s.openTabs);
   const activeTabId = useAppStore((s) => s.activeTabId);
+  const splitTabId = useAppStore((s) => s.splitTabId);
 
   const activeTab = openTabs.find((t) => t.id === activeTabId);
   const isHistoryTab = activeTab?.type === "history";
 
   const [secondaryWidth, setSecondaryWidth] = useState(340);
+  const [splitWidth, setSplitWidth] = useState<number | null>(null);
   const secondaryOnLeft = sidebarPosition === "right";
 
   const handleSecondaryResize = useCallback(
@@ -35,6 +38,13 @@ export function StoryboardPanel() {
       setSecondaryWidth((w) => Math.min(600, Math.max(260, w + adjusted)));
     },
     [secondaryOnLeft],
+  );
+
+  const handleSplitResize = useCallback(
+    (delta: number) => {
+      setSplitWidth((w) => Math.max(200, (w ?? 400) - delta));
+    },
+    [],
   );
 
   const secondaryPanel = showVersionHistory ? (
@@ -57,36 +67,51 @@ export function StoryboardPanel() {
         {/* Tab bar */}
         <TabBar />
 
-        {/* Content */}
-        {isHistoryTab ? (
-          <HistoryGraphTab />
-        ) : activeSketch ? (
-          <SketchForm />
-        ) : activeStoryboard ? (
-          <StoryboardView />
-        ) : activeNotePath ? (
-          <NoteEditor />
-        ) : (
-          <div className="flex-1 flex items-center justify-center">
-            <div className="flex flex-col items-center gap-3">
-              <div className="relative w-12 h-12">
-                <div
-                  className="absolute inset-0 rounded-xl blur-xl opacity-30"
-                  style={{ background: "linear-gradient(135deg, var(--color-accent), #e879a8)" }}
-                />
-                <img
-                  src="/cutready.svg"
-                  alt=""
-                  className="relative w-12 h-12 drop-shadow-md opacity-50"
-                  draggable={false}
-                />
+        {/* Content — primary + optional split */}
+        <div className="flex-1 flex min-h-0">
+          {/* Primary pane */}
+          <div className="flex-1 flex flex-col min-w-0">
+            {isHistoryTab ? (
+              <HistoryGraphTab />
+            ) : activeSketch ? (
+              <SketchForm />
+            ) : activeStoryboard ? (
+              <StoryboardView />
+            ) : activeNotePath ? (
+              <NoteEditor />
+            ) : (
+              <div className="flex-1 flex items-center justify-center">
+                <div className="flex flex-col items-center gap-3">
+                  <div className="relative w-12 h-12">
+                    <div
+                      className="absolute inset-0 rounded-xl blur-xl opacity-30"
+                      style={{ background: "linear-gradient(135deg, var(--color-accent), #e879a8)" }}
+                    />
+                    <img
+                      src="/cutready.svg"
+                      alt=""
+                      className="relative w-12 h-12 drop-shadow-md opacity-50"
+                      draggable={false}
+                    />
+                  </div>
+                  <p className="text-sm text-[var(--color-text-secondary)]">
+                    Create a sketch or storyboard to get started
+                  </p>
+                </div>
               </div>
-              <p className="text-sm text-[var(--color-text-secondary)]">
-                Create a sketch or storyboard to get started
-              </p>
-            </div>
+            )}
           </div>
-        )}
+
+          {/* Split pane */}
+          {splitTabId && (
+            <>
+              <ResizeHandle direction="horizontal" onResize={handleSplitResize} />
+              <div className="shrink-0 h-full border-l border-[var(--color-border)]" style={{ width: splitWidth ?? "40%" }}>
+                <SplitPreviewPane />
+              </div>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Secondary panel on right when sidebar is left */}

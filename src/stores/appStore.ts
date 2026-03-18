@@ -94,6 +94,8 @@ interface AppStoreState {
   openTabs: EditorTab[];
   /** Currently active tab id. */
   activeTabId: string | null;
+  /** Tab shown in the split (right) pane, or null when not split. */
+  splitTabId: string | null;
 
   // ── Sketch state ───────────────────────────────────────
 
@@ -243,6 +245,10 @@ interface AppStoreState {
   closeTab: (tabId: string) => void;
   /** Set the active tab. */
   setActiveTab: (tabId: string) => void;
+  /** Open a tab in the split (right) pane. */
+  openTabInSplit: (tabId: string) => void;
+  /** Close the split pane. */
+  closeSplit: () => void;
   /** Reorder tabs. */
   reorderTabs: (tabIds: string[]) => void;
   /** @internal Persist open tabs to localStorage. */
@@ -504,6 +510,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
 
   openTabs: [],
   activeTabId: null,
+  splitTabId: null,
 
   sketches: [],
   activeSketchPath: null,
@@ -629,6 +636,8 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       }
     }
     set({ openTabs: next, activeTabId: nextActive });
+    // Clear split if the closed tab was in the split pane
+    if (get().splitTabId === tabId) set({ splitTabId: null });
     // Load the new active tab's content
     if (nextActive) {
       const nextTab = next.find((t) => t.id === nextActive);
@@ -662,6 +671,17 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       set({ activeSketchPath: null, activeSketch: null, activeStoryboardPath: null, activeStoryboard: null, activeNotePath: null, activeNoteContent: null });
     }
     get()._persistTabs();
+  },
+  openTabInSplit: (tabId) => {
+    const { openTabs, activeTabId } = get();
+    const tab = openTabs.find((t) => t.id === tabId);
+    if (!tab) return;
+    // Don't split to the same tab that's already active
+    if (tabId === activeTabId) return;
+    set({ splitTabId: tabId });
+  },
+  closeSplit: () => {
+    set({ splitTabId: null });
   },
   reorderTabs: (tabIds) => {
     const { openTabs } = get();
