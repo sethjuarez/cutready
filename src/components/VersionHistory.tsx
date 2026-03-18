@@ -161,7 +161,7 @@ export function VersionHistory() {
           <button
             onClick={() => useAppStore.setState({ snapshotPromptOpen: true })}
             className="group/btn flex items-center gap-1 p-1 rounded text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] transition-colors"
-            title="Save Project Snapshot (Ctrl+S)"
+            title="Save Workspace Snapshot (Ctrl+S)"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
               <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />

@@ -1169,7 +1169,7 @@ function ChatTab() {
     return (
       <div className="flex-1 flex items-center justify-center p-4">
         <p className="text-xs text-[var(--color-text-secondary)] text-center">
-          Open a project to start chatting
+          Open a workspace to start chatting
         </p>
       </div>
     );

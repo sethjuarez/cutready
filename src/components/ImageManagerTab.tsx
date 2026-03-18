@@ -1,5 +1,5 @@
 /**
- * ImageManagerTab — settings sub-tab for managing project images.
+ * ImageManagerTab — settings sub-tab for managing workspace images.
  *
  * Groups images into collapsible sections:
  * - ⚠️ Orphaned section at top (expanded by default, amber highlight)
@@ -147,7 +147,7 @@ export function ImageManagerTab() {
   if (!currentProject) {
     return (
       <div className="text-[var(--color-text-secondary)] text-sm py-8 text-center">
-        Open a project to manage images.
+        Open a workspace to manage images.
       </div>
     );
   }
@@ -212,7 +212,7 @@ export function ImageManagerTab() {
       {/* Grouped sections */}
       {images.length === 0 && !loading && (
         <div className="text-[var(--color-text-secondary)] text-sm py-8 text-center">
-          No images in this project yet.
+          No images in this workspace yet.
         </div>
       )}
 

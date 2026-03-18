@@ -109,7 +109,7 @@ export function HomePanel() {
       directory: true,
       multiple: false,
       defaultPath,
-      title: "Choose location for new project",
+      title: "Choose location for new workspace",
     });
     if (!selected) return;
 
@@ -266,7 +266,7 @@ export function HomePanel() {
           {/* Create project inline form */}
           {showCreate && (
             <div className="w-full mb-6 p-4 rounded-xl bg-[var(--color-surface-alt)] border border-[var(--color-accent)] shadow-lg shadow-[var(--color-accent)]/5 animate-[fadeSlideIn_0.15s_ease-out]">
-              <label className="block text-sm font-medium mb-2">Project name</label>
+              <label className="block text-sm font-medium mb-2">Workspace name</label>
               <div className="flex gap-2">
                 <input
                   type="text"
@@ -378,7 +378,7 @@ export function HomePanel() {
               </h2>
               <div className="flex flex-col gap-1.5 max-h-[60vh] overflow-y-auto pr-1">
                 {recentProjects.map((p) => {
-                  const name = p.path.split(/[/\\]/).pop() ?? "project";
+                  const name = p.path.split(/[/\\]/).pop() ?? "workspace";
                   return (
                     <div
                       key={p.path}

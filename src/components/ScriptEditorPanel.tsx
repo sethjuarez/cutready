@@ -7,7 +7,7 @@ export function ScriptEditorPanel() {
   if (!project) {
     return (
       <div className="flex items-center justify-center h-full text-[var(--color-text-secondary)]">
-        No project open. Go to Home to select one.
+        No workspace open. Go to Home to select one.
       </div>
     );
   }

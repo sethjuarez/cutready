@@ -190,8 +190,8 @@ export function AppLayout() {
           {/* Activity bar on left (hidden on home) */}
           {view !== "home" && sidebarPosition === "left" && <Sidebar />}
 
-          {/* Primary sidebar (hidden on home) */}
-          {view !== "home" && sidebarVisible && sidebarPosition === "left" && <PrimarySidebar />}
+          {/* Primary sidebar (hidden on home, global settings, workspace settings) */}
+          {view !== "home" && view !== "settings" && view !== "workspace" && sidebarVisible && sidebarPosition === "left" && <PrimarySidebar />}
 
           {/* Center column: content + output panel */}
           <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
@@ -205,8 +205,8 @@ export function AppLayout() {
               {view === "workspace" && <div className="h-full overflow-y-auto"><SettingsPanel mode="workspace" /></div>}
             </div>
 
-            {/* Lower: output panel (hidden on home) */}
-            {view !== "home" && outputVisible && (
+            {/* Lower: output panel (hidden on home and settings views) */}
+            {view !== "home" && view !== "settings" && view !== "workspace" && outputVisible && (
               <>
                 <ResizeHandle direction="vertical" onResize={handleOutputResize} />
                 <div className="shrink-0 overflow-hidden" style={{ height: outputHeight }}>
@@ -218,8 +218,8 @@ export function AppLayout() {
             )}
           </div>
 
-          {/* Primary sidebar on right (hidden on home) */}
-          {view !== "home" && sidebarVisible && sidebarPosition === "right" && <PrimarySidebar />}
+          {/* Primary sidebar on right (hidden on home and settings views) */}
+          {view !== "home" && view !== "settings" && view !== "workspace" && sidebarVisible && sidebarPosition === "right" && <PrimarySidebar />}
 
           {/* Activity bar on right (hidden on home) */}
           {view !== "home" && sidebarPosition === "right" && <Sidebar />}

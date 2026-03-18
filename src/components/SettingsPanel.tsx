@@ -144,7 +144,7 @@ export function SettingsPanel({ mode = "global" }: { mode?: "global" | "workspac
       <p className="text-sm text-[var(--color-text-secondary)] mb-6">
         {mode === "workspace"
           ? "Settings for this workspace. Overrides apply only here."
-          : "Global preferences that apply to all projects."}
+          : "Global preferences that apply to all workspaces."}
       </p>
 
       {/* Tab bar */}
@@ -611,7 +611,7 @@ function AIProviderTab({ settings, updateSetting, isAzure, isOAuth, hasToken, ca
         >
           <option value="off">Off — text only</option>
           <option value="notes">Notes only — images in markdown notes</option>
-          <option value="notes_and_sketches">Notes + Sketches — all project images</option>
+          <option value="notes_and_sketches">Notes + Sketches — all workspace images</option>
         </select>
         <p className="text-xs text-[var(--color-text-secondary)]">
           When enabled and the model supports vision, images referenced in notes and sketches are sent to the AI.

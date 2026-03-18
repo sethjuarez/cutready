@@ -644,7 +644,7 @@ The row already has a visual and design_plan. Read the sketch with read_sketch f
             </div>
             <div className="flex-1 overflow-y-auto p-3">
               {projectImages.length === 0 ? (
-                <div className="text-center text-sm text-[var(--color-text-secondary)] py-8">No images in project</div>
+                <div className="text-center text-sm text-[var(--color-text-secondary)] py-8">No images in workspace</div>
               ) : (
                 <div className="grid grid-cols-3 gap-2">
                   {projectImages.map((img) => (
