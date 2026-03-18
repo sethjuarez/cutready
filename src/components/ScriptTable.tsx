@@ -541,7 +541,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
             </div>
 
             {/* Content area */}
-            <div className="flex-1 min-h-0 relative p-[15px]">
+            <div className="flex-1 min-h-0 relative">
               {lightboxMode === "preview" ? (
                 /* Preview mode — DslRenderer */
                 <div className="w-full h-full flex items-center justify-center">
