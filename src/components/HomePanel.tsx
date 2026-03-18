@@ -350,7 +350,9 @@ export function HomePanel() {
             <span className="text-xs text-[var(--color-text-secondary)] opacity-60">
               <kbd className="px-1.5 py-0.5 rounded border border-[var(--color-border)] bg-[var(--color-surface-alt)] text-[10px] font-mono">Ctrl</kbd>
               {" + "}
-              <kbd className="px-1.5 py-0.5 rounded border border-[var(--color-border)] bg-[var(--color-surface-alt)] text-[10px] font-mono">K</kbd>
+              <kbd className="px-1.5 py-0.5 rounded border border-[var(--color-border)] bg-[var(--color-surface-alt)] text-[10px] font-mono">Shift</kbd>
+              {" + "}
+              <kbd className="px-1.5 py-0.5 rounded border border-[var(--color-border)] bg-[var(--color-surface-alt)] text-[10px] font-mono">P</kbd>
               {" "}
               Command Palette
             </span>
