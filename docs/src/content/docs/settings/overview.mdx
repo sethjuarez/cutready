@@ -164,16 +164,20 @@ suggestions for this workspace.
 </TabItem>
 <TabItem label="Images">
 
-### Image Manager
+### Image & Visual Manager
 
-<Screenshot src="/images/settings-images.png" darkSrc="/images/settings-images-dark.png" alt="Image manager" caption="Browse project images with orphan detection for cleanup" />
+<Screenshot src="/images/settings-images.png" darkSrc="/images/settings-images-dark.png" alt="Image manager" caption="Browse project images and visuals with orphan detection for cleanup" />
 
-Browse and manage screenshots stored in your project's `.cutready/screenshots/`
-directory. The image manager shows:
+Browse and manage screenshots and visuals stored in your project. The asset
+manager scans both `.cutready/screenshots/` (images) and `.cutready/visuals/`
+(elucim DSL animations) and shows:
 
-- Thumbnail grid of all project images
-- Which images are referenced by sketches and notes
-- **Orphan detection** — identifies unused images that can be safely deleted
+- Thumbnail grid — screenshots render as images, visuals render as live
+  DslRenderer previews
+- Which assets are referenced by sketches and notes
+- **Orphan detection** — identifies unused assets that can be safely deleted
+- A **DSL** badge distinguishes visual files from screenshots
+- Summary bar with counts per type and total size
 
 </TabItem>
 <TabItem label="AI Provider Override">

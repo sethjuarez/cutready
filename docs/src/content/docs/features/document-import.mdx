@@ -37,6 +37,18 @@ CutReady processes each file according to its type:
 - **`.sk`, `.sb`, `.md`** files are copied directly into the project
 - **`.docx`, `.doc`, `.pdf`, `.pptx`** files are converted to markdown notes
 
+### Handling Duplicates
+
+When importing a `.sk`, `.sb`, or `.md` file that already exists in the
+project, CutReady shows a **conflict dialog** with three options:
+
+- **Overwrite** — replace the existing file with the imported version
+- **Keep Both** — import with a numbered suffix (e.g., `sketch-1.sk`)
+- **Cancel** — skip this file and continue with other imports
+
+Referenced assets (screenshots and visuals) are always copied alongside the
+imported file to ensure nothing is broken.
+
 ## Format-Specific Conversion
 
 ### Word Documents (.docx)
