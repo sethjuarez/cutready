@@ -157,9 +157,12 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
       .catch((err) => console.error("[ScriptTable] Failed to load visual for editor:", err));
   }, [visualLightbox?.visualPath, lightboxMode]);
 
-  // Editor theme using CSS var() strings — no getComputedStyle needed.
-  // Includes both editor chrome tokens and DSL content tokens.
+  // Editor theme using CSS var() strings where possible.
+  // background/scene-bg must be hex — the editor computes luminance from them
+  // to auto-select the canvas content theme (light vs dark).
   const isDark = document.documentElement.classList.contains("dark");
+  const surfaceHex = getComputedStyle(document.documentElement).getPropertyValue("--color-surface").trim()
+    || (isDark ? "#2b2926" : "#faf9f7");
   const editorTheme = useMemo(() => ({
     // Editor chrome tokens
     "color-scheme": isDark ? "dark" : "light",
@@ -172,10 +175,10 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
     panel: isDark ? "rgba(43,41,38,0.95)" : "rgba(250,249,247,0.95)",
     chrome: isDark ? "rgba(53,50,48,0.85)" : "rgba(240,239,237,0.85)",
     "input-bg": isDark ? "#231f1d" : "#ffffff",
-    // DSL content tokens (for $token resolution on the canvas)
+    // DSL content tokens — background/scene-bg as hex for luminance detection
     foreground: "var(--color-text)",
-    background: "var(--color-surface)",
-    "scene-bg": "var(--color-surface)",
+    background: surfaceHex,
+    "scene-bg": surfaceHex,
     "scene-fg": "var(--color-text)",
     muted: "var(--color-text-secondary)",
     primary: "var(--color-accent)",
@@ -184,7 +187,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
     success: "var(--color-success)",
     warning: "var(--color-warning)",
     error: "var(--color-error)",
-  }), [isDark]);
+  }), [isDark, surfaceHex]);
 
   const closeLightbox = useCallback(() => {
     setVisualLightbox(null);

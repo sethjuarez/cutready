@@ -1,4 +1,4 @@
-import { useRef, useCallback, useState, useEffect } from "react";
+import { useRef, useCallback, useState, useEffect, useMemo } from "react";
 import { DslRenderer, type ElucimDocument, type DslRendererRef } from "@elucim/dsl";
 import { invoke } from "@tauri-apps/api/core";
 
@@ -21,7 +21,7 @@ export interface VisualControlHandle {
   isPlaying: boolean;
 }
 
-/** Static theme using CSS var() strings — no getComputedStyle needed. */
+/** Static theme using CSS var() strings. */
 const THEME = {
   foreground: "var(--color-text)",
   background: "var(--color-surface)",
@@ -40,6 +40,20 @@ const THEME = {
 };
 
 /**
+ * Build a preview-mode DSL: hides built-in controls, auto-plays once.
+ * Strips root background so theme's scene-bg takes effect.
+ * (DslRenderer 0.11.0 override props exist but have issues — mutate for now.)
+ */
+function buildPreviewDsl(dsl: ElucimDocument): ElucimDocument {
+  const root = { ...dsl.root } as Record<string, unknown>;
+  root.controls = false;
+  root.autoPlay = true;
+  root.loop = false;
+  delete root.background;
+  return { ...dsl, root: root as unknown as ElucimDocument["root"] };
+}
+
+/**
  * Renders an elucim animation inline.
  *
  * - **thumbnail**: static last-frame poster for the planning table (no animation loop).
@@ -51,6 +65,18 @@ export default function VisualCell({ visualPath, mode, onClick, className, contr
   const [visual, setVisual] = useState<Record<string, unknown> | null>(null);
   const [hasError, setHasError] = useState(false);
   const [isPlaying, setIsPlaying] = useState(true);
+
+  // Detect light/dark for explicit colorScheme (auto can't parse var() strings)
+  const [isDark, setIsDark] = useState(() =>
+    document.documentElement.classList.contains("dark"),
+  );
+  useEffect(() => {
+    const observer = new MutationObserver(() => {
+      setIsDark(document.documentElement.classList.contains("dark"));
+    });
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+    return () => observer.disconnect();
+  }, []);
 
   // Load visual JSON from file path
   useEffect(() => {
@@ -75,6 +101,7 @@ export default function VisualCell({ visualPath, mode, onClick, className, contr
   }, []);
 
   const dsl = visual as unknown as ElucimDocument | null;
+  const previewDsl = useMemo(() => dsl ? buildPreviewDsl(dsl) : null, [dsl]);
 
   const replay = useCallback(() => {
     rendererRef.current?.seekToFrame(0);
@@ -127,7 +154,7 @@ export default function VisualCell({ visualPath, mode, onClick, className, contr
             <DslRenderer
               dsl={dsl}
               poster="last"
-              colorScheme="auto"
+              colorScheme={isDark ? "dark" : "light"}
               theme={THEME}
               onError={handleError}
               style={{ width: 960, height: 540 }}
@@ -151,11 +178,8 @@ export default function VisualCell({ visualPath, mode, onClick, className, contr
       <ErrorBoundary onError={() => setHasError(true)}>
         <DslRenderer
           ref={rendererRef}
-          dsl={dsl}
-          colorScheme="auto"
-          controls={false}
-          autoPlay
-          loop={false}
+          dsl={previewDsl!}
+          colorScheme={isDark ? "dark" : "light"}
           theme={THEME}
           onError={handleError}
           onPlayStateChange={setIsPlaying}
