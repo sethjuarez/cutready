@@ -13,6 +13,11 @@
   --color-border-subtle: #e8e5e0;
   --color-text: #2c2925;
   --color-text-secondary: #8a857d;
+  --color-secondary: #7c3aed;
+  --color-tertiary: #db2777;
+  --color-success: #16a34a;
+  --color-warning: #d97706;
+  --color-error: #dc2626;
   --titlebar-height: 40px;
   --statusbar-height: 28px;
   --app-font-family: "Geist Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
@@ -36,6 +41,11 @@
   --color-border-subtle: #353230;
   --color-text: #e8e4df;
   --color-text-secondary: #9b968e;
+  --color-secondary: #a78bfa;
+  --color-tertiary: #f472b6;
+  --color-success: #34d399;
+  --color-warning: #fbbf24;
+  --color-error: #f87171;
 }
 
 /* Prevent text selection on UI chrome (title bar, buttons) */

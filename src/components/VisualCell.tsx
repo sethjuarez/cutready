@@ -1,4 +1,4 @@
-import { useRef, useCallback, useState, useEffect, useMemo } from "react";
+import { useRef, useCallback, useState, useEffect } from "react";
 import { DslRenderer, type ElucimDocument, type DslRendererRef } from "@elucim/dsl";
 import { invoke } from "@tauri-apps/api/core";
 
@@ -21,62 +21,23 @@ export interface VisualControlHandle {
   isPlaying: boolean;
 }
 
-/** Read CutReady CSS variables and build an elucim theme object. */
-function useCutReadyTheme() {
-  const [isDark, setIsDark] = useState(() =>
-    document.documentElement.classList.contains("dark"),
-  );
-
-  useEffect(() => {
-    const observer = new MutationObserver(() => {
-      setIsDark(document.documentElement.classList.contains("dark"));
-    });
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
-    return () => observer.disconnect();
-  }, []);
-
-  return useMemo(() => {
-    const s = getComputedStyle(document.documentElement);
-    const fg = s.getPropertyValue("--color-text").trim() || (isDark ? "#e8e4df" : "#2c2925");
-    const bg = s.getPropertyValue("--color-surface").trim() || (isDark ? "#2b2926" : "#faf9f7");
-    const accent = s.getPropertyValue("--color-accent").trim() || (isDark ? "#a49afa" : "#6b5ce7");
-    const secondary = s.getPropertyValue("--color-text-secondary").trim() || (isDark ? "#a09b93" : "#78756f");
-    const surfaceAlt = s.getPropertyValue("--color-surface-alt").trim() || (isDark ? "#353230" : "#f0efed");
-    const border = s.getPropertyValue("--color-border").trim() || (isDark ? "#4a4644" : "#e2e0dd");
-
-    return {
-      // Core theme keys (read by Scene via --elucim-scene-bg/fg)
-      foreground: fg,
-      background: bg,
-      accent,
-      "scene-bg": bg,
-      "scene-fg": fg,
-      // Semantic tokens for $token resolution in DSL color fields
-      muted: secondary,
-      surface: surfaceAlt,
-      border,
-      primary: accent,
-      secondary: isDark ? "#a78bfa" : "#7c3aed",
-      tertiary: isDark ? "#f472b6" : "#db2777",
-      success: isDark ? "#34d399" : "#16a34a",
-      warning: isDark ? "#fbbf24" : "#d97706",
-      error: isDark ? "#f87171" : "#dc2626",
-    };
-  }, [isDark]);
-}
-
-/**
- * Build a preview-mode DSL: hides built-in controls, auto-plays once.
- * Strips root background so --elucim-scene-bg (from theme) takes effect.
- */
-function buildPreviewDsl(dsl: ElucimDocument): ElucimDocument {
-  const root = { ...dsl.root } as Record<string, unknown>;
-  root.controls = false;
-  root.autoPlay = true;
-  root.loop = false;
-  delete root.background; // Let theme --elucim-scene-bg control it
-  return { ...dsl, root: root as unknown as ElucimDocument["root"] };
-}
+/** Static theme using CSS var() strings — no getComputedStyle needed. */
+const THEME = {
+  foreground: "var(--color-text)",
+  background: "var(--color-surface)",
+  accent: "var(--color-accent)",
+  "scene-bg": "var(--color-surface)",
+  "scene-fg": "var(--color-text)",
+  muted: "var(--color-text-secondary)",
+  surface: "var(--color-surface-alt)",
+  border: "var(--color-border)",
+  primary: "var(--color-accent)",
+  secondary: "var(--color-secondary)",
+  tertiary: "var(--color-tertiary)",
+  success: "var(--color-success)",
+  warning: "var(--color-warning)",
+  error: "var(--color-error)",
+};
 
 /**
  * Renders an elucim animation inline.
@@ -90,7 +51,6 @@ export default function VisualCell({ visualPath, mode, onClick, className, contr
   const [visual, setVisual] = useState<Record<string, unknown> | null>(null);
   const [hasError, setHasError] = useState(false);
   const [isPlaying, setIsPlaying] = useState(true);
-  const theme = useCutReadyTheme();
 
   // Load visual JSON from file path
   useEffect(() => {
@@ -115,18 +75,6 @@ export default function VisualCell({ visualPath, mode, onClick, className, contr
   }, []);
 
   const dsl = visual as unknown as ElucimDocument | null;
-  const previewDsl = useMemo(() => dsl ? buildPreviewDsl(dsl) : null, [dsl]);
-
-  // Poll play state and expose control handle to parent
-  useEffect(() => {
-    if (mode !== "full") return;
-    setIsPlaying(true);
-    const interval = setInterval(() => {
-      const playing = rendererRef.current?.isPlaying() ?? false;
-      setIsPlaying(playing);
-    }, 250);
-    return () => clearInterval(interval);
-  }, [mode, visual]);
 
   const replay = useCallback(() => {
     rendererRef.current?.seekToFrame(0);
@@ -179,7 +127,8 @@ export default function VisualCell({ visualPath, mode, onClick, className, contr
             <DslRenderer
               dsl={dsl}
               poster="last"
-              theme={theme}
+              colorScheme="auto"
+              theme={THEME}
               onError={handleError}
               style={{ width: 960, height: 540 }}
             />
@@ -202,9 +151,14 @@ export default function VisualCell({ visualPath, mode, onClick, className, contr
       <ErrorBoundary onError={() => setHasError(true)}>
         <DslRenderer
           ref={rendererRef}
-          dsl={previewDsl!}
-          theme={theme}
+          dsl={dsl}
+          colorScheme="auto"
+          controls={false}
+          autoPlay
+          loop={false}
+          theme={THEME}
           onError={handleError}
+          onPlayStateChange={setIsPlaying}
           className="w-full h-full rounded-lg shadow-lg"
         />
       </ErrorBoundary>

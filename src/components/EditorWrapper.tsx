@@ -1,12 +1,13 @@
 /**
  * Wraps @elucim/editor's ElucimEditor for use in ScriptTable's lightbox.
  *
- * With 0.10.0:
+ * With 0.11.0:
  * - $token resolution handled by the editor itself
  * - onDocumentChange callback provides live document for saving
- * - initialFrame seeks to the last frame so all elements are visible
+ * - initialFrame="last" auto-resolves to the final frame
+ * - theme accepts CSS var() strings directly
  */
-import { useMemo, memo, lazy, Suspense } from "react";
+import { memo, lazy, Suspense } from "react";
 import type { ElucimDocument } from "@elucim/dsl";
 
 export interface EditorWrapperProps {
@@ -19,20 +20,11 @@ const LazyElucimEditor = lazy(() =>
   import("@elucim/editor").then((mod) => ({ default: mod.ElucimEditor }))
 );
 
-/** Extract durationInFrames from the document root. */
-function getLastFrame(doc: ElucimDocument): number {
-  const root = doc?.root as unknown as Record<string, unknown> | undefined;
-  const dur = root && typeof root.durationInFrames === "number" ? root.durationInFrames : 120;
-  return Math.max(0, dur - 1);
-}
-
 export default memo(function EditorWrapper({
   dsl,
   theme,
   onDocumentChange,
 }: EditorWrapperProps) {
-  const lastFrame = useMemo(() => getLastFrame(dsl), [dsl]);
-
   return (
     <Suspense
       fallback={
@@ -43,7 +35,7 @@ export default memo(function EditorWrapper({
     >
       <LazyElucimEditor
         initialDocument={dsl}
-        initialFrame={lastFrame}
+        initialFrame="last"
         theme={theme}
         onDocumentChange={onDocumentChange}
         className="w-full h-full"
