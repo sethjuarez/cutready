@@ -295,6 +295,8 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
     case "clear_feedback":
     case "export_logs":
       return null;
+    case "create_github_issue":
+      return "https://github.com/sethjuarez/cutready/issues/999";
     case "list_monitors":
       return [{ id: 0, name: "Primary Monitor", width: 1920, height: 1080, x: 0, y: 0, is_primary: true }];
     case "capture_screenshot":

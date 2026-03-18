@@ -285,6 +285,7 @@ pub fn run() {
             commands::feedback::clear_feedback,
             commands::feedback::delete_feedback,
             commands::feedback::export_logs,
+            commands::feedback::create_github_issue,
         ])
         .on_window_event(|window, event| {
             match event {

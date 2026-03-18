@@ -96,6 +96,58 @@ pub fn delete_feedback(app: tauri::AppHandle, index: usize) -> Result<(), String
     Ok(())
 }
 
+/// Create a GitHub issue via the `gh` CLI. Returns the issue URL on success.
+/// Uses `--body-file -` to pipe the body via stdin (avoids shell escaping and length limits).
+#[tauri::command]
+pub async fn create_github_issue(
+    repo: String,
+    title: String,
+    body: String,
+    labels: Option<Vec<String>>,
+) -> Result<String, String> {
+    use std::process::Stdio;
+    use tokio::io::AsyncWriteExt;
+
+    let mut cmd = tokio::process::Command::new("gh");
+    cmd.args(["issue", "create", "--repo", &repo, "--title", &title, "--body-file", "-"]);
+
+    if let Some(lbls) = &labels {
+        for label in lbls {
+            cmd.args(["--label", label]);
+        }
+    }
+
+    cmd.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
+
+    let mut child = cmd.spawn().map_err(|e| {
+        if e.kind() == std::io::ErrorKind::NotFound {
+            "GitHub CLI (gh) is not installed or not on PATH. Install it from https://cli.github.com and restart CutReady.".to_string()
+        } else {
+            format!("Failed to start gh CLI: {e}")
+        }
+    })?;
+
+    // Write body to stdin
+    if let Some(mut stdin) = child.stdin.take() {
+        stdin.write_all(body.as_bytes()).await.map_err(|e| format!("Failed to write issue body: {e}"))?;
+        // drop stdin to close the pipe
+    }
+
+    let output = child.wait_with_output().await.map_err(|e| format!("gh process error: {e}"))?;
+
+    if output.status.success() {
+        let url = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        Ok(url)
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        if stderr.contains("401") || stderr.contains("authentication") {
+            Err(format!("GitHub authentication failed. Run `gh auth login` in a terminal and restart CutReady.\n\nDetails: {stderr}"))
+        } else {
+            Err(format!("gh issue create failed: {stderr}"))
+        }
+    }
+}
+
 /// Collect all log files into a zip archive at the given destination path.
 #[tauri::command]
 pub fn export_logs(app: tauri::AppHandle, dest: String, debug_log: Option<String>) -> Result<(), String> {

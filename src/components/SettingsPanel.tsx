@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
 import { BUILT_IN_AGENTS } from "./ChatPanel";
 import { ImageManagerTab } from "./ImageManagerTab";
+import { useToastStore } from "../stores/toastStore";
 
 interface ModelInfo {
   id: string;
@@ -860,7 +861,7 @@ function FeedbackListTab() {
     return { title, body };
   };
 
-  /** Try LLM formatting, fall back to simple template. */
+  /** Try LLM formatting, fall back to simple template. Then submit via gh CLI, fall back to browser. */
   const formatAndOpenIssue = async (entry: FeedbackEntry, index: number) => {
     if (issuePending !== null) return;
     setIssuePending(index);
@@ -930,7 +931,26 @@ function FeedbackListTab() {
       ({ title, body } = buildFallbackIssue(entry, appVersion));
     }
 
-    // Truncate body if URL would be too long
+    // Try gh CLI first (no length limits, full body with debug log)
+    try {
+      const labels = [entry.category === "bug" ? "bug" : entry.category === "feature" ? "enhancement" : "feedback"];
+      const url = await invoke<string>("create_github_issue", {
+        repo: GITHUB_REPO,
+        title,
+        body,
+        labels,
+      });
+      if (url) {
+        try { await shellOpen(url); } catch { /* opened via gh, URL still returned */ }
+        useToastStore.getState().show(`Issue created: ${url}`);
+        setIssuePending(null);
+        return;
+      }
+    } catch (ghErr) {
+      console.warn("[feedback] gh issue create failed, falling back to browser:", ghErr);
+    }
+
+    // Fallback: open browser with URL (may truncate)
     const baseUrl = `https://github.com/${GITHUB_REPO}/issues/new?title=${encodeURIComponent(title)}&body=`;
     const maxBodyLen = MAX_URL_LENGTH - baseUrl.length;
     const encodedBody = encodeURIComponent(
