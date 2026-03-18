@@ -40,13 +40,13 @@ pub async fn create_project_folder(
     }
 
     // Auto-add to recent projects
-    let _ = add_to_recent_projects(&app, &path);
+    let _ = add_to_recent_projects(&app, &path, None);
 
     Ok(view)
 }
 
 /// Open an existing project folder.
-/// In multi-project repos, opens the repo and activates the first project.
+/// In multi-project repos, restores the last-used project (or falls back to the first).
 /// In single-project repos, behaves exactly as before (repo root = project root).
 #[tauri::command]
 pub async fn open_project_folder(
@@ -63,8 +63,13 @@ pub async fn open_project_folder(
         *repo_lock = Some(repo);
     }
 
-    // Activate the first project (or the sole project in single-project mode)
-    let entry = projects.first().ok_or("No projects found")?;
+    // Activate the last-used project, falling back to the first project
+    let last_active = get_last_active_for_repo(&app, &path);
+    let entry = last_active
+        .as_ref()
+        .and_then(|lp| projects.iter().find(|p| p.path == *lp))
+        .or(projects.first())
+        .ok_or("No projects found")?;
     let view = if entry.path == "." {
         // Single-project mode: root IS the project
         ProjectView::new(root.clone())
@@ -77,8 +82,13 @@ pub async fn open_project_folder(
         *current = Some(view.clone());
     }
 
-    // Auto-add to recent projects
-    let _ = add_to_recent_projects(&app, &path);
+    // Auto-add to recent projects, preserving the active project
+    let active_project = if entry.path != "." {
+        Some(entry.path.clone())
+    } else {
+        None
+    };
+    let _ = add_to_recent_projects(&app, &path, active_project);
 
     Ok(view)
 }
@@ -127,7 +137,7 @@ pub async fn add_recent_project(
     path: String,
     app: tauri::AppHandle,
 ) -> Result<(), String> {
-    add_to_recent_projects(&app, &path).map_err(|e| e.to_string())
+    add_to_recent_projects(&app, &path, None).map_err(|e| e.to_string())
 }
 
 /// Remove a project from the recent projects list.
@@ -168,7 +178,11 @@ pub async fn get_last_parent_folder(
 }
 
 /// Internal helper: add a project path to the recent list and update last parent folder.
-fn add_to_recent_projects(app: &tauri::AppHandle, path: &str) -> Result<(), String> {
+fn add_to_recent_projects(
+    app: &tauri::AppHandle,
+    path: &str,
+    last_active_project: Option<String>,
+) -> Result<(), String> {
     let store = app.store(STORE_FILE).map_err(|e| e.to_string())?;
 
     let mut recent: Vec<RecentProject> = store
@@ -185,7 +199,7 @@ fn add_to_recent_projects(app: &tauri::AppHandle, path: &str) -> Result<(), Stri
         RecentProject {
             path: path.to_string(),
             last_opened: Utc::now(),
-            last_active_project: None,
+            last_active_project,
         },
     );
 
@@ -209,6 +223,42 @@ fn add_to_recent_projects(app: &tauri::AppHandle, path: &str) -> Result<(), Stri
     Ok(())
 }
 
+/// Look up the last active project path for a given repo from the recent projects store.
+fn get_last_active_for_repo(app: &tauri::AppHandle, repo_path: &str) -> Option<String> {
+    let store = app.store(STORE_FILE).ok()?;
+    let recent: Vec<RecentProject> = store
+        .get("recent_projects")
+        .and_then(|v| serde_json::from_value(v).ok())
+        .unwrap_or_default();
+    recent
+        .iter()
+        .find(|r| r.path == repo_path)
+        .and_then(|r| r.last_active_project.clone())
+}
+
+/// Update just the `last_active_project` field for a repo in the recent projects store.
+fn update_last_active_project(
+    app: &tauri::AppHandle,
+    repo_path: &str,
+    project_path: Option<String>,
+) -> Result<(), String> {
+    let store = app.store(STORE_FILE).map_err(|e| e.to_string())?;
+    let mut recent: Vec<RecentProject> = store
+        .get("recent_projects")
+        .and_then(|v| serde_json::from_value(v).ok())
+        .unwrap_or_default();
+
+    if let Some(entry) = recent.iter_mut().find(|r| r.path == repo_path) {
+        entry.last_active_project = project_path;
+    }
+
+    store.set(
+        "recent_projects",
+        serde_json::to_value(&recent).unwrap_or_default(),
+    );
+    store.save().map_err(|e| e.to_string())?;
+    Ok(())
+}
 // ── Sidebar order commands ─────────────────────────────────────────
 
 /// Get the sidebar ordering manifest for the current project.
@@ -289,6 +339,7 @@ pub async fn is_multi_project(
 #[tauri::command]
 pub async fn switch_project(
     project_path: String,
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
 ) -> Result<ProjectView, String> {
     let root = repo_root(&state)?;
@@ -301,13 +352,23 @@ pub async fn switch_project(
         .ok_or_else(|| format!("Project '{}' not found in repo", project_path))?;
 
     let view = if entry.path == "." {
-        ProjectView::new(root)
+        ProjectView::new(root.clone())
     } else {
-        ProjectView::in_repo(root, &entry.path, entry.name.clone())
+        ProjectView::in_repo(root.clone(), &entry.path, entry.name.clone())
     };
 
     let mut current = state.current_project.lock().map_err(|e| e.to_string())?;
     *current = Some(view.clone());
+
+    // Persist the active project so it's restored on next open
+    let repo_path = root.to_string_lossy().to_string();
+    let active = if project_path != "." {
+        Some(project_path)
+    } else {
+        None
+    };
+    let _ = update_last_active_project(&app, &repo_path, active);
+
     Ok(view)
 }
 
