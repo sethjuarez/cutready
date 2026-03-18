@@ -790,7 +790,7 @@ function ChatTab() {
   }, [showContextPicker, contextFilter, allFiles, references]);
 
   // Available tools list
-  const availableTools = ["list_project_files", "read_note", "read_sketch", "set_planning_rows", "update_planning_row", "set_row_visual", "design_plan", "list_project_images", "save_feedback", "delegate_to_agent", "fetch_url"];
+  const availableTools = ["list_project_files", "read_note", "read_sketch", "set_planning_rows", "update_planning_row", "set_row_visual", "design_plan", "list_project_images", "save_feedback", "delegate_to_agent", "fetch_url", "list_snapshots", "read_file_at_snapshot", "compare_snapshots", "list_timelines", "get_current_snapshot"];
 
   const buildConfig = useCallback(() => ({
     provider: settings.aiProvider,
