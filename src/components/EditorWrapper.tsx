@@ -51,7 +51,10 @@ export default memo(function EditorWrapper({
         initialDocument={dsl}
         initialFrame="last"
         theme={theme}
-        editorTheme={{ "color-scheme": isDark ? "dark" : "light" }}
+        editorTheme={{
+          "color-scheme": isDark ? "dark" : "light",
+          "bg": isDark ? "#252220" : "#eae7e2",
+        }}
         onDocumentChange={onDocumentChange}
         className="w-full h-full"
         style={{ width: "100%", height: "100%" }}
