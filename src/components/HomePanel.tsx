@@ -227,7 +227,7 @@ export function HomePanel() {
                 <ActionIcon type="new" />
               </div>
               <div>
-                <div className="text-sm font-semibold">New Project</div>
+                <div className="text-sm font-semibold">New Workspace</div>
                 <div className="text-xs text-[var(--color-text-secondary)] mt-0.5">
                   Start from scratch
                 </div>
