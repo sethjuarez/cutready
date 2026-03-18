@@ -36,6 +36,7 @@
       "allow": [{ "path": "**" }]
     },
     "store:default",
+    "stronghold:default",
     "global-shortcut:default",
     "window-state:default",
     "log:default",

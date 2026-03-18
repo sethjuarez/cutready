@@ -51,10 +51,16 @@ tauri-plugin-process = "2"
 tauri-plugin-updater = "2"
 scraper = "0.25.0"
 tauri-plugin-opener = "2.5.3"
+tauri-plugin-stronghold = "2"
 
 # Vendor OpenSSL on macOS to support cross-compilation (ARM → Intel)
 [target.'cfg(target_os = "macos")'.dependencies]
 openssl-sys = { version = "0.9", features = ["vendored"] }
+
+# Stronghold's scrypt dependency needs opt-level 3 even in dev mode
+# https://github.com/tauri-apps/plugins-workspace/issues/2048
+[profile.dev.package.scrypt]
+opt-level = 3
 
 [dev-dependencies]
 tempfile = "3"

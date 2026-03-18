@@ -122,6 +122,16 @@ pub fn run() {
             // Initialize dev trace logger (no-op in release builds)
             crate::util::trace::init();
 
+            // Stronghold: encrypted vault for secrets (API keys, tokens).
+            // Salt file auto-created in app_local_data_dir on first run.
+            let salt_path = app
+                .path()
+                .app_local_data_dir()
+                .expect("could not resolve app local data path")
+                .join("salt.txt");
+            app.handle()
+                .plugin(tauri_plugin_stronghold::Builder::with_argon2(&salt_path).build())?;
+
             use tauri_plugin_global_shortcut::{
                 Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState,
             };

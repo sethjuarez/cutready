@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { create } from "zustand";
 import { LazyStore } from "@tauri-apps/plugin-store";
 import { invoke } from "@tauri-apps/api/core";
+import { isSecretKey, loadAllSecrets, setSecret, type SecretKey } from "./useSecretStore";
 
 export interface AgentPreset {
   id: string;
@@ -164,6 +165,35 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
       result.aiProvider = "azure_openai";
     }
 
+    // Load secrets from Stronghold (encrypted vault)
+    try {
+      const secrets = await loadAllSecrets();
+
+      // Migrate: if stronghold is empty but plain store has secrets, move them over
+      let migrated = false;
+      for (const sk of Object.keys(secrets) as SecretKey[]) {
+        const plainVal = (result as Record<string, unknown>)[sk] as string | undefined;
+        if (!secrets[sk] && plainVal) {
+          // Secret exists in plain store but not vault — migrate it
+          await setSecret(sk, plainVal);
+          secrets[sk] = plainVal;
+          // Clear from plain store
+          await store.set(sk, "");
+          migrated = true;
+        }
+      }
+      if (migrated) await store.save();
+
+      // Override result with vault values (vault is authoritative)
+      for (const sk of Object.keys(secrets) as SecretKey[]) {
+        if (secrets[sk]) {
+          (result as Record<string, unknown>)[sk] = secrets[sk];
+        }
+      }
+    } catch {
+      // Stronghold unavailable (e.g. browser dev mode) — use plain store values
+    }
+
     set({ settings: { ...get().settings, ...result }, loaded: true });
 
     // Auto-refresh OAuth token on startup if we have a refresh token
@@ -183,12 +213,14 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
             updates.aiRefreshToken = tokenResult.refresh_token;
           }
           set((state) => ({ settings: { ...state.settings, ...updates } }));
-          if (store) {
-            await store.set("aiAccessToken", tokenResult.access_token);
+          // Save refreshed tokens to vault
+          try {
+            await setSecret("aiAccessToken", tokenResult.access_token);
             if (tokenResult.refresh_token) {
-              await store.set("aiRefreshToken", tokenResult.refresh_token);
+              await setSecret("aiRefreshToken", tokenResult.refresh_token);
             }
-            await store.save();
+          } catch {
+            // Vault unavailable — fall through
           }
         }
       } catch {
@@ -227,16 +259,34 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
     set((state) => ({ settings: { ...state.settings, [key]: value } }));
 
     if (WORKSPACE_KEYS.includes(key as keyof WorkspaceSettings)) {
-      // Workspace setting → save to repo's .cutready/settings.json
+      // Workspace setting — special handling for repoToken (encrypted)
+      if (isSecretKey(key as string)) {
+        try { await setSecret(key as SecretKey, value as string); } catch { /* vault unavailable */ }
+      }
       try {
         const data = await invoke<Record<string, unknown>>("get_workspace_settings");
-        data[key] = value;
+        // Don't persist secrets in workspace settings file
+        if (!isSecretKey(key as string)) {
+          data[key] = value;
+        }
         await invoke("set_workspace_settings", { settings: data });
       } catch {
         // No repo open — setting stored in memory only
       }
+    } else if (isSecretKey(key as string)) {
+      // Global secret → save to encrypted vault
+      try {
+        await setSecret(key as SecretKey, value as string);
+      } catch {
+        // Vault unavailable — fall back to plain store
+        const store = get()._store;
+        if (store) {
+          await store.set(key, value);
+          await store.save();
+        }
+      }
     } else {
-      // Global setting → save to Tauri app data
+      // Global non-secret → save to Tauri app data (plaintext)
       const store = get()._store;
       if (store) {
         await store.set(key, value);
