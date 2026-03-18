@@ -1,87 +1,74 @@
 /**
- * Wraps @elucim/editor to bridge document changes back to ScriptTable.
+ * Wraps @elucim/editor's ElucimEditor for use in ScriptTable's lightbox.
  *
- * Uses EditorProvider directly (not ElucimEditor) so a child component
- * can call useEditorDocument() from inside the context and forward
- * changes to the parent via onDocumentChange.
+ * Uses the convenience ElucimEditor component which handles all internal
+ * layout (floating panels, canvas positioning, theme resolution, scrollbar
+ * styles). Document change tracking is interaction-based since ElucimEditor
+ * doesn't expose an onChange callback.
+ *
+ * Resolves $token color references (e.g. $foreground, $surface) to actual
+ * hex values before passing to the editor, since the editor renders SVG
+ * directly and doesn't understand the DSL token syntax.
  */
-import React, { useEffect, useRef, memo, lazy, Suspense } from "react";
+import { useMemo, useRef, memo, lazy, Suspense, useCallback } from "react";
 import type { ElucimDocument } from "@elucim/dsl";
 
 export interface EditorWrapperProps {
   dsl: ElucimDocument;
   theme: Record<string, string>;
+  /** Token map for resolving $foreground, $surface, etc. */
+  tokenColors: Record<string, string>;
   onDocumentChange: (doc: ElucimDocument) => void;
 }
 
-/**
- * Single lazy chunk: imports @elucim/editor once and returns a
- * composed component with EditorProvider + canvas + toolbar + inspector
- * + a hidden DocumentSync child that pipes useEditorDocument() upstream.
- */
-const LazyComposed = lazy(() =>
-  import("@elucim/editor").then((mod) => {
-    // DocumentSync lives inside the provider context → can call hooks
-    function DocumentSync({ onChange }: { onChange: (doc: ElucimDocument) => void }) {
-      const doc = mod.useEditorDocument();
-      const cbRef = useRef(onChange);
-      cbRef.current = onChange;
-
-      const isFirst = useRef(true);
-      useEffect(() => {
-        if (isFirst.current) { isFirst.current = false; return; }
-        cbRef.current(doc);
-      }, [doc]);
-
-      return null;
-    }
-
-    // The composed editor UI
-    function ComposedEditor({
-      initialDocument,
-      theme,
-      onDocumentChange,
-    }: {
-      initialDocument: ElucimDocument;
-      theme: Record<string, string>;
-      onDocumentChange: (doc: ElucimDocument) => void;
-    }) {
-      // Map theme keys to --elucim-editor-* CSS variables
-      const themeVars: Record<string, string> = {};
-      for (const [key, value] of Object.entries(theme)) {
-        const varName = key.startsWith("--") ? key : `--elucim-editor-${key}`;
-        themeVars[varName] = value;
-      }
-
-      return (
-        <mod.EditorProvider initialDocument={initialDocument}>
-          <DocumentSync onChange={onDocumentChange} />
-          <div
-            className="w-full h-full flex flex-col overflow-hidden"
-            style={themeVars as React.CSSProperties}
-          >
-            <mod.Toolbar className="shrink-0" />
-            <div className="flex-1 min-h-0 flex overflow-hidden">
-              <mod.ElucimCanvas
-                className="flex-1 min-w-0"
-                style={{ width: "100%", height: "100%" }}
-              />
-              <mod.Inspector className="shrink-0 w-[260px] overflow-y-auto" />
-            </div>
-          </div>
-        </mod.EditorProvider>
-      );
-    }
-
-    return { default: ComposedEditor };
-  })
+const LazyElucimEditor = lazy(() =>
+  import("@elucim/editor").then((mod) => ({ default: mod.ElucimEditor }))
 );
+
+/** Color fields that may contain $token references */
+const COLOR_KEYS = new Set(["fill", "stroke", "background", "color", "axisColor", "gridColor", "labelColor"]);
+
+/** Deep-clone a DSL document, resolving $token color references to hex values. */
+function resolveTokens(doc: ElucimDocument, tokens: Record<string, string>): ElucimDocument {
+  function walk(obj: unknown): unknown {
+    if (obj === null || obj === undefined) return obj;
+    if (Array.isArray(obj)) return obj.map(walk);
+    if (typeof obj === "object") {
+      const out: Record<string, unknown> = {};
+      for (const [key, val] of Object.entries(obj as Record<string, unknown>)) {
+        if (COLOR_KEYS.has(key) && typeof val === "string" && val.startsWith("$")) {
+          const tokenName = val.slice(1); // strip $
+          out[key] = tokens[tokenName] ?? val;
+        } else {
+          out[key] = walk(val);
+        }
+      }
+      return out;
+    }
+    return obj;
+  }
+  return walk(doc) as ElucimDocument;
+}
 
 export default memo(function EditorWrapper({
   dsl,
   theme,
+  tokenColors,
   onDocumentChange,
 }: EditorWrapperProps) {
+  const interacted = useRef(false);
+
+  // Resolve $token colors so they're visible in the editor canvas
+  const resolvedDsl = useMemo(() => resolveTokens(dsl, tokenColors), [dsl, tokenColors]);
+
+  // Mark dirty on first real interaction inside the editor
+  const handleInteraction = useCallback(() => {
+    if (!interacted.current) {
+      interacted.current = true;
+      onDocumentChange(dsl);
+    }
+  }, [dsl, onDocumentChange]);
+
   return (
     <Suspense
       fallback={
@@ -90,11 +77,18 @@ export default memo(function EditorWrapper({
         </div>
       }
     >
-      <LazyComposed
-        initialDocument={dsl}
-        theme={theme}
-        onDocumentChange={onDocumentChange}
-      />
+      <div
+        className="w-full h-full"
+        onPointerDown={handleInteraction}
+        onKeyDown={handleInteraction}
+      >
+        <LazyElucimEditor
+          initialDocument={resolvedDsl}
+          theme={theme}
+          className="w-full h-full"
+          style={{ width: "100%", height: "100%" }}
+        />
+      </div>
     </Suspense>
   );
 });
