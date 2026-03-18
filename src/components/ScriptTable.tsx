@@ -490,20 +490,18 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
             </div>
 
             {/* Content area */}
-            <div className="flex-1 min-h-0 relative">
+            <div className="flex-1 min-h-0 relative overflow-hidden">
               {lightboxMode === "preview" ? (
                 /* Preview mode — DslRenderer */
-                <div className="w-full h-full flex items-center justify-center">
-                  <div className="rounded-lg overflow-hidden shadow-lg bg-[var(--color-surface)]" style={{ width: "100%", height: "100%", maxWidth: "1280px", aspectRatio: "960 / 540", margin: "auto" }}>
-                    <Suspense fallback={<div className="w-full h-full bg-[var(--color-surface-alt)] animate-pulse" />}>
-                      <VisualCell
-                        visualPath={visualLightbox.visualPath}
-                        mode="full"
-                        className="w-full h-full"
-                        key={`${visualLightbox.visualPath}-v${visualVersion}`}
-                      />
-                    </Suspense>
-                  </div>
+                <div className="absolute inset-0 flex items-center justify-center p-4">
+                  <Suspense fallback={<div className="w-full h-full bg-[var(--color-surface-alt)] animate-pulse rounded-lg" />}>
+                    <VisualCell
+                      visualPath={visualLightbox.visualPath}
+                      mode="full"
+                      className="w-full h-full"
+                      key={`${visualLightbox.visualPath}-v${visualVersion}`}
+                    />
+                  </Suspense>
                 </div>
               ) : (
                 /* Edit mode — ElucimEditor */

@@ -94,6 +94,29 @@ export default function VisualCell({ visualPath, mode, onClick, className, contr
     }
   }, [controlRef, replay, isPlaying]);
 
+  // Full mode: measure container and compute fitted width to prevent overflow.
+  // fitToContainer sets SVG width=100% and derives height from viewBox, which
+  // overflows height-limited containers. We compute the max width that keeps
+  // the scene within bounds: min(containerWidth, containerHeight * aspectRatio).
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [fitWidth, setFitWidth] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (mode !== "full") return;
+    const el = containerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([entry]) => {
+      const { width: cw, height: ch } = entry.contentRect;
+      if (!dsl || cw === 0 || ch === 0) return;
+      const sw = (dsl as unknown as { width?: number }).width || 960;
+      const sh = (dsl as unknown as { height?: number }).height || 540;
+      const ratio = sw / sh;
+      setFitWidth(Math.min(cw, ch * ratio));
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [dsl, mode]);
+
   if (hasError) {
     return (
       <div
@@ -147,24 +170,27 @@ export default function VisualCell({ visualPath, mode, onClick, className, contr
     );
   }
 
-  // Full mode — fills container, CutReady themed, no built-in controls
+  // Full mode — fills container, centered, properly sized
   return (
-    <div className={`w-full h-full flex items-center justify-center ${className ?? ""}`}>
-      <DslRenderer
-        ref={rendererRef}
-        dsl={dsl}
-        controls={false}
-        autoPlay
-        loop={false}
-        colorScheme={isDark ? "dark" : "light"}
-        theme={THEME}
-        fitToContainer
-        onError={handleError}
-        onRenderError={() => setHasError(true)}
-        fallback={ERROR_FALLBACK}
-        onPlayStateChange={setIsPlaying}
-        className="w-full h-full rounded-lg shadow-lg"
-      />
+    <div ref={containerRef} className={`w-full h-full flex items-center justify-center ${className ?? ""}`}>
+      {fitWidth !== null && (
+        <div style={{ width: fitWidth }}>
+          <DslRenderer
+            ref={rendererRef}
+            dsl={dsl}
+            controls={false}
+            autoPlay
+            loop={false}
+            colorScheme={isDark ? "dark" : "light"}
+            theme={THEME}
+            fitToContainer
+            onError={handleError}
+            onRenderError={() => setHasError(true)}
+            fallback={ERROR_FALLBACK}
+            onPlayStateChange={setIsPlaying}
+          />
+        </div>
+      )}
     </div>
   );
 }
