@@ -293,6 +293,7 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
       ];
     case "save_feedback":
     case "clear_feedback":
+    case "export_logs":
       return null;
     case "list_monitors":
       return [{ id: 0, name: "Primary Monitor", width: 1920, height: 1080, x: 0, y: 0, is_primary: true }];

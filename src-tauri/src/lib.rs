@@ -284,6 +284,7 @@ pub fn run() {
             commands::feedback::list_feedback,
             commands::feedback::clear_feedback,
             commands::feedback::delete_feedback,
+            commands::feedback::export_logs,
         ])
         .on_window_event(|window, event| {
             match event {
