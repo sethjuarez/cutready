@@ -174,7 +174,15 @@ export function HomePanel() {
       setShowClone(false);
     } catch (err) {
       console.error("Clone failed:", err);
-      showToast(`Clone failed: ${err}`, 5000);
+      const msg = String(err);
+      if (msg.includes("401")) {
+        showToast(
+          "Clone failed: authentication required. Install the GitHub CLI (gh) and run 'gh auth login', then restart CutReady — or paste an access token above.",
+          8000,
+        );
+      } else {
+        showToast(`Clone failed: ${msg}`, 5000);
+      }
     } finally {
       setCloning(false);
     }
