@@ -158,23 +158,45 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
   }, [visualLightbox?.visualPath, lightboxMode]);
 
   // Resolve CutReady CSS vars to editor theme overrides.
-  // With 0.9.0, color-scheme drives light/dark defaults for unset tokens.
+  // Includes both editor chrome tokens (bg, fg, panel, etc.) AND
+  // DSL content tokens (foreground, background, muted, etc.) so $token
+  // references in the canvas resolve to CutReady's warm palette.
   const editorTheme = useMemo(() => {
     const s = getComputedStyle(document.documentElement);
     const get = (v: string, fb: string) => s.getPropertyValue(v).trim() || fb;
     const isDark = document.documentElement.classList.contains("dark");
 
+    const fg = get("--color-text", isDark ? "#e8e4df" : "#2c2925");
+    const bg = get("--color-surface", isDark ? "#2b2926" : "#faf9f7");
+    const accent = get("--color-accent", isDark ? "#a49afa" : "#6b5ce7");
+    const secondary = get("--color-text-secondary", isDark ? "#a09b93" : "#78756f");
+    const surfaceAlt = get("--color-surface-alt", isDark ? "#353230" : "#f0efed");
+    const borderColor = get("--color-border", isDark ? "#4a4644" : "#e2e0dd");
+
     return {
+      // Editor chrome tokens
       "color-scheme": isDark ? "dark" : "light",
-      accent: get("--color-accent", isDark ? "#a49afa" : "#6b5ce7"),
-      bg: get("--color-surface", isDark ? "#2b2926" : "#faf9f7"),
-      surface: get("--color-surface-alt", isDark ? "#353230" : "#f0efed"),
-      fg: get("--color-text", isDark ? "#e8e4df" : "#2c2925"),
-      "text-secondary": get("--color-text-secondary", isDark ? "#a09b93" : "#78756f"),
-      border: get("--color-border", isDark ? "#4a4644" : "#e2e0dd"),
+      accent,
+      bg,
+      surface: surfaceAlt,
+      fg,
+      "text-secondary": secondary,
+      border: borderColor,
       panel: isDark ? "rgba(43,41,38,0.95)" : "rgba(250,249,247,0.95)",
       chrome: isDark ? "rgba(53,50,48,0.85)" : "rgba(240,239,237,0.85)",
       "input-bg": isDark ? "#231f1d" : "#ffffff",
+      // DSL content tokens (for $token resolution on the canvas)
+      foreground: fg,
+      background: bg,
+      "scene-bg": bg,
+      "scene-fg": fg,
+      muted: secondary,
+      primary: accent,
+      secondary: isDark ? "#a78bfa" : "#7c3aed",
+      tertiary: isDark ? "#f472b6" : "#db2777",
+      success: isDark ? "#34d399" : "#16a34a",
+      warning: isDark ? "#fbbf24" : "#d97706",
+      error: isDark ? "#f87171" : "#dc2626",
     };
   }, [visualLightbox]);
 
