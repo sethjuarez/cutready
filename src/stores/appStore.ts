@@ -1356,6 +1356,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await get().loadGraphData();
       await get().checkDirty();
       await get().checkRewound();
+      await get().refreshSyncStatus();
     } catch (err) {
       console.error("Failed to save version:", err);
     }
