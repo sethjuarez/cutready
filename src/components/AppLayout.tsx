@@ -14,6 +14,7 @@ import { OutputPanel } from "./OutputPanel";
 import { CommandPalette } from "./CommandPalette";
 import { TitleBar } from "./TitleBar";
 import { SnapshotDialog } from "./SnapshotDialog";
+import { IdentityDialog } from "./IdentityDialog";
 import { MergeConflictPanel } from "./MergeConflictPanel";
 import { commandRegistry, useCommands } from "../services/commandRegistry";
 
@@ -264,6 +265,7 @@ export function AppLayout() {
       />
 
       <SnapshotDialog />
+      <IdentityDialog />
     </>
   );
 }

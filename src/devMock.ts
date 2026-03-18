@@ -169,6 +169,10 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
       return false;
     case "is_rewound":
       return false;
+    case "check_git_identity":
+      return { name: "Dev User", email: "dev@example.com", is_fallback: false };
+    case "set_git_identity":
+      return null;
     case "create_snapshot":
       return "new-snapshot-id";
     case "get_sidebar_order":

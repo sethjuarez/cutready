@@ -26,6 +26,24 @@ pub async fn save_with_label(
 }
 
 #[tauri::command]
+pub async fn check_git_identity(
+    state: State<'_, AppState>,
+) -> Result<versioning::IdentityStatus, String> {
+    let root = versioning_root(&state)?;
+    Ok(versioning::check_git_identity(&root))
+}
+
+#[tauri::command]
+pub async fn set_git_identity(
+    name: String,
+    email: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let root = versioning_root(&state)?;
+    versioning::set_git_identity(&root, &name, &email).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub async fn list_versions(state: State<'_, AppState>) -> Result<Vec<VersionEntry>, String> {
     let root = versioning_root(&state)?;
 
