@@ -1,24 +1,22 @@
 /**
- * Wraps @elucim/editor's ElucimEditor for use in ScriptTable's lightbox.
+ * Wraps @elucim/editor for use in ScriptTable's lightbox.
  *
- * - Resolves $token color references in element fill/stroke to hex values
- * - Sets initialFrame to durationInFrames-1 so all animated elements visible
- * - Passes light/dark theme from CutReady
+ * Uses EditorProvider directly (not ElucimEditor) so DocumentBridge
+ * can call useEditorDocument() to track live changes for saving.
+ * ElucimEditor's internal layout (yo) is not exported, so we use
+ * the sub-components: ElucimCanvas, Toolbar, Inspector, Timeline.
+ *
+ * Resolves $token color references in element colors to hex values.
  */
-import { useMemo, useRef, memo, lazy, Suspense, useCallback } from "react";
+import { useMemo, useRef, useEffect, memo, lazy, Suspense } from "react";
 import type { ElucimDocument } from "@elucim/dsl";
 
 export interface EditorWrapperProps {
   dsl: ElucimDocument;
   theme: Record<string, string>;
-  /** Token map for resolving $foreground, $surface, etc. in element colors */
   tokenColors: Record<string, string>;
   onDocumentChange: (doc: ElucimDocument) => void;
 }
-
-const LazyElucimEditor = lazy(() =>
-  import("@elucim/editor").then((mod) => ({ default: mod.ElucimEditor }))
-);
 
 /** Color fields that may contain $token references */
 const COLOR_KEYS = new Set(["fill", "stroke", "background", "color", "axisColor", "gridColor", "labelColor"]);
@@ -51,23 +49,96 @@ function getLastFrame(doc: ElucimDocument): number {
   return Math.max(0, dur - 1);
 }
 
+/**
+ * Single lazy chunk: imports editor once, defines DocumentBridge
+ * inside the same module scope so it can call useEditorDocument().
+ */
+const LazyComposedEditor = lazy(() =>
+  import("@elucim/editor").then((mod) => {
+    /** Reads live document and forwards changes to parent. */
+    function DocumentBridge({ onChange }: { onChange: (doc: ElucimDocument) => void }) {
+      const doc = mod.useEditorDocument();
+      const cbRef = useRef(onChange);
+      cbRef.current = onChange;
+      const isFirst = useRef(true);
+
+      useEffect(() => {
+        if (isFirst.current) { isFirst.current = false; return; }
+        cbRef.current(doc);
+      }, [doc]);
+
+      return null;
+    }
+
+    /** Resolves theme keys to --elucim-editor-* CSS variables. */
+    function buildThemeVars(theme: Record<string, string>): React.CSSProperties {
+      const vars: Record<string, string> = {};
+      for (const [key, value] of Object.entries(theme)) {
+        vars[key.startsWith("--") ? key : `--elucim-editor-${key}`] = value;
+      }
+      return vars as React.CSSProperties;
+    }
+
+    function ComposedEditor({
+      initialDocument,
+      initialFrame,
+      theme,
+      onDocumentChange,
+    }: {
+      initialDocument: ElucimDocument;
+      initialFrame: number;
+      theme: Record<string, string>;
+      onDocumentChange: (doc: ElucimDocument) => void;
+    }) {
+      const themeVars = useMemo(() => buildThemeVars(theme), [theme]);
+      const isDark = (theme["color-scheme"] ?? "dark") === "dark";
+
+      return (
+        <mod.EditorProvider initialDocument={initialDocument} initialFrame={initialFrame}>
+          <DocumentBridge onChange={onDocumentChange} />
+          <div
+            className="elucim-editor w-full h-full flex flex-col overflow-hidden"
+            style={{
+              ...themeVars,
+              background: `var(--elucim-editor-bg, ${isDark ? "#1a1a2e" : "#faf9f7"})`,
+              color: `var(--elucim-editor-fg, ${isDark ? "#e0e0e0" : "#2c2925"})`,
+              fontFamily: "system-ui, -apple-system, sans-serif",
+              userSelect: "none",
+              colorScheme: isDark ? "dark" : "light",
+            }}
+          >
+            <div className="flex-1 min-h-0 relative">
+              <mod.ElucimCanvas
+                className="absolute inset-0"
+                style={{ width: "100%", height: "100%" }}
+              />
+              {/* Floating toolbar */}
+              <div className="absolute top-3 left-3 z-10">
+                <mod.Toolbar />
+              </div>
+              {/* Floating inspector (only when selection) */}
+              <div className="absolute top-3 right-3 z-10">
+                <mod.Inspector />
+              </div>
+            </div>
+            <mod.Timeline className="shrink-0" />
+          </div>
+        </mod.EditorProvider>
+      );
+    }
+
+    return { default: ComposedEditor };
+  })
+);
+
 export default memo(function EditorWrapper({
   dsl,
   theme,
   tokenColors,
   onDocumentChange,
 }: EditorWrapperProps) {
-  const interacted = useRef(false);
-
   const resolvedDsl = useMemo(() => resolveTokenColors(dsl, tokenColors), [dsl, tokenColors]);
   const lastFrame = useMemo(() => getLastFrame(dsl), [dsl]);
-
-  const handleInteraction = useCallback(() => {
-    if (!interacted.current) {
-      interacted.current = true;
-      onDocumentChange(dsl);
-    }
-  }, [dsl, onDocumentChange]);
 
   return (
     <Suspense
@@ -77,19 +148,12 @@ export default memo(function EditorWrapper({
         </div>
       }
     >
-      <div
-        className="w-full h-full"
-        onPointerDown={handleInteraction}
-        onKeyDown={handleInteraction}
-      >
-        <LazyElucimEditor
-          initialDocument={resolvedDsl}
-          initialFrame={lastFrame}
-          theme={theme}
-          className="w-full h-full"
-          style={{ width: "100%", height: "100%" }}
-        />
-      </div>
+      <LazyComposedEditor
+        initialDocument={resolvedDsl}
+        initialFrame={lastFrame}
+        theme={theme}
+        onDocumentChange={onDocumentChange}
+      />
     </Suspense>
   );
 });
