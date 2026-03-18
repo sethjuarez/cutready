@@ -9,6 +9,18 @@
 Covector manages this changelog. Do not edit manually.
 Each release section is generated from `.changes/*.md` files.
 
+## [0.13.0](https://github.com/sethjuarez/cutready/compare/v0.12.0...v0.13.0) (2026-03-18)
+
+
+### Features
+
+* identity prompt dialog when git identity is unresolved ([8a5ce33](https://github.com/sethjuarez/cutready/commit/8a5ce3378b5ddb7574d94acd5840537e0edab05a))
+
+
+### Bug Fixes
+
+* resolve git identity from gh CLI to fix reflog errors on fresh machines ([409546b](https://github.com/sethjuarez/cutready/commit/409546bf14a295610f7073d68073a26c70214911))
+
 ## [0.12.0](https://github.com/sethjuarez/cutready/compare/v0.11.0...v0.12.0) (2026-03-18)
 
 
