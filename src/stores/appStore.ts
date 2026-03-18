@@ -673,11 +673,9 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     get()._persistTabs();
   },
   openTabInSplit: (tabId) => {
-    const { openTabs, activeTabId } = get();
+    const { openTabs } = get();
     const tab = openTabs.find((t) => t.id === tabId);
     if (!tab) return;
-    // Don't split to the same tab that's already active
-    if (tabId === activeTabId) return;
     set({ splitTabId: tabId });
   },
   closeSplit: () => {

@@ -62,7 +62,7 @@ export function TabBar() {
           className="fixed z-[100] py-1 min-w-[200px] bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg shadow-lg"
           style={{ left: contextMenu.x, top: contextMenu.y }}
         >
-          {contextMenu.tabId !== activeTabId && (
+          {contextMenu.tabId !== splitTabId && (
             <button
               className="flex items-center gap-2 w-full px-3 py-1.5 text-[12px] text-left text-[var(--color-text)] hover:bg-[var(--color-accent)]/10 hover:text-[var(--color-accent)] transition-colors"
               onClick={() => { openTabInSplit(contextMenu.tabId); setContextMenu(null); }}

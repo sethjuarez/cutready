@@ -58,7 +58,7 @@ function SketchPreviewContent({ path }: { path: string }) {
 
   useEffect(() => {
     let cancelled = false;
-    invoke<Sketch>("read_sketch", { relativePath: path })
+    invoke<Sketch>("get_sketch", { relativePath: path })
       .then((s) => { if (!cancelled) setSketch(s); })
       .catch(() => { if (!cancelled) setError(true); });
     return () => { cancelled = true; };
@@ -67,7 +67,7 @@ function SketchPreviewContent({ path }: { path: string }) {
   // Re-load when AI updates or sketch changes happen
   useEffect(() => {
     const handler = () => {
-      invoke<Sketch>("read_sketch", { relativePath: path })
+      invoke<Sketch>("get_sketch", { relativePath: path })
         .then((s) => setSketch(s))
         .catch(() => {});
     };
@@ -132,7 +132,7 @@ function NotePreviewContent({ path }: { path: string }) {
 
   useEffect(() => {
     let cancelled = false;
-    invoke<string>("read_note", { relativePath: path })
+    invoke<string>("get_note", { relativePath: path })
       .then((c) => { if (!cancelled) setContent(c); })
       .catch(() => { if (!cancelled) setError(true); });
     return () => { cancelled = true; };
@@ -141,7 +141,7 @@ function NotePreviewContent({ path }: { path: string }) {
   // Re-load when note changes
   useEffect(() => {
     const handler = () => {
-      invoke<string>("read_note", { relativePath: path })
+      invoke<string>("get_note", { relativePath: path })
         .then((c) => setContent(c))
         .catch(() => {});
     };
@@ -165,7 +165,7 @@ function StoryboardPreviewContent({ path }: { path: string }) {
 
   useEffect(() => {
     let cancelled = false;
-    invoke<Storyboard>("read_storyboard", { relativePath: path })
+    invoke<Storyboard>("get_storyboard", { relativePath: path })
       .then((s) => { if (!cancelled) setStoryboard(s); })
       .catch(() => { if (!cancelled) setError(true); });
     return () => { cancelled = true; };
