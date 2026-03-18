@@ -12,11 +12,13 @@ formats. This page documents the structure of each file type.
 
 ## Directory Layout
 
-Projects use a **flat directory layout**. All documents live at the root of the
-project folder, though subdirectories are supported for organization:
+Workspaces use a **flat directory layout** in single-project mode. Multi-project
+workspaces have each project in its own subdirectory:
+
+### Single-Project
 
 ```text
-my-project/
+my-workspace/
 ├── project.json
 ├── .cutready-order.json
 ├── .git/
@@ -28,6 +30,25 @@ my-project/
 ├── research.md
 ├── screenshot-001.png
 └── screenshot-002.png
+```
+
+### Multi-Project
+
+```text
+my-workspace/
+├── .cutready/
+│   └── projects.json
+├── .git/
+├── project-alpha/
+│   ├── project.json
+│   ├── .cutready-order.json
+│   ├── intro.sk
+│   └── demo-flow.sb
+└── project-beta/
+    ├── project.json
+    ├── .cutready-order.json
+    ├── overview.sk
+    └── notes.md
 ```
 
 CutReady recursively discovers `.sk`, `.sb`, and `.md` files within the
@@ -117,7 +138,7 @@ CodeMirror-based markdown editor.
 
 ## Sidebar Ordering (`.cutready-order.json`)
 
-This file persists the user's preferred document order in the sidebar:
+This file persists the user's preferred document order in the Explorer:
 
 ```json
 {
@@ -131,12 +152,12 @@ This file persists the user's preferred document order in the sidebar:
 }
 ```
 
-When a user drag-and-drops documents in the sidebar, the new order is written
+When a user drag-and-drops documents in the Explorer, the new order is written
 to this file. Documents not listed in the order file appear at the end.
 
 ## Version History (`.git/`)
 
-Each project contains an embedded git repository managed by **gitoxide (gix)**:
+Each workspace contains an embedded git repository managed by **gitoxide (gix)**:
 
 - Snapshots are stored as git commits
 - The full document state is committed on each save (`Ctrl+S`)
@@ -162,3 +183,38 @@ The root-level manifest identifies the directory as a CutReady project:
 
 CutReady checks for this file when opening a folder to confirm it's a valid
 project.
+
+## Multi-Project Manifest (`.cutready/projects.json`)
+
+In multi-project workspaces, the `.cutready/projects.json` file tracks all
+projects within the workspace:
+
+```json
+{
+  "projects": [
+    {
+      "name": "Product Demo",
+      "path": "product-demo"
+    },
+    {
+      "name": "Partner Deck",
+      "path": "partner-deck"
+    }
+  ]
+}
+```
+
+This file is created automatically when a workspace is migrated from
+single-project to multi-project mode.
+
+## Encrypted Vault (`vault.hold`)
+
+CutReady stores sensitive credentials (API keys, OAuth tokens, personal access
+tokens) in an **IOTA Stronghold** encrypted vault file. The `vault.hold` file
+lives in the **app data directory** (not in the workspace), so credentials are
+never committed to version history.
+
+<Aside type="tip">
+  The vault is created and managed automatically. You don't need to interact
+  with it directly — CutReady handles encryption and decryption transparently.
+</Aside>

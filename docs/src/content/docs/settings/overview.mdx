@@ -1,6 +1,6 @@
 ---
 title: Settings
-description: Configure output directories, AI providers, API credentials, and custom agents.
+description: Configure display preferences, AI providers, agents, workspace-level overrides, and encrypted credential storage.
 sidebar:
   order: 1
 ---
@@ -10,31 +10,28 @@ import Screenshot from '../../../components/Screenshot.astro';
 
 <Badge text="Available" variant="success" />
 
-The Settings panel lets you configure CutReady's output behavior, AI provider
-connection, and custom agent definitions. Open it from the **gear icon** (⚙️)
-in the sidebar.
+CutReady has two levels of settings: **Global settings** that apply everywhere,
+and **Workspace settings** that apply to the current workspace and can override
+global defaults. Both open as full-width panels (no sidebar).
 
-<Screenshot src="/images/settings-panel.png" darkSrc="/images/settings-panel-dark.png" alt="Settings panel" caption="The Settings panel with General, AI Provider, and Agents tabs" />
+## Global Settings
 
-## Settings Tabs
+Open global settings from the **gear icon** (⚙️) pinned to the bottom of the
+sidebar. Global settings apply across all workspaces.
 
-Settings are organized into tabs:
+<Screenshot src="/images/settings-panel.png" darkSrc="/images/settings-panel-dark.png" alt="Global settings panel" caption="Global settings with Display, AI Provider, Agents, and Feedback tabs" />
 
 <Tabs>
-<TabItem label="General">
+<TabItem label="Display">
 
-### Output Directory
+### Display Preferences
 
-<Screenshot src="/images/settings-general.png" darkSrc="/images/settings-general-dark.png" alt="General settings" caption="General settings tab with output directory and audio configuration" />
+Configure the visual appearance of CutReady:
 
-Choose where CutReady saves exported video files and assembled output folders.
-Click **Browse** to select a directory, or type a path directly.
-
-### Audio Input Device
-
-Select the microphone used for narration recording during the Produce phase.
-CutReady lists all available audio input devices detected on your system. The
-selected device is saved and reused across sessions.
+- **Text size** — Adjust the base font size for the editor
+- **Row density** — Choose between compact and comfortable row spacing
+- **Color palette** — Select a color theme
+- **Editor width** — Set the preferred width for editing panels
 
 </TabItem>
 <TabItem label="AI Provider">
@@ -57,8 +54,8 @@ For Azure OpenAI, configure the following:
 - **API Endpoint** — Your Azure OpenAI resource URL (e.g.,
   `https://your-resource.openai.azure.com/`)
 - **Authentication** — Choose between:
-  - **OAuth** — Click "Sign in with Azure" to start the Azure AD flow. Requires
-    Tenant ID and Client ID.
+  - **OAuth** — Click "Sign in with Azure" to start the browser-based Azure AD
+    flow. Requires Tenant ID and Client ID.
   - **API Key** — Paste your Azure OpenAI API key directly
 - **Tenant ID** — Your Azure AD tenant identifier (for OAuth)
 - **Client ID** — Your Azure AD application client ID (for OAuth)
@@ -71,9 +68,10 @@ For direct OpenAI access:
 - **API Key** — Your OpenAI API key
 - **Model** — The model to use (e.g., `gpt-4o`, `gpt-4o-mini`)
 
-<Aside type="caution">
-  API keys are stored locally on your machine. They are never transmitted
-  anywhere except to the configured API endpoint.
+<Aside type="tip">
+  API keys and tokens are stored in an **encrypted IOTA Stronghold vault**
+  (`vault.hold` in the app data directory). They are never stored in plaintext
+  and never transmitted anywhere except to the configured API endpoint.
 </Aside>
 
 </TabItem>
@@ -137,6 +135,33 @@ You can also **Copy All** to get all feedback entries at once, or **Clear All**
 to reset your feedback history.
 
 </TabItem>
+</Tabs>
+
+## Workspace Settings
+
+Open workspace settings from the **monitor icon** (🖥️) in the sidebar
+navigation. Workspace settings apply to the current workspace only and can
+**override** global defaults for AI Provider, Agents, and Display.
+
+<Tabs>
+<TabItem label="Git Remote">
+
+### Remote URL
+
+Configure the GitHub remote for syncing your workspace. Enter the HTTPS or SSH
+URL and click **Test Connection** to verify. See
+[Workspace Remote](/settings/repository/) for full details.
+
+</TabItem>
+<TabItem label="Memory">
+
+### Workspace Memory
+
+Workspace-specific context that persists across AI sessions. Memory items
+provide background knowledge to the AI assistant so it can give more relevant
+suggestions for this workspace.
+
+</TabItem>
 <TabItem label="Images">
 
 ### Image Manager
@@ -151,12 +176,43 @@ directory. The image manager shows:
 - **Orphan detection** — identifies unused images that can be safely deleted
 
 </TabItem>
+<TabItem label="AI Provider Override">
+
+Override the global AI provider settings for this workspace. Useful when
+different workspaces need different models or endpoints. When set, workspace
+overrides take priority over global settings.
+
+</TabItem>
+<TabItem label="Agents Override">
+
+Override the global agent configuration for this workspace. Add workspace-specific
+custom agents or change the default agent selection.
+
+</TabItem>
+<TabItem label="Display Override">
+
+Override global display preferences (text size, row density, color palette, editor
+width) for this workspace.
+
+</TabItem>
 </Tabs>
+
+## Encrypted Secret Storage
+
+CutReady stores all sensitive credentials — API keys, OAuth tokens, and personal
+access tokens — in an **IOTA Stronghold** encrypted vault. The vault file
+(`vault.hold`) lives in the app data directory, not in your workspace.
+
+- **Automatic migration**: On first launch after upgrading, any plaintext
+  credentials in `settings.json` are migrated to the encrypted vault
+- **Transparent**: No password prompt — encryption is handled automatically
+- **Secure by default**: Credentials never touch the filesystem in plaintext
 
 ## Settings Persistence
 
-All settings are persisted locally using Tauri's app data directory. Settings
-are loaded on startup and apply immediately when changed — no restart required.
+Global settings are persisted in Tauri's app data directory. Workspace settings
+are stored within the workspace. All settings apply immediately when changed — no
+restart required.
 
 <Aside type="tip">
   If you're not sure which AI model to use, start with `gpt-4o` for the best

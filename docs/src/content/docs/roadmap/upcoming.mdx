@@ -12,12 +12,14 @@ import { Aside, Badge } from '@astrojs/starlight/components';
   listed here are not yet available unless marked otherwise.
 </Aside>
 
-## Current Release (v0.5.0)
+## Current Release (v0.9.0)
 
-The current release includes a full demo planning workflow with AI assistance
-and collaboration features:
+The current release includes a full demo planning workflow with AI assistance,
+multi-project workspaces, encrypted secret storage, and collaboration features:
 
-- ✅ **Project management** — Create, open, and organize projects
+- ✅ **Multi-project workspaces** — A single git repo (workspace) can hold multiple projects with a ProjectSwitcher in the sidebar
+- ✅ **Project management** — Create, open, rename, and organize projects within workspaces
+- ✅ **Workspace migration** — Automatic migration flow to convert single-project repos to multi-project
 - ✅ **Sketch editor** — 4-column planning tables with inline editing, card-style rows, and screenshots
 - ✅ **Screen capture** — Multi-monitor screenshots with region selection
 - ✅ **Storyboard management** — Drag-and-drop organization of sketch sequences
@@ -28,18 +30,28 @@ and collaboration features:
 - ✅ **History graph** — Full DAG visualization of all timelines, forks, and merges
 - ✅ **Remote sync** — Push/pull/sync with GitHub remotes via git2
 - ✅ **Markdown notes** — CodeMirror editor with AI cleanup, rich paste, and live preview
-- ✅ **Command palette** — Keyboard-driven command access
+- ✅ **Command palette** — Keyboard-driven command access (Ctrl+Shift+P)
 - ✅ **Cross-platform builds** — Windows, macOS (ARM + Intel), Linux
 - ✅ **AI assistant** — 3 built-in agents (Planner, Writer, Editor), custom agents, and color-coded file references
+- ✅ **AI change highlighting** — Modified rows highlighted with inline diffs and undo support; "Show AI Changes" button to re-view
+- ✅ **AI vision support** — Send images to the AI (configurable: off, notes only, notes+sketches)
+- ✅ **LLM compaction** — Smart conversation pruning when context gets long
+- ✅ **Responses API** — Auto-routes codex/pro models to OpenAI Responses API
 - ✅ **Sparkle (✨) buttons** — One-click AI improvements for titles, descriptions, and rows
-- ✅ **Document import** — Word, PDF, and PowerPoint import as project notes
+- ✅ **Document import** — Word, PDF, PowerPoint, sketch (.sk), storyboard (.sb), and markdown (.md) import via unified Explorer button
+- ✅ **Word export** — Export sketches, storyboards, and notes to .docx format with visual rendering
 - ✅ **Activity panel** — Color-coded AI operation logs
 - ✅ **Debug panel** — Captures JS console and Rust backend logs for diagnostics
 - ✅ **Azure AI Foundry integration** — With OAuth support and deployed model discovery
+- ✅ **Azure OAuth** — Browser-based OAuth flow for keyless Azure OpenAI
+- ✅ **Encrypted secret storage** — API keys, OAuth tokens, and PATs stored in an IOTA Stronghold encrypted vault
+- ✅ **Settings split** — Global settings (Display, AI Provider, Agents, Feedback) and workspace settings (Git Remote, Memory, Images, plus overrides)
 - ✅ **Feedback system** — Title bar popover with debug log attachment, settings history, and AI-formatted GitHub Issue creation
 - ✅ **Smart rich paste** — AI-powered HTML-to-markdown conversion for Word and web content
 - ✅ **Auto-update** — Built-in update mechanism via Tauri updater
 - ✅ **Display settings** — Text size, row density, color palette, and editor width preferences
+- ✅ **Explorer tree view** — File browser in the sidebar showing all project files
+- ✅ **Title bar breadcrumb** — Shows workspace / project path in the title bar
 
 ## Upcoming: Browser Recording <Badge text="In Development" variant="note" />
 

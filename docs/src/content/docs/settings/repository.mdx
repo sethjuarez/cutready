@@ -1,6 +1,6 @@
 ---
-title: Repository Settings
-description: Configure remote sync, authentication, and git identity.
+title: Workspace Remote
+description: Configure remote sync, authentication, and git identity for your workspace.
 sidebar:
   order: 3
 ---
@@ -10,16 +10,21 @@ import Screenshot from '../../../components/Screenshot.astro';
 
 <Badge text="Available" variant="success" />
 
-The **Repository** tab in Settings configures remote sync for your project.
-This is where you connect to a GitHub repository, set authentication, and
-configure your git identity.
+The **Git Remote** tab in Workspace Settings configures remote sync for your
+workspace. This is where you connect to a GitHub repository, set authentication,
+and configure your git identity.
+
+<Aside type="note">
+  Remote settings are per-workspace, not global. Open them from the **monitor
+  icon** (🖥️) in the sidebar, then select the **Git Remote** tab.
+</Aside>
 
 ## Remote URL
 
 Enter the HTTPS or SSH URL of your GitHub repository:
 
-```
-https://github.com/your-username/your-project.git
+```text
+https://github.com/your-username/your-workspace.git
 ```
 
 Click **Test Connection** to verify CutReady can reach the remote with your
@@ -39,7 +44,7 @@ simplest option — no tokens or keys to manage.
 
 Generate a [fine-grained token](https://github.com/settings/tokens?type=beta)
 with **Contents: Read and write** permission for your repository. Paste it
-into the token field.
+into the token field. The token is stored in the encrypted Stronghold vault.
 
 ### SSH Key
 
@@ -53,17 +58,17 @@ especially useful when collaborating — your identity shows on the
 snapshots you create.
 
 <Aside type="note">
-  The git identity is per-project. If you work on multiple projects with
+  The git identity is per-workspace. If you work on multiple workspaces with
   different identities (personal vs. work), each can have its own settings.
 </Aside>
 
 ## When to Configure
 
-You only need repository settings if you want to:
+You only need remote settings if you want to:
 
-- **Back up** your project to GitHub
+- **Back up** your workspace to GitHub
 - **Sync** across multiple devices
-- **Collaborate** with others on the same project
+- **Collaborate** with others on the same workspace
 - **Open pull requests** from timelines
 
 If you're working solo on a single machine, you can skip this entirely —

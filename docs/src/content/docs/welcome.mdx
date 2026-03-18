@@ -9,12 +9,14 @@ import { Aside, Badge } from '@astrojs/starlight/components';
 import Screenshot from '../../components/Screenshot.astro';
 
 <Aside type="caution" title="Early Access">
-  CutReady is in active development (v0.5.0). Sketch planning, storyboards, AI assistant,
-  version history with timelines and merging, remote sync via GitHub, and a full
-  collaboration workflow are all functional. Video production and export are coming soon.
+  CutReady is in active development (v0.9.0). Multi-project workspaces, sketch planning,
+  storyboards, AI assistant with vision and change highlighting, version history with
+  timelines and merging, remote sync via GitHub, encrypted secret storage, Word export,
+  and a full collaboration workflow are all functional. Video production and export are
+  coming soon.
 </Aside>
 
-<Screenshot src="/images/app-home.png" darkSrc="/images/app-home-dark.png" alt="CutReady home screen" caption="CutReady home screen — create or open a project to get started" />
+<Screenshot src="/images/app-home.png" darkSrc="/images/app-home-dark.png" alt="CutReady home screen" caption="CutReady home screen — create or open a workspace to get started" />
 
 ## What is CutReady?
 
@@ -59,9 +61,10 @@ CutReady is built on modern, cross-platform technologies:
 - **CodeMirror** — Markdown editing
 - **gix + git2** — Pure-Rust git for version history, libgit2 for remote operations
 - **Azure OpenAI** — AI assistant and sparkle button intelligence
+- **IOTA Stronghold** — Encrypted vault for API keys and tokens
 
 ## Next Steps
 
 - **[Installation](/getting-started/installation/)** — Download and install CutReady
-- **[Quick Start](/getting-started/quick-start/)** — Create your first demo project
+- **[Quick Start](/getting-started/quick-start/)** — Create your first demo workspace
 - **[Features](/features/sketch-editor/)** — Explore what CutReady can do

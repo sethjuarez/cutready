@@ -1,6 +1,6 @@
 ---
 title: Document Import
-description: Import Word documents, PDFs, and PowerPoint presentations into CutReady projects.
+description: Import Word documents, PDFs, PowerPoint presentations, sketches, storyboards, and markdown files into CutReady projects.
 sidebar:
   order: 10
 ---
@@ -10,26 +10,32 @@ import Screenshot from '../../../components/Screenshot.astro';
 
 <Badge text="Available" variant="success" />
 
-CutReady can import external documents into your project as **notes**, making
-it easy to bring in existing slide decks, scripts, and reference materials
-without manual copy-paste.
+CutReady can import external documents into your project, making it easy to
+bring in existing slide decks, scripts, reference materials, and CutReady files
+from other projects without manual copy-paste.
 
 <Screenshot src="/images/notes-editor-full.png" darkSrc="/images/notes-editor-full-dark.png" alt="Notes editor with imported content" caption="Imported documents appear as markdown notes that you can edit and reference" />
 
 ## Supported Formats
 
-| Format | Extension | Import Method |
+| Format | Extension | Import Result |
 | --- | --- | --- |
-| **Word (modern)** | `.docx` | Full extraction — headings, paragraphs, embedded images |
-| **Word (legacy)** | `.doc` | Text extraction fallback (binary format) |
-| **PDF** | `.pdf` | Text extraction via pdf-extract |
-| **PowerPoint** | `.pptx` | Slides → sections with headings, body text, speaker notes, images |
+| **Sketch** | `.sk` | Imported as a sketch file in the project |
+| **Storyboard** | `.sb` | Imported as a storyboard file in the project |
+| **Markdown** | `.md` | Imported as a note in the project |
+| **Word (modern)** | `.docx` | Full extraction — headings, paragraphs, embedded images → note |
+| **Word (legacy)** | `.doc` | Text extraction fallback (binary format) → note |
+| **PDF** | `.pdf` | Text extraction via pdf-extract → note |
+| **PowerPoint** | `.pptx` | Slides → sections with headings, body text, speaker notes, images → note |
 
 ## How to Import
 
-Click the **Import** button in the StoryboardList sidebar. A file picker opens
-where you can select one or more supported documents. CutReady processes each
-file and creates a markdown note in your project.
+Click the **Import** button in the **Explorer header** at the top of the sidebar
+tree view. A file picker opens where you can select one or more supported files.
+CutReady processes each file according to its type:
+
+- **`.sk`, `.sb`, `.md`** files are copied directly into the project
+- **`.docx`, `.doc`, `.pdf`, `.pptx`** files are converted to markdown notes
 
 ## Format-Specific Conversion
 
@@ -107,6 +113,7 @@ Document import is handled by dedicated Tauri commands:
 
 | Command | Format |
 | --- | --- |
+| `import_file` | Sketch (.sk), storyboard (.sb), and markdown (.md) files |
 | `import_docx` | Word documents (.docx and .doc) |
 | `import_pdf` | PDF files |
 | `import_pptx` | PowerPoint presentations |
@@ -114,3 +121,12 @@ Document import is handled by dedicated Tauri commands:
 Each command accepts a file path and the current project path, processes the
 document, and returns the generated markdown content along with any extracted
 image paths.
+
+## Word Export
+
+CutReady can also **export** your project documents to Word format (`.docx`):
+
+- Export sketches, storyboards, and notes to a `.docx` file
+- Screenshots and images are rendered inline in the document
+- The exported file **auto-opens** after creation
+- Useful for sharing demo plans with stakeholders who prefer Word

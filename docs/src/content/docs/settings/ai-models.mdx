@@ -7,7 +7,7 @@ sidebar:
 
 import { Aside, Badge, Steps, Tabs, TabItem } from '@astrojs/starlight/components';
 
-<Badge text="v0.3.0" variant="note" />
+<Badge text="v0.9.0" variant="note" />
 
 CutReady uses large language models (LLMs) to power its AI assistant — planning
 sketches, writing narratives, improving descriptions, and managing your demo
@@ -54,7 +54,9 @@ its API calls accordingly.
 
 2. **Open CutReady Settings**
 
-   Click the **gear icon** (⚙️) in the sidebar, then select the **AI Provider** tab.
+   Click the **gear icon** (⚙️) pinned to the bottom of the sidebar, then
+   select the **AI Provider** tab. (You can also configure AI Provider per
+   workspace in **Workspace Settings → AI Provider Override**.)
 
 3. **Select Azure OpenAI as the provider**
 
@@ -79,7 +81,8 @@ its API calls accordingly.
 
    - Set **Authentication** to **Sign in with Azure (Entra ID)**
    - Enter your **Tenant ID** and **Client ID**
-   - Click **Sign in with Azure** and complete the login flow
+   - Click **Sign in with Azure** — a browser window opens for the OAuth flow
+   - Complete the login in your browser and return to CutReady
    - CutReady will obtain and refresh tokens automatically
 
    </TabItem>
@@ -151,6 +154,16 @@ For direct OpenAI API access:
   is how the AI assistant interacts with your project — reading sketches,
   updating notes, modifying planning rows, etc.
 </Aside>
+
+## Encrypted Credential Storage
+
+All API keys, OAuth tokens, and personal access tokens are stored in an
+**IOTA Stronghold** encrypted vault (`vault.hold` in the app data directory).
+Credentials are never written to disk in plaintext.
+
+If you're upgrading from an earlier version, CutReady automatically migrates
+any plaintext credentials from `settings.json` to the encrypted vault on first
+launch. No action is needed.
 
 ## Troubleshooting
 

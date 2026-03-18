@@ -12,41 +12,53 @@ import Screenshot from '../../../components/Screenshot.astro';
 
 <Screenshot src="/images/sketch-sidebar.png" darkSrc="/images/sketch-sidebar-dark.png" alt="CutReady interface with sidebar" caption="CutReady's interface showing sidebar navigation and explorer panel" />
 
-CutReady uses a modern, VS Code-inspired interface with a sidebar, tabbed
-editors, resizable panels, and a command palette.
+CutReady uses a modern, VS Code-inspired interface with a sidebar, Explorer
+tree view, tabbed editors, resizable panels, and a command palette.
 
 ## Layout
 
 ```text
 ┌────────────────────────────────────────────────────────────┐
-│  Title Bar (window controls, feedback, panel toggles)      │
+│  Title Bar (workspace / project breadcrumb, panel toggles) │
 ├────────┬──────────────────────────────────┬────────────────┤
 │ Side-  │  Tab Bar (open documents)        │  Chat Panel    │
 │ bar    ├──────────────────────────────────┤  (AI chat +    │
-│ (5     │  Main Content                    │   Activity)    │
-│ icons) │  (Sketch / Record / Script /     │                │
+│ (nav + │  Main Content                    │   Activity)    │
+│ gear)  │  (Sketch / Record / Script /     │                │
 │        │   Settings)                      │                │
 │        ├──────────────────────────────────┤                │
-│        │  Output Panel (Activity + Debug)     │                │
+│        │  Output Panel (Activity + Debug) │                │
 └────────┴──────────────────────────────────┴────────────────┘
 ```
 
 ## Sidebar
 
-The sidebar has 5 navigation icons:
+The sidebar has navigation icons at the top and a gear icon pinned to the bottom:
 
 | Icon | View | Description |
 |------|------|-------------|
-| 🏠 | Home | Project selection and creation |
+| 🏠 | Home | Workspace selection and creation |
+| 🖥️ | Workspace Settings | Workspace-level configuration |
 | ✏️ | Sketch | Edit sketches and planning tables |
 | 🔴 | Record | Browser profile selection and recording |
 | 📄 | Script | Edit recorded scripts (coming soon) |
-| ⚙️ | Settings | API keys, output directory configuration |
 | 💬 | Chat | AI chat panel (right sidebar) |
+| ⚙️ | Global Settings | Global preferences (pinned to bottom) |
+
+The **Explorer tree view** shows all files in the current project — sketches
+(`.sk`), storyboards (`.sb`), and notes (`.md`). The Explorer header includes
+a unified **Import** button for importing files into the project.
 
 - **Toggle visibility**: `Ctrl+B`
 - **Move sidebar**: Right-click for left/right positioning
 - The sidebar remembers its width across sessions
+- **Escape** cancels any in-progress creation or rename action
+
+### Project Switcher
+
+When a workspace contains multiple projects, a **ProjectSwitcher** dropdown
+appears in the sidebar. Click to switch between projects or create new ones.
+A pencil icon next to the project name allows renaming.
 
 ## Command Palette
 
@@ -56,6 +68,7 @@ all available commands. Start typing to filter.
 ## Title Bar
 
 CutReady uses a **frameless window** with a custom title bar that includes:
+- **Workspace / project breadcrumb** — Shows the current workspace and project path
 - Window controls (minimize, maximize, close)
 - **Feedback button** — chat-bubble icon to submit feedback with optional debug log
 - Toggle buttons for sidebar, output panel, and chat panel
@@ -92,7 +105,7 @@ CutReady has a built-in feedback system accessible from the title bar:
 | `` Ctrl+` `` | Toggle Output Panel |
 | `Ctrl+S` | Save Version |
 | `Ctrl+Shift+I` | Toggle Chat Panel |
-| `Escape` | Close overlays/modals |
+| `Escape` | Close overlays/modals, cancel creation/rename actions |
 
 ## Chat Panel
 

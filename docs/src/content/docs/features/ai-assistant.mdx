@@ -106,6 +106,51 @@ a particular audience or following specific style guidelines.
 
 <Aside type="note">
   The AI assistant requires an API key or OAuth connection configured in
-  **Settings → AI Provider**. See the [Settings](/settings/overview/)
-  page for setup details.
+  **Settings → AI Provider** (global) or **Workspace Settings → AI Provider
+  Override**. See the [Settings](/settings/overview/) page for setup details.
 </Aside>
+
+## AI Change Highlighting
+
+When the AI modifies sketch planning rows, the affected rows are
+**highlighted** to show exactly what changed:
+
+- Modified rows get a visual highlight with **inline diffs** showing the
+  before/after text
+- Each highlighted change includes an **undo button** to revert individual
+  modifications
+- The **"Show AI Changes"** button in the toolbar lets you re-view the last
+  set of AI-applied highlights at any time
+
+This makes it easy to review, accept, or reject AI suggestions row by row.
+
+## Vision Support
+
+The AI assistant can process images alongside text. When enabled, screenshots
+from your sketches and notes are sent to the model for visual context:
+
+| Mode | Behavior |
+| --- | --- |
+| **Off** | No images sent to the AI |
+| **Notes only** | Images embedded in notes are included |
+| **Notes + Sketches** | Images from both notes and sketch rows are included |
+
+Configure vision support in **Global Settings → AI Provider** or override it
+per workspace. Vision requires a model that supports image inputs (e.g.,
+`gpt-4o`).
+
+## LLM Compaction
+
+Long conversations can exceed a model's context window. CutReady handles this
+with **smart conversation pruning** (compaction):
+
+- When the conversation approaches the context limit, older messages are
+  summarized and condensed automatically
+- The AI retains key context and decisions from earlier in the conversation
+- Compaction is transparent — the conversation continues seamlessly
+
+## Responses API
+
+CutReady automatically routes requests to the **OpenAI Responses API** when
+using codex or pro-series models. This happens transparently — no configuration
+needed. For standard models, the regular Chat Completions API is used.
