@@ -1,0 +1,196 @@
+---
+title: Setup Guide
+description: Step-by-step instructions for setting up GitHub collaboration in CutReady.
+sidebar:
+  order: 5
+---
+
+import { Aside, Steps, Tabs, TabItem, Badge } from '@astrojs/starlight/components';
+
+<Badge text="Recommended" variant="success" />
+
+This guide walks you through setting up GitHub collaboration so you can
+push, pull, and clone CutReady workspaces with your team.
+
+## Prerequisites
+
+Before configuring remote sync, install the **GitHub CLI** — it handles
+authentication for you so you never need to manage tokens manually.
+
+<Tabs>
+  <TabItem label="Windows">
+    Install via **winget** (built into Windows 11):
+
+    ```powershell
+    winget install GitHub.cli
+    ```
+
+    Or download the installer from [cli.github.com](https://cli.github.com).
+
+    <Aside type="caution">
+      After installing, **restart CutReady** so it can find `gh` on your PATH.
+      Desktop apps don't pick up PATH changes while running.
+    </Aside>
+  </TabItem>
+
+  <TabItem label="macOS">
+    Install via **Homebrew**:
+
+    ```bash
+    brew install gh
+    ```
+
+    Or download from [cli.github.com](https://cli.github.com).
+  </TabItem>
+
+  <TabItem label="Linux">
+    Install via your package manager:
+
+    ```bash
+    # Debian/Ubuntu
+    sudo apt install gh
+
+    # Fedora
+    sudo dnf install gh
+    ```
+
+    Or see [cli.github.com](https://cli.github.com) for other distributions.
+  </TabItem>
+</Tabs>
+
+## Authenticate with GitHub
+
+<Steps>
+
+1. **Open a terminal** (PowerShell, Terminal, or your shell of choice).
+
+2. **Log in to GitHub:**
+
+   ```bash
+   gh auth login
+   ```
+
+   Follow the interactive prompts — choose **GitHub.com**, **HTTPS**, and
+   authenticate via the browser when prompted.
+
+3. **Set up git credential integration:**
+
+   ```bash
+   gh auth setup-git
+   ```
+
+   This configures git to use your GitHub CLI credentials automatically.
+   CutReady uses this under the hood for all remote operations.
+
+4. **Restart CutReady** if it's already running, so it can detect the
+   newly installed CLI and credentials.
+
+</Steps>
+
+<Aside type="tip">
+  You only need to do this once per machine. After `gh auth login`, CutReady
+  automatically picks up your credentials for push, pull, fetch, and clone.
+</Aside>
+
+## Verify Your Setup
+
+To confirm everything is working:
+
+```bash
+gh auth status
+```
+
+You should see output like:
+
+```text
+github.com
+  ✓ Logged in to github.com account yourname
+  - Active account: true
+  - Git operations protocol: https
+  - Token scopes: 'repo', 'read:org'
+```
+
+Make sure the account shown has access to the repositories you want to
+collaborate on.
+
+## Create a Remote Repository
+
+If you're starting a new CutReady project that you want to share:
+
+<Steps>
+
+1. Create a repository on GitHub (via [github.com/new](https://github.com/new)
+   or `gh repo create`).
+
+2. In CutReady, open **Settings** → **Git Remote** tab.
+
+3. Paste the remote URL (e.g., `https://github.com/you/your-project.git`).
+
+4. Click **Save** — the Sync Bar will appear in the Snapshots panel.
+
+5. Click **Push** to upload your workspace.
+
+</Steps>
+
+## Clone an Existing Workspace
+
+To join a teammate's CutReady project:
+
+<Steps>
+
+1. On the **Home** screen, click **Clone Workspace**.
+
+2. Paste the repository URL.
+
+3. Choose a local folder to clone into.
+
+4. CutReady downloads the workspace and opens it automatically.
+
+</Steps>
+
+<Aside type="note">
+  If you see a **401 error** when cloning, it usually means `gh` isn't
+  installed or authenticated. Run `gh auth login` and `gh auth setup-git`
+  in a terminal, then **restart CutReady** and try again.
+</Aside>
+
+## Saving Snapshots
+
+CutReady uses **snapshots** (git commits) to track your work. Every time
+you save, a snapshot is created automatically.
+
+For snapshots to work in a cloned workspace, no additional setup is needed —
+CutReady commits as "CutReady \<app@cutready.local\>" by default. Your
+GitHub identity is used for push/pull operations via the `gh` credentials.
+
+## Troubleshooting
+
+### "Clone failed: 401" or "Permission denied"
+
+- **Cause:** GitHub CLI isn't installed, not authenticated, or CutReady
+  can't find it on PATH.
+- **Fix:** Run `gh auth login` and `gh auth setup-git`, then restart CutReady.
+
+### "Push failed: 403"
+
+- **Cause:** Your GitHub account doesn't have write access to the repository.
+- **Fix:** Ask the repository owner to grant you Collaborator access, or fork
+  the repository.
+
+### Sync Bar shows "Disconnected"
+
+- **Cause:** No internet connection, or the remote URL is incorrect.
+- **Fix:** Check your connection and verify the remote URL in Settings →
+  Git Remote.
+
+### Changes not appearing after pull
+
+- **Cause:** The changes may be on a different timeline (branch).
+- **Fix:** Check the Timeline Selector to see all available timelines and
+  switch to the one with the changes you expect.
+
+## What's Next?
+
+- [Remote Sync](/collaboration/remote-sync/) — Sync Bar, publishing timelines, and offline resilience
+- [Merging & Conflicts](/collaboration/merging/) — Resolving conflicts when changes collide
+- [Version History](/collaboration/version-history/) — Navigating snapshots and timelines
