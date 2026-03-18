@@ -1,19 +1,17 @@
 /**
  * Wraps @elucim/editor's ElucimEditor for use in ScriptTable's lightbox.
  *
- * Known limitation: The editor's canvas scene wrapper uses elucim's built-in
- * DARK_THEME/LIGHT_THEME for --elucim-* tokens instead of the content theme
- * prop. This means the scene background inside the editor won't match
- * CutReady's palette. Tracked upstream — needs a fix in @elucim/editor to
- * pass the content theme through to the canvas scene's themeToVars() call.
+ * Since 0.13.1, the editor threads the content theme through to the canvas
+ * scene (fixing the previous gap where the scene always used built-in
+ * DARK_THEME/LIGHT_THEME). We pass concrete hex themes (getCutReadyTheme)
+ * so the canvas can generate proper --elucim-* vars.
  */
 import { memo, lazy, Suspense, useState, useEffect } from "react";
 import type { ElucimDocument } from "@elucim/dsl";
-import type { ElucimTheme } from "@elucim/core";
+import { getCutReadyTheme } from "../theme/elucimTheme";
 
 export interface EditorWrapperProps {
   dsl: ElucimDocument;
-  theme: ElucimTheme;
   onDocumentChange: (doc: ElucimDocument) => void;
 }
 
@@ -23,7 +21,6 @@ const LazyElucimEditor = lazy(() =>
 
 export default memo(function EditorWrapper({
   dsl,
-  theme,
   onDocumentChange,
 }: EditorWrapperProps) {
   // Detect light/dark for explicit colorScheme (auto can't parse var() strings)
@@ -37,6 +34,8 @@ export default memo(function EditorWrapper({
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
     return () => observer.disconnect();
   }, []);
+
+  const theme = getCutReadyTheme(isDark);
 
   return (
     <Suspense

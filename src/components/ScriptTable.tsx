@@ -17,7 +17,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import type { PlanningRow } from "../types/sketch";
 import type { ElucimDocument } from "@elucim/dsl";
-import { ELUCIM_THEME } from "../theme/elucimTheme";
+
 
 const VisualCell = lazy(() => import("./VisualCell"));
 const EditorWrapper = lazy(() => import("./EditorWrapper"));
@@ -158,10 +158,6 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
       .then((data) => setEditorDsl(data as unknown as ElucimDocument))
       .catch((err) => console.error("[ScriptTable] Failed to load visual for editor:", err));
   }, [visualLightbox?.visualPath, lightboxMode]);
-
-  // Editor content theme — shared constant, auto-derives chrome in 0.12.0.
-  // colorScheme must be explicit since luminance detection can't parse var() strings.
-  const editorTheme = ELUCIM_THEME;
 
   const closeLightbox = useCallback(() => {
     setVisualLightbox(null);
@@ -509,7 +505,6 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
                   {editorDsl ? (
                     <EditorWrapper
                       dsl={editorDsl}
-                      theme={editorTheme}
                       onDocumentChange={(doc) => { setEditorDsl(doc); setEditorDirty(true); }}
                     />
                   ) : (
