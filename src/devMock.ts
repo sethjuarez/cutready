@@ -300,9 +300,11 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
       return null;
     case "list_project_images":
       return [
-        { path: ".cutready/screenshots/screenshot-001.png", size: 245000, referencedBy: ["sketches/demo-introduction.sk"] },
-        { path: ".cutready/screenshots/screenshot-002.png", size: 180000, referencedBy: ["sketches/demo-introduction.sk", "notes/script-draft.md"] },
-        { path: ".cutready/screenshots/pasted-1705312000.png", size: 95000, referencedBy: [] },
+        { path: ".cutready/screenshots/screenshot-001.png", size: 245000, referencedBy: ["sketches/demo-introduction.sk"], assetType: "screenshot" },
+        { path: ".cutready/screenshots/screenshot-002.png", size: 180000, referencedBy: ["sketches/demo-introduction.sk", "notes/script-draft.md"], assetType: "screenshot" },
+        { path: ".cutready/screenshots/pasted-1705312000.png", size: 95000, referencedBy: [], assetType: "screenshot" },
+        { path: ".cutready/visuals/a1b2c3d4e5f6.json", size: 3200, referencedBy: ["sketches/demo-introduction.sk"], assetType: "visual" },
+        { path: ".cutready/visuals/deadbeef1234.json", size: 4100, referencedBy: [], assetType: "visual" },
       ];
     case "delete_project_image":
     case "delete_orphaned_images":
