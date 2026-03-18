@@ -53,7 +53,7 @@ export default memo(function EditorWrapper({
         theme={theme}
         editorTheme={{
           "color-scheme": isDark ? "dark" : "light",
-          "bg": isDark ? "#252220" : "#eae7e2",
+          "--elucim-editor-bg": isDark ? "#252220" : "#eae7e2",
         }}
         onDocumentChange={onDocumentChange}
         className="w-full h-full"
