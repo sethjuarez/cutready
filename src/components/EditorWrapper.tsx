@@ -1,12 +1,11 @@
 /**
  * Wraps @elucim/editor's ElucimEditor for use in ScriptTable's lightbox.
  *
- * With 0.12.0:
- * - Unified ElucimTheme type for content + auto-derived chrome
- * - $token resolution handled by the editor itself
- * - onDocumentChange callback provides live document for saving
- * - initialFrame="last" auto-resolves to the final frame
- * - theme accepts CSS var() strings directly
+ * Known limitation: The editor's canvas scene wrapper uses elucim's built-in
+ * DARK_THEME/LIGHT_THEME for --elucim-* tokens instead of the content theme
+ * prop. This means the scene background inside the editor won't match
+ * CutReady's palette. Tracked upstream — needs a fix in @elucim/editor to
+ * pass the content theme through to the canvas scene's themeToVars() call.
  */
 import { memo, lazy, Suspense, useState, useEffect } from "react";
 import type { ElucimDocument } from "@elucim/dsl";
