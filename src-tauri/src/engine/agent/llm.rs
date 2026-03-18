@@ -1284,9 +1284,17 @@ impl LlmClient {
             body.tools.as_ref().map_or(0, |t| t.len())
         );
 
-        let body_json = escape_non_ascii_json(
-            &serde_json::to_string(&body).unwrap_or_default()
-        );
+        let raw_json = serde_json::to_string(&body).unwrap_or_default();
+        let escaped = escape_non_ascii_json(&raw_json);
+        let body_json = if let Err(e) = serde_json::from_str::<serde_json::Value>(&escaped) {
+            log::error!(
+                "[llm] escape_non_ascii_json corrupted JSON (non-stream) at byte {}: {} — falling back to raw UTF-8",
+                e.column().saturating_sub(1), e
+            );
+            raw_json
+        } else {
+            escaped
+        };
 
         let resp = self
             .http
@@ -1559,7 +1567,27 @@ impl LlmClient {
         // many minutes as chunks arrive progressively.
         // Escape non-ASCII to prevent Azure gateway JSON parse failures on
         // multi-byte UTF-8 chars (em dashes, smart quotes, etc.).
-        let body_json = escape_non_ascii_json(&body_json);
+        let escaped_json = escape_non_ascii_json(&body_json);
+
+        // Validate AFTER escaping — if escape_non_ascii_json corrupted the JSON,
+        // fall back to the pre-escape version (which passed validation above).
+        let body_json = if let Err(e) = serde_json::from_str::<serde_json::Value>(&escaped_json) {
+            let col = e.column().saturating_sub(1);
+            let start = col.saturating_sub(60);
+            let end = (col + 60).min(escaped_json.len());
+            let safe_start = (start..=col).rev()
+                .find(|&i| escaped_json.is_char_boundary(i)).unwrap_or(0);
+            let safe_end = (end..=escaped_json.len())
+                .find(|&i| escaped_json.is_char_boundary(i)).unwrap_or(escaped_json.len());
+            log::error!(
+                "[llm] escape_non_ascii_json corrupted JSON at byte {}: {} — context: …{}…  — falling back to raw UTF-8",
+                col, e, &escaped_json[safe_start..safe_end]
+            );
+            body_json // fall back to the valid pre-escape body
+        } else {
+            escaped_json
+        };
+
         // Keep body_json alive for diagnostics on 400 errors.
         let body_bytes = body_json.as_bytes().to_vec();
         let resp = self
