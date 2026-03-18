@@ -3,7 +3,7 @@ import type { ElucimTheme } from "@elucim/core";
 /**
  * Shared elucim content theme using CSS var() references.
  * Used by DslRenderer (preview) and ElucimEditor (editing) so both
- * render with identical CutReady colors.
+ * render with identical CutReady colors in the live app.
  *
  * Because values are unresolved var() strings, always pass an explicit
  * colorScheme ("light" | "dark") — "auto" luminance detection can't
@@ -23,3 +23,55 @@ export const ELUCIM_THEME: ElucimTheme = {
   warning: "var(--color-warning)",
   error: "var(--color-error)",
 };
+
+/**
+ * CutReady's warm dark palette as concrete hex values.
+ * Used for AI-generated visuals, PNG/video export, and documents
+ * opened outside CutReady where CSS vars won't resolve.
+ *
+ * Values sourced from index.css `.dark` block.
+ */
+export const CUTREADY_DARK: ElucimTheme = {
+  foreground: "#e8e4df",
+  background: "#2b2926",
+  accent: "#a49afa",
+  muted: "#9b968e",
+  surface: "#353230",
+  border: "#3e3b38",
+  primary: "#a49afa",
+  secondary: "#a78bfa",
+  tertiary: "#f472b6",
+  success: "#34d399",
+  warning: "#fbbf24",
+  error: "#f87171",
+};
+
+/**
+ * CutReady's warm light palette as concrete hex values.
+ * Used for AI-generated visuals, PNG/video export, and documents
+ * opened outside CutReady where CSS vars won't resolve.
+ *
+ * Values sourced from index.css `:root` block.
+ */
+export const CUTREADY_LIGHT: ElucimTheme = {
+  foreground: "#2c2925",
+  background: "#faf9f7",
+  accent: "#6b5ce7",
+  muted: "#8a857d",
+  surface: "#f0eeeb",
+  border: "#ddd9d3",
+  primary: "#6b5ce7",
+  secondary: "#7c3aed",
+  tertiary: "#db2777",
+  success: "#16a34a",
+  warning: "#d97706",
+  error: "#dc2626",
+};
+
+/**
+ * Returns the appropriate concrete CutReady theme for the given mode.
+ * Use this in contexts where CSS vars won't resolve (export, AI generation).
+ */
+export function getCutReadyTheme(isDark: boolean): ElucimTheme {
+  return isDark ? CUTREADY_DARK : CUTREADY_LIGHT;
+}
