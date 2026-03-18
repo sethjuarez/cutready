@@ -1,8 +1,18 @@
-//! Git-backed document versioning via gix (pure-Rust git).
+//! Git-backed document versioning — hybrid gix + git2.
 //!
 //! Each project directory is a git repository. Every save auto-commits
 //! a snapshot, giving users infinite undo and version history without
 //! needing to understand git.
+//!
+//! **Why two git libraries?**
+//!   - **gix** (pure Rust): commits, trees, branches, timeline management.
+//!     Excels at direct object writing via `build_tree_from_dir`.
+//!   - **git2** (libgit2 C bindings): diffs, merges, remote operations.
+//!     gix has no diff/merge engine and immature credential handling.
+//!
+//! Because gix bypasses the git index, `sync_index_to_head()` is called
+//! after any operation that changes HEAD or the working tree, keeping
+//! git2-based tools consistent.
 
 use std::path::Path;
 
