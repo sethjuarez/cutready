@@ -1,7 +1,7 @@
 import { useRef, useCallback, useState, useEffect } from "react";
 import { DslRenderer, type ElucimDocument, type DslRendererRef } from "@elucim/dsl";
-import type { ElucimTheme } from "@elucim/core";
 import { invoke } from "@tauri-apps/api/core";
+import { ELUCIM_THEME } from "../theme/elucimTheme";
 
 interface VisualCellProps {
   /** Path to the visual file (e.g., ".cutready/visuals/abc123.json"). */
@@ -23,20 +23,7 @@ export interface VisualControlHandle {
 }
 
 /** Static theme using CSS var() strings — shared by both thumbnail and full modes. */
-const THEME: ElucimTheme = {
-  foreground: "var(--color-text)",
-  background: "var(--color-surface)",
-  accent: "var(--color-accent)",
-  muted: "var(--color-text-secondary)",
-  surface: "var(--color-surface-alt)",
-  border: "var(--color-border)",
-  primary: "var(--color-accent)",
-  secondary: "var(--color-secondary)",
-  tertiary: "var(--color-tertiary)",
-  success: "var(--color-success)",
-  warning: "var(--color-warning)",
-  error: "var(--color-error)",
-};
+const THEME = ELUCIM_THEME;
 
 /** Error fallback shown when DslRenderer crashes. */
 const ERROR_FALLBACK = (

@@ -17,6 +17,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import type { PlanningRow } from "../types/sketch";
 import type { ElucimDocument } from "@elucim/dsl";
+import { ELUCIM_THEME } from "../theme/elucimTheme";
 
 const VisualCell = lazy(() => import("./VisualCell"));
 const EditorWrapper = lazy(() => import("./EditorWrapper"));
@@ -158,22 +159,9 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
       .catch((err) => console.error("[ScriptTable] Failed to load visual for editor:", err));
   }, [visualLightbox?.visualPath, lightboxMode]);
 
-  // Editor content theme — uses CSS var() strings, auto-derives chrome in 0.12.0.
+  // Editor content theme — shared constant, auto-derives chrome in 0.12.0.
   // colorScheme must be explicit since luminance detection can't parse var() strings.
-  const editorTheme: import("@elucim/core").ElucimTheme = {
-    foreground: "var(--color-text)",
-    background: "var(--color-surface)",
-    accent: "var(--color-accent)",
-    muted: "var(--color-text-secondary)",
-    surface: "var(--color-surface-alt)",
-    border: "var(--color-border)",
-    primary: "var(--color-accent)",
-    secondary: "var(--color-secondary)",
-    tertiary: "var(--color-tertiary)",
-    success: "var(--color-success)",
-    warning: "var(--color-warning)",
-    error: "var(--color-error)",
-  };
+  const editorTheme = ELUCIM_THEME;
 
   const closeLightbox = useCallback(() => {
     setVisualLightbox(null);
