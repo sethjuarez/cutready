@@ -348,18 +348,7 @@ pub fn clone_from_url(
     };
     let effective_token: Option<&str> = token.or(gh_token.as_deref());
 
-    let mut callbacks = RemoteCallbacks::new();
-    callbacks.credentials(|_url, username_from_url, allowed| {
-        if allowed.contains(git2::CredentialType::SSH_KEY) {
-            let user = username_from_url.unwrap_or("git");
-            return Cred::ssh_key_from_agent(user);
-        }
-        if let Some(tok) = effective_token {
-            return Cred::userpass_plaintext(tok, "");
-        }
-        Cred::default()
-    });
-
+    let callbacks = make_callbacks(effective_token);
     let mut fetch_opts = FetchOptions::new();
     fetch_opts.remote_callbacks(callbacks);
 
