@@ -367,18 +367,22 @@ function ImageCard({
       }`}
     >
       {/* Thumbnail */}
-      <div className="aspect-video bg-black/20 flex items-center justify-center overflow-hidden">
-        {isVisual ? (
-          <VisualThumbnail relativePath={image.path} />
-        ) : (
+      {isVisual ? (
+        <div className="aspect-video bg-black/20 relative overflow-hidden">
+          <div className="absolute inset-0">
+            <VisualThumbnail relativePath={image.path} />
+          </div>
+        </div>
+      ) : (
+        <div className="aspect-video bg-black/20 flex items-center justify-center overflow-hidden">
           <img
             src={src}
             alt={fileName}
             className="max-w-full max-h-full object-contain"
             loading="lazy"
           />
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Info */}
       <div className="p-2 space-y-1">
@@ -451,17 +455,19 @@ function VisualThumbnail({ relativePath }: { relativePath: string }) {
   }
 
   return (
-    <DslRenderer
-      dsl={dsl}
-      poster="last"
-      colorScheme={isDark ? "dark" : "light"}
-      theme={ELUCIM_THEME}
-      fitToContainer
-      fallback={
-        <div className="flex items-center justify-center w-full h-full text-[10px] text-[var(--color-text-secondary)]">
-          Render error
-        </div>
-      }
-    />
+    <div className="w-full h-full">
+      <DslRenderer
+        dsl={dsl}
+        poster="last"
+        colorScheme={isDark ? "dark" : "light"}
+        theme={ELUCIM_THEME}
+        fitToContainer
+        fallback={
+          <div className="flex items-center justify-center w-full h-full text-[10px] text-[var(--color-text-secondary)]">
+            Render error
+          </div>
+        }
+      />
+    </div>
   );
 }
