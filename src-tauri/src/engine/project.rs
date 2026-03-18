@@ -1025,9 +1025,25 @@ pub fn delete_chat_session(path: &Path) -> Result<(), ProjectError> {
 
 // ── Sidebar order manifest ──────────────────────────────────────────
 
-const ORDER_FILE: &str = ".cutready-order.json";
-const WORKSPACE_FILE: &str = ".cutready/workspace.json";
+// Ephemeral UI state lives in .git/cutready/ (never tracked by snapshots).
+// Only user content (sketches, visuals, screenshots, etc.) stays in the working tree.
+const GIT_STATE_DIR: &str = ".git/cutready";
+
 const REPO_SETTINGS_FILE: &str = ".cutready/settings.json";
+
+/// Resolve the per-project state directory inside .git/cutready/.
+/// For single-project repos: `.git/cutready/`
+/// For multi-project repos: `.git/cutready/<project-name>/`
+fn git_state_dir(repo_root: &Path, project_root: &Path) -> std::path::PathBuf {
+    let base = repo_root.join(GIT_STATE_DIR);
+    if repo_root == project_root {
+        base
+    } else if let Ok(rel) = project_root.strip_prefix(repo_root) {
+        base.join(rel)
+    } else {
+        base
+    }
+}
 
 /// Workspace state persisted across app restarts.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default)]
@@ -1051,45 +1067,78 @@ pub struct WorkspaceTab {
 }
 
 /// Read workspace state. Returns default (empty) if missing.
-pub fn read_workspace_state(project_root: &Path) -> WorkspaceState {
-    let path = project_root.join(WORKSPACE_FILE);
-    if let Ok(data) = std::fs::read_to_string(&path) {
-        serde_json::from_str(&data).unwrap_or_default()
-    } else {
-        WorkspaceState::default()
+/// Checks .git/cutready/ first (new location), falls back to .cutready/ (legacy).
+pub fn read_workspace_state(repo_root: &Path, project_root: &Path) -> WorkspaceState {
+    let state_dir = git_state_dir(repo_root, project_root);
+    let new_path = state_dir.join("workspace.json");
+    if let Ok(data) = std::fs::read_to_string(&new_path) {
+        if let Ok(ws) = serde_json::from_str(&data) {
+            return ws;
+        }
     }
+    // Legacy fallback: read from .cutready/workspace.json
+    let legacy_path = project_root.join(".cutready/workspace.json");
+    if let Ok(data) = std::fs::read_to_string(&legacy_path) {
+        if let Ok(ws) = serde_json::from_str::<WorkspaceState>(&data) {
+            // Migrate: write to new location, remove legacy file
+            let _ = std::fs::create_dir_all(&state_dir);
+            let _ = serde_json::to_string_pretty(&ws)
+                .map(|json| std::fs::write(&new_path, json));
+            let _ = std::fs::remove_file(&legacy_path);
+            return ws;
+        }
+    }
+    WorkspaceState::default()
 }
 
-/// Write workspace state.
+/// Write workspace state to .git/cutready/ (untracked by snapshots).
 pub fn write_workspace_state(
+    repo_root: &Path,
     project_root: &Path,
     ws: &WorkspaceState,
 ) -> Result<(), ProjectError> {
-    let path = project_root.join(WORKSPACE_FILE);
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| ProjectError::Io(e.to_string()))?;
-    }
+    let state_dir = git_state_dir(repo_root, project_root);
+    std::fs::create_dir_all(&state_dir).map_err(|e| ProjectError::Io(e.to_string()))?;
+    let path = state_dir.join("workspace.json");
     let data =
         serde_json::to_string_pretty(ws).map_err(|e| ProjectError::Serialize(e.to_string()))?;
     std::fs::write(&path, data).map_err(|e| ProjectError::Io(e.to_string()))
 }
 
 /// Read the sidebar ordering manifest. Returns default (empty) if missing.
-pub fn read_sidebar_order(project_root: &Path) -> SidebarOrder {
-    let path = project_root.join(ORDER_FILE);
-    if let Ok(data) = std::fs::read_to_string(&path) {
-        serde_json::from_str(&data).unwrap_or_default()
-    } else {
-        SidebarOrder::default()
+/// Checks .git/cutready/ first (new location), falls back to legacy locations.
+pub fn read_sidebar_order(repo_root: &Path, project_root: &Path) -> SidebarOrder {
+    let state_dir = git_state_dir(repo_root, project_root);
+    let new_path = state_dir.join("order.json");
+    if let Ok(data) = std::fs::read_to_string(&new_path) {
+        if let Ok(order) = serde_json::from_str(&data) {
+            return order;
+        }
     }
+    // Legacy fallback: read from .cutready-order.json in project root
+    let legacy_path = project_root.join(".cutready-order.json");
+    if let Ok(data) = std::fs::read_to_string(&legacy_path) {
+        if let Ok(order) = serde_json::from_str::<SidebarOrder>(&data) {
+            // Migrate: write to new location, remove legacy file
+            let _ = std::fs::create_dir_all(&state_dir);
+            let _ = serde_json::to_string_pretty(&order)
+                .map(|json| std::fs::write(&new_path, json));
+            let _ = std::fs::remove_file(&legacy_path);
+            return order;
+        }
+    }
+    SidebarOrder::default()
 }
 
-/// Write the sidebar ordering manifest.
+/// Write the sidebar ordering manifest to .git/cutready/ (untracked by snapshots).
 pub fn write_sidebar_order(
+    repo_root: &Path,
     project_root: &Path,
     order: &SidebarOrder,
 ) -> Result<(), ProjectError> {
-    let path = project_root.join(ORDER_FILE);
+    let state_dir = git_state_dir(repo_root, project_root);
+    std::fs::create_dir_all(&state_dir).map_err(|e| ProjectError::Io(e.to_string()))?;
+    let path = state_dir.join("order.json");
     let data =
         serde_json::to_string_pretty(order).map_err(|e| ProjectError::Serialize(e.to_string()))?;
     std::fs::write(&path, data).map_err(|e| ProjectError::Io(e.to_string()))

@@ -57,6 +57,8 @@ export function SnapshotDialog() {
       close();
     } catch (err) {
       console.error("Snapshot save failed:", err);
+      const { useToastStore } = await import("../stores/toastStore");
+      useToastStore.getState().show(`Snapshot failed: ${err}`, 5000);
       setSaving(false);
     }
   }, [label, forkLabel, isRewound, saveVersion, loadGraphData, loadTimelines, close]);

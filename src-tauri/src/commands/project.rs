@@ -19,6 +19,13 @@ fn project_root(state: &AppState) -> Result<std::path::PathBuf, String> {
     Ok(view.root.clone())
 }
 
+/// Helper: get both project root and repo root from current state.
+fn project_and_repo_root(state: &AppState) -> Result<(std::path::PathBuf, std::path::PathBuf), String> {
+    let current = state.current_project.lock().map_err(|e| e.to_string())?;
+    let view = current.as_ref().ok_or("No project is currently open")?;
+    Ok((view.root.clone(), view.repo_root.clone()))
+}
+
 /// Initialize a new project in the given folder.
 #[tauri::command]
 pub async fn create_project_folder(
@@ -266,8 +273,8 @@ fn update_last_active_project(
 pub async fn get_sidebar_order(
     state: State<'_, AppState>,
 ) -> Result<project::SidebarOrder, String> {
-    let root = project_root(&state)?;
-    Ok(project::read_sidebar_order(&root))
+    let (proj_root, rp_root) = project_and_repo_root(&state)?;
+    Ok(project::read_sidebar_order(&rp_root, &proj_root))
 }
 
 /// Save the sidebar ordering manifest for the current project.
@@ -276,8 +283,8 @@ pub async fn set_sidebar_order(
     order: project::SidebarOrder,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let root = project_root(&state)?;
-    project::write_sidebar_order(&root, &order).map_err(|e| e.to_string())
+    let (proj_root, rp_root) = project_and_repo_root(&state)?;
+    project::write_sidebar_order(&rp_root, &proj_root, &order).map_err(|e| e.to_string())
 }
 
 /// Get workspace state (open tabs, active tab, chat session) for the current project.
@@ -285,8 +292,8 @@ pub async fn set_sidebar_order(
 pub async fn get_workspace_state(
     state: State<'_, AppState>,
 ) -> Result<project::WorkspaceState, String> {
-    let root = project_root(&state)?;
-    Ok(project::read_workspace_state(&root))
+    let (proj_root, rp_root) = project_and_repo_root(&state)?;
+    Ok(project::read_workspace_state(&rp_root, &proj_root))
 }
 
 /// Save workspace state for the current project.
@@ -295,8 +302,8 @@ pub async fn set_workspace_state(
     workspace: project::WorkspaceState,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let root = project_root(&state)?;
-    project::write_workspace_state(&root, &workspace).map_err(|e| e.to_string())
+    let (proj_root, rp_root) = project_and_repo_root(&state)?;
+    project::write_workspace_state(&rp_root, &proj_root, &workspace).map_err(|e| e.to_string())
 }
 
 /// List all files and directories in the project folder.

@@ -142,18 +142,48 @@ pub fn discard_changes(project_dir: &Path) -> Result<(), VersioningError> {
 
 /// Check if working directory has changes not captured in a snapshot.
 pub fn has_unsaved_changes(project_dir: &Path) -> Result<bool, VersioningError> {
-    let repo = open_repo(project_dir)?;
+    // Use git2 status which handles CRLF normalization and .gitignore correctly.
+    let repo = git2::Repository::open(project_dir)
+        .map_err(|e| VersioningError::Git(e.to_string()))?;
 
-    let head_tree_id = match repo.head_commit() {
-        Ok(commit) => {
-            let tree = commit.tree().map_err(|e| VersioningError::Git(e.to_string()))?;
-            tree.id
+    // If no HEAD commit yet, any files = unsaved changes
+    if repo.head().is_err() {
+        return Ok(true);
+    }
+
+    let statuses = repo
+        .statuses(Some(
+            git2::StatusOptions::new()
+                .include_untracked(true)
+                .recurse_untracked_dirs(true)
+                // Exclude files we don't track in snapshots
+                .exclude_submodules(true),
+        ))
+        .map_err(|e| VersioningError::Git(e.to_string()))?;
+
+    // Check if any entry is dirty (modified, new, deleted, renamed)
+    for entry in statuses.iter() {
+        let status = entry.status();
+        // Skip ignored files
+        if status.contains(git2::Status::IGNORED) {
+            continue;
         }
-        Err(_) => return Ok(true), // No commits yet = everything is unsaved
-    };
+        // Any index or working-tree change counts
+        if status.intersects(
+            git2::Status::INDEX_NEW
+                | git2::Status::INDEX_MODIFIED
+                | git2::Status::INDEX_DELETED
+                | git2::Status::INDEX_RENAMED
+                | git2::Status::WT_NEW
+                | git2::Status::WT_MODIFIED
+                | git2::Status::WT_DELETED
+                | git2::Status::WT_RENAMED,
+        ) {
+            return Ok(true);
+        }
+    }
 
-    let working_tree_id = build_tree_from_dir(&repo, project_dir, project_dir)?;
-    Ok(working_tree_id != head_tree_id)
+    Ok(false)
 }
 
 /// List all versions (commits) in reverse chronological order.
