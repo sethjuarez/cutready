@@ -36,6 +36,13 @@ pub fn init_project_repo(project_dir: &Path) -> Result<(), VersioningError> {
     let head_path = repo.git_dir().join("HEAD");
     std::fs::write(&head_path, "ref: refs/heads/main\n")
         .map_err(|e| VersioningError::Io(e.to_string()))?;
+
+    // Ensure reflog directories exist (gix::init may not create them)
+    let _ = std::fs::create_dir_all(repo.git_dir().join("logs").join("refs").join("heads"));
+
+    // Resolve git identity so commits and reflogs work on fresh machines
+    ensure_git_identity(project_dir);
+
     Ok(())
 }
 
@@ -62,9 +69,11 @@ pub fn commit_snapshot(
 
     let parents_refs: Vec<&gix::oid> = parent_ids.iter().map(|id| id.as_ref()).collect();
 
+    let (author_name, author_email) = resolve_committer(project_dir);
+
     let committer = gix::actor::SignatureRef {
-        name: "CutReady".into(),
-        email: "app@cutready.local".into(),
+        name: author_name.as_str().into(),
+        email: author_email.as_str().into(),
         time: gix::date::Time::now_local_or_utc(),
     };
 
@@ -1051,7 +1060,132 @@ pub fn diff_working_tree(project_dir: &Path) -> Result<Vec<DiffEntry>, Versionin
 }
 
 fn open_repo(project_dir: &Path) -> Result<gix::Repository, VersioningError> {
+    // Ensure the git identity is configured before opening with gix.
+    // gix needs user.name/email in config for reflog entries — without them,
+    // commit_as() and reference() fail with "reflog could not be created".
+    ensure_git_identity(project_dir);
+
     gix::open(project_dir).map_err(|e| VersioningError::Git(e.to_string()))
+}
+
+/// Resolve the git committer identity for this repo.
+/// Returns (name, email) from git config (guaranteed to be set after ensure_git_identity).
+fn resolve_committer(project_dir: &Path) -> (String, String) {
+    if let Ok(repo) = git2::Repository::open(project_dir) {
+        if let Ok(config) = repo.config() {
+            let name = config.get_string("user.name").unwrap_or_default();
+            let email = config.get_string("user.email").unwrap_or_default();
+            if !name.is_empty() && !email.is_empty() {
+                return (name, email);
+            }
+        }
+    }
+    ("CutReady".into(), "app@cutready.local".into())
+}
+
+/// Ensure user.name and user.email exist in the repo's **local** git config.
+///
+/// CutReady manages its own git repos, so the local config must be
+/// self-contained — we can't depend on global/system config existing.
+///
+/// Resolution order for missing values:
+///   1. Copy from global/system git config (respect the user's identity)
+///   2. `gh api user` — infer identity from GitHub CLI auth
+///   3. "CutReady" / "app@cutready.local" — fallback so the app always works
+pub fn ensure_git_identity(project_dir: &Path) {
+    let git_dir = project_dir.join(".git");
+    let config_path = git_dir.join("config");
+    if !config_path.exists() {
+        return;
+    }
+
+    // Check LOCAL config only — global/system may not exist on every machine
+    let local = match git2::Config::open(&config_path) {
+        Ok(c) => c,
+        Err(_) => return,
+    };
+
+    let has_local_name = local.get_string("user.name").is_ok();
+    let has_local_email = local.get_string("user.email").is_ok();
+    if has_local_name && has_local_email {
+        return;
+    }
+    drop(local);
+
+    // Try to inherit from global/system config first
+    let (global_name, global_email) = resolve_global_git_identity(project_dir);
+
+    // If global didn't have it, try GitHub CLI
+    let (gh_name, gh_email) = if global_name.is_none() || global_email.is_none() {
+        resolve_gh_identity()
+    } else {
+        (None, None)
+    };
+
+    // Write to local repo config (priority: global > gh > default)
+    if let Ok(mut local) = git2::Config::open(&config_path) {
+        if !has_local_name {
+            let name = global_name.as_deref()
+                .or(gh_name.as_deref())
+                .unwrap_or("CutReady");
+            let _ = local.set_str("user.name", name);
+        }
+        if !has_local_email {
+            let email = global_email.as_deref()
+                .or(gh_email.as_deref())
+                .unwrap_or("app@cutready.local");
+            let _ = local.set_str("user.email", email);
+        }
+    }
+}
+
+/// Read user.name/email from global/system git config (not local).
+fn resolve_global_git_identity(project_dir: &Path) -> (Option<String>, Option<String>) {
+    let repo = match git2::Repository::open(project_dir) {
+        Ok(r) => r,
+        Err(_) => return (None, None),
+    };
+    let config = match repo.config() {
+        Ok(c) => c,
+        Err(_) => return (None, None),
+    };
+
+    let name = config.get_string("user.name").ok();
+    let email = config.get_string("user.email").ok();
+    (name, email)
+}
+
+/// Query `gh api user` for the authenticated GitHub identity.
+fn resolve_gh_identity() -> (Option<String>, Option<String>) {
+    let output = match std::process::Command::new("gh")
+        .args(["api", "user", "--jq", r#"[.name, .login, .email] | @tsv"#])
+        .output()
+    {
+        Ok(o) if o.status.success() => o,
+        _ => return (None, None),
+    };
+
+    let text = String::from_utf8_lossy(&output.stdout);
+    let parts: Vec<&str> = text.trim().split('\t').collect();
+
+    let raw_name = parts.first().and_then(|s| {
+        let s = s.trim();
+        if s.is_empty() || s == "null" { None } else { Some(s.to_string()) }
+    });
+    let login = parts.get(1).and_then(|s| {
+        let s = s.trim();
+        if s.is_empty() || s == "null" { None } else { Some(s.to_string()) }
+    });
+    let raw_email = parts.get(2).and_then(|s| {
+        let s = s.trim();
+        if s.is_empty() || s == "null" { None } else { Some(s.to_string()) }
+    });
+
+    let name = raw_name.or(login.clone());
+    let email = raw_email
+        .or_else(|| login.map(|l| format!("{}@users.noreply.github.com", l)));
+
+    (name, email)
 }
 
 /// Resolve a (possibly short) commit hash to a full 40-char hex SHA.
@@ -2562,5 +2696,56 @@ mod tests {
         std::fs::write(tmp.path().join("a.txt"), "content").unwrap();
         assert!(has_unsaved_changes(tmp.path()).unwrap(),
             "Repo with no HEAD should be considered dirty");
+    }
+
+    #[test]
+    fn commit_works_without_global_git_identity() {
+        // Reproduces #17: on a fresh machine with no git config user.name/email,
+        // gix fails to write reflog entries → "reflog could not be created or updated".
+        // ensure_git_identity should resolve this via global config, gh, or fallback.
+        let tmp = setup_project_dir();
+        init_project_repo(tmp.path()).unwrap();
+
+        // Strip any identity from LOCAL config (simulates a fresh clone on
+        // a machine where init/clone didn't write user identity)
+        let config_path = tmp.path().join(".git").join("config");
+        let config_text = std::fs::read_to_string(&config_path).unwrap();
+        let mut in_user = false;
+        let cleaned: String = config_text
+            .lines()
+            .filter(|l| {
+                let t = l.trim().to_lowercase();
+                if t.starts_with('[') {
+                    in_user = t.starts_with("[user]");
+                    return !in_user;
+                }
+                !in_user
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        std::fs::write(&config_path, format!("{}\n", cleaned)).unwrap();
+
+        // Verify local config has no identity
+        let local = git2::Config::open(&config_path).unwrap();
+        assert!(local.get_string("user.name").is_err(),
+            "Test setup: local config should have no user.name");
+        drop(local);
+
+        // Run our fix — should write identity to local config
+        ensure_git_identity(tmp.path());
+
+        // Verify local config now has identity
+        let local = git2::Config::open(&config_path).unwrap();
+        assert!(local.get_string("user.name").is_ok(),
+            "ensure_git_identity should have written user.name to local config");
+        assert!(local.get_string("user.email").is_ok(),
+            "ensure_git_identity should have written user.email to local config");
+        drop(local);
+
+        // Commit should succeed
+        std::fs::write(tmp.path().join("test.sk"), "content").unwrap();
+        let result = commit_snapshot(tmp.path(), "snapshot after identity fix", None);
+        assert!(result.is_ok(),
+            "commit_snapshot should succeed after ensure_git_identity: {:?}", result.err());
     }
 }
