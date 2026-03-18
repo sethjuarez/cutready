@@ -135,7 +135,9 @@ pub fn discard_changes(project_dir: &Path) -> Result<(), VersioningError> {
         .tree()
         .map_err(|e| VersioningError::Git(e.to_string()))?;
     clean_working_dir(project_dir)?;
-    write_tree_to_dir(&repo, tree.id, project_dir)
+    write_tree_to_dir(&repo, tree.id, project_dir)?;
+    sync_index_to_head(project_dir);
+    Ok(())
 }
 
 /// Check if working directory has changes not captured in a snapshot.
@@ -290,6 +292,7 @@ pub fn pop_stash(project_dir: &Path) -> Result<bool, VersioningError> {
     write_tree_to_dir(&repo, tree_id, project_dir)?;
 
     std::fs::remove_file(&stash_file).map_err(|e| VersioningError::Io(e.to_string()))?;
+    sync_index_to_head(project_dir);
     Ok(true)
 }
 
