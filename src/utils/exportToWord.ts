@@ -31,11 +31,11 @@ import type { Sketch, Storyboard } from "../types/sketch";
 
 // ── Markdown → docx primitives ──────────────────────────────────
 
-/** Parse inline markdown into styled TextRuns. Handles **bold**, *italic*, `code`. */
+/** Parse inline markdown into styled TextRuns and ImageRuns. Handles **bold**, *italic*, `code`, and ![alt](path) images. */
 function parseInlineMarkdown(text: string): TextRun[] {
   const runs: TextRun[] = [];
-  // Regex matches: `code`, ***bolditalic***, **bold**, *italic*, or plain text
-  const pattern = /(`[^`]+`|\*\*\*[^*]+\*\*\*|\*\*[^*]+\*\*|\*[^*]+\*)/g;
+  // Regex matches: image, `code`, ***bolditalic***, **bold**, *italic*, or plain text
+  const pattern = /(!\[[^\]]*\]\([^)]+\)|`[^`]+`|\*\*\*[^*]+\*\*\*|\*\*[^*]+\*\*|\*[^*]+\*)/g;
   let lastIndex = 0;
 
   for (const match of text.matchAll(pattern)) {
@@ -43,7 +43,12 @@ function parseInlineMarkdown(text: string): TextRun[] {
     if (before) runs.push(new TextRun({ text: before }));
 
     const raw = match[0];
-    if (raw.startsWith("`")) {
+    if (raw.startsWith("![")) {
+      // Image reference — rendered as placeholder text (actual image handled by caller)
+      const altMatch = raw.match(/!\[([^\]]*)\]\(([^)]+)\)/);
+      const alt = altMatch?.[1] || altMatch?.[2] || "image";
+      runs.push(new TextRun({ text: `[${alt}]`, italics: true }));
+    } else if (raw.startsWith("`")) {
       runs.push(new TextRun({ text: raw.slice(1, -1), font: "Consolas", bold: true }));
     } else if (raw.startsWith("***")) {
       runs.push(new TextRun({ text: raw.slice(3, -3), bold: true, italics: true }));
@@ -464,19 +469,40 @@ async function markdownToDocxContent(
       continue;
     }
 
-    // Image: ![alt](path)
-    const imgMatch = trimmed.match(/^!\[([^\]]*)\]\(([^)]+)\)/);
-    if (imgMatch) {
-      const imgPath = imgMatch[2];
-      const img = await readScreenshot(projectRoot, imgPath);
-      if (img) {
-        elements.push(new Paragraph({ children: [img] }));
-      } else {
-        elements.push(
-          new Paragraph({
-            children: [new TextRun({ text: `[Image: ${imgPath}]`, italics: true })],
-          }),
-        );
+    // Image: ![alt](path) — handle lines containing one or more images
+    // Images may be standalone or mixed with text
+    const imgPattern = /!\[([^\]]*)\]\(([^)]+)\)/g;
+    if (imgPattern.test(trimmed)) {
+      imgPattern.lastIndex = 0; // reset after test
+      const parts: (Paragraph | null)[] = [];
+      let lastIdx = 0;
+      for (const m of trimmed.matchAll(imgPattern)) {
+        // Text before image
+        const before = trimmed.slice(lastIdx, m.index).trim();
+        if (before) {
+          parts.push(new Paragraph({ children: parseInlineMarkdown(before) }));
+        }
+        // The image itself
+        const imgPath = m[2];
+        const img = await readScreenshot(projectRoot, imgPath);
+        if (img) {
+          parts.push(new Paragraph({ children: [img] }));
+        } else {
+          parts.push(
+            new Paragraph({
+              children: [new TextRun({ text: `[Image: ${imgPath}]`, italics: true })],
+            }),
+          );
+        }
+        lastIdx = m.index! + m[0].length;
+      }
+      // Text after last image
+      const after = trimmed.slice(lastIdx).trim();
+      if (after) {
+        parts.push(new Paragraph({ children: parseInlineMarkdown(after) }));
+      }
+      for (const p of parts) {
+        if (p) elements.push(p);
       }
       continue;
     }
