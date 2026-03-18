@@ -174,9 +174,64 @@ pub fn open_repo(root: &Path) -> Result<(RepoView, Vec<ProjectEntry>), ProjectEr
         let _ = versioning::commit_snapshot(root, "Initialize project", None);
     }
 
+    // Repair: move orphaned repo-level assets into the first project.
+    // This fixes workspaces migrated before the asset-move fix.
+    repair_orphaned_assets(root);
+
     let repo = RepoView::new(root.to_path_buf());
     let projects = list_projects(root);
     Ok((repo, projects))
+}
+
+/// Move orphaned `.cutready/screenshots` and `.cutready/visuals` from repo root
+/// into the first project's `.cutready/` directory. This repairs workspaces that
+/// were migrated to multi-project before the migration learned to move assets.
+fn repair_orphaned_assets(repo_root: &Path) {
+    let manifest = match read_manifest(repo_root) {
+        Some(m) if !m.projects.is_empty() => m,
+        _ => return, // single-project or empty — nothing to repair
+    };
+
+    // Only repair if the first project is NOT "." (i.e. truly multi-project)
+    let first = &manifest.projects[0];
+    if first.path == "." {
+        return;
+    }
+
+    let cutready = repo_root.join(".cutready");
+    let target_cutready = repo_root.join(&first.path).join(".cutready");
+
+    for subdir in &["screenshots", "visuals"] {
+        let src = cutready.join(subdir);
+        if !src.exists() || !src.is_dir() {
+            continue;
+        }
+
+        // Check if there are actual files to move
+        let has_files = std::fs::read_dir(&src)
+            .map(|rd| rd.count() > 0)
+            .unwrap_or(false);
+        if !has_files {
+            continue;
+        }
+
+        // Ensure destination exists
+        let dest_dir = target_cutready.join(subdir);
+        let _ = std::fs::create_dir_all(&dest_dir);
+
+        // Move each file (don't overwrite existing)
+        if let Ok(entries) = std::fs::read_dir(&src) {
+            for entry in entries.flatten() {
+                let dest_file = dest_dir.join(entry.file_name());
+                if !dest_file.exists() {
+                    let _ = std::fs::rename(entry.path(), &dest_file);
+                }
+            }
+        }
+
+        // Remove the now-empty source dir
+        let _ = std::fs::remove_dir(&src);
+    }
 }
 
 /// Create a new project within a multi-project repo.
@@ -251,8 +306,8 @@ pub fn migrate_to_multi_project(
     // Create the target subdirectory
     std::fs::create_dir_all(&target).map_err(|e| ProjectError::Io(e.to_string()))?;
 
-    // Move all project files (not .git, not .cutready) into the subdirectory
-    let skip = [".git", ".cutready", &path];
+    // Move all project files (not .git, not .cutready, not the target dir) into the subdirectory
+    let skip = [".git", ".cutready", &path as &str];
     for entry in std::fs::read_dir(repo_root).map_err(|e| ProjectError::Io(e.to_string()))? {
         let entry = entry.map_err(|e| ProjectError::Io(e.to_string()))?;
         let name = entry.file_name();
@@ -262,6 +317,20 @@ pub fn migrate_to_multi_project(
         }
         let dest = target.join(&name);
         std::fs::rename(entry.path(), &dest).map_err(|e| ProjectError::Io(e.to_string()))?;
+    }
+
+    // Move asset directories (.cutready/screenshots, .cutready/visuals) into the project.
+    // The repo-level .cutready/ is kept for the manifest; only asset subdirs move.
+    let cutready_dir = repo_root.join(".cutready");
+    for subdir in &["screenshots", "visuals"] {
+        let src = cutready_dir.join(subdir);
+        if src.exists() {
+            let dest_cutready = target.join(".cutready");
+            std::fs::create_dir_all(&dest_cutready)
+                .map_err(|e| ProjectError::Io(e.to_string()))?;
+            let dest = dest_cutready.join(subdir);
+            std::fs::rename(&src, &dest).map_err(|e| ProjectError::Io(e.to_string()))?;
+        }
     }
 
     let entry = ProjectEntry {
