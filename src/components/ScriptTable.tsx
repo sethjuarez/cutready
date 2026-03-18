@@ -526,8 +526,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
 
             {/* Nudge bar (both modes) */}
             {onNudgeVisual && !readOnly && (
-              <div className="flex items-center gap-2 px-4 py-2.5 border-t border-[var(--color-border)] bg-[var(--color-surface-alt)] shrink-0">
-                <span className="text-[11px] text-[var(--color-text-secondary)] shrink-0">AI Nudge</span>
+              <div className="flex items-center gap-2 px-4 py-2 border-t border-[var(--color-border)] bg-[var(--color-surface-alt)] shrink-0">
                 <input
                   type="text"
                   value={nudgeInput}
@@ -550,9 +549,11 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
                     }
                   }}
                   disabled={!nudgeInput.trim()}
-                  className="px-3 py-1.5 rounded-lg bg-[var(--color-accent)] text-white text-[12px] font-medium disabled:opacity-40 hover:bg-[var(--color-accent-hover)] transition-colors"
+                  className="p-1.5 rounded-lg text-[var(--color-text-secondary)] hover:text-[var(--color-text)] disabled:opacity-30 transition-colors"
                 >
-                  Nudge ✨
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 3l1.912 5.813a2 2 0 0 0 1.275 1.275L21 12l-5.813 1.912a2 2 0 0 0-1.275 1.275L12 21l-1.912-5.813a2 2 0 0 0-1.275-1.275L3 12l5.813-1.912a2 2 0 0 0 1.275-1.275L12 3z" />
+                  </svg>
                 </button>
               </div>
             )}
