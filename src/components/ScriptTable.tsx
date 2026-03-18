@@ -77,6 +77,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
   const [lightboxMode, setLightboxMode] = useState<"preview" | "edit">("preview");
   const [editorDsl, setEditorDsl] = useState<ElucimDocument | null>(null);
   const [editorDirty, setEditorDirty] = useState(false);
+  const [visualVersion, setVisualVersion] = useState(0);
   const focusCellAfterRender = useRef<number | null>(null);
   const [undoToast, setUndoToast] = useState<string | null>(null);
   const undoToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -205,6 +206,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
         document: doc,
       });
       setEditorDirty(false);
+      setVisualVersion((v) => v + 1);
     } catch (err) {
       console.error("[ScriptTable] Failed to save visual:", err);
     }
@@ -385,6 +387,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
                   isHighlighted={highlightedRows?.has(idx) ?? false}
                   rowDiff={rowDiffs?.find((d) => d.rowIndex === idx)}
                   onDismissHighlight={onDismissHighlights}
+                  visualVersion={visualVersion}
                 />
               ))}
             </tbody>
@@ -524,6 +527,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
                         visualPath={visualLightbox.visualPath}
                         mode="full"
                         className="w-full h-full"
+                        key={`${visualLightbox.visualPath}-v${visualVersion}`}
                       />
                     </Suspense>
                   </div>
@@ -628,6 +632,7 @@ function SortableRow({
   isHighlighted,
   rowDiff,
   onDismissHighlight,
+  visualVersion,
 }: {
   id: string;
   row: PlanningRow;
@@ -651,6 +656,7 @@ function SortableRow({
   isHighlighted?: boolean;
   rowDiff?: RowDiff;
   onDismissHighlight?: () => void;
+  visualVersion: number;
 }){
   const [diffExpanded, setDiffExpanded] = useState(true);
   const {
@@ -773,6 +779,7 @@ function SortableRow({
               <VisualCell
                 visualPath={row.visual!}
                 mode="thumbnail"
+                key={`${row.visual}-v${visualVersion}`}
               />
             </Suspense>
             {/* Hover overlay with action buttons */}
