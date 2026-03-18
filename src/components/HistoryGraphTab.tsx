@@ -476,14 +476,26 @@ export function HistoryGraphTab() {
                       strokeWidth={1.5} strokeDasharray="3 2" opacity={0.6} />
                   )}
 
-                  {node.is_remote_tip && (
-                    <g>
-                      <rect x={x - r - 41} y={y - 7} width={38} height={14} rx={3}
-                        fill="var(--color-surface)" stroke="var(--color-border)" strokeWidth={0.5} />
-                      <text x={x - r - 37} y={y + 1} dominantBaseline="middle"
-                        fontSize={7} fill="var(--color-text-secondary)" fontWeight={500}>origin</text>
-                    </g>
-                  )}
+                  {node.is_remote_tip && (() => {
+                    const badgeW = 38;
+                    const badgeX = x - r - 3 - badgeW;
+                    return (
+                      <g>
+                        {/* Connector line — mirrors the right-side branch connector */}
+                        {dir === "vertical" && (
+                          <line
+                            x1={x - r - 2} y1={y}
+                            x2={badgeX + badgeW + 2} y2={y}
+                            stroke="#10b981" strokeWidth={0.5} opacity={0.25}
+                          />
+                        )}
+                        <rect x={badgeX} y={y - 7} width={badgeW} height={14} rx={3}
+                          fill="#10b981" opacity={0.15} />
+                        <text x={badgeX + 5} y={y + 3} fontSize={7.5} fill="#10b981" opacity={0.85}
+                          fontWeight={600} fontFamily="var(--font-mono, monospace)">origin</text>
+                      </g>
+                    );
+                  })()}
 
                   {/* Connector line from node to label (vertical mode) */}
                   {dir === "vertical" && ln.showLabel && (

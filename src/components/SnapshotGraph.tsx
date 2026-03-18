@@ -193,7 +193,8 @@ export function SnapshotGraph({
     return result;
   }, [sorted, displayLane, numLanes, isDirty, isRewound, aliases]);
 
-  const graphW = GRAPH_PAD + (numLanes || 1) * LANE_W + 4;
+  const graphPad = showRemoteBadges ? 52 : GRAPH_PAD;
+  const graphW = graphPad + (numLanes || 1) * LANE_W + 4;
 
   /* ── empty state ─────────────────────────────── */
   if (sorted.length === 0 && !isDirty) {
@@ -215,7 +216,7 @@ export function SnapshotGraph({
     totalH += r.h;
   }
   function rowCy(i: number) { return rowTops[i] + rows[i].h / 2; }
-  function laneX(l: number) { return GRAPH_PAD + l * LANE_W; }
+  function laneX(l: number) { return graphPad + l * LANE_W; }
 
   /* ── Build SVG paths: rails + connectors ──────── */
   // For each node row, we need:
@@ -403,6 +404,28 @@ export function SnapshotGraph({
                 onClick={() => onNodeClick(node.id, node.is_head)}
                 title={node.is_head ? "Current snapshot (HEAD)" : `Navigate to: ${node.message}`}
               />
+              {/* Remote badge — left of the dot with connector line, mirroring branch labels */}
+              {showRemoteBadges && node.is_remote_tip && (() => {
+                const badgeLeft = 2;
+                const badgeW = 40;
+                const lineLeft = badgeLeft + badgeW;
+                const lineRight = x - r - 2;
+                return (
+                  <>
+                    {lineRight > lineLeft && (
+                      <div className="absolute" style={{
+                        left: lineLeft, top: "50%",
+                        width: lineRight - lineLeft, height: 0,
+                        borderTop: "1px solid #10b981", opacity: 0.25,
+                        zIndex: 1,
+                      }} />
+                    )}
+                    <div className="absolute text-[9px] px-1.5 py-px rounded-sm leading-tight whitespace-nowrap font-semibold font-mono"
+                      style={{ left: badgeLeft, top: "50%", transform: "translateY(-50%)", zIndex: 2, color: "#10b981", backgroundColor: "rgba(16,185,129,0.15)" }}
+                      title="Remote tracking branch points here">origin</div>
+                  </>
+                );
+              })()}
             </div>
             {/* Label column — indented to match lane */}
             <div
@@ -435,10 +458,6 @@ export function SnapshotGraph({
                       style={{ backgroundColor: "var(--color-surface-alt)" }}>+{aLabel}</span>
                   );
                 })}
-                {showRemoteBadges && node.is_remote_tip && (
-                  <span className="text-[9px] px-1 py-px rounded-sm leading-tight text-emerald-600 dark:text-emerald-400 bg-emerald-500/10"
-                    title="Remote tracking branch points here">origin</span>
-                )}
               </div>
             </div>
           </div>
