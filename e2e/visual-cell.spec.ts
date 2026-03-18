@@ -111,6 +111,8 @@ const VALID_VISUAL = {
 };
 
 // Sketch with a visual on row 0, no visual on row 1
+const VISUAL_PATH = ".cutready/visuals/test-visual.json";
+
 const SKETCH_WITH_VISUAL = {
   title: "Visual Test Sketch",
   description: "Testing elucim visual rendering",
@@ -120,7 +122,7 @@ const SKETCH_WITH_VISUAL = {
       narrative: "Introduction with animated visual",
       demo_actions: "Show the landing page",
       screenshot: null,
-      visual: VALID_VISUAL,
+      visual: VISUAL_PATH,
     },
     {
       time: "0:30–1:00",
@@ -155,8 +157,12 @@ async function openProject(page: Page) {
 }
 
 async function openSketch(page: Page) {
-  // Override the sketch data to include our visual
-  await setOverrides(page, { get_sketch: SKETCH_WITH_VISUAL });
+  // Override the sketch data to include our visual (as a path reference)
+  // and override get_visual to return the actual visual JSON
+  await setOverrides(page, {
+    get_sketch: SKETCH_WITH_VISUAL,
+    get_visual: VALID_VISUAL,
+  });
   // Click the first sketch in sidebar
   await page.getByText("Demo Introduction").first().click();
   await page.waitForTimeout(800);
@@ -317,7 +323,7 @@ test.describe("VisualCell — elucim DSL rendering", () => {
       };
     });
 
-    const previewBtn = page.getByRole("button", { name: "Preview" });
+    const previewBtn = page.locator('button[title="Preview sketch (presentation mode)"]');
     await previewBtn.click();
     await page.waitForTimeout(2000); // Let animation auto-play
 
@@ -429,11 +435,11 @@ test.describe("VisualCell — elucim DSL rendering", () => {
     const sketchWithTokens = {
       ...SKETCH_WITH_VISUAL,
       rows: [
-        { ...SKETCH_WITH_VISUAL.rows[0], visual: tokenVisual },
+        { ...SKETCH_WITH_VISUAL.rows[0], visual: VISUAL_PATH },
         ...SKETCH_WITH_VISUAL.rows.slice(1),
       ],
     };
-    await setOverrides(page, { get_sketch: sketchWithTokens });
+    await setOverrides(page, { get_sketch: sketchWithTokens, get_visual: tokenVisual });
     await page.getByText("Demo Introduction").first().click();
     await page.waitForTimeout(800);
 
@@ -460,7 +466,7 @@ test.describe("VisualCell — elucim DSL rendering", () => {
     expect(cssVars).toContain("--elucim-border");
 
     // Verify the SVG text elements use var() references (resolved $tokens)
-    const svgTexts = page.locator('[data-testid="elucim-text"]');
+    const svgTexts = dslRoot.locator("svg text");
     const firstTextFill = await svgTexts.first().getAttribute("fill");
     console.log("First text fill:", firstTextFill);
     // Should be a var() reference, not a raw $token

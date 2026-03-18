@@ -289,7 +289,8 @@ test.describe("Documentation Screenshots (1920×1080)", () => {
 
   test("13 — Settings: Images", async ({ page }) => {
     await setupApp(page);
-    await page.getByRole("button", { name: "Settings" }).click();
+    // Images tab is in workspace settings, not global
+    await page.locator('[title="Workspace"]').click();
     await page.waitForTimeout(400);
     await page.getByText("Images").first().click();
     await page.waitForTimeout(300);
