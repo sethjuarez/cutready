@@ -1081,6 +1081,7 @@ pub fn read_workspace_state(repo_root: &Path, project_root: &Path) -> WorkspaceS
     if let Ok(data) = std::fs::read_to_string(&legacy_path) {
         if let Ok(ws) = serde_json::from_str::<WorkspaceState>(&data) {
             // Migrate: write to new location, remove legacy file
+            log::info!("[workspace] migrating workspace.json from {:?} → {:?}", legacy_path, new_path);
             let _ = std::fs::create_dir_all(&state_dir);
             let _ = serde_json::to_string_pretty(&ws)
                 .map(|json| std::fs::write(&new_path, json));
@@ -1120,6 +1121,7 @@ pub fn read_sidebar_order(repo_root: &Path, project_root: &Path) -> SidebarOrder
     if let Ok(data) = std::fs::read_to_string(&legacy_path) {
         if let Ok(order) = serde_json::from_str::<SidebarOrder>(&data) {
             // Migrate: write to new location, remove legacy file
+            log::info!("[workspace] migrating sidebar order from {:?} → {:?}", legacy_path, new_path);
             let _ = std::fs::create_dir_all(&state_dir);
             let _ = serde_json::to_string_pretty(&order)
                 .map(|json| std::fs::write(&new_path, json));
@@ -1715,5 +1717,106 @@ Some text
         delete_note(&note, root).unwrap();
         assert!(!note.exists(), "note should be deleted");
         assert!(img.exists(), "image referenced by sketch should be kept");
+    }
+
+    // ── Workspace state migration tests ──────────────────────────
+
+    #[test]
+    fn workspace_state_writes_to_git_dir() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        git2::Repository::init(root).unwrap();
+
+        let ws = WorkspaceState {
+            open_tabs: vec![],
+            active_tab_id: Some("test-tab".to_string()),
+            chat_session_path: None,
+        };
+        write_workspace_state(root, root, &ws).unwrap();
+
+        // Should be in .git/cutready/, not .cutready/
+        assert!(root.join(".git/cutready/workspace.json").exists(),
+            "Workspace state should be in .git/cutready/");
+        assert!(!root.join(".cutready/workspace.json").exists(),
+            "Workspace state should NOT be in .cutready/");
+    }
+
+    #[test]
+    fn workspace_state_migrates_from_legacy() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        git2::Repository::init(root).unwrap();
+
+        // Write state to legacy location
+        let legacy_dir = root.join(".cutready");
+        std::fs::create_dir_all(&legacy_dir).unwrap();
+        std::fs::write(
+            legacy_dir.join("workspace.json"),
+            r#"{"open_tabs":[],"active_tab_id":"legacy-tab"}"#,
+        ).unwrap();
+
+        // Read should find it and migrate
+        let ws = read_workspace_state(root, root);
+        assert_eq!(ws.active_tab_id.as_deref(), Some("legacy-tab"),
+            "Should read from legacy location");
+
+        // Legacy file should be deleted, new file should exist
+        assert!(!legacy_dir.join("workspace.json").exists(),
+            "Legacy file should be deleted after migration");
+        assert!(root.join(".git/cutready/workspace.json").exists(),
+            "Migrated file should be in .git/cutready/");
+
+        // Reading again should find it in new location
+        let ws2 = read_workspace_state(root, root);
+        assert_eq!(ws2.active_tab_id.as_deref(), Some("legacy-tab"));
+    }
+
+    #[test]
+    fn workspace_state_returns_default_when_missing() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        git2::Repository::init(root).unwrap();
+
+        let ws = read_workspace_state(root, root);
+        assert!(ws.open_tabs.is_empty(), "Default should have empty tabs");
+        assert!(ws.active_tab_id.is_none(), "Default should have no active tab");
+    }
+
+    #[test]
+    fn sidebar_order_migrates_from_legacy() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        git2::Repository::init(root).unwrap();
+
+        // Write to legacy location (root-level .cutready-order.json)
+        let legacy_order = SidebarOrder {
+            storyboards: vec![],
+            sketches: vec!["b.sk".to_string(), "a.sk".to_string()],
+            notes: vec![],
+        };
+        std::fs::write(
+            root.join(".cutready-order.json"),
+            serde_json::to_string(&legacy_order).unwrap(),
+        ).unwrap();
+
+        let order = read_sidebar_order(root, root);
+        assert_eq!(order.sketches, vec!["b.sk", "a.sk"]);
+
+        // Legacy file should be deleted
+        assert!(!root.join(".cutready-order.json").exists(),
+            "Legacy order file should be deleted after migration");
+        assert!(root.join(".git/cutready/order.json").exists(),
+            "Migrated order should be in .git/cutready/");
+    }
+
+    #[test]
+    fn git_state_dir_multi_project() {
+        let repo = PathBuf::from("/repo");
+        let project = PathBuf::from("/repo/projects/demo");
+        let dir = git_state_dir(&repo, &project);
+        assert!(dir.to_string_lossy().contains("cutready"),
+            "Should contain cutready dir");
+        assert!(dir.to_string_lossy().contains("demo"),
+            "Should contain project name for multi-project: {:?}", dir);
     }
 }

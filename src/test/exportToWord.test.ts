@@ -220,4 +220,44 @@ describe("exportNoteToWord", () => {
     await exportNoteToWord("With Image", md, "/projects/test");
     expect(mockWriteFile).toHaveBeenCalledTimes(1);
   }, 15_000);
+
+  it("inlines images when readFile succeeds", async () => {
+    mockReadFile.mockResolvedValue(new Uint8Array([0x89, 0x50, 0x4E, 0x47])); // PNG header
+    const md = "![Demo screenshot](.cutready/screenshots/demo.png)";
+    await exportNoteToWord("With Image", md, "/projects/test");
+    expect(mockReadFile).toHaveBeenCalledTimes(1);
+    // readFile should be called with the full path
+    const callPath = mockReadFile.mock.calls[0][0] as string;
+    expect(callPath).toContain(".cutready/screenshots/demo.png");
+    expect(mockWriteFile).toHaveBeenCalledTimes(1);
+  }, 15_000);
+
+  it("handles images mixed with text on same line", async () => {
+    mockReadFile.mockResolvedValue(new Uint8Array([0xFF, 0xD8, 0xFF]));
+    const md = "See this: ![shot](.cutready/screenshots/a.png) and this text after.";
+    await exportNoteToWord("Mixed", md, "/projects/test");
+    expect(mockReadFile).toHaveBeenCalledTimes(1);
+    expect(mockWriteFile).toHaveBeenCalledTimes(1);
+  }, 15_000);
+
+  it("handles multiple images on separate lines", async () => {
+    mockReadFile.mockResolvedValue(new Uint8Array([0xFF, 0xD8, 0xFF]));
+    const md = [
+      "![First](.cutready/screenshots/a.png)",
+      "",
+      "![Second](.cutready/screenshots/b.png)",
+    ].join("\n");
+    await exportNoteToWord("Multi Image", md, "/projects/test");
+    expect(mockReadFile).toHaveBeenCalledTimes(2);
+    expect(mockWriteFile).toHaveBeenCalledTimes(1);
+  }, 15_000);
+
+  it("handles image path with spaces", async () => {
+    mockReadFile.mockResolvedValue(new Uint8Array([0xFF, 0xD8, 0xFF]));
+    const md = "![Shot](.cutready/screenshots/my screenshot.png)";
+    await exportNoteToWord("Spaces", md, "/projects/test");
+    const callPath = mockReadFile.mock.calls[0][0] as string;
+    expect(callPath).toContain("my screenshot.png");
+    expect(mockWriteFile).toHaveBeenCalledTimes(1);
+  }, 15_000);
 });

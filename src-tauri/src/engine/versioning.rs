@@ -148,6 +148,7 @@ pub fn has_unsaved_changes(project_dir: &Path) -> Result<bool, VersioningError> 
 
     // If no HEAD commit yet, any files = unsaved changes
     if repo.head().is_err() {
+        log::debug!("[dirty] no HEAD commit — reporting dirty");
         return Ok(true);
     }
 
@@ -179,6 +180,8 @@ pub fn has_unsaved_changes(project_dir: &Path) -> Result<bool, VersioningError> 
                 | git2::Status::WT_DELETED
                 | git2::Status::WT_RENAMED,
         ) {
+            let path = entry.path().unwrap_or("<unknown>");
+            log::debug!("[dirty] changed: {:?} — {:?}", path, status);
             return Ok(true);
         }
     }
@@ -2418,5 +2421,146 @@ mod tests {
 
         let result = promote_timeline(tmp.path(), "does-not-exist");
         assert!(result.is_err(), "Should fail for nonexistent timeline");
+    }
+
+    // ── Dirty detection tests ──────────────────────────────────────
+
+    #[test]
+    fn dirty_clean_after_commit() {
+        let tmp = setup_project_dir();
+        init_project_repo(tmp.path()).unwrap();
+
+        std::fs::write(tmp.path().join("a.sk"), "content").unwrap();
+        commit_snapshot(tmp.path(), "init", None).unwrap();
+
+        assert!(!has_unsaved_changes(tmp.path()).unwrap(),
+            "Should be clean immediately after commit");
+    }
+
+    #[test]
+    fn dirty_new_file_detected() {
+        let tmp = setup_project_dir();
+        init_project_repo(tmp.path()).unwrap();
+
+        std::fs::write(tmp.path().join("a.sk"), "content").unwrap();
+        commit_snapshot(tmp.path(), "init", None).unwrap();
+
+        // Add a new untracked file
+        std::fs::write(tmp.path().join("b.sk"), "new content").unwrap();
+        assert!(has_unsaved_changes(tmp.path()).unwrap(),
+            "Should be dirty after adding untracked file");
+    }
+
+    #[test]
+    fn dirty_modified_file_detected() {
+        let tmp = setup_project_dir();
+        init_project_repo(tmp.path()).unwrap();
+
+        std::fs::write(tmp.path().join("a.sk"), "v1").unwrap();
+        commit_snapshot(tmp.path(), "init", None).unwrap();
+
+        std::fs::write(tmp.path().join("a.sk"), "v2").unwrap();
+        assert!(has_unsaved_changes(tmp.path()).unwrap(),
+            "Should be dirty after modifying tracked file");
+    }
+
+    #[test]
+    fn dirty_deleted_file_detected() {
+        let tmp = setup_project_dir();
+        init_project_repo(tmp.path()).unwrap();
+
+        std::fs::write(tmp.path().join("a.sk"), "content").unwrap();
+        commit_snapshot(tmp.path(), "init", None).unwrap();
+
+        std::fs::remove_file(tmp.path().join("a.sk")).unwrap();
+        assert!(has_unsaved_changes(tmp.path()).unwrap(),
+            "Should be dirty after deleting tracked file");
+    }
+
+    #[test]
+    fn dirty_gitignored_files_ignored() {
+        // CutReady's build_tree_from_dir skips dotfiles (except .cutready/.chats),
+        // so .gitignore itself is never committed. But we can still test that git2
+        // status respects gitignore rules by placing a .gitignore in .cutready/
+        // (which IS tracked) or using the repo-level config.
+        let tmp = setup_project_dir();
+        init_project_repo(tmp.path()).unwrap();
+
+        // Write .gitignore content via repo config (exclude file)
+        let exclude_dir = tmp.path().join(".git/info");
+        std::fs::create_dir_all(&exclude_dir).unwrap();
+        std::fs::write(exclude_dir.join("exclude"), "ignored.tmp\n").unwrap();
+
+        std::fs::write(tmp.path().join("a.sk"), "content").unwrap();
+        commit_snapshot(tmp.path(), "init", None).unwrap();
+
+        // Add a file matching the exclude pattern — should not trigger dirty
+        std::fs::write(tmp.path().join("ignored.tmp"), "should be ignored").unwrap();
+        assert!(!has_unsaved_changes(tmp.path()).unwrap(),
+            "Git-excluded files should not trigger dirty state");
+
+        // But a non-ignored file should still trigger dirty
+        std::fs::write(tmp.path().join("new.sk"), "new content").unwrap();
+        assert!(has_unsaved_changes(tmp.path()).unwrap(),
+            "Non-ignored new file should trigger dirty state");
+    }
+
+    #[test]
+    fn dirty_git_state_dir_not_tracked() {
+        // Files in .git/cutready/ should never appear as dirty
+        let tmp = setup_project_dir();
+        init_project_repo(tmp.path()).unwrap();
+
+        std::fs::write(tmp.path().join("a.sk"), "content").unwrap();
+        commit_snapshot(tmp.path(), "init", None).unwrap();
+
+        // Write ephemeral state into .git/cutready/
+        let state_dir = tmp.path().join(".git/cutready");
+        std::fs::create_dir_all(&state_dir).unwrap();
+        std::fs::write(state_dir.join("workspace.json"), r#"{"open_tabs":[]}"#).unwrap();
+
+        assert!(!has_unsaved_changes(tmp.path()).unwrap(),
+            "Files in .git/ should never trigger dirty state");
+    }
+
+    #[test]
+    fn dirty_crlf_content_not_dirty() {
+        // On Windows, git2 status with core.autocrlf handles CRLF ↔ LF normalization.
+        // Verify that modifying only line endings doesn't make a file "dirty"
+        // when the git config normalizes them.
+        let tmp = setup_project_dir();
+        init_project_repo(tmp.path()).unwrap();
+
+        // Configure autocrlf at repo level
+        let repo = git2::Repository::open(tmp.path()).unwrap();
+        repo.config().unwrap().set_bool("core.autocrlf", true).unwrap();
+        drop(repo);
+
+        // Write a file with LF and commit via build_tree_from_dir (raw bytes)
+        std::fs::write(tmp.path().join("a.sk"), "line1\nline2\n").unwrap();
+        commit_snapshot(tmp.path(), "init", None).unwrap();
+
+        // Clean right after commit
+        assert!(!has_unsaved_changes(tmp.path()).unwrap(),
+            "Should be clean right after commit");
+
+        // Rewrite with CRLF — git2 status with autocrlf should normalize
+        std::fs::write(tmp.path().join("a.sk"), "line1\r\nline2\r\n").unwrap();
+
+        // With core.autocrlf=true, git2 normalizes CRLF→LF for comparison,
+        // so the content should be considered unchanged
+        assert!(!has_unsaved_changes(tmp.path()).unwrap(),
+            "CRLF vs LF should not trigger dirty with core.autocrlf=true");
+    }
+
+    #[test]
+    fn dirty_no_head_means_dirty() {
+        // A brand new repo with no commits should report dirty if files exist
+        let tmp = TempDir::new().unwrap();
+        git2::Repository::init(tmp.path()).unwrap();
+
+        std::fs::write(tmp.path().join("a.txt"), "content").unwrap();
+        assert!(has_unsaved_changes(tmp.path()).unwrap(),
+            "Repo with no HEAD should be considered dirty");
     }
 }
