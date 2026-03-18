@@ -356,6 +356,9 @@ pub fn clone_from_url(
     builder.fetch_options(fetch_opts);
     builder.clone(url, dest)?;
 
+    // Resolve git identity so gix-based snapshots work on fresh machines
+    super::versioning::ensure_git_identity(dest);
+
     Ok(())
 }
 
