@@ -213,7 +213,7 @@ export function StoryboardList() {
 
   const handleImport = useCallback(async () => {
     try {
-      const { open: openDialog } = await import("@tauri-apps/plugin-dialog");
+      const { open: openDialog, message: showMessage } = await import("@tauri-apps/plugin-dialog");
       const selected = await openDialog({
         title: "Import Files",
         multiple: true,
@@ -227,23 +227,56 @@ export function StoryboardList() {
       });
       if (!selected) return;
 
+      // Helper: invoke an import command, handling file-exists conflicts.
+      async function importWithConflict(
+        command: string,
+        filePath: string,
+      ): Promise<string> {
+        try {
+          return await invoke<string>(command, { filePath });
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          if (msg.startsWith("FILE_EXISTS:")) {
+            const existing = msg.slice("FILE_EXISTS:".length);
+            const result = await showMessage(
+              `"${existing}" already exists in this workspace.\n\nOverwrite will replace the file and its images.`,
+              {
+                title: "File Already Exists",
+                buttons: { yes: "Overwrite", no: "Keep Both", cancel: "Cancel" },
+              },
+            );
+            if (result === "Yes") {
+              return await invoke<string>(command, { filePath, conflict: "overwrite" });
+            } else if (result === "No") {
+              return await invoke<string>(command, { filePath, conflict: "rename" });
+            }
+            return ""; // Cancel
+          }
+          throw err;
+        }
+      }
+
       const paths = Array.isArray(selected) ? selected : [selected];
       let importedNote = "";
       for (const raw of paths) {
         const filePath = typeof raw === "string" ? raw : String(raw);
         const ext = filePath.split(".").pop()?.toLowerCase();
         if (ext === "sk") {
-          await invoke<string>("import_sketch", { filePath });
+          await importWithConflict("import_sketch", filePath);
         } else if (ext === "sb") {
-          await invoke<string>("import_storyboard", { filePath });
+          await importWithConflict("import_storyboard", filePath);
         } else if (ext === "md") {
-          importedNote = await invoke<string>("import_markdown", { filePath });
+          const result = await importWithConflict("import_markdown", filePath);
+          if (result) importedNote = result;
         } else if (ext === "docx" || ext === "doc") {
-          importedNote = await invoke<string>("import_docx", { filePath });
+          const result = await importWithConflict("import_docx", filePath);
+          if (result) importedNote = result;
         } else if (ext === "pdf") {
-          importedNote = await invoke<string>("import_pdf", { filePath });
+          const result = await importWithConflict("import_pdf", filePath);
+          if (result) importedNote = result;
         } else if (ext === "pptx") {
-          importedNote = await invoke<string>("import_pptx", { filePath });
+          const result = await importWithConflict("import_pptx", filePath);
+          if (result) importedNote = result;
         }
       }
       await loadSketches();
