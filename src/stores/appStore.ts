@@ -152,6 +152,10 @@ interface AppStoreState {
   showVersionHistory: boolean;
   /** Whether the snapshot name prompt should be shown (triggered by Ctrl+S). */
   snapshotPromptOpen: boolean;
+  /** Whether the identity prompt dialog should be shown. */
+  identityPromptOpen: boolean;
+  /** Callback to run after identity is set (opens snapshot dialog). */
+  identityPromptCallback: (() => void) | null;
   /** After saving a snapshot, navigate to this commit ID (used by nav-save flow). */
   pendingNavAfterSave: string | null;
   /** Whether there are unsaved changes since the last snapshot. */
@@ -394,7 +398,7 @@ interface AppStoreState {
   /** Toggle version history sidebar. */
   toggleVersionHistory: () => void;
   /** Open snapshot name prompt (and ensure panel is visible). */
-  promptSnapshot: () => void;
+  promptSnapshot: () => Promise<void>;
 
   // ── Remote sync actions ────────────────────────────────────
   /** Detect configured remote for the project. */
@@ -534,6 +538,8 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   graphNodes: [],
   showVersionHistory: savedLayout.showVersionHistory ?? false,
   snapshotPromptOpen: false,
+  identityPromptOpen: false,
+  identityPromptCallback: null,
   pendingNavAfterSave: null,
   isDirty: false,
   hasStash: false,
@@ -826,6 +832,8 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       timelines: [],
       graphNodes: [],
       snapshotPromptOpen: false,
+      identityPromptOpen: false,
+      identityPromptCallback: null,
       isDirty: false,
       hasStash: false,
       isRewound: false,
@@ -1580,7 +1588,20 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     });
   },
 
-  promptSnapshot: () => {
+  promptSnapshot: async () => {
+    // Check if identity is resolved — if fallback, prompt the user first
+    try {
+      const status = await invoke<{ name: string; email: string; is_fallback: boolean }>("check_git_identity");
+      if (status.is_fallback) {
+        set({
+          identityPromptOpen: true,
+          identityPromptCallback: () => set({ snapshotPromptOpen: true }),
+        });
+        return;
+      }
+    } catch {
+      // If check fails (e.g., no project open), proceed to snapshot dialog
+    }
     set({ snapshotPromptOpen: true });
   },
 

@@ -190,6 +190,8 @@ pub fn run() {
             commands::storyboard::add_section_to_storyboard,
             commands::storyboard::reorder_storyboard_items,
             commands::versioning::save_with_label,
+            commands::versioning::check_git_identity,
+            commands::versioning::set_git_identity,
             commands::versioning::list_versions,
             commands::versioning::preview_version,
             commands::versioning::restore_version,

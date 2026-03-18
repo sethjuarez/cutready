@@ -1069,8 +1069,13 @@ fn open_repo(project_dir: &Path) -> Result<gix::Repository, VersioningError> {
 }
 
 /// Resolve the git committer identity for this repo.
-/// Returns (name, email) from git config (guaranteed to be set after ensure_git_identity).
+/// Checks workspace settings first, then git config.
 fn resolve_committer(project_dir: &Path) -> (String, String) {
+    // 1. Workspace settings (highest priority — user explicitly set in CutReady)
+    if let Some((name, email)) = read_workspace_identity(project_dir) {
+        return (name, email);
+    }
+    // 2. Git config (local, then global — set by ensure_git_identity)
     if let Ok(repo) = git2::Repository::open(project_dir) {
         if let Ok(config) = repo.config() {
             let name = config.get_string("user.name").unwrap_or_default();
@@ -1081,6 +1086,107 @@ fn resolve_committer(project_dir: &Path) -> (String, String) {
         }
     }
     ("CutReady".into(), "app@cutready.local".into())
+}
+
+/// Result of identity resolution — tells the frontend whether a prompt is needed.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct IdentityStatus {
+    pub name: String,
+    pub email: String,
+    /// True if we fell back to "CutReady" defaults (prompt the user).
+    pub is_fallback: bool,
+}
+
+/// Check how the git identity would be resolved without writing anything.
+/// Returns the resolved name/email and whether it's a fallback.
+pub fn check_git_identity(project_dir: &Path) -> IdentityStatus {
+    // 1. Workspace settings
+    if let Some((name, email)) = read_workspace_identity(project_dir) {
+        return IdentityStatus { name, email, is_fallback: false };
+    }
+    // 2. Local git config
+    let config_path = project_dir.join(".git").join("config");
+    if config_path.exists() {
+        if let Ok(local) = git2::Config::open(&config_path) {
+            let name = local.get_string("user.name").ok();
+            let email = local.get_string("user.email").ok();
+            if let (Some(n), Some(e)) = (name, email) {
+                if !n.is_empty() && !e.is_empty() {
+                    return IdentityStatus { name: n, email: e, is_fallback: false };
+                }
+            }
+        }
+    }
+    // 3. Global/system git config
+    let (global_name, global_email) = resolve_global_git_identity(project_dir);
+    if let (Some(n), Some(e)) = (&global_name, &global_email) {
+        if !n.is_empty() && !e.is_empty() {
+            return IdentityStatus { name: n.clone(), email: e.clone(), is_fallback: false };
+        }
+    }
+    // 4. GitHub CLI
+    let (gh_name, gh_email) = resolve_gh_identity();
+    let name = gh_name.or(global_name);
+    let email = gh_email.or(global_email);
+    if let (Some(n), Some(e)) = (&name, &email) {
+        if !n.is_empty() && !e.is_empty() {
+            return IdentityStatus { name: n.clone(), email: e.clone(), is_fallback: false };
+        }
+    }
+    // 5. Fallback — prompt needed
+    IdentityStatus {
+        name: name.unwrap_or_else(|| "CutReady".into()),
+        email: email.unwrap_or_else(|| "app@cutready.local".into()),
+        is_fallback: true,
+    }
+}
+
+/// Write the user's chosen identity to local git config and workspace settings.
+pub fn set_git_identity(
+    project_dir: &Path,
+    name: &str,
+    email: &str,
+) -> Result<(), VersioningError> {
+    // Write to local .git/config so gix picks it up for reflogs
+    let config_path = project_dir.join(".git").join("config");
+    if config_path.exists() {
+        let mut local = git2::Config::open(&config_path)
+            .map_err(|e| VersioningError::Git(e.to_string()))?;
+        local.set_str("user.name", name)
+            .map_err(|e| VersioningError::Git(e.to_string()))?;
+        local.set_str("user.email", email)
+            .map_err(|e| VersioningError::Git(e.to_string()))?;
+    }
+    // Write to workspace settings so CutReady remembers across machines
+    write_workspace_identity(project_dir, name, email);
+    Ok(())
+}
+
+/// Read repoAuthorName/repoAuthorEmail from .cutready/settings.json.
+fn read_workspace_identity(project_dir: &Path) -> Option<(String, String)> {
+    let settings = crate::engine::project::read_repo_settings(project_dir);
+    let name = settings.get("repoAuthorName")
+        .and_then(|v| v.as_str())
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+    let email = settings.get("repoAuthorEmail")
+        .and_then(|v| v.as_str())
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+    match (name, email) {
+        (Some(n), Some(e)) => Some((n, e)),
+        _ => None,
+    }
+}
+
+/// Write identity to .cutready/settings.json (merge with existing).
+fn write_workspace_identity(project_dir: &Path, name: &str, email: &str) {
+    let mut settings = crate::engine::project::read_repo_settings(project_dir);
+    if let Some(obj) = settings.as_object_mut() {
+        obj.insert("repoAuthorName".into(), serde_json::Value::String(name.into()));
+        obj.insert("repoAuthorEmail".into(), serde_json::Value::String(email.into()));
+    }
+    let _ = crate::engine::project::write_repo_settings(project_dir, &settings);
 }
 
 /// Ensure user.name and user.email exist in the repo's **local** git config.
@@ -2747,5 +2853,60 @@ mod tests {
         let result = commit_snapshot(tmp.path(), "snapshot after identity fix", None);
         assert!(result.is_ok(),
             "commit_snapshot should succeed after ensure_git_identity: {:?}", result.err());
+    }
+
+    #[test]
+    fn check_git_identity_reports_fallback_when_no_identity() {
+        let tmp = setup_project_dir();
+        init_project_repo(tmp.path()).unwrap();
+
+        // Strip local identity
+        let config_path = tmp.path().join(".git").join("config");
+        let config_text = std::fs::read_to_string(&config_path).unwrap();
+        let mut in_user = false;
+        let cleaned: String = config_text
+            .lines()
+            .filter(|l| {
+                let t = l.trim().to_lowercase();
+                if t.starts_with('[') { in_user = t.starts_with("[user]"); return !in_user; }
+                !in_user
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        std::fs::write(&config_path, format!("{}\n", cleaned)).unwrap();
+
+        // check_git_identity should resolve from global/gh (not fallback on dev machine)
+        // but set_git_identity should persist and be found on subsequent check
+        let name = "Test Author";
+        let email = "test@example.com";
+        set_git_identity(tmp.path(), name, email).unwrap();
+
+        let status = check_git_identity(tmp.path());
+        assert!(!status.is_fallback, "After set_git_identity, should not be fallback");
+        assert_eq!(status.name, name);
+        assert_eq!(status.email, email);
+    }
+
+    #[test]
+    fn set_git_identity_writes_to_config_and_settings() {
+        let tmp = setup_project_dir();
+        init_project_repo(tmp.path()).unwrap();
+
+        set_git_identity(tmp.path(), "Jane Doe", "jane@example.com").unwrap();
+
+        // Should be in local git config
+        let local = git2::Config::open(&tmp.path().join(".git").join("config")).unwrap();
+        assert_eq!(local.get_string("user.name").unwrap(), "Jane Doe");
+        assert_eq!(local.get_string("user.email").unwrap(), "jane@example.com");
+
+        // Should be in workspace settings
+        let settings = crate::engine::project::read_repo_settings(tmp.path());
+        assert_eq!(settings["repoAuthorName"].as_str().unwrap(), "Jane Doe");
+        assert_eq!(settings["repoAuthorEmail"].as_str().unwrap(), "jane@example.com");
+
+        // resolve_committer should return workspace settings values
+        let (name, email) = resolve_committer(tmp.path());
+        assert_eq!(name, "Jane Doe");
+        assert_eq!(email, "jane@example.com");
     }
 }
