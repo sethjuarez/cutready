@@ -1615,6 +1615,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await get().refreshSyncStatus();
       await get().loadGraphData();
       await get().loadTimelines();
+      await get().loadVersions();
     } catch (err) {
       set({ syncError: String(err) });
     } finally {
@@ -1646,6 +1647,9 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         token,
       });
       await get().refreshSyncStatus();
+      await get().loadGraphData();
+      await get().loadTimelines();
+      await get().loadVersions();
     } catch (err) {
       set({ syncError: String(err) });
     } finally {
