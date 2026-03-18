@@ -9,6 +9,52 @@
 Covector manages this changelog. Do not edit manually.
 Each release section is generated from `.changes/*.md` files.
 
+## [0.11.0](https://github.com/sethjuarez/cutready/compare/v0.10.0...v0.11.0) (2026-03-18)
+
+
+### Features
+
+* add CutReady-specific elucim themes with concrete hex values ([e882ea9](https://github.com/sethjuarez/cutready/commit/e882ea971aeed6a26339b9b8dff86b30cea454f6))
+* import conflict dialog — overwrite, keep both, or cancel ([cf1b077](https://github.com/sethjuarez/cutready/commit/cf1b077ab04eabf391025ba085136496eacc165d))
+* include visuals in image manager for orphan detection and cleanup ([aa54efb](https://github.com/sethjuarez/cutready/commit/aa54efb64f4c566f6cd4007d127088d2190562ae))
+* integrate Elucim visual editor in expanded lightbox ([2b98e39](https://github.com/sethjuarez/cutready/commit/2b98e39a3b506786992b076c9d66c98610b3eb14))
+* refresh visual thumbnails after editor save ([be1f483](https://github.com/sethjuarez/cutready/commit/be1f4836190e92b06e405e0066cce5ccd980de5f))
+* render visual thumbnails in image manager with DslRenderer ([ef3c1e2](https://github.com/sethjuarez/cutready/commit/ef3c1e225f784386f6d289b1abb16c558ddd7e1c))
+* split editor — right-click tab to open side-by-side preview ([df11fb8](https://github.com/sethjuarez/cutready/commit/df11fb818fe3aa3d66b75580bc40c2ab571efc4f))
+* upgrade [@elucim](https://github.com/elucim) packages to 0.9.0 ([59ea145](https://github.com/sethjuarez/cutready/commit/59ea145a486b4b5d902e3f99cf6f8227a601366c))
+* upgrade [@elucim](https://github.com/elucim) to 0.10.0, simplify editor integration ([8ef2e42](https://github.com/sethjuarez/cutready/commit/8ef2e426b425205bfe66fbdd78979acf35baff0e))
+* upgrade [@elucim](https://github.com/elucim) to 0.11.0, major integration cleanup ([6ae69f2](https://github.com/sethjuarez/cutready/commit/6ae69f2752f1b9cefbed1fa5b66e1781a88e4fba))
+* upgrade elucim to 0.13.1 — canvas scene now uses content theme ([5fa0606](https://github.com/sethjuarez/cutready/commit/5fa06063ad33b2caa181148e883453804c708f92))
+* upgrade to elucim 0.12.0, remove workaround code ([1a31f55](https://github.com/sethjuarez/cutready/commit/1a31f55c0676b1f7c526b790fa79b5772a07ee31))
+* upgrade to elucim 0.13.0 ([9ed35a0](https://github.com/sethjuarez/cutready/commit/9ed35a006f906857c9176d0ec6e501a636a231ed))
+
+
+### Bug Fixes
+
+* add get_visual mock for visual thumbnail rendering in web mode ([42de3e0](https://github.com/sethjuarez/cutready/commit/42de3e0d60e5d004144cb6f3a9d852cbe7370d58))
+* add visual mock data to devMock for web mode testing ([92080a7](https://github.com/sethjuarez/cutready/commit/92080a7d8ab3b0bc527de443b8389bfbe2a2fbf9))
+* complete editor theme tokens and hide nudge bar in edit mode ([4fd5c4e](https://github.com/sethjuarez/cutready/commit/4fd5c4e7a25ec38976c2fe7ccaa713bfa4cfe235))
+* correct Tauri command names in split pane and allow splitting active tab ([8cfe5a5](https://github.com/sethjuarez/cutready/commit/8cfe5a5a1a5ccde0a16bbe0b0def1a72d2a2a66b))
+* deduplicate @elucim/core via Vite alias ([fa7c29a](https://github.com/sethjuarez/cutready/commit/fa7c29a579b509c2aa9b954323a23d5ceb836018))
+* import sketch/notes now copies referenced visuals and screenshots ([59ad9b2](https://github.com/sethjuarez/cutready/commit/59ad9b249e757c4e133671c8531e3a6052c004af))
+* lower Responses API compaction threshold from 1MB to 128KB ([a6b0a1f](https://github.com/sethjuarez/cutready/commit/a6b0a1fd1c900027fb620dd3267719449ccb15cf))
+* lower Responses API compaction to 64KB (server rejects at ~79KB) ([ac6755c](https://github.com/sethjuarez/cutready/commit/ac6755c684aff10eec23fa70d8d698f631326c07))
+* multi-project migration now moves screenshots and visuals ([2a0f112](https://github.com/sethjuarez/cutready/commit/2a0f1128c393c384058e87f463c3131a5b9b97ba))
+* override editor canvas background with CutReady warm colors ([8b0dc05](https://github.com/sethjuarez/cutready/commit/8b0dc0541a76151b001c2dd63af757bc4805e0ba))
+* pass DSL content tokens to editor theme for canvas  resolution ([8fb39b4](https://github.com/sethjuarez/cutready/commit/8fb39b4fad3c9a06f1b30d47c266a34c6585a78a))
+* pass explicit colorScheme to ElucimEditor for correct light/dark chrome ([7fba225](https://github.com/sethjuarez/cutready/commit/7fba225b58d19d294035f2bdc965866bb19e1652))
+* repair all 4 remaining e2e test failures (81/81 green) ([739b7b6](https://github.com/sethjuarez/cutready/commit/739b7b65c4dce74e234f90953c37c3958db4fd56))
+* resolve \ token on canvas root ([176bc65](https://github.com/sethjuarez/cutready/commit/176bc653d2981e375d854f0de51565464e89bcb5))
+* restore buildPreviewDsl and explicit colorScheme for DslRenderer ([325d73c](https://github.com/sethjuarez/cutready/commit/325d73c8ce38e1dcaa61c433dc71cec748f3a715))
+* revert inner padding — should be handled by elucim editor ([3bfc1ba](https://github.com/sethjuarez/cutready/commit/3bfc1bae274cce3e6983a4ece191628915f2248a))
+* use absolute positioning for visual thumbnails to avoid flex collapse ([5ee117c](https://github.com/sethjuarez/cutready/commit/5ee117cdcbedece211439d4c63930b028716a5d8))
+* use EditorProvider directly so save gets live document ([920c597](https://github.com/sethjuarez/cutready/commit/920c59797495129169b4017ce97bc0190d820668))
+* use ElucimEditor directly and resolve \ colors ([d205090](https://github.com/sethjuarez/cutready/commit/d2050902412ac00548b5ac01fce88fbb12f0ab07))
+* use floppy-disk icon for visual editor save button ([5dd98f4](https://github.com/sethjuarez/cutready/commit/5dd98f4007475e966916fade194ae061226c14ec))
+* use full CSS var name for editor canvas background override ([7f8586c](https://github.com/sethjuarez/cutready/commit/7f8586c7c44717589f3b1bc0ae88d77571683ca1))
+* use ResizeObserver for correct visual preview sizing in lightbox ([beffc90](https://github.com/sethjuarez/cutready/commit/beffc9045ca370a22da370341d810212aa1b80a3))
+* validate JSON after escape_non_ascii_json, fall back on corruption ([feddf8e](https://github.com/sethjuarez/cutready/commit/feddf8e18946b21bf5d71e05763038f0d94c6de8))
+
 ## [0.10.0](https://github.com/sethjuarez/cutready/compare/v0.9.0...v0.10.0) (2026-03-18)
 
 
