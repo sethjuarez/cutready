@@ -62,6 +62,16 @@ snapshots you create.
   different identities (personal vs. work), each can have its own settings.
 </Aside>
 
+### Automatic Resolution
+
+If you don't set an identity in Settings, CutReady resolves it automatically:
+
+1. **Global git config** — if you've run `git config --global user.name`, that's used.
+2. **GitHub CLI** — if you're signed in via `gh auth login`, your GitHub profile name and email are used.
+3. **Prompt** — if neither source has your identity, CutReady asks you for a name and email before your first snapshot.
+
+Once resolved, the identity is saved to the workspace so you're never asked again.
+
 ## When to Configure
 
 You only need remote settings if you want to:

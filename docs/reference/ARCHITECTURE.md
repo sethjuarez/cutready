@@ -777,6 +777,23 @@ fn restore_version(
 - The version history UI presents commits as a navigable timeline, not a raw git log.
 - `gix` is chosen over `git2-rs` (libgit2 bindings) to avoid cmake and C toolchain dependencies on Windows.
 
+**Git identity management**:
+
+Each CutReady workspace is a self-contained git repository. The local
+`.git/config` must have `user.name` and `user.email` so `gix` can write
+reflog entries when committing snapshots. `ensure_git_identity()` resolves
+missing identity via a priority chain:
+
+1. **Workspace settings** (`repoAuthorName`/`repoAuthorEmail` in `.cutready/settings.json`)
+2. **Local git config** (already set from a previous resolution)
+3. **Global/system git config** (user's machine-wide identity)
+4. **GitHub CLI** (`gh api user` — uses the authenticated GitHub profile)
+5. **Frontend prompt** (one-time dialog before the first snapshot)
+6. **Fallback** ("CutReady" / "app@cutready.local" — last resort)
+
+The resolved identity is persisted to both local git config and workspace
+settings, so subsequent operations are instant.
+
 ---
 
 ## Technology Stack
