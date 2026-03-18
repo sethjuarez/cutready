@@ -131,7 +131,7 @@ export function HomePanel() {
       directory: true,
       multiple: false,
       defaultPath,
-      title: "Open project folder",
+      title: "Open workspace folder",
     });
     if (!selected) return;
     await openProject(selected);
@@ -255,7 +255,7 @@ export function HomePanel() {
                 <ActionIcon type="open" />
               </div>
               <div>
-                <div className="text-sm font-semibold">Open Project</div>
+                <div className="text-sm font-semibold">Open Workspace</div>
                 <div className="text-xs text-[var(--color-text-secondary)] mt-0.5">
                   Pick an existing folder
                 </div>
