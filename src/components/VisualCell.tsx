@@ -1,5 +1,6 @@
-import { useRef, useCallback, useState, useEffect, useMemo } from "react";
+import { useRef, useCallback, useState, useEffect } from "react";
 import { DslRenderer, type ElucimDocument, type DslRendererRef } from "@elucim/dsl";
+import type { ElucimTheme } from "@elucim/core";
 import { invoke } from "@tauri-apps/api/core";
 
 interface VisualCellProps {
@@ -21,13 +22,11 @@ export interface VisualControlHandle {
   isPlaying: boolean;
 }
 
-/** Static theme using CSS var() strings. */
-const THEME = {
+/** Static theme using CSS var() strings — shared by both thumbnail and full modes. */
+const THEME: ElucimTheme = {
   foreground: "var(--color-text)",
   background: "var(--color-surface)",
   accent: "var(--color-accent)",
-  "scene-bg": "var(--color-surface)",
-  "scene-fg": "var(--color-text)",
   muted: "var(--color-text-secondary)",
   surface: "var(--color-surface-alt)",
   border: "var(--color-border)",
@@ -39,19 +38,12 @@ const THEME = {
   error: "var(--color-error)",
 };
 
-/**
- * Build a preview-mode DSL: hides built-in controls, auto-plays once.
- * Strips root background so theme's scene-bg takes effect.
- * (DslRenderer 0.11.0 override props exist but have issues — mutate for now.)
- */
-function buildPreviewDsl(dsl: ElucimDocument): ElucimDocument {
-  const root = { ...dsl.root } as Record<string, unknown>;
-  root.controls = false;
-  root.autoPlay = true;
-  root.loop = false;
-  delete root.background;
-  return { ...dsl, root: root as unknown as ElucimDocument["root"] };
-}
+/** Error fallback shown when DslRenderer crashes. */
+const ERROR_FALLBACK = (
+  <div className="flex items-center justify-center w-full h-full text-[10px] text-[var(--color-error)]">
+    Render error
+  </div>
+);
 
 /**
  * Renders an elucim animation inline.
@@ -101,7 +93,6 @@ export default function VisualCell({ visualPath, mode, onClick, className, contr
   }, []);
 
   const dsl = visual as unknown as ElucimDocument | null;
-  const previewDsl = useMemo(() => dsl ? buildPreviewDsl(dsl) : null, [dsl]);
 
   const replay = useCallback(() => {
     rendererRef.current?.seekToFrame(0);
@@ -119,9 +110,9 @@ export default function VisualCell({ visualPath, mode, onClick, className, contr
   if (hasError) {
     return (
       <div
-        className={`flex items-center justify-center text-[10px] text-red-400 ${
+        className={`flex items-center justify-center text-[10px] text-[var(--color-error)] ${
           mode === "thumbnail" ? "w-40 h-24" : "w-full h-full"
-        } rounded-md border border-red-300/30 bg-red-500/5 ${className ?? ""}`}
+        } rounded-md border border-[var(--color-error)]/30 bg-[var(--color-error)]/5 ${className ?? ""}`}
       >
         <span>Invalid visual</span>
       </div>
@@ -148,19 +139,16 @@ export default function VisualCell({ visualPath, mode, onClick, className, contr
         className={`relative group/vis w-40 h-24 rounded-md bg-[var(--color-surface-alt)] border border-[var(--color-border)] overflow-hidden cursor-pointer ${className ?? ""}`}
         onClick={handleClick}
       >
-        {/* Static last-frame poster — no animation loop, saves CPU */}
-        <div className="w-[960px] h-[540px] origin-top-left" style={{ transform: `scale(${160 / 960})` }}>
-          <ErrorBoundary onError={() => setHasError(true)}>
-            <DslRenderer
-              dsl={dsl}
-              poster="last"
-              colorScheme={isDark ? "dark" : "light"}
-              theme={THEME}
-              onError={handleError}
-              style={{ width: 960, height: 540 }}
-            />
-          </ErrorBoundary>
-        </div>
+        <DslRenderer
+          dsl={dsl}
+          poster="last"
+          colorScheme={isDark ? "dark" : "light"}
+          theme={THEME}
+          fitToContainer
+          onError={handleError}
+          onRenderError={() => setHasError(true)}
+          fallback={ERROR_FALLBACK}
+        />
 
         {/* Hover overlay with play icon */}
         <div className="absolute inset-0 bg-black/30 opacity-0 group-hover/vis:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
@@ -174,48 +162,22 @@ export default function VisualCell({ visualPath, mode, onClick, className, contr
 
   // Full mode — fills container, CutReady themed, no built-in controls
   return (
-    <div className={`visual-cell-full w-full h-full flex items-center justify-center ${className ?? ""}`}>
-      <ErrorBoundary onError={() => setHasError(true)}>
-        <DslRenderer
-          ref={rendererRef}
-          dsl={previewDsl!}
-          colorScheme={isDark ? "dark" : "light"}
-          theme={THEME}
-          onError={handleError}
-          onPlayStateChange={setIsPlaying}
-          className="w-full h-full rounded-lg shadow-lg"
-        />
-      </ErrorBoundary>
+    <div className={`w-full h-full flex items-center justify-center ${className ?? ""}`}>
+      <DslRenderer
+        ref={rendererRef}
+        dsl={dsl}
+        controls={false}
+        autoPlay
+        loop={false}
+        colorScheme={isDark ? "dark" : "light"}
+        theme={THEME}
+        fitToContainer
+        onError={handleError}
+        onRenderError={() => setHasError(true)}
+        fallback={ERROR_FALLBACK}
+        onPlayStateChange={setIsPlaying}
+        className="w-full h-full rounded-lg shadow-lg"
+      />
     </div>
   );
-}
-
-// ---------------------------------------------------------------------------
-// Minimal error boundary for catching DslRenderer render errors
-// ---------------------------------------------------------------------------
-import { Component, type ReactNode, type ErrorInfo } from "react";
-
-interface EBProps {
-  children: ReactNode;
-  onError: () => void;
-}
-interface EBState {
-  hasError: boolean;
-}
-
-class ErrorBoundary extends Component<EBProps, EBState> {
-  state: EBState = { hasError: false };
-
-  static getDerivedStateFromError(): EBState {
-    return { hasError: true };
-  }
-
-  componentDidCatch(_error: Error, _info: ErrorInfo) {
-    this.props.onError();
-  }
-
-  render() {
-    if (this.state.hasError) return null;
-    return this.props.children;
-  }
 }

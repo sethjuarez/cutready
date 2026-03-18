@@ -336,18 +336,7 @@ html {
   margin: 0.5rem 0;
 }
 
-/* Full-mode visual: force elucim player/scene to fill container */
-.visual-cell-full [data-testid="elucim-player"] {
-  width: 100% !important;
-  max-width: 100% !important;
-  height: 100% !important;
-}
-.visual-cell-full [data-testid="elucim-scene"] {
-  width: 100% !important;
-  max-width: 100% !important;
-  height: 100% !important;
-  aspect-ratio: auto !important;
-}
+
 
 /* ── AI change highlighting ────────────────────────────────── */
 

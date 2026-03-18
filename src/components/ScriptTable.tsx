@@ -158,37 +158,22 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
       .catch((err) => console.error("[ScriptTable] Failed to load visual for editor:", err));
   }, [visualLightbox?.visualPath, lightboxMode]);
 
-  // Editor theme using CSS var() strings where possible.
-  // background/scene-bg must be hex — the editor computes luminance from them
-  // to auto-select the canvas content theme (light vs dark).
-  const isDark = document.documentElement.classList.contains("dark");
-  const surfaceHex = getComputedStyle(document.documentElement).getPropertyValue("--color-surface").trim()
-    || (isDark ? "#2b2926" : "#faf9f7");
-  const editorTheme = useMemo(() => ({
-    // Editor chrome tokens
-    "color-scheme": isDark ? "dark" : "light",
-    accent: "var(--color-accent)",
-    bg: "var(--color-surface)",
-    surface: "var(--color-surface-alt)",
-    fg: "var(--color-text)",
-    "text-secondary": "var(--color-text-secondary)",
-    border: "var(--color-border)",
-    panel: isDark ? "rgba(43,41,38,0.95)" : "rgba(250,249,247,0.95)",
-    chrome: isDark ? "rgba(53,50,48,0.85)" : "rgba(240,239,237,0.85)",
-    "input-bg": isDark ? "#231f1d" : "#ffffff",
-    // DSL content tokens — background/scene-bg as hex for luminance detection
+  // Editor content theme — uses CSS var() strings, auto-derives chrome in 0.12.0.
+  // colorScheme must be explicit since luminance detection can't parse var() strings.
+  const editorTheme: import("@elucim/core").ElucimTheme = {
     foreground: "var(--color-text)",
-    background: surfaceHex,
-    "scene-bg": surfaceHex,
-    "scene-fg": "var(--color-text)",
+    background: "var(--color-surface)",
+    accent: "var(--color-accent)",
     muted: "var(--color-text-secondary)",
+    surface: "var(--color-surface-alt)",
+    border: "var(--color-border)",
     primary: "var(--color-accent)",
     secondary: "var(--color-secondary)",
     tertiary: "var(--color-tertiary)",
     success: "var(--color-success)",
     warning: "var(--color-warning)",
     error: "var(--color-error)",
-  }), [isDark, surfaceHex]);
+  };
 
   const closeLightbox = useCallback(() => {
     setVisualLightbox(null);

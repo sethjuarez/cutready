@@ -1,7 +1,8 @@
 /**
  * Wraps @elucim/editor's ElucimEditor for use in ScriptTable's lightbox.
  *
- * With 0.11.0:
+ * With 0.12.0:
+ * - Unified ElucimTheme type for content + auto-derived chrome
  * - $token resolution handled by the editor itself
  * - onDocumentChange callback provides live document for saving
  * - initialFrame="last" auto-resolves to the final frame
@@ -9,10 +10,11 @@
  */
 import { memo, lazy, Suspense } from "react";
 import type { ElucimDocument } from "@elucim/dsl";
+import type { ElucimTheme } from "@elucim/core";
 
 export interface EditorWrapperProps {
   dsl: ElucimDocument;
-  theme: Record<string, string>;
+  theme: ElucimTheme;
   onDocumentChange: (doc: ElucimDocument) => void;
 }
 
