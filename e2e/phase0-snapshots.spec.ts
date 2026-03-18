@@ -28,7 +28,7 @@ test.describe("Phase 0 — Snapshot UX", () => {
 
   test("save button opens snapshot dialog (Ctrl+S shortcut)", async ({ page }) => {
     // The Save button should be in the snapshots panel header
-    const saveBtn = page.locator('button[title*="Save Project Snapshot"]');
+    const saveBtn = page.locator('button[title*="Save Workspace Snapshot"]');
     await expect(saveBtn).toBeVisible({ timeout: 5_000 });
     await saveBtn.click();
     // Snapshot dialog should appear with the snapshot name input

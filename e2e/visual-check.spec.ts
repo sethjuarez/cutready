@@ -7,16 +7,16 @@ test.describe("Visual verification — new UI components", () => {
     await page.waitForSelector('[title="Settings"]', { timeout: 5000 });
   });
 
-  test("screenshot: Settings Repository tab", async ({ page }) => {
-    await page.locator('[title="Settings"]').click();
-    await page.getByRole("button", { name: "Repository" }).click();
+  test("screenshot: Settings Git Remote tab", async ({ page }) => {
+    await page.locator('[title="Workspace"]').click();
+    await page.getByRole("button", { name: "Git Remote" }).click();
     await page.waitForTimeout(500);
     await page.screenshot({ path: "e2e/screenshots/settings-repo-tab.png", fullPage: true });
   });
 
-  test("screenshot: Settings Repository tab — PAT selected", async ({ page }) => {
-    await page.locator('[title="Settings"]').click();
-    await page.getByRole("button", { name: "Repository" }).click();
+  test("screenshot: Settings Git Remote tab — PAT selected", async ({ page }) => {
+    await page.locator('[title="Workspace"]').click();
+    await page.getByRole("button", { name: "Git Remote" }).click();
     const patLabel = page.locator("label").filter({ hasText: "Personal Access Token" });
     await patLabel.click();
     await page.waitForTimeout(300);

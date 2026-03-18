@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 
-test.describe("Settings → Repository tab", () => {
+test.describe("Settings → Git Remote tab", () => {
   test.beforeEach(async ({ page }) => {
     await page.goto("/");
     // Open the mock project from the home screen
@@ -9,15 +9,15 @@ test.describe("Settings → Repository tab", () => {
     await page.waitForSelector('[title="Settings"]', { timeout: 5000 });
   });
 
-  /** Click the sidebar Settings gear icon, then the Repository tab */
+  /** Click the sidebar Workspace button, then the Git Remote tab */
   async function openRepoSettings(page: import("@playwright/test").Page) {
-    await page.locator('[title="Settings"]').click();
-    const repoTab = page.getByRole("button", { name: "Repository" });
+    await page.locator('[title="Workspace"]').click();
+    const repoTab = page.getByRole("button", { name: "Git Remote" });
     await expect(repoTab).toBeVisible({ timeout: 3000 });
     await repoTab.click();
   }
 
-  test("navigates to Settings and shows Repository tab", async ({ page }) => {
+  test("navigates to Workspace Settings and shows Git Remote tab", async ({ page }) => {
     await openRepoSettings(page);
 
     await expect(page.getByText("Remote URL")).toBeVisible();

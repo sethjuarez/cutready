@@ -8,7 +8,10 @@
  */
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
+import { DslRenderer, type ElucimDocument } from "@elucim/dsl";
 import { useAppStore } from "../stores/appStore";
+import { useTheme } from "../hooks/useTheme";
+import { ELUCIM_THEME } from "../theme/elucimTheme";
 import { SketchIcon, StoryboardIcon, NoteIcon, AlertTriangleIcon } from "./Icons";
 
 interface ImageInfo {
@@ -366,14 +369,7 @@ function ImageCard({
       {/* Thumbnail */}
       <div className="aspect-video bg-black/20 flex items-center justify-center overflow-hidden">
         {isVisual ? (
-          <div className="flex flex-col items-center gap-1 text-[var(--color-text-secondary)]">
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-              <circle cx="8.5" cy="8.5" r="1.5" />
-              <polyline points="21 15 16 10 5 21" />
-            </svg>
-            <span className="text-[10px]">Visual</span>
-          </div>
+          <VisualThumbnail relativePath={image.path} />
         ) : (
           <img
             src={src}
@@ -420,5 +416,52 @@ function ImageCard({
         </button>
       </div>
     </div>
+  );
+}
+
+/** Loads a visual JSON file and renders it as a DslRenderer thumbnail. */
+function VisualThumbnail({ relativePath }: { relativePath: string }) {
+  const [dsl, setDsl] = useState<ElucimDocument | null>(null);
+  const [error, setError] = useState(false);
+  const { theme } = useTheme();
+  const isDark = theme === "dark";
+
+  useEffect(() => {
+    let cancelled = false;
+    invoke<Record<string, unknown>>("get_visual", { relativePath })
+      .then((data) => { if (!cancelled) setDsl(data as unknown as ElucimDocument); })
+      .catch(() => { if (!cancelled) setError(true); });
+    return () => { cancelled = true; };
+  }, [relativePath]);
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center w-full h-full text-[10px] text-[var(--color-text-secondary)]">
+        Failed to load
+      </div>
+    );
+  }
+
+  if (!dsl) {
+    return (
+      <div className="flex items-center justify-center w-full h-full text-[10px] text-[var(--color-text-secondary)]">
+        Loading…
+      </div>
+    );
+  }
+
+  return (
+    <DslRenderer
+      dsl={dsl}
+      poster="last"
+      colorScheme={isDark ? "dark" : "light"}
+      theme={ELUCIM_THEME}
+      fitToContainer
+      fallback={
+        <div className="flex items-center justify-center w-full h-full text-[10px] text-[var(--color-text-secondary)]">
+          Render error
+        </div>
+      }
+    />
   );
 }
