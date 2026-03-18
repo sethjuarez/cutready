@@ -96,24 +96,6 @@ pub fn init_project_folder(root: &Path) -> Result<ProjectView, ProjectError> {
     Ok(ProjectView::new(root.to_path_buf()))
 }
 
-/// Open an existing project folder by scanning for .sk/.sb files.
-/// Initializes git if not already a repo (needed for snapshots).
-pub fn open_project_folder(root: &Path) -> Result<ProjectView, ProjectError> {
-    if !root.exists() || !root.is_dir() {
-        return Err(ProjectError::NotFound(
-            root.to_string_lossy().into_owned(),
-        ));
-    }
-
-    // Init git if not already a repo so snapshots work
-    if !root.join(".git").exists() {
-        versioning::init_project_repo(root).map_err(|e| ProjectError::Io(e.to_string()))?;
-        let _ = versioning::commit_snapshot(root, "Initialize project", None);
-    }
-
-    Ok(ProjectView::new(root.to_path_buf()))
-}
-
 // ── Multi-project manifest ────────────────────────────────────────
 
 const MANIFEST_PATH: &str = ".cutready/projects.json";
@@ -1225,22 +1207,6 @@ mod tests {
         let view = init_project_folder(&root).unwrap();
         assert_eq!(view.name, "My Demo");
         assert!(root.join(".git").exists());
-    }
-
-    #[test]
-    fn open_project_folder_returns_view() {
-        let tmp = TempDir::new().unwrap();
-        let root = tmp.path().join("Test Project");
-        std::fs::create_dir_all(&root).unwrap();
-
-        let view = open_project_folder(&root).unwrap();
-        assert_eq!(view.name, "Test Project");
-    }
-
-    #[test]
-    fn open_nonexistent_folder_errors() {
-        let result = open_project_folder(Path::new("/nonexistent/path"));
-        assert!(result.is_err());
     }
 
     #[test]
