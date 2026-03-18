@@ -9,6 +9,54 @@
 Covector manages this changelog. Do not edit manually.
 Each release section is generated from `.changes/*.md` files.
 
+## [0.10.0](https://github.com/sethjuarez/cutready/compare/v0.9.0...v0.10.0) (2026-03-18)
+
+
+### Features
+
+* add 'Show AI Changes' button to re-view last diff highlights ([e6418d0](https://github.com/sethjuarez/cutready/commit/e6418d0a1b233520e744c45ac5792c18993cd50a))
+* AI change highlighting with inline diffs and undo support ([c450ce0](https://github.com/sethjuarez/cutready/commit/c450ce01ce22a22f4d880cac423c9d3ab665545c))
+* click 'Unsaved changes' to view working tree diff ([155e0bb](https://github.com/sethjuarez/cutready/commit/155e0bb18a2eccb7f25c5bc42eefc8ca4719572b))
+* complete multi-project support with versioning, migration, and recent projects ([cb817e1](https://github.com/sethjuarez/cutready/commit/cb817e1997191bef7d1caae3cfe3fafc389f38a6))
+* encrypt secrets at rest with Tauri Stronghold ([41971a4](https://github.com/sethjuarez/cutready/commit/41971a42de66bfa89d997e3227d2f8e0d08af1bf))
+* import .sk and .sb files into the current project ([6733a14](https://github.com/sethjuarez/cutready/commit/6733a14ff3dc1079b28e6d3be686ac28b669603e))
+* improve migration UX and add project rename ([ada6ce1](https://github.com/sethjuarez/cutready/commit/ada6ce182401d9b2221a1e872e4f354c5e0610d0))
+* LLM-powered compaction for dropped conversation messages ([52a9452](https://github.com/sethjuarez/cutready/commit/52a9452015d4ac8caed9fdb5d382ffdb3aaa7f7c))
+* multi-project per repo backend + frontend foundation ([8231c42](https://github.com/sethjuarez/cutready/commit/8231c42a89041b893ecf1b9caa8d4f4d7c6561e0))
+* show all project files in explorer tree view ([33611da](https://github.com/sethjuarez/cutready/commit/33611da5ab81d785b52b7653c8c762dedc5af1ec))
+* show workspace / project breadcrumb in title bar ([0d8eec3](https://github.com/sethjuarez/cutready/commit/0d8eec3787ef8892fde258e5ee40c42d94ce25de))
+* split settings into global and workspace with sidebar reorganization ([b0b3288](https://github.com/sethjuarez/cutready/commit/b0b328861d5bdbbcdcdc988123e9f27ba6865bb4))
+
+
+### Bug Fixes
+
+* add missing index sync to discard_changes and pop_stash ([5d5c0c8](https://github.com/sethjuarez/cutready/commit/5d5c0c8b6a67f2bea8617e6e081451a1798521e1))
+* AI row highlight using background-color instead of box-shadow ([bd1e800](https://github.com/sethjuarez/cutready/commit/bd1e80050614bfe5b63775335eb7a77cb64deeb8))
+* collapse dot-prefixed folders by default in tree view ([2c23a4f](https://github.com/sethjuarez/cutready/commit/2c23a4fad2829dd3ee7191239afe1c1757a14543))
+* correct command palette shortcut hint (Ctrl+Shift+P, not Ctrl+K) ([d5d2718](https://github.com/sethjuarez/cutready/commit/d5d2718df13fc572063a1bc4df08db6bbe72226e))
+* escape non-ASCII in JSON bodies to prevent API parse failures ([01ce5b3](https://github.com/sethjuarez/cutready/commit/01ce5b334ce764d0ac65111322a14178e8f4638e))
+* global Escape key cancels all creation/rename actions ([a8c8164](https://github.com/sethjuarez/cutready/commit/a8c8164eae7a329d47cea605f0e5dc61b97b9ebf))
+* handle multimodal content parts in chat message rendering ([910e0ea](https://github.com/sethjuarez/cutready/commit/910e0ea7c46a4c6a667b8976ed69f1a669693d74))
+* move project switcher above explorer header ([3f56f5d](https://github.com/sethjuarez/cutready/commit/3f56f5db5057d21b7414f25a6a17687657f6577f))
+* move project switcher below explorer header ([16c6f2d](https://github.com/sethjuarez/cutready/commit/16c6f2d06c32dd89d8f6dc275555553d78aa6f78))
+* raise Responses API body limit to 1MB and improve error classification ([dbdd2d9](https://github.com/sethjuarez/cutready/commit/dbdd2d953785f1e6473dd64c464a09f0770ff484))
+* refresh currentProject after rename so switcher label updates ([cd91e65](https://github.com/sethjuarez/cutready/commit/cd91e65f2e12c569a3fb5ce75c2dff3f18d39404))
+* refresh sync status after saving snapshot ([23ad734](https://github.com/sethjuarez/cutready/commit/23ad7348eb3d9e509ed07abb4dd90beef523c52d))
+* rename 'New Project' to 'New Workspace' on home screen ([1c27caf](https://github.com/sethjuarez/cutready/commit/1c27caf67017a09799d0fbc8159e151da2d0fa60))
+* rename 'Open Project' to 'Open Workspace' on home screen ([dcce665](https://github.com/sethjuarez/cutready/commit/dcce665d3949e6f6ca42776f00eef3582cf8c752))
+* rename 'Recent Projects' to 'Recent Workspaces' on home screen ([4d1e6b9](https://github.com/sethjuarez/cutready/commit/4d1e6b923f5cdbd81eaa7f3f9e1720b8a8ae0350))
+* rename single-project triggers migration to multi-project mode ([dfd9390](https://github.com/sethjuarez/cutready/commit/dfd9390dfc9d9821c6071668a82ac9af01ded051))
+* rename_project now renames folder and updates manifest path ([0bd085e](https://github.com/sethjuarez/cutready/commit/0bd085e8d9bb52aaab9322555385a0cd6c1b912f))
+* replace clone error alert() with toast notification ([6ec965e](https://github.com/sethjuarez/cutready/commit/6ec965ec933c3ae831dfc7c000784d9ad388d92f))
+* replace double-click rename with pencil icon button ([aeed297](https://github.com/sethjuarez/cutready/commit/aeed29752d1c87f30899aa5f93eb9901d82458b4))
+* resize and budget images to prevent 400 API errors ([2cebe5d](https://github.com/sethjuarez/cutready/commit/2cebe5dd67ceeaff541ffd31b4515f25b92069b2))
+* show dotfiles/dotdirs in explorer tree view ([84892f2](https://github.com/sethjuarez/cutready/commit/84892f2c9d42f9d3161acc57b1e98b4f43cc1fef))
+* standardize 'workspace' terminology across all UI strings ([50a412e](https://github.com/sethjuarez/cutready/commit/50a412e1512397f309cd169f81eed13285d36aea))
+* sync git index after gix commits and checkouts ([2d9e701](https://github.com/sethjuarez/cutready/commit/2d9e701aae1ff825ff0256ff68b91f563f507191))
+* use CutReady icon for empty state instead of emoji ([961f927](https://github.com/sethjuarez/cutready/commit/961f9277240c2487abd4905db09fcf24279ce73e))
+* use CutReady logo with gradient glow for empty state ([3d9ebd2](https://github.com/sethjuarez/cutready/commit/3d9ebd2dcb64bf8929d40ba1084bd904ae83e9ff))
+* use explicit purple hex for user message border in both themes ([ac64f8f](https://github.com/sethjuarez/cutready/commit/ac64f8fbeb1f5453005627382449e2473249585a))
+
 ## [0.9.0](https://github.com/sethjuarez/cutready/compare/v0.8.0...v0.9.0) (2026-03-17)
 
 
