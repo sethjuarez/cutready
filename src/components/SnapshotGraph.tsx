@@ -145,6 +145,7 @@ export function SnapshotGraph({
 }: Props) {
   const [hovered, setHovered] = useState<string | null>(null);
   const currentRemote = useAppStore((s) => s.currentRemote);
+  const diffWorkingTree = useAppStore((s) => s.diffWorkingTree);
 
   /* ── Separate primary nodes from alias nodes ──── */
   const { primaryNodes, aliases } = useMemo(() => {
@@ -312,7 +313,12 @@ export function SnapshotGraph({
         if (row.kind === "dirty") {
           const x = laneX(row.laneIdx);
           return (
-            <div key="dirty" className="flex items-center overflow-hidden" style={{ height: row.h }}>
+            <div key="dirty"
+              className="flex items-center overflow-hidden cursor-pointer hover:bg-[var(--color-surface-alt)] transition-colors"
+              style={{ height: row.h }}
+              onClick={() => diffWorkingTree()}
+              title="View unsaved changes"
+            >
               <div className="shrink-0 relative" style={{ width: graphW, height: row.h }}>
                 <div className="absolute rounded-full border-[1.5px] border-dashed"
                   style={{
@@ -332,7 +338,12 @@ export function SnapshotGraph({
           const x = laneX(row.laneIdx);
           const headColor = lc(0); // trunk is always lane 0
           return (
-            <div key="ghost" className="flex items-center overflow-hidden" style={{ height: row.h }}>
+            <div key="ghost"
+              className="flex items-center overflow-hidden cursor-pointer hover:bg-[var(--color-surface-alt)] transition-colors"
+              style={{ height: row.h }}
+              onClick={() => diffWorkingTree()}
+              title="View unsaved changes"
+            >
               <div className="shrink-0 relative" style={{ width: graphW, height: row.h }}>
                 <div className="absolute rounded-full border-[1.5px] border-dashed"
                   style={{

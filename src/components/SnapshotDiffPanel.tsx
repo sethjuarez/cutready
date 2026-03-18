@@ -17,7 +17,9 @@ export function SnapshotDiffPanel() {
     <div className="border-t border-[var(--color-border)] bg-[var(--color-surface)]">
       <div className="flex items-center justify-between px-3 py-1.5">
         <span className="text-[10px] font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">
-          Diff: {diffSelection.from.slice(0, 7)} → {diffSelection.to.slice(0, 7)}
+          {diffSelection.to === "working"
+            ? "Unsaved changes"
+            : `Diff: ${diffSelection.from.slice(0, 7)} → ${diffSelection.to.slice(0, 7)}`}
         </span>
         <div className="flex items-center gap-2">
           <span className="text-[10px] text-emerald-500">+{totalAdded}</span>
@@ -43,7 +45,7 @@ export function SnapshotDiffPanel() {
         ))}
         {diffResult.length === 0 && (
           <div className="px-3 py-4 text-center text-[10px] text-[var(--color-text-secondary)]">
-            No changes between these snapshots
+            {diffSelection.to === "working" ? "No unsaved changes" : "No changes between these snapshots"}
           </div>
         )}
       </div>

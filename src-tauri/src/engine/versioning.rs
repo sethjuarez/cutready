@@ -917,7 +917,78 @@ pub fn diff_snapshots(
     Ok(entries)
 }
 
-// ── Internal helpers ────────────────────────────────────────────────
+/// Compare HEAD against the working directory and return file-level changes.
+pub fn diff_working_tree(project_dir: &Path) -> Result<Vec<DiffEntry>, VersioningError> {
+    let repo = git2::Repository::open(project_dir)
+        .map_err(|e| VersioningError::Git(e.to_string()))?;
+
+    let head_tree = repo
+        .head()
+        .and_then(|h| h.peel_to_tree())
+        .map_err(|e| VersioningError::Git(e.to_string()))?;
+
+    let mut opts = git2::DiffOptions::new();
+    opts.include_untracked(true);
+    opts.recurse_untracked_dirs(true);
+
+    let diff = repo
+        .diff_tree_to_workdir_with_index(Some(&head_tree), Some(&mut opts))
+        .map_err(|e| VersioningError::Git(e.to_string()))?;
+
+    let mut entries: Vec<DiffEntry> = Vec::new();
+    let num_deltas = diff.deltas().len();
+    for i in 0..num_deltas {
+        let delta = diff.deltas().nth(i).unwrap();
+        let path = delta
+            .new_file()
+            .path()
+            .or_else(|| delta.old_file().path())
+            .unwrap_or(Path::new(""))
+            .to_string_lossy()
+            .to_string();
+        let status = match delta.status() {
+            git2::Delta::Added | git2::Delta::Untracked => "added",
+            git2::Delta::Deleted => "deleted",
+            _ => "modified",
+        };
+        entries.push(DiffEntry {
+            path,
+            status: status.to_string(),
+            additions: 0,
+            deletions: 0,
+        });
+    }
+
+    // Count line additions/deletions per file
+    let entry_count = entries.len();
+    let mut current_file: usize = 0;
+    diff.print(git2::DiffFormat::Patch, |delta, _hunk, line| {
+        let dpath = delta
+            .new_file()
+            .path()
+            .or_else(|| delta.old_file().path())
+            .unwrap_or(Path::new(""))
+            .to_string_lossy()
+            .to_string();
+        for j in current_file..entry_count {
+            if entries[j].path == dpath {
+                current_file = j;
+                break;
+            }
+        }
+        if current_file < entry_count {
+            match line.origin() {
+                '+' => entries[current_file].additions += 1,
+                '-' => entries[current_file].deletions += 1,
+                _ => {}
+            }
+        }
+        true
+    })
+    .map_err(|e| VersioningError::Git(e.to_string()))?;
+
+    Ok(entries)
+}
 
 fn open_repo(project_dir: &Path) -> Result<gix::Repository, VersioningError> {
     gix::open(project_dir).map_err(|e| VersioningError::Git(e.to_string()))

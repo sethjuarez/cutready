@@ -209,6 +209,7 @@ pub fn run() {
             commands::versioning::load_editor_state,
             commands::versioning::is_rewound,
             commands::versioning::diff_snapshots,
+            commands::versioning::diff_working_tree,
             commands::versioning::check_large_files,
             commands::versioning::clone_from_url,
             commands::versioning::merge_timelines,

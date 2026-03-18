@@ -413,6 +413,8 @@ interface AppStoreState {
   // ── Diff ──────────────────────────────────────────────────
   /** Compare two snapshots and return file-level diffs. */
   diffSnapshots: (fromCommit: string, toCommit: string) => Promise<DiffEntry[]>;
+  /** Compare HEAD against the working directory. */
+  diffWorkingTree: () => Promise<DiffEntry[]>;
   /** Check for large files before pushing. Returns list of (path, size). */
   checkLargeFiles: () => Promise<Array<[string, number]>>;
   /** Clone a workspace from a GitHub URL. */
@@ -1782,6 +1784,17 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       return entries;
     } catch (err) {
       console.error("Failed to diff snapshots:", err);
+      return [];
+    }
+  },
+
+  diffWorkingTree: async () => {
+    try {
+      const entries = await invoke<DiffEntry[]>("diff_working_tree");
+      set({ diffResult: entries, diffSelection: { from: "HEAD", to: "working" } });
+      return entries;
+    } catch (err) {
+      console.error("Failed to diff working tree:", err);
       return [];
     }
   },
