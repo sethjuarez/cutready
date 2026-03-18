@@ -309,6 +309,20 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
     case "delete_project_image":
     case "delete_orphaned_images":
       return null;
+    case "get_visual":
+      // Return a sample elucim DSL document for visual thumbnails
+      return {
+        version: 1,
+        root: {
+          width: 960, height: 540, fps: 30, durationInFrames: 60,
+          background: "$background",
+          children: [
+            { type: "rect", x: 80, y: 80, width: 800, height: 380, fill: "$surface", rx: 24 },
+            { type: "text", x: 480, y: 240, content: "Sample Visual", fontSize: 48, fill: "$foreground", textAnchor: "middle" },
+            { type: "text", x: 480, y: 310, content: "CutReady", fontSize: 28, fill: "$accent", textAnchor: "middle" },
+          ],
+        },
+      };
     // Remote/versioning commands
     case "add_git_remote":
     case "remove_git_remote":
