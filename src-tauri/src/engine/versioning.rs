@@ -103,6 +103,10 @@ pub fn commit_snapshot(
         clear_prev_tip(project_dir);
     }
 
+    // Sync the git index to match the new HEAD tree so git2-based tools
+    // (diff, status, remotes) see a consistent state.
+    sync_index_to_head(project_dir);
+
     Ok(commit_id.to_string())
 }
 
@@ -239,7 +243,11 @@ pub fn checkout_version(project_dir: &Path, commit_id: &str) -> Result<(), Versi
         .map_err(|e| VersioningError::Git(e.to_string()))?;
 
     clean_working_dir(project_dir)?;
-    write_tree_to_dir(&repo, tree.id, project_dir)
+    write_tree_to_dir(&repo, tree.id, project_dir)?;
+
+    // Sync git index to match the checked-out tree
+    sync_index_to_head(project_dir);
+    Ok(())
 }
 
 /// Stash the current working tree into a git tree object.
@@ -548,7 +556,9 @@ pub fn switch_timeline(project_dir: &Path, name: &str) -> Result<(), VersioningE
         .map_err(|e| VersioningError::Git(e.to_string()))?;
 
     clean_working_dir(project_dir)?;
-    write_tree_to_dir(&repo, tree.id, project_dir)
+    write_tree_to_dir(&repo, tree.id, project_dir)?;
+    sync_index_to_head(project_dir);
+    Ok(())
 }
 
 /// Delete a non-active timeline.
@@ -992,6 +1002,16 @@ pub fn diff_working_tree(project_dir: &Path) -> Result<Vec<DiffEntry>, Versionin
 
 fn open_repo(project_dir: &Path) -> Result<gix::Repository, VersioningError> {
     gix::open(project_dir).map_err(|e| VersioningError::Git(e.to_string()))
+}
+
+/// Sync the git index to match HEAD's tree so git2-based operations see
+/// a consistent view. Called after gix commits which bypass the index.
+fn sync_index_to_head(project_dir: &Path) {
+    let Ok(repo) = git2::Repository::open(project_dir) else { return };
+    let Ok(head) = repo.head().and_then(|h| h.peel_to_tree()) else { return };
+    let Ok(mut index) = repo.index() else { return };
+    let _ = index.read_tree(&head);
+    let _ = index.write();
 }
 
 fn slugify_timeline_name(name: &str) -> String {
