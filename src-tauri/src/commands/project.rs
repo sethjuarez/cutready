@@ -367,7 +367,8 @@ pub async fn delete_project(
     Ok(())
 }
 
-/// Rename a project in the manifest (does NOT rename the folder).
+/// Rename a project. In single-project mode (path == "."), this migrates the
+/// workspace to multi-project by moving files into a named subdirectory.
 #[tauri::command]
 pub async fn rename_project(
     project_path: String,
@@ -375,6 +376,18 @@ pub async fn rename_project(
     state: State<'_, AppState>,
 ) -> Result<String, String> {
     let root = repo_root(&state)?;
+
+    // Single-project mode: renaming the sole project triggers migration
+    if project_path == "." && !project::is_multi_project(&root) {
+        let entry = project::migrate_to_multi_project(&root, &new_name)
+            .map_err(|e| e.to_string())?;
+
+        // Update current project to point at the new subdirectory
+        let mut current = state.current_project.lock().map_err(|e| e.to_string())?;
+        *current = Some(ProjectView::in_repo(root, &entry.path, entry.name.clone()));
+
+        return Ok(entry.path);
+    }
 
     // Derive new folder-safe path from the new name
     let new_path = new_name
