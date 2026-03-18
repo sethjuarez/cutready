@@ -199,9 +199,10 @@ pub fn get_file_at_version(
     commit_id: &str,
     file_path: &str,
 ) -> Result<Vec<u8>, VersioningError> {
+    let full_id = resolve_commit_id(project_dir, commit_id)?;
     let repo = open_repo(project_dir)?;
 
-    let oid: gix::ObjectId = commit_id
+    let oid: gix::ObjectId = full_id
         .parse()
         .map_err(|e: gix::hash::decode::Error| VersioningError::Git(e.to_string()))?;
 
@@ -868,12 +869,15 @@ pub fn diff_snapshots(
     from_commit: &str,
     to_commit: &str,
 ) -> Result<Vec<DiffEntry>, VersioningError> {
+    let from_full = resolve_commit_id(project_dir, from_commit)?;
+    let to_full = resolve_commit_id(project_dir, to_commit)?;
+
     let repo = git2::Repository::open(project_dir)
         .map_err(|e| VersioningError::Git(e.to_string()))?;
 
-    let from_oid = git2::Oid::from_str(from_commit)
+    let from_oid = git2::Oid::from_str(&from_full)
         .map_err(|e| VersioningError::Git(e.to_string()))?;
-    let to_oid = git2::Oid::from_str(to_commit)
+    let to_oid = git2::Oid::from_str(&to_full)
         .map_err(|e| VersioningError::Git(e.to_string()))?;
 
     let from_tree = repo.find_commit(from_oid)
@@ -1015,6 +1019,21 @@ pub fn diff_working_tree(project_dir: &Path) -> Result<Vec<DiffEntry>, Versionin
 
 fn open_repo(project_dir: &Path) -> Result<gix::Repository, VersioningError> {
     gix::open(project_dir).map_err(|e| VersioningError::Git(e.to_string()))
+}
+
+/// Resolve a (possibly short) commit hash to a full 40-char hex SHA.
+/// Uses git2's revparse which handles short hashes, full hashes, and refs.
+fn resolve_commit_id(project_dir: &Path, short_id: &str) -> Result<String, VersioningError> {
+    // If it already looks like a full hex SHA, return as-is
+    if short_id.len() == 40 && short_id.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Ok(short_id.to_string());
+    }
+    let repo = git2::Repository::open(project_dir)
+        .map_err(|e| VersioningError::Git(e.to_string()))?;
+    let obj = repo
+        .revparse_single(short_id)
+        .map_err(|e| VersioningError::Git(format!("Cannot resolve '{}': {}", short_id, e)))?;
+    Ok(obj.id().to_string())
 }
 
 /// Sync the git index to match HEAD's tree so git2-based operations see
