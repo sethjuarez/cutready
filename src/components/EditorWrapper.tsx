@@ -1,14 +1,11 @@
 /**
  * Wraps @elucim/editor's ElucimEditor for use in ScriptTable's lightbox.
  *
- * Uses the convenience ElucimEditor component which handles all internal
- * layout (floating panels, canvas positioning, theme resolution, scrollbar
- * styles). Document change tracking is interaction-based since ElucimEditor
- * doesn't expose an onChange callback.
+ * Resolves $token color references to hex values before passing to the
+ * editor. The editor renders SVG directly and doesn't understand DSL tokens.
  *
- * Resolves $token color references (e.g. $foreground, $surface) to actual
- * hex values before passing to the editor, since the editor renders SVG
- * directly and doesn't understand the DSL token syntax.
+ * TODO: Once @elucim/editor adds an `initialFrame` prop, pass
+ * `durationInFrames - 1` so all animated elements are visible on open.
  */
 import { useMemo, useRef, memo, lazy, Suspense, useCallback } from "react";
 import type { ElucimDocument } from "@elucim/dsl";
@@ -28,8 +25,11 @@ const LazyElucimEditor = lazy(() =>
 /** Color fields that may contain $token references */
 const COLOR_KEYS = new Set(["fill", "stroke", "background", "color", "axisColor", "gridColor", "labelColor"]);
 
-/** Deep-clone a DSL document, resolving $token color references to hex values. */
-function resolveTokens(doc: ElucimDocument, tokens: Record<string, string>): ElucimDocument {
+/**
+ * Deep-clone a DSL document for the editor, resolving $token color
+ * references to hex values.
+ */
+function resolveForEditor(doc: ElucimDocument, tokens: Record<string, string>): ElucimDocument {
   function walk(obj: unknown): unknown {
     if (obj === null || obj === undefined) return obj;
     if (Array.isArray(obj)) return obj.map(walk);
@@ -37,8 +37,7 @@ function resolveTokens(doc: ElucimDocument, tokens: Record<string, string>): Elu
       const out: Record<string, unknown> = {};
       for (const [key, val] of Object.entries(obj as Record<string, unknown>)) {
         if (COLOR_KEYS.has(key) && typeof val === "string" && val.startsWith("$")) {
-          const tokenName = val.slice(1); // strip $
-          out[key] = tokens[tokenName] ?? val;
+          out[key] = tokens[val.slice(1)] ?? val;
         } else {
           out[key] = walk(val);
         }
@@ -58,10 +57,8 @@ export default memo(function EditorWrapper({
 }: EditorWrapperProps) {
   const interacted = useRef(false);
 
-  // Resolve $token colors so they're visible in the editor canvas
-  const resolvedDsl = useMemo(() => resolveTokens(dsl, tokenColors), [dsl, tokenColors]);
+  const resolvedDsl = useMemo(() => resolveForEditor(dsl, tokenColors), [dsl, tokenColors]);
 
-  // Mark dirty on first real interaction inside the editor
   const handleInteraction = useCallback(() => {
     if (!interacted.current) {
       interacted.current = true;

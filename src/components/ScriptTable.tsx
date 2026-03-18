@@ -162,15 +162,38 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
     const s = getComputedStyle(document.documentElement);
     const get = (v: string, fb: string) => s.getPropertyValue(v).trim() || fb;
     const isDark = document.documentElement.classList.contains("dark");
+
+    const accent = get("--color-accent", isDark ? "#a49afa" : "#6b5ce7");
+    const bg = get("--color-surface", isDark ? "#2b2926" : "#faf9f7");
+    const surface = get("--color-surface-alt", isDark ? "#353230" : "#f0efed");
+    const fg = get("--color-text", isDark ? "#e8e4df" : "#2c2925");
+    const textSecondary = get("--color-text-secondary", isDark ? "#a09b93" : "#78756f");
+    const border = get("--color-border", isDark ? "#4a4644" : "#e2e0dd");
+
     return {
-      accent: get("--color-accent", isDark ? "#a49afa" : "#6b5ce7"),
-      bg: get("--color-surface", isDark ? "#2b2926" : "#faf9f7"),
-      surface: get("--color-surface-alt", isDark ? "#353230" : "#f0efed"),
-      fg: get("--color-text", isDark ? "#e8e4df" : "#2c2925"),
-      "text-secondary": get("--color-text-secondary", isDark ? "#a09b93" : "#78756f"),
-      border: get("--color-border", isDark ? "#4a4644" : "#e2e0dd"),
+      // Core
+      accent,
+      bg,
+      surface,
+      fg,
+      // Text variants
+      "text-secondary": textSecondary,
+      "text-muted": isDark ? "#78756f" : "#a09b93",
+      "text-disabled": isDark ? "#5c5956" : "#c5c2be",
+      // Panels & chrome
       panel: isDark ? "rgba(43,41,38,0.95)" : "rgba(250,249,247,0.95)",
       chrome: isDark ? "rgba(53,50,48,0.85)" : "rgba(240,239,237,0.85)",
+      // Borders
+      border,
+      "border-subtle": isDark ? "#3a3836" : "#ebe9e6",
+      // Inputs — critical for avoiding black textboxes in light mode
+      "input-bg": isDark ? "#231f1d" : "#ffffff",
+      // Status
+      success: isDark ? "#34d399" : "#16a34a",
+      info: isDark ? "#4fc3f7" : "#2563eb",
+      error: isDark ? "#f87171" : "#dc2626",
+      // Color scheme hint
+      "color-scheme": isDark ? "dark" : "light",
     };
   }, [visualLightbox]); // recalc when lightbox opens (picks up current theme)
 
@@ -456,7 +479,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
         >
           <div
             className="relative flex flex-col rounded-xl overflow-hidden shadow-2xl bg-[var(--color-surface)]"
-            style={{ width: "95vw", height: "90vh", maxWidth: "1600px" }}
+            style={{ width: "calc(100vw - 60px)", height: "calc(100vh - 60px)" }}
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header bar */}
@@ -518,10 +541,10 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
             </div>
 
             {/* Content area */}
-            <div className="flex-1 min-h-0 relative">
+            <div className="flex-1 min-h-0 relative p-[15px]">
               {lightboxMode === "preview" ? (
                 /* Preview mode — DslRenderer */
-                <div className="w-full h-full flex items-center justify-center p-4">
+                <div className="w-full h-full flex items-center justify-center">
                   <div className="rounded-lg overflow-hidden shadow-lg bg-[var(--color-surface)]" style={{ width: "100%", height: "100%", maxWidth: "1280px", aspectRatio: "960 / 540", margin: "auto" }}>
                     <Suspense fallback={<div className="w-full h-full bg-[var(--color-surface-alt)] animate-pulse" />}>
                       <VisualCell
@@ -549,8 +572,8 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
               )}
             </div>
 
-            {/* Nudge bar (both modes) */}
-            {onNudgeVisual && !readOnly && (
+            {/* Nudge bar (preview mode only — editor has its own timeline) */}
+            {onNudgeVisual && !readOnly && lightboxMode === "preview" && (
               <div className="flex items-center gap-2 px-4 py-2 border-t border-[var(--color-border)] bg-[var(--color-surface-alt)] shrink-0">
                 <input
                   type="text"
