@@ -839,39 +839,74 @@ fn extract_sketch_screenshot_refs(content: &str) -> Vec<String> {
     refs
 }
 
-/// List all images in .cutready/screenshots/ with their reference info.
+/// Extract `.cutready/visuals/...` visual paths from sketch JSON content.
 ///
-/// For each image, scans all .md notes and .sk sketches to find which ones reference it.
+/// Parses the `"visual"` field from each planning row in the sketch.
+fn extract_sketch_visual_refs(content: &str) -> Vec<String> {
+    let mut refs = Vec::new();
+    if let Ok(val) = serde_json::from_str::<serde_json::Value>(content) {
+        if let Some(rows) = val.get("rows").and_then(|r| r.as_array()) {
+            for row in rows {
+                if let Some(vis) = row.get("visual").and_then(|v| v.as_str()) {
+                    let vis = vis.replace('\\', "/");
+                    if vis.contains(".cutready/visuals/") {
+                        refs.push(vis);
+                    }
+                }
+            }
+        }
+    }
+    refs
+}
+
+/// List all images in .cutready/screenshots/ and visuals in .cutready/visuals/
+/// with their reference info.
+///
+/// For each asset, scans all .md notes and .sk sketches to find which ones reference it.
 pub fn list_images_with_refs(project_root: &Path) -> Result<Vec<ImageRefInfo>, ProjectError> {
     let ss_dir = project_root.join(".cutready").join("screenshots");
-    if !ss_dir.exists() {
-        return Ok(Vec::new());
-    }
+    let vis_dir = project_root.join(".cutready").join("visuals");
 
-    // Collect all image files
-    let mut images: Vec<(String, u64)> = Vec::new();
-    for entry in std::fs::read_dir(&ss_dir).map_err(|e| ProjectError::Io(e.to_string()))? {
-        let entry = entry.map_err(|e| ProjectError::Io(e.to_string()))?;
-        let path = entry.path();
-        if path.is_file() {
-            let name = entry.file_name().to_string_lossy().to_string();
-            let rel = format!(".cutready/screenshots/{name}");
-            let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
-            images.push((rel, size));
+    // Collect all screenshot files
+    let mut assets: Vec<(String, u64, &'static str)> = Vec::new();
+    if ss_dir.exists() {
+        for entry in std::fs::read_dir(&ss_dir).map_err(|e| ProjectError::Io(e.to_string()))? {
+            let entry = entry.map_err(|e| ProjectError::Io(e.to_string()))?;
+            let path = entry.path();
+            if path.is_file() {
+                let name = entry.file_name().to_string_lossy().to_string();
+                let rel = format!(".cutready/screenshots/{name}");
+                let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
+                assets.push((rel, size, "screenshot"));
+            }
         }
     }
 
-    if images.is_empty() {
+    // Collect all visual files
+    if vis_dir.exists() {
+        for entry in std::fs::read_dir(&vis_dir).map_err(|e| ProjectError::Io(e.to_string()))? {
+            let entry = entry.map_err(|e| ProjectError::Io(e.to_string()))?;
+            let path = entry.path();
+            if path.is_file() && path.extension().is_some_and(|ext| ext == "json") {
+                let name = entry.file_name().to_string_lossy().to_string();
+                let rel = format!(".cutready/visuals/{name}");
+                let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
+                assets.push((rel, size, "visual"));
+            }
+        }
+    }
+
+    if assets.is_empty() {
         return Ok(Vec::new());
     }
 
-    // Build a map of image path → list of files that reference it
+    // Build a map of asset path → list of files that reference it
     let mut ref_map: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
-    for (img, _) in &images {
-        ref_map.insert(img.clone(), Vec::new());
+    for (path, _, _) in &assets {
+        ref_map.insert(path.clone(), Vec::new());
     }
 
-    // Scan markdown notes for image references
+    // Scan markdown notes for screenshot references
     scan_files_recursive(project_root, project_root, "md", &mut |rel_path, abs_path| {
         if let Ok(content) = std::fs::read_to_string(abs_path) {
             let refs = extract_screenshot_refs(&content);
@@ -883,26 +918,31 @@ pub fn list_images_with_refs(project_root: &Path) -> Result<Vec<ImageRefInfo>, P
         }
     })?;
 
-    // Scan sketch files for screenshot field references
+    // Scan sketch files for screenshot and visual field references
     scan_files_recursive(project_root, project_root, "sk", &mut |rel_path, abs_path| {
         if let Ok(content) = std::fs::read_to_string(abs_path) {
-            let refs = extract_sketch_screenshot_refs(&content);
-            for img_ref in refs {
+            for img_ref in extract_sketch_screenshot_refs(&content) {
                 if let Some(referrers) = ref_map.get_mut(&img_ref) {
+                    referrers.push(rel_path.to_string());
+                }
+            }
+            for vis_ref in extract_sketch_visual_refs(&content) {
+                if let Some(referrers) = ref_map.get_mut(&vis_ref) {
                     referrers.push(rel_path.to_string());
                 }
             }
         }
     })?;
 
-    let mut result: Vec<ImageRefInfo> = images
+    let mut result: Vec<ImageRefInfo> = assets
         .into_iter()
-        .map(|(path, size)| {
+        .map(|(path, size, asset_type)| {
             let referenced_by = ref_map.remove(&path).unwrap_or_default();
             ImageRefInfo {
                 path,
                 size,
                 referenced_by,
+                asset_type,
             }
         })
         .collect();
@@ -916,6 +956,8 @@ pub struct ImageRefInfo {
     pub path: String,
     pub size: u64,
     pub referenced_by: Vec<String>,
+    /// "screenshot" or "visual"
+    pub asset_type: &'static str,
 }
 
 /// Check if a sketch file exists given a relative path from project root.

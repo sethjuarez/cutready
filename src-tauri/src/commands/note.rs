@@ -102,19 +102,21 @@ pub async fn save_pasted_image(
     Ok(format!(".cutready/screenshots/{filename}"))
 }
 
-/// Image info returned by the image manager.
+/// Image/visual info returned by the image manager.
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ImageInfo {
-    /// Relative path (e.g. ".cutready/screenshots/pasted-123.png")
+    /// Relative path (e.g. ".cutready/screenshots/pasted-123.png" or ".cutready/visuals/abc123.json")
     pub path: String,
     /// File size in bytes
     pub size: u64,
-    /// Which note files reference this image (relative paths)
+    /// Which files reference this asset (relative paths)
     pub referenced_by: Vec<String>,
+    /// "screenshot" or "visual"
+    pub asset_type: String,
 }
 
-/// List all images in the project's screenshots directory with reference info.
+/// List all images and visuals in the project with reference info.
 #[tauri::command]
 pub async fn list_project_images(state: State<'_, AppState>) -> Result<Vec<ImageInfo>, String> {
     let root = project_root(&state)?;
@@ -125,11 +127,12 @@ pub async fn list_project_images(state: State<'_, AppState>) -> Result<Vec<Image
             path: r.path,
             size: r.size,
             referenced_by: r.referenced_by,
+            asset_type: r.asset_type.to_string(),
         })
         .collect())
 }
 
-/// Delete a specific image file from the project.
+/// Delete a specific image or visual file from the project.
 #[tauri::command]
 pub async fn delete_project_image(
     relative_path: String,
@@ -139,28 +142,30 @@ pub async fn delete_project_image(
     let abs_path = project::safe_resolve(&root, &relative_path).map_err(|e| e.to_string())?;
 
     if !abs_path.exists() {
-        return Err(format!("Image not found: {relative_path}"));
+        return Err(format!("Asset not found: {relative_path}"));
     }
-    // Only allow deleting from .cutready/screenshots
-    if !relative_path.starts_with(".cutready/screenshots/") {
-        return Err("Can only delete images from .cutready/screenshots/".into());
+    // Only allow deleting from .cutready/screenshots or .cutready/visuals
+    if !relative_path.starts_with(".cutready/screenshots/")
+        && !relative_path.starts_with(".cutready/visuals/")
+    {
+        return Err("Can only delete assets from .cutready/screenshots/ or .cutready/visuals/".into());
     }
-    std::fs::remove_file(&abs_path).map_err(|e| format!("Failed to delete image: {e}"))?;
+    std::fs::remove_file(&abs_path).map_err(|e| format!("Failed to delete asset: {e}"))?;
     Ok(())
 }
 
-/// Delete all orphaned images (re-verified server-side).
-/// Returns the count of deleted images.
+/// Delete all orphaned images and visuals (re-verified server-side).
+/// Returns the count of deleted assets.
 #[tauri::command]
 pub async fn delete_orphaned_images(state: State<'_, AppState>) -> Result<u32, String> {
     let root = project_root(&state)?;
     let refs = project::list_images_with_refs(&root).map_err(|e| e.to_string())?;
     let mut deleted = 0u32;
-    for img in &refs {
-        if img.referenced_by.is_empty() {
-            let abs = root.join(&img.path);
+    for asset in &refs {
+        if asset.referenced_by.is_empty() {
+            let abs = root.join(&asset.path);
             if abs.exists() {
-                std::fs::remove_file(&abs).map_err(|e| format!("Failed to delete {}: {e}", img.path))?;
+                std::fs::remove_file(&abs).map_err(|e| format!("Failed to delete {}: {e}", asset.path))?;
                 deleted += 1;
             }
         }

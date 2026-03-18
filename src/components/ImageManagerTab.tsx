@@ -15,6 +15,7 @@ interface ImageInfo {
   path: string;
   size: number;
   referencedBy: string[];
+  assetType: "screenshot" | "visual";
 }
 
 interface ImageGroup {
@@ -156,9 +157,21 @@ export function ImageManagerTab() {
     <div className="space-y-4">
       {/* Summary bar */}
       <div className="flex items-center gap-4 text-sm text-[var(--color-text-secondary)]">
-        <span>{images.length} image{images.length !== 1 ? "s" : ""}</span>
+        <span>{images.length} asset{images.length !== 1 ? "s" : ""}</span>
         <span>·</span>
         <span>{formatBytes(totalSize)} total</span>
+        {images.some((i) => i.assetType === "screenshot") && (
+          <>
+            <span>·</span>
+            <span>{images.filter((i) => i.assetType === "screenshot").length} screenshot{images.filter((i) => i.assetType === "screenshot").length !== 1 ? "s" : ""}</span>
+          </>
+        )}
+        {images.some((i) => i.assetType === "visual") && (
+          <>
+            <span>·</span>
+            <span>{images.filter((i) => i.assetType === "visual").length} visual{images.filter((i) => i.assetType === "visual").length !== 1 ? "s" : ""}</span>
+          </>
+        )}
         {orphanedCount > 0 && (
           <>
             <span>·</span>
@@ -212,7 +225,7 @@ export function ImageManagerTab() {
       {/* Grouped sections */}
       {images.length === 0 && !loading && (
         <div className="text-[var(--color-text-secondary)] text-sm py-8 text-center">
-          No images in this workspace yet.
+          No images or visuals in this workspace yet.
         </div>
       )}
 
@@ -281,7 +294,7 @@ function ImageSection({
           {group.label}
         </span>
         <span className="text-xs text-[var(--color-text-secondary)] tabular-nums">
-          {group.images.length} image{group.images.length !== 1 ? "s" : ""}
+          {group.images.length} asset{group.images.length !== 1 ? "s" : ""}
         </span>
         <span className="text-xs text-[var(--color-text-secondary)] tabular-nums">
           · {formatBytes(group.totalSize)}
@@ -333,10 +346,11 @@ function ImageCard({
   contextFile?: string;
 }) {
   const isOrphaned = image.referencedBy.length === 0;
+  const isVisual = image.assetType === "visual";
   const fileName = image.path.split("/").pop() || image.path;
-  const src = convertFileSrc(`${projectRoot}/${image.path}`);
+  const src = isVisual ? undefined : convertFileSrc(`${projectRoot}/${image.path}`);
 
-  // When shown inside a file section, count how many OTHER files reference this image
+  // When shown inside a file section, count how many OTHER files reference this asset
   const otherRefCount = contextFile
     ? image.referencedBy.filter((r) => r !== contextFile).length
     : 0;
@@ -351,20 +365,38 @@ function ImageCard({
     >
       {/* Thumbnail */}
       <div className="aspect-video bg-black/20 flex items-center justify-center overflow-hidden">
-        <img
-          src={src}
-          alt={fileName}
-          className="max-w-full max-h-full object-contain"
-          loading="lazy"
-        />
+        {isVisual ? (
+          <div className="flex flex-col items-center gap-1 text-[var(--color-text-secondary)]">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+              <circle cx="8.5" cy="8.5" r="1.5" />
+              <polyline points="21 15 16 10 5 21" />
+            </svg>
+            <span className="text-[10px]">Visual</span>
+          </div>
+        ) : (
+          <img
+            src={src}
+            alt={fileName}
+            className="max-w-full max-h-full object-contain"
+            loading="lazy"
+          />
+        )}
       </div>
 
       {/* Info */}
       <div className="p-2 space-y-1">
         <div className="flex items-center justify-between gap-2">
-          <span className="text-xs text-[var(--color-text)] truncate font-mono" title={image.path}>
-            {fileName}
-          </span>
+          <div className="flex items-center gap-1.5 min-w-0">
+            {isVisual && (
+              <span className="shrink-0 text-[10px] px-1 py-0.5 rounded bg-[var(--color-accent)]/10 text-[var(--color-accent)] font-medium">
+                DSL
+              </span>
+            )}
+            <span className="text-xs text-[var(--color-text)] truncate font-mono" title={image.path}>
+              {fileName}
+            </span>
+          </div>
           <span className="text-xs text-[var(--color-text-secondary)] shrink-0">
             {formatBytes(image.size)}
           </span>
