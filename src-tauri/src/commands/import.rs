@@ -1,6 +1,7 @@
 //! Tauri commands for importing documents (.docx, .pdf, .pptx).
 
 use std::fs;
+use std::path::{Path, PathBuf};
 
 use tauri::State;
 
@@ -103,16 +104,22 @@ pub async fn import_pptx(
 }
 
 /// Import a .md (markdown) file as a note.
-/// Returns the relative path of the created note.
+/// Copies referenced screenshots, returns the relative path.
 #[tauri::command]
 pub async fn import_markdown(
     file_path: String,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
     let root = project_root(&state)?;
-    let content = fs::read_to_string(&file_path).map_err(|e| format!("Failed to read file: {e}"))?;
+    let source_path = Path::new(&file_path);
+    let content = fs::read_to_string(source_path).map_err(|e| format!("Failed to read file: {e}"))?;
 
-    let filename = std::path::Path::new(&file_path)
+    // Copy referenced screenshots from source workspace
+    if let Some(source_root) = infer_source_root(source_path) {
+        copy_note_assets(&content, &source_root, &root);
+    }
+
+    let filename = source_path
         .file_stem()
         .and_then(|s| s.to_str())
         .unwrap_or("imported-note");
@@ -131,19 +138,25 @@ pub async fn import_markdown(
 }
 
 /// Import a .sk (sketch) file into the current project.
-/// Validates JSON structure, copies to project, returns the relative path.
+/// Validates JSON structure, copies referenced assets, returns the relative path.
 #[tauri::command]
 pub async fn import_sketch(
     file_path: String,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
     let root = project_root(&state)?;
-    let data = fs::read_to_string(&file_path).map_err(|e| format!("Failed to read file: {e}"))?;
+    let source_path = Path::new(&file_path);
+    let data = fs::read_to_string(source_path).map_err(|e| format!("Failed to read file: {e}"))?;
 
-    let sketch: crate::models::sketch::Sketch =
+    let mut sketch: crate::models::sketch::Sketch =
         serde_json::from_str(&data).map_err(|e| format!("Invalid sketch file: {e}"))?;
 
-    let filename = std::path::Path::new(&file_path)
+    // Copy referenced screenshots and visuals from source workspace
+    if let Some(source_root) = infer_source_root(source_path) {
+        copy_sketch_assets(&mut sketch, &source_root, &root);
+    }
+
+    let filename = source_path
         .file_stem()
         .and_then(|s| s.to_str())
         .unwrap_or("imported-sketch");
@@ -169,12 +182,13 @@ pub async fn import_storyboard(
     state: State<'_, AppState>,
 ) -> Result<String, String> {
     let root = project_root(&state)?;
-    let data = fs::read_to_string(&file_path).map_err(|e| format!("Failed to read file: {e}"))?;
+    let source_path = Path::new(&file_path);
+    let data = fs::read_to_string(source_path).map_err(|e| format!("Failed to read file: {e}"))?;
 
     let storyboard: crate::models::sketch::Storyboard =
         serde_json::from_str(&data).map_err(|e| format!("Invalid storyboard file: {e}"))?;
 
-    let filename = std::path::Path::new(&file_path)
+    let filename = source_path
         .file_stem()
         .and_then(|s| s.to_str())
         .unwrap_or("imported-storyboard");
@@ -192,8 +206,82 @@ pub async fn import_storyboard(
     Ok(final_path)
 }
 
+/// Infer the project root from a file path by walking up to find `.git` or `.cutready`.
+fn infer_source_root(file_path: &Path) -> Option<PathBuf> {
+    let mut dir = file_path.parent()?;
+    loop {
+        if dir.join(".git").exists() || dir.join(".cutready").exists() {
+            return Some(dir.to_path_buf());
+        }
+        dir = dir.parent()?;
+    }
+}
+
+/// Copy a single asset file from source root to dest root if it exists.
+/// Creates parent directories as needed. Silently skips missing files.
+fn copy_asset(source_root: &Path, dest_root: &Path, relative_path: &str) {
+    let src = source_root.join(relative_path);
+    if !src.exists() {
+        return;
+    }
+    let dest = dest_root.join(relative_path);
+    if dest.exists() {
+        return; // already present
+    }
+    if let Some(parent) = dest.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+    let _ = fs::copy(&src, &dest);
+}
+
+/// Copy all screenshots and visuals referenced by a sketch's planning rows.
+fn copy_sketch_assets(
+    sketch: &mut crate::models::sketch::Sketch,
+    source_root: &Path,
+    dest_root: &Path,
+) {
+    for row in &mut sketch.rows {
+        // Copy screenshot
+        if let Some(ref ss) = row.screenshot {
+            copy_asset(source_root, dest_root, ss);
+        }
+        // Handle visual
+        if let Some(ref visual) = row.visual {
+            if let Some(vis_path) = visual.as_str() {
+                // External visual file — copy it
+                copy_asset(source_root, dest_root, vis_path);
+            } else if visual.is_object() {
+                // Inline visual (legacy) — migrate to external file
+                if let Ok(path) = project::write_visual(dest_root, visual) {
+                    row.visual = Some(serde_json::Value::String(path));
+                }
+            }
+        }
+    }
+}
+
+/// Copy all screenshots referenced by markdown content (![...](.cutready/screenshots/...)).
+fn copy_note_assets(content: &str, source_root: &Path, dest_root: &Path) {
+    // Match markdown image refs and HTML img src referencing .cutready/screenshots/
+    for pattern in &["](", "src=\"", "src='"] {
+        let mut rest = content;
+        while let Some(pos) = rest.find(pattern) {
+            let after = &rest[pos + pattern.len()..];
+            let end_char = if *pattern == "](" { ')' } else { pattern.chars().last().unwrap() };
+            if let Some(end) = after.find(end_char) {
+                let path = after[..end].trim();
+                if path.contains(".cutready/screenshots/") || path.contains(".cutready/visuals/") {
+                    let normalized = path.replace('\\', "/");
+                    copy_asset(source_root, dest_root, &normalized);
+                }
+            }
+            rest = &rest[pos + pattern.len()..];
+        }
+    }
+}
+
 /// Find a non-conflicting filename by appending -2, -3, etc.
-fn find_available_path(root: &std::path::Path, relative_path: &str, ext: &str) -> String {
+fn find_available_path(root: &Path, relative_path: &str, ext: &str) -> String {
     let base = relative_path.trim_end_matches(&format!(".{ext}"));
     let first = root.join(relative_path);
     if !first.exists() {
