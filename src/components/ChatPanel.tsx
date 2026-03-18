@@ -1762,7 +1762,7 @@ function MessageRow({ message, projectRoot, onDelete }: { message: ChatMessage; 
   if (message.role === "system" && message.content) {
     return (
       <div className="px-3.5 py-1">
-        <div className="inline-flex items-center gap-1.5 px-2 py-0.5 text-[11px] rounded border transition-colors bg-amber-500/10 text-amber-500 border-amber-500/25">
+        <div className="inline-flex items-center gap-1.5 px-2 py-0.5 text-[11px] rounded border transition-colors bg-[var(--color-accent)]/10 text-[var(--color-text-secondary)] border-[var(--color-border)]">
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="opacity-70 shrink-0">
             <path d="M4 14h16" />
             <path d="M4 10h16" />
