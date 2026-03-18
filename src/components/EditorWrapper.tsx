@@ -8,7 +8,7 @@
  * - initialFrame="last" auto-resolves to the final frame
  * - theme accepts CSS var() strings directly
  */
-import { memo, lazy, Suspense } from "react";
+import { memo, lazy, Suspense, useState, useEffect } from "react";
 import type { ElucimDocument } from "@elucim/dsl";
 import type { ElucimTheme } from "@elucim/core";
 
@@ -27,6 +27,18 @@ export default memo(function EditorWrapper({
   theme,
   onDocumentChange,
 }: EditorWrapperProps) {
+  // Detect light/dark for explicit colorScheme (auto can't parse var() strings)
+  const [isDark, setIsDark] = useState(() =>
+    document.documentElement.classList.contains("dark")
+  );
+  useEffect(() => {
+    const observer = new MutationObserver(() => {
+      setIsDark(document.documentElement.classList.contains("dark"));
+    });
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+    return () => observer.disconnect();
+  }, []);
+
   return (
     <Suspense
       fallback={
@@ -39,6 +51,7 @@ export default memo(function EditorWrapper({
         initialDocument={dsl}
         initialFrame="last"
         theme={theme}
+        editorTheme={{ "color-scheme": isDark ? "dark" : "light" }}
         onDocumentChange={onDocumentChange}
         className="w-full h-full"
         style={{ width: "100%", height: "100%" }}
