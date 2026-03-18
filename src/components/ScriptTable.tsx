@@ -178,30 +178,6 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
     };
   }, [visualLightbox]);
 
-  // Token map for resolving $foreground, $surface, etc. in DSL documents
-  const tokenColors = useMemo(() => {
-    const s = getComputedStyle(document.documentElement);
-    const get = (v: string, fb: string) => s.getPropertyValue(v).trim() || fb;
-    const isDark = document.documentElement.classList.contains("dark");
-    const fg = get("--color-text", isDark ? "#e8e4df" : "#2c2925");
-    const bg = get("--color-surface", isDark ? "#2b2926" : "#faf9f7");
-    const accent = get("--color-accent", isDark ? "#a49afa" : "#6b5ce7");
-    return {
-      foreground: fg,
-      background: bg,
-      accent,
-      muted: get("--color-text-secondary", isDark ? "#a09b93" : "#78756f"),
-      surface: get("--color-surface-alt", isDark ? "#353230" : "#f0efed"),
-      border: get("--color-border", isDark ? "#4a4644" : "#e2e0dd"),
-      primary: accent,
-      secondary: isDark ? "#a78bfa" : "#7c3aed",
-      tertiary: isDark ? "#f472b6" : "#db2777",
-      success: isDark ? "#34d399" : "#16a34a",
-      warning: isDark ? "#fbbf24" : "#d97706",
-      error: isDark ? "#f87171" : "#dc2626",
-    };
-  }, [visualLightbox]);
-
   const closeLightbox = useCallback(() => {
     setVisualLightbox(null);
     setNudgeInput("");
@@ -543,7 +519,6 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
                     <EditorWrapper
                       dsl={editorDsl}
                       theme={editorTheme}
-                      tokenColors={tokenColors}
                       onDocumentChange={(doc) => { setEditorDsl(doc); setEditorDirty(true); }}
                     />
                   ) : (
