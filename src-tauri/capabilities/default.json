@@ -26,6 +26,10 @@
       "allow": [{ "path": "**" }]
     },
     {
+      "identifier": "fs:allow-read-file",
+      "allow": [{ "path": "**" }]
+    },
+    {
       "identifier": "core:app:default"
     },
     "dialog:default",
