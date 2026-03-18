@@ -135,12 +135,33 @@ function bodyCell(text: string): TableCell {
   });
 }
 
-const IMG_WIDTH = convertInchesToTwip(2.5);
-const IMG_HEIGHT = convertInchesToTwip(1.4); // ~16:9 aspect ratio
+// Thumbnail size for images in the planning table (pixels, ~16:9)
+const THUMBNAIL_WIDTH = 240;
+const THUMBNAIL_HEIGHT = 135;
+
+// Larger size for standalone images in note exports (pixels, ~16:9)
+const INLINE_IMG_WIDTH = 480;
+const INLINE_IMG_HEIGHT = 270;
 
 // Thumbnail size for visuals in the planning table — max 200px wide
 const VISUAL_WIDTH = 200;
 const VISUAL_HEIGHT = 112; // ~16:9
+
+/** Detect image type from file extension for docx embedding. */
+function imageTypeFromPath(path: string): "jpg" | "png" | "gif" | "bmp" {
+  const ext = path.split(".").pop()?.toLowerCase();
+  switch (ext) {
+    case "jpg":
+    case "jpeg":
+      return "jpg";
+    case "gif":
+      return "gif";
+    case "bmp":
+      return "bmp";
+    default:
+      return "png";
+  }
+}
 
 // Light-mode token map — used to replace $token refs before rendering visuals for Word
 const LIGHT_TOKENS: Record<string, string> = {
@@ -177,16 +198,22 @@ function toLightMode(obj: unknown): unknown {
 }
 
 /** Read a screenshot file and return an ImageRun, or null on failure. */
-async function readScreenshot(projectRoot: string, relativePath: string): Promise<ImageRun | null> {
+async function readScreenshot(
+  projectRoot: string,
+  relativePath: string,
+  width: number = INLINE_IMG_WIDTH,
+  height: number = INLINE_IMG_HEIGHT,
+): Promise<ImageRun | null> {
   try {
     const fullPath = `${projectRoot}/${relativePath}`;
     const data = await readFile(fullPath);
     return new ImageRun({
       data,
-      transformation: { width: IMG_WIDTH, height: IMG_HEIGHT },
-      type: "jpg",
+      transformation: { width, height },
+      type: imageTypeFromPath(relativePath),
     });
-  } catch {
+  } catch (e) {
+    console.error("[exportToWord] Failed to read screenshot:", relativePath, e);
     return null;
   }
 }
@@ -243,7 +270,7 @@ async function buildPlanningTable(rows: Sketch["rows"], projectRoot: string): Pr
         const img = await captureVisualLastFrame(row.visual);
         cells.push(screenshotCell(img));
       } else {
-        const img = row.screenshot ? await readScreenshot(projectRoot, row.screenshot) : null;
+        const img = row.screenshot ? await readScreenshot(projectRoot, row.screenshot, THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT) : null;
         cells.push(screenshotCell(img));
       }
     }
