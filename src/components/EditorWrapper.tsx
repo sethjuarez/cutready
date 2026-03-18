@@ -21,7 +21,7 @@ const LazyElucimEditor = lazy(() =>
 );
 
 /** Color fields that may contain $token references */
-const COLOR_KEYS = new Set(["fill", "stroke", "color", "axisColor", "gridColor", "labelColor"]);
+const COLOR_KEYS = new Set(["fill", "stroke", "background", "color", "axisColor", "gridColor", "labelColor"]);
 
 /** Resolve $token color references in element properties to hex values. */
 function resolveTokenColors(doc: ElucimDocument, tokens: Record<string, string>): ElucimDocument {
