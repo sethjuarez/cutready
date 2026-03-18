@@ -9,6 +9,7 @@ use serde_json::{json, Value};
 
 use crate::engine::agent::llm::{ContentPart, FunctionDefinition, ImageUrlData, ToolCall, ToolDefinition};
 use crate::engine::project;
+use crate::engine::versioning;
 use crate::models::sketch::PlanningRow;
 
 // ---------------------------------------------------------------------------
@@ -425,6 +426,60 @@ pub fn all_tools() -> Vec<ToolDefinition> {
                 "required": ["category", "content"]
             }),
         ),
+        // ── Snapshot / versioning tools ──────────────────────────────
+        tool_def(
+            "list_snapshots",
+            "List the project's version history (git snapshots) in reverse chronological order. Returns commit IDs, messages, and timestamps. Use this to find snapshot IDs for read_file_at_snapshot or compare_snapshots.",
+            json!({
+                "type": "object",
+                "properties": {
+                    "limit": { "type": "integer", "description": "Maximum number of snapshots to return (default: 20)" }
+                },
+                "required": []
+            }),
+        ),
+        tool_def(
+            "read_file_at_snapshot",
+            "Read the content of a specific file at a historical snapshot. Use this to see what a sketch, note, or storyboard looked like at a previous point in time. Get snapshot IDs from list_snapshots.",
+            json!({
+                "type": "object",
+                "properties": {
+                    "snapshot_id": { "type": "string", "description": "The commit/snapshot ID (from list_snapshots)" },
+                    "path": { "type": "string", "description": "Relative file path (e.g. 'introduction.sk', 'notes/script.md')" }
+                },
+                "required": ["snapshot_id", "path"]
+            }),
+        ),
+        tool_def(
+            "compare_snapshots",
+            "Compare two snapshots and see which files changed between them, including line-level addition/deletion counts. Use this to understand what evolved between versions.",
+            json!({
+                "type": "object",
+                "properties": {
+                    "from_snapshot": { "type": "string", "description": "The older snapshot ID (from list_snapshots)" },
+                    "to_snapshot": { "type": "string", "description": "The newer snapshot ID (from list_snapshots)" }
+                },
+                "required": ["from_snapshot", "to_snapshot"]
+            }),
+        ),
+        tool_def(
+            "list_timelines",
+            "List all timelines (branches) in the project. Shows which timeline is currently active, snapshot counts, and display labels.",
+            json!({
+                "type": "object",
+                "properties": {},
+                "required": []
+            }),
+        ),
+        tool_def(
+            "get_current_snapshot",
+            "Get information about the current snapshot (HEAD commit) and active timeline. Use this to orient yourself in the project's version history.",
+            json!({
+                "type": "object",
+                "properties": {},
+                "required": []
+            }),
+        ),
     ]
 }
 
@@ -467,6 +522,11 @@ pub fn execute_tool(call: &ToolCall, project_root: &Path, vision_enabled: bool) 
             "update_storyboard" => exec_update_storyboard(project_root, &args),
             "recall_memory" => exec_recall_memory(project_root, &args),
             "save_memory" => exec_save_memory(project_root, &args),
+            "list_snapshots" => exec_list_snapshots(project_root, &args),
+            "read_file_at_snapshot" => exec_read_file_at_snapshot(project_root, &args),
+            "compare_snapshots" => exec_compare_snapshots(project_root, &args),
+            "list_timelines" => exec_list_timelines(project_root),
+            "get_current_snapshot" => exec_get_current_snapshot(project_root),
             other => format!("Unknown tool: {other}"),
         }
     }));
@@ -1630,6 +1690,192 @@ fn flatten_nodes(children: &[Value]) -> Vec<&Value> {
         }
     }
     result
+}
+
+// ---------------------------------------------------------------------------
+// Snapshot / versioning tool implementations
+// ---------------------------------------------------------------------------
+
+/// Find the repo root (where .git lives) by walking up from the project root.
+/// In single-project mode these are the same; in multi-project mode the repo
+/// root is the parent containing .git/.
+fn find_repo_root(project_root: &Path) -> PathBuf {
+    let mut current = project_root.to_path_buf();
+    loop {
+        if current.join(".git").exists() {
+            return current;
+        }
+        match current.parent() {
+            Some(parent) => current = parent.to_path_buf(),
+            None => return project_root.to_path_buf(),
+        }
+    }
+}
+
+fn exec_list_snapshots(root: &Path, args: &Value) -> String {
+    let repo_root = find_repo_root(root);
+    let limit = args.get("limit").and_then(|v| v.as_u64()).unwrap_or(20) as usize;
+
+    match versioning::list_versions(&repo_root) {
+        Ok(versions) => {
+            if versions.is_empty() {
+                return "No snapshots found. The project has no version history yet.".into();
+            }
+            let mut out = format!("## Snapshots ({} total, showing up to {})\n\n", versions.len(), limit);
+            for v in versions.iter().take(limit) {
+                let ts = v.timestamp.format("%Y-%m-%d %H:%M");
+                out.push_str(&format!("- `{}` — {} ({})\n", &v.id[..8.min(v.id.len())], v.message, ts));
+            }
+            if versions.len() > limit {
+                out.push_str(&format!("\n_{} more snapshots not shown. Use `limit` to see more._\n", versions.len() - limit));
+            }
+            out
+        }
+        Err(e) => format!("Error listing snapshots: {e}"),
+    }
+}
+
+fn exec_read_file_at_snapshot(root: &Path, args: &Value) -> String {
+    let repo_root = find_repo_root(root);
+    let snapshot_id = match args.get("snapshot_id").and_then(|v| v.as_str()) {
+        Some(id) => id,
+        None => return "Error: 'snapshot_id' is required".into(),
+    };
+    let path = match args.get("path").and_then(|v| v.as_str()) {
+        Some(p) => p,
+        None => return "Error: 'path' is required".into(),
+    };
+
+    // In multi-project repos, the file path is relative to the project root,
+    // but git stores paths relative to repo root. Compute the prefix.
+    let prefix = if repo_root != root {
+        root.strip_prefix(&repo_root)
+            .map(|p| p.to_string_lossy().replace('\\', "/"))
+            .unwrap_or_default()
+    } else {
+        String::new()
+    };
+    let git_path = if prefix.is_empty() {
+        path.to_string()
+    } else {
+        format!("{}/{}", prefix, path)
+    };
+
+    match versioning::get_file_at_version(&repo_root, snapshot_id, &git_path) {
+        Ok(bytes) => {
+            match String::from_utf8(bytes) {
+                Ok(content) => {
+                    let short_id = &snapshot_id[..8.min(snapshot_id.len())];
+                    format!("## {} at snapshot {}\n\n{}", path, short_id, content)
+                }
+                Err(_) => format!("File '{}' exists at this snapshot but is binary (not text).", path),
+            }
+        }
+        Err(e) => format!("Error reading '{}' at snapshot {}: {}", path, &snapshot_id[..8.min(snapshot_id.len())], e),
+    }
+}
+
+fn exec_compare_snapshots(root: &Path, args: &Value) -> String {
+    let repo_root = find_repo_root(root);
+    let from = match args.get("from_snapshot").and_then(|v| v.as_str()) {
+        Some(id) => id,
+        None => return "Error: 'from_snapshot' is required".into(),
+    };
+    let to = match args.get("to_snapshot").and_then(|v| v.as_str()) {
+        Some(id) => id,
+        None => return "Error: 'to_snapshot' is required".into(),
+    };
+
+    match versioning::diff_snapshots(&repo_root, from, to) {
+        Ok(entries) => {
+            if entries.is_empty() {
+                return format!(
+                    "No differences between snapshots `{}` and `{}`.",
+                    &from[..8.min(from.len())],
+                    &to[..8.min(to.len())]
+                );
+            }
+            let mut out = format!(
+                "## Changes: `{}` → `{}`\n\n| File | Status | +Lines | -Lines |\n| --- | --- | --- | --- |\n",
+                &from[..8.min(from.len())],
+                &to[..8.min(to.len())]
+            );
+            for e in &entries {
+                out.push_str(&format!(
+                    "| {} | {} | +{} | -{} |\n",
+                    e.path, e.status, e.additions, e.deletions
+                ));
+            }
+            let total_add: u32 = entries.iter().map(|e| e.additions).sum();
+            let total_del: u32 = entries.iter().map(|e| e.deletions).sum();
+            out.push_str(&format!(
+                "\n**{} file(s) changed**, +{} -{} lines\n",
+                entries.len(), total_add, total_del
+            ));
+            out
+        }
+        Err(e) => format!("Error comparing snapshots: {e}"),
+    }
+}
+
+fn exec_list_timelines(root: &Path) -> String {
+    let repo_root = find_repo_root(root);
+    match versioning::list_timelines(&repo_root) {
+        Ok(timelines) => {
+            if timelines.is_empty() {
+                return "No timelines found.".into();
+            }
+            let mut out = "## Timelines\n\n".to_string();
+            for t in &timelines {
+                let active = if t.is_active { " ← active" } else { "" };
+                out.push_str(&format!(
+                    "- **{}** (\"{}\"): {} snapshot(s){}\n",
+                    t.name, t.label, t.snapshot_count, active
+                ));
+            }
+            out
+        }
+        Err(e) => format!("Error listing timelines: {e}"),
+    }
+}
+
+fn exec_get_current_snapshot(root: &Path) -> String {
+    let repo_root = find_repo_root(root);
+
+    // Get current timeline
+    let timeline = match versioning::list_timelines(&repo_root) {
+        Ok(tls) => tls.into_iter().find(|t| t.is_active),
+        Err(_) => None,
+    };
+
+    // Get HEAD commit
+    let head = match versioning::list_versions(&repo_root) {
+        Ok(versions) => versions.into_iter().next(),
+        Err(_) => None,
+    };
+
+    let mut out = "## Current State\n\n".to_string();
+    if let Some(tl) = &timeline {
+        out.push_str(&format!("- **Timeline**: {} (\"{}\")\n", tl.name, tl.label));
+        out.push_str(&format!("- **Snapshots on this timeline**: {}\n", tl.snapshot_count));
+    } else {
+        out.push_str("- **Timeline**: (detached or unknown)\n");
+    }
+    if let Some(v) = &head {
+        let ts = v.timestamp.format("%Y-%m-%d %H:%M");
+        out.push_str(&format!("- **HEAD**: `{}` — {} ({})\n", &v.id[..8.min(v.id.len())], v.message, ts));
+    } else {
+        out.push_str("- **HEAD**: (no commits yet)\n");
+    }
+
+    // Check for unsaved changes
+    if let Ok(dirty) = versioning::has_unsaved_changes(&repo_root) {
+        if dirty {
+            out.push_str("- **Unsaved changes**: yes\n");
+        }
+    }
+
+    out
 }
 
 #[cfg(test)]
