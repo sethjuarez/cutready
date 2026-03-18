@@ -357,7 +357,7 @@ export function HomePanel() {
           </div>
         </div>
 
-        {/* ── Right / bottom column: recent projects ── */}
+        {/* ── Right / bottom column: recent workspaces ── */}
         <div className="w-full lg:w-72 lg:shrink-0 min-h-0">
           {loading && recentProjects.length === 0 ? (
             <div className="text-center text-[var(--color-text-secondary)] py-6">
@@ -366,13 +366,13 @@ export function HomePanel() {
           ) : recentProjects.length === 0 ? (
             <div className="text-center py-4">
               <p className="text-sm text-[var(--color-text-secondary)]">
-                No recent projects yet.
+                No recent workspaces yet.
               </p>
             </div>
           ) : (
             <>
               <h2 className="text-xs font-medium text-[var(--color-text-secondary)] uppercase tracking-wider mb-2">
-                Recent Projects
+                Recent Workspaces
               </h2>
               <div className="flex flex-col gap-1.5 max-h-[60vh] overflow-y-auto pr-1">
                 {recentProjects.map((p) => {
