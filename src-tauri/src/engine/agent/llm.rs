@@ -1427,12 +1427,11 @@ impl LlmClient {
             "body_kb": body_kb,
         }));
 
-        // Azure gateway rejects bodies over ~4MB with cryptic IIS errors.
-        // When trimming, summarize dropped messages into working memory so the
-        // LLM retains context about what was discussed earlier.
-        // The Responses API has hit 400 parse errors around ~80KB with large
-        // visual DSL payloads. Use a conservative byte guard well below that.
-        const MAX_BODY_BYTES_RESPONSES: usize = 128 * 1024; // 128KB — compact before 400s
+        // The Responses API endpoint (or its Azure gateway) consistently rejects
+        // bodies around ~79KB with JSON parse errors at byte ~79257, regardless of
+        // content. This appears to be a hard server-side size limit. Compact well
+        // below that threshold.
+        const MAX_BODY_BYTES_RESPONSES: usize = 64 * 1024; // 64KB — safely below the ~79KB wall
         const MAX_BODY_BYTES_CHAT: usize = 3 * 1024 * 1024; // 3MB for Chat Completions
         let max_body = if use_responses { MAX_BODY_BYTES_RESPONSES } else { MAX_BODY_BYTES_CHAT };
         if body_json.len() > max_body {
