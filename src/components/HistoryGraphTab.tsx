@@ -34,7 +34,7 @@ const ROW_GAP_V = 36;
 const ROW_GAP_H = 56;
 const LANE_GAP_V = 24;
 const LANE_GAP_H = 48;
-const PAD = 32;
+const PAD = 50;
 const NODE_R = 5;
 const HEAD_R = 7;
 
@@ -85,7 +85,7 @@ function computeLayout(
   for (const n of deduped) {
     inDeg.set(n.id, n.parents.filter((p) => nodeMap.has(p)).length);
   }
-  // Start with root nodes (no parents), sorted oldest first
+  // Start with root nodes (no parents), sorted oldest first for stable topo sort
   const tsOf = (n: GraphNode) => new Date(n.timestamp).getTime();
   const ready = deduped.filter((n) => inDeg.get(n.id) === 0);
   ready.sort((a, b) => tsOf(a) - tsOf(b));
@@ -104,6 +104,9 @@ function computeLayout(
       }
     }
   }
+
+  // Reverse so newest commits appear at top (row 0)
+  sorted.reverse();
 
   /* 3. Timeline-based lane assignment — each timeline gets a fixed lane */
   const nodeCol = new Map<string, number>();
@@ -475,9 +478,9 @@ export function HistoryGraphTab() {
 
                   {node.is_remote_tip && (
                     <g>
-                      <rect x={x + r + 3} y={y - 7} width={38} height={14} rx={3}
+                      <rect x={x - r - 41} y={y - 7} width={38} height={14} rx={3}
                         fill="var(--color-surface)" stroke="var(--color-border)" strokeWidth={0.5} />
-                      <text x={x + r + 7} y={y + 1} dominantBaseline="middle"
+                      <text x={x - r - 37} y={y + 1} dominantBaseline="middle"
                         fontSize={7} fill="var(--color-text-secondary)" fontWeight={500}>origin</text>
                     </g>
                   )}
