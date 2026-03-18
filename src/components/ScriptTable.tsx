@@ -157,45 +157,26 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
       .catch((err) => console.error("[ScriptTable] Failed to load visual for editor:", err));
   }, [visualLightbox?.visualPath, lightboxMode]);
 
-  // Resolve CutReady CSS vars to static colors for the editor theme
+  // Resolve CutReady CSS vars to editor theme overrides.
+  // With 0.9.0, color-scheme drives light/dark defaults for unset tokens.
   const editorTheme = useMemo(() => {
     const s = getComputedStyle(document.documentElement);
     const get = (v: string, fb: string) => s.getPropertyValue(v).trim() || fb;
     const isDark = document.documentElement.classList.contains("dark");
 
-    const accent = get("--color-accent", isDark ? "#a49afa" : "#6b5ce7");
-    const bg = get("--color-surface", isDark ? "#2b2926" : "#faf9f7");
-    const surface = get("--color-surface-alt", isDark ? "#353230" : "#f0efed");
-    const fg = get("--color-text", isDark ? "#e8e4df" : "#2c2925");
-    const textSecondary = get("--color-text-secondary", isDark ? "#a09b93" : "#78756f");
-    const border = get("--color-border", isDark ? "#4a4644" : "#e2e0dd");
-
     return {
-      // Core
-      accent,
-      bg,
-      surface,
-      fg,
-      // Text variants
-      "text-secondary": textSecondary,
-      "text-muted": isDark ? "#78756f" : "#a09b93",
-      "text-disabled": isDark ? "#5c5956" : "#c5c2be",
-      // Panels & chrome
+      "color-scheme": isDark ? "dark" : "light",
+      accent: get("--color-accent", isDark ? "#a49afa" : "#6b5ce7"),
+      bg: get("--color-surface", isDark ? "#2b2926" : "#faf9f7"),
+      surface: get("--color-surface-alt", isDark ? "#353230" : "#f0efed"),
+      fg: get("--color-text", isDark ? "#e8e4df" : "#2c2925"),
+      "text-secondary": get("--color-text-secondary", isDark ? "#a09b93" : "#78756f"),
+      border: get("--color-border", isDark ? "#4a4644" : "#e2e0dd"),
       panel: isDark ? "rgba(43,41,38,0.95)" : "rgba(250,249,247,0.95)",
       chrome: isDark ? "rgba(53,50,48,0.85)" : "rgba(240,239,237,0.85)",
-      // Borders
-      border,
-      "border-subtle": isDark ? "#3a3836" : "#ebe9e6",
-      // Inputs — critical for avoiding black textboxes in light mode
       "input-bg": isDark ? "#231f1d" : "#ffffff",
-      // Status
-      success: isDark ? "#34d399" : "#16a34a",
-      info: isDark ? "#4fc3f7" : "#2563eb",
-      error: isDark ? "#f87171" : "#dc2626",
-      // Color scheme hint
-      "color-scheme": isDark ? "dark" : "light",
     };
-  }, [visualLightbox]); // recalc when lightbox opens (picks up current theme)
+  }, [visualLightbox]);
 
   // Token map for resolving $foreground, $surface, etc. in DSL documents
   const tokenColors = useMemo(() => {

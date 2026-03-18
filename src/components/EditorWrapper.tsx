@@ -1,11 +1,9 @@
 /**
  * Wraps @elucim/editor's ElucimEditor for use in ScriptTable's lightbox.
  *
- * Resolves $token color references to hex values before passing to the
- * editor. The editor renders SVG directly and doesn't understand DSL tokens.
- *
- * TODO: Once @elucim/editor adds an `initialFrame` prop, pass
- * `durationInFrames - 1` so all animated elements are visible on open.
+ * - Resolves $token color references in element fill/stroke to hex values
+ * - Sets initialFrame to durationInFrames-1 so all animated elements visible
+ * - Passes light/dark theme from CutReady
  */
 import { useMemo, useRef, memo, lazy, Suspense, useCallback } from "react";
 import type { ElucimDocument } from "@elucim/dsl";
@@ -13,7 +11,7 @@ import type { ElucimDocument } from "@elucim/dsl";
 export interface EditorWrapperProps {
   dsl: ElucimDocument;
   theme: Record<string, string>;
-  /** Token map for resolving $foreground, $surface, etc. */
+  /** Token map for resolving $foreground, $surface, etc. in element colors */
   tokenColors: Record<string, string>;
   onDocumentChange: (doc: ElucimDocument) => void;
 }
@@ -23,13 +21,10 @@ const LazyElucimEditor = lazy(() =>
 );
 
 /** Color fields that may contain $token references */
-const COLOR_KEYS = new Set(["fill", "stroke", "background", "color", "axisColor", "gridColor", "labelColor"]);
+const COLOR_KEYS = new Set(["fill", "stroke", "color", "axisColor", "gridColor", "labelColor"]);
 
-/**
- * Deep-clone a DSL document for the editor, resolving $token color
- * references to hex values.
- */
-function resolveForEditor(doc: ElucimDocument, tokens: Record<string, string>): ElucimDocument {
+/** Resolve $token color references in element properties to hex values. */
+function resolveTokenColors(doc: ElucimDocument, tokens: Record<string, string>): ElucimDocument {
   function walk(obj: unknown): unknown {
     if (obj === null || obj === undefined) return obj;
     if (Array.isArray(obj)) return obj.map(walk);
@@ -49,6 +44,13 @@ function resolveForEditor(doc: ElucimDocument, tokens: Record<string, string>): 
   return walk(doc) as ElucimDocument;
 }
 
+/** Extract durationInFrames from the document root. */
+function getLastFrame(doc: ElucimDocument): number {
+  const root = doc?.root as unknown as Record<string, unknown> | undefined;
+  const dur = root && typeof root.durationInFrames === "number" ? root.durationInFrames : 120;
+  return Math.max(0, dur - 1);
+}
+
 export default memo(function EditorWrapper({
   dsl,
   theme,
@@ -57,7 +59,8 @@ export default memo(function EditorWrapper({
 }: EditorWrapperProps) {
   const interacted = useRef(false);
 
-  const resolvedDsl = useMemo(() => resolveForEditor(dsl, tokenColors), [dsl, tokenColors]);
+  const resolvedDsl = useMemo(() => resolveTokenColors(dsl, tokenColors), [dsl, tokenColors]);
+  const lastFrame = useMemo(() => getLastFrame(dsl), [dsl]);
 
   const handleInteraction = useCallback(() => {
     if (!interacted.current) {
@@ -81,6 +84,7 @@ export default memo(function EditorWrapper({
       >
         <LazyElucimEditor
           initialDocument={resolvedDsl}
+          initialFrame={lastFrame}
           theme={theme}
           className="w-full h-full"
           style={{ width: "100%", height: "100%" }}
