@@ -9,6 +9,31 @@
 Covector manages this changelog. Do not edit manually.
 Each release section is generated from `.changes/*.md` files.
 
+## [0.12.0](https://github.com/sethjuarez/cutready/compare/v0.11.0...v0.12.0) (2026-03-18)
+
+
+### Features
+
+* add Export Logs command to command palette ([f18ddc0](https://github.com/sethjuarez/cutready/commit/f18ddc050238442b9b043d9283247bf79e15ea9b))
+* add snapshot/versioning tools to AI agent ([5b55ecc](https://github.com/sethjuarez/cutready/commit/5b55eccb8927be940ed42c052c39747f20d9a0b1))
+* submit feedback as GitHub issues via gh CLI ([0e85596](https://github.com/sethjuarez/cutready/commit/0e85596640c364a5d766ef33499f2755aebdad63))
+
+
+### Bug Fixes
+
+* add connector line to origin badge, match branch label style ([86bc0d2](https://github.com/sethjuarez/cutready/commit/86bc0d2161331d9e6ab35c76c2ce25e255ae5e79))
+* add fs:allow-read-file permission for screenshot export ([1ae30d7](https://github.com/sethjuarez/cutready/commit/1ae30d70fbb2004205585b2e947c2c3299ad241a))
+* add snapshot tools to chat available tools list ([0d25b24](https://github.com/sethjuarez/cutready/commit/0d25b2463f809fe7392e23ca7c3e0a36770bdaec))
+* detect image type and use pixel dimensions for screenshot word export ([610a137](https://github.com/sethjuarez/cutready/commit/610a1371f216e60adf9a925c3104fa250e708658))
+* handle inline images in note-to-Word export ([735724b](https://github.com/sethjuarez/cutready/commit/735724b6e147e95b6091b883bb356a6cbe433911))
+* move ephemeral UI state to .git/cutready/, fix dirty detection ([255624f](https://github.com/sethjuarez/cutready/commit/255624f50bbb597881fbeb05d3fc4e6cefcf8150))
+* refresh snapshot timeline after fetch and push ([ebd187f](https://github.com/sethjuarez/cutready/commit/ebd187fa17647341f48417a0500337372ea84f46))
+* resolve short commit hashes in snapshot tools ([cfbf14c](https://github.com/sethjuarez/cutready/commit/cfbf14c60f461b8ad433a2e792389a3606bbdc97))
+* restore last active project when reopening multi-project workspace ([7e05133](https://github.com/sethjuarez/cutready/commit/7e0513310924a8f8a146a49782a180c871848ef6))
+* reverse history graph to show newest commits at top ([d47c3d6](https://github.com/sethjuarez/cutready/commit/d47c3d60e1b6157ec8c64e2a82c9bb3b25867eff))
+* show actionable toast on clone 401 — guides users to gh auth login ([9fa97a2](https://github.com/sethjuarez/cutready/commit/9fa97a2363c98f835c9f2493e70db01ba7f61d54))
+* use correct credential format for clone (token as password, not username) ([a6ebfec](https://github.com/sethjuarez/cutready/commit/a6ebfec63e63c7a1c7a63c4aecdf28c06e6516b6))
+
 ## [0.11.0](https://github.com/sethjuarez/cutready/compare/v0.10.0...v0.11.0) (2026-03-18)
 
 
