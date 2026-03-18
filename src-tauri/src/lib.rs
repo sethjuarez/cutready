@@ -178,6 +178,7 @@ pub fn run() {
             commands::sketch::list_sketches,
             commands::sketch::get_sketch,
             commands::sketch::get_visual,
+            commands::sketch::write_visual_doc,
             commands::sketch::rename_sketch,
             commands::storyboard::create_storyboard,
             commands::storyboard::get_storyboard,

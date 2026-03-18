@@ -20,6 +20,7 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@elucim/core": "^0.4.1",
     "@elucim/dsl": "^0.8.3",
+    "@elucim/editor": "^0.8.3",
     "@fontsource/geist-sans": "^5.2.5",
     "@fontsource/inter": "^5.2.8",
     "@fontsource/lora": "^5.2.8",

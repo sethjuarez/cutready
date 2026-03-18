@@ -126,6 +126,20 @@ pub async fn get_visual(
     project::read_visual(&root, &relative_path).map_err(|e| e.to_string())
 }
 
+/// Write an updated visual document back to its existing path.
+#[tauri::command]
+pub async fn write_visual_doc(
+    relative_path: String,
+    document: serde_json::Value,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let root = project_root(&state)?;
+    let abs = project::safe_resolve(&root, &relative_path).map_err(|e| e.to_string())?;
+    let json = serde_json::to_string_pretty(&document)
+        .map_err(|e| format!("Failed to serialize visual: {e}"))?;
+    std::fs::write(&abs, json).map_err(|e| format!("Failed to write visual: {e}"))
+}
+
 #[tauri::command]
 pub async fn rename_sketch(
     old_path: String,

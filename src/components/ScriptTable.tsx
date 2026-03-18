@@ -14,10 +14,12 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { convertFileSrc } from "@tauri-apps/api/core";
+import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import type { PlanningRow } from "../types/sketch";
+import type { ElucimDocument } from "@elucim/dsl";
 
 const VisualCell = lazy(() => import("./VisualCell"));
+const EditorWrapper = lazy(() => import("./EditorWrapper"));
 
 /* Row accent colors — thin left stripe for visual anchoring */
 const ROW_PALETTES: Record<string, string[]> = {
@@ -72,6 +74,9 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
   const [visualLightbox, setVisualLightbox] = useState<{ visualPath: string; rowIndex: number } | null>(null);
   const [nudgeInput, setNudgeInput] = useState("");
+  const [lightboxMode, setLightboxMode] = useState<"preview" | "edit">("preview");
+  const [editorDsl, setEditorDsl] = useState<ElucimDocument | null>(null);
+  const [editorDirty, setEditorDirty] = useState(false);
   const focusCellAfterRender = useRef<number | null>(null);
   const [undoToast, setUndoToast] = useState<string | null>(null);
   const undoToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -132,10 +137,62 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
   useEffect(() => {
     if (!visualLightbox) return;
     const handleKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") { setVisualLightbox(null); setNudgeInput(""); }
+      // In edit mode, only close on explicit X button — let editor handle Escape
+      if (lightboxMode === "edit") return;
+      if (e.key === "Escape") { closeLightbox(); }
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
+  }, [visualLightbox, lightboxMode]);
+
+  // Load DSL when entering edit mode
+  useEffect(() => {
+    if (!visualLightbox || lightboxMode !== "edit") {
+      setEditorDsl(null);
+      setEditorDirty(false);
+      return;
+    }
+    invoke<Record<string, unknown>>("get_visual", { relativePath: visualLightbox.visualPath })
+      .then((data) => setEditorDsl(data as unknown as ElucimDocument))
+      .catch((err) => console.error("[ScriptTable] Failed to load visual for editor:", err));
+  }, [visualLightbox?.visualPath, lightboxMode]);
+
+  // Resolve CutReady CSS vars to static colors for the editor theme
+  const editorTheme = useMemo(() => {
+    const s = getComputedStyle(document.documentElement);
+    const get = (v: string, fb: string) => s.getPropertyValue(v).trim() || fb;
+    const isDark = document.documentElement.classList.contains("dark");
+    return {
+      accent: get("--color-accent", isDark ? "#a49afa" : "#6b5ce7"),
+      bg: get("--color-surface", isDark ? "#2b2926" : "#faf9f7"),
+      surface: get("--color-surface-alt", isDark ? "#353230" : "#f0efed"),
+      fg: get("--color-text", isDark ? "#e8e4df" : "#2c2925"),
+      "text-secondary": get("--color-text-secondary", isDark ? "#a09b93" : "#78756f"),
+      border: get("--color-border", isDark ? "#4a4644" : "#e2e0dd"),
+      panel: isDark ? "rgba(43,41,38,0.95)" : "rgba(250,249,247,0.95)",
+      chrome: isDark ? "rgba(53,50,48,0.85)" : "rgba(240,239,237,0.85)",
+    };
+  }, [visualLightbox]); // recalc when lightbox opens (picks up current theme)
+
+  const closeLightbox = useCallback(() => {
+    setVisualLightbox(null);
+    setNudgeInput("");
+    setLightboxMode("preview");
+    setEditorDsl(null);
+    setEditorDirty(false);
+  }, []);
+
+  const saveEditorChanges = useCallback(async (doc: ElucimDocument) => {
+    if (!visualLightbox) return;
+    try {
+      await invoke("write_visual_doc", {
+        relativePath: visualLightbox.visualPath,
+        document: doc,
+      });
+      setEditorDirty(false);
+    } catch (err) {
+      console.error("[ScriptTable] Failed to save visual:", err);
+    }
   }, [visualLightbox]);
 
   const sensors = useSensors(
@@ -364,29 +421,113 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
         </div>
       )}
 
-      {/* Visual preview lightbox with nudge input */}
+      {/* Visual lightbox — near-fullscreen with preview/edit toggle */}
       {visualLightbox && (
         <div
           className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80"
-          onClick={() => { setVisualLightbox(null); setNudgeInput(""); }}
+          onClick={() => {
+            if (lightboxMode === "edit" && editorDirty) return; // don't close dirty editor by backdrop click
+            closeLightbox();
+          }}
         >
           <div
-            className="flex flex-col items-center gap-4 max-w-[90vw] max-h-[90vh]"
+            className="relative flex flex-col rounded-xl overflow-hidden shadow-2xl bg-[var(--color-surface)]"
+            style={{ width: "95vw", height: "90vh", maxWidth: "1600px" }}
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Visual preview — explicit 960×540 scaled to fit viewport */}
-            <div className="rounded-lg overflow-hidden shadow-2xl bg-[var(--color-surface)]" style={{ width: "min(960px, 85vw)", aspectRatio: "960 / 540" }}>
-              <Suspense fallback={<div className="w-full h-full bg-[var(--color-surface-alt)] animate-pulse" />}>
-                <VisualCell
-                  visualPath={visualLightbox.visualPath}
-                  mode="full"
-                  className="w-full h-full"
-                />
-              </Suspense>
+            {/* Header bar */}
+            <div className="flex items-center justify-between px-4 py-2 border-b border-[var(--color-border)] bg-[var(--color-surface-alt)] shrink-0">
+              <div className="flex items-center gap-3">
+                <span className="text-[13px] font-medium text-[var(--color-text)]">
+                  Row {visualLightbox.rowIndex + 1}
+                </span>
+                {/* Preview / Edit toggle */}
+                {!readOnly && (
+                  <div className="flex items-center rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] p-0.5">
+                    <button
+                      onClick={() => setLightboxMode("preview")}
+                      className={`px-3 py-1 rounded-md text-[12px] font-medium transition-colors ${
+                        lightboxMode === "preview"
+                          ? "bg-[var(--color-accent)] text-white"
+                          : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"
+                      }`}
+                    >
+                      Preview
+                    </button>
+                    <button
+                      onClick={() => setLightboxMode("edit")}
+                      className={`px-3 py-1 rounded-md text-[12px] font-medium transition-colors ${
+                        lightboxMode === "edit"
+                          ? "bg-[var(--color-accent)] text-white"
+                          : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"
+                      }`}
+                    >
+                      Edit
+                    </button>
+                  </div>
+                )}
+                {editorDirty && (
+                  <span className="text-[11px] text-[var(--color-accent)] font-medium">● Unsaved</span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                {/* Save button (edit mode only) */}
+                {lightboxMode === "edit" && editorDirty && editorDsl && (
+                  <button
+                    onClick={() => saveEditorChanges(editorDsl)}
+                    className="px-3 py-1.5 rounded-lg bg-[var(--color-accent)] text-white text-[12px] font-medium hover:bg-[var(--color-accent-hover)] transition-colors"
+                  >
+                    Save
+                  </button>
+                )}
+                {/* Close button */}
+                <button
+                  onClick={closeLightbox}
+                  className="p-1.5 rounded-lg text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)] transition-colors"
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </button>
+              </div>
             </div>
-            {/* Nudge input */}
+
+            {/* Content area */}
+            <div className="flex-1 min-h-0 relative">
+              {lightboxMode === "preview" ? (
+                /* Preview mode — DslRenderer */
+                <div className="w-full h-full flex items-center justify-center p-4">
+                  <div className="rounded-lg overflow-hidden shadow-lg bg-[var(--color-surface)]" style={{ width: "100%", height: "100%", maxWidth: "1280px", aspectRatio: "960 / 540", margin: "auto" }}>
+                    <Suspense fallback={<div className="w-full h-full bg-[var(--color-surface-alt)] animate-pulse" />}>
+                      <VisualCell
+                        visualPath={visualLightbox.visualPath}
+                        mode="full"
+                        className="w-full h-full"
+                      />
+                    </Suspense>
+                  </div>
+                </div>
+              ) : (
+                /* Edit mode — ElucimEditor */
+                <Suspense fallback={<div className="w-full h-full flex items-center justify-center text-[var(--color-text-secondary)]">Loading editor…</div>}>
+                  {editorDsl ? (
+                    <EditorWrapper
+                      dsl={editorDsl}
+                      theme={editorTheme}
+                      onDocumentChange={(doc) => { setEditorDsl(doc); setEditorDirty(true); }}
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-[var(--color-text-secondary)]">Loading…</div>
+                  )}
+                </Suspense>
+              )}
+            </div>
+
+            {/* Nudge bar (both modes) */}
             {onNudgeVisual && !readOnly && (
-              <div className="flex items-center gap-2 w-full max-w-[700px]">
+              <div className="flex items-center gap-2 px-4 py-2.5 border-t border-[var(--color-border)] bg-[var(--color-surface-alt)] shrink-0">
+                <span className="text-[11px] text-[var(--color-text-secondary)] shrink-0">AI Nudge</span>
                 <input
                   type="text"
                   value={nudgeInput}
@@ -395,47 +536,27 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
                     if (e.key === "Enter" && nudgeInput.trim()) {
                       onNudgeVisual(visualLightbox.rowIndex, nudgeInput.trim());
                       setNudgeInput("");
-                      setVisualLightbox(null);
                     }
-                    if (e.key === "Escape") {
-                      setVisualLightbox(null);
-                      setNudgeInput("");
-                    }
+                    e.stopPropagation(); // prevent editor shortcuts
                   }}
-                  placeholder="Nudge: &quot;make the title bigger&quot;, &quot;change color to blue&quot;..."
-                  className="flex-1 px-3 py-2 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text)] text-[13px] placeholder:text-[var(--color-text-secondary)]/50 focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)]"
-                  autoFocus
+                  placeholder={`"make the title bigger", "change color to blue"…`}
+                  className="flex-1 px-3 py-1.5 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text)] text-[13px] placeholder:text-[var(--color-text-secondary)]/50 focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)]"
                 />
                 <button
                   onClick={() => {
                     if (nudgeInput.trim()) {
                       onNudgeVisual(visualLightbox.rowIndex, nudgeInput.trim());
                       setNudgeInput("");
-                      setVisualLightbox(null);
                     }
                   }}
                   disabled={!nudgeInput.trim()}
-                  className="px-3 py-2 rounded-lg bg-[var(--color-accent)] text-white text-[13px] font-medium disabled:opacity-40 hover:bg-[var(--color-accent-hover)] transition-colors"
+                  className="px-3 py-1.5 rounded-lg bg-[var(--color-accent)] text-white text-[12px] font-medium disabled:opacity-40 hover:bg-[var(--color-accent-hover)] transition-colors"
                 >
                   Nudge ✨
                 </button>
               </div>
             )}
-            {/* Row info */}
-            <div className="text-[11px] text-white/50">
-              Row {visualLightbox.rowIndex + 1} · Click outside or press Esc to close
-            </div>
           </div>
-          {/* Close button */}
-          <button
-            onClick={() => { setVisualLightbox(null); setNudgeInput(""); }}
-            className="absolute top-4 right-4 p-2 rounded-full bg-black/50 text-white/80 hover:text-white transition-colors"
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          </button>
         </div>
       )}
 
