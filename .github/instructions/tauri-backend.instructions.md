@@ -127,6 +127,31 @@ Uses `tauri-plugin-store` v2 API:
 - `.get()` returns `Option<JsonValue>`, `.set(key, value)`, `.save()`.
 - Used for recent projects list and last parent folder.
 
+## Subprocess Spawning (Console Window Prevention)
+
+**CRITICAL**: Every `Command::new()` call on Windows **must** set `CREATE_NO_WINDOW` (`0x08000000`) to prevent console windows from flashing on screen. This applies to all subprocess spawns — `gh`, `node`, `powershell`, `ffmpeg`, etc.
+
+For `std::process::Command`:
+
+```rust
+let mut cmd = std::process::Command::new("gh");
+cmd.args(["auth", "token"]);
+#[cfg(windows)]
+{
+    use std::os::windows::process::CommandExt;
+    cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+}
+```
+
+For `tokio::process::Command`:
+
+```rust
+let mut cmd = tokio::process::Command::new("node");
+cmd.arg("index.js");
+#[cfg(windows)]
+cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+```
+
 ## Error Handling
 
 - Use `anyhow::Result` for internal engine logic.
