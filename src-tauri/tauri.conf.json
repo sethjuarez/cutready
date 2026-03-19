@@ -49,6 +49,11 @@
     ]
   },
   "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": ["cutready"]
+      }
+    },
     "shell": {
       "open": true
     },

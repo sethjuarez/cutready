@@ -1,0 +1,164 @@
+---
+/**
+ * Custom 404 page that doubles as a deep link handler.
+ *
+ * GitHub Pages serves this for any path that doesn't match a real file.
+ * If the URL matches /gh/owner/repo, we redirect to cutready://gh/owner/repo.
+ * Otherwise, we show a standard "page not found" message.
+ */
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CutReady</title>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+        background: #1c1a17;
+        color: #e8e6e3;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .card {
+        max-width: 480px;
+        width: 90%;
+        background: #2b2926;
+        border-radius: 16px;
+        padding: 48px 40px;
+        text-align: center;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+      }
+      .logo { font-size: 48px; margin-bottom: 16px; }
+      h1 { font-size: 22px; font-weight: 600; margin-bottom: 8px; letter-spacing: -0.011em; }
+      .repo-name { color: #a49afa; font-weight: 600; }
+      .status { color: #a8a29e; font-size: 14px; margin-top: 12px; }
+      .spinner {
+        display: inline-block;
+        width: 16px; height: 16px;
+        border: 2px solid #a49afa33;
+        border-top-color: #a49afa;
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+        vertical-align: middle;
+        margin-right: 8px;
+      }
+      @keyframes spin { to { transform: rotate(360deg); } }
+
+      .fallback { display: none; margin-top: 32px; }
+      .fallback.show { display: block; }
+      .fallback p { color: #a8a29e; font-size: 14px; margin-bottom: 20px; }
+      .downloads { display: flex; flex-direction: column; gap: 10px; }
+      .dl-btn {
+        display: block;
+        padding: 12px 20px;
+        background: #a49afa;
+        color: #1c1a17;
+        text-decoration: none;
+        border-radius: 8px;
+        font-weight: 600;
+        font-size: 14px;
+        transition: background 0.15s;
+      }
+      .dl-btn:hover { background: #8b7ae8; }
+      .dl-btn.secondary {
+        background: transparent;
+        color: #a49afa;
+        border: 1px solid #a49afa44;
+      }
+      .dl-btn.secondary:hover { background: #a49afa11; }
+      .manual {
+        margin-top: 24px;
+        padding: 16px;
+        background: #1c1a17;
+        border-radius: 8px;
+        text-align: left;
+      }
+      .manual p { color: #a8a29e; font-size: 13px; margin-bottom: 8px; }
+      .manual code {
+        display: block;
+        background: #2b2926;
+        padding: 8px 12px;
+        border-radius: 4px;
+        font-size: 13px;
+        color: #e8e6e3;
+        word-break: break-all;
+      }
+
+      /* Standard 404 styles */
+      .not-found a {
+        color: #a49afa;
+        text-decoration: none;
+      }
+      .not-found a:hover { text-decoration: underline; }
+      .not-found p { color: #a8a29e; font-size: 14px; margin-top: 12px; }
+    </style>
+  </head>
+  <body>
+    <!-- Deep link redirect UI (hidden by default) -->
+    <div id="deep-link-card" class="card" style="display: none;">
+      <div class="logo">✂️</div>
+      <h1>Open in CutReady</h1>
+      <p id="repo-display" class="repo-name"></p>
+      <p id="opening-status" class="status">
+        <span class="spinner"></span> Opening CutReady…
+      </p>
+
+      <div id="fallback" class="fallback">
+        <p>CutReady didn't open? You may need to install it first.</p>
+        <div class="downloads">
+          <a class="dl-btn" href="https://github.com/sethjuarez/cutready/releases/latest" target="_blank">
+            Download CutReady
+          </a>
+          <a class="dl-btn secondary" href="/getting-started/installation/">
+            Installation Guide
+          </a>
+        </div>
+        <div class="manual">
+          <p>After installing, clone this workspace manually:</p>
+          <code id="clone-url"></code>
+        </div>
+      </div>
+    </div>
+
+    <!-- Standard 404 UI (hidden by default) -->
+    <div id="not-found-card" class="card not-found" style="display: none;">
+      <div class="logo">✂️</div>
+      <h1>Page Not Found</h1>
+      <p>The page you're looking for doesn't exist.</p>
+      <p style="margin-top: 20px;"><a href="/">← Back to CutReady Docs</a></p>
+    </div>
+
+    <script is:inline>
+      const path = window.location.pathname.replace(/\/$/, '');
+      const match = path.match(/\/gh\/([^/]+)\/([^/]+)/);
+
+      if (match) {
+        // Deep link mode: redirect to cutready:// protocol
+        const [, owner, repo] = match;
+        const deepLink = `cutready://gh/${owner}/${repo}`;
+        const githubUrl = `https://github.com/${owner}/${repo}.git`;
+
+        document.getElementById('deep-link-card').style.display = '';
+        document.getElementById('repo-display').textContent = `${owner}/${repo}`;
+        document.getElementById('clone-url').textContent = githubUrl;
+
+        // Attempt to open the deep link
+        window.location.href = deepLink;
+
+        // After 2.5 seconds, show the fallback install UI
+        setTimeout(() => {
+          document.getElementById('opening-status').style.display = 'none';
+          document.getElementById('fallback').classList.add('show');
+        }, 2500);
+      } else {
+        // Standard 404 page
+        document.getElementById('not-found-card').style.display = '';
+      }
+    </script>
+  </body>
+</html>

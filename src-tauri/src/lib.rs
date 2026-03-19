@@ -1,6 +1,7 @@
 use std::sync::{Arc, Mutex};
 
 use tauri::{Emitter, Manager};
+use tauri_plugin_deep_link::DeepLinkExt;
 
 use models::script::{ProjectView, RepoView};
 use models::session::CapturedAction;
@@ -115,12 +116,51 @@ pub fn run() {
 
             builder.build()
         })
-        .plugin(tauri_plugin_single_instance::init(|_app, _args, _cwd| {}))
+        .plugin(tauri_plugin_deep_link::init())
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            // On Windows/Linux, deep link URLs arrive as CLI args via single-instance
+            for arg in &args {
+                if arg.starts_with("cutready://") {
+                    let _ = app.emit("deep-link-received", arg.clone());
+                }
+            }
+            // Focus the main window
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.set_focus();
+            }
+        }))
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             // Initialize dev trace logger (no-op in release builds)
             crate::util::trace::init();
+
+            // Deep link: register URL scheme handler on Windows/Linux
+            #[cfg(any(target_os = "linux", target_os = "windows"))]
+            {
+                let _ = app.deep_link().register_all();
+            }
+
+            // Deep link: check if app was launched via a deep link URL
+            {
+                let handle = app.handle().clone();
+                if let Ok(Some(urls)) = app.deep_link().get_current() {
+                    for url in urls {
+                        let url_str: String = url.to_string();
+                        let _ = handle.emit("deep-link-received", url_str);
+                    }
+                }
+            }
+
+            // Deep link: listen for URLs arriving while app is running (macOS)
+            {
+                let handle = app.handle().clone();
+                app.deep_link().on_open_url(move |event| {
+                    for url in event.urls() {
+                        let _ = handle.emit("deep-link-received", url.to_string());
+                    }
+                });
+            }
 
             // Stronghold: encrypted vault for secrets (API keys, tokens).
             // Salt file auto-created in app_local_data_dir on first run.
@@ -170,6 +210,7 @@ pub fn run() {
             commands::project::migrate_to_multi_project,
             commands::project::get_workspace_settings,
             commands::project::set_workspace_settings,
+            commands::project::resolve_deep_link,
             commands::sketch::create_sketch,
             commands::sketch::update_sketch,
             commands::sketch::update_sketch_title,

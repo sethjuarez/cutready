@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { useTheme } from "./hooks/useTheme";
 import { useGlobalHotkeys } from "./hooks/useGlobalHotkeys";
 import { useDebugLog } from "./hooks/useDebugLog";
+import { useDeepLink } from "./hooks/useDeepLink";
 import { StatusBar } from "./components/StatusBar";
 import { AppLayout } from "./components/AppLayout";
 import { ToastContainer } from "./components/ToastContainer";
@@ -12,6 +13,7 @@ function App() {
   const { theme, toggle } = useTheme();
   useGlobalHotkeys();
   useDebugLog();
+  useDeepLink();
 
   // Auto-open last project on startup
   useEffect(() => {

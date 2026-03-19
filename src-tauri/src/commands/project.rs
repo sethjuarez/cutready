@@ -543,3 +543,47 @@ pub async fn set_workspace_settings(
     let root = repo_root(&state)?;
     project::write_repo_settings(&root, &settings).map_err(|e| e.to_string())
 }
+
+/// Check if any recent project was cloned from a given GitHub repo.
+///
+/// Scans recent projects' `.git/config` for a remote URL matching
+/// `github.com/{owner}/{repo}`. Returns the path if found and the folder
+/// still exists on disk.
+#[tauri::command]
+pub async fn resolve_deep_link(
+    owner: String,
+    repo: String,
+    app: tauri::AppHandle,
+) -> Result<Option<String>, String> {
+    let store = app.store(STORE_FILE).map_err(|e| e.to_string())?;
+    let recent: Vec<crate::models::script::RecentProject> = store
+        .get("recent_projects")
+        .and_then(|v| serde_json::from_value(v).ok())
+        .unwrap_or_default();
+
+    let target = format!("github.com/{}/{}", owner, repo).to_lowercase();
+
+    for project in recent {
+        let path = std::path::PathBuf::from(&project.path);
+        if !path.exists() {
+            continue;
+        }
+        let git_config = path.join(".git").join("config");
+        if !git_config.exists() {
+            continue;
+        }
+        if let Ok(config) = git2::Config::open(&git_config) {
+            if let Ok(url) = config.get_string("remote.origin.url") {
+                let url_clean = url
+                    .to_lowercase()
+                    .trim_end_matches(".git")
+                    .to_string();
+                if url_clean.contains(&target) {
+                    return Ok(Some(project.path));
+                }
+            }
+        }
+    }
+
+    Ok(None)
+}

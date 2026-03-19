@@ -45,6 +45,7 @@
     "window-state:default",
     "log:default",
     "process:default",
-    "updater:default"
+    "updater:default",
+    "deep-link:default"
   ]
 }

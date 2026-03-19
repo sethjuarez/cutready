@@ -173,6 +173,8 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
       return { name: "Dev User", email: "dev@example.com", is_fallback: false };
     case "set_git_identity":
       return null;
+    case "resolve_deep_link":
+      return null;
     case "create_snapshot":
       return "new-snapshot-id";
     case "get_sidebar_order":
