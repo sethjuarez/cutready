@@ -33,7 +33,11 @@ enum EventAction {
 /// Translate a single SDK event into a CutReady AgentEvent.
 ///
 /// Pure function — testable without a live SDK client.
-fn translate_event(data: &SessionEventData) -> EventAction {
+/// `tool_names` maps tool_call_id → tool_name from prior ToolExecutionStart events.
+fn translate_event(
+    data: &SessionEventData,
+    tool_names: &std::collections::HashMap<String, String>,
+) -> EventAction {
     match data {
         SessionEventData::AssistantMessageDelta(delta) => EventAction::Emit(AgentEvent::Delta {
             content: delta.delta_content.clone(),
@@ -79,8 +83,13 @@ fn translate_event(data: &SessionEventData) -> EventAction {
                 .as_ref()
                 .map(|r| r.content.clone())
                 .unwrap_or_default();
+            // Resolve tool_call_id → tool_name from the ToolExecutionStart mapping
+            let name = tool_names
+                .get(&tool.tool_call_id)
+                .cloned()
+                .unwrap_or_else(|| tool.tool_call_id.clone());
             EventAction::Emit(AgentEvent::ToolResult {
-                name: tool.tool_call_id.clone(),
+                name,
                 result: result_text,
             })
         }
@@ -232,6 +241,8 @@ pub async fn chat(
     let mut full_response = String::new();
     let mut delta_count: u32 = 0;
     let mut current_message_id: Option<String> = None;
+    // Map tool_call_id → tool_name so ToolExecutionComplete can report the name
+    let mut tool_names: std::collections::HashMap<String, String> = std::collections::HashMap::new();
 
     loop {
         match events.recv().await {
@@ -294,7 +305,12 @@ pub async fn chat(
                     }
                 }
 
-                match translate_event(&event.data) {
+                // Track tool_call_id → tool_name for ToolExecutionComplete
+                if let SessionEventData::ToolExecutionStart(t) = &event.data {
+                    tool_names.insert(t.tool_call_id.clone(), t.tool_name.clone());
+                }
+
+                match translate_event(&event.data, &tool_names) {
                     EventAction::Emit(agent_event) => emit(agent_event),
                     EventAction::Break(Some(agent_event)) => {
                         emit(agent_event);
@@ -804,6 +820,10 @@ mod tests {
         SessionIdleData, ToolExecutionCompleteData, ToolExecutionStartData, ToolResultContent,
     };
 
+    fn no_tools() -> std::collections::HashMap<String, String> {
+        std::collections::HashMap::new()
+    }
+
     #[test]
     fn translate_delta_emits_delta() {
         let data = SessionEventData::AssistantMessageDelta(AssistantMessageDeltaData {
@@ -812,7 +832,7 @@ mod tests {
             total_response_size_bytes: None,
             parent_tool_call_id: None,
         });
-        match translate_event(&data) {
+        match translate_event(&data, &no_tools()) {
             EventAction::Emit(AgentEvent::Delta { content }) => {
                 assert_eq!(content, "hello");
             }
@@ -828,7 +848,7 @@ mod tests {
             total_response_size_bytes: None,
             parent_tool_call_id: None,
         });
-        match translate_event(&data) {
+        match translate_event(&data, &no_tools()) {
             EventAction::Emit(AgentEvent::Delta { content }) => {
                 assert_eq!(content, "");
             }
@@ -846,7 +866,7 @@ mod tests {
             tool_requests: None,
             parent_tool_call_id: None,
         });
-        assert!(matches!(translate_event(&data), EventAction::Ignore));
+        assert!(matches!(translate_event(&data, &no_tools()), EventAction::Ignore));
     }
 
     #[test]
@@ -856,7 +876,7 @@ mod tests {
             content: "let me think...".into(),
             chunk_content: None,
         });
-        match translate_event(&data) {
+        match translate_event(&data, &no_tools()) {
             EventAction::Emit(AgentEvent::Thinking { content }) => {
                 assert_eq!(content, "let me think...");
             }
@@ -870,7 +890,7 @@ mod tests {
             reasoning_id: "r1".into(),
             delta_content: "step 2...".into(),
         });
-        match translate_event(&data) {
+        match translate_event(&data, &no_tools()) {
             EventAction::Emit(AgentEvent::Thinking { content }) => {
                 assert_eq!(content, "step 2...");
             }
@@ -886,7 +906,7 @@ mod tests {
             arguments: Some(serde_json::json!({"path": "demo.sk"})),
             parent_tool_call_id: None,
         });
-        match translate_event(&data) {
+        match translate_event(&data, &no_tools()) {
             EventAction::Emit(AgentEvent::ToolCall { name, arguments }) => {
                 assert_eq!(name, "read_sketch");
                 assert!(arguments.contains("demo.sk"));
@@ -903,7 +923,7 @@ mod tests {
             arguments: None,
             parent_tool_call_id: None,
         });
-        match translate_event(&data) {
+        match translate_event(&data, &no_tools()) {
             EventAction::Emit(AgentEvent::ToolCall { name, arguments }) => {
                 assert_eq!(name, "list_project_files");
                 assert_eq!(arguments, "{}");
@@ -927,7 +947,7 @@ mod tests {
             mcp_server_name: None,
             mcp_tool_name: None,
         });
-        match translate_event(&data) {
+        match translate_event(&data, &no_tools()) {
             EventAction::Emit(AgentEvent::ToolResult { name, result }) => {
                 assert_eq!(name, "tc1");
                 assert_eq!(result, "file contents here");
@@ -949,10 +969,36 @@ mod tests {
             mcp_server_name: None,
             mcp_tool_name: None,
         });
-        match translate_event(&data) {
+        match translate_event(&data, &no_tools()) {
             EventAction::Emit(AgentEvent::ToolResult { name, result }) => {
                 assert_eq!(name, "tc-fail");
                 assert_eq!(result, "", "Missing result should produce empty string");
+            }
+            other => panic!("Expected Emit(ToolResult), got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn translate_tool_complete_resolves_name_from_start() {
+        let mut names = std::collections::HashMap::new();
+        names.insert("tc-create".to_string(), "create_note".to_string());
+        let data = SessionEventData::ToolExecutionComplete(ToolExecutionCompleteData {
+            tool_call_id: "tc-create".into(),
+            success: true,
+            is_user_requested: None,
+            result: Some(ToolResultContent {
+                content: "Note created".into(),
+            }),
+            error: None,
+            tool_telemetry: None,
+            parent_tool_call_id: None,
+            mcp_server_name: None,
+            mcp_tool_name: None,
+        });
+        match translate_event(&data, &names) {
+            EventAction::Emit(AgentEvent::ToolResult { name, result }) => {
+                assert_eq!(name, "create_note", "Should resolve to tool name, not call ID");
+                assert_eq!(result, "Note created");
             }
             other => panic!("Expected Emit(ToolResult), got {other:?}"),
         }
@@ -967,7 +1013,7 @@ mod tests {
             code: Some(429.0),
             provider_call_id: None,
         });
-        match translate_event(&data) {
+        match translate_event(&data, &no_tools()) {
             EventAction::Break(Some(AgentEvent::Error { message })) => {
                 assert_eq!(message, "Rate limit exceeded");
             }
@@ -978,7 +1024,7 @@ mod tests {
     #[test]
     fn translate_session_idle_breaks_cleanly() {
         let data = SessionEventData::SessionIdle(SessionIdleData {});
-        assert!(matches!(translate_event(&data), EventAction::Break(None)));
+        assert!(matches!(translate_event(&data, &no_tools()), EventAction::Break(None)));
     }
 
     #[test]
@@ -989,7 +1035,7 @@ mod tests {
             agent_display_name: "Planner".into(),
             agent_description: "Plans things".into(),
         });
-        match translate_event(&data) {
+        match translate_event(&data, &no_tools()) {
             EventAction::Emit(AgentEvent::AgentStart { agent_id, task }) => {
                 assert_eq!(agent_id, "planner");
                 assert_eq!(task, "");
@@ -1004,7 +1050,7 @@ mod tests {
             tool_call_id: "tc-agent".into(),
             agent_name: "writer".into(),
         });
-        match translate_event(&data) {
+        match translate_event(&data, &no_tools()) {
             EventAction::Emit(AgentEvent::AgentDone { agent_id }) => {
                 assert_eq!(agent_id, "writer");
             }
@@ -1017,7 +1063,7 @@ mod tests {
         let data = SessionEventData::AssistantTurnStart(AssistantTurnStartData {
             turn_id: "t1".into(),
         });
-        match translate_event(&data) {
+        match translate_event(&data, &no_tools()) {
             EventAction::Emit(AgentEvent::Status { message }) => {
                 assert_eq!(message, "Thinking…");
             }
@@ -1030,7 +1076,7 @@ mod tests {
         let data = SessionEventData::AssistantIntent(AssistantIntentData {
             intent: "Reading sketch files".into(),
         });
-        match translate_event(&data) {
+        match translate_event(&data, &no_tools()) {
             EventAction::Emit(AgentEvent::Status { message }) => {
                 assert_eq!(message, "Reading sketch files");
             }
@@ -1041,7 +1087,7 @@ mod tests {
     #[test]
     fn translate_compaction_start_emits_status() {
         let data = SessionEventData::SessionCompactionStart(SessionCompactionStartData {});
-        match translate_event(&data) {
+        match translate_event(&data, &no_tools()) {
             EventAction::Emit(AgentEvent::Status { message }) => {
                 assert!(message.contains("Compacting"));
             }
@@ -1065,7 +1111,7 @@ mod tests {
             checkpoint_path: None,
             summary_content: None,
         });
-        match translate_event(&data) {
+        match translate_event(&data, &no_tools()) {
             EventAction::Emit(AgentEvent::Status { message }) => {
                 assert!(message.contains("✓"));
             }
@@ -1089,7 +1135,7 @@ mod tests {
             checkpoint_path: None,
             summary_content: None,
         });
-        match translate_event(&data) {
+        match translate_event(&data, &no_tools()) {
             EventAction::Emit(AgentEvent::Status { message }) => {
                 assert!(message.contains("failed"));
                 assert!(message.contains("out of memory"));
@@ -1101,13 +1147,13 @@ mod tests {
     #[test]
     fn translate_unknown_event_is_ignored() {
         let data = SessionEventData::Unknown(serde_json::json!({"some": "random data"}));
-        assert!(matches!(translate_event(&data), EventAction::Ignore));
+        assert!(matches!(translate_event(&data, &no_tools()), EventAction::Ignore));
     }
 
     #[test]
     fn translate_usage_event_is_ignored() {
         let data = SessionEventData::AssistantUsage(AssistantUsageData::default());
-        assert!(matches!(translate_event(&data), EventAction::Ignore));
+        assert!(matches!(translate_event(&data, &no_tools()), EventAction::Ignore));
     }
 
     // -----------------------------------------------------------------------
