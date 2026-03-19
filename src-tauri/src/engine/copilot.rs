@@ -347,3 +347,195 @@ fn format_agent_name(id: &str) -> String {
         Some(c) => c.to_uppercase().to_string() + chars.as_str(),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use copilot_sdk::{ModelBilling, ModelCapabilities, ModelSupports};
+
+    // -----------------------------------------------------------------------
+    // Unit tests — always run, no external dependencies
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn format_agent_name_capitalizes_first_letter() {
+        assert_eq!(format_agent_name("planner"), "Planner");
+        assert_eq!(format_agent_name("writer"), "Writer");
+        assert_eq!(format_agent_name("editor"), "Editor");
+    }
+
+    #[test]
+    fn format_agent_name_handles_edge_cases() {
+        assert_eq!(format_agent_name(""), "");
+        assert_eq!(format_agent_name("a"), "A");
+        assert_eq!(format_agent_name("A"), "A");
+        assert_eq!(format_agent_name("already-Capitalized"), "Already-Capitalized");
+    }
+
+    #[test]
+    fn build_sdk_tools_excludes_delegate_to_agent() {
+        let sdk_tools = build_sdk_tools();
+        let names: Vec<&str> = sdk_tools.iter().map(|t| t.name.as_str()).collect();
+        assert!(
+            !names.contains(&"delegate_to_agent"),
+            "delegate_to_agent should be excluded — SDK handles delegation natively"
+        );
+    }
+
+    #[test]
+    fn build_sdk_tools_count_matches_all_tools_minus_delegate() {
+        let all = tools::all_tools();
+        let has_delegate = all.iter().any(|t| t.function.name == "delegate_to_agent");
+        let expected = if has_delegate { all.len() - 1 } else { all.len() };
+        let sdk_tools = build_sdk_tools();
+        assert_eq!(
+            sdk_tools.len(),
+            expected,
+            "SDK tools should include all CutReady tools except delegate_to_agent"
+        );
+    }
+
+    #[test]
+    fn build_sdk_tools_contains_core_tools() {
+        let sdk_tools = build_sdk_tools();
+        let names: Vec<&str> = sdk_tools.iter().map(|t| t.name.as_str()).collect();
+
+        // Spot-check a few essential tools
+        assert!(names.contains(&"read_sketch"), "Should have read_sketch");
+        assert!(names.contains(&"set_planning_rows"), "Should have set_planning_rows");
+        assert!(names.contains(&"list_project_files"), "Should have list_project_files");
+    }
+
+    #[test]
+    fn build_sdk_tools_have_descriptions() {
+        let sdk_tools = build_sdk_tools();
+        for tool in &sdk_tools {
+            assert!(
+                !tool.description.is_empty(),
+                "Tool '{}' should have a non-empty description",
+                tool.name
+            );
+        }
+    }
+
+    fn make_test_model(vision: bool, reasoning: bool, billing: Option<f64>) -> ModelInfo {
+        ModelInfo {
+            id: "test-model".into(),
+            name: "Test Model".into(),
+            capabilities: ModelCapabilities {
+                supports: ModelSupports {
+                    vision,
+                    reasoning_effort: reasoning,
+                },
+                ..Default::default()
+            },
+            policy: None,
+            billing: billing.map(|m| ModelBilling { multiplier: m }),
+            supported_reasoning_efforts: None,
+            default_reasoning_effort: None,
+        }
+    }
+
+    #[test]
+    fn copilot_model_info_from_basic() {
+        let model = make_test_model(false, false, None);
+        let info = CopilotModelInfo::from(model);
+        assert_eq!(info.id, "test-model");
+        assert_eq!(info.name, "Test Model");
+        assert!(!info.supports_vision);
+        assert!(!info.supports_reasoning);
+        assert!(info.billing.is_none());
+    }
+
+    #[test]
+    fn copilot_model_info_from_with_vision_and_reasoning() {
+        let model = make_test_model(true, true, None);
+        let info = CopilotModelInfo::from(model);
+        assert!(info.supports_vision);
+        assert!(info.supports_reasoning);
+    }
+
+    #[test]
+    fn copilot_model_info_from_preserves_billing() {
+        let model = make_test_model(false, false, Some(2.0));
+        let info = CopilotModelInfo::from(model);
+        assert!(info.billing.is_some(), "Billing should be preserved");
+    }
+
+    #[test]
+    fn copilot_model_info_serializes() {
+        let model = make_test_model(true, false, Some(1.5));
+        let info = CopilotModelInfo::from(model);
+        let json = serde_json::to_value(&info).expect("Should serialize");
+        assert_eq!(json["id"], "test-model");
+        assert_eq!(json["supports_vision"], true);
+        assert_eq!(json["supports_reasoning"], false);
+    }
+
+    // -----------------------------------------------------------------------
+    // Integration tests — require `copilot` CLI installed + `gh auth login`
+    //
+    // Run locally with: cargo test -p cutready -- --ignored
+    // Skipped in CI (no CLI or auth available).
+    // -----------------------------------------------------------------------
+
+    #[test]
+    #[ignore]
+    fn cli_is_available() {
+        assert!(
+            is_cli_available(),
+            "copilot CLI should be on PATH (install via `gh extension install github/gh-copilot`)"
+        );
+    }
+
+    #[test]
+    #[ignore]
+    fn cli_path_returns_existing_binary() {
+        let path = cli_path().expect("CLI should be found");
+        assert!(path.exists(), "CLI binary should exist at {}", path.display());
+    }
+
+    #[test]
+    #[ignore]
+    fn create_client_succeeds() {
+        // Verify we can construct a Client without errors
+        let _client = create_client().expect("Should create client");
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn list_models_returns_nonempty() {
+        let models = list_models().await.expect("list_models should succeed");
+        assert!(!models.is_empty(), "Should return at least one model");
+
+        // Every model should have an id and name
+        for m in &models {
+            assert!(!m.id.is_empty(), "Model id should not be empty");
+            assert!(!m.name.is_empty(), "Model name should not be empty");
+        }
+
+        // Print for manual inspection
+        eprintln!("Found {} models:", models.len());
+        for m in &models {
+            eprintln!(
+                "  {} ({}) vision={} reasoning={}",
+                m.name, m.id, m.supports_vision, m.supports_reasoning
+            );
+        }
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn chat_simple_returns_response() {
+        let response = chat_simple(
+            "gpt-4o-mini",
+            "You are a test assistant. Reply with exactly 'PONG'.",
+            "PING",
+        )
+        .await
+        .expect("chat_simple should succeed");
+
+        assert!(!response.is_empty(), "Response should not be empty");
+        eprintln!("chat_simple response: {response}");
+    }
+}
