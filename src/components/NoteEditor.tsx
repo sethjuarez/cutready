@@ -146,15 +146,27 @@ export function NoteEditor() {
 
     logEntry("Cleaning up note with AI…", "info");
     try {
-      const result = await invoke<{ role: string; content: string | null }>("agent_chat", {
-        config,
-        messages: [
-          { role: "system", content: AI_NOTE_CLEANUP_PROMPT },
-          { role: "user", content: activeNoteContent },
-        ],
-      });
-      if (result.content && result.content.trim().length > 0) {
-        let cleaned = result.content.trim();
+      let cleaned: string | null = null;
+
+      if (config.provider === "copilot_sdk") {
+        const response = await invoke<string>("agent_chat_copilot_simple", {
+          model: config.model,
+          systemPrompt: AI_NOTE_CLEANUP_PROMPT,
+          userMessage: activeNoteContent,
+        });
+        if (response && response.trim().length > 0) cleaned = response.trim();
+      } else {
+        const result = await invoke<{ role: string; content: string | null }>("agent_chat", {
+          config,
+          messages: [
+            { role: "system", content: AI_NOTE_CLEANUP_PROMPT },
+            { role: "user", content: activeNoteContent },
+          ],
+        });
+        if (result.content && result.content.trim().length > 0) cleaned = result.content.trim();
+      }
+
+      if (cleaned) {
         // Strip code fence wrapper
         if (cleaned.startsWith("```markdown")) cleaned = cleaned.slice("```markdown".length);
         else if (cleaned.startsWith("```md")) cleaned = cleaned.slice("```md".length);

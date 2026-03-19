@@ -370,6 +370,7 @@ function CopilotStatus({ setModels }: {
 }) {
   const [available, setAvailable] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     invoke<boolean>("check_copilot_available").then(setAvailable).catch(() => setAvailable(false));
@@ -377,6 +378,7 @@ function CopilotStatus({ setModels }: {
 
   const loadCopilotModels = async () => {
     setLoading(true);
+    setError(null);
     try {
       const models = await invoke<CopilotModelInfo[]>("list_copilot_models");
       // Map to the common ModelInfo shape expected by the model picker
@@ -390,6 +392,7 @@ function CopilotStatus({ setModels }: {
       })));
     } catch (e) {
       console.error("Failed to load Copilot models:", e);
+      setError(String(e));
     } finally {
       setLoading(false);
     }
@@ -420,6 +423,9 @@ function CopilotStatus({ setModels }: {
         >
           {loading ? "Loading models…" : "Load available models"}
         </button>
+      )}
+      {error && (
+        <p className="text-xs text-red-600 dark:text-red-400">Failed to load models: {error}</p>
       )}
     </div>
   );
@@ -988,16 +994,29 @@ function FeedbackListTab() {
           ...(entry.debug_log ? [`Debug Log:\n${entry.debug_log}`] : []),
         ].join("\n\n");
 
-        const result = await invoke<{ role: string; content: string | null }>("agent_chat", {
-          config,
-          messages: [
-            { role: "system", content: ISSUE_FORMAT_PROMPT },
-            { role: "user", content: userContent },
-          ],
-        });
+        let aiContent: string | null = null;
 
-        if (result.content) {
-          const parsed = JSON.parse(result.content.trim());
+        if (config.provider === "copilot_sdk") {
+          try {
+            aiContent = await invoke<string>("agent_chat_copilot_simple", {
+              model: config.model,
+              systemPrompt: ISSUE_FORMAT_PROMPT,
+              userMessage: userContent,
+            });
+          } catch { /* fall through to fallback */ }
+        } else {
+          const result = await invoke<{ role: string; content: string | null }>("agent_chat", {
+            config,
+            messages: [
+              { role: "system", content: ISSUE_FORMAT_PROMPT },
+              { role: "user", content: userContent },
+            ],
+          });
+          aiContent = result.content;
+        }
+
+        if (aiContent) {
+          const parsed = JSON.parse(aiContent.trim());
           title = parsed.title || buildFallbackIssue(entry, appVersion).title;
           body = parsed.body || buildFallbackIssue(entry, appVersion).body;
         } else {

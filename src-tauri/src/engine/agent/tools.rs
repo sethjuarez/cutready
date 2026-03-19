@@ -527,6 +527,7 @@ pub fn execute_tool(call: &ToolCall, project_root: &Path, vision_enabled: bool) 
             "compare_snapshots" => exec_compare_snapshots(project_root, &args),
             "list_timelines" => exec_list_timelines(project_root),
             "get_current_snapshot" => exec_get_current_snapshot(project_root),
+            "fetch_url" => exec_fetch_url(&args),
             other => format!("Unknown tool: {other}"),
         }
     }));
@@ -1876,6 +1877,29 @@ fn exec_get_current_snapshot(root: &Path) -> String {
     }
 
     out
+}
+
+/// Execute fetch_url synchronously.
+///
+/// Uses `tokio::task::block_in_place` to run the async HTTP request from
+/// within a sync tool handler context. This is safe because tool handlers
+/// in the Copilot SDK run on a tokio blocking thread.
+fn exec_fetch_url(args: &Value) -> String {
+    let url = match args.get("url").and_then(|v| v.as_str()) {
+        Some(u) => u.to_string(),
+        None => return "Error: missing 'url' argument".into(),
+    };
+
+    // We're inside a tokio runtime (Tauri async command or Copilot SDK handler).
+    // block_in_place allows blocking the current thread without deadlocking the runtime.
+    tokio::task::block_in_place(|| {
+        tokio::runtime::Handle::current().block_on(async {
+            match crate::engine::agent::web::fetch_and_clean(&url).await {
+                Ok(content) => content,
+                Err(e) => format!("Error fetching URL: {e}"),
+            }
+        })
+    })
 }
 
 #[cfg(test)]
