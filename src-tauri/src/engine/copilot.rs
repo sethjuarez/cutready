@@ -48,6 +48,23 @@ fn translate_event(data: &SessionEventData) -> EventAction {
         SessionEventData::AssistantReasoningDelta(d) => EventAction::Emit(AgentEvent::Thinking {
             content: d.delta_content.clone(),
         }),
+        SessionEventData::AssistantTurnStart(_) => EventAction::Emit(AgentEvent::Status {
+            message: "Thinking…".into(),
+        }),
+        SessionEventData::AssistantIntent(intent) => EventAction::Emit(AgentEvent::Status {
+            message: intent.intent.clone(),
+        }),
+        SessionEventData::SessionCompactionStart(_) => EventAction::Emit(AgentEvent::Status {
+            message: "Compacting context…".into(),
+        }),
+        SessionEventData::SessionCompactionComplete(c) => {
+            let msg = if c.success {
+                "Context compacted ✓".into()
+            } else {
+                format!("Context compaction failed: {}", c.error.as_deref().unwrap_or("unknown"))
+            };
+            EventAction::Emit(AgentEvent::Status { message: msg })
+        }
         SessionEventData::ToolExecutionStart(tool) => EventAction::Emit(AgentEvent::ToolCall {
             name: tool.tool_name.clone(),
             arguments: tool
@@ -780,10 +797,11 @@ mod tests {
     // -----------------------------------------------------------------------
 
     use copilot_sdk::{
-        AssistantMessageDeltaData, AssistantMessageData, AssistantReasoningData,
-        AssistantReasoningDeltaData, AssistantUsageData, CustomAgentCompletedData,
-        CustomAgentStartedData, SessionErrorData, SessionIdleData, ToolExecutionCompleteData,
-        ToolExecutionStartData, ToolResultContent,
+        AssistantIntentData, AssistantMessageDeltaData, AssistantMessageData,
+        AssistantReasoningData, AssistantReasoningDeltaData, AssistantTurnStartData,
+        AssistantUsageData, CustomAgentCompletedData, CustomAgentStartedData,
+        SessionCompactionCompleteData, SessionCompactionStartData, SessionErrorData,
+        SessionIdleData, ToolExecutionCompleteData, ToolExecutionStartData, ToolResultContent,
     };
 
     #[test]
@@ -991,6 +1009,92 @@ mod tests {
                 assert_eq!(agent_id, "writer");
             }
             other => panic!("Expected Emit(AgentDone), got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn translate_turn_start_emits_status() {
+        let data = SessionEventData::AssistantTurnStart(AssistantTurnStartData {
+            turn_id: "t1".into(),
+        });
+        match translate_event(&data) {
+            EventAction::Emit(AgentEvent::Status { message }) => {
+                assert_eq!(message, "Thinking…");
+            }
+            other => panic!("Expected Emit(Status), got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn translate_intent_emits_status() {
+        let data = SessionEventData::AssistantIntent(AssistantIntentData {
+            intent: "Reading sketch files".into(),
+        });
+        match translate_event(&data) {
+            EventAction::Emit(AgentEvent::Status { message }) => {
+                assert_eq!(message, "Reading sketch files");
+            }
+            other => panic!("Expected Emit(Status), got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn translate_compaction_start_emits_status() {
+        let data = SessionEventData::SessionCompactionStart(SessionCompactionStartData {});
+        match translate_event(&data) {
+            EventAction::Emit(AgentEvent::Status { message }) => {
+                assert!(message.contains("Compacting"));
+            }
+            other => panic!("Expected Emit(Status), got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn translate_compaction_complete_success() {
+        let data = SessionEventData::SessionCompactionComplete(SessionCompactionCompleteData {
+            success: true,
+            error: None,
+            pre_compaction_tokens: Some(50000.0),
+            post_compaction_tokens: Some(20000.0),
+            pre_compaction_messages_length: None,
+            post_compaction_messages_length: None,
+            compaction_tokens_used: None,
+            messages_removed: None,
+            tokens_removed: None,
+            checkpoint_number: None,
+            checkpoint_path: None,
+            summary_content: None,
+        });
+        match translate_event(&data) {
+            EventAction::Emit(AgentEvent::Status { message }) => {
+                assert!(message.contains("✓"));
+            }
+            other => panic!("Expected Emit(Status), got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn translate_compaction_complete_failure() {
+        let data = SessionEventData::SessionCompactionComplete(SessionCompactionCompleteData {
+            success: false,
+            error: Some("out of memory".into()),
+            pre_compaction_tokens: None,
+            post_compaction_tokens: None,
+            pre_compaction_messages_length: None,
+            post_compaction_messages_length: None,
+            compaction_tokens_used: None,
+            messages_removed: None,
+            tokens_removed: None,
+            checkpoint_number: None,
+            checkpoint_path: None,
+            summary_content: None,
+        });
+        match translate_event(&data) {
+            EventAction::Emit(AgentEvent::Status { message }) => {
+                assert!(message.contains("failed"));
+                assert!(message.contains("out of memory"));
+            }
+            other => panic!("Expected Emit(Status), got {other:?}"),
         }
     }
 
