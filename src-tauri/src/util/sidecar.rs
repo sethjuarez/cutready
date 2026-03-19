@@ -75,14 +75,16 @@ impl SidecarManager {
     pub async fn spawn(
         sidecar_dir: &Path,
     ) -> anyhow::Result<(Self, mpsc::UnboundedReceiver<CapturedAction>)> {
-        let mut child = Command::new("node")
-            .arg("index.js")
+        let mut cmd = Command::new("node");
+        cmd.arg("index.js")
             .current_dir(sidecar_dir)
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
-            .kill_on_drop(true)
-            .spawn()?;
+            .kill_on_drop(true);
+        #[cfg(windows)]
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+        let mut child = cmd.spawn()?;
 
         let stdin = child.stdin.take().expect("stdin not captured");
         let stdout = child.stdout.take().expect("stdout not captured");

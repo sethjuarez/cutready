@@ -1263,9 +1263,14 @@ fn resolve_global_git_identity(project_dir: &Path) -> (Option<String>, Option<St
 
 /// Query `gh api user` for the authenticated GitHub identity.
 fn resolve_gh_identity() -> (Option<String>, Option<String>) {
-    let output = match std::process::Command::new("gh")
-        .args(["api", "user", "--jq", r#"[.name, .login, .email] | @tsv"#])
-        .output()
+    let mut cmd = std::process::Command::new("gh");
+    cmd.args(["api", "user", "--jq", r#"[.name, .login, .email] | @tsv"#]);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
+    let output = match cmd.output()
     {
         Ok(o) if o.status.success() => o,
         _ => return (None, None),

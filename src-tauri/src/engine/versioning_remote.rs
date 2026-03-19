@@ -334,9 +334,14 @@ pub fn clone_from_url(
 ) -> Result<(), RemoteError> {
     // If no explicit token, try to get one from `gh auth token`
     let gh_token: Option<String> = if token.is_none() {
-        std::process::Command::new("gh")
-            .args(["auth", "token"])
-            .output()
+        let mut cmd = std::process::Command::new("gh");
+        cmd.args(["auth", "token"]);
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+        }
+        cmd.output()
             .ok()
             .and_then(|o| if o.status.success() {
                 String::from_utf8(o.stdout).ok().map(|s| s.trim().to_string())

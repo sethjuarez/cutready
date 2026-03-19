@@ -296,9 +296,14 @@ pub async fn get_sync_status(
 /// Try to get a GitHub token from the `gh` CLI.
 #[tauri::command]
 pub async fn get_github_token() -> Result<Option<String>, String> {
-    match std::process::Command::new("gh")
-        .args(["auth", "token"])
-        .output()
+    let mut cmd = std::process::Command::new("gh");
+    cmd.args(["auth", "token"]);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
+    match cmd.output()
     {
         Ok(output) if output.status.success() => {
             let token = String::from_utf8_lossy(&output.stdout).trim().to_string();
