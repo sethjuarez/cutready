@@ -172,6 +172,7 @@ cutready/
 - **Accent color**: Soft purple/violet (light: #6b5ce7, dark: #a49afa). Purple is the brand color.
 - **Font**: Geist Sans via `@fontsource/geist-sans` (400, 500, 600). Letter-spacing: -0.011em.
 - **IPC**: Tauri Commands for request/response, Channels for streaming, Events for broadcasts.
+- **Events over polling**: Prefer event-driven patterns (callbacks, `visibilitychange`, Tauri events) over `setInterval`/`setTimeout` polling. Polling timers prevent Windows from sleeping and waste CPU. When polling is unavoidable (e.g., no push mechanism exists), gate the interval on `document.visibilitychange` so it pauses when the app is minimized or the screen is locked.
 - **LLM routing**: Auto-routes codex/pro models to Responses API, others to Chat Completions. Detection in `llm.rs`.
 - **Path safety**: All user-provided paths go through `safe_resolve()` before filesystem access.
 - **Web shim**: `devMock.ts` activated when `import.meta.env.DEV && !__TAURI_INTERNALS__`. Enables Playwright E2E testing and browser development without the Tauri shell.
