@@ -9,8 +9,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use copilot_sdk::{
-    Client, CustomAgentConfig, ModelInfo, SessionConfig, SessionEventData, SystemMessageConfig,
-    SystemMessageMode, Tool, ToolHandler, ToolResultObject,
+    Client, CustomAgentConfig, ModelInfo, PermissionRequestResult, SessionConfig,
+    SessionEventData, SystemMessageConfig, SystemMessageMode, Tool, ToolHandler, ToolResultObject,
 };
 use serde_json::Value;
 
@@ -273,7 +273,7 @@ pub async fn chat_simple(
 
 /// Create a Copilot SDK client using stdio transport.
 fn create_client() -> Result<Client, String> {
-    let mut builder = Client::builder().use_stdio(true);
+    let mut builder = Client::builder().use_stdio(true).allow_all_tools(true);
 
     // If copilot CLI is at a known path, use it explicitly
     if let Some(path) = cli_path() {
@@ -297,11 +297,18 @@ fn build_sdk_tools() -> Vec<Tool> {
 }
 
 /// Register tool handlers that bridge SDK tool invocations to our execute_tool.
+/// Also registers a permission handler that auto-approves all tool calls
+/// (CutReady's tools are safe — no shell commands, no file deletion).
 async fn register_tool_handlers(
     session: &copilot_sdk::Session,
     project_root: &Path,
     vision_enabled: bool,
 ) {
+    // Auto-approve all permission requests (our tools are sandboxed)
+    session
+        .register_permission_handler(|_req| PermissionRequestResult::approved())
+        .await;
+
     for tool_def in tools::all_tools() {
         if tool_def.function.name == "delegate_to_agent" {
             continue; // SDK handles delegation via custom agents
@@ -537,5 +544,159 @@ mod tests {
 
         assert!(!response.is_empty(), "Response should not be empty");
         eprintln!("chat_simple response: {response}");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[ignore]
+    async fn chat_with_tools_exercises_full_loop() {
+        use std::sync::{Arc, Mutex};
+        use tempfile::TempDir;
+
+        // Create a temp project with a sketch file
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        std::fs::write(
+            root.join("demo.sk"),
+            r#"{"title":"Integration Test Sketch","description":"A test sketch","rows":[]}"#,
+        )
+        .unwrap();
+
+        eprintln!("[test] Creating client...");
+        let client = create_client().expect("create_client");
+
+        eprintln!("[test] Starting client...");
+        client.start().await.expect("client.start()");
+
+        eprintln!("[test] Building tools...");
+        let sdk_tools = build_sdk_tools();
+        eprintln!("[test] Registered {} tool definitions", sdk_tools.len());
+
+        let session_config = SessionConfig {
+            model: Some("gpt-4.1".to_string()),
+            streaming: true,
+            system_message: Some(SystemMessageConfig {
+                mode: Some(SystemMessageMode::Replace),
+                content: Some(
+                    "You are a test assistant. You have tools available. \
+                     When asked to list files, call list_project_files and report what you find."
+                        .to_string(),
+                ),
+            }),
+            tools: sdk_tools,
+            working_directory: Some(root.to_string_lossy().to_string()),
+            ..Default::default()
+        };
+
+        eprintln!("[test] Creating session...");
+        let session = client.create_session(session_config).await.expect("create_session");
+
+        eprintln!("[test] Registering tool handlers + permission handler...");
+        register_tool_handlers(&session, root, false).await;
+
+        eprintln!("[test] Subscribing to events...");
+        let mut events = session.subscribe();
+
+        eprintln!("[test] Sending message...");
+        session
+            .send("List the files in this project using the list_project_files tool.")
+            .await
+            .expect("session.send");
+        eprintln!("[test] Message sent, entering event loop...");
+
+        // Collect events with tracing
+        let collected: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+        let mut full_response = String::new();
+
+        // Add a timeout to prevent infinite hang
+        let timeout = tokio::time::Duration::from_secs(60);
+        let start = tokio::time::Instant::now();
+
+        loop {
+            if start.elapsed() > timeout {
+                eprintln!("[test] TIMEOUT after 60s");
+                break;
+            }
+
+            match tokio::time::timeout(tokio::time::Duration::from_secs(10), events.recv()).await {
+                Ok(Ok(event)) => {
+                    let tag = format!("{:?}", std::mem::discriminant(&event.data));
+                    let readable = match &event.data {
+                        SessionEventData::AssistantMessageDelta(d) => {
+                            full_response.push_str(&d.delta_content);
+                            format!("Delta({}b)", d.delta_content.len())
+                        }
+                        SessionEventData::AssistantMessage(m) => {
+                            if full_response.is_empty() {
+                                full_response = m.content.clone();
+                            }
+                            format!("AssistantMessage({}b)", m.content.len())
+                        }
+                        SessionEventData::ToolExecutionStart(t) => {
+                            format!("ToolCall({})", t.tool_name)
+                        }
+                        SessionEventData::ToolExecutionComplete(t) => {
+                            format!(
+                                "ToolResult({})",
+                                t.result.as_ref().map(|r| r.content.len()).unwrap_or(0)
+                            )
+                        }
+                        SessionEventData::SessionError(e) => {
+                            format!("ERROR: {}", e.message)
+                        }
+                        SessionEventData::SessionIdle(_) => "SessionIdle".to_string(),
+                        _ => tag,
+                    };
+                    eprintln!("[test] Event: {readable}");
+                    collected.lock().unwrap().push(readable);
+
+                    if matches!(
+                        event.data,
+                        SessionEventData::SessionIdle(_) | SessionEventData::SessionError(_)
+                    ) {
+                        break;
+                    }
+                }
+                Ok(Err(_)) => {
+                    eprintln!("[test] Channel closed");
+                    break;
+                }
+                Err(_) => {
+                    eprintln!("[test] No event for 10s, still waiting...");
+                }
+            }
+        }
+
+        eprintln!("[test] Stopping client...");
+        client.stop().await;
+
+        let collected = collected.lock().unwrap();
+        eprintln!("[test] Total events: {}", collected.len());
+        eprintln!(
+            "[test] Response (first 300): {}",
+            &full_response[..full_response.len().min(300)]
+        );
+
+        // Verify the full loop
+        let has_tool_call = collected
+            .iter()
+            .any(|e| e.contains("ToolCall(list_project_files)"));
+        assert!(
+            has_tool_call,
+            "Should have emitted a ToolCall for list_project_files. Events: {collected:?}"
+        );
+
+        let has_tool_result = collected.iter().any(|e| e.starts_with("ToolResult"));
+        assert!(
+            has_tool_result,
+            "Should have emitted a ToolResult after tool execution. Events: {collected:?}"
+        );
+
+        assert!(
+            full_response.contains("demo.sk")
+                || full_response.to_lowercase().contains("sketch")
+                || full_response.to_lowercase().contains("demo"),
+            "Response should reference the demo.sk file. Got: {}",
+            &full_response[..full_response.len().min(300)]
+        );
     }
 }
