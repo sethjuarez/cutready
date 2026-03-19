@@ -18,7 +18,72 @@ use crate::engine::agent::llm::{FunctionCall, ToolCall};
 use crate::engine::agent::runner::AgentEvent;
 use crate::engine::agent::tools;
 
-/// A serializable model info returned to the frontend.
+/// Outcome from translating one SDK event.
+#[derive(Debug)]
+enum EventAction {
+    /// Emit this AgentEvent to the frontend.
+    Emit(AgentEvent),
+    /// Session is done (idle or error) — stop the loop.
+    Break(Option<AgentEvent>),
+    /// Event is informational — no action needed.
+    Ignore,
+}
+
+/// Translate a single SDK event into a CutReady AgentEvent.
+///
+/// Pure function — testable without a live SDK client.
+fn translate_event(data: &SessionEventData) -> EventAction {
+    match data {
+        SessionEventData::AssistantMessageDelta(delta) => EventAction::Emit(AgentEvent::Delta {
+            content: delta.delta_content.clone(),
+        }),
+        SessionEventData::AssistantMessage(_msg) => {
+            // Full message — handled by caller for response aggregation
+            EventAction::Ignore
+        }
+        SessionEventData::AssistantReasoning(r) => EventAction::Emit(AgentEvent::Thinking {
+            content: r.content.clone(),
+        }),
+        SessionEventData::AssistantReasoningDelta(d) => EventAction::Emit(AgentEvent::Thinking {
+            content: d.delta_content.clone(),
+        }),
+        SessionEventData::ToolExecutionStart(tool) => EventAction::Emit(AgentEvent::ToolCall {
+            name: tool.tool_name.clone(),
+            arguments: tool
+                .arguments
+                .as_ref()
+                .map(|a| serde_json::to_string(a).unwrap_or_else(|_| "{}".into()))
+                .unwrap_or_else(|| "{}".into()),
+        }),
+        SessionEventData::ToolExecutionComplete(tool) => {
+            let result_text = tool
+                .result
+                .as_ref()
+                .map(|r| r.content.clone())
+                .unwrap_or_default();
+            EventAction::Emit(AgentEvent::ToolResult {
+                name: tool.tool_call_id.clone(),
+                result: result_text,
+            })
+        }
+        SessionEventData::CustomAgentStarted(agent) => {
+            EventAction::Emit(AgentEvent::AgentStart {
+                agent_id: agent.agent_name.clone(),
+                task: String::new(),
+            })
+        }
+        SessionEventData::CustomAgentCompleted(agent) => {
+            EventAction::Emit(AgentEvent::AgentDone {
+                agent_id: agent.agent_name.clone(),
+            })
+        }
+        SessionEventData::SessionError(err) => EventAction::Break(Some(AgentEvent::Error {
+            message: err.message.clone(),
+        })),
+        SessionEventData::SessionIdle(_) => EventAction::Break(None),
+        _ => EventAction::Ignore,
+    }
+}
 #[derive(serde::Serialize, Clone)]
 pub struct CopilotModelInfo {
     pub id: String,
@@ -150,73 +215,27 @@ pub async fn chat(
 
     loop {
         match events.recv().await {
-            Ok(event) => match &event.data {
-                SessionEventData::AssistantMessageDelta(delta) => {
+            Ok(event) => {
+                // Accumulate full response from messages
+                if let SessionEventData::AssistantMessageDelta(delta) = &event.data {
                     full_response.push_str(&delta.delta_content);
-                    emit(AgentEvent::Delta {
-                        content: delta.delta_content.clone(),
-                    });
                 }
-                SessionEventData::AssistantMessage(msg) => {
+                if let SessionEventData::AssistantMessage(msg) = &event.data {
                     if full_response.is_empty() {
                         full_response = msg.content.clone();
                     }
                 }
-                SessionEventData::AssistantReasoning(r) => {
-                    emit(AgentEvent::Thinking {
-                        content: r.content.clone(),
-                    });
+
+                match translate_event(&event.data) {
+                    EventAction::Emit(agent_event) => emit(agent_event),
+                    EventAction::Break(Some(agent_event)) => {
+                        emit(agent_event);
+                        break;
+                    }
+                    EventAction::Break(None) => break,
+                    EventAction::Ignore => {}
                 }
-                SessionEventData::AssistantReasoningDelta(d) => {
-                    emit(AgentEvent::Thinking {
-                        content: d.delta_content.clone(),
-                    });
-                }
-                SessionEventData::ToolExecutionStart(tool) => {
-                    emit(AgentEvent::ToolCall {
-                        name: tool.tool_name.clone(),
-                        arguments: tool
-                            .arguments
-                            .as_ref()
-                            .map(|a| serde_json::to_string(a).unwrap_or_else(|_| "{}".into()))
-                            .unwrap_or_else(|| "{}".into()),
-                    });
-                }
-                SessionEventData::ToolExecutionComplete(tool) => {
-                    let result_text = tool
-                        .result
-                        .as_ref()
-                        .map(|r| r.content.clone())
-                        .unwrap_or_default();
-                    emit(AgentEvent::ToolResult {
-                        name: tool.tool_call_id.clone(),
-                        result: result_text,
-                    });
-                }
-                SessionEventData::CustomAgentStarted(agent) => {
-                    emit(AgentEvent::AgentStart {
-                        agent_id: agent.agent_name.clone(),
-                        task: String::new(),
-                    });
-                }
-                SessionEventData::CustomAgentCompleted(agent) => {
-                    emit(AgentEvent::AgentDone {
-                        agent_id: agent.agent_name.clone(),
-                    });
-                }
-                SessionEventData::SessionError(err) => {
-                    emit(AgentEvent::Error {
-                        message: err.message.clone(),
-                    });
-                    break;
-                }
-                SessionEventData::SessionIdle(_) => {
-                    break;
-                }
-                _ => {
-                    // Ignore other events (usage, turn start/end, etc.)
-                }
-            },
+            }
             Err(_) => break,
         }
     }
@@ -698,5 +717,393 @@ mod tests {
             "Response should reference the demo.sk file. Got: {}",
             &full_response[..full_response.len().min(300)]
         );
+    }
+
+    // -----------------------------------------------------------------------
+    // Error path tests — event translation edge cases (no CLI needed)
+    // -----------------------------------------------------------------------
+
+    use copilot_sdk::{
+        AssistantMessageDeltaData, AssistantMessageData, AssistantReasoningData,
+        AssistantReasoningDeltaData, AssistantUsageData, CustomAgentCompletedData,
+        CustomAgentStartedData, SessionErrorData, SessionIdleData, ToolExecutionCompleteData,
+        ToolExecutionStartData, ToolResultContent,
+    };
+
+    #[test]
+    fn translate_delta_emits_delta() {
+        let data = SessionEventData::AssistantMessageDelta(AssistantMessageDeltaData {
+            message_id: "m1".into(),
+            delta_content: "hello".into(),
+            total_response_size_bytes: None,
+            parent_tool_call_id: None,
+        });
+        match translate_event(&data) {
+            EventAction::Emit(AgentEvent::Delta { content }) => {
+                assert_eq!(content, "hello");
+            }
+            other => panic!("Expected Emit(Delta), got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn translate_empty_delta() {
+        let data = SessionEventData::AssistantMessageDelta(AssistantMessageDeltaData {
+            message_id: "m2".into(),
+            delta_content: String::new(),
+            total_response_size_bytes: None,
+            parent_tool_call_id: None,
+        });
+        match translate_event(&data) {
+            EventAction::Emit(AgentEvent::Delta { content }) => {
+                assert_eq!(content, "");
+            }
+            other => panic!("Expected Emit(Delta) with empty content, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn translate_assistant_message_is_ignored() {
+        let data = SessionEventData::AssistantMessage(AssistantMessageData {
+            message_id: "m1".into(),
+            content: "full message".into(),
+            chunk_content: None,
+            total_response_size_bytes: None,
+            tool_requests: None,
+            parent_tool_call_id: None,
+        });
+        assert!(matches!(translate_event(&data), EventAction::Ignore));
+    }
+
+    #[test]
+    fn translate_reasoning_emits_thinking() {
+        let data = SessionEventData::AssistantReasoning(AssistantReasoningData {
+            reasoning_id: "r1".into(),
+            content: "let me think...".into(),
+            chunk_content: None,
+        });
+        match translate_event(&data) {
+            EventAction::Emit(AgentEvent::Thinking { content }) => {
+                assert_eq!(content, "let me think...");
+            }
+            other => panic!("Expected Emit(Thinking), got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn translate_reasoning_delta_emits_thinking() {
+        let data = SessionEventData::AssistantReasoningDelta(AssistantReasoningDeltaData {
+            reasoning_id: "r1".into(),
+            delta_content: "step 2...".into(),
+        });
+        match translate_event(&data) {
+            EventAction::Emit(AgentEvent::Thinking { content }) => {
+                assert_eq!(content, "step 2...");
+            }
+            other => panic!("Expected Emit(Thinking), got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn translate_tool_start_with_args() {
+        let data = SessionEventData::ToolExecutionStart(ToolExecutionStartData {
+            tool_call_id: "tc1".into(),
+            tool_name: "read_sketch".into(),
+            arguments: Some(serde_json::json!({"path": "demo.sk"})),
+            parent_tool_call_id: None,
+        });
+        match translate_event(&data) {
+            EventAction::Emit(AgentEvent::ToolCall { name, arguments }) => {
+                assert_eq!(name, "read_sketch");
+                assert!(arguments.contains("demo.sk"));
+            }
+            other => panic!("Expected Emit(ToolCall), got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn translate_tool_start_without_args() {
+        let data = SessionEventData::ToolExecutionStart(ToolExecutionStartData {
+            tool_call_id: "tc2".into(),
+            tool_name: "list_project_files".into(),
+            arguments: None,
+            parent_tool_call_id: None,
+        });
+        match translate_event(&data) {
+            EventAction::Emit(AgentEvent::ToolCall { name, arguments }) => {
+                assert_eq!(name, "list_project_files");
+                assert_eq!(arguments, "{}");
+            }
+            other => panic!("Expected Emit(ToolCall), got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn translate_tool_complete_with_result() {
+        let data = SessionEventData::ToolExecutionComplete(ToolExecutionCompleteData {
+            tool_call_id: "tc1".into(),
+            success: true,
+            is_user_requested: None,
+            result: Some(ToolResultContent {
+                content: "file contents here".into(),
+            }),
+            error: None,
+            tool_telemetry: None,
+            parent_tool_call_id: None,
+            mcp_server_name: None,
+            mcp_tool_name: None,
+        });
+        match translate_event(&data) {
+            EventAction::Emit(AgentEvent::ToolResult { name, result }) => {
+                assert_eq!(name, "tc1");
+                assert_eq!(result, "file contents here");
+            }
+            other => panic!("Expected Emit(ToolResult), got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn translate_tool_complete_without_result() {
+        let data = SessionEventData::ToolExecutionComplete(ToolExecutionCompleteData {
+            tool_call_id: "tc-fail".into(),
+            success: false,
+            is_user_requested: None,
+            result: None,
+            error: None,
+            tool_telemetry: None,
+            parent_tool_call_id: None,
+            mcp_server_name: None,
+            mcp_tool_name: None,
+        });
+        match translate_event(&data) {
+            EventAction::Emit(AgentEvent::ToolResult { name, result }) => {
+                assert_eq!(name, "tc-fail");
+                assert_eq!(result, "", "Missing result should produce empty string");
+            }
+            other => panic!("Expected Emit(ToolResult), got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn translate_session_error_breaks_with_error() {
+        let data = SessionEventData::SessionError(SessionErrorData {
+            error_type: "rate_limit".into(),
+            message: "Rate limit exceeded".into(),
+            stack: None,
+            code: Some(429.0),
+            provider_call_id: None,
+        });
+        match translate_event(&data) {
+            EventAction::Break(Some(AgentEvent::Error { message })) => {
+                assert_eq!(message, "Rate limit exceeded");
+            }
+            other => panic!("Expected Break(Error), got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn translate_session_idle_breaks_cleanly() {
+        let data = SessionEventData::SessionIdle(SessionIdleData {});
+        assert!(matches!(translate_event(&data), EventAction::Break(None)));
+    }
+
+    #[test]
+    fn translate_custom_agent_started() {
+        let data = SessionEventData::CustomAgentStarted(CustomAgentStartedData {
+            tool_call_id: "tc-agent".into(),
+            agent_name: "planner".into(),
+            agent_display_name: "Planner".into(),
+            agent_description: "Plans things".into(),
+        });
+        match translate_event(&data) {
+            EventAction::Emit(AgentEvent::AgentStart { agent_id, task }) => {
+                assert_eq!(agent_id, "planner");
+                assert_eq!(task, "");
+            }
+            other => panic!("Expected Emit(AgentStart), got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn translate_custom_agent_completed() {
+        let data = SessionEventData::CustomAgentCompleted(CustomAgentCompletedData {
+            tool_call_id: "tc-agent".into(),
+            agent_name: "writer".into(),
+        });
+        match translate_event(&data) {
+            EventAction::Emit(AgentEvent::AgentDone { agent_id }) => {
+                assert_eq!(agent_id, "writer");
+            }
+            other => panic!("Expected Emit(AgentDone), got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn translate_unknown_event_is_ignored() {
+        let data = SessionEventData::Unknown(serde_json::json!({"some": "random data"}));
+        assert!(matches!(translate_event(&data), EventAction::Ignore));
+    }
+
+    #[test]
+    fn translate_usage_event_is_ignored() {
+        let data = SessionEventData::AssistantUsage(AssistantUsageData::default());
+        assert!(matches!(translate_event(&data), EventAction::Ignore));
+    }
+
+    // -----------------------------------------------------------------------
+    // Tool handler resilience tests (no CLI needed)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn tool_handler_with_empty_args() {
+        let root = std::env::temp_dir();
+        let handler: ToolHandler = Arc::new(move |name: &str, args: &Value| {
+            let call = ToolCall {
+                id: format!("sdk-{}", name),
+                call_type: "function".into(),
+                function: FunctionCall {
+                    name: name.to_string(),
+                    arguments: serde_json::to_string(args).unwrap_or_else(|_| "{}".into()),
+                },
+            };
+            let result = tools::execute_tool(&call, &root, false);
+            ToolResultObject {
+                text_result_for_llm: result,
+                binary_results_for_llm: None,
+                result_type: "success".into(),
+                error: None,
+                session_log: None,
+                tool_telemetry: None,
+            }
+        });
+
+        // Call with empty object — list_project_files doesn't need args
+        let result = handler("list_project_files", &serde_json::json!({}));
+        assert!(!result.text_result_for_llm.is_empty(), "Should return something even with empty args");
+    }
+
+    #[test]
+    fn tool_handler_with_null_args() {
+        let root = std::env::temp_dir();
+        let handler: ToolHandler = Arc::new(move |name: &str, args: &Value| {
+            let call = ToolCall {
+                id: format!("sdk-{}", name),
+                call_type: "function".into(),
+                function: FunctionCall {
+                    name: name.to_string(),
+                    arguments: serde_json::to_string(args).unwrap_or_else(|_| "{}".into()),
+                },
+            };
+            let result = tools::execute_tool(&call, &root, false);
+            ToolResultObject {
+                text_result_for_llm: result,
+                binary_results_for_llm: None,
+                result_type: "success".into(),
+                error: None,
+                session_log: None,
+                tool_telemetry: None,
+            }
+        });
+
+        // Call with null — should not panic
+        let result = handler("list_project_files", &Value::Null);
+        assert!(!result.text_result_for_llm.is_empty());
+    }
+
+    #[test]
+    fn tool_handler_with_unknown_tool() {
+        let root = std::env::temp_dir();
+        let handler: ToolHandler = Arc::new(move |name: &str, args: &Value| {
+            let call = ToolCall {
+                id: format!("sdk-{}", name),
+                call_type: "function".into(),
+                function: FunctionCall {
+                    name: name.to_string(),
+                    arguments: serde_json::to_string(args).unwrap_or_else(|_| "{}".into()),
+                },
+            };
+            let result = tools::execute_tool(&call, &root, false);
+            ToolResultObject {
+                text_result_for_llm: result,
+                binary_results_for_llm: None,
+                result_type: "success".into(),
+                error: None,
+                session_log: None,
+                tool_telemetry: None,
+            }
+        });
+
+        // Unknown tool — should not panic, returns error message
+        let result = handler("nonexistent_tool_xyz", &serde_json::json!({}));
+        assert!(
+            !result.text_result_for_llm.is_empty(),
+            "Unknown tool should return a message, not panic"
+        );
+    }
+
+    #[test]
+    fn tool_handler_with_malformed_json_args() {
+        let root = std::env::temp_dir();
+        let handler: ToolHandler = Arc::new(move |name: &str, args: &Value| {
+            let call = ToolCall {
+                id: format!("sdk-{}", name),
+                call_type: "function".into(),
+                function: FunctionCall {
+                    name: name.to_string(),
+                    arguments: serde_json::to_string(args).unwrap_or_else(|_| "{}".into()),
+                },
+            };
+            let result = tools::execute_tool(&call, &root, false);
+            ToolResultObject {
+                text_result_for_llm: result,
+                binary_results_for_llm: None,
+                result_type: "success".into(),
+                error: None,
+                session_log: None,
+                tool_telemetry: None,
+            }
+        });
+
+        // Completely wrong arg shape — should not panic
+        let result = handler("read_sketch", &serde_json::json!([1, 2, 3]));
+        assert!(!result.text_result_for_llm.is_empty());
+    }
+
+    // -----------------------------------------------------------------------
+    // Client creation edge case tests (no CLI needed)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn build_sdk_tools_all_have_schemas() {
+        let sdk_tools = build_sdk_tools();
+        for tool in &sdk_tools {
+            assert!(
+                !tool.parameters_schema.is_null(),
+                "Tool '{}' should have a JSON schema for parameters",
+                tool.name
+            );
+        }
+    }
+
+    #[test]
+    fn copilot_model_info_from_empty_name() {
+        let model = ModelInfo {
+            id: "".into(),
+            name: "".into(),
+            capabilities: ModelCapabilities {
+                supports: ModelSupports {
+                    vision: false,
+                    reasoning_effort: false,
+                },
+                ..Default::default()
+            },
+            policy: None,
+            billing: None,
+            supported_reasoning_efforts: None,
+            default_reasoning_effort: None,
+        };
+        let info = CopilotModelInfo::from(model);
+        assert_eq!(info.id, "");
+        assert_eq!(info.name, "");
     }
 }
