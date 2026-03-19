@@ -57,11 +57,16 @@ jobs:
         include:
           - platform: 'ubuntu-24.04'
             args: ''
+            rust_targets: ''
           - platform: 'windows-latest'
             args: ''
+            rust_targets: ''
+          - platform: 'windows-latest'
+            args: '--target aarch64-pc-windows-msvc'
+            rust_targets: 'aarch64-pc-windows-msvc'
 
     runs-on: ${{ matrix.platform }}
-    timeout-minutes: 30
+    timeout-minutes: 45
     env:
       SCCACHE_GHA_ENABLED: 'true'
       RUSTC_WRAPPER: sccache
@@ -83,6 +88,8 @@ jobs:
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_targets }}
 
       - name: Configure sccache
         uses: mozilla-actions/sccache-action@v0.0.7
@@ -91,6 +98,7 @@ jobs:
         run: npm install
 
       - name: Run tests
+        if: matrix.rust_targets == ''
         run: npm test
 
       - uses: tauri-apps/tauri-action@v0
