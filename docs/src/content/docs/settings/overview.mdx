@@ -44,8 +44,20 @@ Choose between supported LLM providers:
 
 | Provider | Auth Method | Configuration |
 | --- | --- | --- |
+| **GitHub Copilot** | GitHub auth (via `gh`) | No configuration needed — uses local CLI |
 | **Azure OpenAI** | OAuth or API key | Endpoint, Tenant ID, Client ID, model |
 | **OpenAI** | API key | API key, model |
+
+### GitHub Copilot Setup
+
+The simplest option — no API keys or endpoints needed:
+
+- **Install** the `copilot` CLI and authenticate with `gh auth login`
+- **Select** GitHub Copilot as the provider in Settings
+- **Pick a model** from the auto-populated dropdown
+
+See [Adding AI Models](/settings/ai-models/#github-copilot-simplest) for detailed
+installation instructions.
 
 ### Azure OpenAI Setup
 

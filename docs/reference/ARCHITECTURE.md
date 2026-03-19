@@ -163,6 +163,7 @@ src-tauri/
 │   │   ├── mod.rs                 # LlmProvider trait
 │   │   ├── azure_openai.rs        # Azure OpenAI implementation
 │   │   └── types.rs               # Shared LLM request/response types
+│   ├── copilot.rs                 # GitHub Copilot SDK integration (alternative provider)
 │   └── util/
 │       ├── ffmpeg.rs              # FFmpeg command builder + progress parser
 │       ├── screenshot.rs          # Screen capture utilities
@@ -911,7 +912,7 @@ Tauri bundler produces a Windows NSIS installer (`.exe`) or MSI:
 
 ## Future Architecture Considerations
 
-- **Copilot SDK integration**: The `LlmProvider` trait is designed to accommodate a GitHub Copilot SDK backend alongside Azure OpenAI. Auth flow differences are encapsulated in the provider implementation.
+- **Copilot SDK integration**: ✅ **Implemented.** When "GitHub Copilot" is selected as the AI provider, CutReady delegates to the Copilot SDK via `engine/copilot.rs`. The SDK manages the agent loop, tool dispatch, and streaming over a JSON-RPC stdio transport to the local `copilot` CLI. No API keys needed — uses the user's existing Copilot subscription.
 - **macOS support**: Tauri is cross-platform. The native automation layer would swap `windows-rs` for macOS Accessibility APIs (`accessibility` frameworks via `objc2` crate). FFmpeg and Playwright work unchanged.
 - **Collaborative editing**: If needed, Lexical’s immutable state model pairs well with CRDT-based merging (e.g., Automerge/Yjs) or a real-time sync protocol. The git-backed storage could layer on top of CRDTs for offline support.
 - **Plugin architecture**: The engine module structure supports extracting engines into Tauri plugins for modularity and third-party extension.
