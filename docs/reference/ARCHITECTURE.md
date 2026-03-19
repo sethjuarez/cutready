@@ -794,6 +794,27 @@ missing identity via a priority chain:
 The resolved identity is persisted to both local git config and workspace
 settings, so subsequent operations are instant.
 
+**Deep link protocol**:
+
+CutReady registers a custom `cutready://` URL scheme via `tauri-plugin-deep-link`.
+The web redirect page at `cutready.io` translates human-friendly URLs
+(`cutready.io/gh/owner/repo`) into protocol URLs (`cutready://gh/owner/repo`).
+
+- **Protocol registration**: Configured in `tauri.conf.json` under `plugins.deep-link.desktop.schemes`.
+- **Single-instance forwarding**: `tauri-plugin-single-instance` catches second instances launched by the OS with the URL as a CLI argument and forwards it to the running instance via Tauri events.
+- **First-launch handling**: `app.deep_link().get_current()` returns the initial URL when the app is cold-started by a protocol link.
+- **Frontend flow**: The `useDeepLink` hook listens for `deep-link-received` events, parses the URL, checks recent projects for a matching repository (via `resolve_deep_link` command), and either opens the existing workspace or triggers the clone dialog.
+- **Web redirect**: A custom 404 page on GitHub Pages (`docs/src/pages/404.astro`) handles all `/gh/owner/repo` paths — it attempts a `cutready://` redirect and falls back to an install prompt after a timeout.
+
+**Subprocess spawning (Windows)**:
+
+All subprocess spawns (`std::process::Command` and `tokio::process::Command`)
+use the `CREATE_NO_WINDOW` flag (`0x08000000`) on Windows to prevent console
+window flashes. This applies to FFmpeg, Playwright sidecar, `gh` CLI calls,
+and any other child processes. The flag is applied via `#[cfg(windows)]`
+blocks using `CommandExt::creation_flags()` (std) or the inherent
+`.creation_flags()` method (tokio).
+
 ---
 
 ## Technology Stack
@@ -880,7 +901,7 @@ Tauri bundler produces a Windows NSIS installer (`.exe`) or MSI:
 | Concern | Mitigation |
 | --------- | ----------- |
 | LLM-generated Python code execution | AST validation, restricted imports, render timeout, user confirmation before execution |
-| API key storage | Tauri plugin-store with OS keychain integration (Windows Credential Manager) |
+| API key storage | Tauri plugin-stronghold with IOTA encrypted vault (Windows Credential Manager fallback) |
 | FFmpeg process management | Graceful shutdown via stdin `q`; kill on app exit; no user-controlled command injection |
 | Playwright browser automation | Isolated browser profile; no access to user's default browser data |
 | Windows input hooks | Hooks only active during interaction recording sessions; clearly indicated in UI |

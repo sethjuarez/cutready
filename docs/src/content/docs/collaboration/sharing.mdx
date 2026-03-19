@@ -1,0 +1,132 @@
+---
+title: Sharing with Deep Links
+description: Share CutReady workspaces with a single link — recipients open or clone the project instantly.
+sidebar:
+  order: 6
+---
+
+import { Aside, Badge, Steps } from '@astrojs/starlight/components';
+
+<Badge text="Available" variant="success" />
+
+CutReady supports **deep links** that let you share a workspace with anyone
+using a single URL. When a recipient clicks the link, CutReady opens the
+project automatically — or clones it if they don't have it yet.
+
+## How It Works
+
+Every CutReady workspace backed by a GitHub repository has a shareable URL:
+
+```text
+https://cutready.io/gh/owner/repo
+```
+
+For example, if your workspace is at `github.com/sethjuarez/mvp-summit-2026`,
+the share link is:
+
+```text
+https://cutready.io/gh/sethjuarez/mvp-summit-2026
+```
+
+When someone opens this link:
+
+1. **CutReady is installed** — the browser hands off to the app via the
+   `cutready://` protocol. CutReady checks if the workspace is already
+   cloned and opens it, or prompts to clone it.
+2. **CutReady is not installed** — the page shows a brief description and
+   a download link pointing to the latest GitHub release.
+
+## Sharing a Workspace
+
+<Steps>
+
+1. Push your workspace to GitHub (see [Remote Sync](/collaboration/remote-sync/)).
+
+2. Construct the link from your GitHub repository URL:
+
+   | GitHub URL | CutReady Link |
+   | --- | --- |
+   | `github.com/alice/my-demo` | `cutready.io/gh/alice/my-demo` |
+   | `github.com/team/project` | `cutready.io/gh/team/project` |
+
+3. Send the link to your collaborator via chat, email, or paste it in a
+   document.
+
+</Steps>
+
+<Aside type="tip">
+  Deep links work with any GitHub repository — public or private. The
+  recipient still needs access to the repository for the clone to succeed.
+</Aside>
+
+## Opening a Shared Link
+
+When you click a `cutready.io/gh/...` link:
+
+<Steps>
+
+1. Your browser redirects to the `cutready://` protocol.
+
+2. CutReady activates and checks your recent projects for a matching
+   repository.
+
+3. **Already cloned** — the workspace opens immediately.
+
+4. **Not cloned** — CutReady opens the Clone dialog pre-filled with the
+   repository URL. Choose a folder, and it clones and opens automatically.
+
+</Steps>
+
+<Aside type="note">
+  If CutReady is already running, the deep link is handled by the existing
+  instance — a second window won't open.
+</Aside>
+
+## The cutready:// Protocol
+
+CutReady registers a custom `cutready://` URL protocol during installation.
+The web redirect page at cutready.io translates the human-friendly URL into
+this protocol:
+
+```text
+cutready.io/gh/owner/repo  →  cutready://gh/owner/repo
+```
+
+You can also use the protocol URL directly if you prefer:
+
+```text
+cutready://gh/sethjuarez/mvp-summit-2026
+```
+
+## Requirements
+
+- **Sender**: Workspace must be pushed to a GitHub remote
+- **Recipient**: CutReady installed + GitHub CLI authenticated
+  (see [Setup Guide](/collaboration/setup-guide/))
+- **Repository access**: The recipient needs read access to the GitHub
+  repository (collaborator on private repos, or any user for public repos)
+
+## Troubleshooting
+
+### Link opens the browser instead of CutReady
+
+- **Cause**: The `cutready://` protocol isn't registered. This can happen
+  if CutReady was installed via a portable build rather than the installer.
+- **Fix**: Reinstall CutReady using the `.msi` or `.exe` installer, which
+  registers the protocol automatically.
+
+### Clone fails after clicking a link
+
+- **Cause**: GitHub CLI isn't authenticated, or you don't have access to
+  the repository.
+- **Fix**: Run `gh auth login` and `gh auth setup-git` in a terminal,
+  restart CutReady, and try the link again. See
+  [Setup Guide](/collaboration/setup-guide/) for full instructions.
+
+### "CutReady not installed" page appears but it is installed
+
+- **Cause**: The browser didn't detect the protocol handler. Some browsers
+  suppress protocol prompts after a user dismisses them once.
+- **Fix**: Copy the `cutready://gh/owner/repo` URL from the page and paste
+  it directly into your browser's address bar, or open CutReady manually
+  and clone from the Home screen.

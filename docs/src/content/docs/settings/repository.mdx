@@ -64,13 +64,34 @@ snapshots you create.
 
 ### Automatic Resolution
 
-If you don't set an identity in Settings, CutReady resolves it automatically:
+If you don't set an identity in Settings, CutReady resolves it automatically
+using a priority chain — the first source that provides a name and email wins:
 
-1. **Global git config** — if you've run `git config --global user.name`, that's used.
-2. **GitHub CLI** — if you're signed in via `gh auth login`, your GitHub profile name and email are used.
-3. **Prompt** — if neither source has your identity, CutReady asks you for a name and email before your first snapshot.
+1. **Workspace settings** — the name and email saved in this Settings panel
+   (stored in `.cutready/settings.json`).
+2. **Local git config** — if a previous resolution already wrote to the
+   workspace's `.git/config`, that's reused.
+3. **Global git config** — if you've run `git config --global user.name`
+   and `git config --global user.email`, those are used.
+4. **GitHub CLI** — if you're signed in via `gh auth login`, CutReady
+   queries your GitHub profile (`gh api user`) for your name and email.
+   If your GitHub email is private, the `username@users.noreply.github.com`
+   address is used.
+5. **Identity prompt** — if none of the above sources have your identity,
+   CutReady shows a one-time dialog asking for your name and email before
+   your first snapshot.
+6. **Fallback** — as a last resort, "CutReady" / "app@cutready.local" is
+   used so snapshots are never blocked.
 
-Once resolved, the identity is saved to the workspace so you're never asked again.
+Once resolved, the identity is persisted to both the workspace's local git
+config and workspace settings, so subsequent saves are instant — you're
+never asked again.
+
+<Aside type="tip">
+  On a fresh machine, install the GitHub CLI and run `gh auth login` before
+  opening CutReady. Your GitHub identity will be picked up automatically
+  with zero configuration.
+</Aside>
 
 ## When to Configure
 

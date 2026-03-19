@@ -159,9 +159,15 @@ To join a teammate's CutReady project:
 CutReady uses **snapshots** (git commits) to track your work. Every time
 you save, a snapshot is created automatically.
 
-For snapshots to work in a cloned workspace, no additional setup is needed —
-CutReady commits as "CutReady \<app@cutready.local\>" by default. Your
-GitHub identity is used for push/pull operations via the `gh` credentials.
+No additional identity setup is needed — CutReady automatically resolves
+your name and email from the GitHub CLI. Since you already ran
+`gh auth login`, your GitHub profile identity is used for snapshots.
+
+<Aside type="tip">
+  You can override the auto-resolved identity in **Settings** → **Git Remote**
+  → **Git Identity**. See [Workspace Remote](/settings/repository/) for the
+  full resolution chain.
+</Aside>
 
 ## Troubleshooting
 
@@ -189,8 +195,21 @@ GitHub identity is used for push/pull operations via the `gh` credentials.
 - **Fix:** Check the Timeline Selector to see all available timelines and
   switch to the one with the changes you expect.
 
+## Sharing via Deep Links
+
+Once your workspace is pushed to GitHub, you can share it with a single link:
+
+```text
+https://cutready.io/gh/your-username/your-workspace
+```
+
+When a collaborator clicks this link, CutReady opens the workspace
+automatically — or prompts them to clone it if they don't have it yet.
+See [Sharing with Deep Links](/collaboration/sharing/) for details.
+
 ## What's Next?
 
+- [Sharing with Deep Links](/collaboration/sharing/) — Share workspaces with a single URL
 - [Remote Sync](/collaboration/remote-sync/) — Sync Bar, publishing timelines, and offline resilience
 - [Merging & Conflicts](/collaboration/merging/) — Resolving conflicts when changes collide
 - [Version History](/collaboration/version-history/) — Navigating snapshots and timelines
