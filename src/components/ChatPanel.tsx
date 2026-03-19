@@ -982,28 +982,53 @@ function ChatTab() {
         agentPrompts[a.id] = a.prompt;
       }
 
-      const result = await invoke<AgentChatResult>("agent_chat_with_tools", {
-        config,
-        messages: fullMessages,
-        agentPrompts,
-      });
+      // Route to the appropriate backend command based on provider
+      const isCopilot = settings.aiProvider === "copilot_sdk";
+      const result = isCopilot
+        ? await invoke<AgentChatResult>("agent_chat_with_copilot", {
+            model: config.model,
+            systemPrompt: effectiveSystemPrompt,
+            userMessage: llmContent || userContent,
+            agentPrompts,
+            visionMode: settings.aiVisionMode || "off",
+          })
+        : await invoke<AgentChatResult>("agent_chat_with_tools", {
+            config,
+            messages: fullMessages,
+            agentPrompts,
+          });
 
       // Activity logging now handled by real-time agent-event listener
 
-      // Use the backend's full conversation (with correct tool_call/tool_result ordering)
-      // but strip the system prompt and restore display-friendly user message content
-      // (backend has llmContent with full web scrapes; display should use compact userContent)
-      const backendMessages = result.messages
-        .filter((m) => m.role !== "system")
-        .map((m) => {
-          // Restore display version of user messages that had web content injected for the LLM
-          if (m.role === "user" && llmContent && m.content === llmContent) {
-            return { ...m, content: userContent };
-          }
-          return m;
-        })
-        // For silent sends, remove the triggering user message from display
-        .filter((m) => !(silent && m.role === "user" && (m.content === userContent || m.content === llmContent)));
+      // For Copilot provider, the SDK manages history internally —
+      // result.messages is empty. Build display messages from what we have.
+      let backendMessages: ChatMessage[];
+      if (isCopilot) {
+        backendMessages = [
+          ...newMessages,
+          { role: "assistant", content: result.response },
+        ];
+        if (silent) {
+          backendMessages = backendMessages.filter(
+            (m) => !(m.role === "user" && (m.content === userContent || m.content === llmContent))
+          );
+        }
+      } else {
+        // Use the backend's full conversation (with correct tool_call/tool_result ordering)
+        // but strip the system prompt and restore display-friendly user message content
+        // (backend has llmContent with full web scrapes; display should use compact userContent)
+        backendMessages = result.messages
+          .filter((m) => m.role !== "system")
+          .map((m) => {
+            // Restore display version of user messages that had web content injected for the LLM
+            if (m.role === "user" && llmContent && m.content === llmContent) {
+              return { ...m, content: userContent };
+            }
+            return m;
+          })
+          // For silent sends, remove the triggering user message from display
+          .filter((m) => !(silent && m.role === "user" && (m.content === userContent || m.content === llmContent)));
+      }
 
       // Log response to activity
       const toolCallCount = backendMessages.filter(

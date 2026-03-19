@@ -207,6 +207,41 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
       return null;
     case "list_models":
       return ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-35-turbo", "o1-preview"];
+    case "check_copilot_available":
+      return true;
+    case "list_copilot_models":
+      return [
+        { id: "claude-sonnet-4", name: "Claude Sonnet 4", supports_vision: true, supports_reasoning: true, billing: null },
+        { id: "gpt-4.1", name: "GPT-4.1", supports_vision: true, supports_reasoning: false, billing: null },
+        { id: "gpt-4o", name: "GPT-4o", supports_vision: true, supports_reasoning: false, billing: null },
+        { id: "o3-mini", name: "o3-mini", supports_vision: false, supports_reasoning: true, billing: null },
+        { id: "claude-haiku-3.5", name: "Claude 3.5 Haiku", supports_vision: true, supports_reasoning: false, billing: null },
+      ];
+    case "agent_chat_with_copilot": {
+      const response = `Mock Copilot response to: "${(args?.userMessage as string)?.substring(0, 50) || "your message"}"\n\nThis is the GitHub Copilot SDK path — the Copilot CLI manages the agent loop, tool dispatch, and streaming.`;
+      const w = window as any;
+      const streamEvents = async () => {
+        w.__TAURI_INTERNALS__?.emit?.("agent-event", { type: "status", message: "Thinking…" });
+        await new Promise(r => setTimeout(r, 300));
+        w.__TAURI_INTERNALS__?.emit?.("agent-event", { type: "tool_call", name: "list_project_files", arguments: "{}" });
+        await new Promise(r => setTimeout(r, 200));
+        w.__TAURI_INTERNALS__?.emit?.("agent-event", { type: "tool_result", name: "list_project_files", result: "sketches/intro.sk, notes/outline.md" });
+        await new Promise(r => setTimeout(r, 200));
+        const words = response.split(" ");
+        for (let i = 0; i < words.length; i++) {
+          w.__TAURI_INTERNALS__?.emit?.("agent-event", { type: "delta", content: (i === 0 ? "" : " ") + words[i] });
+          await new Promise(r => setTimeout(r, 30));
+        }
+        w.__TAURI_INTERNALS__?.emit?.("agent-event", { type: "done", response });
+      };
+      streamEvents();
+      return new Promise(resolve => setTimeout(() => resolve({
+        messages: [],
+        response,
+      }), 2000));
+    }
+    case "agent_chat_copilot_simple":
+      return { role: "assistant", content: `Mock simple Copilot response to: "${(args?.userMessage as string)?.substring(0, 50) || "your message"}"` };
     case "agent_chat_with_tools": {
       // Simulate streaming with agent events
       const userMsgs = (args?.messages as Array<{ role: string; content: string }>) || [];

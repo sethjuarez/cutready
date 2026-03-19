@@ -16,7 +16,7 @@ export interface AgentPreset {
 
 export interface GlobalSettings {
   outputDirectory: string;
-  /** "azure_openai" or "openai" */
+  /** "azure_openai", "openai", or "copilot_sdk" */
   aiProvider: string;
   /** "api_key" or "azure_oauth" */
   aiAuthMode: string;

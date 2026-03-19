@@ -354,6 +354,77 @@ function DisplayTab({ settings, updateSetting }: {
   );
 }
 
+// ── Copilot Status Sub-component ─────────────────────────────────
+
+interface CopilotModelInfo {
+  id: string;
+  name: string;
+  supports_vision: boolean;
+  supports_reasoning: boolean;
+  billing?: string;
+}
+
+function CopilotStatus({ setModels }: {
+  fetchModels: () => void;
+  setModels: (m: ModelInfo[]) => void;
+}) {
+  const [available, setAvailable] = useState<boolean | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    invoke<boolean>("check_copilot_available").then(setAvailable).catch(() => setAvailable(false));
+  }, []);
+
+  const loadCopilotModels = async () => {
+    setLoading(true);
+    try {
+      const models = await invoke<CopilotModelInfo[]>("list_copilot_models");
+      // Map to the common ModelInfo shape expected by the model picker
+      setModels(models.map(m => ({
+        id: m.id,
+        owned_by: "github-copilot",
+        capabilities: {
+          ...(m.supports_vision ? { vision: "true" } : {}),
+          ...(m.supports_reasoning ? { reasoning: "true" } : {}),
+        },
+      })));
+    } catch (e) {
+      console.error("Failed to load Copilot models:", e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-alt)] p-3 flex flex-col gap-2">
+      <div className="flex items-center gap-2">
+        <svg className="w-4 h-4 text-[var(--color-text-secondary)]" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/>
+        </svg>
+        {available === null ? (
+          <span className="text-sm text-[var(--color-text-secondary)]">Checking Copilot CLI…</span>
+        ) : available ? (
+          <span className="text-sm text-green-600 dark:text-green-400 font-medium">✓ Copilot CLI available</span>
+        ) : (
+          <span className="text-sm text-amber-600 dark:text-amber-400">Copilot CLI not found — install it from github.com/github/copilot</span>
+        )}
+      </div>
+      <p className="text-xs text-[var(--color-text-secondary)]">
+        Uses your GitHub CLI credentials (<code className="text-[var(--color-accent)]">gh auth login</code>). No API key needed.
+      </p>
+      {available && (
+        <button
+          onClick={loadCopilotModels}
+          disabled={loading}
+          className="w-fit px-3 py-1.5 rounded-lg text-xs font-medium bg-[var(--color-accent)] text-white hover:bg-[var(--color-accent-hover)] disabled:opacity-50 transition-colors"
+        >
+          {loading ? "Loading models…" : "Load available models"}
+        </button>
+      )}
+    </div>
+  );
+}
+
 // ── AI Provider Tab ──────────────────────────────────────────────
 
 function AIProviderTab({ settings, updateSetting, isAzure, isOAuth, hasToken, canFetchModels, models, setModels, loadingModels, modelFilter, setModelFilter, modelError, fetchModels, oauthStatus, oauthError, startOAuthFlow, signOut }: {
@@ -393,10 +464,17 @@ function AIProviderTab({ settings, updateSetting, isAzure, isOAuth, hasToken, ca
         >
           <option value="azure_openai">Azure OpenAI</option>
           <option value="openai">OpenAI</option>
+          <option value="copilot_sdk">GitHub Copilot</option>
         </select>
       </fieldset>
 
-      {/* Endpoint */}
+      {/* GitHub Copilot Status */}
+      {settings.aiProvider === "copilot_sdk" && (
+        <CopilotStatus fetchModels={fetchModels} setModels={setModels} />
+      )}
+
+      {/* Endpoint (not shown for Copilot) */}
+      {settings.aiProvider !== "copilot_sdk" && (
       <fieldset className="flex flex-col gap-2">
         <label className="text-sm font-medium">
           {isAzure ? "Endpoint" : "Endpoint (optional)"}
@@ -413,9 +491,10 @@ function AIProviderTab({ settings, updateSetting, isAzure, isOAuth, hasToken, ca
           className={inputClass}
         />
       </fieldset>
+      )}
 
-      {/* Auth Mode (Azure only) */}
-      {isAzure && (
+      {/* Auth Mode (Azure only, not Copilot) */}
+      {isAzure && settings.aiProvider !== "copilot_sdk" && (
         <fieldset className="flex flex-col gap-2">
           <label className="text-sm font-medium">Authentication</label>
           <select
@@ -429,8 +508,8 @@ function AIProviderTab({ settings, updateSetting, isAzure, isOAuth, hasToken, ca
         </fieldset>
       )}
 
-      {/* API Key */}
-      {!isOAuth && (
+      {/* API Key (not for OAuth or Copilot) */}
+      {!isOAuth && settings.aiProvider !== "copilot_sdk" && (
         <fieldset className="flex flex-col gap-2">
           <label className="text-sm font-medium">API Key</label>
           <input
