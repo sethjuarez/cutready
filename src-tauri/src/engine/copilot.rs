@@ -12,11 +12,12 @@ use copilot_sdk::{
     Client, CustomAgentConfig, ModelInfo, PermissionRequestResult, SessionConfig,
     SessionEventData, SystemMessageConfig, SystemMessageMode, Tool, ToolHandler, ToolResultObject,
 };
-use serde_json::Value;
+use serde_json::{json, Value};
 
 use crate::engine::agent::llm::{FunctionCall, ToolCall};
 use crate::engine::agent::runner::AgentEvent;
 use crate::engine::agent::tools;
+use crate::util::trace;
 
 /// Outcome from translating one SDK event.
 #[derive(Debug)]
@@ -212,18 +213,62 @@ pub async fn chat(
 
     // Collect the response by processing SDK events
     let mut full_response = String::new();
+    let mut delta_count: u32 = 0;
+    let mut current_message_id: Option<String> = None;
 
     loop {
         match events.recv().await {
             Ok(event) => {
-                // Accumulate full response from messages
+                // Trace every event for diagnostics
+                trace::emit("copilot_event", "copilot", json!({
+                    "kind": format!("{:?}", std::mem::discriminant(&event.data)),
+                    "summary": match &event.data {
+                        SessionEventData::AssistantMessageDelta(d) => {
+                            format!("msg_id={} len={}", d.message_id, d.delta_content.len())
+                        }
+                        SessionEventData::AssistantMessage(m) => {
+                            format!("msg_id={} len={}", m.message_id, m.content.len())
+                        }
+                        SessionEventData::ToolExecutionStart(t) => {
+                            format!("tool={}", t.tool_name)
+                        }
+                        SessionEventData::ToolExecutionComplete(t) => {
+                            format!("tool_call_id={}", t.tool_call_id)
+                        }
+                        _ => String::new(),
+                    },
+                }));
+
+                // Accumulate full response from deltas, tracking message_id
                 if let SessionEventData::AssistantMessageDelta(delta) = &event.data {
-                    full_response.push_str(&delta.delta_content);
-                }
-                if let SessionEventData::AssistantMessage(msg) = &event.data {
-                    if full_response.is_empty() {
-                        full_response = msg.content.clone();
+                    // If message_id changes, the previous turn's text is superseded —
+                    // reset to avoid interleaving deltas from different turns.
+                    if current_message_id.as_deref() != Some(&delta.message_id) {
+                        if current_message_id.is_some() {
+                            trace::emit("copilot_msg_reset", "copilot", json!({
+                                "old_msg_id": current_message_id,
+                                "new_msg_id": delta.message_id,
+                                "discarded_len": full_response.len(),
+                            }));
+                        }
+                        full_response.clear();
+                        current_message_id = Some(delta.message_id.clone());
+                        delta_count = 0;
                     }
+                    full_response.push_str(&delta.delta_content);
+                    delta_count += 1;
+                }
+                // Complete message is authoritative — replace accumulated deltas
+                if let SessionEventData::AssistantMessage(msg) = &event.data {
+                    trace::emit("copilot_msg_complete", "copilot", json!({
+                        "msg_id": msg.message_id,
+                        "content_len": msg.content.len(),
+                        "delta_accumulated_len": full_response.len(),
+                        "delta_count": delta_count,
+                        "match": full_response.len() == msg.content.len(),
+                    }));
+                    full_response = msg.content.clone();
+                    delta_count = 0;
                 }
 
                 match translate_event(&event.data) {
@@ -235,6 +280,11 @@ pub async fn chat(
                     EventAction::Break(None) => break,
                     EventAction::Ignore => {}
                 }
+            }
+            Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
+                trace::emit("copilot_lagged", "copilot", json!({ "skipped": n }));
+                log::warn!("[copilot] broadcast lagged, skipped {n} events");
+                // Continue receiving — don't break on lag
             }
             Err(_) => break,
         }
