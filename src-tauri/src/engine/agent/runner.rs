@@ -282,6 +282,9 @@ pub enum AgentEvent {
     /// A text delta streamed from the LLM.
     #[serde(rename = "delta")]
     Delta { content: String },
+    /// Signals a new turn — frontend should clear its streaming buffer.
+    #[serde(rename = "delta_reset")]
+    DeltaReset,
     /// A reasoning/thinking delta streamed from the LLM.
     #[serde(rename = "thinking")]
     Thinking { content: String },

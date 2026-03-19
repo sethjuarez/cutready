@@ -250,6 +250,8 @@ pub async fn chat(
                                 "new_msg_id": delta.message_id,
                                 "discarded_len": full_response.len(),
                             }));
+                            // Tell frontend to clear its streaming buffer before new turn
+                            emit(AgentEvent::DeltaReset);
                         }
                         full_response.clear();
                         current_message_id = Some(delta.message_id.clone());

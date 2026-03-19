@@ -587,6 +587,10 @@ function ChatTab() {
           streamingRef.current += ev.content ?? "";
           setStreamingText(streamingRef.current);
           break;
+        case "delta_reset":
+          streamingRef.current = "";
+          setStreamingText("");
+          break;
         case "thinking":
           thinkingRef.current += ev.content ?? "";
           setStreamingThinking(thinkingRef.current);

@@ -565,15 +565,28 @@ async function refineChunk(
   config: NonNullable<RichPasteOptions["aiConfig"]>,
 ): Promise<string | null> {
   try {
-    const refined = await invoke<{ role: string; content: string | null }>("agent_chat", {
-      config,
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: chunk },
-      ],
-    });
-    if (refined.content && refined.content.trim().length > 0) {
-      return stripCodeFence(refined.content.trim());
+    let content: string | null = null;
+
+    if (config.provider === "copilot_sdk") {
+      const response = await invoke<string>("agent_chat_copilot_simple", {
+        model: config.model,
+        systemPrompt,
+        userMessage: chunk,
+      });
+      if (response && response.trim().length > 0) content = response.trim();
+    } else {
+      const refined = await invoke<{ role: string; content: string | null }>("agent_chat", {
+        config,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: chunk },
+        ],
+      });
+      content = refined.content?.trim() ?? null;
+    }
+
+    if (content && content.length > 0) {
+      return stripCodeFence(content);
     }
     return null;
   } catch {
