@@ -9,6 +9,18 @@
 Covector manages this changelog. Do not edit manually.
 Each release section is generated from `.changes/*.md` files.
 
+## [0.14.0](https://github.com/sethjuarez/cutready/compare/v0.13.0...v0.14.0) (2026-03-19)
+
+
+### Features
+
+* add Windows ARM64 (aarch64) build target to release workflow ([ee9f6cc](https://github.com/sethjuarez/cutready/commit/ee9f6cc2d4fea3d70bc343652423852d99cd0240)), closes [#19](https://github.com/sethjuarez/cutready/issues/19)
+
+
+### Bug Fixes
+
+* add CREATE_NO_WINDOW flag to all subprocess spawns ([ab89238](https://github.com/sethjuarez/cutready/commit/ab89238bc0c0b5176395d138c035ec7f356bc8af))
+
 ## [0.13.0](https://github.com/sethjuarez/cutready/compare/v0.12.0...v0.13.0) (2026-03-18)
 
 
