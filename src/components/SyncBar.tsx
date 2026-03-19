@@ -26,13 +26,36 @@ export function SyncBar() {
     detectRemote();
   }, [detectRemote]);
 
-  // Periodic fetch every 5 minutes when remote is configured
+  // Periodic fetch every 5 minutes when remote is configured — pauses when app is hidden
   useEffect(() => {
     if (!currentRemote) return;
-    const interval = setInterval(() => {
-      fetchFromRemote();
-    }, 5 * 60 * 1000);
-    return () => clearInterval(interval);
+
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+
+    const start = () => {
+      if (!intervalId) {
+        intervalId = setInterval(() => { fetchFromRemote(); }, 5 * 60 * 1000);
+      }
+    };
+    const stop = () => {
+      if (intervalId) { clearInterval(intervalId); intervalId = null; }
+    };
+
+    const onVisibility = () => {
+      if (document.hidden) {
+        stop();
+      } else {
+        fetchFromRemote(); // catch up immediately on return
+        start();
+      }
+    };
+
+    start();
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      stop();
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
   }, [currentRemote, fetchFromRemote]);
 
   // Hidden for solo users

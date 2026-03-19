@@ -35,11 +35,14 @@ export function RecordingPanel() {
     }
   }, [isBrowserReady, currentProject, detectProfiles, checkBrowsersRunning]);
 
-  // Refresh browser running status periodically while in Phase 1
+  // Check browser running status when app regains focus (instead of polling)
   useEffect(() => {
     if (isBrowserReady || !currentProject || !selectedProfile) return;
-    const timer = setInterval(checkBrowsersRunning, 3000);
-    return () => clearInterval(timer);
+    const onVisible = () => {
+      if (!document.hidden) checkBrowsersRunning();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
   }, [isBrowserReady, currentProject, selectedProfile, checkBrowsersRunning]);
 
   // Auto-scroll to the bottom as new actions come in

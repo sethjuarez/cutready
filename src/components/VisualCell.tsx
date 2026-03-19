@@ -14,6 +14,8 @@ interface VisualCellProps {
   className?: string;
   /** Ref exposed to parent for replay control (full mode). */
   controlRef?: React.MutableRefObject<VisualControlHandle | null>;
+  /** Called when the animation play state changes (playing → stopped or vice versa). */
+  onPlayStateChange?: (playing: boolean) => void;
 }
 
 /** Exposed to parent (SketchPreview) for replay button in header. */
@@ -39,7 +41,7 @@ const ERROR_FALLBACK = (
  * - **full**: auto-plays once, CutReady themed, scales to fill container.
  *   Parent uses `controlRef` to render replay button elsewhere.
  */
-export default function VisualCell({ visualPath, mode, onClick, className, controlRef }: VisualCellProps) {
+export default function VisualCell({ visualPath, mode, onClick, className, controlRef, onPlayStateChange }: VisualCellProps) {
   const rendererRef = useRef<DslRendererRef>(null);
   const [visual, setVisual] = useState<Record<string, unknown> | null>(null);
   const [hasError, setHasError] = useState(false);
@@ -93,6 +95,11 @@ export default function VisualCell({ visualPath, mode, onClick, className, contr
       controlRef.current = { replay, isPlaying };
     }
   }, [controlRef, replay, isPlaying]);
+
+  // Notify parent of play state changes
+  useEffect(() => {
+    onPlayStateChange?.(isPlaying);
+  }, [isPlaying, onPlayStateChange]);
 
   // Full mode: measure container and compute fitted width to prevent overflow.
   // fitToContainer sets SVG width=100% and derives height from viewBox, which

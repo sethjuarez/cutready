@@ -117,12 +117,9 @@ export function SketchPreview({ rows, projectRoot, title, onClose, slides: slide
     return () => window.removeEventListener("keydown", handler);
   }, [onClose, goNext, goPrev, total]);
 
-  // Poll visual play state from controlRef
+  // Reset visual playing state when slide changes
   useEffect(() => {
-    const interval = setInterval(() => {
-      setVisualPlaying(visualControlRef.current?.isPlaying ?? false);
-    }, 300);
-    return () => clearInterval(interval);
+    setVisualPlaying(false);
   }, [currentIdx]);
 
   if (!slide) return null;
@@ -320,7 +317,7 @@ export function SketchPreview({ rows, projectRoot, title, onClose, slides: slide
             </div>
           ) : row?.visual ? (
             <Suspense fallback={<div className="w-full max-w-2xl aspect-video rounded-lg bg-[var(--color-surface-alt)] animate-pulse" />}>
-              <VisualCell visualPath={row.visual} mode="full" controlRef={visualControlRef} className="max-w-full max-h-full" />
+              <VisualCell visualPath={row.visual} mode="full" controlRef={visualControlRef} onPlayStateChange={setVisualPlaying} className="max-w-full max-h-full" />
             </Suspense>
           ) : screenshotSrc ? (
             <img
