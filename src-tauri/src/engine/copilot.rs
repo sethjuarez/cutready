@@ -221,7 +221,7 @@ pub async fn chat(
             Ok(event) => {
                 // Trace every event for diagnostics
                 trace::emit("copilot_event", "copilot", json!({
-                    "kind": format!("{:?}", std::mem::discriminant(&event.data)),
+                    "type": event.event_type,
                     "summary": match &event.data {
                         SessionEventData::AssistantMessageDelta(d) => {
                             format!("msg_id={} len={}", d.message_id, d.delta_content.len())
@@ -258,7 +258,9 @@ pub async fn chat(
                     full_response.push_str(&delta.delta_content);
                     delta_count += 1;
                 }
-                // Complete message is authoritative — replace accumulated deltas
+                // Complete message is authoritative — but only replace if it has
+                // content. Empty AssistantMessage events are tool-call turns where the
+                // model produced no text (only tool invocations).
                 if let SessionEventData::AssistantMessage(msg) = &event.data {
                     trace::emit("copilot_msg_complete", "copilot", json!({
                         "msg_id": msg.message_id,
@@ -267,8 +269,10 @@ pub async fn chat(
                         "delta_count": delta_count,
                         "match": full_response.len() == msg.content.len(),
                     }));
-                    full_response = msg.content.clone();
-                    delta_count = 0;
+                    if !msg.content.is_empty() {
+                        full_response = msg.content.clone();
+                        delta_count = 0;
+                    }
                 }
 
                 match translate_event(&event.data) {
