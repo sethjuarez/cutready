@@ -56,6 +56,8 @@ export interface GlobalSettings {
   aiContextLength: number;
   /** Vision mode: "off", "notes", or "notes_and_sketches". */
   aiVisionMode: "off" | "notes" | "notes_and_sketches";
+  /** Whether the selected model supports vision (set when model is picked). */
+  aiModelSupportsVision: string;
   // Legacy fields (migrated on load)
   llmApiKey?: string;
   llmEndpoint?: string;
@@ -102,6 +104,7 @@ const defaultGlobalSettings: GlobalSettings = {
   displayFontFamily: "system",
   aiContextLength: 0,
   aiVisionMode: "notes_and_sketches",
+  aiModelSupportsVision: "",
 };
 
 export const defaultWorkspaceSettings: WorkspaceSettings = {

@@ -108,6 +108,11 @@ fn translate_event(
             message: err.message.clone(),
         })),
         SessionEventData::SessionIdle(_) => EventAction::Break(None),
+        // Explicitly ignore high-frequency presentation events (no longer Unknown)
+        SessionEventData::AssistantStreamingDelta(_) => EventAction::Ignore,
+        SessionEventData::ExternalToolCompleted(_) => EventAction::Ignore,
+        SessionEventData::PermissionCompleted(_) => EventAction::Ignore,
+        SessionEventData::SessionToolsUpdated(_) => EventAction::Ignore,
         _ => EventAction::Ignore,
     }
 }
@@ -140,6 +145,49 @@ pub fn is_cli_available() -> bool {
 /// Get the path to the `copilot` CLI binary.
 pub fn cli_path() -> Option<PathBuf> {
     copilot_sdk::find_copilot_cli()
+}
+
+/// CLI status info returned to the frontend.
+#[derive(serde::Serialize, Clone)]
+pub struct CopilotCliStatus {
+    pub available: bool,
+    pub version: Option<String>,
+    pub protocol_version: Option<u32>,
+}
+
+/// Check CLI availability and get version info.
+pub async fn get_cli_status() -> CopilotCliStatus {
+    if !is_cli_available() {
+        return CopilotCliStatus {
+            available: false,
+            version: None,
+            protocol_version: None,
+        };
+    }
+    // Try to get version info — if it fails, CLI exists but may be unhealthy
+    match create_client() {
+        Ok(client) => {
+            if client.start().await.is_err() {
+                return CopilotCliStatus {
+                    available: true,
+                    version: None,
+                    protocol_version: None,
+                };
+            }
+            let status = client.get_status().await.ok();
+            client.stop().await;
+            CopilotCliStatus {
+                available: true,
+                version: status.as_ref().map(|s| s.version.clone()),
+                protocol_version: status.as_ref().map(|s| s.protocol_version),
+            }
+        }
+        Err(_) => CopilotCliStatus {
+            available: true,
+            version: None,
+            protocol_version: None,
+        },
+    }
 }
 
 /// List models from the Copilot CLI.

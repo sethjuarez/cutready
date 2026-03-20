@@ -208,7 +208,7 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
     case "list_models":
       return ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-35-turbo", "o1-preview"];
     case "check_copilot_available":
-      return true;
+      return { available: true, version: "1.0.8-mock", protocol_version: 3 };
     case "list_copilot_models":
       return [
         { id: "claude-sonnet-4", name: "Claude Sonnet 4", supports_vision: true, supports_reasoning: true, billing: null },

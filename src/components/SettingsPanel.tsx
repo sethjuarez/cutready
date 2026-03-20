@@ -356,6 +356,12 @@ function DisplayTab({ settings, updateSetting }: {
 
 // ── Copilot Status Sub-component ─────────────────────────────────
 
+interface CopilotCliStatus {
+  available: boolean;
+  version?: string;
+  protocol_version?: number;
+}
+
 interface CopilotModelInfo {
   id: string;
   name: string;
@@ -368,12 +374,14 @@ function CopilotStatus({ setModels }: {
   fetchModels: () => void;
   setModels: (m: ModelInfo[]) => void;
 }) {
-  const [available, setAvailable] = useState<boolean | null>(null);
+  const [status, setStatus] = useState<CopilotCliStatus | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    invoke<boolean>("check_copilot_available").then(setAvailable).catch(() => setAvailable(false));
+    invoke<CopilotCliStatus>("check_copilot_available")
+      .then(setStatus)
+      .catch(() => setStatus({ available: false }));
   }, []);
 
   const loadCopilotModels = async () => {
@@ -404,10 +412,12 @@ function CopilotStatus({ setModels }: {
         <svg className="w-4 h-4 text-[var(--color-text-secondary)]" viewBox="0 0 16 16" fill="currentColor">
           <path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/>
         </svg>
-        {available === null ? (
+        {status === null ? (
           <span className="text-sm text-[var(--color-text-secondary)]">Checking Copilot CLI…</span>
-        ) : available ? (
-          <span className="text-sm text-green-600 dark:text-green-400 font-medium">✓ Copilot CLI available</span>
+        ) : status.available ? (
+          <span className="text-sm text-green-600 dark:text-green-400 font-medium">
+            ✓ Copilot CLI{status.version ? ` v${status.version}` : ""}{status.protocol_version ? ` (protocol ${status.protocol_version})` : ""}
+          </span>
         ) : (
           <span className="text-sm text-amber-600 dark:text-amber-400">Copilot CLI not found — install it from github.com/github/copilot</span>
         )}
@@ -415,7 +425,7 @@ function CopilotStatus({ setModels }: {
       <p className="text-xs text-[var(--color-text-secondary)]">
         Uses your GitHub CLI credentials (<code className="text-[var(--color-accent)]">gh auth login</code>). No API key needed.
       </p>
-      {available && (
+      {status?.available && (
         <button
           onClick={loadCopilotModels}
           disabled={loading}
@@ -663,6 +673,8 @@ function AIProviderTab({ settings, updateSetting, isAzure, isOAuth, hasToken, ca
                     if (m.context_length) {
                       updateSetting("aiContextLength", m.context_length);
                     }
+                    // Track vision capability for the selected model
+                    updateSetting("aiModelSupportsVision", m.capabilities?.vision === "true" ? "true" : "false");
                     setModels([]);
                     setModelFilter("");
                   }}
@@ -702,6 +714,11 @@ function AIProviderTab({ settings, updateSetting, isAzure, isOAuth, hasToken, ca
         <p className="text-xs text-[var(--color-text-secondary)]">
           When enabled and the model supports vision, images referenced in notes and sketches are sent to the AI.
         </p>
+        {settings.aiModelSupportsVision === "false" && settings.aiVisionMode && settings.aiVisionMode !== "off" && (
+          <p className="text-xs text-amber-600 dark:text-amber-400">
+            ⚠ The selected model does not support vision — images will be ignored.
+          </p>
+        )}
       </fieldset>
     </div>
   );

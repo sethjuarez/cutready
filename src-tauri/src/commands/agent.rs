@@ -151,10 +151,10 @@ pub struct AgentChatResult {
 
 use crate::engine::copilot;
 
-/// Check whether the Copilot CLI is installed and available.
+/// Check whether the Copilot CLI is installed, and get version info.
 #[tauri::command]
-pub async fn check_copilot_available() -> Result<bool, String> {
-    Ok(copilot::is_cli_available())
+pub async fn check_copilot_available() -> Result<copilot::CopilotCliStatus, String> {
+    Ok(copilot::get_cli_status().await)
 }
 
 /// List models available through the Copilot CLI.

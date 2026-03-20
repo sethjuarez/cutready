@@ -1069,7 +1069,7 @@ checksum = "9885fa71e26b8ab7855e2ec7cae6e9b380edff76cd052e07c683a0319d51b3a2"
 [[package]]
 name = "copilot-sdk"
 version = "0.1.17"
-source = "git+https://github.com/sethjuarez/copilot-sdk-rust.git?rev=95fb4dc#95fb4dc1fa6335a144c104e813b716009d15afef"
+source = "git+https://github.com/sethjuarez/copilot-sdk-rust.git?rev=b2f679e#b2f679e95e824da6c162ea2c67f6c3878ced1439"
 dependencies = [
  "chrono",
  "serde",
