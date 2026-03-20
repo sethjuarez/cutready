@@ -5,6 +5,16 @@ import { open as shellOpen } from "@tauri-apps/plugin-shell";
 import { BUILT_IN_AGENTS } from "./ChatPanel";
 import { ImageManagerTab } from "./ImageManagerTab";
 import { useToastStore } from "../stores/toastStore";
+import {
+  XMarkIcon,
+  ArrowPathIcon,
+  ChatBubbleLeftIcon,
+  CheckIcon,
+  ClipboardDocumentIcon,
+  TrashIcon,
+  Squares2X2Icon,
+  InformationCircleIcon,
+} from "@heroicons/react/24/outline";
 
 interface ModelInfo {
   id: string;
@@ -667,14 +677,9 @@ function AIProviderTab({ settings, updateSetting, isAzure, isOAuth, hasToken, ca
                 <path d="M12 2v4m0 12v4m-7.07-3.93l2.83-2.83m8.48-8.48l2.83-2.83M2 12h4m12 0h4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83" />
               </svg>
             ) : models.length > 0 ? (
-              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                <path d="M18 6L6 18M6 6l12 12" />
-              </svg>
+              <XMarkIcon className="w-4 h-4" />
             ) : (
-              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 12a9 9 0 11-6.22-8.56" />
-                <path d="M21 3v5h-5" />
-              </svg>
+              <ArrowPathIcon className="w-4 h-4" />
             )}
           </button>
         </div>
@@ -1113,7 +1118,7 @@ function FeedbackListTab() {
       <div className="flex items-center justify-between">
         <p className="text-xs text-[var(--color-text-secondary)]">
           {entries.length === 0
-            ? <>No feedback submitted yet. Use the <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="inline -mt-0.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg> button in the title bar.</>
+            ? <>No feedback submitted yet. Use the <ChatBubbleLeftIcon className="w-3 h-3 inline -mt-0.5" /> button in the title bar.</>
             : `${entries.length} feedback item${entries.length === 1 ? "" : "s"}`}
         </p>
         {entries.length > 0 && (
@@ -1128,16 +1133,12 @@ function FeedbackListTab() {
             >
               {copied ? (
                 <>
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
+                  <CheckIcon className="w-3 h-3" />
                   Copied All!
                 </>
               ) : (
                 <>
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                  </svg>
+                  <ClipboardDocumentIcon className="w-3 h-3" />
                   Copy All
                 </>
               )}
@@ -1146,9 +1147,7 @@ function FeedbackListTab() {
               onClick={clearAll}
               className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] rounded-lg font-medium transition-colors border bg-[var(--color-surface-alt)] text-[var(--color-text-secondary)] border-[var(--color-border)] hover:text-error hover:border-error/40"
             >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M3 6h18M8 6V4h8v2M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
-              </svg>
+              <TrashIcon className="w-3 h-3" />
               Clear All
             </button>
           </div>
@@ -1176,10 +1175,7 @@ function FeedbackListTab() {
               <p className="text-xs text-[var(--color-text)] whitespace-pre-wrap">{entry.feedback}</p>
               {entry.debug_log && (
                 <div className="mt-1.5 flex items-center gap-1 text-[10px] text-[var(--color-text-secondary)]">
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <rect x="4" y="10" width="16" height="12" rx="2" />
-                    <path d="M12 10v12" /><path d="M4 16h16" />
-                  </svg>
+                  <Squares2X2Icon className="w-2.5 h-2.5" />
                   Debug log attached ({entry.debug_log.split("\n").length} lines)
                 </div>
               )}
@@ -1207,18 +1203,14 @@ function FeedbackListTab() {
                 className="absolute top-2 right-16 opacity-0 group-hover:opacity-100 p-1 rounded text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)] transition-all"
                 title="Copy this item"
               >
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                </svg>
+                <ClipboardDocumentIcon className="w-3 h-3" />
               </button>
               <button
                 onClick={() => setConfirmDelete(isConfirming ? null : realIndex)}
                 className="absolute top-2 right-9 opacity-0 group-hover:opacity-100 p-1 rounded text-[var(--color-text-secondary)] hover:text-error hover:bg-[var(--color-surface)] transition-all"
                 title="Delete this item"
               >
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M3 6h18M8 6V4h8v2M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
-                </svg>
+                <TrashIcon className="w-3 h-3" />
               </button>
               <button
                 onClick={() => formatAndOpenIssue(entry, i)}
@@ -1310,7 +1302,7 @@ function RepositoryTab({ settings, updateSetting }: {
 
       {detectedRemote && !settings.repoRemoteUrl && (
         <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[var(--color-accent)]/10 border border-[var(--color-accent)]/20 text-xs text-[var(--color-accent)]">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><path d="M12 16v-4M12 8h.01" /></svg>
+          <InformationCircleIcon className="w-3.5 h-3.5" />
           Detected remote: <strong>{detectedRemote.url}</strong>
           <button
             onClick={() => updateSetting("repoRemoteUrl", detectedRemote.url)}

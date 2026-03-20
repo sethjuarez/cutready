@@ -3,6 +3,7 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
+import { ClockIcon, ArrowPathIcon, Squares2X2Icon, XMarkIcon, ArrowLeftIcon, ArrowRightIcon, PhotoIcon, ChevronLeftIcon, ChevronRightIcon } from "@heroicons/react/24/outline";
 import { ResizeHandle } from "./ResizeHandle";
 import type { PlanningRow } from "../types/sketch";
 import type { VisualControlHandle } from "./VisualCell";
@@ -146,10 +147,7 @@ export function SketchPreview({ rows, projectRoot, title, onClose, slides: slide
             <>
               <div className="w-px h-4 bg-[var(--color-border)]" />
               <span className="text-xs text-[var(--color-text-secondary)]">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="inline -mt-px mr-1">
-                  <circle cx="12" cy="12" r="10" />
-                  <polyline points="12 6 12 12 16 14" />
-                </svg>
+                <ClockIcon className="w-3 h-3 inline -mt-px mr-1" />
                 {row.time}
               </span>
             </>
@@ -163,10 +161,7 @@ export function SketchPreview({ rows, projectRoot, title, onClose, slides: slide
               className="flex items-center gap-1.5 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] transition-colors px-2 py-1 rounded-md hover:bg-[var(--color-surface-alt)]"
               title="Replay animation"
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="1 4 1 10 7 10" />
-                <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
-              </svg>
+              <ArrowPathIcon className="w-3.5 h-3.5" />
               Replay
             </button>
           )}
@@ -179,29 +174,14 @@ export function SketchPreview({ rows, projectRoot, title, onClose, slides: slide
             className="flex items-center gap-1.5 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors px-2 py-1 rounded-md hover:bg-[var(--color-surface-alt)]"
             title={`Move panel to ${panelSide === "left" ? "right" : "left"}`}
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              {panelSide === "left" ? (
-                <>
-                  <rect x="3" y="3" width="18" height="18" rx="2" />
-                  <line x1="15" y1="3" x2="15" y2="21" />
-                </>
-              ) : (
-                <>
-                  <rect x="3" y="3" width="18" height="18" rx="2" />
-                  <line x1="9" y1="3" x2="9" y2="21" />
-                </>
-              )}
-            </svg>
+            <Squares2X2Icon className="w-3.5 h-3.5" />
           </button>
           {/* Close */}
           <button
             onClick={onClose}
             className="flex items-center gap-1.5 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors px-2 py-1 rounded-md hover:bg-[var(--color-surface-alt)]"
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
+            <XMarkIcon className="w-3.5 h-3.5" />
             Close
           </button>
         </div>
@@ -240,19 +220,11 @@ export function SketchPreview({ rows, projectRoot, title, onClose, slides: slide
                   className="px-2.5 py-3 text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors"
                   title="Hide panel"
                 >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                    {panelSide === "left" ? (
-                      <>
-                        <polyline points="11 17 6 12 11 7" />
-                        <line x1="6" y1="12" x2="18" y2="12" />
-                      </>
-                    ) : (
-                      <>
-                        <polyline points="13 17 18 12 13 7" />
-                        <line x1="18" y1="12" x2="6" y2="12" />
-                      </>
-                    )}
-                  </svg>
+                  {panelSide === "left" ? (
+                    <ArrowLeftIcon className="w-3.5 h-3.5" />
+                  ) : (
+                    <ArrowRightIcon className="w-3.5 h-3.5" />
+                  )}
                 </button>
               </div>
               {/* Tab content */}
@@ -292,19 +264,11 @@ export function SketchPreview({ rows, projectRoot, title, onClose, slides: slide
               className={`absolute top-4 ${panelSide === "left" ? "left-4" : "right-4"} p-2 rounded-lg text-[var(--color-text-secondary)] hover:text-[var(--color-text)] bg-[var(--color-surface-alt)] hover:bg-[var(--color-surface-inset)] border border-[var(--color-border)] transition-colors`}
               title="Show panel"
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                {panelSide === "left" ? (
-                  <>
-                    <polyline points="13 7 18 12 13 17" />
-                    <line x1="18" y1="12" x2="6" y2="12" />
-                  </>
-                ) : (
-                  <>
-                    <polyline points="11 7 6 12 11 17" />
-                    <line x1="6" y1="12" x2="18" y2="12" />
-                  </>
-                )}
-              </svg>
+              {panelSide === "left" ? (
+                <ArrowRightIcon className="w-3.5 h-3.5" />
+              ) : (
+                <ArrowLeftIcon className="w-3.5 h-3.5" />
+              )}
             </button>
           )}
           {isTitle ? (
@@ -328,11 +292,7 @@ export function SketchPreview({ rows, projectRoot, title, onClose, slides: slide
           ) : (
             <div className="w-full max-w-2xl aspect-video rounded-lg border-2 border-dashed border-[var(--color-border)] flex items-center justify-center">
               <div className="flex flex-col items-center gap-2 text-[var(--color-text-secondary)]">
-                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" className="opacity-30">
-                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                  <circle cx="8.5" cy="8.5" r="1.5" />
-                  <polyline points="21 15 16 10 5 21" />
-                </svg>
+                <PhotoIcon className="w-12 h-12 opacity-30" />
                 <span className="text-xs">No screenshot</span>
               </div>
             </div>
@@ -348,9 +308,7 @@ export function SketchPreview({ rows, projectRoot, title, onClose, slides: slide
           className="p-2 rounded-lg text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-alt)] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
           title="Previous (←)"
         >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="15 18 9 12 15 6" />
-          </svg>
+          <ChevronLeftIcon className="w-5 h-5" />
         </button>
 
         {/* Slide dots */}
@@ -377,9 +335,7 @@ export function SketchPreview({ rows, projectRoot, title, onClose, slides: slide
           className="p-2 rounded-lg text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-alt)] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
           title="Next (→)"
         >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="9 18 15 12 9 6" />
-          </svg>
+          <ChevronRightIcon className="w-5 h-5" />
         </button>
       </div>
     </div>

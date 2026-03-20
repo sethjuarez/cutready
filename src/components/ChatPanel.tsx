@@ -24,6 +24,24 @@ import { useSettings, type AgentPreset } from "../hooks/useSettings";
 import { VersionHistory } from "./VersionHistory";
 import { SketchIcon, StoryboardIcon, NoteIcon } from "./Icons";
 import type { ChatMessage, ChatSessionSummary, ToolCall } from "../types/sketch";
+import {
+  SparklesIcon,
+  ClockIcon,
+  PaperAirplaneIcon,
+  DocumentIcon,
+  GlobeAltIcon,
+  WrenchIcon,
+  TrashIcon,
+  PlusIcon,
+  ArrowDownTrayIcon,
+  PaperClipIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
+  CheckIcon,
+  UserIcon,
+  XMarkIcon,
+  Bars3Icon,
+} from "@heroicons/react/24/outline";
 
 // ── Helpers ──────────────────────────────────────────────────────
 
@@ -273,139 +291,72 @@ export function resolveAgentPrompt(agentId: string, customAgents: AgentPreset[])
   return builtin?.prompt ?? BUILT_IN_AGENTS[0].prompt;
 }
 
-// ── SVG Icons (matching app's Feather/Lucide style) ──────────────
+// ── SVG Icons (using Heroicons) ──────────────────────────────────
 
 function IconSparkles({ size = 14 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z" />
-      <path d="M20 3v4" /><path d="M22 5h-4" />
-    </svg>
-  );
+  return <SparklesIcon width={size} height={size} />;
 }
 
 function IconHistory({ size = 14 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-      <path d="M3 3v5h5" /><path d="M12 7v5l4 2" />
-    </svg>
-  );
+  return <ClockIcon width={size} height={size} />;
 }
 
 function IconSend({ size = 14 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z" />
-      <path d="m21.854 2.147-10.94 10.939" />
-    </svg>
-  );
+  return <PaperAirplaneIcon width={size} height={size} />;
 }
 
 function IconFile({ size = 12 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" />
-      <path d="M14 2v4a2 2 0 0 0 2 2h4" />
-    </svg>
-  );
+  return <DocumentIcon width={size} height={size} />;
 }
 
 function IconGlobe({ size = 12 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="10" />
-      <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20" />
-      <path d="M2 12h20" />
-    </svg>
-  );
+  return <GlobeAltIcon width={size} height={size} />;
 }
 
 function IconWrench({ size = 12 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
-    </svg>
-  );
+  return <WrenchIcon width={size} height={size} />;
 }
 
 function IconTrash({ size = 12 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M3 6h18" /><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
-      <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
-    </svg>
-  );
+  return <TrashIcon width={size} height={size} />;
 }
 
 function IconPlus({ size = 14 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M5 12h14" /><path d="M12 5v14" />
-    </svg>
-  );
+  return <PlusIcon width={size} height={size} />;
 }
 
 function IconSave({ size = 14 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
-      <polyline points="17 21 17 13 7 13 7 21" />
-      <polyline points="7 3 7 8 15 8" />
-    </svg>
-  );
+  return <ArrowDownTrayIcon width={size} height={size} />;
 }
 
 function IconPaperclip({ size = 14 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48" />
-    </svg>
-  );
+  return <PaperClipIcon width={size} height={size} />;
 }
 
 function IconTool({ size = 14 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
-    </svg>
-  );
+  return <WrenchIcon width={size} height={size} />;
 }
 
 function IconChevronDown({ size = 10 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="m6 9 6 6 6-6" />
-    </svg>
-  );
+  return <ChevronDownIcon width={size} height={size} />;
 }
 
 function IconChevron({ size = 10, expanded = false }: { size?: number; expanded?: boolean }) {
   return (
-    <svg
-      width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+    <ChevronRightIcon
+      width={size}
+      height={size}
       style={{ transform: expanded ? "rotate(90deg)" : "rotate(0deg)", transition: "transform 0.15s" }}
-    >
-      <path d="m9 18 6-6-6-6" />
-    </svg>
+    />
   );
 }
 
 function IconCheck({ size = 12 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="ml-auto shrink-0">
-      <path d="M20 6 9 17l-5-5" />
-    </svg>
-  );
+  return <CheckIcon width={size} height={size} className="ml-auto shrink-0" />;
 }
 
 function IconUser({ size = 12 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
-      <circle cx="12" cy="7" r="4" />
-    </svg>
-  );
+  return <UserIcon width={size} height={size} />;
 }
 
 // ── Dropdown height constraint hook ──────────────────────────────
@@ -1373,9 +1324,7 @@ function ChatTab() {
                     onClick={() => { removeReference(ref.path); if (expandedWebRef === ref.path) setExpandedWebRef(null); }}
                     title="Remove"
                   >
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                      <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-                    </svg>
+                    <XMarkIcon className="w-2.5 h-2.5" />
                   </button>
                 </span>
                 );
@@ -1728,11 +1677,9 @@ function WebRefChip({ url }: { url: string }) {
         onClick={handleExpand}
         className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[var(--color-surface)] border border-[var(--color-border)] text-[11px] text-[var(--color-accent)] hover:bg-[var(--color-surface-toolbar)] transition-colors font-mono align-baseline"
       >
-        <svg className="shrink-0" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><path d="M2 12h20" /><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" /></svg>
+        <GlobeAltIcon className="w-2.5 h-2.5 shrink-0" />
         <span className="max-w-[200px] truncate">{shortUrl}</span>
-        <svg className={`shrink-0 transition-transform ${expanded ? "rotate-180" : ""}`} width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-          <polyline points="6 9 12 15 18 9" />
-        </svg>
+        <ChevronDownIcon className={`w-2 h-2 shrink-0 transition-transform ${expanded ? "rotate-180" : ""}`} />
       </button>
       {expanded && (
         <span className="block mt-1">
@@ -1763,9 +1710,7 @@ function MessageRow({ message, projectRoot, onDelete }: { message: ChatMessage; 
             className="shrink-0 mt-2 p-1 rounded opacity-0 group-hover:opacity-100 text-[var(--color-text-secondary)] hover:text-error hover:bg-error/10 transition-all"
             title="Remove message"
           >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M18 6L6 18M6 6l12 12" />
-            </svg>
+            <XMarkIcon className="w-3 h-3" />
           </button>
         )}
         <div className="bg-[#6b5ce7]/[0.05] border border-[#6b5ce7]/40 dark:bg-[#a49afa]/10 dark:border-[#a49afa]/40 rounded-xl rounded-br-sm px-3 py-2 text-[13px] text-[var(--color-text)] whitespace-pre-wrap break-words leading-[1.6] max-w-[85%]">
@@ -1792,12 +1737,7 @@ function MessageRow({ message, projectRoot, onDelete }: { message: ChatMessage; 
     return (
       <div className="px-3.5 py-1">
         <div className="inline-flex items-center gap-1.5 px-2 py-0.5 text-[11px] rounded border transition-colors bg-[var(--color-accent)]/10 text-[var(--color-text-secondary)] border-[var(--color-border)]">
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="opacity-70 shrink-0">
-            <path d="M4 14h16" />
-            <path d="M4 10h16" />
-            <path d="M8 6h8" />
-            <path d="M8 18h8" />
-          </svg>
+          <Bars3Icon className="w-3 h-3 opacity-70 shrink-0" />
           <span className="font-medium truncate">{textContent(message.content)}</span>
         </div>
       </div>
@@ -2047,9 +1987,7 @@ function ModelPickerDropdown({
               }}
             >
               {model === currentModel && (
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="20 6 9 17 4 12" />
-                </svg>
+                <CheckIcon className="w-2.5 h-2.5" />
               )}
               <span className={model === currentModel ? "" : "ml-[18px]"}>{model}</span>
             </button>

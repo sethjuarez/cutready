@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useAppStore } from "../stores/appStore";
 import { useSettings } from "../hooks/useSettings";
+import { CheckIcon, ArrowUpIcon, ArrowDownIcon, ExclamationTriangleIcon, GlobeAltIcon } from "@heroicons/react/24/outline";
 
 /**
  * SyncBar — shown at the top of the Snapshots panel when a remote is configured.
@@ -117,28 +118,20 @@ export function SyncBar() {
           <div className="flex items-center gap-1.5 text-[10px]">
             {isUpToDate ? (
               <span className="text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="20 6 9 17 4 12" />
-                </svg>
+                <CheckIcon className="w-2.5 h-2.5" />
                 Up to date
               </span>
             ) : (
               <>
                 {ahead > 0 && (
                   <span className="text-[var(--color-accent)] flex items-center gap-0.5" title={`${ahead} unpublished snapshot${ahead !== 1 ? "s" : ""}`}>
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                      <line x1="12" y1="19" x2="12" y2="5" />
-                      <polyline points="5 12 12 5 19 12" />
-                    </svg>
+                    <ArrowUpIcon className="w-2.5 h-2.5" />
                     {ahead}
                   </span>
                 )}
                 {behind > 0 && (
                   <span className="text-warning flex items-center gap-0.5" title={`${behind} incoming snapshot${behind !== 1 ? "s" : ""}`}>
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                      <line x1="12" y1="5" x2="12" y2="19" />
-                      <polyline points="19 12 12 19 5 12" />
-                    </svg>
+                    <ArrowDownIcon className="w-2.5 h-2.5" />
                     {behind}
                   </span>
                 )}
@@ -185,10 +178,7 @@ export function SyncBar() {
       {/* Conflict / diverge banner */}
       {syncError && syncError.includes("diverged") && (
         <div className="mt-1.5 flex items-center gap-1.5 px-2 py-1.5 rounded bg-warning/10 border border-warning/20">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-warning shrink-0">
-            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-            <line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
-          </svg>
+          <ExclamationTriangleIcon className="text-warning shrink-0 w-3 h-3" />
           <span className="text-[10px] text-warning flex-1">
             Timelines have diverged. Manual merge may be required.
           </span>
@@ -200,9 +190,7 @@ export function SyncBar() {
         <div className="mt-1.5 flex items-center gap-1.5 text-[10px] text-error" title={syncError}>
           {(syncError.includes("network") || syncError.includes("resolve host") || syncError.includes("Could not resolve") || syncError.includes("timed out")) ? (
             <>
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
-                <line x1="1" y1="1" x2="23" y2="23" /><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55" /><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39" /><path d="M10.71 5.05A16 16 0 0 1 22.56 9" /><path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88" /><path d="M8.53 16.11a6 6 0 0 1 6.95 0" /><line x1="12" y1="20" x2="12.01" y2="20" />
-              </svg>
+              <GlobeAltIcon className="shrink-0 w-2.5 h-2.5" />
               <span className="truncate">Offline — changes saved locally</span>
             </>
           ) : (

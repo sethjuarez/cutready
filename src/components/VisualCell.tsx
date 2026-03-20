@@ -1,6 +1,7 @@
 import { useRef, useCallback, useState, useEffect } from "react";
 import { DslRenderer, type ElucimDocument, type DslRendererRef } from "@elucim/dsl";
 import { invoke } from "@tauri-apps/api/core";
+import { PlayIcon } from "@heroicons/react/24/outline";
 import { ELUCIM_THEME } from "../theme/elucimTheme";
 
 interface VisualCellProps {
@@ -169,9 +170,7 @@ export default function VisualCell({ visualPath, mode, onClick, className, contr
 
         {/* Hover overlay with play icon */}
         <div className="absolute inset-0 bg-black/30 opacity-0 group-hover/vis:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" className="text-white/90">
-            <polygon points="5,3 19,12 5,21" />
-          </svg>
+          <PlayIcon className="w-5 h-5 text-white/90" />
         </div>
       </div>
     );

@@ -1,5 +1,6 @@
 import * as d3 from "d3";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ArrowsRightLeftIcon, ArrowDownIcon, ArrowRightIcon, ArrowsPointingOutIcon, MinusIcon, PlusIcon } from "@heroicons/react/24/outline";
 import { useAppStore } from "../stores/appStore";
 import type { GraphNode, TimelineInfo } from "../types/sketch";
 
@@ -340,10 +341,7 @@ export function HistoryGraphTab() {
   if (graphNodes.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-[var(--color-text-secondary)]">
-        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="opacity-30 mb-3">
-          <circle cx="6" cy="6" r="2.5" /><circle cx="18" cy="10" r="2.5" /><circle cx="6" cy="18" r="2.5" />
-          <path d="M6 8.5v7" /><path d="M6 8.5c0 3 4 4.5 9.5 4" />
-        </svg>
+        <ArrowsRightLeftIcon className="w-12 h-12 opacity-30 mb-3" />
         <p className="text-xs">No snapshots yet</p>
         <p className="text-[10px] opacity-60 mt-1">Save your first snapshot to see the history graph</p>
       </div>
@@ -368,13 +366,9 @@ export function HistoryGraphTab() {
           title={`Switch to ${dir === "vertical" ? "horizontal" : "vertical"} layout`}
         >
           {dir === "vertical" ? (
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 3v18" /><path d="M5 12l7 7 7-7" />
-            </svg>
+            <ArrowDownIcon className="w-3 h-3" />
           ) : (
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M3 12h18" /><path d="M12 5l7 7-7 7" />
-            </svg>
+            <ArrowRightIcon className="w-3 h-3" />
           )}
           {dir === "vertical" ? "Vertical" : "Horizontal"}
         </button>
@@ -385,9 +379,7 @@ export function HistoryGraphTab() {
           className="flex items-center gap-1 px-2 py-1 rounded text-[10px] text-[var(--color-text-secondary)] hover:bg-[var(--color-border)] transition-colors"
           title="Fit graph to view"
         >
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
-          </svg>
+          <ArrowsPointingOutIcon className="w-3 h-3" />
           Fit
         </button>
 
@@ -398,14 +390,14 @@ export function HistoryGraphTab() {
             className="px-1.5 py-1 text-[var(--color-text-secondary)] hover:bg-[var(--color-border)] transition-colors"
             title="Zoom out"
           >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="5" y1="12" x2="19" y2="12" /></svg>
+            <MinusIcon className="w-3 h-3" />
           </button>
           <button
             onClick={handleZoomIn}
             className="px-1.5 py-1 text-[var(--color-text-secondary)] hover:bg-[var(--color-border)] transition-colors border-l border-[var(--color-border)]"
             title="Zoom in"
           >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+            <PlusIcon className="w-3 h-3" />
           </button>
         </div>
 

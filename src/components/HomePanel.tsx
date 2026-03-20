@@ -3,6 +3,7 @@ import { useAppStore } from "../stores/appStore";
 import { open } from "@tauri-apps/plugin-dialog";
 import { invoke } from "@tauri-apps/api/core";
 import { useToastStore } from "../stores/toastStore";
+import { PlusIcon, ArrowDownTrayIcon, FolderIcon, XMarkIcon } from "@heroicons/react/24/outline";
 
 /* ── Decorative icon components ───────────────────────────── */
 
@@ -27,22 +28,16 @@ function LogoMark() {
 function ActionIcon({ type }: { type: "new" | "open" | "clone" }) {
   if (type === "new") {
     return (
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M12 5v14M5 12h14" />
-      </svg>
+      <PlusIcon className="w-5 h-5" />
     );
   }
   if (type === "clone") {
     return (
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M4 19.5A2.5 2.5 0 016.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z" /><path d="M12 8v6M9 11l3-3 3 3" />
-      </svg>
+      <ArrowDownTrayIcon className="w-5 h-5" />
     );
   }
   return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />
-    </svg>
+    <FolderIcon className="w-5 h-5" />
   );
 }
 
@@ -412,10 +407,7 @@ export function HomePanel() {
                           className="p-1 rounded opacity-0 group-hover:opacity-100 text-[var(--color-text-secondary)] hover:text-error transition-all"
                           title="Remove from recent"
                         >
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <line x1="18" y1="6" x2="6" y2="18" />
-                            <line x1="6" y1="6" x2="18" y2="18" />
-                          </svg>
+                          <XMarkIcon className="w-3 h-3" />
                         </button>
                       </div>
                     </div>

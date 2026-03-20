@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { UserIcon } from "@heroicons/react/24/outline";
 import { useAppStore } from "../stores/appStore";
 
 interface IdentityStatus {
@@ -107,19 +108,7 @@ export function IdentityDialog() {
         {/* Header */}
         <div className="flex items-center gap-2.5 px-5 pt-5 pb-3">
           <div className="p-2 rounded-lg bg-[var(--color-accent)]/10">
-            <svg
-              width="18"
-              height="18"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="var(--color-accent)"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-              <circle cx="12" cy="7" r="4" />
-            </svg>
+            <UserIcon className="w-4.5 h-4.5" style={{ stroke: "var(--color-accent)" }} />
           </div>
           <div>
             <h2 className="text-sm font-semibold text-[var(--color-text)]">

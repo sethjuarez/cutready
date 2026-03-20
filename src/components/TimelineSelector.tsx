@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAppStore } from "../stores/appStore";
+import { ArrowsRightLeftIcon, ChevronDownIcon, CheckIcon, PlusIcon } from "@heroicons/react/24/outline";
 
 /**
  * TimelineSelector — dropdown for switching timelines (branches).
@@ -114,16 +115,9 @@ export function TimelineSelector() {
         className="flex items-center gap-1.5 px-2 py-1 rounded text-[10px] text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-border)]/50 transition-colors max-w-[140px]"
         title={`Branch: ${active?.label ?? "main"}`}
       >
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
-          <line x1="6" y1="3" x2="6" y2="15" />
-          <circle cx="18" cy="6" r="3" />
-          <circle cx="6" cy="18" r="3" />
-          <path d="M18 9a9 9 0 0 1-9 9" />
-        </svg>
+        <ArrowsRightLeftIcon className="shrink-0 w-3 h-3" />
         <span className="truncate">{active?.label ?? "main"}</span>
-        <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 opacity-50">
-          <polyline points="6 9 12 15 18 9" />
-        </svg>
+        <ChevronDownIcon className="shrink-0 opacity-50 w-2 h-2" />
       </button>
 
       {/* Dropdown */}
@@ -157,9 +151,7 @@ export function TimelineSelector() {
                 {/* Consistent icon area */}
                 <span className="w-[10px] shrink-0 flex items-center justify-center">
                   {t.is_active ? (
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                      <polyline points="20 6 9 17 4 12" />
-                    </svg>
+                    <CheckIcon className="w-2.5 h-2.5" />
                   ) : (
                     <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-text-secondary)]/30" />
                   )}
@@ -223,9 +215,7 @@ export function TimelineSelector() {
                 onClick={() => setShowNew(true)}
                 className="w-full flex items-center gap-2 px-3 py-2 text-[11px] text-[var(--color-accent)] hover:bg-[var(--color-accent)]/5 transition-colors"
               >
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
-                </svg>
+                <PlusIcon className="w-2.5 h-2.5" />
                 New Branch
               </button>
             )}

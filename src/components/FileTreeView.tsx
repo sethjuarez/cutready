@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useAppStore } from "../stores/appStore";
 import { NoteIcon, SketchIcon, StoryboardIcon } from "./Icons";
+import { ChevronRightIcon, FolderIcon, DocumentIcon } from "@heroicons/react/24/outline";
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -87,10 +88,7 @@ function fileIcon(ext: string) {
       return <NoteIcon className="shrink-0" />;
     default:
       return (
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 opacity-50">
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-          <polyline points="14 2 14 8 20 8" />
-        </svg>
+        <DocumentIcon className="w-3.5 h-3.5 shrink-0 opacity-50" />
       );
   }
 }
@@ -215,19 +213,8 @@ function TreeNodeRow({
           className="w-full flex items-center gap-1.5 px-3 py-1 text-left text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-alt)] transition-colors"
           style={{ paddingLeft: `${12 + depth * 16}px` }}
         >
-          <svg
-            width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-            strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-            className={`shrink-0 transition-transform ${expanded ? "rotate-90" : ""}`}
-          >
-            <polyline points="9 18 15 12 9 6" />
-          </svg>
-          <svg
-            width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-            strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0"
-          >
-            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
-          </svg>
+          <ChevronRightIcon className={`w-3 h-3 shrink-0 transition-transform ${expanded ? "rotate-90" : ""}`} />
+          <FolderIcon className="w-3.5 h-3.5 shrink-0" />
           <span className="text-xs font-medium truncate">{node.name}</span>
           <span className="text-[10px] text-[var(--color-text-secondary)]/50 ml-auto shrink-0">
             {node.children.length}

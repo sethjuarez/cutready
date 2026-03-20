@@ -4,6 +4,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
+import { ChevronLeftIcon, SparklesIcon, PlayIcon, ComputerDesktopIcon, PlusIcon, XMarkIcon, FolderIcon } from "@heroicons/react/24/outline";
 import { useAppStore } from "../stores/appStore";
 import { useToastStore } from "../stores/toastStore";
 import { ScriptTable } from "./ScriptTable";
@@ -373,9 +374,7 @@ The Actions describe what happens on screen — use them as visual design hints.
             onClick={closeSketch}
             className="flex items-center gap-1.5 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors mb-6"
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="15 18 9 12 15 6" />
-            </svg>
+            <ChevronLeftIcon className="w-3.5 h-3.5" />
             Back to storyboard
           </button>
         )}
@@ -383,7 +382,7 @@ The Actions describe what happens on screen — use them as visual design hints.
         {/* AI updated indicator */}
         {aiUpdatedFlash && (
           <div className="mb-4 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[var(--color-accent)]/10 border border-[var(--color-accent)]/20 text-xs text-[var(--color-accent)] animate-pulse">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.09 6.26L20.18 10l-6.09 1.74L12 18l-2.09-6.26L3.82 10l6.09-1.74L12 2z" /></svg>
+            <SparklesIcon className="w-3 h-3" />
             Updated by AI
           </div>
         )}
@@ -414,9 +413,7 @@ The Actions describe what happens on screen — use them as visual design hints.
                 className="absolute right-1 top-1/2 -translate-y-1/2 opacity-60 hover:opacity-100 p-1 rounded text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 transition-all"
                 title="Improve title with AI"
               >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M12 2l2.09 6.26L20.18 10l-6.09 1.74L12 18l-2.09-6.26L3.82 10l6.09-1.74L12 2z" />
-                </svg>
+                <SparklesIcon className="w-3.5 h-3.5" />
               </button>
             )}
           </div>
@@ -437,9 +434,7 @@ The Actions describe what happens on screen — use them as visual design hints.
                 className="flex items-center gap-1.5 shrink-0 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] px-3 py-1.5 rounded-lg border border-[var(--color-border)] hover:border-[var(--color-accent)]/40 hover:bg-[var(--color-accent)]/5 transition-colors"
                 title="Preview sketch (presentation mode)"
               >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                  <polygon points="5 3 19 12 5 21 5 3" />
-                </svg>
+                <PlayIcon className="w-3.5 h-3.5" />
                 Preview
               </button>
 
@@ -457,11 +452,7 @@ The Actions describe what happens on screen — use them as visual design hints.
                         onClick={() => launchPreviewOnMonitor(m)}
                         className="w-full px-3 py-2 text-left text-sm text-[var(--color-text)] hover:bg-[var(--color-surface-alt)] transition-colors flex items-center gap-2"
                       >
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                          <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
-                          <line x1="8" y1="21" x2="16" y2="21" />
-                          <line x1="12" y1="17" x2="12" y2="21" />
-                        </svg>
+                        <ComputerDesktopIcon className="w-3.5 h-3.5" />
                         <span>{m.name || `Monitor ${m.id}`}</span>
                         {m.is_primary && (
                           <span className="text-[10px] text-[var(--color-accent)] font-medium ml-auto">Primary</span>
@@ -528,9 +519,7 @@ The Actions describe what happens on screen — use them as visual design hints.
               className="absolute right-2 top-2 opacity-60 hover:opacity-100 p-1 rounded text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 transition-all"
               title={localDesc ? "Improve description with AI" : "Generate description with AI"}
             >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12 2l2.09 6.26L20.18 10l-6.09 1.74L12 18l-2.09-6.26L3.82 10l6.09-1.74L12 2z" />
-              </svg>
+              <SparklesIcon className="w-3 h-3" />
             </button>
           )}
         </div>
@@ -551,10 +540,7 @@ The Actions describe what happens on screen — use them as visual design hints.
               className="flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 transition-colors"
               title={localRows.length === 0 ? "Generate plan with AI" : "Improve entire sketch with AI"}
             >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12 2l2.09 6.26L20.18 10l-6.09 1.74L12 18l-2.09-6.26L3.82 10l6.09-1.74L12 2z" />
-                <path d="M19 15l1.04 3.13L23.18 19l-3.14.87L19 23l-1.04-3.13L14.82 19l3.14-.87L19 15z" opacity="0.6" />
-              </svg>
+              <SparklesIcon className="w-3 h-3" />
               {localRows.length === 0 ? "Generate" : "Improve"}
             </button>
           </div>
@@ -613,10 +599,7 @@ The row already has a visual and design_plan. Read the sketch with read_sketch f
             }}
             className="flex items-center gap-1.5 mt-3 px-3 py-2 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] border border-dashed border-[var(--color-border)] hover:border-[var(--color-accent)]/40 rounded-lg transition-colors w-full justify-center"
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="12" y1="5" x2="12" y2="19" />
-              <line x1="5" y1="12" x2="19" y2="12" />
-            </svg>
+            <PlusIcon className="w-3.5 h-3.5" />
             Add Row
           </button>
         </div>
@@ -637,9 +620,7 @@ The row already has a visual and design_plan. Read the sketch with read_sketch f
             <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--color-border)]">
               <span className="text-sm font-medium text-[var(--color-text)]">Pick an image</span>
               <button onClick={() => setImagePickerRowIdx(null)} className="text-[var(--color-text-secondary)] hover:text-[var(--color-text)]">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-                </svg>
+                <XMarkIcon className="w-3.5 h-3.5" />
               </button>
             </div>
             <div className="flex-1 overflow-y-auto p-3">
@@ -676,9 +657,7 @@ The row already has a visual and design_plan. Read the sketch with read_sketch f
                 }}
                 className="w-full flex items-center justify-center gap-1.5 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] px-3 py-2 rounded-lg border border-dashed border-[var(--color-border)] hover:border-[var(--color-accent)] hover:bg-[var(--color-accent)]/5 transition-colors"
               >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />
-                </svg>
+                <FolderIcon className="w-3 h-3" />
                 Browse files...
               </button>
             </div>
@@ -695,9 +674,7 @@ The row already has a visual and design_plan. Read the sketch with read_sketch f
                 Generate Visual — Row {visualPromptRow + 1}
               </span>
               <button onClick={() => setVisualPromptRow(null)} className="text-[var(--color-text-secondary)] hover:text-[var(--color-text)]">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-                </svg>
+                <XMarkIcon className="w-3.5 h-3.5" />
               </button>
             </div>
             <div className="px-4 py-3 flex flex-col gap-3">
@@ -731,9 +708,7 @@ The row already has a visual and design_plan. Read the sketch with read_sketch f
                 onClick={handleGenerateVisual}
                 className="px-4 py-1.5 text-xs font-medium text-white bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] rounded-md transition-colors flex items-center gap-1.5"
               >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3z" />
-                </svg>
+                <SparklesIcon className="w-3 h-3" />
                 Generate
                 <span className="text-[10px] opacity-60 ml-1">⌘↵</span>
               </button>

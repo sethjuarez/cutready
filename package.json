@@ -24,6 +24,7 @@
     "@fontsource/geist-sans": "^5.2.5",
     "@fontsource/inter": "^5.2.8",
     "@fontsource/lora": "^5.2.8",
+    "@heroicons/react": "^2.2.0",
     "@lexical/table": "^0.41.0",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-deep-link": "^2.4.7",

@@ -4,6 +4,7 @@ import { SnapshotGraph } from "./SnapshotGraph";
 import { SnapshotDiffPanel } from "./SnapshotDiffPanel";
 import { SyncBar } from "./SyncBar";
 import { TimelineSelector } from "./TimelineSelector";
+import { ArrowPathIcon, MagnifyingGlassIcon, ClockIcon, ArrowDownTrayIcon } from "@heroicons/react/24/outline";
 
 export function VersionHistory() {
   const graphNodes = useAppStore((s) => s.graphNodes);
@@ -128,10 +129,7 @@ export function VersionHistory() {
               className="group/btn flex items-center gap-1 p-1 rounded text-[var(--color-text-secondary)] hover:text-error transition-colors"
               title="Discard changes"
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
-                <polyline points="1 4 1 10 7 10" />
-                <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
-              </svg>
+              <ArrowPathIcon className="shrink-0 w-3.5 h-3.5" />
               <span className="max-w-0 overflow-hidden group-hover/btn:max-w-[10rem] transition-all duration-200 whitespace-nowrap text-[10px]">
                 Discard
               </span>
@@ -142,18 +140,14 @@ export function VersionHistory() {
             className={`p-1 rounded transition-colors ${showSearch ? "text-[var(--color-accent)]" : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"}`}
             title="Search snapshots"
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
-            </svg>
+            <MagnifyingGlassIcon className="w-3.5 h-3.5" />
           </button>
           <button
             onClick={() => openTab({ type: "history", path: "__history__", title: "History" })}
             className="group/btn flex items-center gap-1 p-1 rounded text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] transition-colors"
             title="Open full history graph"
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
-              <circle cx="12" cy="12" r="3" /><line x1="12" y1="3" x2="12" y2="9" /><line x1="12" y1="15" x2="12" y2="21" />
-            </svg>
+            <ClockIcon className="shrink-0 w-3.5 h-3.5" />
             <span className="max-w-0 overflow-hidden group-hover/btn:max-w-[10rem] transition-all duration-200 whitespace-nowrap text-[10px]">
               History
             </span>
@@ -163,11 +157,7 @@ export function VersionHistory() {
             className="group/btn flex items-center gap-1 p-1 rounded text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] transition-colors"
             title="Save Workspace Snapshot (Ctrl+S)"
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
-              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
-              <polyline points="17 21 17 13 7 13 7 21" />
-              <polyline points="7 3 7 8 15 8" />
-            </svg>
+            <ArrowDownTrayIcon className="shrink-0 w-3.5 h-3.5" />
             <span className="max-w-0 overflow-hidden group-hover/btn:max-w-[10rem] transition-all duration-200 whitespace-nowrap text-[10px]">
               Save
             </span>

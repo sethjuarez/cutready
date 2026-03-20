@@ -1,4 +1,5 @@
 import { useCallback, useState } from "react";
+import { ArrowsRightLeftIcon } from "@heroicons/react/24/outline";
 import { useAppStore } from "../stores/appStore";
 import type { ConflictFile, FieldConflict, TextConflictRegion, FileResolution } from "../types/sketch";
 
@@ -48,10 +49,7 @@ export function MergeConflictPanel() {
       <div className="flex items-center gap-3 px-4 py-3 border-b border-[var(--color-border)] bg-[var(--color-surface)]">
         <div className="flex items-center gap-2">
           <div className="p-1.5 rounded-md bg-warning/10">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-warning">
-              <path d="M8 18L5 15l3-3" />
-              <path d="M5 15h7a4 4 0 0 0 4-4V4" />
-            </svg>
+            <ArrowsRightLeftIcon className="w-4 h-4 text-warning" />
           </div>
           <div>
             <h2 className="text-sm font-semibold text-[var(--color-text)]">

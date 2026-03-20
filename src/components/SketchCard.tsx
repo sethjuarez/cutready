@@ -1,4 +1,5 @@
 import type { SketchSummary } from "../types/sketch";
+import { DocumentIcon, XMarkIcon } from "@heroicons/react/24/outline";
 
 interface SketchCardProps {
   sketch: SketchSummary;
@@ -21,10 +22,7 @@ export function SketchCard({ sketch, onOpen, onRemove }: SketchCardProps) {
     >
       {/* Icon */}
       <div className="mt-0.5 text-[var(--color-text-secondary)]">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-          <polyline points="14 2 14 8 20 8" />
-        </svg>
+        <DocumentIcon className="w-4 h-4" />
       </div>
 
       {/* Content */}
@@ -47,10 +45,7 @@ export function SketchCard({ sketch, onOpen, onRemove }: SketchCardProps) {
           className="opacity-0 group-hover:opacity-100 p-1 rounded text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-all"
           title="Remove from storyboard"
         >
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="18" y1="6" x2="6" y2="18" />
-            <line x1="6" y1="6" x2="18" y2="18" />
-          </svg>
+          <XMarkIcon className="w-3 h-3" />
         </button>
       )}
     </div>
@@ -70,10 +65,7 @@ export function SketchPickerItem({
       onClick={onSelect}
       className="w-full flex items-center gap-2 px-3 py-2 text-left rounded-lg hover:bg-[var(--color-surface-alt)] transition-colors"
     >
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-[var(--color-text-secondary)] shrink-0">
-        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-        <polyline points="14 2 14 8 20 8" />
-      </svg>
+      <DocumentIcon className="w-3.5 h-3.5 text-[var(--color-text-secondary)] shrink-0" />
       <span className="text-xs truncate">{sketch.title}</span>
       <span className="text-[10px] text-[var(--color-text-secondary)] ml-auto shrink-0">
         {sketch.row_count} rows

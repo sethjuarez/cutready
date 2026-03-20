@@ -15,6 +15,18 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
+import {
+  EyeIcon,
+  XMarkIcon,
+  SparklesIcon,
+  ArrowsPointingOutIcon,
+  MagnifyingGlassIcon,
+  PhotoIcon,
+  FolderIcon,
+  PlusIcon,
+  CameraIcon,
+  ArrowDownOnSquareIcon,
+} from "@heroicons/react/24/outline";
 import type { PlanningRow } from "../types/sketch";
 import type { ElucimDocument } from "@elucim/dsl";
 
@@ -296,10 +308,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
               bg-[var(--color-accent)]/8 text-[var(--color-accent)] border-[var(--color-accent)]/20
               hover:bg-[var(--color-accent)]/15 hover:border-[var(--color-accent)]/30"
           >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
-              <circle cx="12" cy="12" r="3" />
-            </svg>
+            <EyeIcon className="w-3 h-3" />
             Show AI Changes
           </button>
         </div>
@@ -400,10 +409,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
             onClick={() => setLightboxSrc(null)}
             className="absolute top-4 right-4 p-2 rounded-full bg-black/50 text-white/80 hover:text-white transition-colors"
           >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
+            <XMarkIcon className="w-5 h-5" />
           </button>
         </div>
       )}
@@ -465,11 +471,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
                     title="Save changes"
                     className="p-1.5 rounded-lg text-[var(--color-accent)] hover:text-[var(--color-accent-hover)] hover:bg-[var(--color-surface)] transition-colors"
                   >
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
-                      <polyline points="17 21 17 13 7 13 7 21" />
-                      <polyline points="7 3 7 8 15 8" />
-                    </svg>
+                    <ArrowDownOnSquareIcon className="w-[18px] h-[18px]" />
                   </button>
                 )}
                 {/* Close button */}
@@ -477,10 +479,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
                   onClick={closeLightbox}
                   className="p-1.5 rounded-lg text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)] transition-colors"
                 >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <line x1="18" y1="6" x2="6" y2="18" />
-                    <line x1="6" y1="6" x2="18" y2="18" />
-                  </svg>
+                  <XMarkIcon className="w-4.5 h-4.5" />
                 </button>
               </div>
             </div>
@@ -541,9 +540,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
                   disabled={!nudgeInput.trim()}
                   className="p-1.5 rounded-lg text-[var(--color-text-secondary)] hover:text-[var(--color-text)] disabled:opacity-30 transition-colors"
                 >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M12 3l1.912 5.813a2 2 0 0 0 1.275 1.275L21 12l-5.813 1.912a2 2 0 0 0-1.275 1.275L12 21l-1.912-5.813a2 2 0 0 0-1.275-1.275L3 12l5.813-1.912a2 2 0 0 0 1.275-1.275L12 3z" />
-                  </svg>
+                  <SparklesIcon className="w-4 h-4" />
                 </button>
               </div>
             )}
@@ -565,7 +562,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
             onClick={() => setUndoToast(null)}
             className="p-0.5 text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors"
           >
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+            <XMarkIcon className="w-2.5 h-2.5" />
           </button>
         </div>
       )}
@@ -756,9 +753,7 @@ function SortableRow({
                 className="p-1 rounded-full bg-white/20 text-white/90 hover:bg-white/40"
                 title="Preview visual (click to edit)"
               >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M15 3h6v6" /><path d="M9 21H3v-6" /><path d="M21 3l-7 7" /><path d="M3 21l7-7" />
-                </svg>
+                <ArrowsPointingOutIcon className="w-3.5 h-3.5" />
               </button>
               {/* Regenerate visual */}
               {!readOnly && onGenerateVisual && (
@@ -767,10 +762,7 @@ function SortableRow({
                   className="p-1 rounded-full bg-white/20 text-white/90 hover:bg-[var(--color-accent)]/80"
                   title="Regenerate visual with AI"
                 >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3z" />
-                    <path d="M20 11l.75 2.25L23 14l-2.25.75L20 17l-.75-2.25L17 14l2.25-.75L20 11z" />
-                  </svg>
+                  <SparklesIcon className="w-3.5 h-3.5" />
                 </button>
               )}
               {/* Remove visual */}
@@ -780,9 +772,7 @@ function SortableRow({
                   className="p-1 rounded-full bg-white/20 text-white/90 hover:bg-error/80"
                   title="Remove visual"
                 >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-                  </svg>
+                  <XMarkIcon className="w-3.5 h-3.5" />
                 </button>
               )}
             </div>
@@ -810,9 +800,7 @@ function SortableRow({
                   className="p-1 rounded-full bg-white/20 text-white/90 hover:bg-white/30"
                   title="View image"
                 >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
-                  </svg>
+                  <MagnifyingGlassIcon className="w-3.5 h-3.5" />
                 </button>
                 {/* Re-capture */}
                 <button
@@ -820,10 +808,7 @@ function SortableRow({
                   className="p-1 rounded-full bg-white/20 text-white/90 hover:bg-white/30"
                   title="Re-capture screenshot"
                 >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z" />
-                    <circle cx="12" cy="13" r="4" />
-                  </svg>
+                  <CameraIcon className="w-3.5 h-3.5" />
                 </button>
                 {/* Pick from project */}
                 {onPickImage && (
@@ -832,9 +817,7 @@ function SortableRow({
                     className="p-1 rounded-full bg-white/20 text-white/90 hover:bg-white/30"
                     title="Pick from workspace images"
                   >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><circle cx="8.5" cy="8.5" r="1.5" /><polyline points="21 15 16 10 5 21" />
-                    </svg>
+                    <PhotoIcon className="w-3.5 h-3.5" />
                   </button>
                 )}
                 {/* Browse filesystem */}
@@ -844,9 +827,7 @@ function SortableRow({
                     className="p-1 rounded-full bg-white/20 text-white/90 hover:bg-white/30"
                     title="Browse for image file"
                   >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />
-                    </svg>
+                    <FolderIcon className="w-3.5 h-3.5" />
                   </button>
                 )}
                 {/* Remove */}
@@ -855,9 +836,7 @@ function SortableRow({
                   className="p-1 rounded-full bg-white/20 text-white/90 hover:bg-error/80"
                   title="Remove screenshot"
                 >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-                  </svg>
+                  <XMarkIcon className="w-3.5 h-3.5" />
                 </button>
               </div>
             )}
@@ -869,11 +848,7 @@ function SortableRow({
               className="w-7 h-7 rounded-md border border-dashed border-[var(--color-border)] hover:border-[var(--color-accent)] hover:bg-[var(--color-accent)]/5 transition-colors flex items-center justify-center group/cap"
               title="Capture screenshot"
             >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
-                className="text-[var(--color-text-secondary)] group-hover/cap:text-[var(--color-accent)] transition-colors">
-                <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z" />
-                <circle cx="12" cy="13" r="4" />
-              </svg>
+              <CameraIcon className="w-3.5 h-3.5 text-[var(--color-text-secondary)] group-hover/cap:text-[var(--color-accent)] transition-colors" />
             </button>
             {onPickImage && (
               <button
@@ -881,12 +856,7 @@ function SortableRow({
                 className="w-7 h-7 rounded-md border border-dashed border-[var(--color-border)] hover:border-[var(--color-accent)] hover:bg-[var(--color-accent)]/5 transition-colors flex items-center justify-center group/pick"
                 title="Pick from workspace images"
               >
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
-                  className="text-[var(--color-text-secondary)] group-hover/pick:text-[var(--color-accent)] transition-colors">
-                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                  <circle cx="8.5" cy="8.5" r="1.5" />
-                  <polyline points="21 15 16 10 5 21" />
-                </svg>
+                <PhotoIcon className="w-3.5 h-3.5 text-[var(--color-text-secondary)] group-hover/pick:text-[var(--color-accent)] transition-colors" />
               </button>
             )}
             {onBrowseImage && (
@@ -895,10 +865,7 @@ function SortableRow({
                 className="w-7 h-7 rounded-md border border-dashed border-[var(--color-border)] hover:border-[var(--color-accent)] hover:bg-[var(--color-accent)]/5 transition-colors flex items-center justify-center group/browse"
                 title="Browse for image file"
               >
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
-                  className="text-[var(--color-text-secondary)] group-hover/browse:text-[var(--color-accent)] transition-colors">
-                  <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />
-                </svg>
+                <FolderIcon className="w-3.5 h-3.5 text-[var(--color-text-secondary)] group-hover/browse:text-[var(--color-accent)] transition-colors" />
               </button>
             )}
             {onGenerateVisual && (
@@ -907,11 +874,7 @@ function SortableRow({
                 className="w-7 h-7 rounded-md border border-dashed border-[var(--color-border)] hover:border-[var(--color-accent)] hover:bg-[var(--color-accent)]/5 transition-colors flex items-center justify-center group/gen"
                 title="Generate visual with AI"
               >
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
-                  className="text-[var(--color-text-secondary)] group-hover/gen:text-[var(--color-accent)] transition-colors">
-                  <path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3z" />
-                  <path d="M20 11l.75 2.25L23 14l-2.25.75L20 17l-.75-2.25L17 14l2.25-.75L20 11z" />
-                </svg>
+                <SparklesIcon className="w-3.5 h-3.5 text-[var(--color-text-secondary)] group-hover/gen:text-[var(--color-accent)] transition-colors" />
               </button>
             )}
           </div>
@@ -927,20 +890,14 @@ function SortableRow({
               className="p-0.5 rounded text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] transition-colors"
               title="Add row below"
             >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="12" y1="5" x2="12" y2="19" />
-                <line x1="5" y1="12" x2="19" y2="12" />
-              </svg>
+              <PlusIcon className="w-3 h-3" />
             </button>
             <button
               onClick={() => deleteRow(idx)}
               className="p-0.5 rounded text-[var(--color-text-secondary)] hover:text-error transition-colors"
               title="Delete row"
             >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="18" y1="6" x2="6" y2="18" />
-                <line x1="6" y1="6" x2="18" y2="18" />
-              </svg>
+              <XMarkIcon className="w-3 h-3" />
             </button>
           </div>
         </td>
@@ -953,14 +910,14 @@ function SortableRow({
           <div className="ai-diff-strip mx-2 mb-1 px-3 py-2 rounded-b-lg text-xs">
             <div className="flex items-center justify-between mb-1">
               <span className="font-medium text-[var(--color-accent)] flex items-center gap-1.5">
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.09 6.26L20.18 10l-6.09 1.74L12 18l-2.09-6.26L3.82 10l6.09-1.74L12 2z" /></svg>
+                <SparklesIcon className="w-3 h-3" />
                 Row {idx + 1} changed
               </span>
               <button
                 onClick={() => { setDiffExpanded(false); onDismissHighlight?.(); }}
                 className="p-0.5 rounded hover:bg-[var(--color-border)]/30 text-[var(--color-text-secondary)]"
               >
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 6L6 18M6 6l12 12" /></svg>
+                <XMarkIcon className="w-2.5 h-2.5" />
               </button>
             </div>
             {rowDiff.fields.map((f) => (
@@ -1376,10 +1333,7 @@ function SparkleButton({ onClick }: { onClick: () => void }) {
       className="absolute top-0.5 right-0.5 p-0.5 rounded opacity-50 hover:opacity-100 transition-opacity text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10"
       title="Improve with AI"
     >
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-        <path d="M12 2l2.09 6.26L20.18 10l-6.09 1.74L12 18l-2.09-6.26L3.82 10l6.09-1.74L12 2z" />
-        <path d="M19 15l1.04 3.13L23.18 19l-3.14.87L19 23l-1.04-3.13L14.82 19l3.14-.87L19 15z" opacity="0.6" />
-      </svg>
+      <SparklesIcon className="w-3 h-3" />
     </button>
   );
 }

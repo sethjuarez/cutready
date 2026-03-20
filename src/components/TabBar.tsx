@@ -3,6 +3,7 @@ import type { EditorTab } from "../stores/appStore";
 import { SketchIcon, StoryboardIcon, NoteIcon, HistoryIcon } from "./Icons";
 import { usePopover } from "../hooks/usePopover";
 import React, { useCallback, useRef } from "react";
+import { Squares2X2Icon, StopIcon, XMarkIcon } from "@heroicons/react/24/outline";
 
 /**
  * TabBar — horizontal row of open document tabs.
@@ -60,10 +61,7 @@ export function TabBar() {
               className="flex items-center gap-2 w-full px-3 py-1.5 text-[12px] text-left text-[var(--color-text)] hover:bg-[var(--color-accent)]/10 hover:text-[var(--color-accent)] transition-colors"
               onClick={() => { openTabInSplit(contextTabIdRef.current); closeContextMenu(); }}
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="3" width="18" height="18" rx="2" />
-                <line x1="12" y1="3" x2="12" y2="21" />
-              </svg>
+              <Squares2X2Icon className="w-3.5 h-3.5" />
               Open to the Side
             </button>
           )}
@@ -72,9 +70,7 @@ export function TabBar() {
               className="flex items-center gap-2 w-full px-3 py-1.5 text-[12px] text-left text-[var(--color-text)] hover:bg-[var(--color-accent)]/10 hover:text-[var(--color-accent)] transition-colors"
               onClick={() => { closeSplit(); closeContextMenu(); }}
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="3" width="18" height="18" rx="2" />
-              </svg>
+              <StopIcon className="w-3.5 h-3.5" />
               Close Split
             </button>
           )}
@@ -82,10 +78,7 @@ export function TabBar() {
             className="flex items-center gap-2 w-full px-3 py-1.5 text-[12px] text-left text-[var(--color-text)] hover:bg-[var(--color-accent)]/10 hover:text-[var(--color-accent)] transition-colors"
             onClick={() => { closeTab(contextTabIdRef.current); closeContextMenu(); }}
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
+            <XMarkIcon className="w-3.5 h-3.5" />
             Close Tab
           </button>
         </div>
@@ -189,10 +182,7 @@ function Tab({
           onClose();
         }}
       >
-        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-          <line x1="18" y1="6" x2="6" y2="18" />
-          <line x1="6" y1="6" x2="18" y2="18" />
-        </svg>
+        <XMarkIcon className="w-2.5 h-2.5" />
       </button>
     </div>
   );

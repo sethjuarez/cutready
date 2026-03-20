@@ -17,6 +17,16 @@ import { invoke } from "@tauri-apps/api/core";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
+import {
+  PlayIcon,
+  ComputerDesktopIcon,
+  SparklesIcon,
+  ChevronRightIcon,
+  PencilIcon,
+  XMarkIcon,
+  PlusIcon,
+  DocumentIcon,
+} from "@heroicons/react/24/outline";
 import { useAppStore } from "../stores/appStore";
 import { useToastStore } from "../stores/toastStore";
 import { SketchPickerItem } from "./SketchCard";
@@ -258,9 +268,7 @@ export function StoryboardView() {
                 className="flex items-center gap-1.5 shrink-0 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] px-3 py-1.5 rounded-lg border border-[var(--color-border)] hover:border-[var(--color-accent)]/40 hover:bg-[var(--color-accent)]/5 transition-colors"
                 title="Preview storyboard (presentation mode)"
               >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                  <polygon points="5 3 19 12 5 21 5 3" />
-                </svg>
+                <PlayIcon className="w-3.5 h-3.5" />
                 Preview
               </button>
 
@@ -278,11 +286,7 @@ export function StoryboardView() {
                         onClick={() => launchPreviewOnMonitor(m)}
                         className="w-full px-3 py-2 text-left text-sm text-[var(--color-text)] hover:bg-[var(--color-surface-alt)] transition-colors flex items-center gap-2"
                       >
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                          <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
-                          <line x1="8" y1="21" x2="16" y2="21" />
-                          <line x1="12" y1="17" x2="12" y2="21" />
-                        </svg>
+                        <ComputerDesktopIcon className="w-3.5 h-3.5" />
                         <span>{m.name || `Monitor ${m.id}`}</span>
                         {m.is_primary && (
                           <span className="text-[10px] text-[var(--color-accent)] font-medium ml-auto">Primary</span>
@@ -340,9 +344,7 @@ export function StoryboardView() {
             className="absolute right-1 top-1 opacity-60 hover:opacity-100 p-1 rounded text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 transition-all"
             title={localDesc ? "Improve description with AI" : "Generate description with AI"}
           >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 2l2.09 6.26L20.18 10l-6.09 1.74L12 18l-2.09-6.26L3.82 10l6.09-1.74L12 2z" />
-            </svg>
+            <SparklesIcon className="w-3 h-3" />
           </button>
         </div>
 
@@ -356,7 +358,7 @@ export function StoryboardView() {
             className="flex items-center gap-1 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] px-2 py-1 rounded-md hover:bg-[var(--color-accent)]/10 transition-colors"
             title="Review storyboard with AI"
           >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.09 6.26L20.18 10l-6.09 1.74L12 18l-2.09-6.26L3.82 10l6.09-1.74L12 2z" /></svg>
+            <SparklesIcon className="w-3 h-3" />
             Review flow
           </button>
           <button
@@ -367,7 +369,7 @@ export function StoryboardView() {
             className="flex items-center gap-1 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] px-2 py-1 rounded-md hover:bg-[var(--color-accent)]/10 transition-colors"
             title="Generate a new sketch with AI"
           >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.09 6.26L20.18 10l-6.09 1.74L12 18l-2.09-6.26L3.82 10l6.09-1.74L12 2z" /></svg>
+            <SparklesIcon className="w-3 h-3" />
             Generate sketch
           </button>
         </div>
@@ -530,13 +532,7 @@ function ExpandableSketchCard({
           className="shrink-0 text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] transition-colors"
           title={collapsed ? "Show table" : "Hide table"}
         >
-          <svg
-            width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-            strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-            className={`transition-transform ${collapsed ? "" : "rotate-90"}`}
-          >
-            <polyline points="9 18 15 12 9 6" />
-          </svg>
+          <ChevronRightIcon className={`w-3.5 h-3.5 transition-transform ${collapsed ? "" : "rotate-90"}`} />
         </button>
 
         <h3 className="text-base font-semibold text-[var(--color-text)] truncate">
@@ -557,9 +553,7 @@ function ExpandableSketchCard({
           className="shrink-0 p-1 rounded text-[var(--color-text-secondary)] opacity-0 group-hover/sketch:opacity-100 hover:text-[var(--color-accent)] transition-all"
           title="Open in editor"
         >
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
-          </svg>
+          <PencilIcon className="w-3.5 h-3.5" />
         </button>
 
         {/* Remove */}
@@ -568,10 +562,7 @@ function ExpandableSketchCard({
           className="shrink-0 p-1 rounded text-[var(--color-text-secondary)] opacity-0 group-hover/sketch:opacity-100 hover:text-error transition-all"
           title="Remove from storyboard"
         >
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="18" y1="6" x2="6" y2="18" />
-            <line x1="6" y1="6" x2="18" y2="18" />
-          </svg>
+          <XMarkIcon className="w-3 h-3" />
         </button>
       </div>
 
@@ -622,10 +613,7 @@ function EmptyState({
           onClick={onAddNew}
           className="flex items-center gap-2 px-4 py-2.5 text-xs font-medium rounded-xl bg-[var(--color-accent)] text-white hover:bg-[var(--color-accent-hover)] transition-colors"
         >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="12" y1="5" x2="12" y2="19" />
-            <line x1="5" y1="12" x2="19" y2="12" />
-          </svg>
+          <PlusIcon className="w-3.5 h-3.5" />
           New Sketch
         </button>
         <button
@@ -748,20 +736,14 @@ function AddBar({
           onClick={onAddNew}
           className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-[var(--color-accent)] text-white hover:bg-[var(--color-accent-hover)] transition-colors"
         >
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="12" y1="5" x2="12" y2="19" />
-            <line x1="5" y1="12" x2="19" y2="12" />
-          </svg>
+          <PlusIcon className="w-3 h-3" />
           New Sketch
         </button>
         <button
           onClick={onPickExisting}
           className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:border-[var(--color-accent)]/40 transition-colors"
         >
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-            <polyline points="14 2 14 8 20 8" />
-          </svg>
+          <DocumentIcon className="w-3 h-3" />
           Add Existing
         </button>
       </div>

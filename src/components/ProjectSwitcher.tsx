@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAppStore } from "../stores/appStore";
 import type { ProjectEntry } from "../types/project";
+import { FolderIcon, ChevronDownIcon, PencilIcon, CheckIcon, PlusIcon } from "@heroicons/react/24/outline";
 
 /**
  * Compact project switcher dropdown. Only visible when the workspace has multiple
@@ -142,36 +143,14 @@ export function ProjectSwitcher() {
         className="flex items-center gap-2 w-full px-3 py-1.5 text-left hover:bg-[var(--color-surface)] transition-colors"
       >
         {/* Project icon */}
-        <svg
-          width="14"
-          height="14"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          className="text-[var(--color-accent)] shrink-0"
-        >
-          <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z" />
-        </svg>
+        <FolderIcon className="text-[var(--color-accent)] shrink-0 w-3.5 h-3.5" />
         <span className="text-[12px] font-medium text-[var(--color-text)] truncate flex-1">
           {activeEntry?.name ?? currentProject?.name ?? "Select project"}
         </span>
         {/* Chevron */}
-        <svg
-          width="10"
-          height="10"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          className={`text-[var(--color-text-secondary)] shrink-0 transition-transform ${isOpen ? "rotate-180" : ""}`}
-        >
-          <polyline points="6 9 12 15 18 9" />
-        </svg>
+        <ChevronDownIcon
+          className={`text-[var(--color-text-secondary)] shrink-0 transition-transform w-2.5 h-2.5 ${isOpen ? "rotate-180" : ""}`}
+        />
       </button>
 
       {/* Dropdown */}
@@ -229,14 +208,10 @@ export function ProjectSwitcher() {
                   className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-[var(--color-surface)] transition-opacity"
                   title="Rename project"
                 >
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
-                  </svg>
+                  <PencilIcon className="w-2.5 h-2.5" />
                 </button>
                 {isActive && (
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
+                  <CheckIcon className="shrink-0 w-3 h-3" />
                 )}
               </div>
             );
@@ -304,10 +279,7 @@ export function ProjectSwitcher() {
                 onClick={handleNewProjectClick}
                 className="flex items-center gap-2 w-full px-3 py-1.5 text-left text-[12px] text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] hover:bg-[var(--color-surface-alt)] transition-colors"
               >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="12" y1="5" x2="12" y2="19" />
-                  <line x1="5" y1="12" x2="19" y2="12" />
-                </svg>
+                <PlusIcon className="w-3 h-3" />
                 New Project
               </button>
             )}

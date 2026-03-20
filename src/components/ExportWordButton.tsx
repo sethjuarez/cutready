@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { WordOrientation } from "../utils/exportToWord";
+import { ArrowDownTrayIcon, DocumentIcon } from "@heroicons/react/24/outline";
 
 interface ExportWordButtonProps {
   onExport: (orientation: WordOrientation) => void | Promise<void>;
@@ -58,12 +59,7 @@ export function ExportWordButton({
             <path d="M21 12a9 9 0 1 1-6.219-8.56" />
           </svg>
         ) : (
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
-            <polyline points="14 2 14 8 20 8" />
-            <line x1="12" y1="18" x2="12" y2="12" />
-            <polyline points="9 15 12 18 15 15" />
-          </svg>
+          <ArrowDownTrayIcon className="w-3.5 h-3.5" />
         )}
         {showLabel && "Word"}
       </button>
@@ -74,18 +70,14 @@ export function ExportWordButton({
             onClick={() => handlePick("portrait")}
             className={`w-full flex items-center gap-2 px-3 py-2 text-xs transition-colors hover:bg-[var(--color-accent)]/10 ${defaultOrientation === "portrait" ? "text-[var(--color-accent)] font-medium" : "text-[var(--color-text)]"}`}
           >
-            <svg width="12" height="14" viewBox="0 0 12 14" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
-              <rect x="0.5" y="0.5" width="11" height="13" rx="1" />
-            </svg>
+            <DocumentIcon className="shrink-0 w-3.5 h-3.5" />
             Portrait
           </button>
           <button
             onClick={() => handlePick("landscape")}
             className={`w-full flex items-center gap-2 px-3 py-2 text-xs transition-colors hover:bg-[var(--color-accent)]/10 ${defaultOrientation === "landscape" ? "text-[var(--color-accent)] font-medium" : "text-[var(--color-text)]"}`}
           >
-            <svg width="14" height="12" viewBox="0 0 14 12" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
-              <rect x="0.5" y="0.5" width="13" height="11" rx="1" />
-            </svg>
+            <DocumentIcon className="shrink-0 w-3.5 h-3.5" />
             Landscape
           </button>
         </div>

@@ -1,5 +1,19 @@
 import { useRef, useState } from "react";
 import { useAppStore, type ActivityEntry } from "../stores/appStore";
+import {
+  ChartBarIcon,
+  BugAntIcon,
+  ArrowDownTrayIcon,
+  TrashIcon,
+  ChevronDownIcon,
+  XCircleIcon,
+  ChatBubbleLeftIcon,
+  CheckIcon,
+  ClockIcon,
+  DocumentIcon,
+  UserGroupIcon,
+  WrenchIcon,
+} from "@heroicons/react/24/outline";
 
 /** Format activity log as plain text and copy to clipboard / save to file. */
 async function exportActivity(entries: ActivityEntry[]) {
@@ -57,22 +71,14 @@ export function OutputPanel({ onCollapse }: OutputPanelProps) {
             active={activeTab === "activity"}
             onClick={() => setActiveTab("activity")}
           >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
-            </svg>
+            <ChartBarIcon className="w-3 h-3" />
             Activity
           </TabButton>
           <TabButton
             active={activeTab === "debug"}
             onClick={() => setActiveTab("debug")}
           >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 2a4 4 0 0 0-4 4v2H6a2 2 0 0 0-2 2v1h4" />
-              <path d="M18 10h-4V8a4 4 0 0 0-4-4" />
-              <rect x="4" y="10" width="16" height="12" rx="2" />
-              <path d="M12 10v12" />
-              <path d="M4 16h16" />
-            </svg>
+            <BugAntIcon className="w-3 h-3" />
             Debug
           </TabButton>
         </div>
@@ -82,29 +88,21 @@ export function OutputPanel({ onCollapse }: OutputPanelProps) {
             className="p-1 rounded text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-alt)] transition-colors"
             title={activeTab === "activity" ? "Export activity log" : "Export debug log"}
           >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-              <polyline points="7 10 12 15 17 10" />
-              <line x1="12" y1="15" x2="12" y2="3" />
-            </svg>
+            <ArrowDownTrayIcon className="w-3 h-3" />
           </button>
           <button
             onClick={() => activeTab === "activity" ? clearActivityLog() : clearDebugLog()}
             className="p-1 rounded text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-alt)] transition-colors"
             title="Clear"
           >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M3 6h18M8 6V4h8v2M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
-            </svg>
+            <TrashIcon className="w-3 h-3" />
           </button>
           <button
             onClick={onCollapse}
             className="p-1 rounded text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-alt)] transition-colors"
             title="Collapse panel"
           >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="6 9 12 15 18 9" />
-            </svg>
+            <ChevronDownIcon className="w-3 h-3" />
           </button>
         </div>
       </div>
@@ -199,17 +197,14 @@ function TabButton({
   );
 }
 
-const S = 11; // icon size for activity rows
-const iconProps = { width: S, height: S, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
-
 function ActivityIcon({ source, level }: { source: string; level: string }) {
-  const cls = "shrink-0 mt-px";
-  if (level === "error") return <svg className={cls} {...iconProps}><circle cx="12" cy="12" r="10" /><path d="m15 9-6 6M9 9l6 6" /></svg>;
-  if (source === "chat") return <svg className={cls} {...iconProps}><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>;
-  if (source === "response") return <svg className={cls} {...iconProps}><polyline points="20 6 9 17 4 12" /></svg>;
-  if (source === "status") return <svg className={cls} {...iconProps}><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>;
-  if (source.startsWith("result")) return <svg className={cls} {...iconProps}><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" /><path d="M14 2v4a2 2 0 0 0 2 2h4" /></svg>;
-  if (source.startsWith("delegate")) return <svg className={cls} {...iconProps}><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>;
+  const cls = "shrink-0 mt-px w-3 h-3";
+  if (level === "error") return <XCircleIcon className={cls} />;
+  if (source === "chat") return <ChatBubbleLeftIcon className={cls} />;
+  if (source === "response") return <CheckIcon className={cls} />;
+  if (source === "status") return <ClockIcon className={cls} />;
+  if (source.startsWith("result")) return <DocumentIcon className={cls} />;
+  if (source.startsWith("delegate")) return <UserGroupIcon className={cls} />;
   // Default: wrench for tool calls
-  return <svg className={cls} {...iconProps}><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" /></svg>;
+  return <WrenchIcon className={cls} />;
 }

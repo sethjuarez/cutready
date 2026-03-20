@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from "react";
+import { XMarkIcon } from "@heroicons/react/24/outline";
 import type { Command } from "../services/commandRegistry";
 
 interface CommandPaletteProps {
@@ -118,10 +119,7 @@ export function CommandPalette({
             className="flex items-center justify-center w-6 h-6 rounded text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-alt)] transition-colors shrink-0"
             onClick={onClose}
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
+            <XMarkIcon className="w-3.5 h-3.5" />
           </button>
         </div>
 

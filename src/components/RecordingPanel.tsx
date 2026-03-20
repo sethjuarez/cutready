@@ -1,4 +1,5 @@
 import { useRef, useEffect } from "react";
+import { ExclamationTriangleIcon, XMarkIcon, ComputerDesktopIcon } from "@heroicons/react/24/outline";
 import { useAppStore } from "../stores/appStore";
 import { ActionCard } from "./ActionCard";
 
@@ -139,21 +140,7 @@ export function RecordingPanel() {
             {/* Browser running warning */}
             {isSelectedBrowserRunning && (
               <div className="mb-4 flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2.5">
-                <svg
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className="mt-0.5 shrink-0 text-warning"
-                >
-                  <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
-                  <line x1="12" y1="9" x2="12" y2="13" />
-                  <line x1="12" y1="17" x2="12.01" y2="17" />
-                </svg>
+                <ExclamationTriangleIcon className="w-4 h-4 mt-0.5 shrink-0 text-warning" />
                 <div>
                   <p className="text-xs font-medium text-warning">
                     Close{" "}
@@ -183,17 +170,7 @@ export function RecordingPanel() {
                   onClick={clearError}
                   className="shrink-0 text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"
                 >
-                  <svg
-                    width="14"
-                    height="14"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  >
-                    <line x1="18" y1="6" x2="6" y2="18" />
-                    <line x1="6" y1="6" x2="18" y2="18" />
-                  </svg>
+                  <XMarkIcon className="w-3.5 h-3.5" />
                 </button>
               </div>
             )}
@@ -217,20 +194,7 @@ export function RecordingPanel() {
                   <path d="M21 12a9 9 0 1 1-6.219-8.56" />
                 </svg>
               ) : (
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <rect x="3" y="3" width="18" height="14" rx="2" />
-                  <line x1="8" y1="21" x2="16" y2="21" />
-                  <line x1="12" y1="17" x2="12" y2="21" />
-                </svg>
+                <ComputerDesktopIcon className="w-3.5 h-3.5" />
               )}
               Open Browser
             </button>

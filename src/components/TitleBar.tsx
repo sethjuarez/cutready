@@ -1,6 +1,7 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useState } from "react";
+import { MagnifyingGlassIcon, XMarkIcon, Squares2X2Icon, ArrowDownTrayIcon, ChatBubbleLeftIcon, CheckIcon, BugAntIcon, StarIcon, PencilIcon, PaperAirplaneIcon } from "@heroicons/react/24/outline";
 import { useUpdateStore } from "../stores/updateStore";
 import { useAppStore } from "../stores/appStore";
 import { usePopover } from "../hooks/usePopover";
@@ -120,10 +121,7 @@ export function TitleBar({
           style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
           title="Command Palette (Ctrl+Shift+P)"
         >
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="11" cy="11" r="8" />
-            <line x1="21" y1="21" x2="16.65" y2="16.65" />
-          </svg>
+          <MagnifyingGlassIcon className="w-3.5 h-3.5" />
           <span className="flex-1 text-left truncate">Search commands…</span>
           <kbd className="text-[10px] px-1 py-px rounded bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-secondary)] font-[inherit]">
             Ctrl+Shift+P
@@ -227,10 +225,7 @@ export function TitleBar({
           className="inline-flex items-center justify-center w-11 h-full hover:bg-red-500 hover:text-white transition-colors"
           aria-label="Close"
         >
-          <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.2">
-            <line x1="1" y1="1" x2="9" y2="9" />
-            <line x1="9" y1="1" x2="1" y2="9" />
-          </svg>
+          <XMarkIcon className="w-2.5 h-2.5" />
         </button>
       </div>
     </div>
@@ -255,12 +250,7 @@ function LayoutDropdown({
         onClick={() => toggle()}
         title="Customize Layout"
       >
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <rect x="3" y="3" width="7" height="7" rx="1" />
-          <rect x="14" y="3" width="7" height="7" rx="1" />
-          <rect x="3" y="14" width="7" height="7" rx="1" />
-          <rect x="14" y="14" width="7" height="7" rx="1" />
-        </svg>
+        <Squares2X2Icon className="w-3 h-3" />
       </button>
 
       {open && (
@@ -354,11 +344,7 @@ function UpdateIndicator() {
         onClick={() => toggle()}
         title={`Update available: v${update.version}${update.body ? `\n${update.body.slice(0, 200)}` : ""}`}
       >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-          <polyline points="7 10 12 15 17 10" />
-          <line x1="12" y1="15" x2="12" y2="3" />
-        </svg>
+        <ArrowDownTrayIcon className="w-3.5 h-3.5" />
         {/* Notification dot */}
         <span className="absolute top-0.5 right-0.5 w-2 h-2 rounded-full bg-indigo-400 animate-pulse" />
       </button>
@@ -399,11 +385,11 @@ function FeedbackPopover() {
   const [includeDebug, setIncludeDebug] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  const categoryLabels: Record<string, { label: string; icon: string }> = {
-    general: { label: "General", icon: "M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" },
-    bug: { label: "Bug", icon: "M8 2l1.88 1.88M14.12 3.88L16 2M9 7.13v-1a3.003 3.003 0 1 1 6 0v1M12 20c-3.3 0-6-2.7-6-6v-3a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v3c0 3.3-2.7 6-6 6M12 20v-9M6.53 9C4.6 8.8 3 7.1 3 5M17.47 9c1.93-.2 3.53-1.9 3.53-4M12 11h.01" },
-    feature: { label: "Feature", icon: "M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" },
-    ux: { label: "Design", icon: "M12 19l7-7 3 3-7 7-3-3zM18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5zM2 2l7.586 7.586M11 13a2 2 0 1 1-4 0 2 2 0 0 1 4 0z" },
+  const categoryLabels = {
+    general: { label: "General", Icon: ChatBubbleLeftIcon },
+    bug: { label: "Bug", Icon: BugAntIcon },
+    feature: { label: "Feature", Icon: StarIcon },
+    ux: { label: "Design", Icon: PencilIcon },
   };
 
   const handleSubmit = async () => {
@@ -456,9 +442,7 @@ function FeedbackPopover() {
         onClick={() => toggle()}
         title="Send Feedback"
       >
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-        </svg>
+        <ChatBubbleLeftIcon className="w-3 h-3" />
       </button>
 
       {open && (
@@ -481,9 +465,7 @@ function FeedbackPopover() {
                       : "bg-[var(--color-surface-alt)] text-[var(--color-text-secondary)] border-[var(--color-border)] hover:text-[var(--color-text)]"
                   }`}
                 >
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d={cat.icon} />
-                  </svg>
+                  <cat.Icon className="w-2.5 h-2.5" />
                   {cat.label}
                 </button>
               );
@@ -537,13 +519,9 @@ function FeedbackPopover() {
               title="Add Feedback"
             >
               {copied ? (
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="20 6 9 17 4 12" />
-                </svg>
+                <CheckIcon className="w-3.5 h-3.5" />
               ) : (
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" />
-                </svg>
+                <PaperAirplaneIcon className="w-3.5 h-3.5" />
               )}
             </button>
           </div>
