@@ -1329,7 +1329,7 @@ function ChatTab() {
         )}
 
         {error && (
-          <div className="mx-3 text-xs text-red-400 bg-red-400/10 rounded-md px-3 py-2 border border-red-400/20">
+          <div className="mx-3 text-xs text-error bg-error/10 rounded-md px-3 py-2 border border-error/20">
             {error}
           </div>
         )}
@@ -1352,7 +1352,7 @@ function ChatTab() {
                     ref.type === "web" && ref.webStatus === "loading"
                       ? `${c.bg} ${c.text} ${c.border} animate-pulse`
                       : ref.type === "web" && ref.webStatus === "error"
-                        ? "bg-red-400/10 text-red-400 border-red-400/30"
+                        ? "bg-error/10 text-error border-error/30"
                         : `${c.bg} ${c.text} ${c.border}`
                   }`}
                 >
@@ -1369,7 +1369,7 @@ function ChatTab() {
                     <span className="max-w-[120px] truncate">{ref.title}</span>
                   )}
                   <button
-                    className="text-[var(--color-text-secondary)] hover:text-red-400 transition-colors"
+                    className="text-[var(--color-text-secondary)] hover:text-error transition-colors"
                     onClick={() => { removeReference(ref.path); if (expandedWebRef === ref.path) setExpandedWebRef(null); }}
                     title="Remove"
                   >
@@ -1760,7 +1760,7 @@ function MessageRow({ message, projectRoot, onDelete }: { message: ChatMessage; 
         {onDelete && (
           <button
             onClick={onDelete}
-            className="shrink-0 mt-2 p-1 rounded opacity-0 group-hover:opacity-100 text-[var(--color-text-secondary)] hover:text-red-400 hover:bg-red-500/10 transition-all"
+            className="shrink-0 mt-2 p-1 rounded opacity-0 group-hover:opacity-100 text-[var(--color-text-secondary)] hover:text-error hover:bg-error/10 transition-all"
             title="Remove message"
           >
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -2230,7 +2230,7 @@ function ChatHistory({ onOpenSession }: { onOpenSession: () => void }) {
                   {/* Delete button — visible on hover */}
                   <button
                     onClick={(e) => handleDelete(e, s.path)}
-                    className="shrink-0 p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-[var(--color-surface-hover)] text-[var(--color-text-secondary)] hover:text-red-400 transition-all"
+                    className="shrink-0 p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-[var(--color-surface-hover)] text-[var(--color-text-secondary)] hover:text-error transition-all"
                     title="Delete session"
                   >
                     <IconTrash size={12} />

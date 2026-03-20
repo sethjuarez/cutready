@@ -23,7 +23,7 @@ export function SnapshotDiffPanel() {
         </span>
         <div className="flex items-center gap-2">
           <span className="text-[10px] text-emerald-500">+{totalAdded}</span>
-          <span className="text-[10px] text-red-400">-{totalRemoved}</span>
+          <span className="text-[10px] text-error">-{totalRemoved}</span>
           <button
             onClick={() => useAppStore.setState({ diffResult: null, diffSelection: null })}
             className="text-[10px] text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors"
@@ -35,12 +35,12 @@ export function SnapshotDiffPanel() {
           <div key={entry.path} className="flex items-center gap-2 px-3 py-1 text-[10px] hover:bg-[var(--color-border)]/20">
             <span className={`shrink-0 w-1.5 h-1.5 rounded-full ${
               entry.status === "added" ? "bg-emerald-500" :
-              entry.status === "deleted" ? "bg-red-400" :
-              "bg-amber-400"
+              entry.status === "deleted" ? "bg-error" :
+              "bg-warning"
             }`} />
             <span className="flex-1 truncate text-[var(--color-text)]">{entry.path}</span>
             {entry.additions > 0 && <span className="text-emerald-500">+{entry.additions}</span>}
-            {entry.deletions > 0 && <span className="text-red-400">-{entry.deletions}</span>}
+            {entry.deletions > 0 && <span className="text-error">-{entry.deletions}</span>}
           </div>
         ))}
         {diffResult.length === 0 && (

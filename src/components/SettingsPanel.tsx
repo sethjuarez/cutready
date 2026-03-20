@@ -28,15 +28,7 @@ interface AuthCodeFlowInit {
 
 type SettingsTab = "ai" | "agents" | "memory" | "display" | "images" | "feedback" | "repository";
 
-const inputClass =
-  "px-3 py-2 rounded-lg bg-[var(--color-surface-alt)] border border-[var(--color-border)] text-sm text-[var(--color-text)] placeholder:text-[var(--color-text-secondary)]/50 focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]/40";
-
-const tabBtnClass = (active: boolean) =>
-  `px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
-    active
-      ? "border-[var(--color-accent)] text-[var(--color-text)]"
-      : "border-transparent text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:border-[var(--color-text-secondary)]/30"
-  }`;
+import { inputClass, tabBtnClass } from "../styles";
 
 export function SettingsPanel({ mode = "global" }: { mode?: "global" | "workspace" }) {
   const { settings, updateSetting, loaded } = useSettings();
@@ -415,11 +407,11 @@ function CopilotStatus({ setModels }: {
         {status === null ? (
           <span className="text-sm text-[var(--color-text-secondary)]">Checking Copilot CLI…</span>
         ) : status.available ? (
-          <span className="text-sm text-green-600 dark:text-green-400 font-medium">
+          <span className="text-sm text-success font-medium">
             ✓ Copilot CLI{status.version ? ` v${status.version}` : ""}{status.protocol_version ? ` (protocol ${status.protocol_version})` : ""}
           </span>
         ) : (
-          <span className="text-sm text-amber-600 dark:text-amber-400">Copilot CLI not found — install it from github.com/github/copilot</span>
+          <span className="text-sm text-warning">Copilot CLI not found — install it from github.com/github/copilot</span>
         )}
       </div>
       <p className="text-xs text-[var(--color-text-secondary)]">
@@ -435,7 +427,7 @@ function CopilotStatus({ setModels }: {
         </button>
       )}
       {error && (
-        <p className="text-xs text-red-600 dark:text-red-400">Failed to load models: {error}</p>
+        <p className="text-xs text-error">Failed to load models: {error}</p>
       )}
     </div>
   );
@@ -575,7 +567,7 @@ function AIProviderTab({ settings, updateSetting, isAzure, isOAuth, hasToken, ca
 
           {hasToken ? (
             <div className="flex items-center gap-3">
-              <span className="text-sm text-green-600 dark:text-green-400 font-medium">
+              <span className="text-sm text-success font-medium">
                 ✓ Signed in
               </span>
               <button
@@ -606,7 +598,7 @@ function AIProviderTab({ settings, updateSetting, isAzure, isOAuth, hasToken, ca
               )}
 
               {oauthError && (
-                <p className="text-xs text-red-500">{oauthError}</p>
+                <p className="text-xs text-error">{oauthError}</p>
               )}
             </div>
           )}
@@ -695,7 +687,7 @@ function AIProviderTab({ settings, updateSetting, isAzure, isOAuth, hasToken, ca
           </p>
         )}
         {modelError && (
-          <p className="text-xs text-red-500">{modelError}</p>
+          <p className="text-xs text-error">{modelError}</p>
         )}
       </fieldset>
 
@@ -715,7 +707,7 @@ function AIProviderTab({ settings, updateSetting, isAzure, isOAuth, hasToken, ca
           When enabled and the model supports vision, images referenced in notes and sketches are sent to the AI.
         </p>
         {settings.aiModelSupportsVision === "false" && settings.aiVisionMode && settings.aiVisionMode !== "off" && (
-          <p className="text-xs text-amber-600 dark:text-amber-400">
+          <p className="text-xs text-warning">
             ⚠ The selected model does not support vision — images will be ignored.
           </p>
         )}
@@ -832,7 +824,7 @@ function AgentsTab({ settings, updateSetting }: {
                     </button>
                     <button
                       onClick={() => deleteAgent(agent.id)}
-                      className="text-[11px] text-red-400 hover:text-red-500 transition-colors"
+                      className="text-[11px] text-error hover:text-error transition-colors"
                     >
                       Delete
                     </button>
@@ -1125,7 +1117,7 @@ function FeedbackListTab() {
             </button>
             <button
               onClick={clearAll}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] rounded-lg font-medium transition-colors border bg-[var(--color-surface-alt)] text-[var(--color-text-secondary)] border-[var(--color-border)] hover:text-red-400 hover:border-red-400/40"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] rounded-lg font-medium transition-colors border bg-[var(--color-surface-alt)] text-[var(--color-text-secondary)] border-[var(--color-border)] hover:text-error hover:border-error/40"
             >
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M3 6h18M8 6V4h8v2M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
@@ -1166,11 +1158,11 @@ function FeedbackListTab() {
               )}
               {/* Confirm delete inline */}
               {isConfirming && (
-                <div className="mt-2 flex items-center gap-2 p-2 rounded bg-red-500/10 border border-red-500/20">
-                  <span className="text-[11px] text-red-400 flex-1">Delete this feedback?</span>
+                <div className="mt-2 flex items-center gap-2 p-2 rounded bg-error/10 border border-error/20">
+                  <span className="text-[11px] text-error flex-1">Delete this feedback?</span>
                   <button
                     onClick={() => deleteSingle(realIndex)}
-                    className="px-2 py-0.5 text-[11px] rounded bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors"
+                    className="px-2 py-0.5 text-[11px] rounded bg-error/20 text-error hover:bg-error/30 transition-colors"
                   >
                     Delete
                   </button>
@@ -1194,7 +1186,7 @@ function FeedbackListTab() {
               </button>
               <button
                 onClick={() => setConfirmDelete(isConfirming ? null : realIndex)}
-                className="absolute top-2 right-9 opacity-0 group-hover:opacity-100 p-1 rounded text-[var(--color-text-secondary)] hover:text-red-400 hover:bg-[var(--color-surface)] transition-all"
+                className="absolute top-2 right-9 opacity-0 group-hover:opacity-100 p-1 rounded text-[var(--color-text-secondary)] hover:text-error hover:bg-[var(--color-surface)] transition-all"
                 title="Delete this item"
               >
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1324,7 +1316,7 @@ function RepositoryTab({ settings, updateSetting }: {
           <p className="text-xs text-emerald-600 dark:text-emerald-400">{testMessage}</p>
         )}
         {testStatus === "error" && (
-          <p className="text-xs text-red-600 dark:text-red-400">{testMessage}</p>
+          <p className="text-xs text-error">{testMessage}</p>
         )}
       </fieldset>
 
@@ -1468,7 +1460,7 @@ function MemoryTab() {
     const colors: Record<string, string> = {
       core: "bg-purple-500/20 text-purple-400",
       archival: "bg-blue-500/20 text-blue-400",
-      insight: "bg-amber-500/20 text-amber-400",
+      insight: "bg-warning/20 text-warning",
     };
     return colors[cat] || "bg-gray-500/20 text-gray-400";
   };
@@ -1495,7 +1487,7 @@ function MemoryTab() {
           {memories.length > 0 && (
             <button
               onClick={() => handleClear()}
-              className="px-2 py-1 text-xs rounded border border-red-500/30 text-red-400 hover:bg-red-500/10 transition-colors"
+              className="px-2 py-1 text-xs rounded border border-error/30 text-error hover:bg-error/10 transition-colors"
             >
               Clear All
             </button>
@@ -1568,7 +1560,7 @@ function MemoryTab() {
                     </button>
                     <button
                       onClick={() => handleDelete(idx)}
-                      className="px-1.5 py-0.5 text-[10px] rounded hover:bg-red-500/10 text-red-400"
+                      className="px-1.5 py-0.5 text-[10px] rounded hover:bg-error/10 text-error"
                     >
                       Delete
                     </button>

@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from "react";
 import { useAppStore } from "../stores/appStore";
 import type { EditorTab } from "../stores/appStore";
 import { SketchIcon, StoryboardIcon, NoteIcon, HistoryIcon } from "./Icons";
+import { usePopover } from "../hooks/usePopover";
+import React, { useCallback, useRef } from "react";
 
 /**
  * TabBar — horizontal row of open document tabs.
@@ -17,19 +18,14 @@ export function TabBar() {
   const openTabInSplit = useAppStore((s) => s.openTabInSplit);
   const closeSplit = useAppStore((s) => s.closeSplit);
 
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; tabId: string } | null>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
+  const { state: contextMenu, ref: menuRef, openAt: openContextMenu, close: closeContextMenu, position: menuPos } = usePopover();
+  const contextTabIdRef = useRef<string>("");
 
-  useEffect(() => {
-    if (!contextMenu) return;
-    const close = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setContextMenu(null);
-    };
-    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") setContextMenu(null); };
-    window.addEventListener("mousedown", close);
-    window.addEventListener("keydown", esc);
-    return () => { window.removeEventListener("mousedown", close); window.removeEventListener("keydown", esc); };
-  }, [contextMenu]);
+  const handleTabContextMenu = useCallback((e: React.MouseEvent, tabId: string) => {
+    e.preventDefault();
+    contextTabIdRef.current = tabId;
+    openContextMenu({ x: e.clientX, y: e.clientY });
+  }, [openContextMenu]);
 
   if (openTabs.length === 0) return null;
 
@@ -46,10 +42,7 @@ export function TabBar() {
           isSplit={tab.id === splitTabId}
           onSelect={() => setActiveTab(tab.id)}
           onClose={() => closeTab(tab.id)}
-          onContextMenu={(e) => {
-            e.preventDefault();
-            setContextMenu({ x: e.clientX, y: e.clientY, tabId: tab.id });
-          }}
+          onContextMenu={(e) => handleTabContextMenu(e, tab.id)}
         />
       ))}
       {/* Fill remaining space with border-bottom */}
@@ -60,12 +53,12 @@ export function TabBar() {
         <div
           ref={menuRef}
           className="fixed z-[100] py-1 min-w-[200px] bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg shadow-lg"
-          style={{ left: contextMenu.x, top: contextMenu.y }}
+          style={{ left: menuPos?.x, top: menuPos?.y }}
         >
-          {contextMenu.tabId !== splitTabId && (
+          {contextTabIdRef.current !== splitTabId && (
             <button
               className="flex items-center gap-2 w-full px-3 py-1.5 text-[12px] text-left text-[var(--color-text)] hover:bg-[var(--color-accent)]/10 hover:text-[var(--color-accent)] transition-colors"
-              onClick={() => { openTabInSplit(contextMenu.tabId); setContextMenu(null); }}
+              onClick={() => { openTabInSplit(contextTabIdRef.current); closeContextMenu(); }}
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <rect x="3" y="3" width="18" height="18" rx="2" />
@@ -74,10 +67,10 @@ export function TabBar() {
               Open to the Side
             </button>
           )}
-          {splitTabId && contextMenu.tabId === splitTabId && (
+          {splitTabId && contextTabIdRef.current === splitTabId && (
             <button
               className="flex items-center gap-2 w-full px-3 py-1.5 text-[12px] text-left text-[var(--color-text)] hover:bg-[var(--color-accent)]/10 hover:text-[var(--color-accent)] transition-colors"
-              onClick={() => { closeSplit(); setContextMenu(null); }}
+              onClick={() => { closeSplit(); closeContextMenu(); }}
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <rect x="3" y="3" width="18" height="18" rx="2" />
@@ -87,7 +80,7 @@ export function TabBar() {
           )}
           <button
             className="flex items-center gap-2 w-full px-3 py-1.5 text-[12px] text-left text-[var(--color-text)] hover:bg-[var(--color-accent)]/10 hover:text-[var(--color-accent)] transition-colors"
-            onClick={() => { closeTab(contextMenu.tabId); setContextMenu(null); }}
+            onClick={() => { closeTab(contextTabIdRef.current); closeContextMenu(); }}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <line x1="18" y1="6" x2="6" y2="18" />

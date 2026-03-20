@@ -409,7 +409,7 @@ export function HomePanel() {
                             e.stopPropagation();
                             removeRecentProject(p.path);
                           }}
-                          className="p-1 rounded opacity-0 group-hover:opacity-100 text-[var(--color-text-secondary)] hover:text-red-500 transition-all"
+                          className="p-1 rounded opacity-0 group-hover:opacity-100 text-[var(--color-text-secondary)] hover:text-error transition-all"
                           title="Remove from recent"
                         >
                           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

@@ -565,7 +565,7 @@ function ExpandableSketchCard({
         {/* Remove */}
         <button
           onClick={onRemove}
-          className="shrink-0 p-1 rounded text-[var(--color-text-secondary)] opacity-0 group-hover/sketch:opacity-100 hover:text-red-400 transition-all"
+          className="shrink-0 p-1 rounded text-[var(--color-text-secondary)] opacity-0 group-hover/sketch:opacity-100 hover:text-error transition-all"
           title="Remove from storyboard"
         >
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

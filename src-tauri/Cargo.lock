@@ -1069,7 +1069,7 @@ checksum = "9885fa71e26b8ab7855e2ec7cae6e9b380edff76cd052e07c683a0319d51b3a2"
 [[package]]
 name = "copilot-sdk"
 version = "0.1.17"
-source = "git+https://github.com/sethjuarez/copilot-sdk-rust.git?rev=b2f679e#b2f679e95e824da6c162ea2c67f6c3878ced1439"
+source = "git+https://github.com/sethjuarez/copilot-sdk-rust.git?rev=96ef003#96ef003e1037086322f61599deb55aa3e6a810a7"
 dependencies = [
  "chrono",
  "serde",
@@ -1322,7 +1322,7 @@ dependencies = [
 
 [[package]]
 name = "cutready"
-version = "0.15.0"
+version = "0.16.0"
 dependencies = [
  "anyhow",
  "base64 0.22.1",

@@ -1,6 +1,7 @@
-import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { type ReactNode, useCallback } from "react";
 import type { AppView } from "../stores/appStore";
 import { useAppStore } from "../stores/appStore";
+import { usePopover } from "../hooks/usePopover";
 
 const navItems: { id: AppView; label: string; icon: ReactNode }[] = [
   {
@@ -115,32 +116,12 @@ export function Sidebar() {
   const isRight = sidebarPosition === "right";
 
   // Context menu state
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
+  const { state: contextMenu, ref: menuRef, openAt: openContextMenu, close: closeContextMenu, position: menuPos } = usePopover();
 
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
-    setContextMenu({ x: e.clientX, y: e.clientY });
-  }, []);
-
-  // Close context menu on outside click or Escape
-  useEffect(() => {
-    if (!contextMenu) return;
-    const handleClose = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setContextMenu(null);
-      }
-    };
-    const handleEsc = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setContextMenu(null);
-    };
-    window.addEventListener("mousedown", handleClose);
-    window.addEventListener("keydown", handleEsc);
-    return () => {
-      window.removeEventListener("mousedown", handleClose);
-      window.removeEventListener("keydown", handleEsc);
-    };
-  }, [contextMenu]);
+    openContextMenu({ x: e.clientX, y: e.clientY });
+  }, [openContextMenu]);
 
   return (
     <>
@@ -183,7 +164,7 @@ export function Sidebar() {
               )}
               {/* Recording indicator dot */}
               {item.id === "recording" && isRecording && (
-                <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-red-500 animate-pulse" />
+                <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-error animate-pulse" />
               )}
             </button>
           );
@@ -236,13 +217,13 @@ export function Sidebar() {
         <div
           ref={menuRef}
           className="fixed z-[100] py-1 min-w-[200px] bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg shadow-lg"
-          style={{ left: contextMenu.x, top: contextMenu.y }}
+          style={{ left: menuPos?.x, top: menuPos?.y }}
         >
           <button
             className="flex items-center gap-2 w-full px-3 py-1.5 text-[12px] text-left text-[var(--color-text)] hover:bg-[var(--color-accent)]/10 hover:text-[var(--color-accent)] transition-colors"
             onClick={() => {
               toggleSidebarPosition();
-              setContextMenu(null);
+              closeContextMenu();
             }}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

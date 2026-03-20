@@ -24,7 +24,7 @@ export function StatusBar({ theme, onToggleTheme }: StatusBarProps) {
       {/* Left: status items */}
       <div className="flex items-center gap-3">
         <span className="inline-flex items-center gap-1.5">
-          <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+          <span className="w-1.5 h-1.5 rounded-full bg-warning animate-pulse" />
           Early Development
         </span>
       </div>

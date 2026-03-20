@@ -47,8 +47,8 @@ export function MergeConflictPanel() {
       {/* Header */}
       <div className="flex items-center gap-3 px-4 py-3 border-b border-[var(--color-border)] bg-[var(--color-surface)]">
         <div className="flex items-center gap-2">
-          <div className="p-1.5 rounded-md bg-amber-500/10">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-amber-500">
+          <div className="p-1.5 rounded-md bg-warning/10">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-warning">
               <path d="M8 18L5 15l3-3" />
               <path d="M5 15h7a4 4 0 0 0 4-4V4" />
             </svg>
@@ -122,18 +122,18 @@ function ConflictCard({
   return (
     <div className={`rounded-lg border transition-colors ${
       isResolved
-        ? "border-green-500/30 bg-green-500/5"
-        : "border-amber-500/30 bg-amber-500/5"
+        ? "border-success/30 bg-success/5"
+        : "border-warning/30 bg-warning/5"
     }`}>
       {/* File header */}
       <div className="flex items-center gap-2 px-3 py-2 border-b border-[var(--color-border)]/50">
-        <span className={`inline-block w-1.5 h-1.5 rounded-full ${isResolved ? "bg-green-500" : "bg-amber-500"}`} />
+        <span className={`inline-block w-1.5 h-1.5 rounded-full ${isResolved ? "bg-success" : "bg-warning"}`} />
         <span className="text-xs font-medium text-[var(--color-text)]">{conflict.path}</span>
         <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--color-border)]/50 text-[var(--color-text-secondary)]">
           {typeLabel}
         </span>
         {isResolved && (
-          <span className="text-[9px] text-green-600 font-medium ml-auto">✓ Resolved</span>
+          <span className="text-[9px] text-success font-medium ml-auto">✓ Resolved</span>
         )}
       </div>
 

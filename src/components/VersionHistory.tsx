@@ -125,7 +125,7 @@ export function VersionHistory() {
           {isDirty && !pendingNavTarget && (
             <button
               onClick={() => setConfirmDiscard(true)}
-              className="group/btn flex items-center gap-1 p-1 rounded text-[var(--color-text-secondary)] hover:text-red-400 transition-colors"
+              className="group/btn flex items-center gap-1 p-1 rounded text-[var(--color-text-secondary)] hover:text-error transition-colors"
               title="Discard changes"
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
@@ -194,15 +194,15 @@ export function VersionHistory() {
 
       {/* Discard confirmation */}
       {confirmDiscard && (
-        <div className="px-3 py-2 border-b border-red-500/20 bg-red-500/5">
-          <div className="text-[10px] font-medium text-red-500 dark:text-red-400 mb-1.5">
+        <div className="px-3 py-2 border-b border-error/20 bg-error/5">
+          <div className="text-[10px] font-medium text-error mb-1.5">
             Discard all changes since last snapshot?
           </div>
           <div className="flex gap-1.5">
             <button
               onClick={handleDiscard}
               disabled={discarding}
-              className="flex-1 px-2 py-1 rounded-md text-[10px] font-medium text-white bg-red-500 hover:bg-red-600 disabled:opacity-40 transition-colors"
+              className="flex-1 px-2 py-1 rounded-md text-[10px] font-medium text-accent-fg bg-error hover:bg-error/80 disabled:opacity-40 transition-colors"
             >
               {discarding ? "Discarding..." : "Discard"}
             </button>
@@ -218,8 +218,8 @@ export function VersionHistory() {
 
       {/* Navigation prompt: dirty + clicking a different snapshot */}
       {pendingNavTarget && (
-        <div className="px-3 py-2 border-b border-amber-500/20 bg-amber-500/5">
-          <div className="text-[10px] font-medium text-amber-600 dark:text-amber-400 mb-1.5">
+        <div className="px-3 py-2 border-b border-warning/20 bg-warning/5">
+          <div className="text-[10px] font-medium text-warning mb-1.5">
             You have unsaved changes
           </div>
           <div className="flex gap-1.5">
@@ -231,7 +231,7 @@ export function VersionHistory() {
             </button>
             <button
               onClick={handleNavDiscard}
-              className="flex-1 px-2 py-1 rounded-md text-[10px] font-medium text-[var(--color-text-secondary)] hover:text-red-400 border border-[var(--color-border)] hover:border-red-400/30 transition-colors"
+              className="flex-1 px-2 py-1 rounded-md text-[10px] font-medium text-[var(--color-text-secondary)] hover:text-error border border-[var(--color-border)] hover:border-error/30 transition-colors"
             >
               Discard changes
             </button>

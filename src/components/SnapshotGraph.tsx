@@ -355,7 +355,7 @@ export function SnapshotGraph({
               </div>
               <div className="flex-1 min-w-0 pr-2 flex items-center gap-1">
                 <span className="text-[10px] italic text-[var(--color-text-secondary)]/70">New direction</span>
-                <span className="text-[9px] px-1 py-px rounded-sm bg-amber-500/10 text-amber-500">branching</span>
+                <span className="text-[9px] px-1 py-px rounded-sm bg-warning/10 text-warning">branching</span>
               </div>
             </div>
           );

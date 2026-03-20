@@ -777,7 +777,7 @@ function SortableRow({
               {!readOnly && (
                 <button
                   onClick={() => onRemoveVisual?.(idx)}
-                  className="p-1 rounded-full bg-white/20 text-white/90 hover:bg-red-500/80"
+                  className="p-1 rounded-full bg-white/20 text-white/90 hover:bg-error/80"
                   title="Remove visual"
                 >
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -852,7 +852,7 @@ function SortableRow({
                 {/* Remove */}
                 <button
                   onClick={() => updateRow(idx, "screenshot", "")}
-                  className="p-1 rounded-full bg-white/20 text-white/90 hover:bg-red-500/80"
+                  className="p-1 rounded-full bg-white/20 text-white/90 hover:bg-error/80"
                   title="Remove screenshot"
                 >
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -934,7 +934,7 @@ function SortableRow({
             </button>
             <button
               onClick={() => deleteRow(idx)}
-              className="p-0.5 rounded text-[var(--color-text-secondary)] hover:text-red-500 transition-colors"
+              className="p-0.5 rounded text-[var(--color-text-secondary)] hover:text-error transition-colors"
               title="Delete row"
             >
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

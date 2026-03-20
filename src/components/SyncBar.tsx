@@ -99,7 +99,7 @@ export function SyncBar() {
         <span
           className={`w-1.5 h-1.5 rounded-full shrink-0 ${
             isSyncing
-              ? "bg-amber-400 animate-pulse"
+              ? "bg-warning animate-pulse"
               : currentRemote
                 ? "bg-emerald-400"
                 : "bg-zinc-400"
@@ -134,7 +134,7 @@ export function SyncBar() {
                   </span>
                 )}
                 {behind > 0 && (
-                  <span className="text-amber-600 dark:text-amber-400 flex items-center gap-0.5" title={`${behind} incoming snapshot${behind !== 1 ? "s" : ""}`}>
+                  <span className="text-warning flex items-center gap-0.5" title={`${behind} incoming snapshot${behind !== 1 ? "s" : ""}`}>
                     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                       <line x1="12" y1="5" x2="12" y2="19" />
                       <polyline points="19 12 12 19 5 12" />
@@ -184,12 +184,12 @@ export function SyncBar() {
 
       {/* Conflict / diverge banner */}
       {syncError && syncError.includes("diverged") && (
-        <div className="mt-1.5 flex items-center gap-1.5 px-2 py-1.5 rounded bg-amber-500/10 border border-amber-500/20">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-amber-500 shrink-0">
+        <div className="mt-1.5 flex items-center gap-1.5 px-2 py-1.5 rounded bg-warning/10 border border-warning/20">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-warning shrink-0">
             <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
             <line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
           </svg>
-          <span className="text-[10px] text-amber-600 dark:text-amber-400 flex-1">
+          <span className="text-[10px] text-warning flex-1">
             Timelines have diverged. Manual merge may be required.
           </span>
         </div>
@@ -197,7 +197,7 @@ export function SyncBar() {
 
       {/* General error message (non-diverge) */}
       {syncError && !syncError.includes("diverged") && (
-        <div className="mt-1.5 flex items-center gap-1.5 text-[10px] text-red-500 dark:text-red-400" title={syncError}>
+        <div className="mt-1.5 flex items-center gap-1.5 text-[10px] text-error" title={syncError}>
           {(syncError.includes("network") || syncError.includes("resolve host") || syncError.includes("Could not resolve") || syncError.includes("timed out")) ? (
             <>
               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">

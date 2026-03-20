@@ -172,7 +172,7 @@ export function TimelineSelector() {
                   <span className="absolute right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-[var(--color-surface)] pl-1 rounded">
                     <button
                       onClick={(e) => handleMerge(t.name, t.label, e)}
-                      className="text-[9px] px-1.5 py-0.5 rounded hover:bg-green-500/15 hover:text-green-500 transition-colors"
+                      className="text-[9px] px-1.5 py-0.5 rounded hover:bg-success/15 hover:text-success transition-colors"
                     >
                       Merge
                     </button>
@@ -184,7 +184,7 @@ export function TimelineSelector() {
                     </button>
                     <button
                       onClick={(e) => handleDelete(t.name, e)}
-                      className="text-[9px] px-1.5 py-0.5 rounded hover:bg-red-400/15 hover:text-red-400 transition-colors"
+                      className="text-[9px] px-1.5 py-0.5 rounded hover:bg-error/15 hover:text-error transition-colors"
                     >
                       ✕
                     </button>

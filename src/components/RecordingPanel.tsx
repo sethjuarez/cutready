@@ -138,7 +138,7 @@ export function RecordingPanel() {
 
             {/* Browser running warning */}
             {isSelectedBrowserRunning && (
-              <div className="mb-4 flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2.5">
+              <div className="mb-4 flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2.5">
                 <svg
                   width="16"
                   height="16"
@@ -148,14 +148,14 @@ export function RecordingPanel() {
                   strokeWidth="2"
                   strokeLinecap="round"
                   strokeLinejoin="round"
-                  className="mt-0.5 shrink-0 text-amber-500"
+                  className="mt-0.5 shrink-0 text-warning"
                 >
                   <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
                   <line x1="12" y1="9" x2="12" y2="13" />
                   <line x1="12" y1="17" x2="12.01" y2="17" />
                 </svg>
                 <div>
-                  <p className="text-xs font-medium text-amber-500">
+                  <p className="text-xs font-medium text-warning">
                     Close{" "}
                     {selectedProfile?.browser === "msedge" ? "Edge" : "Chrome"}{" "}
                     first
@@ -170,9 +170,9 @@ export function RecordingPanel() {
 
             {/* Error display */}
             {error && (
-              <div className="mb-4 flex items-start gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2.5">
+              <div className="mb-4 flex items-start gap-2 rounded-lg border border-error/30 bg-error/10 px-3 py-2.5">
                 <div className="flex-1">
-                  <p className="text-xs font-medium text-red-400">
+                  <p className="text-xs font-medium text-error">
                     Failed to open browser
                   </p>
                   <p className="mt-0.5 break-all text-xs text-[var(--color-text-secondary)]">
@@ -316,9 +316,9 @@ export function RecordingPanel() {
         </div>
 
         {/* Recording status */}
-        <div className="mb-4 flex items-center gap-2 rounded-lg bg-red-500/10 px-3 py-2">
-          <span className="h-2 w-2 animate-pulse rounded-full bg-red-500" />
-          <span className="text-sm font-medium text-red-400">
+        <div className="mb-4 flex items-center gap-2 rounded-lg bg-error/10 px-3 py-2">
+          <span className="h-2 w-2 animate-pulse rounded-full bg-error" />
+          <span className="text-sm font-medium text-error">
             Recording in progress
           </span>
           <span className="text-sm text-[var(--color-text-secondary)]">
@@ -332,7 +332,7 @@ export function RecordingPanel() {
           <button
             onClick={stopRecording}
             disabled={loading}
-            className="flex items-center gap-2 rounded-lg bg-red-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-600 disabled:opacity-50"
+            className="flex items-center gap-2 rounded-lg bg-error px-4 py-2 text-sm font-medium text-accent-fg transition-colors hover:bg-error/80 disabled:opacity-50"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
               <rect x="6" y="6" width="12" height="12" rx="2" />

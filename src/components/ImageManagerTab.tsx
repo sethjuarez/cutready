@@ -178,7 +178,7 @@ export function ImageManagerTab() {
         {orphanedCount > 0 && (
           <>
             <span>·</span>
-            <span className="text-amber-500">{orphanedCount} orphaned</span>
+            <span className="text-warning">{orphanedCount} orphaned</span>
           </>
         )}
       </div>
@@ -195,7 +195,7 @@ export function ImageManagerTab() {
 
         {orphanedCount > 0 && (
           <button
-            className="px-3 py-1.5 text-xs rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-500 hover:bg-amber-500/20 transition-colors"
+            className="px-3 py-1.5 text-xs rounded-lg bg-warning/10 border border-warning/30 text-warning hover:bg-warning/20 transition-colors"
             onClick={deleteAllOrphaned}
           >
             Delete all orphaned
@@ -222,7 +222,7 @@ export function ImageManagerTab() {
       </div>
 
       {error && (
-        <div className="text-red-400 text-sm bg-red-500/10 px-3 py-2 rounded-lg">{error}</div>
+        <div className="text-error text-sm bg-error/10 px-3 py-2 rounded-lg">{error}</div>
       )}
 
       {/* Grouped sections */}
@@ -268,7 +268,7 @@ function ImageSection({
     <div
       className={`rounded-xl border overflow-hidden ${
         group.isOrphaned
-          ? "border-amber-500/30 bg-amber-500/5"
+          ? "border-warning/30 bg-warning/5"
           : "border-[var(--color-border)] bg-[var(--color-surface)]"
       }`}
     >
@@ -276,7 +276,7 @@ function ImageSection({
       <button
         className={`w-full flex items-center gap-2 px-3 py-2.5 text-left transition-colors ${
           group.isOrphaned
-            ? "hover:bg-amber-500/10"
+            ? "hover:bg-warning/10"
             : "hover:bg-[var(--color-surface-alt)]"
         }`}
         onClick={onToggle}
@@ -288,10 +288,10 @@ function ImageSection({
         >
           ▶
         </span>
-        <span className={`shrink-0 ${group.isOrphaned ? "text-amber-500" : "text-[var(--color-text-secondary)]"}`}>{group.icon}</span>
+        <span className={`shrink-0 ${group.isOrphaned ? "text-warning" : "text-[var(--color-text-secondary)]"}`}>{group.icon}</span>
         <span
           className={`text-sm font-medium truncate ${
-            group.isOrphaned ? "text-amber-500" : "text-[var(--color-text)]"
+            group.isOrphaned ? "text-warning" : "text-[var(--color-text)]"
           }`}
         >
           {group.label}
@@ -304,7 +304,7 @@ function ImageSection({
         </span>
         {group.isOrphaned && onDeleteAllOrphaned && (
           <span
-            className="ml-auto text-xs text-amber-500 hover:text-amber-400 transition-colors px-2 py-0.5 rounded hover:bg-amber-500/10"
+            className="ml-auto text-xs text-warning hover:text-warning transition-colors px-2 py-0.5 rounded hover:bg-warning/10"
             onClick={(e) => {
               e.stopPropagation();
               onDeleteAllOrphaned();
@@ -362,7 +362,7 @@ function ImageCard({
     <div
       className={`rounded-lg border overflow-hidden ${
         isOrphaned
-          ? "border-amber-500/40 bg-amber-500/5"
+          ? "border-warning/40 bg-warning/5"
           : "border-[var(--color-border)] bg-[var(--color-surface-alt)]"
       }`}
     >
@@ -403,7 +403,7 @@ function ImageCard({
         </div>
 
         {isOrphaned ? (
-          <div className="text-xs text-amber-500">Not referenced by any file</div>
+          <div className="text-xs text-warning">Not referenced by any file</div>
         ) : otherRefCount > 0 ? (
           <div className="text-xs text-[var(--color-text-secondary)]">
             <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-[var(--color-accent)]/10 text-[var(--color-accent)]">
@@ -413,7 +413,7 @@ function ImageCard({
         ) : null}
 
         <button
-          className="w-full mt-1 px-2 py-1 text-xs rounded bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors"
+          className="w-full mt-1 px-2 py-1 text-xs rounded bg-error/10 text-error hover:bg-error/20 transition-colors"
           onClick={onDelete}
         >
           Delete

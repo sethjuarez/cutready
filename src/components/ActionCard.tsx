@@ -22,7 +22,7 @@ const actionLabels: Record<string, string> = {
 /** Badge color classes for action types. */
 const badgeColors: Record<string, string> = {
   BrowserNavigate: "bg-blue-500/20 text-blue-400",
-  BrowserClick: "bg-green-500/20 text-green-400",
+  BrowserClick: "bg-success/20 text-success",
   BrowserType: "bg-yellow-500/20 text-yellow-400",
   BrowserSelect: "bg-purple-500/20 text-purple-400",
   BrowserScroll: "bg-gray-500/20 text-gray-400",

@@ -118,14 +118,14 @@ export function SnapshotDialog() {
         <div className="px-5 pb-5 flex flex-col gap-3">
           {/* Fork warning */}
           {willFork && (
-            <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-amber-500 shrink-0 mt-0.5">
+            <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg bg-warning/10 border border-warning/20">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-warning shrink-0 mt-0.5">
                 <circle cx="12" cy="12" r="10" />
                 <line x1="12" y1="8" x2="12" y2="12" />
                 <line x1="12" y1="16" x2="12.01" y2="16" />
               </svg>
               <div className="flex-1">
-                <div className="text-[11px] font-medium text-amber-600 dark:text-amber-400 mb-1.5">
+                <div className="text-[11px] font-medium text-warning mb-1.5">
                   You're starting a new direction from an older snapshot
                 </div>
                 <input
@@ -133,7 +133,7 @@ export function SnapshotDialog() {
                   value={forkLabel}
                   onChange={(e) => setForkLabel(e.target.value)}
                   placeholder="Name this line of thinking..."
-                  className="w-full px-2.5 py-1.5 rounded-md bg-[var(--color-surface)] border border-amber-500/30 text-xs text-[var(--color-text)] placeholder:text-[var(--color-text-secondary)]/50 focus:outline-none focus:ring-1 focus:ring-amber-500/40"
+                  className="w-full px-2.5 py-1.5 rounded-md bg-[var(--color-surface)] border border-warning/30 text-xs text-[var(--color-text)] placeholder:text-[var(--color-text-secondary)]/50 focus:outline-none focus:ring-1 focus:ring-warning/40"
                 />
               </div>
             </div>

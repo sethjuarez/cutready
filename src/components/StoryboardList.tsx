@@ -660,8 +660,8 @@ export function StoryboardList() {
               "{pendingDelete.title}" will be permanently deleted.
             </p>
             {pendingDelete.usedBy && pendingDelete.usedBy.length > 0 && (
-              <div className="mb-3 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/30">
-                <p className="text-xs text-amber-400 font-medium mb-1">⚠ Used in {pendingDelete.usedBy.length === 1 ? "a storyboard" : `${pendingDelete.usedBy.length} storyboards`}:</p>
+              <div className="mb-3 px-3 py-2 rounded-lg bg-warning/10 border border-warning/30">
+                <p className="text-xs text-warning font-medium mb-1">⚠ Used in {pendingDelete.usedBy.length === 1 ? "a storyboard" : `${pendingDelete.usedBy.length} storyboards`}:</p>
                 <ul className="text-[11px] text-amber-300/80 list-disc list-inside">
                   {pendingDelete.usedBy.map((t) => <li key={t}>{t}</li>)}
                 </ul>
@@ -683,7 +683,7 @@ export function StoryboardList() {
                   else if (type === "storyboard") deleteStoryboard(path);
                   else deleteNote(path);
                 }}
-                className="px-3 py-1.5 text-xs rounded-lg bg-red-500 text-white hover:bg-red-600 transition-colors"
+                className="px-3 py-1.5 text-xs rounded-lg bg-error text-accent-fg hover:bg-error/80 transition-colors"
               >
                 Delete
               </button>

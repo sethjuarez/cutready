@@ -1,8 +1,9 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { invoke } from "@tauri-apps/api/core";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useUpdateStore } from "../stores/updateStore";
 import { useAppStore } from "../stores/appStore";
+import { usePopover } from "../hooks/usePopover";
 import { relaunch } from "@tauri-apps/plugin-process";
 
 interface TitleBarProps {
@@ -243,24 +244,7 @@ function LayoutDropdown({
   sidebarPosition: "left" | "right";
   onToggleSidebarPosition?: () => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const handleClose = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    const handleEsc = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
-    };
-    window.addEventListener("mousedown", handleClose);
-    window.addEventListener("keydown", handleEsc);
-    return () => {
-      window.removeEventListener("mousedown", handleClose);
-      window.removeEventListener("keydown", handleEsc);
-    };
-  }, [open]);
+  const { state: open, ref, toggle, close } = usePopover();
 
   return (
     <div ref={ref} className="relative">
@@ -268,7 +252,7 @@ function LayoutDropdown({
         className={`flex items-center justify-center w-6 h-[20px] rounded transition-colors text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-alt)] ${
           open ? "bg-[var(--color-surface-alt)] text-[var(--color-text)]" : ""
         }`}
-        onClick={() => setOpen(!open)}
+        onClick={() => toggle()}
         title="Customize Layout"
       >
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -293,7 +277,7 @@ function LayoutDropdown({
               }`}
               onClick={() => {
                 if (sidebarPosition !== "left") onToggleSidebarPosition?.();
-                setOpen(false);
+                close();
               }}
             >
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -310,7 +294,7 @@ function LayoutDropdown({
               }`}
               onClick={() => {
                 if (sidebarPosition !== "right") onToggleSidebarPosition?.();
-                setOpen(false);
+                close();
               }}
             >
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -328,26 +312,9 @@ function LayoutDropdown({
 
 function UpdateIndicator() {
   const update = useUpdateStore((s) => s.update);
-  const [open, setOpen] = useState(false);
+  const { state: open, ref, toggle } = usePopover();
   const [installing, setInstalling] = useState(false);
   const [progress, setProgress] = useState("");
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const handleClose = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    const handleEsc = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
-    };
-    window.addEventListener("mousedown", handleClose);
-    window.addEventListener("keydown", handleEsc);
-    return () => {
-      window.removeEventListener("mousedown", handleClose);
-      window.removeEventListener("keydown", handleEsc);
-    };
-  }, [open]);
 
   if (!update) return null;
 
@@ -384,7 +351,7 @@ function UpdateIndicator() {
     >
       <button
         className="relative flex items-center justify-center w-7 h-[22px] rounded text-indigo-400 hover:text-indigo-300 hover:bg-[var(--color-surface-alt)] transition-colors"
-        onClick={() => setOpen(!open)}
+        onClick={() => toggle()}
         title={`Update available: v${update.version}${update.body ? `\n${update.body.slice(0, 200)}` : ""}`}
       >
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -426,28 +393,11 @@ function UpdateIndicator() {
 }
 
 function FeedbackPopover() {
-  const [open, setOpen] = useState(false);
+  const { state: open, ref, toggle, close } = usePopover();
   const [feedback, setFeedback] = useState("");
   const [category, setCategory] = useState<"general" | "bug" | "feature" | "ux">("general");
   const [includeDebug, setIncludeDebug] = useState(false);
   const [copied, setCopied] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const handleClose = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    const handleEsc = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
-    };
-    window.addEventListener("mousedown", handleClose);
-    window.addEventListener("keydown", handleEsc);
-    return () => {
-      window.removeEventListener("mousedown", handleClose);
-      window.removeEventListener("keydown", handleEsc);
-    };
-  }, [open]);
 
   const categoryLabels: Record<string, { label: string; icon: string }> = {
     general: { label: "General", icon: "M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" },
@@ -491,7 +441,7 @@ function FeedbackPopover() {
     setCopied(true);
     setTimeout(() => {
       setCopied(false);
-      setOpen(false);
+      close();
     }, 1200);
   };
 
@@ -503,7 +453,7 @@ function FeedbackPopover() {
             ? "text-[var(--color-accent)] bg-[var(--color-surface-alt)]"
             : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-alt)]"
         }`}
-        onClick={() => setOpen(!open)}
+        onClick={() => toggle()}
         title="Send Feedback"
       >
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
