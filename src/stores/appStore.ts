@@ -63,6 +63,7 @@ export interface AssetInfo {
   size: number;
   assetType: "screenshot" | "visual";
   referencedBy: string[];
+  modifiedAt: number;
 }
 
 interface AppStoreState {
@@ -1265,12 +1266,13 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
 
   loadAssets: async () => {
     try {
-      const raw = await invoke<{ path: string; size: number; referencedBy: string[]; assetType: string }[]>("list_project_images");
+      const raw = await invoke<{ path: string; size: number; referencedBy: string[]; assetType: string; modifiedAt: number }[]>("list_project_images");
       const assets: AssetInfo[] = raw.map((r) => ({
         path: r.path,
         size: r.size,
         assetType: r.assetType as "screenshot" | "visual",
         referencedBy: r.referencedBy,
+        modifiedAt: r.modifiedAt,
       }));
       set({ assets });
     } catch (err) {

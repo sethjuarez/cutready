@@ -850,7 +850,7 @@ pub fn list_images_with_refs(project_root: &Path) -> Result<Vec<ImageRefInfo>, P
     let vis_dir = project_root.join(".cutready").join("visuals");
 
     // Collect all screenshot files
-    let mut assets: Vec<(String, u64, &'static str)> = Vec::new();
+    let mut assets: Vec<(String, u64, &'static str, u64)> = Vec::new();
     if ss_dir.exists() {
         for entry in std::fs::read_dir(&ss_dir).map_err(|e| ProjectError::Io(e.to_string()))? {
             let entry = entry.map_err(|e| ProjectError::Io(e.to_string()))?;
@@ -858,8 +858,14 @@ pub fn list_images_with_refs(project_root: &Path) -> Result<Vec<ImageRefInfo>, P
             if path.is_file() {
                 let name = entry.file_name().to_string_lossy().to_string();
                 let rel = format!(".cutready/screenshots/{name}");
-                let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
-                assets.push((rel, size, "screenshot"));
+                let meta = entry.metadata().ok();
+                let size = meta.as_ref().map(|m| m.len()).unwrap_or(0);
+                let modified = meta
+                    .and_then(|m| m.modified().ok())
+                    .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                    .map(|d| d.as_millis() as u64)
+                    .unwrap_or(0);
+                assets.push((rel, size, "screenshot", modified));
             }
         }
     }
@@ -872,8 +878,14 @@ pub fn list_images_with_refs(project_root: &Path) -> Result<Vec<ImageRefInfo>, P
             if path.is_file() && path.extension().is_some_and(|ext| ext == "json") {
                 let name = entry.file_name().to_string_lossy().to_string();
                 let rel = format!(".cutready/visuals/{name}");
-                let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
-                assets.push((rel, size, "visual"));
+                let meta = entry.metadata().ok();
+                let size = meta.as_ref().map(|m| m.len()).unwrap_or(0);
+                let modified = meta
+                    .and_then(|m| m.modified().ok())
+                    .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                    .map(|d| d.as_millis() as u64)
+                    .unwrap_or(0);
+                assets.push((rel, size, "visual", modified));
             }
         }
     }
@@ -884,7 +896,7 @@ pub fn list_images_with_refs(project_root: &Path) -> Result<Vec<ImageRefInfo>, P
 
     // Build a map of asset path → list of files that reference it
     let mut ref_map: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
-    for (path, _, _) in &assets {
+    for (path, _, _, _) in &assets {
         ref_map.insert(path.clone(), Vec::new());
     }
 
@@ -918,13 +930,14 @@ pub fn list_images_with_refs(project_root: &Path) -> Result<Vec<ImageRefInfo>, P
 
     let mut result: Vec<ImageRefInfo> = assets
         .into_iter()
-        .map(|(path, size, asset_type)| {
+        .map(|(path, size, asset_type, modified_at)| {
             let referenced_by = ref_map.remove(&path).unwrap_or_default();
             ImageRefInfo {
                 path,
                 size,
                 referenced_by,
                 asset_type,
+                modified_at,
             }
         })
         .collect();
@@ -940,6 +953,8 @@ pub struct ImageRefInfo {
     pub referenced_by: Vec<String>,
     /// "screenshot" or "visual"
     pub asset_type: &'static str,
+    /// File modification time as milliseconds since UNIX epoch.
+    pub modified_at: u64,
 }
 
 /// Check if a sketch file exists given a relative path from project root.

@@ -114,6 +114,8 @@ pub struct ImageInfo {
     pub referenced_by: Vec<String>,
     /// "screenshot" or "visual"
     pub asset_type: String,
+    /// File modification time as milliseconds since UNIX epoch
+    pub modified_at: u64,
 }
 
 /// List all images and visuals in the project with reference info.
@@ -128,6 +130,7 @@ pub async fn list_project_images(state: State<'_, AppState>) -> Result<Vec<Image
             size: r.size,
             referenced_by: r.referenced_by,
             asset_type: r.asset_type.to_string(),
+            modified_at: r.modified_at,
         })
         .collect())
 }
