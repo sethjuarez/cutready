@@ -9,6 +9,25 @@
 Covector manages this changelog. Do not edit manually.
 Each release section is generated from `.changes/*.md` files.
 
+## [0.16.0](https://github.com/sethjuarez/cutready/compare/v0.15.0...v0.16.0) (2026-03-20)
+
+
+### Features
+
+* add GitHub Copilot SDK as alternative AI provider ([6897a43](https://github.com/sethjuarez/cutready/commit/6897a439ee5ba8f5a9f9fb9ab829678b0f5171da))
+* surface Copilot lifecycle events as status messages ([026e804](https://github.com/sethjuarez/cutready/commit/026e804bca06dd70d84f8ee2c5365ff445aba9ee))
+
+
+### Bug Fixes
+
+* add CLI version check, vision validation, and suppress unknown SDK events ([d4e79de](https://github.com/sethjuarez/cutready/commit/d4e79de35767275f083c8c736aecacacecce2dce))
+* improve Copilot event tracing and empty message handling ([fdef5dd](https://github.com/sethjuarez/cutready/commit/fdef5dd5f48d921213851f95f7695a7832ca9162))
+* replace polling timers with event-driven patterns ([64fe954](https://github.com/sethjuarez/cutready/commit/64fe95430d52a53f0cd1bee715176147430429f4))
+* resolve tool name in ToolExecutionComplete for sidebar refresh ([a715a52](https://github.com/sethjuarez/cutready/commit/a715a52c139a0b1c2c278610919d66e3f3a69596))
+* route all AI callsites through provider setting ([729deb9](https://github.com/sethjuarez/cutready/commit/729deb96e173940a3507d7085d3cdd3773e51d93))
+* suppress intermediate turn text and route rich paste through provider ([06f0a95](https://github.com/sethjuarez/cutready/commit/06f0a95d760002862c9cc5d61215c85fb4b4368c))
+* trace Copilot events and fix delta interleaving ([19908bb](https://github.com/sethjuarez/cutready/commit/19908bb8726a41cab717db5fead95c8ef65badc2))
+
 ## [0.15.0](https://github.com/sethjuarez/cutready/compare/v0.14.0...v0.15.0) (2026-03-19)
 
 
