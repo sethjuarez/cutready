@@ -75,6 +75,7 @@ function VisualAssetViewer({
   const [editorOpen, setEditorOpen] = useState(false);
   const [editorDsl, setEditorDsl] = useState<ElucimDocument | null>(null);
   const [editorDirty, setEditorDirty] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   // Load DSL when editor lightbox opens
   useEffect(() => {
@@ -93,12 +94,15 @@ function VisualAssetViewer({
   }, []);
 
   const saveEditorChanges = useCallback(async (doc: ElucimDocument) => {
+    setSaving(true);
     try {
       await invoke("write_visual_doc", { relativePath: assetPath, document: doc });
       setEditorDirty(false);
       setVisualVersion((v) => v + 1);
     } catch (err) {
       console.error("[AssetViewer] Failed to save visual:", err);
+    } finally {
+      setSaving(false);
     }
   }, [assetPath]);
 
@@ -148,7 +152,7 @@ function VisualAssetViewer({
       {editorOpen && (
         <div
           className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80"
-          onClick={() => { if (!editorDirty) closeLightbox(); }}
+          onClick={() => { if (!editorDirty && !saving) closeLightbox(); }}
         >
           <div
             className="relative flex flex-col rounded-xl overflow-hidden shadow-2xl bg-[var(--color-surface)]"
@@ -167,15 +171,17 @@ function VisualAssetViewer({
                 {editorDirty && editorDsl && (
                   <button
                     onClick={() => saveEditorChanges(editorDsl)}
+                    disabled={saving}
                     title="Save changes"
-                    className="p-1.5 rounded-lg text-[var(--color-accent)] hover:text-[var(--color-accent-hover)] hover:bg-[var(--color-surface)] transition-colors"
+                    className="p-1.5 rounded-lg text-[var(--color-accent)] hover:text-[var(--color-accent-hover)] hover:bg-[var(--color-surface)] transition-colors disabled:opacity-40"
                   >
                     <CheckIcon className="w-4 h-4" />
                   </button>
                 )}
                 <button
                   onClick={closeLightbox}
-                  className="p-1.5 rounded-lg text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)] transition-colors"
+                  disabled={saving}
+                  className="p-1.5 rounded-lg text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)] transition-colors disabled:opacity-40"
                 >
                   <XMarkIcon className="w-5 h-5" />
                 </button>
