@@ -9,6 +9,29 @@
 Covector manages this changelog. Do not edit manually.
 Each release section is generated from `.changes/*.md` files.
 
+## [0.17.0](https://github.com/sethjuarez/cutready/compare/v0.16.0...v0.17.0) (2026-03-20)
+
+
+### Features
+
+* add sort controls to Assets pane — type, reference, or recency ([bf08e81](https://github.com/sethjuarez/cutready/commit/bf08e81c63b57137fa4e6f5c6381d3210c2081ab))
+* restructure sidebar into Documents, Assets, and Explorer panes ([5fea472](https://github.com/sethjuarez/cutready/commit/5fea472ea36c981c7f826349b9460db4fa4cc990))
+* upgrade elucim to 0.14.0 and wire image asset resolver ([98e4cc5](https://github.com/sethjuarez/cutready/commit/98e4cc5fa80d9b1bc34d5cba2dbdbc826ed3eeb6))
+
+
+### Bug Fixes
+
+* asset picker clears competing field, fix invalid Tailwind classes, improve tool schemas ([1044885](https://github.com/sethjuarez/cutready/commit/10448857c82f21163ee74ecccd2946a723bd5c25))
+* asset tab icons and colors — PhotoIcon for images, FilmIcon for visuals ([2e724eb](https://github.com/sethjuarez/cutready/commit/2e724ebbfeb441497368e3e4a25359af8c21083f))
+* auto-detect Copilot CLI and auto-load models on provider switch ([dbed553](https://github.com/sethjuarez/cutready/commit/dbed55335ed911acc0634d8187efceb1867d0015))
+* filter visual JSON files from image picker ([f2cd975](https://github.com/sethjuarez/cutready/commit/f2cd975bff20c73e254f583bd52af49d3cc18d05))
+* graceful fallback for missing tool arguments ([f95c215](https://github.com/sethjuarez/cutready/commit/f95c2153805f574e01f755a1c4eb9613fe2c3ede))
+* lightbox close icon and save icon ([e79252e](https://github.com/sethjuarez/cutready/commit/e79252e55ca66cc861a513beb4d05817f5b5dbca))
+* move sort controls inline with Assets header ([5b25f27](https://github.com/sethjuarez/cutready/commit/5b25f27a8015e5bf9d54c9f3b054f3725e7a9b20))
+* open full editor lightbox for visuals in Assets pane ([0483f75](https://github.com/sethjuarez/cutready/commit/0483f75aee0b1aef0c0082d0bbb659c0c978472c))
+* render visual thumbnails in asset picker ([a182e8d](https://github.com/sethjuarez/cutready/commit/a182e8dfa42a0d653eaafb7a0cffc63b6df4d003))
+* replace hardcoded colors with design tokens and extract shared patterns ([5d6a8cf](https://github.com/sethjuarez/cutready/commit/5d6a8cf4fa56b26ba5d10f525175491ef0c84e22))
+
 ## [0.16.0](https://github.com/sethjuarez/cutready/compare/v0.15.0...v0.16.0) (2026-03-20)
 
 
