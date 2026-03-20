@@ -1,5 +1,5 @@
 import { type ReactNode, useCallback } from "react";
-import { HomeIcon, PencilIcon, DocumentIcon, ComputerDesktopIcon, Cog6ToothIcon } from "@heroicons/react/24/outline";
+import { HomeIcon, RectangleStackIcon, FilmIcon, FolderOpenIcon, DocumentIcon, ComputerDesktopIcon, Cog6ToothIcon } from "@heroicons/react/24/outline";
 import type { AppView } from "../stores/appStore";
 import { useAppStore } from "../stores/appStore";
 import { usePopover } from "../hooks/usePopover";
@@ -12,8 +12,18 @@ const navItems: { id: AppView; label: string; icon: ReactNode }[] = [
   },
   {
     id: "sketch",
-    label: "Sketch",
-    icon: <PencilIcon className="w-4 h-4" />,
+    label: "Documents",
+    icon: <RectangleStackIcon className="w-4 h-4" />,
+  },
+  {
+    id: "assets",
+    label: "Assets",
+    icon: <FilmIcon className="w-4 h-4" />,
+  },
+  {
+    id: "explorer",
+    label: "Explorer",
+    icon: <FolderOpenIcon className="w-4 h-4" />,
   },
   {
     id: "recording",
@@ -76,7 +86,7 @@ export function Sidebar() {
           .filter((item) => item.id !== "recording" && item.id !== "editor")
           .map((item) => {
           const isActive = view === item.id;
-          const requiresProject = item.id === "sketch" || item.id === "editor" || item.id === "recording" || item.id === "workspace";
+          const requiresProject = item.id === "sketch" || item.id === "assets" || item.id === "explorer" || item.id === "editor" || item.id === "recording" || item.id === "workspace";
           const isDisabled = requiresProject && !currentProject;
 
           return (

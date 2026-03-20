@@ -14,9 +14,8 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { invoke } from "@tauri-apps/api/core";
-import { ArrowDownTrayIcon, Bars3Icon, FolderIcon, PlusIcon, TrashIcon } from "@heroicons/react/24/outline";
+import { ArrowDownTrayIcon, PlusIcon, TrashIcon } from "@heroicons/react/24/outline";
 import { useAppStore, type SidebarOrder } from "../stores/appStore";
-import { FileTreeView } from "./FileTreeView";
 import { SketchIcon, StoryboardIcon, NoteIcon } from "./Icons";
 import { ProjectSwitcher } from "./ProjectSwitcher";
 
@@ -64,13 +63,10 @@ function SortableSidebarItem({ id, children }: { id: string; children: React.Rea
 }
 
 /**
- * StoryboardList — sidebar with two modes:
- * 1. List mode: Storyboards + Sketch Library (categorized)
- * 2. Tree mode: File hierarchy view
+ * StoryboardList — Documents pane: Storyboards, Sketches, and Notes.
+ * File tree view is now in the separate Explorer pane.
  */
 export function StoryboardList() {
-  const sidebarMode = useAppStore((s) => s.sidebarMode);
-  const setSidebarMode = useAppStore((s) => s.setSidebarMode);
   const storyboards = useAppStore((s) => s.storyboards);
   const sketches = useAppStore((s) => s.sketches);
   const notes = useAppStore((s) => s.notes);
@@ -325,10 +321,10 @@ export function StoryboardList() {
       {/* ── Project switcher ── */}
       <ProjectSwitcher />
 
-      {/* ── Explorer header ──────────────────────────────── */}
+      {/* ── Documents header ──────────────────────────────── */}
       <div className="flex items-center justify-between px-3 h-9 shrink-0 border-b border-[var(--color-border)]">
         <span className="text-[11px] font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">
-          Explorer
+          Documents
         </span>
         <div className="flex items-center gap-1">
           <button
@@ -338,37 +334,9 @@ export function StoryboardList() {
           >
             <ArrowDownTrayIcon className="w-3 h-3" />
           </button>
-          <div className="flex items-center gap-0.5 bg-[var(--color-surface)] rounded-md p-0.5">
-          <button
-            onClick={() => setSidebarMode("list")}
-            className={`p-1 rounded transition-colors ${
-              sidebarMode === "list"
-                ? "bg-[var(--color-accent)]/15 text-[var(--color-accent)]"
-                : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"
-            }`}
-            title="Categorized list"
-          >
-            <Bars3Icon className="w-3 h-3" />
-          </button>
-          <button
-            onClick={() => setSidebarMode("tree")}
-            className={`p-1 rounded transition-colors ${
-              sidebarMode === "tree"
-                ? "bg-[var(--color-accent)]/15 text-[var(--color-accent)]"
-                : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"
-            }`}
-            title="File tree"
-          >
-            <FolderIcon className="w-3 h-3" />
-          </button>
-          </div>
         </div>
       </div>
 
-      {sidebarMode === "tree" ? (
-        <FileTreeView />
-      ) : (
-      <>
       {/* ── Storyboards section ────────────────────────── */}
       <div className="flex items-center justify-between px-3 h-9 shrink-0 border-b border-[var(--color-border)]">
         <span className="text-[11px] font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">
@@ -618,8 +586,6 @@ export function StoryboardList() {
           </DndContext>
         )}
       </div>
-      </>
-      )}
 
       {/* Delete confirmation overlay */}
       {pendingDelete && (

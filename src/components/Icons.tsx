@@ -3,7 +3,7 @@
  * Tasteful, distinct SVG icons for sketches and storyboards.
  */
 import {
-  PencilIcon,
+  SwatchIcon,
   FilmIcon,
   DocumentIcon,
   ExclamationTriangleIcon,
@@ -15,9 +15,9 @@ interface IconProps {
   className?: string;
 }
 
-/** Sketch icon — pencil on paper, representing a creative draft. */
+/** Sketch icon — color swatch, representing a creative design. */
 export function SketchIcon({ size = 14, className = "" }: IconProps) {
-  return <PencilIcon width={size} height={size} className={className} />;
+  return <SwatchIcon width={size} height={size} className={className} />;
 }
 
 /** Storyboard icon — film clapperboard, representing a sequence of scenes. */

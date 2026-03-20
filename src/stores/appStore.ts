@@ -28,7 +28,7 @@ import type {
 } from "../types/sketch";
 
 /** The panels / views available in the app. */
-export type AppView = "home" | "sketch" | "editor" | "recording" | "settings" | "workspace";
+export type AppView = "home" | "sketch" | "assets" | "explorer" | "editor" | "recording" | "settings" | "workspace";
 
 /** Sidebar display mode for the sketch panel. */
 export type SidebarMode = "list" | "tree";
@@ -55,9 +55,17 @@ export interface SidebarOrder {
 /** An open tab in the editor area. */
 export interface EditorTab {
   id: string;
-  type: "sketch" | "storyboard" | "note" | "history";
+  type: "sketch" | "storyboard" | "note" | "history" | "asset";
   path: string;
   title: string;
+}
+
+/** A project asset (screenshot or visual) with reference info. */
+export interface AssetInfo {
+  path: string;
+  size: number;
+  assetType: "screenshot" | "visual";
+  referencedBy: string[];
 }
 
 interface AppStoreState {
@@ -125,6 +133,10 @@ interface AppStoreState {
   activeNoteContent: string | null;
   /** Note paths currently in preview mode (persists across tab switches). */
   notePreviewPaths: Set<string>;
+
+  // ── Asset state ──────────────────────────────────────────
+  /** All project assets (screenshots + visuals) with reference info. */
+  assets: AssetInfo[];
 
   // ── Chat state ──────────────────────────────────────────────
   /** Messages in the current chat session. */
@@ -334,6 +346,17 @@ interface AppStoreState {
   /** Set preview mode for a note path. */
   setNotePreview: (notePath: string, preview: boolean) => void;
 
+  // ── Asset actions ──────────────────────────────────────────
+
+  /** Load assets (screenshots + visuals) for current project. */
+  loadAssets: () => Promise<void>;
+  /** Open an asset in a new tab. */
+  openAsset: (path: string, assetType: "screenshot" | "visual") => void;
+  /** Import an image from the filesystem into the project. */
+  importAsset: () => Promise<void>;
+  /** Delete an asset file. */
+  deleteAsset: (path: string) => Promise<void>;
+
   // ── Chat actions ────────────────────────────────────────────
 
   /** Set chat messages (updates store + auto-saves to disk). */
@@ -526,6 +549,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   activeNotePath: null,
   activeNoteContent: null,
   notePreviewPaths: new Set(),
+  assets: [],
   chatMessages: [],
   chatSessionPath: null,
   chatLoading: false,
@@ -821,6 +845,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       notes: [],
       activeNotePath: null,
       activeNoteContent: null,
+      assets: [],
       chatMessages: [],
       chatSessionPath: null,
       chatLoading: false,
@@ -1243,6 +1268,68 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     if (preview) next.add(notePath);
     else next.delete(notePath);
     set({ notePreviewPaths: next });
+  },
+
+  // ── Asset actions ──────────────────────────────────────────
+
+  loadAssets: async () => {
+    try {
+      const raw = await invoke<{ path: string; size: number; referencedBy: string[]; assetType: string }[]>("list_project_images");
+      const assets: AssetInfo[] = raw.map((r) => ({
+        path: r.path,
+        size: r.size,
+        assetType: r.assetType as "screenshot" | "visual",
+        referencedBy: r.referencedBy,
+      }));
+      set({ assets });
+    } catch (err) {
+      console.error("Failed to load assets:", err);
+    }
+  },
+
+  openAsset: (path, assetType) => {
+    const filename = path.split("/").pop() ?? path;
+    const title = assetType === "visual" ? `🎬 ${filename}` : filename;
+    get().openTab({ type: "asset", path, title });
+    // Navigate to assets view if not already there
+    if (get().view !== "assets" && get().view !== "sketch") {
+      set({ view: "assets" });
+    }
+  },
+
+  importAsset: async () => {
+    try {
+      const { open } = await import("@tauri-apps/plugin-dialog");
+      const selected = await open({
+        multiple: false,
+        filters: [{ name: "Images", extensions: ["png", "jpg", "jpeg", "gif", "webp", "svg"] }],
+      });
+      if (!selected) return;
+      const filePath = typeof selected === "string" ? selected : selected;
+      await invoke("import_image", { sourcePath: filePath });
+      await get().loadAssets();
+    } catch (err) {
+      console.error("Failed to import asset:", err);
+    }
+  },
+
+  deleteAsset: async (path) => {
+    try {
+      await invoke("delete_project_image", { relativePath: path });
+      // Close any open tab for this asset
+      const { openTabs, activeTabId } = get();
+      const tab = openTabs.find((t) => t.type === "asset" && t.path === path);
+      if (tab) {
+        const filtered = openTabs.filter((t) => t.id !== tab.id);
+        set({
+          openTabs: filtered,
+          activeTabId: activeTabId === tab.id ? (filtered[filtered.length - 1]?.id ?? null) : activeTabId,
+        });
+      }
+      await get().loadAssets();
+    } catch (err) {
+      console.error("Failed to delete asset:", err);
+    }
   },
 
   // ── Chat actions ──────────────────────────────────────────

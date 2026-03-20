@@ -3,6 +3,7 @@ import { useAppStore } from "../stores/appStore";
 import { StoryboardView } from "./StoryboardView";
 import { SketchForm } from "./SketchForm";
 import { NoteEditor } from "./NoteEditor";
+import { AssetViewer } from "./AssetViewer";
 import { ChatPanel } from "./ChatPanel";
 import { ResizeHandle } from "./ResizeHandle";
 import { TabBar } from "./TabBar";
@@ -27,6 +28,7 @@ export function StoryboardPanel() {
 
   const activeTab = openTabs.find((t) => t.id === activeTabId);
   const isHistoryTab = activeTab?.type === "history";
+  const isAssetTab = activeTab?.type === "asset";
 
   const [secondaryWidth, setSecondaryWidth] = useState(340);
   const [splitWidth, setSplitWidth] = useState<number | null>(null);
@@ -73,6 +75,8 @@ export function StoryboardPanel() {
           <div className="flex-1 flex flex-col min-w-0">
             {isHistoryTab ? (
               <HistoryGraphTab />
+            ) : isAssetTab && activeTab ? (
+              <AssetViewer assetPath={activeTab.path} />
             ) : activeSketch ? (
               <SketchForm />
             ) : activeStoryboard ? (

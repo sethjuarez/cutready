@@ -9,6 +9,8 @@ import { SettingsPanel } from "./SettingsPanel";
 import { Sidebar } from "./Sidebar";
 import { StoryboardPanel } from "./StoryboardPanel";
 import { StoryboardList } from "./StoryboardList";
+import { AssetList } from "./AssetList";
+import { FileTreeView } from "./FileTreeView";
 import { ResizeHandle } from "./ResizeHandle";
 import { OutputPanel } from "./OutputPanel";
 import { CommandPalette } from "./CommandPalette";
@@ -77,9 +79,21 @@ export function AppLayout() {
       },
       {
         id: "nav.sketch",
-        title: "Go to Sketch Editor",
+        title: "Go to Documents",
         category: "Navigate",
         handler: () => setView("sketch"),
+      },
+      {
+        id: "nav.assets",
+        title: "Go to Assets",
+        category: "Navigate",
+        handler: () => setView("assets"),
+      },
+      {
+        id: "nav.explorer",
+        title: "Go to Explorer",
+        category: "Navigate",
+        handler: () => setView("explorer"),
       },
       {
         id: "nav.editor",
@@ -228,7 +242,7 @@ export function AppLayout() {
             {/* Upper: main content */}
             <div className="flex-1 min-h-0">
               {view === "home" && <div className="h-full overflow-y-auto"><HomePanel /></div>}
-              {view === "sketch" && (isMerging ? <MergeConflictPanel /> : <StoryboardPanel />)}
+              {(view === "sketch" || view === "assets" || view === "explorer") && (isMerging ? <MergeConflictPanel /> : <StoryboardPanel />)}
               {view === "editor" && <div className="h-full overflow-y-auto"><ScriptEditorPanel /></div>}
               {view === "recording" && <div className="h-full overflow-y-auto"><RecordingPanel /></div>}
               {view === "settings" && <div className="h-full overflow-y-auto"><SettingsPanel mode="global" /></div>}
@@ -270,8 +284,9 @@ export function AppLayout() {
   );
 }
 
-/** Primary sidebar (StoryboardList) with resize handle. Rendered full-height. */
+/** Primary sidebar with resize handle. Content switches based on active view. */
 function PrimarySidebar() {
+  const view = useAppStore((s) => s.view);
   const sidebarWidth = useAppStore((s) => s.sidebarWidth);
   const setSidebarWidth = useAppStore((s) => s.setSidebarWidth);
   const sidebarPosition = useAppStore((s) => s.sidebarPosition);
@@ -288,7 +303,13 @@ function PrimarySidebar() {
     <>
       {sidebarPosition === "right" && <ResizeHandle direction="horizontal" onResize={handleResize} />}
       <div className="h-full shrink-0" style={{ width: sidebarWidth }}>
-        <StoryboardList />
+        {view === "assets" ? (
+          <AssetList />
+        ) : view === "explorer" ? (
+          <FileTreeView />
+        ) : (
+          <StoryboardList />
+        )}
       </div>
       {sidebarPosition === "left" && <ResizeHandle direction="horizontal" onResize={handleResize} />}
     </>
