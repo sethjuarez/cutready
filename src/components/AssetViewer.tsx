@@ -1,9 +1,12 @@
-import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
-import { PencilIcon, ArrowPathIcon } from "@heroicons/react/24/outline";
+import { ArrowPathIcon, PencilIcon, CheckIcon, XMarkIcon } from "@heroicons/react/24/outline";
+import type { ElucimDocument } from "@elucim/dsl";
 import VisualCell, { type VisualControlHandle } from "./VisualCell";
 import type { AssetInfo } from "../stores/appStore";
 import { useAppStore } from "../stores/appStore";
+
+const EditorWrapper = lazy(() => import("./EditorWrapper"));
 
 interface AssetViewerProps {
   /** Relative path to the asset file. */
@@ -55,7 +58,7 @@ function ImageAssetViewer({
   );
 }
 
-/** View-only visual with replay + edit button. */
+/** Visual viewer with replay + edit-in-lightbox. */
 function VisualAssetViewer({
   assetPath,
   asset,
@@ -66,19 +69,41 @@ function VisualAssetViewer({
   const filename = assetPath.split("/").pop() ?? assetPath;
   const controlRef = useRef<VisualControlHandle | null>(null);
   const [isPlaying, setIsPlaying] = useState(true);
-  const [editMode, setEditMode] = useState(false);
-  const [editorDsl, setEditorDsl] = useState<Record<string, unknown> | null>(null);
+  const [visualVersion, setVisualVersion] = useState(0);
 
-  // Load DSL for editor mode
+  // Lightbox editor state
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [editorDsl, setEditorDsl] = useState<ElucimDocument | null>(null);
+  const [editorDirty, setEditorDirty] = useState(false);
+
+  // Load DSL when editor lightbox opens
   useEffect(() => {
-    if (!editMode) return;
+    if (!editorOpen) {
+      setEditorDsl(null);
+      setEditorDirty(false);
+      return;
+    }
     invoke<Record<string, unknown>>("get_visual", { relativePath: assetPath })
-      .then(setEditorDsl)
+      .then((data) => setEditorDsl(data as unknown as ElucimDocument))
       .catch(console.error);
-  }, [editMode, assetPath]);
+  }, [editorOpen, assetPath]);
 
   const handleReplay = useCallback(() => {
     controlRef.current?.replay();
+  }, []);
+
+  const saveEditorChanges = useCallback(async (doc: ElucimDocument) => {
+    try {
+      await invoke("write_visual_doc", { relativePath: assetPath, document: doc });
+      setEditorDirty(false);
+      setVisualVersion((v) => v + 1);
+    } catch (err) {
+      console.error("[AssetViewer] Failed to save visual:", err);
+    }
+  }, [assetPath]);
+
+  const closeLightbox = useCallback(() => {
+    setEditorOpen(false);
   }, []);
 
   return (
@@ -87,50 +112,92 @@ function VisualAssetViewer({
       <div className="flex items-center justify-between px-4 py-2 border-b border-[var(--color-border)] bg-[var(--color-surface-alt)] shrink-0">
         <MetadataBar filename={filename} asset={asset} inline />
         <div className="flex items-center gap-1.5">
-          {!editMode && (
-            <button
-              onClick={handleReplay}
-              disabled={isPlaying}
-              className="p-1.5 rounded-lg text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)] transition-colors disabled:opacity-40"
-              title="Replay animation"
-            >
-              <ArrowPathIcon className="w-4 h-4" />
-            </button>
-          )}
           <button
-            onClick={() => setEditMode(!editMode)}
-            className={`p-1.5 rounded-lg transition-colors ${
-              editMode
-                ? "bg-[var(--color-accent)]/15 text-[var(--color-accent)]"
-                : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)]"
-            }`}
-            title={editMode ? "Back to preview" : "Edit DSL"}
+            onClick={handleReplay}
+            disabled={isPlaying}
+            className="p-1.5 rounded-lg text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)] transition-colors disabled:opacity-40"
+            title="Replay animation"
+          >
+            <ArrowPathIcon className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => setEditorOpen(true)}
+            className="p-1.5 rounded-lg text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)] transition-colors"
+            title="Edit visual"
           >
             <PencilIcon className="w-4 h-4" />
           </button>
         </div>
       </div>
 
-      {/* Content */}
+      {/* Preview */}
       <div className="flex-1 min-h-0 overflow-hidden">
-        {editMode ? (
-          <div className="h-full p-4 overflow-auto">
-            <pre className="text-[12px] font-mono text-[var(--color-text)] whitespace-pre-wrap">
-              {editorDsl ? JSON.stringify(editorDsl, null, 2) : "Loading..."}
-            </pre>
-          </div>
-        ) : (
-          <Suspense fallback={<div className="flex-1 flex items-center justify-center text-[var(--color-text-secondary)]">Loading...</div>}>
-            <VisualCell
-              visualPath={assetPath}
-              mode="full"
-              controlRef={controlRef}
-              onPlayStateChange={setIsPlaying}
-              className="w-full h-full"
-            />
-          </Suspense>
-        )}
+        <Suspense fallback={<div className="flex-1 flex items-center justify-center text-[var(--color-text-secondary)]">Loading...</div>}>
+          <VisualCell
+            visualPath={assetPath}
+            mode="full"
+            controlRef={controlRef}
+            onPlayStateChange={setIsPlaying}
+            className="w-full h-full"
+            key={`${assetPath}-v${visualVersion}`}
+          />
+        </Suspense>
       </div>
+
+      {/* Editor lightbox */}
+      {editorOpen && (
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80"
+          onClick={() => { if (!editorDirty) closeLightbox(); }}
+        >
+          <div
+            className="relative flex flex-col rounded-xl overflow-hidden shadow-2xl bg-[var(--color-surface)]"
+            style={{ width: "calc(100vw - 60px)", height: "calc(100vh - 60px)" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between px-4 py-2 border-b border-[var(--color-border)] bg-[var(--color-surface-alt)] shrink-0">
+              <div className="flex items-center gap-3">
+                <span className="text-[13px] font-medium text-[var(--color-text)]">{filename}</span>
+                {editorDirty && (
+                  <span className="text-[11px] text-[var(--color-accent)] font-medium">● Unsaved</span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                {editorDirty && editorDsl && (
+                  <button
+                    onClick={() => saveEditorChanges(editorDsl)}
+                    title="Save changes"
+                    className="p-1.5 rounded-lg text-[var(--color-accent)] hover:text-[var(--color-accent-hover)] hover:bg-[var(--color-surface)] transition-colors"
+                  >
+                    <CheckIcon className="w-4 h-4" />
+                  </button>
+                )}
+                <button
+                  onClick={closeLightbox}
+                  className="p-1.5 rounded-lg text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)] transition-colors"
+                >
+                  <XMarkIcon className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Editor */}
+            <div className="flex-1 min-h-0 relative overflow-hidden">
+              <Suspense fallback={<div className="w-full h-full flex items-center justify-center text-[var(--color-text-secondary)]">Loading editor…</div>}>
+                {editorDsl ? (
+                  <EditorWrapper
+                    dsl={editorDsl}
+                    onDocumentChange={(doc) => { setEditorDsl(doc); setEditorDirty(true); }}
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-[var(--color-text-secondary)]">Loading…</div>
+                )}
+              </Suspense>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
