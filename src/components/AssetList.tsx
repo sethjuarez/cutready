@@ -110,7 +110,7 @@ export function AssetList() {
   return (
     <div className="flex flex-col h-full bg-[var(--color-surface)] text-[var(--color-text)]">
       {/* Header */}
-      <div className="flex items-center justify-between px-3 h-10 shrink-0 border-b border-[var(--color-border)]">
+      <div className="flex items-center gap-2 px-3 h-10 shrink-0 border-b border-[var(--color-border)]">
         <span className="text-[11px] font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider">
           Assets
         </span>
@@ -121,29 +121,28 @@ export function AssetList() {
         >
           <ArrowDownTrayIcon className="w-3.5 h-3.5" />
         </button>
+        {assets.length > 0 && (
+          <>
+            <div className="flex-1" />
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as SortBy)}
+              className="text-[10px] bg-transparent text-[var(--color-text-secondary)] border-none outline-none cursor-pointer"
+            >
+              <option value="type">Type</option>
+              <option value="reference">Reference</option>
+              <option value="recency">Recency</option>
+            </select>
+            <button
+              onClick={toggleDir}
+              className="p-0.5 rounded text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors"
+              title={sortDir === "asc" ? "Ascending" : "Descending"}
+            >
+              <SortDirIcon className="w-3.5 h-3.5" />
+            </button>
+          </>
+        )}
       </div>
-
-      {/* Sort controls */}
-      {assets.length > 0 && (
-        <div className="flex items-center gap-1.5 px-3 h-8 shrink-0 border-b border-[var(--color-border)] bg-[var(--color-surface-alt)]">
-          <select
-            value={sortBy}
-            onChange={(e) => setSortBy(e.target.value as SortBy)}
-            className="text-[10px] bg-transparent text-[var(--color-text-secondary)] border-none outline-none cursor-pointer pr-1"
-          >
-            <option value="type">Type</option>
-            <option value="reference">Reference</option>
-            <option value="recency">Recency</option>
-          </select>
-          <button
-            onClick={toggleDir}
-            className="p-0.5 rounded text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors"
-            title={sortDir === "asc" ? "Ascending" : "Descending"}
-          >
-            <SortDirIcon className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      )}
 
       {/* Asset list */}
       <div className="flex-1 overflow-y-auto">
