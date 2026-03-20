@@ -10,6 +10,7 @@ import { useToastStore } from "../stores/toastStore";
 import { ScriptTable } from "./ScriptTable";
 import { ScreenCaptureOverlay } from "./ScreenCaptureOverlay";
 import { SketchPreview } from "./SketchPreview";
+import VisualCell from "./VisualCell";
 import { exportSketchToWord } from "../utils/exportToWord";
 import { ExportWordButton } from "./ExportWordButton";
 import type { PlanningRow } from "../types/sketch";
@@ -286,28 +287,28 @@ The Actions describe what happens on screen — use them as visual design hints.
     setCaptureRowIdx(null);
   }, []);
 
-  // Image picker state
+  // Image/visual picker state
   const [imagePickerRowIdx, setImagePickerRowIdx] = useState<number | null>(null);
-  const [projectImages, setProjectImages] = useState<{ path: string; size: number }[]>([]);
+  const [projectAssets, setProjectAssets] = useState<{ path: string; size: number; assetType: string }[]>([]);
 
   const handlePickImage = useCallback(async (rowIndex: number) => {
     setImagePickerRowIdx(rowIndex);
     try {
       const images = await invoke<{ path: string; size: number; referencedBy: string[]; assetType: string }[]>("list_project_images");
-      setProjectImages(
-        images
-          .filter((i) => i.assetType === "screenshot")
-          .map((i) => ({ path: i.path, size: i.size })),
-      );
+      setProjectAssets(images.map((i) => ({ path: i.path, size: i.size, assetType: i.assetType })));
     } catch {
-      setProjectImages([]);
+      setProjectAssets([]);
     }
   }, []);
 
-  const handleImagePicked = useCallback((imagePath: string) => {
+  const handleAssetPicked = useCallback((asset: { path: string; assetType: string }) => {
     if (imagePickerRowIdx === null) return;
     const updated = [...localRows];
-    updated[imagePickerRowIdx] = { ...updated[imagePickerRowIdx], screenshot: imagePath };
+    if (asset.assetType === "visual") {
+      updated[imagePickerRowIdx] = { ...updated[imagePickerRowIdx], visual: asset.path };
+    } else {
+      updated[imagePickerRowIdx] = { ...updated[imagePickerRowIdx], screenshot: asset.path };
+    }
     handleRowsChange(updated);
     setImagePickerRowIdx(null);
   }, [imagePickerRowIdx, localRows, handleRowsChange]);
@@ -617,35 +618,41 @@ The row already has a visual and design_plan. Read the sketch with read_sketch f
         />
       )}
 
-      {/* Image picker overlay */}
+      {/* Asset picker overlay — screenshots + visuals */}
       {imagePickerRowIdx !== null && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setImagePickerRowIdx(null)}>
           <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl shadow-2xl max-w-md w-full max-h-[60vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--color-border)]">
-              <span className="text-sm font-medium text-[var(--color-text)]">Pick an image</span>
+              <span className="text-sm font-medium text-[var(--color-text)]">Pick an image or visual</span>
               <button onClick={() => setImagePickerRowIdx(null)} className="text-[var(--color-text-secondary)] hover:text-[var(--color-text)]">
                 <XMarkIcon className="w-3.5 h-3.5" />
               </button>
             </div>
             <div className="flex-1 overflow-y-auto p-3">
-              {projectImages.length === 0 ? (
-                <div className="text-center text-sm text-[var(--color-text-secondary)] py-8">No images in workspace</div>
+              {projectAssets.length === 0 ? (
+                <div className="text-center text-sm text-[var(--color-text-secondary)] py-8">No images or visuals in workspace</div>
               ) : (
                 <div className="grid grid-cols-3 gap-2">
-                  {projectImages.map((img) => (
+                  {projectAssets.map((asset) => (
                     <button
-                      key={img.path}
-                      onClick={() => handleImagePicked(img.path)}
+                      key={asset.path}
+                      onClick={() => handleAssetPicked(asset)}
                       className="rounded-lg border border-[var(--color-border)] hover:border-[var(--color-accent)] overflow-hidden transition-colors group"
-                      title={img.path}
+                      title={asset.path}
                     >
-                      <img
-                        src={projectRoot ? convertFileSrc(`${projectRoot}/${img.path}`) : img.path}
-                        alt={img.path.split("/").pop() ?? ""}
-                        className="w-full aspect-video object-cover"
-                      />
+                      {asset.assetType === "visual" ? (
+                        <div className="w-full aspect-video">
+                          <VisualCell visualPath={asset.path} mode="thumbnail" className="!w-full !h-full !rounded-none" />
+                        </div>
+                      ) : (
+                        <img
+                          src={projectRoot ? convertFileSrc(`${projectRoot}/${asset.path}`) : asset.path}
+                          alt={asset.path.split("/").pop() ?? ""}
+                          className="w-full aspect-video object-cover"
+                        />
+                      )}
                       <div className="px-1.5 py-1 text-[10px] text-[var(--color-text-secondary)] group-hover:text-[var(--color-accent)] truncate">
-                        {img.path.split("/").pop()}
+                        {asset.assetType === "visual" ? "🎬 " : ""}{asset.path.split("/").pop()}
                       </div>
                     </button>
                   ))}
