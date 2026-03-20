@@ -234,12 +234,12 @@ test.describe("Documentation Screenshots (1920×1080)", () => {
 
   test("07 — File tree view", async ({ page }) => {
     await setupApp(page);
-    // Switch to file tree mode
-    await page.getByRole("button", { name: "File tree" }).click();
+    // Switch to Explorer pane (file tree has its own sidebar view now)
+    await page.getByRole("button", { name: "Explorer" }).click();
     await page.waitForTimeout(300);
     await snap(page, "file-tree-view");
-    // Switch back to categorized
-    await page.getByRole("button", { name: "Categorized list" }).click();
+    // Switch back to Documents pane
+    await page.getByRole("button", { name: "Documents" }).click();
     await page.waitForTimeout(200);
   });
 

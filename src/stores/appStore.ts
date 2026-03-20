@@ -30,9 +30,6 @@ import type {
 /** The panels / views available in the app. */
 export type AppView = "home" | "sketch" | "assets" | "explorer" | "editor" | "recording" | "settings" | "workspace";
 
-/** Sidebar display mode for the sketch panel. */
-export type SidebarMode = "list" | "tree";
-
 /** Sidebar position. */
 export type SidebarPosition = "left" | "right";
 
@@ -83,8 +80,6 @@ interface AppStoreState {
   loading: boolean;
   /** Last error message to display in the UI. */
   error: string | null;
-  /** Sidebar display mode: categorized list or file tree. */
-  sidebarMode: SidebarMode;
   /** Width of the sidebar panel in pixels. */
   sidebarWidth: number;
   /** Whether the sidebar panel is visible. */
@@ -240,8 +235,6 @@ interface AppStoreState {
   clearError: () => void;
   /** Switch to a different view. */
   setView: (view: AppView) => void;
-  /** Toggle sidebar between list and tree modes. */
-  setSidebarMode: (mode: SidebarMode) => void;
   /** Set sidebar width. */
   setSidebarWidth: (width: number) => void;
   /** Toggle sidebar visibility. */
@@ -528,7 +521,6 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   isMultiProject: false,
   loading: false,
   error: null,
-  sidebarMode: "list",
   sidebarWidth: savedLayout.sidebarWidth ?? 240,
   sidebarVisible: savedLayout.sidebarVisible ?? true,
   outputVisible: savedLayout.outputVisible ?? false,
@@ -596,7 +588,6 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
 
   clearError: () => set({ error: null }),
   setView: (view) => set({ view }),
-  setSidebarMode: (mode) => set({ sidebarMode: mode }),
   setSidebarWidth: (width) => {
     const w = Math.min(400, Math.max(180, width));
     set({ sidebarWidth: w });
