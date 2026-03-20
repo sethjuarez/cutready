@@ -1287,10 +1287,9 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     }
   },
 
-  openAsset: (path, assetType) => {
+  openAsset: (path, _assetType) => {
     const filename = path.split("/").pop() ?? path;
-    const title = assetType === "visual" ? `🎬 ${filename}` : filename;
-    get().openTab({ type: "asset", path, title });
+    get().openTab({ type: "asset", path, title: filename });
     // Navigate to assets view if not already there
     if (get().view !== "assets" && get().view !== "sketch") {
       set({ view: "assets" });

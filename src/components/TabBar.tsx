@@ -1,6 +1,6 @@
 import { useAppStore } from "../stores/appStore";
 import type { EditorTab } from "../stores/appStore";
-import { SketchIcon, StoryboardIcon, NoteIcon, HistoryIcon } from "./Icons";
+import { SketchIcon, StoryboardIcon, NoteIcon, HistoryIcon, ImageIcon, VisualIcon } from "./Icons";
 import { usePopover } from "../hooks/usePopover";
 import React, { useCallback, useRef } from "react";
 import { Squares2X2Icon, StopIcon, XMarkIcon } from "@heroicons/react/24/outline";
@@ -102,10 +102,15 @@ function Tab({
   onClose: () => void;
   onContextMenu: (e: React.MouseEvent) => void;
 }) {
+  const isImage = tab.type === "asset" && tab.path.includes("/screenshots/");
+  const isVisual = tab.type === "asset" && !isImage;
+
   const typeLabel =
     tab.type === "sketch" ? "Sketch"
     : tab.type === "storyboard" ? "Storyboard"
     : tab.type === "history" ? "History"
+    : isImage ? "Image"
+    : isVisual ? "Visual"
     : "Note";
 
   /* Explicit RGB so inline styles always resolve (CSS vars don't work in all inline contexts) */
@@ -116,12 +121,18 @@ function Tab({
         ? { bar: "bg-emerald-500", icon: "text-emerald-500", tint: "bg-emerald-500" }
         : tab.type === "history"
           ? { bar: "bg-sky-500", icon: "text-sky-500", tint: "bg-sky-500" }
-          : { bar: "bg-rose-500", icon: "text-rose-500", tint: "bg-rose-500" };
+          : isImage
+            ? { bar: "bg-violet-500", icon: "text-violet-500", tint: "bg-violet-500" }
+            : isVisual
+              ? { bar: "bg-amber-500", icon: "text-amber-500", tint: "bg-amber-500" }
+              : { bar: "bg-rose-500", icon: "text-rose-500", tint: "bg-rose-500" };
 
   const TabIcon =
     tab.type === "sketch" ? SketchIcon
     : tab.type === "storyboard" ? StoryboardIcon
     : tab.type === "history" ? HistoryIcon
+    : isImage ? ImageIcon
+    : isVisual ? VisualIcon
     : NoteIcon;
 
   return (

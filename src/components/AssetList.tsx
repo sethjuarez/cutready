@@ -25,7 +25,7 @@ export function AssetList() {
     return () => window.removeEventListener("sidebar-refresh", handler);
   }, [loadAssets]);
 
-  const screenshots = assets.filter((a) => a.assetType === "screenshot");
+  const images = assets.filter((a) => a.assetType === "screenshot");
   const visuals = assets.filter((a) => a.assetType === "visual");
 
   return (
@@ -70,11 +70,11 @@ export function AssetList() {
               />
             )}
 
-            {/* Screenshots section */}
-            {screenshots.length > 0 && (
+            {/* Images section */}
+            {images.length > 0 && (
               <AssetSection
-                title="Screenshots"
-                items={screenshots}
+                title="Images"
+                items={images}
                 activeTabId={activeTabId}
                 onOpen={openAsset}
                 onDelete={deleteAsset}

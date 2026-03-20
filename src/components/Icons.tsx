@@ -8,6 +8,7 @@ import {
   DocumentIcon,
   ExclamationTriangleIcon,
   ClockIcon,
+  PhotoIcon,
 } from "@heroicons/react/24/outline";
 
 interface IconProps {
@@ -38,4 +39,14 @@ export function AlertTriangleIcon({ size = 14, className = "" }: IconProps) {
 /** History icon — branching graph, representing the DAG timeline view. */
 export function HistoryIcon({ size = 14, className = "" }: IconProps) {
   return <ClockIcon width={size} height={size} className={className} />;
+}
+
+/** Image icon — photo, representing a captured or imported image. */
+export function ImageIcon({ size = 14, className = "" }: IconProps) {
+  return <PhotoIcon width={size} height={size} className={className} />;
+}
+
+/** Visual icon — film strip, representing a generated visual/animation. */
+export function VisualIcon({ size = 14, className = "" }: IconProps) {
+  return <FilmIcon width={size} height={size} className={className} />;
 }

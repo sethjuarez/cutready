@@ -10,7 +10,7 @@ interface AssetViewerProps {
   assetPath: string;
 }
 
-/** Tab content for viewing a project asset (screenshot or visual). */
+/** Tab content for viewing a project asset (image or visual). */
 export function AssetViewer({ assetPath }: AssetViewerProps) {
   const assets = useAppStore((s) => s.assets);
   const projectRoot = useAppStore((s) => s.currentProject?.root ?? null);
@@ -22,11 +22,11 @@ export function AssetViewer({ assetPath }: AssetViewerProps) {
     return <VisualAssetViewer assetPath={assetPath} asset={asset} />;
   }
 
-  return <ScreenshotAssetViewer assetPath={assetPath} asset={asset} projectRoot={projectRoot} />;
+  return <ImageAssetViewer assetPath={assetPath} asset={asset} projectRoot={projectRoot} />;
 }
 
-/** View-only screenshot with zoom. */
-function ScreenshotAssetViewer({
+/** View-only image with zoom. */
+function ImageAssetViewer({
   assetPath,
   asset,
   projectRoot,
