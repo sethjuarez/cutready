@@ -225,11 +225,11 @@ pub fn all_tools() -> Vec<ToolDefinition> {
         ),
         tool_def(
             "read_sketch",
-            "Read a sketch's planning rows (time, narrative, demo_actions, screenshot)",
+            "Read a sketch's planning rows (time, narrative, demo_actions, screenshot). IMPORTANT: You must provide the 'path' argument — call list_project_files first if you don't know it.",
             json!({
                 "type": "object",
                 "properties": {
-                    "path": { "type": "string", "description": "Relative path exactly as returned by list_project_files (e.g. 'introduction.sk' or 'demos/overview.sk')" }
+                    "path": { "type": "string", "description": "REQUIRED. Relative path exactly as returned by list_project_files (e.g. 'introduction.sk' or 'demos/overview.sk')" }
                 },
                 "required": ["path"]
             }),
@@ -316,15 +316,15 @@ pub fn all_tools() -> Vec<ToolDefinition> {
         ),
         tool_def(
             "design_plan",
-            "Save an English-language design brief for a planning row's visual. Call this before generating DSL JSON to think through the design. Describes layout, elements, spatial arrangement, color palette, and animation sequence in plain English.",
+            "Save an English-language design brief for a planning row's visual. Call this before generating DSL JSON to think through the design. Describes layout, elements, spatial arrangement, color palette, and animation sequence in plain English. IMPORTANT: You must provide 'path', 'index', and 'plan' — all three are required.",
             json!({
                 "type": "object",
                 "properties": {
-                    "path": { "type": "string", "description": "Relative path to the sketch" },
-                    "index": { "type": "integer", "description": "0-based row index" },
+                    "path": { "type": "string", "description": "REQUIRED. Relative path to the sketch (e.g. 'my-presentation.sk')" },
+                    "index": { "type": "integer", "description": "REQUIRED. 0-based row index (e.g. 0 for the first row, 5 for the sixth)" },
                     "plan": {
                         "type": "string",
-                        "description": "English description of the visual design: what elements to show, where they go on the 960×540 canvas, color choices, and animation sequence"
+                        "description": "REQUIRED. English description of the visual design: what elements to show, where they go on the 960×540 canvas, color choices, and animation sequence"
                     }
                 },
                 "required": ["path", "index", "plan"]

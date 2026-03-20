@@ -108,7 +108,7 @@ export function IdentityDialog() {
         {/* Header */}
         <div className="flex items-center gap-2.5 px-5 pt-5 pb-3">
           <div className="p-2 rounded-lg bg-[var(--color-accent)]/10">
-            <UserIcon className="w-4.5 h-4.5" style={{ stroke: "var(--color-accent)" }} />
+            <UserIcon className="w-5 h-5" style={{ stroke: "var(--color-accent)" }} />
           </div>
           <div>
             <h2 className="text-sm font-semibold text-[var(--color-text)]">

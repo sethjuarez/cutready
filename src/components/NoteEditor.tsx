@@ -205,7 +205,7 @@ export function NoteEditor() {
     <div className="flex flex-col flex-1 overflow-hidden">
       {/* Title bar */}
       <div className="flex items-center gap-2 px-6 py-3 border-b border-[var(--color-border)] shrink-0">
-        <DocumentIcon className="w-4.5 h-4.5 text-[var(--color-text-secondary)] shrink-0" />
+        <DocumentIcon className="w-5 h-5 text-[var(--color-text-secondary)] shrink-0" />
         <h1 className="text-lg font-semibold text-[var(--color-text)]">{displayTitle}</h1>
         <span className="text-[10px] text-[var(--color-text-secondary)] px-1.5 py-0.5 rounded bg-[var(--color-surface-alt)]">.md</span>
 

@@ -305,9 +305,9 @@ The Actions describe what happens on screen — use them as visual design hints.
     if (imagePickerRowIdx === null) return;
     const updated = [...localRows];
     if (asset.assetType === "visual") {
-      updated[imagePickerRowIdx] = { ...updated[imagePickerRowIdx], visual: asset.path };
+      updated[imagePickerRowIdx] = { ...updated[imagePickerRowIdx], visual: asset.path, screenshot: null };
     } else {
-      updated[imagePickerRowIdx] = { ...updated[imagePickerRowIdx], screenshot: asset.path };
+      updated[imagePickerRowIdx] = { ...updated[imagePickerRowIdx], screenshot: asset.path, visual: null };
     }
     handleRowsChange(updated);
     setImagePickerRowIdx(null);
