@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useSettings, useSettingsStore, type AgentPreset } from "../hooks/useSettings";
 import { invoke } from "@tauri-apps/api/core";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
@@ -370,18 +370,28 @@ function CopilotStatus({ setModels }: {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const checkAvailability = useCallback(() => {
     invoke<CopilotCliStatus>("check_copilot_available")
       .then(setStatus)
       .catch(() => setStatus({ available: false }));
   }, []);
 
-  const loadCopilotModels = async () => {
+  // Check on mount
+  useEffect(() => { checkAvailability(); }, [checkAvailability]);
+
+  // Re-check when window regains focus (user may have installed CLI in another window)
+  useEffect(() => {
+    if (status?.available) return;
+    const onFocus = () => checkAvailability();
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [status?.available, checkAvailability]);
+
+  const loadCopilotModels = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const models = await invoke<CopilotModelInfo[]>("list_copilot_models");
-      // Map to the common ModelInfo shape expected by the model picker
       setModels(models.map(m => ({
         id: m.id,
         owned_by: "github-copilot",
@@ -396,7 +406,16 @@ function CopilotStatus({ setModels }: {
     } finally {
       setLoading(false);
     }
-  };
+  }, [setModels]);
+
+  // Auto-load models once CLI is detected
+  const autoLoaded = useRef(false);
+  useEffect(() => {
+    if (status?.available && !autoLoaded.current) {
+      autoLoaded.current = true;
+      loadCopilotModels();
+    }
+  }, [status?.available, loadCopilotModels]);
 
   return (
     <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-alt)] p-3 flex flex-col gap-2">
@@ -411,7 +430,7 @@ function CopilotStatus({ setModels }: {
             ✓ Copilot CLI{status.version ? ` v${status.version}` : ""}{status.protocol_version ? ` (protocol ${status.protocol_version})` : ""}
           </span>
         ) : (
-          <span className="text-sm text-warning">Copilot CLI not found — install it from github.com/github/copilot</span>
+          <span className="text-sm text-warning">Copilot CLI not found — looking for it… (install from github.com/github/copilot)</span>
         )}
       </div>
       <p className="text-xs text-[var(--color-text-secondary)]">
@@ -421,9 +440,17 @@ function CopilotStatus({ setModels }: {
         <button
           onClick={loadCopilotModels}
           disabled={loading}
-          className="w-fit px-3 py-1.5 rounded-lg text-xs font-medium bg-[var(--color-accent)] text-white hover:bg-[var(--color-accent-hover)] disabled:opacity-50 transition-colors"
+          className="w-fit px-3 py-1.5 rounded-lg text-xs font-medium bg-[var(--color-accent)] text-accent-fg hover:bg-[var(--color-accent-hover)] disabled:opacity-50 transition-colors"
         >
-          {loading ? "Loading models…" : "Load available models"}
+          {loading ? "Loading models…" : "Reload models"}
+        </button>
+      )}
+      {!status?.available && status !== null && (
+        <button
+          onClick={checkAvailability}
+          className="w-fit px-3 py-1.5 rounded-lg text-xs font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-text)] border border-[var(--color-border)] hover:bg-[var(--color-surface-alt)] transition-colors"
+        >
+          Check again
         </button>
       )}
       {error && (
