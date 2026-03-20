@@ -3,7 +3,6 @@ import { useSettings, useSettingsStore, type AgentPreset } from "../hooks/useSet
 import { invoke } from "@tauri-apps/api/core";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
 import { BUILT_IN_AGENTS } from "./ChatPanel";
-import { ImageManagerTab } from "./ImageManagerTab";
 import { useToastStore } from "../stores/toastStore";
 import {
   XMarkIcon,
@@ -36,7 +35,7 @@ interface AuthCodeFlowInit {
   port: number;
 }
 
-type SettingsTab = "ai" | "agents" | "memory" | "display" | "images" | "feedback" | "repository";
+type SettingsTab = "ai" | "agents" | "memory" | "display" | "feedback" | "repository";
 
 import { inputClass, tabBtnClass } from "../styles";
 
@@ -127,14 +126,13 @@ export function SettingsPanel({ mode = "global" }: { mode?: "global" | "workspac
 
   // Tabs depend on mode
   const globalTabs = ["display", "ai", "agents", "feedback"] as const;
-  const workspaceTabs = ["repository", "memory", "images", "ai", "agents", "display"] as const;
+  const workspaceTabs = ["repository", "memory", "ai", "agents", "display"] as const;
   const tabs = mode === "workspace" ? workspaceTabs : globalTabs;
   const tabLabels: Record<string, string> = {
     display: "Display",
     ai: "AI Provider",
     agents: "Agents",
     memory: "Memory",
-    images: "Images",
     feedback: "Feedback",
     repository: "Git Remote",
   };
@@ -196,9 +194,6 @@ export function SettingsPanel({ mode = "global" }: { mode?: "global" | "workspac
       )}
       {activeTab === "memory" && (
         <MemoryTab />
-      )}
-      {activeTab === "images" && (
-        <ImageManagerTab />
       )}
       {activeTab === "feedback" && (
         <FeedbackListTab />

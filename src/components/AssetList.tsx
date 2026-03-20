@@ -1,10 +1,54 @@
-import { Suspense, useEffect } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { ArrowDownTrayIcon, TrashIcon } from "@heroicons/react/24/outline";
+import { ArrowDownTrayIcon, TrashIcon, ChevronRightIcon } from "@heroicons/react/24/outline";
 import { useAppStore, type AssetInfo } from "../stores/appStore";
 import VisualCell from "./VisualCell";
 
-/** Sidebar pane listing all project assets (screenshots + visuals). */
+interface AssetGroup {
+  label: string;
+  items: AssetInfo[];
+}
+
+/** Build groups: first by type (Visuals, Images), then within each by reference. */
+function buildGroups(assets: AssetInfo[]): { visuals: AssetGroup[]; images: AssetGroup[] } {
+  const visuals = assets.filter((a) => a.assetType === "visual");
+  const images = assets.filter((a) => a.assetType === "screenshot");
+  return {
+    visuals: groupByReference(visuals),
+    images: groupByReference(images),
+  };
+}
+
+function groupByReference(items: AssetInfo[]): AssetGroup[] {
+  const unlinked: AssetInfo[] = [];
+  const byRef = new Map<string, AssetInfo[]>();
+
+  for (const item of items) {
+    if (item.referencedBy.length === 0) {
+      unlinked.push(item);
+    } else {
+      for (const ref of item.referencedBy) {
+        const label = ref.split("/").pop() ?? ref;
+        const group = byRef.get(label) ?? [];
+        group.push(item);
+        byRef.set(label, group);
+      }
+    }
+  }
+
+  const groups: AssetGroup[] = [];
+  // Referenced groups sorted alphabetically
+  for (const [label, groupItems] of [...byRef.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+    groups.push({ label, items: groupItems });
+  }
+  // Unlinked at the end
+  if (unlinked.length > 0) {
+    groups.push({ label: "Unlinked", items: unlinked });
+  }
+  return groups;
+}
+
+/** Sidebar pane listing all project assets grouped by type and reference. */
 export function AssetList() {
   const assets = useAppStore((s) => s.assets);
   const loadAssets = useAppStore((s) => s.loadAssets);
@@ -25,8 +69,7 @@ export function AssetList() {
     return () => window.removeEventListener("sidebar-refresh", handler);
   }, [loadAssets]);
 
-  const images = assets.filter((a) => a.assetType === "screenshot");
-  const visuals = assets.filter((a) => a.assetType === "visual");
+  const { visuals, images } = useMemo(() => buildGroups(assets), [assets]);
 
   return (
     <div className="flex flex-col h-full bg-[var(--color-surface)] text-[var(--color-text)]">
@@ -59,22 +102,21 @@ export function AssetList() {
           </div>
         ) : (
           <>
-            {/* Visuals section */}
             {visuals.length > 0 && (
-              <AssetSection
+              <TypeSection
                 title="Visuals"
-                items={visuals}
+                count={visuals.reduce((n, g) => n + g.items.length, 0)}
+                groups={visuals}
                 activeTabId={activeTabId}
                 onOpen={openAsset}
                 onDelete={deleteAsset}
               />
             )}
-
-            {/* Images section */}
             {images.length > 0 && (
-              <AssetSection
+              <TypeSection
                 title="Images"
-                items={images}
+                count={images.reduce((n, g) => n + g.items.length, 0)}
+                groups={images}
                 activeTabId={activeTabId}
                 onOpen={openAsset}
                 onDelete={deleteAsset}
@@ -87,37 +129,90 @@ export function AssetList() {
   );
 }
 
-function AssetSection({
+/** Top-level type section (Visuals / Images) — always visible, contains reference sub-groups. */
+function TypeSection({
   title,
-  items,
+  count,
+  groups,
   activeTabId,
   onOpen,
   onDelete,
 }: {
   title: string;
-  items: AssetInfo[];
+  count: number;
+  groups: AssetGroup[];
   activeTabId: string | null;
   onOpen: (path: string, assetType: "screenshot" | "visual") => void;
   onDelete: (path: string) => Promise<void>;
 }) {
   return (
     <div>
-      <div className="px-3 h-7 flex items-center border-b border-[var(--color-border)]">
-        <span className="text-[10px] font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">
-          {title} ({items.length})
+      <div className="px-3 h-7 flex items-center border-b border-[var(--color-border)] bg-[var(--color-surface-alt)]">
+        <span className="text-[10px] font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider">
+          {title} ({count})
         </span>
       </div>
-      <div className="py-1">
-        {items.map((asset) => (
-          <AssetItem
-            key={asset.path}
-            asset={asset}
-            isActive={activeTabId === `asset-${asset.path}`}
-            onOpen={() => onOpen(asset.path, asset.assetType)}
-            onDelete={() => onDelete(asset.path)}
-          />
-        ))}
-      </div>
+      {groups.map((group) => (
+        <ReferenceGroup
+          key={group.label}
+          group={group}
+          isUnlinked={group.label === "Unlinked"}
+          activeTabId={activeTabId}
+          onOpen={onOpen}
+          onDelete={onDelete}
+        />
+      ))}
+    </div>
+  );
+}
+
+/** Collapsible sub-group by reference file (or "Unlinked"). */
+function ReferenceGroup({
+  group,
+  isUnlinked,
+  activeTabId,
+  onOpen,
+  onDelete,
+}: {
+  group: AssetGroup;
+  isUnlinked: boolean;
+  activeTabId: string | null;
+  onOpen: (path: string, assetType: "screenshot" | "visual") => void;
+  onDelete: (path: string) => Promise<void>;
+}) {
+  const [collapsed, setCollapsed] = useState(false);
+
+  const toggle = useCallback(() => setCollapsed((c) => !c), []);
+
+  return (
+    <div>
+      <button
+        onClick={toggle}
+        className={`w-full flex items-center gap-1.5 px-3 h-6 text-[10px] transition-colors ${
+          isUnlinked
+            ? "text-[var(--color-warning)] hover:bg-[var(--color-warning)]/5"
+            : "text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-alt)]"
+        }`}
+      >
+        <ChevronRightIcon
+          className={`w-2.5 h-2.5 shrink-0 transition-transform ${collapsed ? "" : "rotate-90"}`}
+        />
+        <span className="truncate font-medium">{group.label}</span>
+        <span className="ml-auto opacity-60">{group.items.length}</span>
+      </button>
+      {!collapsed && (
+        <div className="py-0.5">
+          {group.items.map((asset) => (
+            <AssetItem
+              key={asset.path}
+              asset={asset}
+              isActive={activeTabId === `asset-${asset.path}`}
+              onOpen={() => onOpen(asset.path, asset.assetType)}
+              onDelete={() => onDelete(asset.path)}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -169,14 +264,9 @@ function AssetItem({
         )}
       </div>
 
-      {/* Name + refs */}
+      {/* Name */}
       <div className="flex-1 min-w-0">
         <div className="text-[12px] truncate">{filename}</div>
-        {asset.referencedBy.length > 0 && (
-          <div className="text-[10px] text-[var(--color-text-secondary)] truncate">
-            {asset.referencedBy.map((r) => r.split("/").pop()).join(", ")}
-          </div>
-        )}
       </div>
 
       {/* Delete button */}
