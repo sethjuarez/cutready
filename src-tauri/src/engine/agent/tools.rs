@@ -673,7 +673,14 @@ fn exec_read_note(root: &Path, args: &Value, vision_enabled: bool) -> String {
 fn exec_read_sketch(root: &Path, args: &Value, vision_enabled: bool) -> String {
     let path = match args.get("path").and_then(|v| v.as_str()) {
         Some(p) => resolve_path(root, p),
-        None => return "Error: missing 'path' argument".into(),
+        None => {
+            // Graceful fallback: return file listing so the model can self-correct
+            // without burning an extra round-trip to list_project_files.
+            let listing = exec_list_project_files(root);
+            return format!(
+                "Error: missing 'path' argument. Call read_sketch with a path from the list below.\n\n{listing}"
+            );
+        }
     };
     match project::read_sketch(&path) {
         Ok(sketch) => {
@@ -796,11 +803,22 @@ fn exec_set_planning_rows(root: &Path, args: &Value) -> String {
 fn exec_update_planning_row(root: &Path, args: &Value) -> String {
     let path = match args.get("path").and_then(|v| v.as_str()) {
         Some(p) => resolve_path(root, p),
-        None => return "Error: missing 'path' argument".into(),
+        None => {
+            let listing = exec_list_project_files(root);
+            return format!(
+                "Error: missing 'path' argument. Call update_planning_row with a path from the list below.\n\n{listing}"
+            );
+        }
     };
     let index = match args.get("index").and_then(|v| v.as_u64()) {
         Some(i) => i as usize,
-        None => return "Error: missing 'index' argument".into(),
+        None => {
+            let hint = match project::read_sketch(&path) {
+                Ok(s) => format!(" Sketch has {} rows (valid indices: 0–{}).", s.rows.len(), s.rows.len().saturating_sub(1)),
+                Err(_) => String::new(),
+            };
+            return format!("Error: missing 'index' (0-based row index).{hint}");
+        }
     };
 
     let mut sketch = match project::read_sketch(&path) {
@@ -839,11 +857,22 @@ fn exec_update_planning_row(root: &Path, args: &Value) -> String {
 fn exec_set_row_visual(root: &Path, args: &Value) -> String {
     let path = match args.get("path").and_then(|v| v.as_str()) {
         Some(p) => resolve_path(root, p),
-        None => return "Error: missing 'path' argument".into(),
+        None => {
+            let listing = exec_list_project_files(root);
+            return format!(
+                "Error: missing 'path' argument. Call set_row_visual with a path from the list below.\n\n{listing}"
+            );
+        }
     };
     let index = match args.get("index").and_then(|v| v.as_u64()) {
         Some(i) => i as usize,
-        None => return "Error: missing 'index' argument".into(),
+        None => {
+            let hint = match project::read_sketch(&path) {
+                Ok(s) => format!(" Sketch has {} rows (valid indices: 0–{}).", s.rows.len(), s.rows.len().saturating_sub(1)),
+                Err(_) => String::new(),
+            };
+            return format!("Error: missing 'index' (0-based row index).{hint}");
+        }
     };
 
     let mut sketch = match project::read_sketch(&path) {
@@ -931,11 +960,23 @@ fn exec_set_row_visual(root: &Path, args: &Value) -> String {
 fn exec_design_plan(root: &Path, args: &Value) -> String {
     let path = match args.get("path").and_then(|v| v.as_str()) {
         Some(p) => resolve_path(root, p),
-        None => return "Error: missing 'path' argument".into(),
+        None => {
+            let listing = exec_list_project_files(root);
+            return format!(
+                "Error: missing 'path' argument. Call design_plan with a path from the list below.\n\n{listing}"
+            );
+        }
     };
     let index = match args.get("index").and_then(|v| v.as_u64()) {
         Some(i) => i as usize,
-        None => return "Error: missing 'index' argument".into(),
+        None => {
+            // Read the sketch to tell the model how many rows exist
+            let hint = match project::read_sketch(&path) {
+                Ok(s) => format!(" Sketch has {} rows (valid indices: 0–{}).", s.rows.len(), s.rows.len().saturating_sub(1)),
+                Err(_) => String::new(),
+            };
+            return format!("Error: missing 'index' (0-based row index).{hint}");
+        }
     };
     let plan = match args.get("plan").and_then(|v| v.as_str()) {
         Some(p) => p.to_string(),
