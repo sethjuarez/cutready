@@ -25,7 +25,7 @@ import {
   FolderIcon,
   PlusIcon,
   CameraIcon,
-  ArrowDownOnSquareIcon,
+  CheckIcon,
 } from "@heroicons/react/24/outline";
 import type { PlanningRow } from "../types/sketch";
 import type { ElucimDocument } from "@elucim/dsl";
@@ -471,7 +471,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
                     title="Save changes"
                     className="p-1.5 rounded-lg text-[var(--color-accent)] hover:text-[var(--color-accent-hover)] hover:bg-[var(--color-surface)] transition-colors"
                   >
-                    <ArrowDownOnSquareIcon className="w-[18px] h-[18px]" />
+                    <CheckIcon className="w-4 h-4" />
                   </button>
                 )}
                 {/* Close button */}
@@ -479,7 +479,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
                   onClick={closeLightbox}
                   className="p-1.5 rounded-lg text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)] transition-colors"
                 >
-                  <XMarkIcon className="w-4.5 h-4.5" />
+                  <XMarkIcon className="w-5 h-5" />
                 </button>
               </div>
             </div>
