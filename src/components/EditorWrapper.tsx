@@ -6,9 +6,12 @@
  * DARK_THEME/LIGHT_THEME). We pass concrete hex themes (getCutReadyTheme)
  * so the canvas can generate proper --elucim-* vars.
  */
-import { memo, lazy, Suspense, useState, useEffect } from "react";
+import { memo, lazy, Suspense, useState, useEffect, useCallback } from "react";
 import type { ElucimDocument } from "@elucim/dsl";
+import { invoke } from "@tauri-apps/api/core";
 import { getCutReadyTheme } from "../theme/elucimTheme";
+import { useElucimImageResolver } from "../hooks/useElucimImageResolver";
+import { useAppStore } from "../stores/appStore";
 
 export interface EditorWrapperProps {
   dsl: ElucimDocument;
@@ -23,6 +26,9 @@ export default memo(function EditorWrapper({
   dsl,
   onDocumentChange,
 }: EditorWrapperProps) {
+  const imageResolver = useElucimImageResolver();
+  const projectRoot = useAppStore((s) => s.currentProject?.root ?? null);
+
   // Detect light/dark for explicit colorScheme (auto can't parse var() strings)
   const [isDark, setIsDark] = useState(() =>
     document.documentElement.classList.contains("dark")
@@ -33,6 +39,24 @@ export default memo(function EditorWrapper({
     });
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
     return () => observer.disconnect();
+  }, []);
+
+  // Browse image callback — opens file picker for images only (no visuals)
+  const handleBrowseImage = useCallback(async () => {
+    const { open } = await import("@tauri-apps/plugin-dialog");
+    const selected = await open({
+      multiple: false,
+      filters: [{ name: "Images", extensions: ["png", "jpg", "jpeg", "gif", "webp", "svg"] }],
+    });
+    if (!selected) return null;
+    const filePath = typeof selected === "string" ? selected : selected;
+    try {
+      const relativePath = await invoke<string>("import_image", { sourcePath: filePath });
+      return { ref: relativePath, displayName: relativePath.split("/").pop() ?? relativePath };
+    } catch (err) {
+      console.error("Failed to import image for editor:", err);
+      return null;
+    }
   }, []);
 
   const theme = getCutReadyTheme(isDark);
@@ -54,6 +78,8 @@ export default memo(function EditorWrapper({
           "--elucim-editor-bg": isDark ? "#252220" : "#eae7e2",
         }}
         onDocumentChange={onDocumentChange}
+        onBrowseImage={projectRoot ? handleBrowseImage : undefined}
+        imageResolver={imageResolver}
         className="w-full h-full"
         style={{ width: "100%", height: "100%" }}
       />

@@ -3,6 +3,7 @@ import { DslRenderer, type ElucimDocument, type DslRendererRef } from "@elucim/d
 import { invoke } from "@tauri-apps/api/core";
 import { PlayIcon } from "@heroicons/react/24/outline";
 import { ELUCIM_THEME } from "../theme/elucimTheme";
+import { useElucimImageResolver } from "../hooks/useElucimImageResolver";
 
 interface VisualCellProps {
   /** Path to the visual file (e.g., ".cutready/visuals/abc123.json"). */
@@ -44,6 +45,7 @@ const ERROR_FALLBACK = (
  */
 export default function VisualCell({ visualPath, mode, onClick, className, controlRef, onPlayStateChange }: VisualCellProps) {
   const rendererRef = useRef<DslRendererRef>(null);
+  const imageResolver = useElucimImageResolver();
   const [visual, setVisual] = useState<Record<string, unknown> | null>(null);
   const [hasError, setHasError] = useState(false);
   const [isPlaying, setIsPlaying] = useState(true);
@@ -163,6 +165,7 @@ export default function VisualCell({ visualPath, mode, onClick, className, contr
           colorScheme={isDark ? "dark" : "light"}
           theme={THEME}
           fitToContainer
+          imageResolver={imageResolver}
           onError={handleError}
           onRenderError={() => setHasError(true)}
           fallback={ERROR_FALLBACK}
@@ -190,6 +193,7 @@ export default function VisualCell({ visualPath, mode, onClick, className, contr
             colorScheme={isDark ? "dark" : "light"}
             theme={THEME}
             fitToContainer
+            imageResolver={imageResolver}
             onError={handleError}
             onRenderError={() => setHasError(true)}
             fallback={ERROR_FALLBACK}

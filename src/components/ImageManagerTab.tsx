@@ -12,6 +12,7 @@ import { DslRenderer, type ElucimDocument } from "@elucim/dsl";
 import { useAppStore } from "../stores/appStore";
 import { useTheme } from "../hooks/useTheme";
 import { ELUCIM_THEME } from "../theme/elucimTheme";
+import { useElucimImageResolver } from "../hooks/useElucimImageResolver";
 import { SketchIcon, StoryboardIcon, NoteIcon, AlertTriangleIcon } from "./Icons";
 
 interface ImageInfo {
@@ -429,6 +430,7 @@ function VisualThumbnail({ relativePath }: { relativePath: string }) {
   const [error, setError] = useState(false);
   const { theme } = useTheme();
   const isDark = theme === "dark";
+  const imageResolver = useElucimImageResolver();
 
   useEffect(() => {
     let cancelled = false;
@@ -462,6 +464,7 @@ function VisualThumbnail({ relativePath }: { relativePath: string }) {
         colorScheme={isDark ? "dark" : "light"}
         theme={ELUCIM_THEME}
         fitToContainer
+        imageResolver={imageResolver}
         fallback={
           <div className="flex items-center justify-center w-full h-full text-[10px] text-[var(--color-text-secondary)]">
             Render error
