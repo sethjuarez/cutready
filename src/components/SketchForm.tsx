@@ -293,8 +293,12 @@ The Actions describe what happens on screen — use them as visual design hints.
   const handlePickImage = useCallback(async (rowIndex: number) => {
     setImagePickerRowIdx(rowIndex);
     try {
-      const images = await invoke<{ path: string; size: number; referencedBy: string[] }[]>("list_project_images");
-      setProjectImages(images.map((i) => ({ path: i.path, size: i.size })));
+      const images = await invoke<{ path: string; size: number; referencedBy: string[]; assetType: string }[]>("list_project_images");
+      setProjectImages(
+        images
+          .filter((i) => i.assetType === "screenshot")
+          .map((i) => ({ path: i.path, size: i.size })),
+      );
     } catch {
       setProjectImages([]);
     }
