@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { PlayIcon } from "@heroicons/react/24/outline";
 import { ELUCIM_THEME } from "../theme/elucimTheme";
 import { useElucimImageResolver } from "../hooks/useElucimImageResolver";
+import { ErrorBoundary } from "./ErrorBoundary";
 
 interface VisualCellProps {
   /** Path to the visual file (e.g., ".cutready/visuals/abc123.json"). */
@@ -159,17 +160,19 @@ export default function VisualCell({ visualPath, mode, onClick, className, contr
         className={`relative group/vis w-40 h-24 rounded-md bg-[var(--color-surface-alt)] border border-[var(--color-border)] overflow-hidden cursor-pointer ${className ?? ""}`}
         onClick={handleClick}
       >
-        <DslRenderer
-          dsl={dsl}
-          poster="last"
-          colorScheme={isDark ? "dark" : "light"}
-          theme={THEME}
-          fitToContainer
-          imageResolver={imageResolver}
-          onError={handleError}
-          onRenderError={() => setHasError(true)}
-          fallback={ERROR_FALLBACK}
-        />
+        <ErrorBoundary fallback={ERROR_FALLBACK} resetKey={visualPath} onError={() => setHasError(true)}>
+          <DslRenderer
+            dsl={dsl}
+            poster="last"
+            colorScheme={isDark ? "dark" : "light"}
+            theme={THEME}
+            fitToContainer
+            imageResolver={imageResolver}
+            onError={handleError}
+            onRenderError={() => setHasError(true)}
+            fallback={ERROR_FALLBACK}
+          />
+        </ErrorBoundary>
 
         {/* Hover overlay with play icon */}
         <div className="absolute inset-0 bg-black/30 opacity-0 group-hover/vis:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
@@ -184,21 +187,23 @@ export default function VisualCell({ visualPath, mode, onClick, className, contr
     <div ref={containerRef} className={`w-full h-full flex items-center justify-center ${className ?? ""}`}>
       {fitWidth !== null && (
         <div style={{ width: fitWidth }}>
-          <DslRenderer
-            ref={rendererRef}
-            dsl={dsl}
-            controls={false}
-            autoPlay
-            loop={false}
-            colorScheme={isDark ? "dark" : "light"}
-            theme={THEME}
-            fitToContainer
-            imageResolver={imageResolver}
-            onError={handleError}
-            onRenderError={() => setHasError(true)}
-            fallback={ERROR_FALLBACK}
-            onPlayStateChange={setIsPlaying}
-          />
+          <ErrorBoundary fallback={ERROR_FALLBACK} resetKey={visualPath} onError={() => setHasError(true)}>
+            <DslRenderer
+              ref={rendererRef}
+              dsl={dsl}
+              controls={false}
+              autoPlay
+              loop={false}
+              colorScheme={isDark ? "dark" : "light"}
+              theme={THEME}
+              fitToContainer
+              imageResolver={imageResolver}
+              onError={handleError}
+              onRenderError={() => setHasError(true)}
+              fallback={ERROR_FALLBACK}
+              onPlayStateChange={setIsPlaying}
+            />
+          </ErrorBoundary>
         </div>
       )}
     </div>

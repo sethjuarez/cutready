@@ -12,6 +12,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { getCutReadyTheme } from "../theme/elucimTheme";
 import { useElucimImageResolver } from "../hooks/useElucimImageResolver";
 import { useAppStore } from "../stores/appStore";
+import { ErrorBoundary } from "./ErrorBoundary";
 
 export interface EditorWrapperProps {
   dsl: ElucimDocument;
@@ -62,27 +63,35 @@ export default memo(function EditorWrapper({
   const theme = getCutReadyTheme(isDark);
 
   return (
-    <Suspense
+    <ErrorBoundary
       fallback={
-        <div className="w-full h-full flex items-center justify-center text-[var(--color-text-secondary)]">
-          Loading editor…
+        <div className="w-full h-full flex items-center justify-center text-sm text-[var(--color-error)]">
+          Editor failed to render
         </div>
       }
     >
-      <LazyElucimEditor
-        initialDocument={dsl}
-        initialFrame="last"
-        theme={theme}
-        editorTheme={{
-          "color-scheme": isDark ? "dark" : "light",
-          "--elucim-editor-bg": isDark ? "#252220" : "#eae7e2",
-        }}
-        onDocumentChange={onDocumentChange}
-        onBrowseImage={projectRoot ? handleBrowseImage : undefined}
-        imageResolver={imageResolver}
-        className="w-full h-full"
-        style={{ width: "100%", height: "100%" }}
-      />
-    </Suspense>
+      <Suspense
+        fallback={
+          <div className="w-full h-full flex items-center justify-center text-[var(--color-text-secondary)]">
+            Loading editor…
+          </div>
+        }
+      >
+        <LazyElucimEditor
+          initialDocument={dsl}
+          initialFrame="last"
+          theme={theme}
+          editorTheme={{
+            "color-scheme": isDark ? "dark" : "light",
+            "--elucim-editor-bg": isDark ? "#252220" : "#eae7e2",
+          }}
+          onDocumentChange={onDocumentChange}
+          onBrowseImage={projectRoot ? handleBrowseImage : undefined}
+          imageResolver={imageResolver}
+          className="w-full h-full"
+          style={{ width: "100%", height: "100%" }}
+        />
+      </Suspense>
+    </ErrorBoundary>
   );
 });

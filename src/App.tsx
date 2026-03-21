@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useCallback, useState } from "react";
 import { useTheme } from "./hooks/useTheme";
 import { useGlobalHotkeys } from "./hooks/useGlobalHotkeys";
 import { useDebugLog } from "./hooks/useDebugLog";
@@ -6,6 +6,7 @@ import { useDeepLink } from "./hooks/useDeepLink";
 import { StatusBar } from "./components/StatusBar";
 import { AppLayout } from "./components/AppLayout";
 import { ToastContainer } from "./components/ToastContainer";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { useAppStore } from "./stores/appStore";
 import { useUpdateStore } from "./stores/updateStore";
 
@@ -14,6 +15,9 @@ function App() {
   useGlobalHotkeys();
   useDebugLog();
   useDeepLink();
+
+  const [resetKey, setResetKey] = useState(0);
+  const handleReset = useCallback(() => setResetKey((k) => k + 1), []);
 
   // Auto-open last project on startup
   useEffect(() => {
@@ -28,11 +32,29 @@ function App() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-[var(--color-surface)] text-[var(--color-text)]">
-      <AppLayout />
-      <StatusBar theme={theme} onToggleTheme={toggle} />
-      <ToastContainer />
-    </div>
+    <ErrorBoundary
+      resetKey={resetKey}
+      fallback={
+        <div className="min-h-screen bg-[var(--color-surface)] text-[var(--color-text)] flex items-center justify-center">
+          <div className="text-center space-y-4">
+            <p className="text-lg font-medium text-[var(--color-text)]">Something went wrong</p>
+            <p className="text-sm text-[var(--color-text-secondary)]">An unexpected error crashed the interface.</p>
+            <button
+              onClick={handleReset}
+              className="px-4 py-2 rounded-lg bg-[var(--color-accent)] text-white text-sm font-medium hover:bg-[var(--color-accent-hover)] transition-colors"
+            >
+              Reload interface
+            </button>
+          </div>
+        </div>
+      }
+    >
+      <div className="min-h-screen bg-[var(--color-surface)] text-[var(--color-text)]">
+        <AppLayout />
+        <StatusBar theme={theme} onToggleTheme={toggle} />
+        <ToastContainer />
+      </div>
+    </ErrorBoundary>
   );
 }
 
