@@ -274,8 +274,13 @@ function buildMergedJson(
   conflict: ConflictFile,
   choices: Record<string, "ours" | "theirs">,
 ): string {
-  // Start with "ours" as base, then apply per-field choices
-  const base = JSON.parse(conflict.ours);
+  let base: Record<string, unknown>;
+  try {
+    base = JSON.parse(conflict.ours);
+  } catch {
+    // If ours is invalid JSON, fall back to raw text
+    return conflict.ours;
+  }
 
   for (const fc of conflict.field_conflicts) {
     const choice = choices[fc.field_path];

@@ -3,9 +3,7 @@ import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import { XMarkIcon } from "@heroicons/react/24/outline";
 import { useAppStore } from "../stores/appStore";
 import type { Sketch, Storyboard } from "../types/sketch";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-
+import { SafeMarkdown } from "./SafeMarkdown";
 /**
  * SplitPreviewPane — renders a read-only preview of a tab's content
  * in the split (right) pane. Loads data independently from the primary editor.
@@ -152,7 +150,7 @@ function NotePreviewContent({ path }: { path: string }) {
 
   return (
     <div className="p-4 prose-cutready">
-      <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+      <SafeMarkdown rehypePlugins={[]}>{content}</SafeMarkdown>
     </div>
   );
 }

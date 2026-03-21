@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { DocumentIcon, SparklesIcon, PencilIcon, EyeIcon } from "@heroicons/react/24/outline";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-import rehypeRaw from "rehype-raw";
+import { SafeMarkdown } from "./SafeMarkdown";
 import { useAppStore } from "../stores/appStore";
 import { useSettings } from "../hooks/useSettings";
 import { MarkdownEditor } from "./MarkdownEditor";
@@ -302,9 +300,7 @@ export function NoteEditor() {
           <div className="max-w-3xl mx-auto py-6">
             <div className="prose-desc text-sm text-[var(--color-text)] leading-relaxed">
             {activeNoteContent ? (
-              <ReactMarkdown
-                remarkPlugins={[remarkGfm]}
-                rehypePlugins={[rehypeRaw]}
+              <SafeMarkdown
                 components={{
                   img: ({ src, alt, ...props }) => {
                     let resolvedSrc = src ?? "";
@@ -316,7 +312,7 @@ export function NoteEditor() {
                 }}
               >
                 {activeNoteContent}
-              </ReactMarkdown>
+              </SafeMarkdown>
             ) : (
               <p className="text-[var(--color-text-secondary)] italic">Nothing to preview</p>
             )}

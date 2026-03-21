@@ -14,9 +14,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { invoke } from "@tauri-apps/api/core";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-import rehypeRaw from "rehype-raw";
+import { SafeMarkdown } from "./SafeMarkdown";
 import {
   PlayIcon,
   ComputerDesktopIcon,
@@ -324,7 +322,7 @@ export function StoryboardView() {
             >
               {localDesc ? (
                 <div className="prose-desc text-[var(--color-text-secondary)] leading-relaxed">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>{localDesc}</ReactMarkdown>
+                  <SafeMarkdown>{localDesc}</SafeMarkdown>
                 </div>
               ) : (
                 <span className="text-[var(--color-text-secondary)]/40">
@@ -569,7 +567,7 @@ function ExpandableSketchCard({
       {/* Description (from full sketch if loaded) */}
       {fullSketch && typeof fullSketch.description === "string" && fullSketch.description.trim() && (
         <div className="prose-desc text-sm text-[var(--color-text-secondary)] mb-2 leading-relaxed">
-          <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>{fullSketch.description}</ReactMarkdown>
+          <SafeMarkdown>{fullSketch.description}</SafeMarkdown>
         </div>
       )}
 

@@ -1,9 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-import rehypeRaw from "rehype-raw";
+import { SafeMarkdown } from "./SafeMarkdown";
 import { ChevronLeftIcon, SparklesIcon, PlayIcon, ComputerDesktopIcon, PlusIcon, XMarkIcon, FolderIcon } from "@heroicons/react/24/outline";
 import { useAppStore } from "../stores/appStore";
 import { useToastStore } from "../stores/toastStore";
@@ -504,7 +502,7 @@ The Actions describe what happens on screen — use them as visual design hints.
             >
               {localDesc ? (
                 <div className="prose-desc text-[var(--color-text)] leading-relaxed">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>{localDesc}</ReactMarkdown>
+                  <SafeMarkdown>{localDesc}</SafeMarkdown>
                 </div>
               ) : (
                 <span className="text-[var(--color-text-secondary)]/40">

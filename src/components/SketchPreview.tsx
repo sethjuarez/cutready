@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useState, useRef, lazy, Suspense } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-import rehypeRaw from "rehype-raw";
+import { SafeMarkdown } from "./SafeMarkdown";
 import { ClockIcon, ArrowPathIcon, Squares2X2Icon, XMarkIcon, ArrowLeftIcon, ArrowRightIcon, PhotoIcon, ChevronLeftIcon, ChevronRightIcon } from "@heroicons/react/24/outline";
 import { ResizeHandle } from "./ResizeHandle";
 import type { PlanningRow } from "../types/sketch";
@@ -234,7 +232,7 @@ export function SketchPreview({ rows, projectRoot, title, onClose, slides: slide
                 ) : activeTab === "narrative" ? (
                   row!.narrative ? (
                     <div className="prose-desc text-sm text-[var(--color-text)] leading-relaxed">
-                      <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>{row!.narrative}</ReactMarkdown>
+                      <SafeMarkdown>{row!.narrative}</SafeMarkdown>
                     </div>
                   ) : (
                     <span className="text-sm text-[var(--color-text-secondary)] italic">No narrative</span>
@@ -242,7 +240,7 @@ export function SketchPreview({ rows, projectRoot, title, onClose, slides: slide
                 ) : (
                   row!.demo_actions ? (
                     <div className="prose-desc text-sm text-[var(--color-text)] leading-relaxed">
-                      <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>{row!.demo_actions}</ReactMarkdown>
+                      <SafeMarkdown>{row!.demo_actions}</SafeMarkdown>
                     </div>
                   ) : (
                     <span className="text-sm text-[var(--color-text-secondary)] italic">No actions</span>

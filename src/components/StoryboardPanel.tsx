@@ -9,6 +9,7 @@ import { ResizeHandle } from "./ResizeHandle";
 import { TabBar } from "./TabBar";
 import { HistoryGraphTab } from "./HistoryGraphTab";
 import { SplitPreviewPane } from "./SplitPreviewPane";
+import { ErrorBoundary } from "./ErrorBoundary";
 
 /**
  * StoryboardPanel — center content area for sketch/storyboard workflow.
@@ -74,7 +75,15 @@ export function StoryboardPanel() {
           {/* Primary pane */}
           <div className="flex-1 flex flex-col min-w-0">
             {isHistoryTab ? (
-              <HistoryGraphTab />
+              <ErrorBoundary
+                fallback={
+                  <div className="flex-1 flex items-center justify-center text-sm text-[var(--color-error)]">
+                    History graph failed to render
+                  </div>
+                }
+              >
+                <HistoryGraphTab />
+              </ErrorBoundary>
             ) : isAssetTab && activeTab ? (
               <AssetViewer assetPath={activeTab.path} />
             ) : activeSketch ? (
