@@ -6,13 +6,13 @@
  * DARK_THEME/LIGHT_THEME). We pass concrete hex themes (getCutReadyTheme)
  * so the canvas can generate proper --elucim-* vars.
  */
-import { memo, lazy, Suspense, useState, useEffect, useCallback } from "react";
+import { memo, lazy, Suspense, useState, useEffect, useCallback, useRef } from "react";
 import type { ElucimDocument } from "@elucim/dsl";
-import { invoke } from "@tauri-apps/api/core";
 import { getCutReadyTheme } from "../theme/elucimTheme";
 import { useElucimImageResolver } from "../hooks/useElucimImageResolver";
-import { useAppStore } from "../stores/appStore";
+import { useAppStore, type AssetInfo } from "../stores/appStore";
 import { ErrorBoundary } from "./ErrorBoundary";
+import { ProjectImagePicker } from "./ProjectImagePicker";
 
 export interface EditorWrapperProps {
   dsl: ElucimDocument;
@@ -42,22 +42,29 @@ export default memo(function EditorWrapper({
     return () => observer.disconnect();
   }, []);
 
-  // Browse image callback — opens file picker for images only (no visuals)
+  // Promise-based picker: onBrowseImage opens the modal and returns a promise
+  // that resolves when the user picks an image or cancels.
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const pickerResolver = useRef<((result: { ref: string; displayName: string } | null) => void) | null>(null);
+
   const handleBrowseImage = useCallback(async () => {
-    const { open } = await import("@tauri-apps/plugin-dialog");
-    const selected = await open({
-      multiple: false,
-      filters: [{ name: "Images", extensions: ["png", "jpg", "jpeg", "gif", "webp", "svg"] }],
+    setPickerOpen(true);
+    return new Promise<{ ref: string; displayName: string } | null>((resolve) => {
+      pickerResolver.current = resolve;
     });
-    if (!selected) return null;
-    const filePath = typeof selected === "string" ? selected : selected;
-    try {
-      const relativePath = await invoke<string>("import_image", { sourcePath: filePath });
-      return { ref: relativePath, displayName: relativePath.split("/").pop() ?? relativePath };
-    } catch (err) {
-      console.error("Failed to import image for editor:", err);
-      return null;
-    }
+  }, []);
+
+  const handlePickerSelect = useCallback((asset: AssetInfo) => {
+    const displayName = asset.path.split("/").pop() ?? asset.path;
+    pickerResolver.current?.({ ref: asset.path, displayName });
+    pickerResolver.current = null;
+    setPickerOpen(false);
+  }, []);
+
+  const handlePickerCancel = useCallback(() => {
+    pickerResolver.current?.(null);
+    pickerResolver.current = null;
+    setPickerOpen(false);
   }, []);
 
   const theme = getCutReadyTheme(isDark);
@@ -92,6 +99,9 @@ export default memo(function EditorWrapper({
           style={{ width: "100%", height: "100%" }}
         />
       </Suspense>
+      {pickerOpen && (
+        <ProjectImagePicker onSelect={handlePickerSelect} onCancel={handlePickerCancel} />
+      )}
     </ErrorBoundary>
   );
 });
