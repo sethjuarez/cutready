@@ -9,6 +9,14 @@
 Covector manages this changelog. Do not edit manually.
 Each release section is generated from `.changes/*.md` files.
 
+## [0.17.1](https://github.com/sethjuarez/cutready/compare/v0.17.0...v0.17.1) (2026-03-21)
+
+
+### Bug Fixes
+
+* add ErrorBoundary to catch visual rendering crashes ([2fc0867](https://github.com/sethjuarez/cutready/commit/2fc0867cb090faf3d519a8953e99e93ff35c9339))
+* protect markdown rendering and other crash vectors with error boundaries ([a0fc683](https://github.com/sethjuarez/cutready/commit/a0fc68340f21463991a2baa5b3f78ef07fa387dc))
+
 ## [0.17.0](https://github.com/sethjuarez/cutready/compare/v0.16.0...v0.17.0) (2026-03-20)
 
 
