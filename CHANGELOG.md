@@ -9,6 +9,13 @@
 Covector manages this changelog. Do not edit manually.
 Each release section is generated from `.changes/*.md` files.
 
+## [0.18.0](https://github.com/sethjuarez/cutready/compare/v0.17.1...v0.18.0) (2026-03-21)
+
+
+### Features
+
+* replace OS file dialog with project image picker in Elucim editor ([1be6980](https://github.com/sethjuarez/cutready/commit/1be6980d99da360b1df1900d62d61820ff2936c4))
+
 ## [0.17.1](https://github.com/sethjuarez/cutready/compare/v0.17.0...v0.17.1) (2026-03-21)
 
 
