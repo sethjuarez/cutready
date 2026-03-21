@@ -270,7 +270,7 @@ function FieldConflictRow({
   );
 }
 
-function buildMergedJson(
+export function buildMergedJson(
   conflict: ConflictFile,
   choices: Record<string, "ours" | "theirs">,
 ): string {
@@ -293,7 +293,7 @@ function buildMergedJson(
   return JSON.stringify(base, null, 2);
 }
 
-function setNestedValue(obj: any, path: string, value: unknown) {
+export function setNestedValue(obj: any, path: string, value: unknown) {
   // Parse path like "meta.author" or "items[2].name"
   const parts = path.replace(/\[(\d+)\]/g, ".$1").split(".");
   let current = obj;
