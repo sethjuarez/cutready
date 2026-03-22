@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowDownTrayIcon, ExclamationCircleIcon } from "@heroicons/react/24/outline";
 import { useAppStore } from "../stores/appStore";
+import { generateSnapshotName } from "../utils/snapshotName";
 
 /**
  * Modal dialog for naming a snapshot (Ctrl+S).
@@ -20,16 +21,15 @@ export function SnapshotDialog() {
   const [saving, setSaving] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Auto-generate a snapshot name when the dialog opens
+  // Auto-generate a snapshot name (and fork label when rewound) on open
   useEffect(() => {
-    if (snapshotPromptOpen && !label) {
-      const now = new Date();
-      const h = now.getHours();
-      const m = String(now.getMinutes()).padStart(2, "0");
-      const period = h < 12 ? "morning" : h < 17 ? "afternoon" : "evening";
-      const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-      const day = dayNames[now.getDay()];
-      setLabel(`${day} ${period} ${h % 12 || 12}:${m}`);
+    if (snapshotPromptOpen) {
+      if (!label) {
+        setLabel(generateSnapshotName());
+      }
+      if (isRewound && !forkLabel) {
+        setForkLabel("New direction");
+      }
     }
   }, [snapshotPromptOpen]);
 
@@ -59,7 +59,7 @@ export function SnapshotDialog() {
     } catch (err) {
       console.error("Snapshot save failed:", err);
       const { useToastStore } = await import("../stores/toastStore");
-      useToastStore.getState().show(`Snapshot failed: ${err}`, 5000);
+      useToastStore.getState().show(`Snapshot failed: ${err}`, 5000, "error");
       setSaving(false);
     }
   }, [label, forkLabel, isRewound, saveVersion, loadGraphData, loadTimelines, close]);
@@ -115,18 +115,21 @@ export function SnapshotDialog() {
         <div className="px-5 pb-5 flex flex-col gap-3">
           {/* Fork warning */}
           {willFork && (
-            <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg bg-warning/10 border border-warning/20">
-              <ExclamationCircleIcon className="w-3.5 h-3.5 text-warning shrink-0 mt-0.5" />
+            <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg bg-[var(--color-accent)]/10 border border-[var(--color-accent)]/20">
+              <ExclamationCircleIcon className="w-3.5 h-3.5 text-[var(--color-accent)] shrink-0 mt-0.5" />
               <div className="flex-1">
-                <div className="text-[11px] font-medium text-warning mb-1.5">
-                  You're starting a new direction from an older snapshot
+                <div className="text-[11px] font-medium text-[var(--color-accent)] mb-0.5">
+                  Creating a new branch
+                </div>
+                <div className="text-[10px] text-[var(--color-text-secondary)] mb-2">
+                  Your changes will be saved on a separate timeline, so the original history stays safe.
                 </div>
                 <input
                   type="text"
                   value={forkLabel}
                   onChange={(e) => setForkLabel(e.target.value)}
-                  placeholder="Name this line of thinking..."
-                  className="w-full px-2.5 py-1.5 rounded-md bg-[var(--color-surface)] border border-warning/30 text-xs text-[var(--color-text)] placeholder:text-[var(--color-text-secondary)]/50 focus:outline-none focus:ring-1 focus:ring-warning/40"
+                  placeholder="e.g. Alternative intro, V2 approach..."
+                  className="w-full px-2.5 py-1.5 rounded-md bg-[var(--color-surface)] border border-[var(--color-accent)]/20 text-xs text-[var(--color-text)] placeholder:text-[var(--color-text-secondary)]/50 focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)]/40"
                 />
               </div>
             </div>

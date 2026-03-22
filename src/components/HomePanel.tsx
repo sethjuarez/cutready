@@ -2,8 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useAppStore } from "../stores/appStore";
 import { open } from "@tauri-apps/plugin-dialog";
 import { invoke } from "@tauri-apps/api/core";
-import { useToastStore } from "../stores/toastStore";
-import { PlusIcon, ArrowDownTrayIcon, FolderIcon, XMarkIcon } from "@heroicons/react/24/outline";
+import { PlusIcon, ArrowDownTrayIcon, FolderIcon, XMarkIcon, XCircleIcon } from "@heroicons/react/24/outline";
 
 /* ── Decorative icon components ───────────────────────────── */
 
@@ -74,13 +73,13 @@ export function HomePanel() {
   const createProject = useAppStore((s) => s.createProject);
   const openProject = useAppStore((s) => s.openProject);
 
-  const showToast = useToastStore((s) => s.show);
   const [newName, setNewName] = useState("");
   const [showCreate, setShowCreate] = useState(false);
   const [showClone, setShowClone] = useState(false);
   const [cloneUrl, setCloneUrl] = useState("");
   const [cloneToken, setCloneToken] = useState("");
   const [cloning, setCloning] = useState(false);
+  const [cloneError, setCloneError] = useState<{ type: "auth" | "generic"; message: string } | null>(null);
 
   const slug = newName
     .trim()
@@ -133,6 +132,7 @@ export function HomePanel() {
   }, [openProject]);
 
   const handleClone = useCallback(async () => {
+    setCloneError(null);
     const url = cloneUrl.trim();
     if (!url) return;
 
@@ -171,12 +171,9 @@ export function HomePanel() {
       console.error("Clone failed:", err);
       const msg = String(err);
       if (msg.includes("401")) {
-        showToast(
-          "Clone failed: authentication required. Install the GitHub CLI (gh) and run 'gh auth login', then restart CutReady — or paste an access token above.",
-          8000,
-        );
+        setCloneError({ type: "auth", message: msg });
       } else {
-        showToast(`Clone failed: ${msg}`, 5000);
+        setCloneError({ type: "generic", message: msg });
       }
     } finally {
       setCloning(false);
@@ -312,7 +309,7 @@ export function HomePanel() {
                 onChange={(e) => setCloneUrl(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") handleClone();
-                  if (e.key === "Escape") { setShowClone(false); setCloneUrl(""); setCloneToken(""); }
+                  if (e.key === "Escape") { setShowClone(false); setCloneUrl(""); setCloneToken(""); setCloneError(null); }
                 }}
                 placeholder="https://github.com/org/repo.git"
                 autoFocus
@@ -325,7 +322,7 @@ export function HomePanel() {
                 onChange={(e) => setCloneToken(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") handleClone();
-                  if (e.key === "Escape") { setShowClone(false); setCloneUrl(""); setCloneToken(""); }
+                  if (e.key === "Escape") { setShowClone(false); setCloneUrl(""); setCloneToken(""); setCloneError(null); }
                 }}
                 placeholder="ghp_..."
                 className="w-full px-3 py-2 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] text-sm text-[var(--color-text)] placeholder:text-[var(--color-text-secondary)]/50 focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]/40 mb-3"
@@ -339,12 +336,36 @@ export function HomePanel() {
                   {cloning ? "Cloning..." : "Choose Folder & Clone"}
                 </button>
                 <button
-                  onClick={() => { setShowClone(false); setCloneUrl(""); setCloneToken(""); }}
+                  onClick={() => { setShowClone(false); setCloneUrl(""); setCloneToken(""); setCloneError(null); }}
                   className="px-3 py-2 rounded-lg text-sm text-[var(--color-text-secondary)] hover:bg-[var(--color-surface)] transition-colors"
                 >
                   Cancel
                 </button>
               </div>
+              {cloneError?.type === "auth" && (
+                <div className="mt-3 rounded-lg border border-[var(--color-error)]/30 bg-[var(--color-error)]/5 p-3">
+                  <div className="flex items-start gap-2">
+                    <XCircleIcon className="w-4 h-4 text-[var(--color-error)] shrink-0 mt-0.5" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium text-[var(--color-error)] mb-2">Authentication required</p>
+                      <ol className="text-[11px] text-[var(--color-text-secondary)] space-y-1 list-decimal list-inside">
+                        <li>Install the <a href="https://cli.github.com" className="text-[var(--color-accent)] underline" target="_blank" rel="noopener">GitHub CLI</a></li>
+                        <li>Run <code className="px-1 py-0.5 rounded bg-[var(--color-surface-inset)] text-[10px]">gh auth login</code> in your terminal</li>
+                        <li>Restart CutReady and try again</li>
+                      </ol>
+                      <p className="text-[11px] text-[var(--color-text-secondary)] mt-2">
+                        Or paste an access token in the field above.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+              {cloneError?.type === "generic" && (
+                <div className="mt-3 flex items-start gap-2 text-xs text-[var(--color-error)]">
+                  <XCircleIcon className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                  <span className="break-all">{cloneError.message}</span>
+                </div>
+              )}
             </div>
           )}
 

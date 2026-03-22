@@ -71,7 +71,7 @@ test.describe("Phase 1 — Solo Timeline Switcher", () => {
     await page.waitForTimeout(500);
 
     // Expect the fork naming input
-    const forkInput = page.locator('input[placeholder="Name this line of thinking..."]');
+    const forkInput = page.locator('input[placeholder="e.g. Alternative intro, V2 approach..."]');
     await expect(forkInput).toBeVisible({ timeout: 3_000 });
 
     await page.screenshot({

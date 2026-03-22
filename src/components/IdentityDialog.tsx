@@ -70,7 +70,7 @@ export function IdentityDialog() {
     } catch (err) {
       console.error("Failed to set identity:", err);
       const { useToastStore } = await import("../stores/toastStore");
-      useToastStore.getState().show(`Failed to set identity: ${err}`, 5000);
+      useToastStore.getState().show(`Failed to set identity: ${err}`, 5000, "error");
       setSaving(false);
     }
   }, [name, email, identityPromptCallback]);

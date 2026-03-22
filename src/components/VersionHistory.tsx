@@ -237,6 +237,17 @@ export function VersionHistory() {
 
       {/* Active branch — linear snapshot list */}
       <div className="flex-1 overflow-y-auto">
+        {activeNodes.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-12 text-center px-4">
+            <div className="w-10 h-10 rounded-full bg-[var(--color-accent)]/10 flex items-center justify-center mb-3">
+              <ClockIcon className="w-5 h-5 text-[var(--color-accent)]" />
+            </div>
+            <p className="text-sm font-medium text-[var(--color-text)] mb-1">No snapshots yet</p>
+            <p className="text-xs text-[var(--color-text-secondary)] max-w-[240px] leading-relaxed">
+              Save a snapshot to create a restore point. Press <kbd className="px-1 py-0.5 rounded border border-[var(--color-border)] bg-[var(--color-surface-alt)] text-[10px] font-mono">Ctrl+S</kbd> to quick-save.
+            </p>
+          </div>
+        ) : (
         <div className="py-1">
           <SnapshotGraph
             nodes={searchQuery
@@ -255,6 +266,7 @@ export function VersionHistory() {
             </div>
           )}
         </div>
+        )}
       </div>
 
       {/* Diff panel — shows file changes between two selected snapshots */}

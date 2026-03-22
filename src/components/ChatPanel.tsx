@@ -514,6 +514,9 @@ function ChatTab() {
   const [showModelPicker, setShowModelPicker] = useState(false);
   const [showToolsInfo, setShowToolsInfo] = useState(false);
   const [showAgentPicker, setShowAgentPicker] = useState(false);
+  const [toolbarExpanded, setToolbarExpanded] = useState(() => {
+    return localStorage.getItem("cutready:chat-toolbar-expanded") === "true";
+  });
   const [expandedWebRef, setExpandedWebRef] = useState<string | null>(null);
   const [streamingText, setStreamingText] = useState<string>("");
   const [streamingThinking, setStreamingThinking] = useState<string>("");
@@ -683,6 +686,14 @@ function ChatTab() {
   const modelMaxH = useDropdownMaxHeight(modelPickerRef, showModelPicker);
   const toolsMaxH = useDropdownMaxHeight(toolsInfoRef, showToolsInfo);
   const agentMaxH = useDropdownMaxHeight(agentPickerRef, showAgentPicker);
+
+  const toggleToolbar = useCallback(() => {
+    setToolbarExpanded((prev) => {
+      const next = !prev;
+      localStorage.setItem("cutready:chat-toolbar-expanded", String(next));
+      return next;
+    });
+  }, []);
 
   // All agents: built-ins + custom
   const allAgents = useMemo(() => {
@@ -1183,15 +1194,6 @@ function ChatTab() {
           <IconPlus size={14} />
         </button>
         <div className="flex-1" />
-        {messages.length > 0 && (
-          <button
-            className="flex items-center justify-center w-[26px] h-[26px] rounded text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-toolbar)] transition-colors"
-            onClick={clearChat}
-            title="Clear chat"
-          >
-            <IconTrash size={12} />
-          </button>
-        )}
       </div>
 
       {/* Messages */}
@@ -1436,139 +1438,159 @@ function ChatTab() {
             )}
           </div>
 
-          {/* Agent picker */}
-          <div className="relative" ref={agentPickerRef}>
-            <button
-              className={`flex items-center gap-1 px-1.5 h-[26px] rounded text-[11px] transition-colors ${
-                showAgentPicker
-                  ? "bg-[var(--color-surface)] text-[var(--color-text)]"
-                  : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)]"
-              }`}
-              onClick={() => setShowAgentPicker(!showAgentPicker)}
-              title="Select Agent"
-            >
-              <IconSparkles size={11} />
-              <span className="max-w-[80px] truncate">{selectedAgent.name}</span>
-              <IconChevronDown size={10} />
-            </button>
-            {showAgentPicker && (
-              <div className="absolute bottom-full left-0 mb-1 w-[200px] bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg shadow-lg overflow-hidden z-20 flex flex-col" style={{ maxHeight: agentMaxH }}>
-                {BUILT_IN_AGENTS.length > 0 && (
-                  <>
-                    <div className="px-3 py-1.5 border-b border-[var(--color-border)] shrink-0">
-                      <span className="text-[10px] font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">Built-in</span>
-                    </div>
-                    <div className="py-0.5">
-                      {BUILT_IN_AGENTS.map((agent) => (
-                        <button
-                          key={agent.id}
-                          className={`w-full flex items-center gap-2 px-3 py-1.5 text-[11px] text-left transition-colors ${
-                            selectedAgent.id === agent.id
-                              ? "bg-[var(--color-accent)]/10 text-[var(--color-text)]"
-                              : "text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-alt)] hover:text-[var(--color-text)]"
-                          }`}
-                          onClick={() => {
-                            updateSetting("aiSelectedAgent", agent.id);
-                            setShowAgentPicker(false);
-                          }}
-                        >
-                          <IconSparkles size={11} />
-                          <span className="flex-1">{agent.name}</span>
-                          {agent.modelOverride && (
-                            <span className="text-[9px] text-[var(--color-text-secondary)] opacity-60">{agent.modelOverride}</span>
-                          )}
-                          {selectedAgent.id === agent.id && <IconCheck size={11} />}
-                        </button>
-                      ))}
-                    </div>
-                  </>
-                )}
-                {(settings.aiAgents?.length ?? 0) > 0 && (
-                  <>
-                    <div className="px-3 py-1.5 border-t border-[var(--color-border)] shrink-0">
-                      <span className="text-[10px] font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">Custom</span>
-                    </div>
-                    <div className="py-0.5 overflow-y-auto">
-                      {(settings.aiAgents || []).map((agent) => (
-                        <button
-                          key={agent.id}
-                          className={`w-full flex items-center gap-2 px-3 py-1.5 text-[11px] text-left transition-colors ${
-                            selectedAgent.id === agent.id
-                              ? "bg-[var(--color-accent)]/10 text-[var(--color-text)]"
-                              : "text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-alt)] hover:text-[var(--color-text)]"
-                          }`}
-                          onClick={() => {
-                            updateSetting("aiSelectedAgent", agent.id);
-                            setShowAgentPicker(false);
-                          }}
-                        >
-                          <IconUser size={11} />
-                          <span className="truncate">{agent.name}</span>
-                          {selectedAgent.id === agent.id && <IconCheck size={11} />}
-                        </button>
-                      ))}
-                    </div>
-                  </>
+          {/* Expand toggle */}
+          <button
+            className={`flex items-center justify-center w-[26px] h-[26px] rounded text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)] transition-colors ${
+              toolbarExpanded ? "bg-[var(--color-surface)]" : ""
+            }`}
+            onClick={toggleToolbar}
+            title={toolbarExpanded ? "Hide options" : "Show agent, model & tools"}
+          >
+            <ChevronRightIcon
+              width={12}
+              height={12}
+              className={`transition-transform ${toolbarExpanded ? "rotate-180" : ""}`}
+            />
+          </button>
+
+          {/* Agent, Model, Tools — conditionally visible */}
+          {toolbarExpanded && (
+            <>
+              {/* Agent picker */}
+              <div className="relative" ref={agentPickerRef}>
+                <button
+                  className={`flex items-center gap-1 px-1.5 h-[26px] rounded text-[11px] transition-colors ${
+                    showAgentPicker
+                      ? "bg-[var(--color-surface)] text-[var(--color-text)]"
+                      : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)]"
+                  }`}
+                  onClick={() => setShowAgentPicker(!showAgentPicker)}
+                  title="Select Agent"
+                >
+                  <IconSparkles size={11} />
+                  <span className="max-w-[80px] truncate">{selectedAgent.name}</span>
+                  <IconChevronDown size={10} />
+                </button>
+                {showAgentPicker && (
+                  <div className="absolute bottom-full left-0 mb-1 w-[200px] bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg shadow-lg overflow-hidden z-20 flex flex-col" style={{ maxHeight: agentMaxH }}>
+                    {BUILT_IN_AGENTS.length > 0 && (
+                      <>
+                        <div className="px-3 py-1.5 border-b border-[var(--color-border)] shrink-0">
+                          <span className="text-[10px] font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">Built-in</span>
+                        </div>
+                        <div className="py-0.5">
+                          {BUILT_IN_AGENTS.map((agent) => (
+                            <button
+                              key={agent.id}
+                              className={`w-full flex items-center gap-2 px-3 py-1.5 text-[11px] text-left transition-colors ${
+                                selectedAgent.id === agent.id
+                                  ? "bg-[var(--color-accent)]/10 text-[var(--color-text)]"
+                                  : "text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-alt)] hover:text-[var(--color-text)]"
+                              }`}
+                              onClick={() => {
+                                updateSetting("aiSelectedAgent", agent.id);
+                                setShowAgentPicker(false);
+                              }}
+                            >
+                              <IconSparkles size={11} />
+                              <span className="flex-1">{agent.name}</span>
+                              {agent.modelOverride && (
+                                <span className="text-[9px] text-[var(--color-text-secondary)] opacity-60">{agent.modelOverride}</span>
+                              )}
+                              {selectedAgent.id === agent.id && <IconCheck size={11} />}
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                    {(settings.aiAgents?.length ?? 0) > 0 && (
+                      <>
+                        <div className="px-3 py-1.5 border-t border-[var(--color-border)] shrink-0">
+                          <span className="text-[10px] font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">Custom</span>
+                        </div>
+                        <div className="py-0.5 overflow-y-auto">
+                          {(settings.aiAgents || []).map((agent) => (
+                            <button
+                              key={agent.id}
+                              className={`w-full flex items-center gap-2 px-3 py-1.5 text-[11px] text-left transition-colors ${
+                                selectedAgent.id === agent.id
+                                  ? "bg-[var(--color-accent)]/10 text-[var(--color-text)]"
+                                  : "text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-alt)] hover:text-[var(--color-text)]"
+                              }`}
+                              onClick={() => {
+                                updateSetting("aiSelectedAgent", agent.id);
+                                setShowAgentPicker(false);
+                              }}
+                            >
+                              <IconUser size={11} />
+                              <span className="truncate">{agent.name}</span>
+                              {selectedAgent.id === agent.id && <IconCheck size={11} />}
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
                 )}
               </div>
-            )}
-          </div>
 
-          {/* Model picker */}
-          <div className="relative" ref={modelPickerRef}>
-            <button
-              className={`flex items-center gap-1 px-1.5 h-[26px] rounded text-[11px] transition-colors ${
-                showModelPicker
-                  ? "bg-[var(--color-surface)] text-[var(--color-text)]"
-                  : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)]"
-              }`}
-              onClick={() => setShowModelPicker(!showModelPicker)}
-              title="Select Model"
-            >
-              <span className="max-w-[100px] truncate">{settings.aiModel || "Model"}</span>
-              <IconChevronDown size={10} />
-            </button>
-            {showModelPicker && (
-              <ModelPickerDropdown
-                currentModel={settings.aiModel}
-                onClose={() => setShowModelPicker(false)}
-                maxHeight={modelMaxH}
-              />
-            )}
-          </div>
-
-          {/* Tools info */}
-          <div className="relative" ref={toolsInfoRef}>
-            <button
-              className={`flex items-center gap-1 px-1.5 h-[26px] rounded text-[11px] transition-colors ${
-                showToolsInfo
-                  ? "bg-[var(--color-surface)] text-[var(--color-text)]"
-                  : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)]"
-              }`}
-              onClick={() => setShowToolsInfo(!showToolsInfo)}
-              title="Available Tools"
-            >
-              <IconTool size={12} />
-              <span>{availableTools.length}</span>
-            </button>
-            {showToolsInfo && (
-              <div className="absolute bottom-full left-0 mb-1 w-[220px] bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg shadow-lg overflow-hidden z-20 flex flex-col" style={{ maxHeight: toolsMaxH }}>
-                <div className="px-3 py-2 border-b border-[var(--color-border)] shrink-0">
-                  <span className="text-[10px] font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">Available Tools</span>
-                </div>
-                <div className="flex-1 overflow-y-auto py-1">
-                  {availableTools.map((tool) => (
-                    <div key={tool} className="flex items-center gap-2 px-3 py-1.5 text-[11px] text-[var(--color-text-secondary)]">
-                      {tool.startsWith("read_") || tool === "list_project_files"
-                        ? <IconFile size={11} />
-                        : <IconWrench size={11} />}
-                      <span>{tool}</span>
-                    </div>
-                  ))}
-                </div>
+              {/* Model picker */}
+              <div className="relative" ref={modelPickerRef}>
+                <button
+                  className={`flex items-center gap-1 px-1.5 h-[26px] rounded text-[11px] transition-colors ${
+                    showModelPicker
+                      ? "bg-[var(--color-surface)] text-[var(--color-text)]"
+                      : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)]"
+                  }`}
+                  onClick={() => setShowModelPicker(!showModelPicker)}
+                  title="Select Model"
+                >
+                  <span className="max-w-[100px] truncate">{settings.aiModel || "Model"}</span>
+                  <IconChevronDown size={10} />
+                </button>
+                {showModelPicker && (
+                  <ModelPickerDropdown
+                    currentModel={settings.aiModel}
+                    onClose={() => setShowModelPicker(false)}
+                    maxHeight={modelMaxH}
+                  />
+                )}
               </div>
-            )}
-          </div>
+
+              {/* Tools info */}
+              <div className="relative" ref={toolsInfoRef}>
+                <button
+                  className={`flex items-center gap-1 px-1.5 h-[26px] rounded text-[11px] transition-colors ${
+                    showToolsInfo
+                      ? "bg-[var(--color-surface)] text-[var(--color-text)]"
+                      : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)]"
+                  }`}
+                  onClick={() => setShowToolsInfo(!showToolsInfo)}
+                  title="Available Tools"
+                >
+                  <IconTool size={12} />
+                  <span>{availableTools.length}</span>
+                </button>
+                {showToolsInfo && (
+                  <div className="absolute bottom-full left-0 mb-1 w-[220px] bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg shadow-lg overflow-hidden z-20 flex flex-col" style={{ maxHeight: toolsMaxH }}>
+                    <div className="px-3 py-2 border-b border-[var(--color-border)] shrink-0">
+                      <span className="text-[10px] font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">Available Tools</span>
+                    </div>
+                    <div className="flex-1 overflow-y-auto py-1">
+                      {availableTools.map((tool) => (
+                        <div key={tool} className="flex items-center gap-2 px-3 py-1.5 text-[11px] text-[var(--color-text-secondary)]">
+                          {tool.startsWith("read_") || tool === "list_project_files"
+                            ? <IconFile size={11} />
+                            : <IconWrench size={11} />}
+                          <span>{tool}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
 
           <div className="flex-1" />
 

@@ -601,10 +601,13 @@ function EmptyState({
   onPickExisting: () => void;
 }) {
   return (
-    <div className="flex flex-col items-center justify-center py-16">
-      <div className="text-4xl mb-4">🎬</div>
-      <p className="text-sm text-[var(--color-text-secondary)] mb-6">
-        Start building your storyboard
+    <div className="flex flex-col items-center justify-center py-16 text-center">
+      <div className="w-12 h-12 rounded-full bg-[var(--color-accent)]/10 flex items-center justify-center mb-4">
+        <PlayIcon className="w-6 h-6 text-[var(--color-accent)]" />
+      </div>
+      <p className="text-sm font-medium text-[var(--color-text)] mb-1">No sketches yet</p>
+      <p className="text-xs text-[var(--color-text-secondary)] max-w-[280px] leading-relaxed mb-6">
+        A storyboard sequences your sketches into a complete demo flow. Add sketches to build your narrative.
       </p>
       <div className="flex gap-3">
         <button

@@ -18,6 +18,8 @@ import { ArrowDownTrayIcon, PlusIcon, TrashIcon } from "@heroicons/react/24/outl
 import { useAppStore, type SidebarOrder } from "../stores/appStore";
 import { SketchIcon, StoryboardIcon, NoteIcon } from "./Icons";
 import { ProjectSwitcher } from "./ProjectSwitcher";
+import { ConfirmDialog } from "./ConfirmDialog";
+import { useToastStore } from "../stores/toastStore";
 
 /** Sort items by manifest order. Items not in the manifest go at the end. */
 function applySidebarOrder<T extends { path: string }>(items: T[], order: string[]): T[] {
@@ -105,6 +107,14 @@ export function StoryboardList() {
   const [isCreatingNote, setIsCreatingNote] = useState(false);
   const [newNoteTitle, setNewNoteTitle] = useState("");
   const [pendingDelete, setPendingDelete] = useState<{ type: "storyboard" | "sketch" | "note"; path: string; title: string; usedBy?: string[] } | null>(null);
+  const [drmConfirm, setDrmConfirm] = useState<{ resolve: (ok: boolean) => void } | null>(null);
+  const showToast = useToastStore((s) => s.show);
+
+  const showDrmConfirm = useCallback(() => {
+    return new Promise<boolean>((resolve) => {
+      setDrmConfirm({ resolve });
+    });
+  }, []);
 
   // Global Escape to cancel any active creation
   useEffect(() => {
@@ -286,14 +296,7 @@ export function StoryboardList() {
 
       // DRM-protected document? Offer clipboard fallback
       if (errMsg.includes("DRM-protected") || errMsg.includes("protected or encrypted")) {
-        const ok = confirm(
-          "This document is protected. To import it:\n\n" +
-          "1. Open the file in Word\n" +
-          "2. Select all text (Ctrl+A)\n" +
-          "3. Copy it (Ctrl+C)\n" +
-          "4. Click OK here\n\n" +
-          "The note will be created from your clipboard."
-        );
+        const ok = await showDrmConfirm();
         if (ok) {
           try {
             const text = await navigator.clipboard.readText();
@@ -304,15 +307,15 @@ export function StoryboardList() {
               await loadNotes();
               openNote(notePath);
             } else {
-              alert("Clipboard is empty. Please copy the text from Word first.");
+              showToast("Clipboard is empty — please copy the text from Word first", 5000, "warning");
             }
           } catch {
-            alert("Could not read clipboard. Please make sure you copied text from Word.");
+            showToast("Could not read clipboard — please make sure you copied text from Word", 5000, "warning");
           }
         }
       }
     }
-  }, [loadSketches, loadStoryboards, loadNotes, openNote]);
+  }, [loadSketches, loadStoryboards, loadNotes, openNote, showDrmConfirm, showToast]);
 
   return (
     <div
@@ -627,6 +630,17 @@ export function StoryboardList() {
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={!!drmConfirm}
+        title="Protected Document"
+        message={"This document is protected. To import it:\n\n1. Open the file in Word\n2. Select all text (Ctrl+A)\n3. Copy it (Ctrl+C)\n4. Click Import below\n\nThe note will be created from your clipboard."}
+        confirmLabel="Import from Clipboard"
+        cancelLabel="Cancel"
+        variant="warning"
+        onConfirm={() => { drmConfirm?.resolve(true); setDrmConfirm(null); }}
+        onCancel={() => { drmConfirm?.resolve(false); setDrmConfirm(null); }}
+      />
     </div>
   );
 }

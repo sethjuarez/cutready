@@ -313,6 +313,16 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
           </button>
         </div>
       )}
+      {rows.length === 1 && !rows[0].time && !rows[0].narrative && !rows[0].demo_actions && !readOnly && (
+        <div className="mb-3 px-4 py-3 rounded-lg bg-[var(--color-accent)]/5 border border-[var(--color-accent)]/15 text-xs text-[var(--color-text-secondary)] leading-relaxed">
+          <p className="font-medium text-[var(--color-text)] mb-1.5">Plan your demo scene</p>
+          <div className="flex gap-4">
+            <div><span className="font-medium text-[var(--color-text)]">Time</span> — Duration or timestamp</div>
+            <div><span className="font-medium text-[var(--color-text)]">Narrative</span> — What you&apos;ll say</div>
+            <div><span className="font-medium text-[var(--color-text)]">Actions</span> — What happens on screen</div>
+          </div>
+        </div>
+      )}
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}

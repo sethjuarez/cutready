@@ -1076,7 +1076,7 @@ function FeedbackListTab() {
       });
       if (url) {
         try { await shellOpen(url); } catch { /* opened via gh, URL still returned */ }
-        useToastStore.getState().show(`Issue created: ${url}`);
+        useToastStore.getState().show(`Issue created: ${url}`, 3000, "info");
         setIssuePending(null);
         return;
       }

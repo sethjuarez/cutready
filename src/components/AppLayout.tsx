@@ -96,22 +96,30 @@ export function AppLayout() {
         handler: () => setView("explorer"),
       },
       {
-        id: "nav.editor",
-        title: "Go to Script Editor",
-        category: "Navigate",
-        handler: () => setView("editor"),
-      },
-      {
-        id: "nav.recording",
-        title: "Go to Recording",
-        category: "Navigate",
-        handler: () => setView("recording"),
-      },
-      {
         id: "nav.settings",
         title: "Go to Settings",
         category: "Navigate",
         handler: () => setView("settings"),
+      },
+      {
+        id: "snapshot.quickSave",
+        title: "Quick Save Snapshot",
+        category: "Snapshot",
+        keybinding: "Ctrl+S",
+        handler: () => {
+          const { currentProject, quickSave } = useAppStore.getState();
+          if (currentProject) quickSave();
+        },
+      },
+      {
+        id: "snapshot.saveAs",
+        title: "Save Snapshot As\u2026",
+        category: "Snapshot",
+        keybinding: "Ctrl+Shift+S",
+        handler: () => {
+          const { currentProject, promptSnapshot } = useAppStore.getState();
+          if (currentProject) promptSnapshot();
+        },
       },
       {
         id: "debug.exportLogs",
@@ -137,7 +145,7 @@ export function AppLayout() {
             useToastStore.getState().show("Logs exported", 3000);
           } catch (err) {
             console.error("Export logs failed:", err);
-            useToastStore.getState().show(`Export failed: ${err}`, 5000);
+            useToastStore.getState().show(`Export failed: ${err}`, 5000, "error");
           }
         },
       },
@@ -159,11 +167,17 @@ export function AppLayout() {
         e.preventDefault();
         toggleOutput();
       }
-      if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === "S" || e.key === "s")) {
         e.preventDefault();
         const { currentProject, promptSnapshot } = useAppStore.getState();
         if (currentProject) {
           promptSnapshot();
+        }
+      } else if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+        e.preventDefault();
+        const { currentProject, quickSave } = useAppStore.getState();
+        if (currentProject) {
+          quickSave();
         }
       }
     };

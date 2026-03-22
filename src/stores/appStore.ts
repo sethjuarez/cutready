@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { invoke, Channel } from "@tauri-apps/api/core";
+import { generateSnapshotName } from "../utils/snapshotName";
 import type { ProjectView, ProjectEntry, RecentProject } from "../types/project";
 import type {
   BrowserProfile,
@@ -414,6 +415,8 @@ interface AppStoreState {
   loadGraphData: () => Promise<void>;
   /** Toggle version history sidebar. */
   toggleVersionHistory: () => void;
+  /** Quick-save a snapshot with an auto-generated name (Ctrl+S). */
+  quickSave: () => Promise<void>;
   /** Open snapshot name prompt (and ensure panel is visible). */
   promptSnapshot: () => Promise<void>;
 
@@ -1665,6 +1668,39 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       saveLayout({ showVersionHistory: !state.showVersionHistory });
       return { showVersionHistory: !state.showVersionHistory };
     });
+  },
+
+  quickSave: async () => {
+    // When rewound, a fork name is required — fall through to the named dialog
+    if (get().isRewound) {
+      get().promptSnapshot();
+      return;
+    }
+    try {
+      // Check identity first — if fallback, fall back to the named dialog
+      const status = await invoke<{ name: string; email: string; is_fallback: boolean }>("check_git_identity");
+      if (status.is_fallback) {
+        set({
+          identityPromptOpen: true,
+          identityPromptCallback: () => set({ snapshotPromptOpen: true }),
+        });
+        return;
+      }
+    } catch {
+      // If check fails, proceed with save anyway
+    }
+    try {
+      const label = generateSnapshotName();
+      await get().saveVersion(label);
+      await get().loadGraphData();
+      await get().loadTimelines();
+      const { useToastStore } = await import("./toastStore");
+      useToastStore.getState().show("Snapshot saved", 2000);
+    } catch (err) {
+      console.error("Quick save failed:", err);
+      const { useToastStore } = await import("./toastStore");
+      useToastStore.getState().show(`Snapshot failed: ${err}`, 5000, "error");
+    }
   },
 
   promptSnapshot: async () => {
