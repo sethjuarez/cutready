@@ -287,16 +287,6 @@ test.describe("Documentation Screenshots (1920×1080)", () => {
     await snap(page, "settings-feedback");
   });
 
-  test("13 — Settings: Images", async ({ page }) => {
-    await setupApp(page);
-    // Images tab is in workspace settings, not global
-    await page.locator('[title="Workspace"]').click();
-    await page.waitForTimeout(400);
-    await page.getByText("Images").first().click();
-    await page.waitForTimeout(300);
-    await snap(page, "settings-images");
-  });
-
   test("14 — Snapshots panel", async ({ page }) => {
     await setupAppWithPanels(page);
     await openSketch(page, "Demo Introduction");
