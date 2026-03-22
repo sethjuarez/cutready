@@ -169,6 +169,8 @@ interface AppStoreState {
   pendingNavAfterSave: string | null;
   /** Whether there are unsaved changes since the last snapshot. */
   isDirty: boolean;
+  /** Whether a quickSave is in progress. */
+  saving: boolean;
   /** Whether a stash (temporarily saved work) exists. */
   hasStash: boolean;
   /** Whether we are viewing a rewound snapshot (prev-tip exists). */
@@ -562,6 +564,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   identityPromptCallback: null,
   pendingNavAfterSave: null,
   isDirty: false,
+  saving: false,
   hasStash: false,
   isRewound: false,
   currentRemote: null,
@@ -1689,6 +1692,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     } catch {
       // If check fails, proceed with save anyway
     }
+    set({ saving: true });
     try {
       const label = generateSnapshotName();
       await get().saveVersion(label);
@@ -1700,6 +1704,8 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       console.error("Quick save failed:", err);
       const { useToastStore } = await import("./toastStore");
       useToastStore.getState().show(`Snapshot failed: ${err}`, 5000, "error");
+    } finally {
+      set({ saving: false });
     }
   },
 

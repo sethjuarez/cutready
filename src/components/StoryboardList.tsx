@@ -108,6 +108,7 @@ export function StoryboardList() {
   const [newNoteTitle, setNewNoteTitle] = useState("");
   const [pendingDelete, setPendingDelete] = useState<{ type: "storyboard" | "sketch" | "note"; path: string; title: string; usedBy?: string[] } | null>(null);
   const [drmConfirm, setDrmConfirm] = useState<{ resolve: (ok: boolean) => void } | null>(null);
+  const [importing, setImporting] = useState(false);
   const showToast = useToastStore((s) => s.show);
 
   const showDrmConfirm = useCallback(() => {
@@ -233,6 +234,7 @@ export function StoryboardList() {
         ],
       });
       if (!selected) return;
+      setImporting(true);
 
       // Helper: invoke an import command, handling file-exists conflicts.
       async function importWithConflict(
@@ -314,6 +316,8 @@ export function StoryboardList() {
           }
         }
       }
+    } finally {
+      setImporting(false);
     }
   }, [loadSketches, loadStoryboards, loadNotes, openNote, showDrmConfirm, showToast]);
 
@@ -332,10 +336,18 @@ export function StoryboardList() {
         <div className="flex items-center gap-1">
           <button
             onClick={handleImport}
-            className="p-1 rounded-md text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 transition-colors"
+            className="p-1 rounded-md text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 transition-colors disabled:opacity-50 disabled:pointer-events-none"
             title="Import .sk, .sb, or document"
+            disabled={importing}
           >
-            <ArrowDownTrayIcon className="w-3 h-3" />
+            {importing ? (
+              <svg className="w-3 h-3 animate-spin text-[var(--color-text-secondary)]" viewBox="0 0 24 24" fill="none">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+            ) : (
+              <ArrowDownTrayIcon className="w-3 h-3" />
+            )}
           </button>
         </div>
       </div>

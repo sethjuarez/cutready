@@ -20,6 +20,7 @@ export function VersionHistory() {
   const timelines = useAppStore((s) => s.timelines);
   const loadTimelines = useAppStore((s) => s.loadTimelines);
   const currentRemote = useAppStore((s) => s.currentRemote);
+  const saving = useAppStore((s) => s.saving);
   const hasRemote = !!currentRemote;
 
   const [pendingNavTarget, setPendingNavTarget] = useState<string | null>(null);
@@ -154,10 +155,18 @@ export function VersionHistory() {
           </button>
           <button
             onClick={() => useAppStore.setState({ snapshotPromptOpen: true })}
-            className="group/btn flex items-center gap-1 p-1 rounded text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] transition-colors"
+            className="group/btn flex items-center gap-1 p-1 rounded text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] transition-colors disabled:opacity-50 disabled:pointer-events-none"
             title="Save Workspace Snapshot (Ctrl+S)"
+            disabled={saving}
           >
-            <ArrowDownTrayIcon className="shrink-0 w-3.5 h-3.5" />
+            {saving ? (
+              <svg className="shrink-0 w-3.5 h-3.5 animate-spin text-[var(--color-accent)]" viewBox="0 0 24 24" fill="none">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+            ) : (
+              <ArrowDownTrayIcon className="shrink-0 w-3.5 h-3.5" />
+            )}
             <span className="max-w-0 overflow-hidden group-hover/btn:max-w-[10rem] transition-all duration-200 whitespace-nowrap text-[10px]">
               Save
             </span>

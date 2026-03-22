@@ -17,6 +17,7 @@ import { CommandPalette } from "./CommandPalette";
 import { TitleBar } from "./TitleBar";
 import { SnapshotDialog } from "./SnapshotDialog";
 import { IdentityDialog } from "./IdentityDialog";
+import { KeyboardShortcutsDialog } from "./KeyboardShortcutsDialog";
 import { MergeConflictPanel } from "./MergeConflictPanel";
 import { commandRegistry, useCommands } from "../services/commandRegistry";
 
@@ -36,6 +37,7 @@ export function AppLayout() {
   const isMerging = useAppStore((s) => s.isMerging);
 
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [recentCommands, setRecentCommands] = useState<string[]>([]);
 
   const commands = useCommands();
@@ -122,6 +124,13 @@ export function AppLayout() {
         },
       },
       {
+        id: "help.keyboardShortcuts",
+        title: "Keyboard Shortcuts",
+        category: "Help",
+        keybinding: "Ctrl+/",
+        handler: () => setShortcutsOpen(true),
+      },
+      {
         id: "debug.exportLogs",
         title: "Export Logs",
         category: "Debug",
@@ -155,6 +164,11 @@ export function AppLayout() {
   // Global keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "/") {
+        e.preventDefault();
+        setShortcutsOpen((prev) => !prev);
+        return;
+      }
       if (e.ctrlKey && e.shiftKey && (e.key === "P" || e.key === "p")) {
         e.preventDefault();
         setCommandPaletteOpen(true);
@@ -294,6 +308,7 @@ export function AppLayout() {
 
       <SnapshotDialog />
       <IdentityDialog />
+      <KeyboardShortcutsDialog open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
     </>
   );
 }

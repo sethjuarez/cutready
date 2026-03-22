@@ -188,6 +188,7 @@ function Tab({
             ? "opacity-60 hover:opacity-100 hover:bg-[var(--color-surface-alt)]"
             : "opacity-0 group-hover:opacity-60 hover:!opacity-100 hover:bg-[var(--color-surface)]"
         }`}
+        title="Close tab"
         onClick={(e) => {
           e.stopPropagation();
           onClose();
