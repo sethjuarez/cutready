@@ -39,6 +39,7 @@ import {
   UserIcon,
   XMarkIcon,
   Bars3Icon,
+  StopIcon,
 } from "@heroicons/react/24/outline";
 
 // ── Helpers ──────────────────────────────────────────────────────
@@ -88,6 +89,7 @@ export const BUILT_IN_AGENTS: AgentPreset[] = [
   {
     id: "planner",
     name: "Planner",
+    description: "Analyzes your project and recommends a plan — never edits directly",
     prompt: `You are CutReady AI — Planner mode. You help users plan demo videos by **recommending** changes, not making them directly.
 
 ## Your Role
@@ -118,6 +120,7 @@ Present your plan as a markdown table so the user can review before asking the W
   {
     id: "writer",
     name: "Writer",
+    description: "Rewrites narrative and scripts for natural spoken delivery",
     prompt: `You are CutReady AI — Writer mode. You specialize in narrative and script refinement.
 
 ## Your Role
@@ -154,6 +157,7 @@ Example scene: \`{ "version": "1.0", "root": { "type": "scene", "width": 800, "h
   {
     id: "editor",
     name: "Editor",
+    description: "Makes precise, targeted edits to specific cells in your sketch",
     prompt: `You are CutReady AI — Editor mode. You make precise, surgical edits to existing sketches.
 
 ## Your Role
@@ -176,6 +180,7 @@ Make targeted changes to specific cells in the planning table. Be concise and ef
   {
     id: "designer",
     name: "Designer",
+    description: "Creates animated visuals and diagrams using the elucim DSL",
     prompt: `You are CutReady AI — Designer mode. You create rich, polished animated visuals for demo sketch rows using the elucim DSL.
 
 ## IMPORTANT: User Instructions
@@ -530,6 +535,7 @@ function ChatTab() {
   // Listen for streaming agent events from the backend
   const streamingRef = useRef("");
   const thinkingRef = useRef("");
+  const abortedRef = useRef(false);
   const pendingToolArgsRef = useRef<Record<string, string>>({});
   useEffect(() => {
     const unlisten = listen<{ type: string; content?: string; message?: string; name?: string; arguments?: string; result?: string; response?: string; agent_id?: string; task?: string }>("agent-event", (event) => {
@@ -820,8 +826,8 @@ function ChatTab() {
     if (loading) {
       try {
         await invoke("push_pending_chat_message", { message: text });
-        // Show pending message in the chat with a visual marker
-        const pendingMsg: ChatMessage = { role: "user", content: `[pending] ${text}` };
+        // Show pending message with a queued marker (rendered specially by MessageRow)
+        const pendingMsg: ChatMessage = { role: "user", content: text, pending: true };
         setChatMessages([...messages, pendingMsg]);
       } catch (err) {
         console.error("Failed to push pending message:", err);
@@ -888,6 +894,7 @@ function ChatTab() {
     ];
 
     setChatLoading(true);
+    abortedRef.current = false;
     streamingRef.current = "";
     thinkingRef.current = "";
     setStreamingText("");
@@ -1006,8 +1013,12 @@ function ChatTab() {
         level: "success",
       }]);
 
+      // If the user stopped generation, discard the result
+      if (abortedRef.current) return;
+
       setChatMessages(backendMessages);
     } catch (err) {
+      if (abortedRef.current) return;
       const errMsg = err instanceof Error ? err.message : String(err);
       setChatError(errMsg);
       // Log error to activity
@@ -1040,6 +1051,30 @@ function ChatTab() {
       handleSendRef.current(text, { silent, agent });
     }
   }, [pendingChatPrompt]);
+
+  const handleStop = useCallback(() => {
+    abortedRef.current = true;
+    setChatLoading(false);
+    setStreamingText("");
+    setStreamingThinking("");
+    setStreamingStatus("");
+    streamingRef.current = "";
+    thinkingRef.current = "";
+  }, [setChatLoading]);
+
+  const handleRetry = useCallback(() => {
+    // Find the last user message text and re-send it
+    const lastUser = [...messages].reverse().find((m) => m.role === "user");
+    if (lastUser) {
+      setChatError(null);
+      const text = textContent(lastUser.content);
+      // Remove the last user message + any trailing assistant/error messages
+      const lastIdx = messages.lastIndexOf(lastUser);
+      setChatMessages(messages.slice(0, lastIdx));
+      // Defer the send so the store update is picked up
+      setTimeout(() => handleSendRef.current(text), 0);
+    }
+  }, [messages, setChatError, setChatMessages]);
 
   const handleInputChange = useCallback(
     (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -1280,9 +1315,7 @@ function ChatTab() {
         )}
 
         {error && (
-          <div className="mx-3 text-xs text-error bg-error/10 rounded-md px-3 py-2 border border-error/20">
-            {error}
-          </div>
+          <ChatErrorCard error={error} onRetry={handleRetry} onDismiss={() => setChatError(null)} />
         )}
 
         <div ref={messagesEndRef} />
@@ -1472,7 +1505,7 @@ function ChatTab() {
                   <IconChevronDown size={10} />
                 </button>
                 {showAgentPicker && (
-                  <div className="absolute bottom-full left-0 mb-1 w-[200px] bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg shadow-lg overflow-hidden z-20 flex flex-col" style={{ maxHeight: agentMaxH }}>
+                  <div className="absolute bottom-full left-0 mb-1 w-[240px] bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg shadow-lg overflow-hidden z-20 flex flex-col" style={{ maxHeight: agentMaxH }}>
                     {BUILT_IN_AGENTS.length > 0 && (
                       <>
                         <div className="px-3 py-1.5 border-b border-[var(--color-border)] shrink-0">
@@ -1493,10 +1526,17 @@ function ChatTab() {
                               }}
                             >
                               <IconSparkles size={11} />
-                              <span className="flex-1">{agent.name}</span>
-                              {agent.modelOverride && (
-                                <span className="text-[9px] text-[var(--color-text-secondary)] opacity-60">{agent.modelOverride}</span>
-                              )}
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-1">
+                                  <span>{agent.name}</span>
+                                  {agent.modelOverride && (
+                                    <span className="text-[9px] text-[var(--color-text-secondary)] opacity-60">{agent.modelOverride}</span>
+                                  )}
+                                </div>
+                                {agent.description && (
+                                  <div className="text-[9px] text-[var(--color-text-secondary)] opacity-70 truncate">{agent.description}</div>
+                                )}
+                              </div>
                               {selectedAgent.id === agent.id && <IconCheck size={11} />}
                             </button>
                           ))}
@@ -1594,15 +1634,25 @@ function ChatTab() {
 
           <div className="flex-1" />
 
-          {/* Send button */}
-          <button
-            className="flex items-center justify-center w-[26px] h-[26px] rounded text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-            onClick={() => handleSend()}
-            disabled={loading || !input.trim()}
-            title="Send (Enter)"
-          >
-            <IconSend size={14} />
-          </button>
+          {/* Send / Stop button */}
+          {loading ? (
+            <button
+              className="flex items-center justify-center w-[26px] h-[26px] rounded text-error hover:bg-error/10 transition-colors"
+              onClick={handleStop}
+              title="Stop generation"
+            >
+              <StopIcon width={14} height={14} />
+            </button>
+          ) : (
+            <button
+              className="flex items-center justify-center w-[26px] h-[26px] rounded text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+              onClick={() => handleSend()}
+              disabled={!input.trim()}
+              title="Send (Enter)"
+            >
+              <IconSend size={14} />
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -1733,7 +1783,17 @@ function MessageRow({ message, projectRoot, onDelete }: { message: ChatMessage; 
             <XMarkIcon className="w-3 h-3" />
           </button>
         )}
-        <div className="bg-[#6b5ce7]/[0.05] border border-[#6b5ce7]/40 dark:bg-[#a49afa]/10 dark:border-[#a49afa]/40 rounded-xl rounded-br-sm px-3 py-2 text-[13px] text-[var(--color-text)] whitespace-pre-wrap break-words leading-[1.6] max-w-[85%]">
+        <div className={`rounded-xl rounded-br-sm px-3 py-2 text-[13px] text-[var(--color-text)] whitespace-pre-wrap break-words leading-[1.6] max-w-[85%] ${
+          message.pending
+            ? "bg-[var(--color-surface-alt)] border border-dashed border-[var(--color-border)] opacity-70"
+            : "bg-[#6b5ce7]/[0.05] border border-[#6b5ce7]/40 dark:bg-[#a49afa]/10 dark:border-[#a49afa]/40"
+        }`}>
+          {message.pending && (
+            <span className="inline-flex items-center gap-1 text-[10px] text-[var(--color-text-secondary)] mb-1">
+              <ClockIcon className="w-2.5 h-2.5" />
+              Queued
+            </span>
+          )}
           <UserContent content={textContent(message.content)} />
         </div>
       </div>
@@ -2012,6 +2072,67 @@ function ModelPickerDropdown({
           ))
         )}
       </div>
+    </div>
+  );
+}
+
+// ── Friendly Error Display ────────────────────────────────────────
+
+function classifyError(error: string): { title: string; suggestion: string } {
+  const lower = error.toLowerCase();
+  if (lower.includes("401") || lower.includes("unauthorized") || lower.includes("authentication"))
+    return { title: "Authentication failed", suggestion: "Check your API key or refresh your login in Settings." };
+  if (lower.includes("403") || lower.includes("forbidden"))
+    return { title: "Access denied", suggestion: "Your account may not have access to this model or endpoint." };
+  if (lower.includes("429") || lower.includes("rate limit") || lower.includes("too many"))
+    return { title: "Rate limit reached", suggestion: "Wait a moment and try again, or switch to a different model." };
+  if (lower.includes("timeout") || lower.includes("timed out"))
+    return { title: "Request timed out", suggestion: "The AI took too long to respond. Try a shorter message or simpler request." };
+  if (lower.includes("json") || lower.includes("parse") || lower.includes("body"))
+    return { title: "Response error", suggestion: "The conversation may be too long. Try starting a new chat." };
+  if (lower.includes("network") || lower.includes("connect") || lower.includes("fetch"))
+    return { title: "Connection failed", suggestion: "Check your internet connection and endpoint URL in Settings." };
+  return { title: "Something went wrong", suggestion: "Try again, or start a new chat if the problem persists." };
+}
+
+function ChatErrorCard({ error, onRetry, onDismiss }: { error: string; onRetry: () => void; onDismiss: () => void }) {
+  const [showRaw, setShowRaw] = useState(false);
+  const { title, suggestion } = classifyError(error);
+
+  return (
+    <div className="mx-3 rounded-lg border border-error/20 bg-error/5 overflow-hidden">
+      <div className="px-3 py-2.5">
+        <div className="text-xs font-medium text-error mb-0.5">{title}</div>
+        <div className="text-[11px] text-[var(--color-text-secondary)] leading-relaxed">{suggestion}</div>
+      </div>
+      <div className="flex items-center gap-2 px-3 pb-2">
+        <button
+          onClick={onRetry}
+          className="text-[11px] font-medium text-[var(--color-accent)] hover:underline"
+        >
+          Try again
+        </button>
+        <button
+          onClick={() => setShowRaw(!showRaw)}
+          className="text-[11px] text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors"
+        >
+          {showRaw ? "Hide details" : "Show details"}
+        </button>
+        <div className="flex-1" />
+        <button
+          onClick={onDismiss}
+          className="text-[11px] text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors"
+        >
+          Dismiss
+        </button>
+      </div>
+      {showRaw && (
+        <div className="px-3 pb-2.5">
+          <div className="text-[10px] font-mono text-error/80 bg-error/5 rounded px-2 py-1.5 max-h-[100px] overflow-y-auto break-all leading-relaxed">
+            {error}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

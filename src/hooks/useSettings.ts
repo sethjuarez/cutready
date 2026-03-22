@@ -8,6 +8,8 @@ export interface AgentPreset {
   id: string;
   name: string;
   prompt: string;
+  /** Short one-line description shown in the agent picker. */
+  description?: string;
   /** Optional model override — if set, this agent uses a different model than the global setting. */
   modelOverride?: string;
 }

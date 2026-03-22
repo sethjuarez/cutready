@@ -141,6 +141,8 @@ export interface ChatMessage {
   content: string | ContentPart[] | null;
   tool_calls?: ToolCall[];
   tool_call_id?: string;
+  /** Frontend-only: marks a message as queued while the agent is busy. */
+  pending?: boolean;
 }
 
 export interface ToolCall {
