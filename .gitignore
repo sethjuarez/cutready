@@ -30,4 +30,10 @@ src-tauri/gen/
 # OS
 .DS_Store
 Thumbs.db
+
+# Test artifacts
 test-results/
+e2e/screenshots/
+
+# Copilot CLI
+skills-lock.json
