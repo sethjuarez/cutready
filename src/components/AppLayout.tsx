@@ -19,6 +19,7 @@ import { SnapshotDialog } from "./SnapshotDialog";
 import { IdentityDialog } from "./IdentityDialog";
 import { KeyboardShortcutsDialog } from "./KeyboardShortcutsDialog";
 import { MergeConflictPanel } from "./MergeConflictPanel";
+import { FeedbackDialog } from "./FeedbackDialog";
 import { commandRegistry, useCommands } from "../services/commandRegistry";
 import { useTheme } from "../hooks/useTheme";
 import {
@@ -55,6 +56,7 @@ export function AppLayout() {
 
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [recentCommands, setRecentCommands] = useState<string[]>([]);
 
   const { toggle: toggleTheme } = useTheme();
@@ -109,7 +111,7 @@ export function AppLayout() {
         category: "View",
         icon: <ChatBubbleLeftIcon className="w-4 h-4" />,
         handler: async () => {
-          // TODO: Wire up feedback dialog as a standalone modal
+          setFeedbackOpen(true);
         },
       },
       {
@@ -389,6 +391,7 @@ export function AppLayout() {
       <SnapshotDialog />
       <IdentityDialog />
       <KeyboardShortcutsDialog open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
+      <FeedbackDialog isOpen={feedbackOpen} onClose={() => setFeedbackOpen(false)} />
     </>
   );
 }
