@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, lazy, Suspense, type ReactNode, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { createPortal } from "react-dom";
 import { usePopover } from "../hooks/usePopover";
 import {
   DndContext,
@@ -1333,6 +1334,8 @@ interface MediaAddPopoverProps {
 function MediaAddPopover({ idx, onCaptureScreenshot, onPickImage, onBrowseImage, onGenerateVisual }: MediaAddPopoverProps) {
   const { state, ref, toggle, close } = usePopover();
   const itemsRef = useRef<(HTMLButtonElement | null)[]>([]);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
 
   const items = useMemo(() => {
     const list: { icon: typeof CameraIcon; label: string; action: () => void }[] = [
@@ -1361,6 +1364,16 @@ function MediaAddPopover({ idx, onCaptureScreenshot, onPickImage, onBrowseImage,
     }
   };
 
+  // Compute position when popover opens
+  useEffect(() => {
+    if (state !== null && buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      setPos({ top: rect.top, left: rect.left });
+    } else {
+      setPos(null);
+    }
+  }, [state]);
+
   // Focus first item when popover opens
   useEffect(() => {
     if (state !== null) {
@@ -1371,6 +1384,7 @@ function MediaAddPopover({ idx, onCaptureScreenshot, onPickImage, onBrowseImage,
   return (
     <div ref={ref} className="relative inline-flex">
       <button
+        ref={buttonRef}
         onClick={toggle}
         className="w-8 h-8 rounded-md border border-dashed border-[var(--color-border)] hover:border-[var(--color-accent)] hover:bg-[var(--color-accent)]/5 transition-colors flex items-center justify-center"
         title="Add media"
@@ -1379,10 +1393,12 @@ function MediaAddPopover({ idx, onCaptureScreenshot, onPickImage, onBrowseImage,
       >
         <PlusIcon className="w-4 h-4 text-[var(--color-text-secondary)]" />
       </button>
-      {state !== null && (
+      {state !== null && pos && createPortal(
         <div
-          className="absolute left-0 bottom-full mb-1 z-50 min-w-[170px] py-1 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg shadow-lg"
+          className="fixed z-[9999] min-w-[170px] py-1 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg shadow-lg"
+          style={{ top: pos.top, left: pos.left, transform: "translateY(-100%) translateY(-4px)" }}
           role="menu"
+          onMouseDown={(e) => e.stopPropagation()}
         >
           {items.map((item, i) => {
             const Icon = item.icon;
@@ -1401,7 +1417,8 @@ function MediaAddPopover({ idx, onCaptureScreenshot, onPickImage, onBrowseImage,
               </button>
             );
           })}
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );
