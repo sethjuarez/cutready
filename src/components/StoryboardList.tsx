@@ -329,8 +329,8 @@ export function StoryboardList() {
       <ProjectSwitcher />
 
       {/* ── Documents header ──────────────────────────────── */}
-      <div className="flex items-center justify-between px-3 h-9 shrink-0 border-b border-[var(--color-border)]">
-        <span className="text-[11px] font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">
+      <div className="flex items-center justify-between px-3 h-9 shrink-0 border-b border-[var(--color-border-subtle)]">
+        <span className="text-[12px] font-medium text-[var(--color-text-secondary)]">
           Documents
         </span>
         <div className="flex items-center gap-1">
@@ -353,8 +353,8 @@ export function StoryboardList() {
       </div>
 
       {/* ── Storyboards section ────────────────────────── */}
-      <div className="flex items-center justify-between px-3 h-9 shrink-0 border-b border-[var(--color-border)]">
-        <span className="text-[11px] font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">
+      <div className="flex items-center justify-between px-3 h-9 shrink-0 border-b border-[var(--color-border-subtle)]">
+        <span className="text-[12px] font-medium text-[var(--color-text-secondary)]">
           Storyboards
         </span>
         <button
@@ -401,7 +401,7 @@ export function StoryboardList() {
                     tabIndex={0}
                     onClick={() => openStoryboard(sb.path)}
                     onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") openStoryboard(sb.path); }}
-                    className={`group/item w-full flex items-center gap-2 px-2 py-2 text-left transition-colors cursor-pointer ${
+                    className={`group/item w-full flex items-center gap-2 px-3 py-2.5 text-left transition-colors cursor-pointer ${
                       sb.path === activeStoryboardPath
                         ? "bg-emerald-500/10 text-emerald-500"
                         : "text-[var(--color-text)] hover:bg-[var(--color-surface-alt)]"
@@ -433,8 +433,8 @@ export function StoryboardList() {
       </div>
 
       {/* ── Sketches section──────────────────────────── */}
-      <div className="flex items-center justify-between px-3 h-9 shrink-0 border-y border-[var(--color-border)]">
-        <span className="text-[11px] font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">
+      <div className="flex items-center justify-between px-3 h-9 shrink-0 border-y border-[var(--color-border-subtle)]">
+        <span className="text-[12px] font-medium text-[var(--color-text-secondary)]">
           Sketches
         </span>
         <button
@@ -481,7 +481,7 @@ export function StoryboardList() {
                     tabIndex={0}
                     onClick={() => handleOpenSketchStandalone(sk.path)}
                     onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") handleOpenSketchStandalone(sk.path); }}
-                    className={`group/item w-full flex items-center gap-2 px-2 py-2 text-left transition-colors cursor-pointer ${
+                    className={`group/item w-full flex items-center gap-2 px-3 py-2.5 text-left transition-colors cursor-pointer ${
                       sk.path === activeSketchPath
                         ? "bg-violet-500/10 text-[var(--color-accent)]"
                         : "text-[var(--color-text)] hover:bg-[var(--color-surface-alt)]"
@@ -513,8 +513,8 @@ export function StoryboardList() {
       </div>
 
       {/* ── Notes section─────────────────────────────── */}
-      <div className="flex items-center justify-between px-3 h-9 shrink-0 border-y border-[var(--color-border)]">
-        <span className="text-[11px] font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">
+      <div className="flex items-center justify-between px-3 h-9 shrink-0 border-y border-[var(--color-border-subtle)]">
+        <span className="text-[12px] font-medium text-[var(--color-text-secondary)]">
           Notes
         </span>
         <button
@@ -574,7 +574,7 @@ export function StoryboardList() {
                     tabIndex={0}
                     onClick={() => openNote(note.path)}
                     onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") openNote(note.path); }}
-                    className={`group/item w-full flex items-center gap-2 px-2 py-2 text-left transition-colors cursor-pointer ${
+                    className={`group/item w-full flex items-center gap-2 px-3 py-2.5 text-left transition-colors cursor-pointer ${
                       note.path === activeNotePath
                         ? "bg-rose-500/10 text-rose-500"
                         : "text-[var(--color-text)] hover:bg-[var(--color-surface-alt)]"

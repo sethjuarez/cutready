@@ -2,21 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { SafeMarkdown } from "./SafeMarkdown";
-import {
-  DndContext,
-  closestCenter,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-} from "@dnd-kit/core";
-import {
-  SortableContext,
-  useSortable,
-  horizontalListSortingStrategy,
-  arrayMove,
-} from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
+
 import { useAppStore } from "../stores/appStore";
 import { useSettings, type AgentPreset } from "../hooks/useSettings";
 import { VersionHistory } from "./VersionHistory";
@@ -40,6 +26,8 @@ import {
   XMarkIcon,
   Bars3Icon,
   StopIcon,
+  ChevronLeftIcon,
+  EllipsisVerticalIcon,
 } from "@heroicons/react/24/outline";
 
 // ── Helpers ──────────────────────────────────────────────────────
@@ -336,10 +324,6 @@ function IconPaperclip({ size = 14 }: { size?: number }) {
   return <PaperClipIcon width={size} height={size} />;
 }
 
-function IconTool({ size = 14 }: { size?: number }) {
-  return <WrenchIcon width={size} height={size} />;
-}
-
 function IconChevronDown({ size = 10 }: { size?: number }) {
   return <ChevronDownIcon width={size} height={size} />;
 }
@@ -382,95 +366,68 @@ function useDropdownMaxHeight(
 
 // ── Main Panel ───────────────────────────────────────────────────
 
-const TAB_DEFS: { id: SecondaryTab; label: string; icon: (s: number) => React.ReactNode }[] = [
-  { id: "chat", label: "Chat", icon: (s) => <IconSparkles size={s} /> },
-  { id: "sessions", label: "Sessions", icon: (s) => <IconHistory size={s} /> },
-  { id: "snapshots", label: "Snapshots", icon: (s) => <IconSave size={s} /> },
-];
-
-const TAB_ORDER_KEY = "cutready:panel-tab-order";
-
-function loadTabOrder(): SecondaryTab[] {
-  try {
-    const raw = localStorage.getItem(TAB_ORDER_KEY);
-    if (raw) {
-      const arr = JSON.parse(raw) as SecondaryTab[];
-      const ids = TAB_DEFS.map((t) => t.id);
-      if (arr.length === ids.length && ids.every((id) => arr.includes(id))) return arr;
-    }
-  } catch { /* ignore */ }
-  return TAB_DEFS.map((t) => t.id);
-}
-
-function SortableTab({ tab, isActive, onClick }: { tab: typeof TAB_DEFS[number]; isActive: boolean; onClick: () => void }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: tab.id });
-  const style: React.CSSProperties = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.4 : 1,
-  };
-
-  return (
-    <button
-      ref={setNodeRef}
-      style={style}
-      {...attributes}
-      {...listeners}
-      className={`flex items-center gap-1.5 px-3 py-2 text-[11px] font-medium transition-colors border-b-2 -mb-px ${
-        isActive
-          ? "border-[var(--color-accent)] text-[var(--color-text)]"
-          : "border-transparent text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:border-[var(--color-text-secondary)]/30"
-      }`}
-      onClick={onClick}
-    >
-      {tab.icon(12)}
-      {tab.label}
-    </button>
-  );
-}
-
 export function ChatPanel() {
   const [activeTab, setActiveTab] = useState<SecondaryTab>("chat");
-  const [tabOrder, setTabOrder] = useState<SecondaryTab[]>(loadTabOrder);
+  const [showMenu, setShowMenu] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-  );
-
-  const orderedTabs = useMemo(
-    () => tabOrder.map((id) => TAB_DEFS.find((t) => t.id === id)!),
-    [tabOrder],
-  );
-
-  const handleDragEnd = useCallback((event: DragEndEvent) => {
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
-    setTabOrder((prev) => {
-      const oldIndex = prev.indexOf(active.id as SecondaryTab);
-      const newIndex = prev.indexOf(over.id as SecondaryTab);
-      const next = arrayMove(prev, oldIndex, newIndex);
-      localStorage.setItem(TAB_ORDER_KEY, JSON.stringify(next));
-      return next;
-    });
-  }, []);
+  // Close dropdown on outside click
+  useEffect(() => {
+    if (!showMenu) return;
+    function handleClick(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setShowMenu(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [showMenu]);
 
   return (
     <div className="flex flex-col h-full bg-[var(--color-surface-inset)]">
-      {/* Tab bar — draggable underline tabs */}
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-        <SortableContext items={tabOrder} strategy={horizontalListSortingStrategy}>
-          <div className="flex items-stretch border-b border-[var(--color-border)] shrink-0">
-            {orderedTabs.map((tab) => (
-              <SortableTab
-                key={tab.id}
-                tab={tab}
-                isActive={activeTab === tab.id}
-                onClick={() => setActiveTab(tab.id)}
-              />
-            ))}
+      {/* Header with back navigation / overflow menu */}
+      <div className="flex items-center justify-between px-3 h-10 border-b border-[var(--color-border)] shrink-0">
+        {activeTab === "chat" ? (
+          <span className="text-[13px] font-medium text-[var(--color-text)]">Chat</span>
+        ) : (
+          <button
+            onClick={() => setActiveTab("chat")}
+            className="flex items-center gap-1.5 text-[13px] font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors"
+          >
+            <ChevronLeftIcon className="w-3.5 h-3.5" />
+            {activeTab === "sessions" ? "Sessions" : "Snapshots"}
+          </button>
+        )}
+        {activeTab === "chat" && (
+          <div className="relative" ref={menuRef}>
+            <button
+              onClick={() => setShowMenu(!showMenu)}
+              className="p-1 rounded-md text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-alt)] transition-colors"
+              title="More options"
+            >
+              <EllipsisVerticalIcon className="w-4 h-4" />
+            </button>
+            {showMenu && (
+              <div className="absolute right-0 top-full mt-1 z-20 w-[180px] py-1 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg shadow-lg">
+                <button
+                  onClick={() => { setActiveTab("sessions"); setShowMenu(false); }}
+                  className="w-full px-3 py-2 text-left text-[12px] text-[var(--color-text)] hover:bg-[var(--color-surface-alt)] transition-colors flex items-center gap-2"
+                >
+                  <IconHistory size={14} />
+                  Session History
+                </button>
+                <button
+                  onClick={() => { setActiveTab("snapshots"); setShowMenu(false); }}
+                  className="w-full px-3 py-2 text-left text-[12px] text-[var(--color-text)] hover:bg-[var(--color-surface-alt)] transition-colors flex items-center gap-2"
+                >
+                  <IconSave size={14} />
+                  Snapshots
+                </button>
+              </div>
+            )}
           </div>
-        </SortableContext>
-      </DndContext>
+        )}
+      </div>
 
       {/* Tab content */}
       <div className="flex-1 min-h-0">
@@ -517,7 +474,6 @@ function ChatTab() {
   const [showContextPicker, setShowContextPicker] = useState(false);
   const [contextFilter, setContextFilter] = useState("");
   const [showModelPicker, setShowModelPicker] = useState(false);
-  const [showToolsInfo, setShowToolsInfo] = useState(false);
   const [showAgentPicker, setShowAgentPicker] = useState(false);
   const [toolbarExpanded, setToolbarExpanded] = useState(() => {
     return localStorage.getItem("cutready:chat-toolbar-expanded") === "true";
@@ -683,15 +639,13 @@ function ChatTab() {
   const autocompleteRef = useRef<HTMLDivElement>(null);
   const contextPickerRef = useRef<HTMLDivElement>(null);
   const modelPickerRef = useRef<HTMLDivElement>(null);
-  const toolsInfoRef = useRef<HTMLDivElement>(null);
-  const agentPickerRef = useRef<HTMLDivElement>(null);
+  const agentPickerRef= useRef<HTMLDivElement>(null);
 
   // Constrain dropdown heights to available viewport space
   const acMaxH = useDropdownMaxHeight(autocompleteRef, showAutocomplete);
   const ctxMaxH = useDropdownMaxHeight(contextPickerRef, showContextPicker);
   const modelMaxH = useDropdownMaxHeight(modelPickerRef, showModelPicker);
-  const toolsMaxH = useDropdownMaxHeight(toolsInfoRef, showToolsInfo);
-  const agentMaxH = useDropdownMaxHeight(agentPickerRef, showAgentPicker);
+  const agentMaxH= useDropdownMaxHeight(agentPickerRef, showAgentPicker);
 
   const toggleToolbar = useCallback(() => {
     setToolbarExpanded((prev) => {
@@ -719,16 +673,15 @@ function ChatTab() {
 
   // Click-outside to close pickers
   useEffect(() => {
-    if (!showContextPicker && !showModelPicker && !showToolsInfo && !showAgentPicker) return;
+    if (!showContextPicker && !showModelPicker && !showAgentPicker) return;
     const handle = (e: MouseEvent) => {
       if (showContextPicker && contextPickerRef.current && !contextPickerRef.current.contains(e.target as Node)) setShowContextPicker(false);
       if (showModelPicker && modelPickerRef.current && !modelPickerRef.current.contains(e.target as Node)) setShowModelPicker(false);
-      if (showToolsInfo && toolsInfoRef.current && !toolsInfoRef.current.contains(e.target as Node)) setShowToolsInfo(false);
       if (showAgentPicker && agentPickerRef.current && !agentPickerRef.current.contains(e.target as Node)) setShowAgentPicker(false);
     };
     window.addEventListener("mousedown", handle);
     return () => window.removeEventListener("mousedown", handle);
-  }, [showContextPicker, showModelPicker, showToolsInfo]);
+  }, [showContextPicker, showModelPicker, showAgentPicker]);
 
   // All referenceable files
   const allFiles = useMemo<FileReference[]>(() => {
@@ -759,10 +712,7 @@ function ChatTab() {
       .slice(0, 10);
   }, [showContextPicker, contextFilter, allFiles, references]);
 
-  // Available tools list
-  const availableTools = ["list_project_files", "read_note", "read_sketch", "set_planning_rows", "update_planning_row", "set_row_visual", "design_plan", "list_project_images", "save_feedback", "delegate_to_agent", "fetch_url", "list_snapshots", "read_file_at_snapshot", "compare_snapshots", "list_timelines", "get_current_snapshot"];
-
-  const buildConfig = useCallback(() => ({
+  const buildConfig= useCallback(() => ({
     provider: settings.aiProvider,
     endpoint: settings.aiEndpoint,
     api_key: settings.aiApiKey,
@@ -1597,38 +1547,6 @@ function ChatTab() {
                 )}
               </div>
 
-              {/* Tools info */}
-              <div className="relative" ref={toolsInfoRef}>
-                <button
-                  className={`flex items-center gap-1 px-1.5 h-[26px] rounded text-[11px] transition-colors ${
-                    showToolsInfo
-                      ? "bg-[var(--color-surface)] text-[var(--color-text)]"
-                      : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)]"
-                  }`}
-                  onClick={() => setShowToolsInfo(!showToolsInfo)}
-                  title="Available Tools"
-                >
-                  <IconTool size={12} />
-                  <span>{availableTools.length}</span>
-                </button>
-                {showToolsInfo && (
-                  <div className="absolute bottom-full left-0 mb-1 w-[220px] bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg shadow-lg overflow-hidden z-20 flex flex-col" style={{ maxHeight: toolsMaxH }}>
-                    <div className="px-3 py-2 border-b border-[var(--color-border)] shrink-0">
-                      <span className="text-[10px] font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">Available Tools</span>
-                    </div>
-                    <div className="flex-1 overflow-y-auto py-1">
-                      {availableTools.map((tool) => (
-                        <div key={tool} className="flex items-center gap-2 px-3 py-1.5 text-[11px] text-[var(--color-text-secondary)]">
-                          {tool.startsWith("read_") || tool === "list_project_files"
-                            ? <IconFile size={11} />
-                            : <IconWrench size={11} />}
-                          <span>{tool}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
             </>
           )}
 

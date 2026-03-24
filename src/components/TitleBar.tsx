@@ -1,33 +1,16 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useState } from "react";
-import { MagnifyingGlassIcon, XMarkIcon, Squares2X2Icon, ArrowDownTrayIcon, ChatBubbleLeftIcon, CheckIcon, BugAntIcon, StarIcon, PencilIcon, PaperAirplaneIcon } from "@heroicons/react/24/outline";
+import { MagnifyingGlassIcon, XMarkIcon, ArrowDownTrayIcon } from "@heroicons/react/24/outline";
 import { useUpdateStore } from "../stores/updateStore";
 import { useAppStore } from "../stores/appStore";
 import { usePopover } from "../hooks/usePopover";
 import { relaunch } from "@tauri-apps/plugin-process";
 
 interface TitleBarProps {
-  sidebarVisible?: boolean;
-  sidebarPosition?: "left" | "right";
-  outputVisible?: boolean;
-  secondaryVisible?: boolean;
-  onToggleSidebar?: () => void;
-  onToggleSidebarPosition?: () => void;
-  onToggleOutput?: () => void;
-  onToggleSecondary?: () => void;
   onCommandPaletteOpen?: () => void;
 }
 
 export function TitleBar({
-  sidebarVisible = true,
-  sidebarPosition = "left",
-  outputVisible = false,
-  secondaryVisible = false,
-  onToggleSidebar,
-  onToggleSidebarPosition,
-  onToggleOutput,
-  onToggleSecondary,
   onCommandPaletteOpen,
 }: TitleBarProps) {
   const appWindow = (() => {
@@ -69,7 +52,7 @@ export function TitleBar({
   return (
     <div
       data-tauri-drag-region
-      className="no-select fixed top-0 left-0 right-0 z-50 flex items-center justify-between bg-[var(--color-surface)]/80 backdrop-blur-md border-b border-[var(--color-border)]"
+      className="no-select fixed top-0 left-0 right-0 z-50 flex items-center justify-between bg-[var(--color-surface)] border-b border-[var(--color-border)]"
       style={{ height: "var(--titlebar-height)" }}
     >
       {/* Left: App branding */}
@@ -129,70 +112,10 @@ export function TitleBar({
         </button>
       </div>
 
-      {/* Right: Layout toggles + window controls */}
+      {/* Right: Update indicator + window controls */}
       <div className="flex items-center h-full shrink-0">
         {/* Update indicator */}
         <UpdateIndicator />
-        {/* Layout toggles — icons match spatial positions, actions swap with sidebar position */}
-        <div className="flex items-center gap-0.5 px-1.5" style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}>
-          {/* Feedback button */}
-          <FeedbackPopover />
-          {/* Separator between feedback and panel toggles */}
-          <div className="w-px h-3 bg-[var(--color-border)] mx-0.5 shrink-0" />
-          {/* Left panel icon — toggles whichever panel is on the left */}
-          <button
-            className={`flex items-center justify-center w-6 h-[20px] rounded transition-colors ${
-              (sidebarPosition === "left" ? sidebarVisible : secondaryVisible)
-                ? "text-[var(--color-accent)]"
-                : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"
-            } hover:bg-[var(--color-surface-alt)]`}
-            onClick={sidebarPosition === "left" ? onToggleSidebar : onToggleSecondary}
-            title={sidebarPosition === "left" ? "Toggle Sidebar (Ctrl+B)" : "Toggle Secondary Panel"}
-          >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="3" width="18" height="18" rx="2" />
-              <line x1="9" y1="3" x2="9" y2="21" />
-            </svg>
-          </button>
-          {/* Bottom panel icon */}
-          <button
-            className={`flex items-center justify-center w-6 h-[20px] rounded transition-colors ${
-              outputVisible
-                ? "text-[var(--color-accent)]"
-                : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"
-            } hover:bg-[var(--color-surface-alt)]`}
-            onClick={onToggleOutput}
-            title="Toggle Panel (Ctrl+`)"
-          >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="3" width="18" height="18" rx="2" />
-              <line x1="3" y1="15" x2="21" y2="15" />
-            </svg>
-          </button>
-          {/* Right panel icon — toggles whichever panel is on the right */}
-          <button
-            className={`flex items-center justify-center w-6 h-[20px] rounded transition-colors ${
-              (sidebarPosition === "right" ? sidebarVisible : secondaryVisible)
-                ? "text-[var(--color-accent)]"
-                : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"
-            } hover:bg-[var(--color-surface-alt)]`}
-            onClick={sidebarPosition === "right" ? onToggleSidebar : onToggleSecondary}
-            title={sidebarPosition === "right" ? "Toggle Sidebar (Ctrl+B)" : "Toggle Secondary Panel"}
-          >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="3" width="18" height="18" rx="2" />
-              <line x1="15" y1="3" x2="15" y2="21" />
-            </svg>
-          </button>
-          {/* Layout config dropdown */}
-          <LayoutDropdown
-            sidebarPosition={sidebarPosition}
-            onToggleSidebarPosition={onToggleSidebarPosition}
-          />
-        </div>
-
-        {/* Separator between layout toggles and window controls */}
-        <div className="w-px h-4 bg-[var(--color-border)] mx-1 shrink-0" />
 
         {/* Window controls */}
         <button
@@ -228,74 +151,6 @@ export function TitleBar({
           <XMarkIcon className="w-2.5 h-2.5" />
         </button>
       </div>
-    </div>
-  );
-}
-
-function LayoutDropdown({
-  sidebarPosition,
-  onToggleSidebarPosition,
-}: {
-  sidebarPosition: "left" | "right";
-  onToggleSidebarPosition?: () => void;
-}) {
-  const { state: open, ref, toggle, close } = usePopover();
-
-  return (
-    <div ref={ref} className="relative">
-      <button
-        className={`flex items-center justify-center w-6 h-[20px] rounded transition-colors text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-alt)] ${
-          open ? "bg-[var(--color-surface-alt)] text-[var(--color-text)]" : ""
-        }`}
-        onClick={() => toggle()}
-        title="Customize Layout"
-      >
-        <Squares2X2Icon className="w-3 h-3" />
-      </button>
-
-      {open && (
-        <div className="absolute right-0 top-full mt-1 z-[100] w-[200px] py-2 px-3 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg shadow-lg">
-          <div className="text-[10px] font-medium text-[var(--color-text-secondary)] uppercase tracking-wider mb-1.5">
-            Sidebar Position
-          </div>
-          <div className="flex gap-1">
-            <button
-              className={`flex-1 flex items-center justify-center gap-1 h-[26px] rounded text-[11px] transition-colors ${
-                sidebarPosition === "left"
-                  ? "bg-[var(--color-accent)]/15 text-[var(--color-accent)] font-medium"
-                  : "text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-alt)] hover:text-[var(--color-text)]"
-              }`}
-              onClick={() => {
-                if (sidebarPosition !== "left") onToggleSidebarPosition?.();
-                close();
-              }}
-            >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="3" width="18" height="18" rx="2" />
-                <line x1="9" y1="3" x2="9" y2="21" />
-              </svg>
-              Left
-            </button>
-            <button
-              className={`flex-1 flex items-center justify-center gap-1 h-[26px] rounded text-[11px] transition-colors ${
-                sidebarPosition === "right"
-                  ? "bg-[var(--color-accent)]/15 text-[var(--color-accent)] font-medium"
-                  : "text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-alt)] hover:text-[var(--color-text)]"
-              }`}
-              onClick={() => {
-                if (sidebarPosition !== "right") onToggleSidebarPosition?.();
-                close();
-              }}
-            >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="3" width="18" height="18" rx="2" />
-                <line x1="15" y1="3" x2="15" y2="21" />
-              </svg>
-              Right
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -378,156 +233,5 @@ function UpdateIndicator() {
   );
 }
 
-function FeedbackPopover() {
-  const { state: open, ref, toggle, close } = usePopover();
-  const [feedback, setFeedback] = useState("");
-  const [category, setCategory] = useState<"general" | "bug" | "feature" | "ux">("general");
-  const [includeDebug, setIncludeDebug] = useState(false);
-  const [copied, setCopied] = useState(false);
 
-  const categoryLabels = {
-    general: { label: "General", Icon: ChatBubbleLeftIcon },
-    bug: { label: "Bug", Icon: BugAntIcon },
-    feature: { label: "Feature", Icon: StarIcon },
-    ux: { label: "Design", Icon: PencilIcon },
-  };
-
-  const handleSubmit = async () => {
-    if (!feedback.trim()) return;
-    // Snapshot debug log if toggle is on
-    let debugLogText: string | undefined;
-    if (includeDebug) {
-      const entries = useAppStore.getState().debugLog;
-      if (entries.length > 0) {
-        debugLogText = entries
-          .map((e) => `[${e.timestamp.toISOString()}] [${e.level.toUpperCase().padEnd(7)}] [${e.source}] ${e.content}`)
-          .join("\n");
-      }
-    }
-    const entry = {
-      category: categoryLabels[category].label,
-      feedback: feedback.trim(),
-      date: new Date().toISOString(),
-      ...(debugLogText ? { debug_log: debugLogText } : {}),
-    };
-    // Always persist to app data directory
-    await invoke("save_feedback", { entry }).catch(() => {});
-    // Also copy to clipboard
-    const text = [
-      `## CutReady Feedback`,
-      `**Category:** ${entry.category}`,
-      `**Date:** ${entry.date.split("T")[0]}`,
-      ``,
-      entry.feedback,
-      ...(debugLogText ? [``, `---`, `### Debug Log`, `\`\`\``, debugLogText, `\`\`\``] : []),
-    ].join("\n");
-    await navigator.clipboard.writeText(text).catch(() => {});
-    setFeedback("");
-    setIncludeDebug(false);
-    setCopied(true);
-    setTimeout(() => {
-      setCopied(false);
-      close();
-    }, 1200);
-  };
-
-  return (
-    <div ref={ref} className="relative">
-      <button
-        className={`flex items-center justify-center w-6 h-[20px] rounded transition-colors ${
-          open
-            ? "text-[var(--color-accent)] bg-[var(--color-surface-alt)]"
-            : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-alt)]"
-        }`}
-        onClick={() => toggle()}
-        title="Send Feedback"
-      >
-        <ChatBubbleLeftIcon className="w-3 h-3" />
-      </button>
-
-      {open && (
-        <div className="absolute right-0 top-full mt-1 z-[100] w-[280px] py-3 px-3 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg shadow-lg space-y-2.5">
-          <div className="text-[10px] font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">
-            Send Feedback
-          </div>
-
-          {/* Category pills */}
-          <div className="flex gap-1">
-            {(Object.keys(categoryLabels) as Array<keyof typeof categoryLabels>).map((key) => {
-              const cat = categoryLabels[key];
-              return (
-                <button
-                  key={key}
-                  onClick={() => setCategory(key as typeof category)}
-                  className={`inline-flex items-center gap-1 px-2 py-1 text-[10px] rounded-md border transition-colors ${
-                    category === key
-                      ? "bg-[var(--color-accent)]/15 text-[var(--color-accent)] border-[var(--color-accent)]/30"
-                      : "bg-[var(--color-surface-alt)] text-[var(--color-text-secondary)] border-[var(--color-border)] hover:text-[var(--color-text)]"
-                  }`}
-                >
-                  <cat.Icon className="w-2.5 h-2.5" />
-                  {cat.label}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Text */}
-          <textarea
-            value={feedback}
-            onChange={(e) => setFeedback(e.target.value)}
-            placeholder="What's on your mind?"
-            rows={3}
-            className="w-full px-2.5 py-2 rounded-md bg-[var(--color-surface-alt)] border border-[var(--color-border)] text-xs text-[var(--color-text)] placeholder:text-[var(--color-text-secondary)]/50 focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)]/40 resize-none"
-            autoFocus
-          />
-
-          {/* Debug toggle + submit on same row */}
-          <div className="flex items-center justify-between">
-            <label className="flex items-center gap-1.5 cursor-pointer group">
-              <button
-                type="button"
-                role="switch"
-                aria-checked={includeDebug}
-                onClick={() => setIncludeDebug(!includeDebug)}
-                className={`relative inline-flex h-[14px] w-[26px] shrink-0 rounded-full border transition-colors ${
-                  includeDebug
-                    ? "bg-[var(--color-accent)] border-[var(--color-accent)]"
-                    : "bg-[var(--color-surface-alt)] border-[var(--color-border)]"
-                }`}
-              >
-                <span
-                  className={`pointer-events-none block h-[10px] w-[10px] rounded-full bg-white shadow-sm transition-transform mt-[1px] ${
-                    includeDebug ? "translate-x-[13px]" : "translate-x-[1px]"
-                  }`}
-                />
-              </button>
-              <span className="text-[10px] text-[var(--color-text-secondary)] group-hover:text-[var(--color-text)] transition-colors select-none">
-                Include debug log
-              </span>
-            </label>
-            <button
-              onClick={handleSubmit}
-              disabled={!feedback.trim()}
-              className={`flex items-center justify-center w-7 h-7 rounded-md transition-colors ${
-                !feedback.trim()
-                  ? "text-[var(--color-text-secondary)]/30 cursor-not-allowed"
-                  : copied
-                    ? "text-emerald-500 bg-emerald-500/15"
-                    : "text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] hover:bg-[var(--color-surface-alt)]"
-              }`}
-              title="Add Feedback"
-            >
-              {copied ? (
-                <CheckIcon className="w-3.5 h-3.5" />
-              ) : (
-                <PaperAirplaneIcon className="w-3.5 h-3.5" />
-              )}
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
 

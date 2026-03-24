@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { SafeMarkdown } from "./SafeMarkdown";
-import { ChevronLeftIcon, SparklesIcon, PlayIcon, ComputerDesktopIcon, PlusIcon, XMarkIcon, FolderIcon } from "@heroicons/react/24/outline";
+import { ChevronLeftIcon, SparklesIcon, ComputerDesktopIcon, PlusIcon, XMarkIcon, FolderIcon, EllipsisHorizontalIcon } from "@heroicons/react/24/outline";
 import { useAppStore } from "../stores/appStore";
 import { useToastStore } from "../stores/toastStore";
 import { ScriptTable } from "./ScriptTable";
@@ -10,7 +10,6 @@ import { ScreenCaptureOverlay } from "./ScreenCaptureOverlay";
 import { SketchPreview } from "./SketchPreview";
 import VisualCell from "./VisualCell";
 import { exportSketchToWord } from "../utils/exportToWord";
-import { ExportWordButton } from "./ExportWordButton";
 import type { PlanningRow } from "../types/sketch";
 import { diffRow, type RowDiff } from "../utils/textDiff";
 
@@ -52,6 +51,7 @@ export function SketchForm() {
   const lastAiDiffs = useRef<{ rows: Set<number>; diffs: RowDiff[] } | null>(null);
   // Snapshot of rows before an AI edit lands — used for diff computation
   const aiSnapshotRef = useRef<{ rows: PlanningRow[]; changedIndices: number[] } | null>(null);
+  const [showOverflow, setShowOverflow] = useState(false);
   const [visualPromptRow, setVisualPromptRow] = useState<number | null>(null);
   const [visualInstructions, setVisualInstructions] = useState("");
   const [localDesc, setLocalDesc] = useState(
@@ -390,14 +390,7 @@ The Actions describe what happens on screen — use them as visual design hints.
           </div>
         )}
 
-        {/* Details section */}
-        <div className="mb-2">
-          <h3 className="text-xs font-medium text-[var(--color-text-secondary)] uppercase tracking-wider mb-3">
-            Details
-          </h3>
-        </div>
-
-        {/* Title + Preview button */}
+        {/* Title + overflow menu */}
         <div className="flex items-center gap-3 mb-4">
           <div className="relative flex-1 group/title">
             <input
@@ -422,25 +415,40 @@ The Actions describe what happens on screen — use them as visual design hints.
             )}
           </div>
           {localRows.length > 0 && (
-            <div className="relative flex items-center gap-2">
-              <ExportWordButton
-                showLabel
-                onExport={(orientation) => {
-                  if (!activeSketch) return;
-                  return exportSketchToWord(activeSketch, projectRoot, orientation).then(() => {
-                    useToastStore.getState().show("Export complete");
-                    useAppStore.getState().addActivityEntries([{ id: crypto.randomUUID(), timestamp: new Date(), source: "export", content: `Exported "${activeSketch.title}" to Word`, level: "success" }]);
-                  }).catch(err => console.error("Word export failed:", err));
-                }}
-              />
+            <div className="relative">
               <button
-                onClick={handlePreviewClick}
-                className="flex items-center gap-1.5 shrink-0 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] px-3 py-1.5 rounded-lg border border-[var(--color-border)] hover:border-[var(--color-accent)]/40 hover:bg-[var(--color-accent)]/5 transition-colors"
-                title="Preview sketch (presentation mode)"
+                onClick={() => setShowOverflow(!showOverflow)}
+                className="p-1.5 rounded-md text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-alt)] transition-colors"
+                title="More actions"
               >
-                <PlayIcon className="w-3.5 h-3.5" />
-                Preview
+                <EllipsisHorizontalIcon className="w-4 h-4" />
               </button>
+              {showOverflow && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setShowOverflow(false)} />
+                  <div className="absolute right-0 top-full mt-1 z-50 w-[180px] py-1 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg shadow-lg">
+                    <button
+                      onClick={() => {
+                        if (!activeSketch) return;
+                        setShowOverflow(false);
+                        exportSketchToWord(activeSketch, projectRoot, "landscape").then(() => {
+                          useToastStore.getState().show("Export complete");
+                          useAppStore.getState().addActivityEntries([{ id: crypto.randomUUID(), timestamp: new Date(), source: "export", content: `Exported "${activeSketch.title}" to Word`, level: "success" }]);
+                        }).catch(err => console.error("Word export failed:", err));
+                      }}
+                      className="w-full px-3 py-2 text-left text-[12px] text-[var(--color-text)] hover:bg-[var(--color-surface-alt)] transition-colors flex items-center gap-2"
+                    >
+                      Export to Word
+                    </button>
+                    <button
+                      onClick={() => { handlePreviewClick(); setShowOverflow(false); }}
+                      className="w-full px-3 py-2 text-left text-[12px] text-[var(--color-text)] hover:bg-[var(--color-surface-alt)] transition-colors flex items-center gap-2"
+                    >
+                      Preview
+                    </button>
+                  </div>
+                </>
+              )}
 
               {/* Monitor picker dropdown */}
               {showMonitorPicker && (
@@ -531,10 +539,7 @@ The Actions describe what happens on screen — use them as visual design hints.
 
         {/* Planning Table */}
         <div>
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-xs font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">
-              Planning Table
-            </h3>
+          <div className="flex items-center justify-end mb-3">
             <button
               onClick={() => sendChatPrompt(
                 localRows.length === 0

@@ -20,6 +20,7 @@ import { IdentityDialog } from "./IdentityDialog";
 import { KeyboardShortcutsDialog } from "./KeyboardShortcutsDialog";
 import { MergeConflictPanel } from "./MergeConflictPanel";
 import { commandRegistry, useCommands } from "../services/commandRegistry";
+import { useTheme } from "../hooks/useTheme";
 
 export function AppLayout() {
   const view = useAppStore((s) => s.view);
@@ -32,7 +33,6 @@ export function AppLayout() {
   const outputHeight = useAppStore((s) => s.outputHeight);
   const setOutputHeight = useAppStore((s) => s.setOutputHeight);
   const toggleOutput = useAppStore((s) => s.toggleOutput);
-  const showVersionHistory = useAppStore((s) => s.showVersionHistory);
   const toggleVersionHistory = useAppStore((s) => s.toggleVersionHistory);
   const isMerging = useAppStore((s) => s.isMerging);
 
@@ -40,6 +40,7 @@ export function AppLayout() {
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [recentCommands, setRecentCommands] = useState<string[]>([]);
 
+  const { toggle: toggleTheme } = useTheme();
   const commands = useCommands();
   const mainRef = useRef<HTMLDivElement>(null);
 
@@ -72,6 +73,21 @@ export function AppLayout() {
         title: "Move Sidebar to Other Side",
         category: "View",
         handler: () => toggleSidebarPosition(),
+      },
+      {
+        id: "view.toggleSecondary",
+        title: "Toggle Secondary Panel",
+        category: "View",
+        keybinding: "Ctrl+Shift+B",
+        handler: () => toggleVersionHistory(),
+      },
+      {
+        id: "view.sendFeedback",
+        title: "Send Feedback",
+        category: "View",
+        handler: async () => {
+          // TODO: Wire up feedback dialog as a standalone modal
+        },
       },
       {
         id: "nav.home",
@@ -131,6 +147,13 @@ export function AppLayout() {
         handler: () => setShortcutsOpen(true),
       },
       {
+        id: "view.toggleTheme",
+        title: "Toggle Theme (Light/Dark)",
+        category: "View",
+        keybinding: "Ctrl+Shift+T",
+        handler: () => toggleTheme(),
+      },
+      {
         id: "debug.exportLogs",
         title: "Export Logs",
         category: "Debug",
@@ -158,8 +181,24 @@ export function AppLayout() {
           }
         },
       },
+      {
+        id: "sketch.exportWord",
+        title: "Export Sketch to Word",
+        category: "Sketch",
+        handler: () => {
+          // TODO: Needs active sketch context from SketchForm — wire via appStore event or shared ref
+        },
+      },
+      {
+        id: "sketch.preview",
+        title: "Preview Sketch",
+        category: "Sketch",
+        handler: () => {
+          // TODO: Needs active sketch context from SketchForm — wire via appStore event or shared ref
+        },
+      },
     ]);
-  }, [setView, toggleSidebar, toggleSidebarPosition, toggleOutput]);
+  }, [setView, toggleSidebar, toggleSidebarPosition, toggleOutput, toggleVersionHistory, toggleTheme]);
 
   // Global keyboard shortcuts
   useEffect(() => {
@@ -172,6 +211,16 @@ export function AppLayout() {
       if (e.ctrlKey && e.shiftKey && (e.key === "P" || e.key === "p")) {
         e.preventDefault();
         setCommandPaletteOpen(true);
+      }
+      if (e.ctrlKey && e.shiftKey && (e.key === "T" || e.key === "t")) {
+        e.preventDefault();
+        toggleTheme();
+        return;
+      }
+      if (e.ctrlKey && e.shiftKey && (e.key === "B" || e.key === "b")) {
+        e.preventDefault();
+        toggleVersionHistory();
+        return;
       }
       if ((e.ctrlKey || e.metaKey) && e.key === "b") {
         e.preventDefault();
@@ -197,7 +246,7 @@ export function AppLayout() {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [toggleSidebar, toggleOutput]);
+  }, [toggleSidebar, toggleOutput, toggleVersionHistory, toggleTheme]);
 
   // Apply display settings as CSS variables
   const { settings: displaySettings } = useSettings();
@@ -240,14 +289,6 @@ export function AppLayout() {
   return (
     <>
       <TitleBar
-        sidebarVisible={sidebarVisible}
-        sidebarPosition={sidebarPosition}
-        outputVisible={outputVisible}
-        secondaryVisible={showVersionHistory}
-        onToggleSidebar={toggleSidebar}
-        onToggleSidebarPosition={toggleSidebarPosition}
-        onToggleOutput={toggleOutput}
-        onToggleSecondary={toggleVersionHistory}
         onCommandPaletteOpen={() => setCommandPaletteOpen(true)}
       />
       <div

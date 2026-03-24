@@ -11,7 +11,7 @@ import { useAppStore } from "./stores/appStore";
 import { useUpdateStore } from "./stores/updateStore";
 
 function App() {
-  const { theme, toggle } = useTheme();
+  useTheme();
   useGlobalHotkeys();
   useDebugLog();
   useDeepLink();
@@ -51,7 +51,7 @@ function App() {
     >
       <div className="min-h-screen bg-[var(--color-surface)] text-[var(--color-text)]">
         <AppLayout />
-        <StatusBar theme={theme} onToggleTheme={toggle} />
+        <StatusBar />
         <ToastContainer />
       </div>
     </ErrorBoundary>

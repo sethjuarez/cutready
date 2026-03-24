@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState, lazy, Suspense, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, lazy, Suspense, type ReactNode, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { usePopover } from "../hooks/usePopover";
 import {
   DndContext,
   closestCenter,
@@ -852,42 +853,13 @@ function SortableRow({
             )}
           </div>
         ) : !readOnly ? (
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => onCaptureScreenshot?.(idx)}
-              className="w-7 h-7 rounded-md border border-dashed border-[var(--color-border)] hover:border-[var(--color-accent)] hover:bg-[var(--color-accent)]/5 transition-colors flex items-center justify-center group/cap"
-              title="Capture screenshot"
-            >
-              <CameraIcon className="w-3.5 h-3.5 text-[var(--color-text-secondary)] group-hover/cap:text-[var(--color-accent)] transition-colors" />
-            </button>
-            {onPickImage && (
-              <button
-                onClick={() => onPickImage(idx)}
-                className="w-7 h-7 rounded-md border border-dashed border-[var(--color-border)] hover:border-[var(--color-accent)] hover:bg-[var(--color-accent)]/5 transition-colors flex items-center justify-center group/pick"
-                title="Pick from workspace images"
-              >
-                <PhotoIcon className="w-3.5 h-3.5 text-[var(--color-text-secondary)] group-hover/pick:text-[var(--color-accent)] transition-colors" />
-              </button>
-            )}
-            {onBrowseImage && (
-              <button
-                onClick={() => onBrowseImage(idx)}
-                className="w-7 h-7 rounded-md border border-dashed border-[var(--color-border)] hover:border-[var(--color-accent)] hover:bg-[var(--color-accent)]/5 transition-colors flex items-center justify-center group/browse"
-                title="Browse for image file"
-              >
-                <FolderIcon className="w-3.5 h-3.5 text-[var(--color-text-secondary)] group-hover/browse:text-[var(--color-accent)] transition-colors" />
-              </button>
-            )}
-            {onGenerateVisual && (
-              <button
-                onClick={() => onGenerateVisual(idx)}
-                className="w-7 h-7 rounded-md border border-dashed border-[var(--color-border)] hover:border-[var(--color-accent)] hover:bg-[var(--color-accent)]/5 transition-colors flex items-center justify-center group/gen"
-                title="Generate visual with AI"
-              >
-                <SparklesIcon className="w-3.5 h-3.5 text-[var(--color-text-secondary)] group-hover/gen:text-[var(--color-accent)] transition-colors" />
-              </button>
-            )}
-          </div>
+          <MediaAddPopover
+            idx={idx}
+            onCaptureScreenshot={onCaptureScreenshot}
+            onPickImage={onPickImage}
+            onBrowseImage={onBrowseImage}
+            onGenerateVisual={onGenerateVisual}
+          />
         ) : (
           <span className="text-[10px] text-[var(--color-text-secondary)]">—</span>
         )}
@@ -1340,10 +1312,97 @@ function SparkleButton({ onClick }: { onClick: () => void }) {
   return (
     <button
       onClick={(e) => { e.stopPropagation(); onClick(); }}
-      className="absolute top-0.5 right-0.5 p-0.5 rounded opacity-50 hover:opacity-100 transition-opacity text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10"
+      className="absolute top-0.5 right-0.5 p-0.5 rounded opacity-0 group-hover/cell:opacity-100 transition-opacity text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10"
       title="Improve with AI"
     >
       <SparklesIcon className="w-3 h-3" />
     </button>
+  );
+}
+
+/* ── Media add popover — single "+" button expands to action list ── */
+
+interface MediaAddPopoverProps {
+  idx: number;
+  onCaptureScreenshot?: (idx: number) => void;
+  onPickImage?: (idx: number) => void;
+  onBrowseImage?: (idx: number) => void;
+  onGenerateVisual?: (idx: number) => void;
+}
+
+function MediaAddPopover({ idx, onCaptureScreenshot, onPickImage, onBrowseImage, onGenerateVisual }: MediaAddPopoverProps) {
+  const { state, ref, toggle, close } = usePopover();
+  const itemsRef = useRef<(HTMLButtonElement | null)[]>([]);
+
+  const items = useMemo(() => {
+    const list: { icon: typeof CameraIcon; label: string; action: () => void }[] = [
+      { icon: CameraIcon, label: "Capture screenshot", action: () => onCaptureScreenshot?.(idx) },
+    ];
+    if (onPickImage) list.push({ icon: PhotoIcon, label: "Pick from workspace", action: () => onPickImage(idx) });
+    if (onBrowseImage) list.push({ icon: FolderIcon, label: "Browse for file", action: () => onBrowseImage(idx) });
+    if (onGenerateVisual) list.push({ icon: SparklesIcon, label: "Generate visual", action: () => onGenerateVisual(idx) });
+    return list;
+  }, [idx, onCaptureScreenshot, onPickImage, onBrowseImage, onGenerateVisual]);
+
+  const handleItemClick = (action: () => void) => {
+    close();
+    action();
+  };
+
+  const handleKeyDown = (e: ReactKeyboardEvent, index: number) => {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      const next = (index + 1) % items.length;
+      itemsRef.current[next]?.focus();
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      const prev = (index - 1 + items.length) % items.length;
+      itemsRef.current[prev]?.focus();
+    }
+  };
+
+  // Focus first item when popover opens
+  useEffect(() => {
+    if (state !== null) {
+      requestAnimationFrame(() => itemsRef.current[0]?.focus());
+    }
+  }, [state]);
+
+  return (
+    <div ref={ref} className="relative inline-flex">
+      <button
+        onClick={toggle}
+        className="w-8 h-8 rounded-md border border-dashed border-[var(--color-border)] hover:border-[var(--color-accent)] hover:bg-[var(--color-accent)]/5 transition-colors flex items-center justify-center"
+        title="Add media"
+        aria-expanded={state !== null}
+        aria-haspopup="true"
+      >
+        <PlusIcon className="w-4 h-4 text-[var(--color-text-secondary)]" />
+      </button>
+      {state !== null && (
+        <div
+          className="absolute left-0 bottom-full mb-1 z-50 min-w-[170px] py-1 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg shadow-lg"
+          role="menu"
+        >
+          {items.map((item, i) => {
+            const Icon = item.icon;
+            return (
+              <button
+                key={item.label}
+                ref={(el) => { itemsRef.current[i] = el; }}
+                role="menuitem"
+                tabIndex={0}
+                onClick={() => handleItemClick(item.action)}
+                onKeyDown={(e) => handleKeyDown(e, i)}
+                className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] hover:bg-[var(--color-accent)]/5 transition-colors text-left"
+              >
+                <Icon className="w-3.5 h-3.5 flex-shrink-0" />
+                {item.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }

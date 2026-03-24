@@ -77,7 +77,7 @@ export function Sidebar() {
   return (
     <>
       <nav
-        className={`no-select flex flex-col w-12 bg-[var(--color-surface-toolbar)] items-center py-3 gap-1 ${
+        className={`no-select flex flex-col w-12 bg-[var(--color-surface)] items-center py-3 gap-1.5 ${
           isRight ? "border-l border-[var(--color-border)]" : "border-r border-[var(--color-border)]"
         }`}
         onContextMenu={handleContextMenu}
@@ -95,13 +95,13 @@ export function Sidebar() {
               onClick={() => !isDisabled && setView(item.id)}
               disabled={isDisabled}
               className={`
-                flex items-center justify-center w-9 h-9 rounded-lg transition-colors relative
+                flex items-center justify-center w-10 h-10 rounded-lg transition-colors relative
                 ${
                   isActive
                     ? "bg-[var(--color-accent)]/15 text-[var(--color-accent)]"
                     : isDisabled
                       ? "text-[var(--color-text-secondary)]/40 cursor-not-allowed"
-                      : "text-[var(--color-text-secondary)] hover:bg-[var(--color-surface)] hover:text-[var(--color-text)]"
+                      : "text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-alt)] hover:text-[var(--color-text)]"
                 }
               `}
               title={item.label}
@@ -131,11 +131,11 @@ export function Sidebar() {
             <button
               onClick={() => setView("settings")}
               className={`
-                flex items-center justify-center w-9 h-9 rounded-lg transition-colors relative
+                flex items-center justify-center w-10 h-10 rounded-lg transition-colors relative
                 ${
                   isActive
                     ? "bg-[var(--color-accent)]/15 text-[var(--color-accent)]"
-                    : "text-[var(--color-text-secondary)] hover:bg-[var(--color-surface)] hover:text-[var(--color-text)]"
+                    : "text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-alt)] hover:text-[var(--color-text)]"
                 }
               `}
               title="Settings"
