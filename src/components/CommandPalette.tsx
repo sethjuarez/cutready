@@ -57,7 +57,9 @@ export function CommandPalette({
     if (isOpen) {
       setQuery(initialQuery);
       setSelectedIndex(0);
-      setTimeout(() => inputRef.current?.focus(), 0);
+      // Try focusing immediately, then again after a frame for Tauri webview
+      inputRef.current?.focus();
+      requestAnimationFrame(() => inputRef.current?.focus());
     }
   }, [isOpen, initialQuery]);
 
@@ -100,6 +102,8 @@ export function CommandPalette({
       <div
         className="w-[520px] max-w-[90vw] max-h-[60vh] bg-[var(--color-surface)] border border-[var(--color-border)] rounded-b-xl shadow-2xl flex flex-col overflow-hidden h-fit"
         onClick={(e) => e.stopPropagation()}
+        onKeyDown={handleKeyDown}
+        tabIndex={-1}
       >
         {/* Input */}
         <div className="flex items-center px-3 py-2 border-b border-[var(--color-border)]">
@@ -113,7 +117,6 @@ export function CommandPalette({
               setQuery(e.target.value);
               setSelectedIndex(0);
             }}
-            onKeyDown={handleKeyDown}
           />
           <button
             className="flex items-center justify-center w-6 h-6 rounded text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-alt)] transition-colors shrink-0"
@@ -133,9 +136,9 @@ export function CommandPalette({
           {filteredCommands.map((cmd, index) => (
             <div
               key={cmd.id}
-              className={`flex items-center justify-between px-3 py-1.5 rounded cursor-pointer text-[13px] ${
+              className={`flex items-center justify-between px-3 py-1.5 rounded cursor-pointer text-[13px] transition-colors ${
                 index === selectedIndex
-                  ? "bg-[var(--color-accent)]/10"
+                  ? "bg-[var(--color-surface-alt)] text-[var(--color-accent)]"
                   : "hover:bg-[var(--color-surface-alt)]"
               }`}
               onClick={() => {
