@@ -1374,6 +1374,14 @@ function MediaAddPopover({ idx, onCaptureScreenshot, onPickImage, onBrowseImage,
     }
   }, [state]);
 
+  // Close on scroll
+  useEffect(() => {
+    if (state === null) return;
+    const handleScroll = () => close();
+    window.addEventListener("scroll", handleScroll, true);
+    return () => window.removeEventListener("scroll", handleScroll, true);
+  }, [state, close]);
+
   // Focus first item when popover opens
   useEffect(() => {
     if (state !== null) {
