@@ -21,6 +21,23 @@ import { KeyboardShortcutsDialog } from "./KeyboardShortcutsDialog";
 import { MergeConflictPanel } from "./MergeConflictPanel";
 import { commandRegistry, useCommands } from "../services/commandRegistry";
 import { useTheme } from "../hooks/useTheme";
+import {
+  HomeIcon,
+  RectangleStackIcon,
+  FilmIcon,
+  FolderOpenIcon,
+  Cog6ToothIcon,
+  MagnifyingGlassIcon,
+  ViewColumnsIcon,
+  Squares2X2Icon,
+  ChatBubbleLeftIcon,
+  SunIcon,
+  ArrowDownTrayIcon,
+  CommandLineIcon,
+  BookmarkIcon,
+  DocumentTextIcon,
+  PlayIcon,
+} from "@heroicons/react/24/outline";
 
 export function AppLayout() {
   const view = useAppStore((s) => s.view);
@@ -52,6 +69,7 @@ export function AppLayout() {
         title: "Command Palette",
         category: "View",
         keybinding: "Ctrl+Shift+P",
+        icon: <MagnifyingGlassIcon className="w-4 h-4" />,
         handler: () => setCommandPaletteOpen(true),
       },
       {
@@ -59,6 +77,7 @@ export function AppLayout() {
         title: "Toggle Sidebar",
         category: "View",
         keybinding: "Ctrl+B",
+        icon: <ViewColumnsIcon className="w-4 h-4" />,
         handler: () => toggleSidebar(),
       },
       {
@@ -66,12 +85,14 @@ export function AppLayout() {
         title: "Toggle Output Panel",
         category: "View",
         keybinding: "Ctrl+`",
+        icon: <CommandLineIcon className="w-4 h-4" />,
         handler: () => toggleOutput(),
       },
       {
         id: "view.toggleSidebarPosition",
         title: "Move Sidebar to Other Side",
         category: "View",
+        icon: <Squares2X2Icon className="w-4 h-4" />,
         handler: () => toggleSidebarPosition(),
       },
       {
@@ -79,12 +100,14 @@ export function AppLayout() {
         title: "Toggle Secondary Panel",
         category: "View",
         keybinding: "Ctrl+Shift+B",
+        icon: <ViewColumnsIcon className="w-4 h-4" />,
         handler: () => toggleVersionHistory(),
       },
       {
         id: "view.sendFeedback",
         title: "Send Feedback",
         category: "View",
+        icon: <ChatBubbleLeftIcon className="w-4 h-4" />,
         handler: async () => {
           // TODO: Wire up feedback dialog as a standalone modal
         },
@@ -93,30 +116,35 @@ export function AppLayout() {
         id: "nav.home",
         title: "Go to Home",
         category: "Navigate",
+        icon: <HomeIcon className="w-4 h-4" />,
         handler: () => setView("home"),
       },
       {
         id: "nav.sketch",
         title: "Go to Documents",
         category: "Navigate",
+        icon: <RectangleStackIcon className="w-4 h-4" />,
         handler: () => setView("sketch"),
       },
       {
         id: "nav.assets",
         title: "Go to Assets",
         category: "Navigate",
+        icon: <FilmIcon className="w-4 h-4" />,
         handler: () => setView("assets"),
       },
       {
         id: "nav.explorer",
         title: "Go to Explorer",
         category: "Navigate",
+        icon: <FolderOpenIcon className="w-4 h-4" />,
         handler: () => setView("explorer"),
       },
       {
         id: "nav.settings",
         title: "Go to Settings",
         category: "Navigate",
+        icon: <Cog6ToothIcon className="w-4 h-4" />,
         handler: () => setView("settings"),
       },
       {
@@ -124,6 +152,7 @@ export function AppLayout() {
         title: "Quick Save Snapshot",
         category: "Snapshot",
         keybinding: "Ctrl+S",
+        icon: <BookmarkIcon className="w-4 h-4" />,
         handler: () => {
           const { currentProject, quickSave } = useAppStore.getState();
           if (currentProject) quickSave();
@@ -134,6 +163,7 @@ export function AppLayout() {
         title: "Save Snapshot As\u2026",
         category: "Snapshot",
         keybinding: "Ctrl+Shift+S",
+        icon: <BookmarkIcon className="w-4 h-4" />,
         handler: () => {
           const { currentProject, promptSnapshot } = useAppStore.getState();
           if (currentProject) promptSnapshot();
@@ -151,12 +181,14 @@ export function AppLayout() {
         title: "Toggle Theme (Light/Dark)",
         category: "View",
         keybinding: "Ctrl+Shift+T",
+        icon: <SunIcon className="w-4 h-4" />,
         handler: () => toggleTheme(),
       },
       {
         id: "debug.exportLogs",
         title: "Export Logs",
         category: "Debug",
+        icon: <ArrowDownTrayIcon className="w-4 h-4" />,
         handler: async () => {
           try {
             const { save } = await import("@tauri-apps/plugin-dialog");
@@ -185,6 +217,7 @@ export function AppLayout() {
         id: "sketch.exportWord",
         title: "Export Sketch to Word",
         category: "Sketch",
+        icon: <DocumentTextIcon className="w-4 h-4" />,
         handler: () => {
           // TODO: Needs active sketch context from SketchForm — wire via appStore event or shared ref
         },
@@ -193,6 +226,7 @@ export function AppLayout() {
         id: "sketch.preview",
         title: "Preview Sketch",
         category: "Sketch",
+        icon: <PlayIcon className="w-4 h-4" />,
         handler: () => {
           // TODO: Needs active sketch context from SketchForm — wire via appStore event or shared ref
         },
@@ -203,14 +237,19 @@ export function AppLayout() {
   // Global keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Always allow Ctrl+Shift+P to toggle the command palette
+      if (e.ctrlKey && e.shiftKey && (e.key === "P" || e.key === "p")) {
+        e.preventDefault();
+        setCommandPaletteOpen((prev) => !prev);
+        return;
+      }
+      // Skip all other shortcuts when command palette is open
+      if (commandPaletteOpen) return;
+
       if ((e.ctrlKey || e.metaKey) && e.key === "/") {
         e.preventDefault();
         setShortcutsOpen((prev) => !prev);
         return;
-      }
-      if (e.ctrlKey && e.shiftKey && (e.key === "P" || e.key === "p")) {
-        e.preventDefault();
-        setCommandPaletteOpen(true);
       }
       if (e.ctrlKey && e.shiftKey && (e.key === "T" || e.key === "t")) {
         e.preventDefault();
@@ -246,7 +285,7 @@ export function AppLayout() {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [toggleSidebar, toggleOutput, toggleVersionHistory, toggleTheme]);
+  }, [toggleSidebar, toggleOutput, toggleVersionHistory, toggleTheme, commandPaletteOpen]);
 
   // Apply display settings as CSS variables
   const { settings: displaySettings } = useSettings();

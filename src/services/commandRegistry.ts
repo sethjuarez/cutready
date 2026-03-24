@@ -1,10 +1,13 @@
 /** Command registry — central place to register and execute named commands. */
 
+import type React from "react";
+
 export interface Command {
   id: string;
   title: string;
   category?: string;
   keybinding?: string;
+  icon?: React.ReactNode;
   handler: () => void | Promise<void>;
 }
 

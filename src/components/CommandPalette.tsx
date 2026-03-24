@@ -144,7 +144,10 @@ export function CommandPalette({
               }}
               onMouseEnter={() => setSelectedIndex(index)}
             >
-              <div className="flex items-center gap-1 min-w-0">
+              <div className="flex items-center gap-2 min-w-0">
+                {cmd.icon && (
+                  <span className="shrink-0 w-4 h-4 flex items-center justify-center text-[var(--color-text-secondary)]">{cmd.icon}</span>
+                )}
                 {cmd.category && (
                   <span className="text-[var(--color-text-secondary)]">{cmd.category}:</span>
                 )}
