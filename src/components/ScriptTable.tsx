@@ -762,7 +762,7 @@ function SortableRow({
               {/* Expand / preview */}
               <button
                 onClick={() => onVisualClick(row.visual!, idx)}
-                className="p-1 rounded-full bg-white/20 text-white/90 hover:bg-white/40"
+                className="p-1 rounded-full bg-black/20 text-white hover:bg-black/40"
                 title="Preview visual (click to edit)"
               >
                 <ArrowsPointingOutIcon className="w-3.5 h-3.5" />
@@ -771,7 +771,7 @@ function SortableRow({
               {!readOnly && onGenerateVisual && (
                 <button
                   onClick={() => onGenerateVisual(idx)}
-                  className="p-1 rounded-full bg-white/20 text-white/90 hover:bg-[rgb(var(--color-accent))]/80"
+                  className="p-1 rounded-full bg-black/20 text-white hover:bg-[rgb(var(--color-accent))]/80"
                   title="Regenerate visual with AI"
                 >
                   <SparklesIcon className="w-3.5 h-3.5" />
@@ -781,7 +781,7 @@ function SortableRow({
               {!readOnly && (
                 <button
                   onClick={() => onRemoveVisual?.(idx)}
-                  className="p-1 rounded-full bg-white/20 text-white/90 hover:bg-error/80"
+                  className="p-1 rounded-full bg-black/20 text-white hover:bg-error/80"
                   title="Remove visual"
                 >
                   <XMarkIcon className="w-3.5 h-3.5" />
@@ -809,7 +809,7 @@ function SortableRow({
                     const src = projectRoot ? convertFileSrc(`${projectRoot}/${row.screenshot}`) : row.screenshot!;
                     onImageClick(src);
                   }}
-                  className="p-1 rounded-full bg-white/20 text-white/90 hover:bg-white/30"
+                  className="p-1 rounded-full bg-black/20 text-white hover:bg-black/30"
                   title="View image"
                 >
                   <MagnifyingGlassIcon className="w-3.5 h-3.5" />
@@ -817,7 +817,7 @@ function SortableRow({
                 {/* Re-capture */}
                 <button
                   onClick={() => onCaptureScreenshot?.(idx)}
-                  className="p-1 rounded-full bg-white/20 text-white/90 hover:bg-white/30"
+                  className="p-1 rounded-full bg-black/20 text-white hover:bg-black/30"
                   title="Re-capture screenshot"
                 >
                   <CameraIcon className="w-3.5 h-3.5" />
@@ -826,7 +826,7 @@ function SortableRow({
                 {onPickImage && (
                   <button
                     onClick={() => onPickImage(idx)}
-                    className="p-1 rounded-full bg-white/20 text-white/90 hover:bg-white/30"
+                    className="p-1 rounded-full bg-black/20 text-white hover:bg-black/30"
                     title="Pick from workspace images"
                   >
                     <PhotoIcon className="w-3.5 h-3.5" />
@@ -836,7 +836,7 @@ function SortableRow({
                 {onBrowseImage && (
                   <button
                     onClick={() => onBrowseImage(idx)}
-                    className="p-1 rounded-full bg-white/20 text-white/90 hover:bg-white/30"
+                    className="p-1 rounded-full bg-black/20 text-white hover:bg-black/30"
                     title="Browse for image file"
                   >
                     <FolderIcon className="w-3.5 h-3.5" />
@@ -845,7 +845,7 @@ function SortableRow({
                 {/* Remove */}
                 <button
                   onClick={() => updateRow(idx, "screenshot", "")}
-                  className="p-1 rounded-full bg-white/20 text-white/90 hover:bg-error/80"
+                  className="p-1 rounded-full bg-black/20 text-white hover:bg-error/80"
                   title="Remove screenshot"
                 >
                   <XMarkIcon className="w-3.5 h-3.5" />
