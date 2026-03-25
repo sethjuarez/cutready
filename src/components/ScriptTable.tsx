@@ -1332,10 +1332,14 @@ interface MediaAddPopoverProps {
 }
 
 function MediaAddPopover({ idx, onCaptureScreenshot, onPickImage, onBrowseImage, onGenerateVisual }: MediaAddPopoverProps) {
-  const { state, ref, toggle, close } = usePopover();
+  const { state, ref, addRef, toggle, close } = usePopover();
   const itemsRef = useRef<(HTMLButtonElement | null)[]>([]);
   const buttonRef = useRef<HTMLButtonElement>(null);
+  const portalRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+
+  // Register the portaled menu container so clicks inside don't trigger close
+  useEffect(() => { addRef(portalRef); }, [addRef]);
 
   const items = useMemo(() => {
     const list: { icon: typeof CameraIcon; label: string; action: () => void }[] = [
@@ -1403,10 +1407,10 @@ function MediaAddPopover({ idx, onCaptureScreenshot, onPickImage, onBrowseImage,
       </button>
       {state !== null && pos && createPortal(
         <div
+          ref={portalRef}
           className="fixed z-dropdown min-w-[170px] py-1 bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-lg shadow-lg"
           style={{ top: pos.top, left: pos.left, transform: "translateY(-100%) translateY(-4px)" }}
           role="menu"
-          onMouseDown={(e) => e.stopPropagation()}
         >
           {items.map((item, i) => {
             const Icon = item.icon;

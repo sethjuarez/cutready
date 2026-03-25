@@ -13,6 +13,8 @@ interface UsePopoverReturn {
   state: PopoverState | null;
   /** Ref to attach to the popover container for click-outside detection */
   ref: React.RefObject<HTMLDivElement | null>;
+  /** Register an additional ref for click-outside detection (e.g. portaled content) */
+  addRef: (ref: React.RefObject<HTMLElement | null>) => void;
   /** Open at a fixed position (e.g., right-click context menu) */
   openAt: (pos: PopoverPosition) => void;
   /** Open without position (e.g., dropdown toggle) */
@@ -28,18 +30,28 @@ interface UsePopoverReturn {
 /**
  * Shared popover/context-menu hook.
  * Handles open/close state, click-outside dismissal, and Escape key.
+ * Use `addRef` to register additional refs (e.g. portaled menus) so clicks
+ * inside them don't trigger close.
  */
 export function usePopover(): UsePopoverReturn {
   const [state, setState] = useState<PopoverState | null>(null);
   const ref = useRef<HTMLDivElement | null>(null);
+  const extraRefs = useRef<Set<React.RefObject<HTMLElement | null>>>(new Set());
+
+  const addRef = useCallback((r: React.RefObject<HTMLElement | null>) => {
+    extraRefs.current.add(r);
+  }, []);
 
   useEffect(() => {
     if (state === null) return;
 
     const handleClose = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setState(null);
+      const target = e.target as Node;
+      if (ref.current?.contains(target)) return;
+      for (const r of extraRefs.current) {
+        if (r.current?.contains(target)) return;
       }
+      setState(null);
     };
     const handleEsc = (e: KeyboardEvent) => {
       if (e.key === "Escape") setState(null);
@@ -71,5 +83,5 @@ export function usePopover(): UsePopoverReturn {
 
   const position = state !== null && state !== true ? state : undefined;
 
-  return { state, ref, openAt, open, close, toggle, position };
+  return { state, ref, addRef, openAt, open, close, toggle, position };
 }
