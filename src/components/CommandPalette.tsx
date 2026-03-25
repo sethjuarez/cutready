@@ -96,7 +96,7 @@ export function CommandPalette({
 
   return (
     <div
-      className="fixed inset-0 z-modal flex justify-center pt-[36px] bg-black/25"
+      className="fixed inset-0 z-modal flex justify-center pt-[var(--titlebar-height)] bg-black/25"
       onClick={onClose}
     >
       <div
@@ -110,6 +110,10 @@ export function CommandPalette({
           <input
             ref={inputRef}
             type="text"
+            role="combobox"
+            aria-expanded="true"
+            aria-controls="command-list"
+            aria-activedescendant={filteredCommands[selectedIndex] ? `cmd-${filteredCommands[selectedIndex].id}` : undefined}
             className="flex-1 bg-transparent border-none outline-none text-[rgb(var(--color-text))] text-sm py-1"
             placeholder="Type a command..."
             value={query}
@@ -126,8 +130,13 @@ export function CommandPalette({
           </button>
         </div>
 
+        {/* Live region for screen readers */}
+        <span className="sr-only" aria-live="polite" aria-atomic="true">
+          {filteredCommands.length} {filteredCommands.length === 1 ? "command" : "commands"}
+        </span>
+
         {/* List */}
-        <div className="overflow-y-auto max-h-[350px] p-1" ref={listRef}>
+        <div className="overflow-y-auto max-h-[350px] p-1" ref={listRef} id="command-list" role="listbox" aria-label="Commands">
           {filteredCommands.length === 0 && (
             <div className="px-4 py-4 text-center text-[rgb(var(--color-text-secondary))] text-[13px]">
               No commands found
@@ -136,6 +145,9 @@ export function CommandPalette({
           {filteredCommands.map((cmd, index) => (
             <div
               key={cmd.id}
+              id={`cmd-${cmd.id}`}
+              role="option"
+              aria-selected={index === selectedIndex}
               className={`flex items-center justify-between px-3 py-1.5 rounded cursor-pointer text-[13px] transition-colors ${
                 index === selectedIndex
                   ? "bg-[rgb(var(--color-surface-alt))] text-[rgb(var(--color-accent))]"
@@ -149,7 +161,7 @@ export function CommandPalette({
             >
               <div className="flex items-center gap-2 min-w-0">
                 {cmd.icon && (
-                  <span className="shrink-0 w-4 h-4 flex items-center justify-center text-[rgb(var(--color-text-secondary))]">{cmd.icon}</span>
+                  <span className={`shrink-0 w-4 h-4 flex items-center justify-center ${index !== selectedIndex ? 'text-[rgb(var(--color-text-secondary))]' : ''}`}>{cmd.icon}</span>
                 )}
                 {cmd.category && (
                   <span className="text-[rgb(var(--color-text-secondary))]">{cmd.category}:</span>
