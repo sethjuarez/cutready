@@ -12,7 +12,7 @@ export function StatusBar() {
 
   return (
     <div
-      className="no-select fixed bottom-0 left-0 right-0 z-50 flex items-center bg-[var(--color-surface)] border-t border-[var(--color-border)] px-3 text-xs text-[var(--color-text-secondary)]"
+      className="no-select fixed bottom-0 left-0 right-0 z-50 flex items-center bg-[rgb(var(--color-surface))] border-t border-[rgb(var(--color-border))] px-3 text-xs text-[rgb(var(--color-text-secondary))]"
       style={{ height: "var(--statusbar-height)" }}
     >
       {version && <span className="opacity-60">v{version}</span>}

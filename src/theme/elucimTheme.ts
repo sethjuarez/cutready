@@ -10,18 +10,18 @@ import type { ElucimTheme } from "@elucim/core";
  * parse CSS variables.
  */
 export const ELUCIM_THEME: ElucimTheme = {
-  foreground: "var(--color-text)",
-  background: "var(--color-surface)",
-  accent: "var(--color-accent)",
-  muted: "var(--color-text-secondary)",
-  surface: "var(--color-surface-alt)",
-  border: "var(--color-border)",
-  primary: "var(--color-accent)",
-  secondary: "var(--color-secondary)",
-  tertiary: "var(--color-tertiary)",
-  success: "var(--color-success)",
-  warning: "var(--color-warning)",
-  error: "var(--color-error)",
+  foreground: "rgb(var(--color-text))",
+  background: "rgb(var(--color-surface))",
+  accent: "rgb(var(--color-accent))",
+  muted: "rgb(var(--color-text-secondary))",
+  surface: "rgb(var(--color-surface-alt))",
+  border: "rgb(var(--color-border))",
+  primary: "rgb(var(--color-accent))",
+  secondary: "rgb(var(--color-secondary))",
+  tertiary: "rgb(var(--color-tertiary))",
+  success: "rgb(var(--color-success))",
+  warning: "rgb(var(--color-warning))",
+  error: "rgb(var(--color-error))",
 };
 
 /**

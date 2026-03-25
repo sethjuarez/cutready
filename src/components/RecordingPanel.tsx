@@ -70,10 +70,10 @@ export function RecordingPanel() {
     return (
       <div className="flex h-full items-center justify-center p-8">
         <div className="text-center">
-          <h2 className="text-lg font-semibold text-[var(--color-text)]">
+          <h2 className="text-lg font-semibold text-[rgb(var(--color-text))]">
             No Workspace Open
           </h2>
-          <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
+          <p className="mt-1 text-sm text-[rgb(var(--color-text-secondary))]">
             Open or create a project to start recording.
           </p>
         </div>
@@ -98,10 +98,10 @@ export function RecordingPanel() {
     return (
       <div className="flex h-full flex-col p-6">
         <div className="mb-6">
-          <h1 className="text-xl font-semibold text-[var(--color-text)]">
+          <h1 className="text-xl font-semibold text-[rgb(var(--color-text))]">
             Record Demo
           </h1>
-          <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
+          <p className="mt-1 text-sm text-[rgb(var(--color-text-secondary))]">
             Choose a browser profile to record with your extensions and
             bookmarks, or use a fresh browser.
           </p>
@@ -110,7 +110,7 @@ export function RecordingPanel() {
         <div className="flex flex-1 flex-col items-center justify-center">
           <div className="w-full max-w-sm">
             {/* Profile selector */}
-            <label className="mb-1.5 block text-xs font-medium text-[var(--color-text-secondary)]">
+            <label className="mb-1.5 block text-xs font-medium text-[rgb(var(--color-text-secondary))]">
               Browser Profile
             </label>
             <select
@@ -127,7 +127,7 @@ export function RecordingPanel() {
                   setSelectedProfile(match ?? null);
                 }
               }}
-              className="mb-4 w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm text-[var(--color-text)] outline-none transition-colors focus:border-[var(--color-accent)]"
+              className="mb-4 w-full rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-3 py-2 text-sm text-[rgb(var(--color-text))] outline-none transition-colors focus:border-[rgb(var(--color-accent))]"
             >
               {profiles.map((p) => (
                 <option key={profileKey(p)} value={profileKey(p)}>
@@ -147,7 +147,7 @@ export function RecordingPanel() {
                     {selectedProfile?.browser === "msedge" ? "Edge" : "Chrome"}{" "}
                     first
                   </p>
-                  <p className="mt-0.5 text-xs text-[var(--color-text-secondary)]">
+                  <p className="mt-0.5 text-xs text-[rgb(var(--color-text-secondary))]">
                     The browser must be closed to use your profile with
                     extensions.
                   </p>
@@ -162,13 +162,13 @@ export function RecordingPanel() {
                   <p className="text-xs font-medium text-error">
                     Failed to open browser
                   </p>
-                  <p className="mt-0.5 break-all text-xs text-[var(--color-text-secondary)]">
+                  <p className="mt-0.5 break-all text-xs text-[rgb(var(--color-text-secondary))]">
                     {error}
                   </p>
                 </div>
                 <button
                   onClick={clearError}
-                  className="shrink-0 text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"
+                  className="shrink-0 text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))]"
                 >
                   <XMarkIcon className="w-3.5 h-3.5" />
                 </button>
@@ -179,7 +179,7 @@ export function RecordingPanel() {
             <button
               onClick={prepareBrowser}
               disabled={loading || !!isSelectedBrowserRunning}
-              className="flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--color-accent)] px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[var(--color-accent-hover)] disabled:opacity-50"
+              className="flex w-full items-center justify-center gap-2 rounded-lg bg-[rgb(var(--color-accent))] px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[rgb(var(--color-accent-hover))] disabled:opacity-50"
             >
               {loading ? (
                 <svg
@@ -210,33 +210,33 @@ export function RecordingPanel() {
     return (
       <div className="flex h-full flex-col p-6">
         <div className="mb-6">
-          <h1 className="text-xl font-semibold text-[var(--color-text)]">
+          <h1 className="text-xl font-semibold text-[rgb(var(--color-text))]">
             Record Demo
           </h1>
-          <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
+          <p className="mt-1 text-sm text-[rgb(var(--color-text-secondary))]">
             Navigate to your demo starting point, then click &ldquo;Ready to
             Record&rdquo; when you&rsquo;re set.
           </p>
         </div>
 
         {/* Browser status */}
-        <div className="mb-4 flex items-center gap-2 rounded-lg bg-[var(--color-accent)]/10 px-3 py-2">
-          <span className="h-2 w-2 rounded-full bg-[var(--color-accent)]" />
-          <span className="text-sm font-medium text-[var(--color-accent)]">
+        <div className="mb-4 flex items-center gap-2 rounded-lg bg-[rgb(var(--color-accent))]/10 px-3 py-2">
+          <span className="h-2 w-2 rounded-full bg-[rgb(var(--color-accent))]" />
+          <span className="text-sm font-medium text-[rgb(var(--color-accent))]">
             {channelLabel} connected
           </span>
         </div>
 
         <div className="flex flex-1 items-center justify-center">
           <div className="text-center">
-            <p className="mb-4 text-sm text-[var(--color-text-secondary)]">
+            <p className="mb-4 text-sm text-[rgb(var(--color-text-secondary))]">
               Set up your demo in the browser, then start recording.
             </p>
             <div className="flex items-center justify-center gap-3">
               <button
                 onClick={startRecording}
                 disabled={loading}
-                className="flex items-center gap-2 rounded-lg bg-[var(--color-accent)] px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[var(--color-accent-hover)] disabled:opacity-50"
+                className="flex items-center gap-2 rounded-lg bg-[rgb(var(--color-accent))] px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[rgb(var(--color-accent-hover))] disabled:opacity-50"
               >
                 <svg
                   width="14"
@@ -248,9 +248,9 @@ export function RecordingPanel() {
                 </svg>
                 Ready to Record
               </button>
-              <span className="text-xs text-[var(--color-text-secondary)]">
+              <span className="text-xs text-[rgb(var(--color-text-secondary))]">
                 or press{" "}
-                <kbd className="rounded border border-[var(--color-border)] bg-[var(--color-surface-alt)] px-1.5 py-0.5 font-mono text-[10px]">
+                <kbd className="rounded border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] px-1.5 py-0.5 font-mono text-[10px]">
                   Ctrl+Shift+R
                 </kbd>
               </span>
@@ -258,7 +258,7 @@ export function RecordingPanel() {
             <button
               onClick={disconnectBrowser}
               disabled={loading}
-              className="mt-6 text-xs text-[var(--color-text-secondary)] underline decoration-[var(--color-border)] underline-offset-2 transition-colors hover:text-[var(--color-text)]"
+              className="mt-6 text-xs text-[rgb(var(--color-text-secondary))] underline decoration-[rgb(var(--color-border))] underline-offset-2 transition-colors hover:text-[rgb(var(--color-text))]"
             >
               Close Browser
             </button>
@@ -274,7 +274,7 @@ export function RecordingPanel() {
     return (
       <div className="flex h-full flex-col p-6">
         <div className="mb-4">
-          <h1 className="text-xl font-semibold text-[var(--color-text)]">
+          <h1 className="text-xl font-semibold text-[rgb(var(--color-text))]">
             Record Demo
           </h1>
         </div>
@@ -285,7 +285,7 @@ export function RecordingPanel() {
           <span className="text-sm font-medium text-error">
             Recording in progress
           </span>
-          <span className="text-sm text-[var(--color-text-secondary)]">
+          <span className="text-sm text-[rgb(var(--color-text-secondary))]">
             — {capturedActions.length} action
             {capturedActions.length !== 1 ? "s" : ""} captured
           </span>
@@ -303,9 +303,9 @@ export function RecordingPanel() {
             </svg>
             Stop Recording
           </button>
-          <span className="text-xs text-[var(--color-text-secondary)]">
+          <span className="text-xs text-[rgb(var(--color-text-secondary))]">
             or press{" "}
-            <kbd className="rounded border border-[var(--color-border)] bg-[var(--color-surface-alt)] px-1.5 py-0.5 font-mono text-[10px]">
+            <kbd className="rounded border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] px-1.5 py-0.5 font-mono text-[10px]">
               Ctrl+Shift+R
             </kbd>
           </span>
@@ -314,7 +314,7 @@ export function RecordingPanel() {
         {/* Action list */}
         <div ref={listRef} className="flex-1 space-y-2 overflow-y-auto">
           {capturedActions.length === 0 && (
-            <div className="flex h-full items-center justify-center text-sm text-[var(--color-text-secondary)]">
+            <div className="flex h-full items-center justify-center text-sm text-[rgb(var(--color-text-secondary))]">
               Interact with the browser — actions will appear here in real time.
             </div>
           )}
@@ -331,25 +331,25 @@ export function RecordingPanel() {
   return (
     <div className="flex h-full flex-col p-6">
       <div className="mb-4">
-        <h1 className="text-xl font-semibold text-[var(--color-text)]">
+        <h1 className="text-xl font-semibold text-[rgb(var(--color-text))]">
           Record Demo
         </h1>
       </div>
 
       {/* Browser status */}
-      <div className="mb-4 flex items-center gap-2 rounded-lg bg-[var(--color-accent)]/10 px-3 py-2">
-        <span className="h-2 w-2 rounded-full bg-[var(--color-accent)]" />
-        <span className="text-sm font-medium text-[var(--color-accent)]">
+      <div className="mb-4 flex items-center gap-2 rounded-lg bg-[rgb(var(--color-accent))]/10 px-3 py-2">
+        <span className="h-2 w-2 rounded-full bg-[rgb(var(--color-accent))]" />
+        <span className="text-sm font-medium text-[rgb(var(--color-accent))]">
           {channelLabel} connected
         </span>
       </div>
 
       {/* Summary */}
-      <div className="mb-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-alt)] p-4">
-        <h3 className="text-sm font-semibold text-[var(--color-text)]">
+      <div className="mb-4 rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] p-4">
+        <h3 className="text-sm font-semibold text-[rgb(var(--color-text))]">
           Recording Complete
         </h3>
-        <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
+        <p className="mt-1 text-sm text-[rgb(var(--color-text-secondary))]">
           Captured {capturedActions.length} action
           {capturedActions.length !== 1 ? "s" : ""}. Continue to the Script
           Editor to refine your demo script, or record another take.
@@ -368,7 +368,7 @@ export function RecordingPanel() {
         <button
           onClick={startRecording}
           disabled={loading}
-          className="flex items-center gap-2 rounded-lg bg-[var(--color-accent)] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[var(--color-accent-hover)] disabled:opacity-50"
+          className="flex items-center gap-2 rounded-lg bg-[rgb(var(--color-accent))] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[rgb(var(--color-accent-hover))] disabled:opacity-50"
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
             <circle cx="12" cy="12" r="10" />
@@ -378,7 +378,7 @@ export function RecordingPanel() {
         <button
           onClick={disconnectBrowser}
           disabled={loading}
-          className="text-xs text-[var(--color-text-secondary)] underline decoration-[var(--color-border)] underline-offset-2 transition-colors hover:text-[var(--color-text)]"
+          className="text-xs text-[rgb(var(--color-text-secondary))] underline decoration-[rgb(var(--color-border))] underline-offset-2 transition-colors hover:text-[rgb(var(--color-text))]"
         >
           Close Browser
         </button>

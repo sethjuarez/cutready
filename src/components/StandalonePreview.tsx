@@ -59,7 +59,7 @@ export function StandalonePreview() {
 
   if (!data) {
     return (
-      <div className="fixed inset-0 flex items-center justify-center bg-[var(--color-surface)] text-[var(--color-text-secondary)]">
+      <div className="fixed inset-0 flex items-center justify-center bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text-secondary))]">
         No preview data available.
       </div>
     );

@@ -20,12 +20,12 @@ export function SplitPreviewPane() {
   return (
     <div className="flex flex-col h-full min-w-0">
       {/* Split pane header */}
-      <div className="flex items-center justify-between px-3 h-[36px] bg-[var(--color-surface-alt)] border-b border-[var(--color-border)] shrink-0">
-        <span className="text-[12px] text-[var(--color-text-secondary)] truncate">
+      <div className="flex items-center justify-between px-3 h-[36px] bg-[rgb(var(--color-surface-alt))] border-b border-[rgb(var(--color-border))] shrink-0">
+        <span className="text-[12px] text-[rgb(var(--color-text-secondary))] truncate">
           {tab.title}
         </span>
         <button
-          className="flex items-center justify-center w-5 h-5 rounded text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)] transition-colors"
+          className="flex items-center justify-center w-5 h-5 rounded text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface))] transition-colors"
           onClick={closeSplit}
           title="Close split"
         >
@@ -39,7 +39,7 @@ export function SplitPreviewPane() {
         {tab.type === "note" && <NotePreviewContent path={tab.path} />}
         {tab.type === "storyboard" && <StoryboardPreviewContent path={tab.path} />}
         {tab.type === "history" && (
-          <div className="flex items-center justify-center h-full text-[var(--color-text-secondary)] text-sm">
+          <div className="flex items-center justify-center h-full text-[rgb(var(--color-text-secondary))] text-sm">
             History cannot be split
           </div>
         )}
@@ -75,14 +75,14 @@ function SketchPreviewContent({ path }: { path: string }) {
     };
   }, [path]);
 
-  if (error) return <div className="p-4 text-sm text-[var(--color-error)]">Failed to load sketch</div>;
+  if (error) return <div className="p-4 text-sm text-[rgb(var(--color-error))]">Failed to load sketch</div>;
   if (!sketch) return <LoadingSpinner />;
 
   return (
     <div className="p-4">
-      <h2 className="text-lg font-semibold text-[var(--color-text)] mb-1">{sketch.title || "Untitled"}</h2>
+      <h2 className="text-lg font-semibold text-[rgb(var(--color-text))] mb-1">{sketch.title || "Untitled"}</h2>
       {sketch.description ? (
-        <p className="text-sm text-[var(--color-text-secondary)] mb-4">{String(sketch.description)}</p>
+        <p className="text-sm text-[rgb(var(--color-text-secondary))] mb-4">{String(sketch.description)}</p>
       ) : null}
 
       {/* Planning table */}
@@ -98,17 +98,17 @@ function SketchPreviewContent({ path }: { path: string }) {
           </thead>
           <tbody>
             {sketch.rows.map((row, i) => (
-              <tr key={i} className="border-b border-[var(--color-border-subtle)]">
-                <td className="script-table-td text-[var(--color-text-secondary)] w-8">{i + 1}</td>
-                <td className="script-table-td">{row.narrative || <span className="text-[var(--color-text-secondary)]/40">—</span>}</td>
-                <td className="script-table-td">{row.demo_actions || <span className="text-[var(--color-text-secondary)]/40">—</span>}</td>
+              <tr key={i} className="border-b border-[rgb(var(--color-border-subtle))]">
+                <td className="script-table-td text-[rgb(var(--color-text-secondary))] w-8">{i + 1}</td>
+                <td className="script-table-td">{row.narrative || <span className="text-[rgb(var(--color-text-secondary))]/40">—</span>}</td>
+                <td className="script-table-td">{row.demo_actions || <span className="text-[rgb(var(--color-text-secondary))]/40">—</span>}</td>
                 {sketch.rows.some((r) => r.screenshot) && (
                   <td className="script-table-td">
                     {row.screenshot && (
                       <img
                         src={convertFileSrc(row.screenshot)}
                         alt=""
-                        className="w-24 h-auto rounded border border-[var(--color-border)]"
+                        className="w-24 h-auto rounded border border-[rgb(var(--color-border))]"
                       />
                     )}
                   </td>
@@ -145,7 +145,7 @@ function NotePreviewContent({ path }: { path: string }) {
     return () => window.removeEventListener("cutready:ai-note-updated", handler);
   }, [path]);
 
-  if (error) return <div className="p-4 text-sm text-[var(--color-error)]">Failed to load note</div>;
+  if (error) return <div className="p-4 text-sm text-[rgb(var(--color-error))]">Failed to load note</div>;
   if (content === null) return <LoadingSpinner />;
 
   return (
@@ -167,24 +167,24 @@ function StoryboardPreviewContent({ path }: { path: string }) {
     return () => { cancelled = true; };
   }, [path]);
 
-  if (error) return <div className="p-4 text-sm text-[var(--color-error)]">Failed to load storyboard</div>;
+  if (error) return <div className="p-4 text-sm text-[rgb(var(--color-error))]">Failed to load storyboard</div>;
   if (!storyboard) return <LoadingSpinner />;
 
   return (
     <div className="p-4">
-      <h2 className="text-lg font-semibold text-[var(--color-text)] mb-3">{storyboard.title || "Untitled"}</h2>
+      <h2 className="text-lg font-semibold text-[rgb(var(--color-text))] mb-3">{storyboard.title || "Untitled"}</h2>
       <div className="flex flex-col gap-2">
         {storyboard.items.map((item, i) => (
           <div
             key={i}
-            className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[var(--color-surface-alt)] border border-[var(--color-border)] text-sm"
+            className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[rgb(var(--color-surface-alt))] border border-[rgb(var(--color-border))] text-sm"
           >
-            <span className="text-[var(--color-text-secondary)] text-xs w-5">{i + 1}</span>
-            <span className="text-[var(--color-text)]">
+            <span className="text-[rgb(var(--color-text-secondary))] text-xs w-5">{i + 1}</span>
+            <span className="text-[rgb(var(--color-text))]">
               {item.type === "section" ? item.title : item.path}
             </span>
             {item.type === "section" && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--color-accent)]/10 text-[var(--color-accent)]">
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))]">
                 Section · {item.sketches.length} sketches
               </span>
             )}
@@ -197,7 +197,7 @@ function StoryboardPreviewContent({ path }: { path: string }) {
 
 function LoadingSpinner() {
   return (
-    <div className="flex items-center justify-center h-32 text-[var(--color-text-secondary)]">
+    <div className="flex items-center justify-center h-32 text-[rgb(var(--color-text-secondary))]">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="animate-spin">
         <path d="M21 12a9 9 0 1 1-6.219-8.56" />
       </svg>

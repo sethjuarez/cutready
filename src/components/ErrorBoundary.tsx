@@ -49,7 +49,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
   render(): ReactNode {
     if (this.state.hasError) {
       return this.props.fallback ?? (
-        <div className="flex items-center justify-center w-full h-full text-[10px] text-[var(--color-error)]">
+        <div className="flex items-center justify-center w-full h-full text-[10px] text-[rgb(var(--color-error))]">
           Render error
         </div>
       );

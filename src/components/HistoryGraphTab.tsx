@@ -40,7 +40,7 @@ const NODE_R = 5;
 const HEAD_R = 7;
 
 const LANE_COLORS = [
-  "var(--color-accent)", "#10b981", "#f59e0b", "#ef4444",
+  "rgb(var(--color-accent))", "#10b981", "#f59e0b", "#ef4444",
   "#3b82f6", "#ec4899", "#14b8a6", "#8b5cf6",
 ];
 const lc = (i: number) => LANE_COLORS[i % LANE_COLORS.length];
@@ -340,7 +340,7 @@ export function HistoryGraphTab() {
   /* ── Empty state ──────────────────────────────────── */
   if (graphNodes.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center h-full text-[var(--color-text-secondary)]">
+      <div className="flex flex-col items-center justify-center h-full text-[rgb(var(--color-text-secondary))]">
         <ArrowsRightLeftIcon className="w-12 h-12 opacity-30 mb-3" />
         <p className="text-xs">No snapshots yet</p>
         <p className="text-[10px] opacity-60 mt-1">Save your first snapshot to see the history graph</p>
@@ -350,10 +350,10 @@ export function HistoryGraphTab() {
 
   /* ── Render ───────────────────────────────────────── */
   return (
-    <div className="flex flex-col h-full bg-[var(--color-bg)]">
+    <div className="flex flex-col h-full bg-[rgb(var(--color-bg))]">
       {/* Toolbar */}
-      <div className="flex items-center gap-3 px-4 py-1.5 border-b border-[var(--color-border)] bg-[var(--color-surface)] shrink-0">
-        <span className="text-[10px] text-[var(--color-text-secondary)]">
+      <div className="flex items-center gap-3 px-4 py-1.5 border-b border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] shrink-0">
+        <span className="text-[10px] text-[rgb(var(--color-text-secondary))]">
           {layout.nodes.length} snapshot{layout.nodes.length !== 1 ? "s" : ""} · {timelines.length} timeline{timelines.length !== 1 ? "s" : ""}
         </span>
 
@@ -362,7 +362,7 @@ export function HistoryGraphTab() {
         {/* Direction toggle */}
         <button
           onClick={toggleDir}
-          className="flex items-center gap-1 px-2 py-1 rounded text-[10px] text-[var(--color-text-secondary)] hover:bg-[var(--color-border)] transition-colors"
+          className="flex items-center gap-1 px-2 py-1 rounded text-[10px] text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-border))] transition-colors"
           title={`Switch to ${dir === "vertical" ? "horizontal" : "vertical"} layout`}
         >
           {dir === "vertical" ? (
@@ -376,7 +376,7 @@ export function HistoryGraphTab() {
         {/* Fit button */}
         <button
           onClick={handleFit}
-          className="flex items-center gap-1 px-2 py-1 rounded text-[10px] text-[var(--color-text-secondary)] hover:bg-[var(--color-border)] transition-colors"
+          className="flex items-center gap-1 px-2 py-1 rounded text-[10px] text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-border))] transition-colors"
           title="Fit graph to view"
         >
           <ArrowsPointingOutIcon className="w-3 h-3" />
@@ -384,17 +384,17 @@ export function HistoryGraphTab() {
         </button>
 
         {/* Zoom +/− */}
-        <div className="flex items-center border border-[var(--color-border)] rounded overflow-hidden">
+        <div className="flex items-center border border-[rgb(var(--color-border))] rounded overflow-hidden">
           <button
             onClick={handleZoomOut}
-            className="px-1.5 py-1 text-[var(--color-text-secondary)] hover:bg-[var(--color-border)] transition-colors"
+            className="px-1.5 py-1 text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-border))] transition-colors"
             title="Zoom out"
           >
             <MinusIcon className="w-3 h-3" />
           </button>
           <button
             onClick={handleZoomIn}
-            className="px-1.5 py-1 text-[var(--color-text-secondary)] hover:bg-[var(--color-border)] transition-colors border-l border-[var(--color-border)]"
+            className="px-1.5 py-1 text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-border))] transition-colors border-l border-[rgb(var(--color-border))]"
             title="Zoom in"
           >
             <PlusIcon className="w-3 h-3" />
@@ -407,11 +407,11 @@ export function HistoryGraphTab() {
             <button
               key={t.name}
               onClick={() => switchTimeline(t.name)}
-              className="flex items-center gap-1.5 text-[10px] text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors"
+              className="flex items-center gap-1.5 text-[10px] text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] transition-colors"
               title={`Switch to ${t.label}`}
             >
               <span className="w-2 h-2 rounded-full" style={{ backgroundColor: lc(t.color_index) }} />
-              <span className={t.is_active ? "font-medium text-[var(--color-text)]" : ""}>{t.label}</span>
+              <span className={t.is_active ? "font-medium text-[rgb(var(--color-text))]" : ""}>{t.label}</span>
               {t.is_active && <span className="text-[8px] opacity-50">(active)</span>}
             </button>
           ))}
@@ -459,7 +459,7 @@ export function HistoryGraphTab() {
 
                   <circle
                     cx={x} cy={y} r={isHov ? r + 2 : r}
-                    fill={isHead ? color : "var(--color-surface)"}
+                    fill={isHead ? color : "rgb(var(--color-surface))"}
                     stroke={color} strokeWidth={isHead ? 3 : 2}
                   />
 
@@ -529,7 +529,7 @@ export function HistoryGraphTab() {
                   {ln.showLabel && (dir === "vertical" ? (
                     <text
                       x={labelX} y={y + 1} dominantBaseline="middle" fontSize={9}
-                      fill={isHead ? "var(--color-text)" : "var(--color-text-secondary)"}
+                      fill={isHead ? "rgb(var(--color-text))" : "rgb(var(--color-text-secondary))"}
                       fontWeight={isHead ? 600 : 400} opacity={0.85}>
                       {node.message.length > 30 ? node.message.substring(0, 30) + "…" : node.message}
                     </text>
@@ -537,7 +537,7 @@ export function HistoryGraphTab() {
                     <text
                       x={x + r + 4} y={y + r + 4}
                       fontSize={8}
-                      fill={isHead ? "var(--color-text)" : "var(--color-text-secondary)"}
+                      fill={isHead ? "rgb(var(--color-text))" : "rgb(var(--color-text-secondary))"}
                       fontWeight={isHead ? 600 : 400} opacity={0.85}
                       transform={`rotate(30, ${x + r + 4}, ${y + r + 4})`}
                     >
@@ -561,15 +561,15 @@ export function HistoryGraphTab() {
               className="absolute pointer-events-none z-50 max-w-xs"
               style={{ left: tooltipPos.x, top: tooltipPos.y }}
             >
-              <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg shadow-lg px-3 py-2">
-                <p className="text-xs font-semibold text-[var(--color-text)] leading-tight">{node.message}</p>
+              <div className="bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-lg shadow-lg px-3 py-2">
+                <p className="text-xs font-semibold text-[rgb(var(--color-text))] leading-tight">{node.message}</p>
                 <div className="flex items-center gap-2 mt-1">
-                  <span className="text-[9px] font-mono text-[var(--color-text-secondary)]">{node.id.substring(0, 7)}</span>
+                  <span className="text-[9px] font-mono text-[rgb(var(--color-text-secondary))]">{node.id.substring(0, 7)}</span>
                   <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: color }} />
-                  <span className="text-[9px] text-[var(--color-text-secondary)]">{formatTimestamp(node.timestamp)}</span>
+                  <span className="text-[9px] text-[rgb(var(--color-text-secondary))]">{formatTimestamp(node.timestamp)}</span>
                 </div>
                 {node.author && (
-                  <p className="text-[9px] text-[var(--color-text-secondary)] mt-0.5">{node.author}</p>
+                  <p className="text-[9px] text-[rgb(var(--color-text-secondary))] mt-0.5">{node.author}</p>
                 )}
               </div>
             </div>

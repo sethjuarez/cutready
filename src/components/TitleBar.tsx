@@ -52,7 +52,7 @@ export function TitleBar({
   return (
     <div
       data-tauri-drag-region
-      className="no-select fixed top-0 left-0 right-0 z-50 flex items-center justify-between bg-[var(--color-surface)] border-b border-[var(--color-border)]"
+      className="no-select fixed top-0 left-0 right-0 z-50 flex items-center justify-between bg-[rgb(var(--color-surface))] border-b border-[rgb(var(--color-border))]"
       style={{ height: "var(--titlebar-height)" }}
     >
       {/* Left: App branding */}
@@ -74,8 +74,8 @@ export function TitleBar({
             fill="#7c6fdb"
             transform="rotate(-14 14 42)"
           />
-          <circle cx="14" cy="48" r="5" fill="var(--color-accent)" />
-          <path d="M48 68 L88 84 L48 100Z" fill="var(--color-accent)" />
+          <circle cx="14" cy="48" r="5" fill="rgb(var(--color-accent))" />
+          <path d="M48 68 L88 84 L48 100Z" fill="rgb(var(--color-accent))" />
         </svg>
         <span
           data-tauri-drag-region
@@ -86,11 +86,11 @@ export function TitleBar({
         {workspaceName && (
           <span
             data-tauri-drag-region
-            className="text-sm text-[var(--color-text-secondary)] font-normal ml-1.5"
+            className="text-sm text-[rgb(var(--color-text-secondary))] font-normal ml-1.5"
           >
             / {workspaceName}
             {isMultiProject && projectName && (
-              <span className="text-[var(--color-text-secondary)]/60"> / {projectName}</span>
+              <span className="text-[rgb(var(--color-text-secondary))]/60"> / {projectName}</span>
             )}
           </span>
         )}
@@ -99,14 +99,14 @@ export function TitleBar({
       {/* Center: Command center */}
       <div data-tauri-drag-region className="flex-1 flex items-center justify-center min-w-0 px-4">
         <button
-          className="flex items-center gap-1.5 w-full max-w-[380px] h-[22px] px-2.5 bg-[var(--color-surface-alt)] border border-[var(--color-border)] rounded-md text-[var(--color-text-secondary)] text-[12px] cursor-pointer hover:border-[var(--color-text-secondary)] transition-colors"
+          className="flex items-center gap-1.5 w-full max-w-[380px] h-[22px] px-2.5 bg-[rgb(var(--color-surface-alt))] border border-[rgb(var(--color-border))] rounded-md text-[rgb(var(--color-text-secondary))] text-[12px] cursor-pointer hover:border-[rgb(var(--color-text-secondary))] transition-colors"
           onClick={onCommandPaletteOpen}
           style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
           title="Command Palette (Ctrl+Shift+P)"
         >
           <MagnifyingGlassIcon className="w-3.5 h-3.5" />
           <span className="flex-1 text-left truncate">Search commands…</span>
-          <kbd className="text-[10px] px-1 py-px rounded bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-secondary)] font-[inherit]">
+          <kbd className="text-[10px] px-1 py-px rounded bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] text-[rgb(var(--color-text-secondary))] font-[inherit]">
             Ctrl+Shift+P
           </kbd>
         </button>
@@ -120,7 +120,7 @@ export function TitleBar({
         {/* Window controls */}
         <button
           onClick={handleMinimize}
-          className="inline-flex items-center justify-center w-11 h-full hover:bg-[var(--color-surface-alt)] transition-colors"
+          className="inline-flex items-center justify-center w-11 h-full hover:bg-[rgb(var(--color-surface-alt))] transition-colors"
           aria-label="Minimize"
         >
           <svg width="10" height="1" viewBox="0 0 10 1" fill="currentColor">
@@ -129,13 +129,13 @@ export function TitleBar({
         </button>
         <button
           onClick={handleMaximize}
-          className="inline-flex items-center justify-center w-11 h-full hover:bg-[var(--color-surface-alt)] transition-colors"
+          className="inline-flex items-center justify-center w-11 h-full hover:bg-[rgb(var(--color-surface-alt))] transition-colors"
           aria-label="Maximize"
         >
           {maximized ? (
             <svg width="10" height="10" viewBox="0 0 11 11" fill="none" stroke="currentColor" strokeWidth="1">
               <rect x="3.5" y="0.5" width="7" height="7" rx="0.5" />
-              <rect x="0.5" y="3.5" width="7" height="7" rx="0.5" fill="var(--color-surface-toolbar)" />
+              <rect x="0.5" y="3.5" width="7" height="7" rx="0.5" fill="rgb(var(--color-surface-toolbar))" />
             </svg>
           ) : (
             <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1">
@@ -195,7 +195,7 @@ function UpdateIndicator() {
       style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
     >
       <button
-        className="relative flex items-center justify-center w-7 h-[22px] rounded text-indigo-400 hover:text-indigo-300 hover:bg-[var(--color-surface-alt)] transition-colors"
+        className="relative flex items-center justify-center w-7 h-[22px] rounded text-indigo-400 hover:text-indigo-300 hover:bg-[rgb(var(--color-surface-alt))] transition-colors"
         onClick={() => toggle()}
         title={`Update available: v${update.version}${update.body ? `\n${update.body.slice(0, 200)}` : ""}`}
       >
@@ -205,14 +205,14 @@ function UpdateIndicator() {
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full mt-1 z-[100] w-[240px] py-2.5 px-3 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg shadow-lg">
-          <div className="text-[10px] font-medium text-[var(--color-text-secondary)] uppercase tracking-wider mb-1.5">
+        <div className="absolute right-0 top-full mt-1 z-[100] w-[240px] py-2.5 px-3 bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-lg shadow-lg">
+          <div className="text-[10px] font-medium text-[rgb(var(--color-text-secondary))] uppercase tracking-wider mb-1.5">
             Update Available
           </div>
-          <div className="text-xs text-[var(--color-text)] mb-2">
+          <div className="text-xs text-[rgb(var(--color-text))] mb-2">
             <span className="font-semibold">v{update.version}</span>
             {update.body && (
-              <p className="mt-1 text-[var(--color-text-secondary)] line-clamp-3">
+              <p className="mt-1 text-[rgb(var(--color-text-secondary))] line-clamp-3">
                 {update.body}
               </p>
             )}

@@ -112,7 +112,7 @@ export function TimelineSelector() {
       {/* Trigger button */}
       <button
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-1.5 px-2 py-1 rounded text-[10px] text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-border)]/50 transition-colors max-w-[140px]"
+        className="flex items-center gap-1.5 px-2 py-1 rounded text-[10px] text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-border))]/50 transition-colors max-w-[140px]"
         title={`Branch: ${active?.label ?? "main"}`}
       >
         <ArrowsRightLeftIcon className="shrink-0 w-3 h-3" />
@@ -122,7 +122,7 @@ export function TimelineSelector() {
 
       {/* Dropdown */}
       {open && (
-        <div className="absolute top-full left-0 mt-1 w-56 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] shadow-lg z-50 overflow-hidden">
+        <div className="absolute top-full left-0 mt-1 w-56 rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] shadow-lg z-50 overflow-hidden">
           {/* Search filter */}
           {timelines.length > 3 && (
             <div className="px-2 pt-2">
@@ -131,7 +131,7 @@ export function TimelineSelector() {
                 value={filter}
                 onChange={(e) => setFilter(e.target.value)}
                 placeholder="Filter branches…"
-                className="w-full px-2 py-1 rounded text-[10px] bg-[var(--color-bg)] border border-[var(--color-border)] text-[var(--color-text)] placeholder:text-[var(--color-text-secondary)]/50 outline-none focus:border-[var(--color-accent)]"
+                className="w-full px-2 py-1 rounded text-[10px] bg-[rgb(var(--color-bg))] border border-[rgb(var(--color-border))] text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/50 outline-none focus:border-[rgb(var(--color-accent))]"
               />
             </div>
           )}
@@ -144,8 +144,8 @@ export function TimelineSelector() {
                 onClick={() => t.is_active ? setOpen(false) : handleSwitch(t.name)}
                 className={`group w-full flex items-center gap-2 px-3 py-1.5 text-left text-[11px] transition-colors relative ${
                   t.is_active
-                    ? "bg-[var(--color-accent)]/10 text-[var(--color-accent)] font-medium"
-                    : "text-[var(--color-text)] hover:bg-[var(--color-border)]/30"
+                    ? "bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))] font-medium"
+                    : "text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-border))]/30"
                 }`}
               >
                 {/* Consistent icon area */}
@@ -153,15 +153,15 @@ export function TimelineSelector() {
                   {t.is_active ? (
                     <CheckIcon className="w-2.5 h-2.5" />
                   ) : (
-                    <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-text-secondary)]/30" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-[rgb(var(--color-text-secondary))]/30" />
                   )}
                 </span>
                 <span className="truncate flex-1">{t.label}</span>
-                <span className="text-[9px] text-[var(--color-text-secondary)] tabular-nums ml-auto">
+                <span className="text-[9px] text-[rgb(var(--color-text-secondary))] tabular-nums ml-auto">
                   {t.snapshot_count} {t.snapshot_count === 1 ? "snap" : "snaps"}
                 </span>
                 {!t.is_active && t.name !== "main" && timelines.length > 1 && (
-                  <span className="absolute right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-[var(--color-surface)] pl-1 rounded">
+                  <span className="absolute right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-[rgb(var(--color-surface))] pl-1 rounded">
                     <button
                       onClick={(e) => handleMerge(t.name, t.label, e)}
                       className="text-[9px] px-1.5 py-0.5 rounded hover:bg-success/15 hover:text-success transition-colors"
@@ -170,7 +170,7 @@ export function TimelineSelector() {
                     </button>
                     <button
                       onClick={(e) => handlePromote(t.name, t.label, e)}
-                      className="text-[9px] px-1.5 py-0.5 rounded hover:bg-[var(--color-accent)]/15 hover:text-[var(--color-accent)] transition-colors"
+                      className="text-[9px] px-1.5 py-0.5 rounded hover:bg-[rgb(var(--color-accent))]/15 hover:text-[rgb(var(--color-accent))] transition-colors"
                     >
                       Promote
                     </button>
@@ -185,14 +185,14 @@ export function TimelineSelector() {
               </button>
             ))}
             {filtered.length === 0 && (
-              <div className="px-3 py-2 text-[10px] text-[var(--color-text-secondary)]">
+              <div className="px-3 py-2 text-[10px] text-[rgb(var(--color-text-secondary))]">
                 No branches match "{filter}"
               </div>
             )}
           </div>
 
           {/* New timeline */}
-          <div className="border-t border-[var(--color-border)]">
+          <div className="border-t border-[rgb(var(--color-border))]">
             {showNew ? (
               <div className="flex items-center gap-1.5 px-2 py-2">
                 <input
@@ -200,12 +200,12 @@ export function TimelineSelector() {
                   onChange={(e) => setNewName(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleCreate()}
                   placeholder="Branch name…"
-                  className="flex-1 px-2 py-1 rounded text-[10px] bg-[var(--color-bg)] border border-[var(--color-border)] text-[var(--color-text)] placeholder:text-[var(--color-text-secondary)]/50 outline-none focus:border-[var(--color-accent)]"
+                  className="flex-1 px-2 py-1 rounded text-[10px] bg-[rgb(var(--color-bg))] border border-[rgb(var(--color-border))] text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/50 outline-none focus:border-[rgb(var(--color-accent))]"
                   autoFocus
                 />
                 <button
                   onClick={handleCreate}
-                  className="px-2 py-1 rounded text-[10px] font-medium bg-[var(--color-accent)] text-white hover:opacity-90 transition-opacity"
+                  className="px-2 py-1 rounded text-[10px] font-medium bg-[rgb(var(--color-accent))] text-white hover:opacity-90 transition-opacity"
                 >
                   Create
                 </button>
@@ -213,7 +213,7 @@ export function TimelineSelector() {
             ) : (
               <button
                 onClick={() => setShowNew(true)}
-                className="w-full flex items-center gap-2 px-3 py-2 text-[11px] text-[var(--color-accent)] hover:bg-[var(--color-accent)]/5 transition-colors"
+                className="w-full flex items-center gap-2 px-3 py-2 text-[11px] text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/5 transition-colors"
               >
                 <PlusIcon className="w-2.5 h-2.5" />
                 New Branch

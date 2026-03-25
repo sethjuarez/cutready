@@ -53,35 +53,35 @@ export function ProjectImagePicker({ onSelect, onCancel }: ProjectImagePickerPro
       onClick={onCancel}
     >
       <div
-        className="flex flex-col rounded-xl overflow-hidden shadow-2xl bg-[var(--color-surface)] border border-[var(--color-border)]"
+        className="flex flex-col rounded-xl overflow-hidden shadow-2xl bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))]"
         style={{ width: "min(640px, calc(100vw - 80px))", maxHeight: "calc(100vh - 120px)" }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--color-border)] bg-[var(--color-surface-alt)] shrink-0">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] shrink-0">
           <div className="flex items-center gap-2">
-            <PhotoIcon className="w-4 h-4 text-[var(--color-accent)]" />
-            <span className="text-[13px] font-medium text-[var(--color-text)]">Choose project image</span>
+            <PhotoIcon className="w-4 h-4 text-[rgb(var(--color-accent))]" />
+            <span className="text-[13px] font-medium text-[rgb(var(--color-text))]">Choose project image</span>
           </div>
           <button
             onClick={onCancel}
-            className="p-1 rounded-lg text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)] transition-colors"
+            className="p-1 rounded-lg text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface))] transition-colors"
           >
             <XMarkIcon className="w-4 h-4" />
           </button>
         </div>
 
         {/* Search */}
-        <div className="px-4 py-2 border-b border-[var(--color-border)] shrink-0">
+        <div className="px-4 py-2 border-b border-[rgb(var(--color-border))] shrink-0">
           <div className="relative">
-            <MagnifyingGlassIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[var(--color-text-secondary)]" />
+            <MagnifyingGlassIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[rgb(var(--color-text-secondary))]" />
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Filter images…"
               autoFocus
-              className="w-full pl-8 pr-3 py-1.5 rounded-lg bg-[var(--color-surface-alt)] border border-[var(--color-border)] text-[12px] text-[var(--color-text)] placeholder:text-[var(--color-text-secondary)]/50 focus:outline-none focus:border-[var(--color-accent)]/50 transition-colors"
+              className="w-full pl-8 pr-3 py-1.5 rounded-lg bg-[rgb(var(--color-surface-alt))] border border-[rgb(var(--color-border))] text-[12px] text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/50 focus:outline-none focus:border-[rgb(var(--color-accent))]/50 transition-colors"
             />
           </div>
         </div>
@@ -89,7 +89,7 @@ export function ProjectImagePicker({ onSelect, onCancel }: ProjectImagePickerPro
         {/* Grid */}
         <div className="flex-1 overflow-y-auto p-3 min-h-0">
           {images.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-[var(--color-text-secondary)] gap-2">
+            <div className="flex flex-col items-center justify-center py-12 text-[rgb(var(--color-text-secondary))] gap-2">
               <PhotoIcon className="w-8 h-8 opacity-30" />
               <span className="text-xs">
                 {assets.some((a) => a.assetType === "screenshot")
@@ -111,12 +111,12 @@ export function ProjectImagePicker({ onSelect, onCancel }: ProjectImagePickerPro
                     onDoubleClick={() => onSelect(asset)}
                     className={`group relative flex flex-col rounded-lg overflow-hidden border-2 transition-all text-left ${
                       isSelected
-                        ? "border-[var(--color-accent)] ring-1 ring-[var(--color-accent)]/30"
-                        : "border-transparent hover:border-[var(--color-border)]"
+                        ? "border-[rgb(var(--color-accent))] ring-1 ring-[rgb(var(--color-accent))]/30"
+                        : "border-transparent hover:border-[rgb(var(--color-border))]"
                     }`}
                   >
                     {/* Thumbnail */}
-                    <div className="aspect-video bg-[var(--color-surface-alt)] flex items-center justify-center overflow-hidden">
+                    <div className="aspect-video bg-[rgb(var(--color-surface-alt))] flex items-center justify-center overflow-hidden">
                       <img
                         src={src}
                         alt={filename}
@@ -125,14 +125,14 @@ export function ProjectImagePicker({ onSelect, onCancel }: ProjectImagePickerPro
                       />
                     </div>
                     {/* Label */}
-                    <div className="px-2 py-1.5 bg-[var(--color-surface)]">
-                      <span className="text-[10px] text-[var(--color-text-secondary)] truncate block" title={filename}>
+                    <div className="px-2 py-1.5 bg-[rgb(var(--color-surface))]">
+                      <span className="text-[10px] text-[rgb(var(--color-text-secondary))] truncate block" title={filename}>
                         {filename}
                       </span>
                     </div>
                     {/* Selection indicator */}
                     {isSelected && (
-                      <div className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full bg-[var(--color-accent)] flex items-center justify-center">
+                      <div className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full bg-[rgb(var(--color-accent))] flex items-center justify-center">
                         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                           <polyline points="20 6 9 17 4 12" />
                         </svg>
@@ -146,17 +146,17 @@ export function ProjectImagePicker({ onSelect, onCancel }: ProjectImagePickerPro
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-2 px-4 py-3 border-t border-[var(--color-border)] bg-[var(--color-surface-alt)] shrink-0">
+        <div className="flex items-center justify-end gap-2 px-4 py-3 border-t border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] shrink-0">
           <button
             onClick={onCancel}
-            className="px-3 py-1.5 rounded-lg text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)] transition-colors"
+            className="px-3 py-1.5 rounded-lg text-xs text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface))] transition-colors"
           >
             Cancel
           </button>
           <button
             onClick={handleConfirm}
             disabled={!selected}
-            className="px-4 py-1.5 rounded-lg text-xs font-medium bg-[var(--color-accent)] text-white hover:bg-[var(--color-accent-hover)] disabled:opacity-40 transition-colors"
+            className="px-4 py-1.5 rounded-lg text-xs font-medium bg-[rgb(var(--color-accent))] text-white hover:bg-[rgb(var(--color-accent-hover))] disabled:opacity-40 transition-colors"
           >
             Insert
           </button>

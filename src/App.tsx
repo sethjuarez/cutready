@@ -35,13 +35,13 @@ function App() {
     <ErrorBoundary
       resetKey={resetKey}
       fallback={
-        <div className="min-h-screen bg-[var(--color-surface)] text-[var(--color-text)] flex items-center justify-center">
+        <div className="min-h-screen bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text))] flex items-center justify-center">
           <div className="text-center space-y-4">
-            <p className="text-lg font-medium text-[var(--color-text)]">Something went wrong</p>
-            <p className="text-sm text-[var(--color-text-secondary)]">An unexpected error crashed the interface.</p>
+            <p className="text-lg font-medium text-[rgb(var(--color-text))]">Something went wrong</p>
+            <p className="text-sm text-[rgb(var(--color-text-secondary))]">An unexpected error crashed the interface.</p>
             <button
               onClick={handleReset}
-              className="px-4 py-2 rounded-lg bg-[var(--color-accent)] text-white text-sm font-medium hover:bg-[var(--color-accent-hover)] transition-colors"
+              className="px-4 py-2 rounded-lg bg-[rgb(var(--color-accent))] text-white text-sm font-medium hover:bg-[rgb(var(--color-accent-hover))] transition-colors"
             >
               Reload interface
             </button>
@@ -49,7 +49,7 @@ function App() {
         </div>
       }
     >
-      <div className="min-h-screen bg-[var(--color-surface)] text-[var(--color-text)]">
+      <div className="min-h-screen bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text))]">
         <AppLayout />
         <StatusBar />
         <ToastContainer />

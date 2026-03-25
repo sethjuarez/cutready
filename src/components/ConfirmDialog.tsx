@@ -43,24 +43,24 @@ export function ConfirmDialog({
   if (!open) return null;
 
   const variantColors = {
-    default: { bg: "var(--color-accent)" },
-    warning: { bg: "var(--color-warning)" },
-    error: { bg: "var(--color-error)" },
+    default: { bg: "rgb(var(--color-accent))" },
+    warning: { bg: "rgb(var(--color-warning))" },
+    error: { bg: "rgb(var(--color-error))" },
   };
   const colors = variantColors[variant];
 
   return (
     <div className="fixed inset-0 z-[9999] flex items-start justify-center pt-[20vh]">
       <div className="absolute inset-0 bg-black/40" onClick={onCancel} />
-      <div className="relative bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl shadow-2xl w-full max-w-sm mx-4 overflow-hidden">
+      <div className="relative bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-xl shadow-2xl w-full max-w-sm mx-4 overflow-hidden">
         <div className="px-5 pt-5 pb-4">
-          <h2 className="text-sm font-semibold text-[var(--color-text)] mb-2">{title}</h2>
-          <p className="text-xs text-[var(--color-text-secondary)] leading-relaxed whitespace-pre-line">{message}</p>
+          <h2 className="text-sm font-semibold text-[rgb(var(--color-text))] mb-2">{title}</h2>
+          <p className="text-xs text-[rgb(var(--color-text-secondary))] leading-relaxed whitespace-pre-line">{message}</p>
         </div>
         <div className="flex items-center justify-end gap-2 px-5 pb-4">
           <button
             onClick={onCancel}
-            className="px-3 py-1.5 rounded-lg text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors"
+            className="px-3 py-1.5 rounded-lg text-xs text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] transition-colors"
           >
             {cancelLabel}
           </button>

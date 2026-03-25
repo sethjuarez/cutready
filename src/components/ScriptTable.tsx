@@ -307,8 +307,8 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
           <button
             onClick={onReShowHighlights}
             className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-medium rounded-md border transition-colors
-              bg-[var(--color-accent)]/8 text-[var(--color-accent)] border-[var(--color-accent)]/20
-              hover:bg-[var(--color-accent)]/15 hover:border-[var(--color-accent)]/30"
+              bg-[rgb(var(--color-accent))]/8 text-[rgb(var(--color-accent))] border-[rgb(var(--color-accent))]/20
+              hover:bg-[rgb(var(--color-accent))]/15 hover:border-[rgb(var(--color-accent))]/30"
           >
             <EyeIcon className="w-3 h-3" />
             Show AI Changes
@@ -316,12 +316,12 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
         </div>
       )}
       {rows.length === 1 && !rows[0].time && !rows[0].narrative && !rows[0].demo_actions && !readOnly && (
-        <div className="mb-3 px-4 py-3 rounded-lg bg-[var(--color-accent)]/5 border border-[var(--color-accent)]/15 text-xs text-[var(--color-text-secondary)] leading-relaxed">
-          <p className="font-medium text-[var(--color-text)] mb-1.5">Plan your demo scene</p>
+        <div className="mb-3 px-4 py-3 rounded-lg bg-[rgb(var(--color-accent))]/5 border border-[rgb(var(--color-accent))]/15 text-xs text-[rgb(var(--color-text-secondary))] leading-relaxed">
+          <p className="font-medium text-[rgb(var(--color-text))] mb-1.5">Plan your demo scene</p>
           <div className="flex gap-4">
-            <div><span className="font-medium text-[var(--color-text)]">Time</span> — Duration or timestamp</div>
-            <div><span className="font-medium text-[var(--color-text)]">Narrative</span> — What you&apos;ll say</div>
-            <div><span className="font-medium text-[var(--color-text)]">Actions</span> — What happens on screen</div>
+            <div><span className="font-medium text-[rgb(var(--color-text))]">Time</span> — Duration or timestamp</div>
+            <div><span className="font-medium text-[rgb(var(--color-text))]">Narrative</span> — What you&apos;ll say</div>
+            <div><span className="font-medium text-[rgb(var(--color-text))]">Actions</span> — What happens on screen</div>
           </div>
         </div>
       )}
@@ -387,7 +387,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
           {activeIdx >= 0 ? (
             <table className="w-full" style={{ borderCollapse: "separate" }}>
               <tbody>
-                <tr className="card-row shadow-lg" style={{ backgroundColor: "var(--color-surface-alt)" }}>
+                <tr className="card-row shadow-lg" style={{ backgroundColor: "rgb(var(--color-surface-alt))" }}>
                   {!readOnly && <td className="p-1 w-7" style={{ borderLeft: `3px solid ${getRowColor(activeIdx)}` }} />}
                   <td className="script-table-td text-xs" style={{ width: 50 }}>{rows[activeIdx].time}</td>
                   <td className="script-table-td text-xs">
@@ -436,25 +436,25 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
           }}
         >
           <div
-            className="relative flex flex-col rounded-xl overflow-hidden shadow-2xl bg-[var(--color-surface)]"
+            className="relative flex flex-col rounded-xl overflow-hidden shadow-2xl bg-[rgb(var(--color-surface))]"
             style={{ width: "calc(100vw - 60px)", height: "calc(100vh - 60px)" }}
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header bar */}
-            <div className="flex items-center justify-between px-4 py-2 border-b border-[var(--color-border)] bg-[var(--color-surface-alt)] shrink-0">
+            <div className="flex items-center justify-between px-4 py-2 border-b border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] shrink-0">
               <div className="flex items-center gap-3">
-                <span className="text-[13px] font-medium text-[var(--color-text)]">
+                <span className="text-[13px] font-medium text-[rgb(var(--color-text))]">
                   Row {visualLightbox.rowIndex + 1}
                 </span>
                 {/* Preview / Edit toggle */}
                 {!readOnly && (
-                  <div className="flex items-center rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] p-0.5">
+                  <div className="flex items-center rounded-lg bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] p-0.5">
                     <button
                       onClick={() => setLightboxMode("preview")}
                       className={`px-3 py-1 rounded-md text-[12px] font-medium transition-colors ${
                         lightboxMode === "preview"
-                          ? "bg-[var(--color-accent)] text-white"
-                          : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"
+                          ? "bg-[rgb(var(--color-accent))] text-white"
+                          : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))]"
                       }`}
                     >
                       Preview
@@ -463,8 +463,8 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
                       onClick={() => setLightboxMode("edit")}
                       className={`px-3 py-1 rounded-md text-[12px] font-medium transition-colors ${
                         lightboxMode === "edit"
-                          ? "bg-[var(--color-accent)] text-white"
-                          : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"
+                          ? "bg-[rgb(var(--color-accent))] text-white"
+                          : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))]"
                       }`}
                     >
                       Edit
@@ -472,7 +472,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
                   </div>
                 )}
                 {editorDirty && (
-                  <span className="text-[11px] text-[var(--color-accent)] font-medium">● Unsaved</span>
+                  <span className="text-[11px] text-[rgb(var(--color-accent))] font-medium">● Unsaved</span>
                 )}
               </div>
               <div className="flex items-center gap-2">
@@ -481,7 +481,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
                   <button
                     onClick={() => saveEditorChanges(editorDsl)}
                     title="Save changes"
-                    className="p-1.5 rounded-lg text-[var(--color-accent)] hover:text-[var(--color-accent-hover)] hover:bg-[var(--color-surface)] transition-colors"
+                    className="p-1.5 rounded-lg text-[rgb(var(--color-accent))] hover:text-[rgb(var(--color-accent-hover))] hover:bg-[rgb(var(--color-surface))] transition-colors"
                   >
                     <CheckIcon className="w-4 h-4" />
                   </button>
@@ -489,7 +489,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
                 {/* Close button */}
                 <button
                   onClick={closeLightbox}
-                  className="p-1.5 rounded-lg text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)] transition-colors"
+                  className="p-1.5 rounded-lg text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface))] transition-colors"
                 >
                   <XMarkIcon className="w-5 h-5" />
                 </button>
@@ -501,7 +501,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
               {lightboxMode === "preview" ? (
                 /* Preview mode — DslRenderer */
                 <div className="absolute inset-0 flex items-center justify-center p-4">
-                  <Suspense fallback={<div className="w-full h-full bg-[var(--color-surface-alt)] animate-pulse rounded-lg" />}>
+                  <Suspense fallback={<div className="w-full h-full bg-[rgb(var(--color-surface-alt))] animate-pulse rounded-lg" />}>
                     <VisualCell
                       visualPath={visualLightbox.visualPath}
                       mode="full"
@@ -512,14 +512,14 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
                 </div>
               ) : (
                 /* Edit mode — ElucimEditor */
-                <Suspense fallback={<div className="w-full h-full flex items-center justify-center text-[var(--color-text-secondary)]">Loading editor…</div>}>
+                <Suspense fallback={<div className="w-full h-full flex items-center justify-center text-[rgb(var(--color-text-secondary))]">Loading editor…</div>}>
                   {editorDsl ? (
                     <EditorWrapper
                       dsl={editorDsl}
                       onDocumentChange={(doc) => { setEditorDsl(doc); setEditorDirty(true); }}
                     />
                   ) : (
-                    <div className="w-full h-full flex items-center justify-center text-[var(--color-text-secondary)]">Loading…</div>
+                    <div className="w-full h-full flex items-center justify-center text-[rgb(var(--color-text-secondary))]">Loading…</div>
                   )}
                 </Suspense>
               )}
@@ -527,7 +527,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
 
             {/* Nudge bar (preview mode only — editor has its own timeline) */}
             {onNudgeVisual && !readOnly && lightboxMode === "preview" && (
-              <div className="flex items-center gap-2 px-4 py-2 border-t border-[var(--color-border)] bg-[var(--color-surface-alt)] shrink-0">
+              <div className="flex items-center gap-2 px-4 py-2 border-t border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] shrink-0">
                 <input
                   type="text"
                   value={nudgeInput}
@@ -540,7 +540,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
                     e.stopPropagation(); // prevent editor shortcuts
                   }}
                   placeholder={`"make the title bigger", "change color to blue"…`}
-                  className="flex-1 px-3 py-1.5 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text)] text-[13px] placeholder:text-[var(--color-text-secondary)]/50 focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)]"
+                  className="flex-1 px-3 py-1.5 rounded-lg bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] text-[rgb(var(--color-text))] text-[13px] placeholder:text-[rgb(var(--color-text-secondary))]/50 focus:outline-none focus:ring-1 focus:ring-[rgb(var(--color-accent))]"
                 />
                 <button
                   onClick={() => {
@@ -550,7 +550,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
                     }
                   }}
                   disabled={!nudgeInput.trim()}
-                  className="p-1.5 rounded-lg text-[var(--color-text-secondary)] hover:text-[var(--color-text)] disabled:opacity-30 transition-colors"
+                  className="p-1.5 rounded-lg text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] disabled:opacity-30 transition-colors"
                 >
                   <SparklesIcon className="w-4 h-4" />
                 </button>
@@ -562,17 +562,17 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
 
       {/* Undo toast */}
       {undoToast && (
-        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[9999] flex items-center gap-2 px-3 py-2 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] shadow-lg text-[12px] text-[var(--color-text)]">
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[9999] flex items-center gap-2 px-3 py-2 rounded-lg bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] shadow-lg text-[12px] text-[rgb(var(--color-text))]">
           <span>{undoToast}</span>
           <button
             onClick={() => { popUndo(); setUndoToast(null); }}
-            className="px-2 py-0.5 rounded text-[11px] font-medium text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 transition-colors"
+            className="px-2 py-0.5 rounded text-[11px] font-medium text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10 transition-colors"
           >
             Undo
           </button>
           <button
             onClick={() => setUndoToast(null)}
-            className="p-0.5 text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors"
+            className="p-0.5 text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] transition-colors"
           >
             <XMarkIcon className="w-2.5 h-2.5" />
           </button>
@@ -650,7 +650,7 @@ function SortableRow({
   };
 
   const accentColor = getRowColor(idx);
-  const rowBg = idx % 2 === 0 ? "var(--color-surface-alt)" : "var(--color-surface-inset)";
+  const rowBg = idx % 2 === 0 ? "rgb(var(--color-surface-alt))" : "rgb(var(--color-surface-inset))";
 
   return (
     <>
@@ -686,7 +686,7 @@ function SortableRow({
       {!readOnly && (
         <td className="p-0 align-middle" style={{ borderLeft: `3px solid ${accentColor}` }}>
           <div
-            className="cursor-grab active:cursor-grabbing text-[var(--color-text-secondary)] flex items-center justify-center h-full"
+            className="cursor-grab active:cursor-grabbing text-[rgb(var(--color-text-secondary))] flex items-center justify-center h-full"
             {...attributes}
             {...listeners}
           >
@@ -750,7 +750,7 @@ function SortableRow({
         {row.visual ? (
           /* ── Elucim animated visual ── */
           <div className="relative group/vis cursor-pointer" onClick={() => onVisualClick(row.visual!, idx)}>
-            <Suspense fallback={<div className="w-40 h-24 rounded-md bg-[var(--color-surface-alt)] border border-[var(--color-border)] animate-pulse" />}>
+            <Suspense fallback={<div className="w-40 h-24 rounded-md bg-[rgb(var(--color-surface-alt))] border border-[rgb(var(--color-border))] animate-pulse" />}>
               <VisualCell
                 visualPath={row.visual!}
                 mode="thumbnail"
@@ -771,7 +771,7 @@ function SortableRow({
               {!readOnly && onGenerateVisual && (
                 <button
                   onClick={() => onGenerateVisual(idx)}
-                  className="p-1 rounded-full bg-white/20 text-white/90 hover:bg-[var(--color-accent)]/80"
+                  className="p-1 rounded-full bg-white/20 text-white/90 hover:bg-[rgb(var(--color-accent))]/80"
                   title="Regenerate visual with AI"
                 >
                   <SparklesIcon className="w-3.5 h-3.5" />
@@ -790,7 +790,7 @@ function SortableRow({
             </div>
           </div>
         ) : row.screenshot ? (
-          <div className="relative group/ss w-40 h-24 rounded-md bg-[var(--color-surface-alt)] border border-[var(--color-border)] overflow-hidden cursor-pointer"
+          <div className="relative group/ss w-40 h-24 rounded-md bg-[rgb(var(--color-surface-alt))] border border-[rgb(var(--color-border))] overflow-hidden cursor-pointer"
             onClick={() => {
               const src = projectRoot ? convertFileSrc(`${projectRoot}/${row.screenshot}`) : row.screenshot!;
               onImageClick(src);
@@ -862,7 +862,7 @@ function SortableRow({
             onGenerateVisual={onGenerateVisual}
           />
         ) : (
-          <span className="text-[10px] text-[var(--color-text-secondary)]">—</span>
+          <span className="text-[10px] text-[rgb(var(--color-text-secondary))]">—</span>
         )}
       </td>
       {!readOnly && (
@@ -870,14 +870,14 @@ function SortableRow({
           <div className="flex flex-col gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
             <button
               onClick={() => addRow(idx)}
-              className="p-0.5 rounded text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] transition-colors"
+              className="p-0.5 rounded text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] transition-colors"
               title="Add row below"
             >
               <PlusIcon className="w-3 h-3" />
             </button>
             <button
               onClick={() => deleteRow(idx)}
-              className="p-0.5 rounded text-[var(--color-text-secondary)] hover:text-error transition-colors"
+              className="p-0.5 rounded text-[rgb(var(--color-text-secondary))] hover:text-error transition-colors"
               title="Delete row"
             >
               <XMarkIcon className="w-3 h-3" />
@@ -892,20 +892,20 @@ function SortableRow({
         <td colSpan={readOnly ? 4 : 6} className="p-0">
           <div className="ai-diff-strip mx-2 mb-1 px-3 py-2 rounded-b-lg text-xs">
             <div className="flex items-center justify-between mb-1">
-              <span className="font-medium text-[var(--color-accent)] flex items-center gap-1.5">
+              <span className="font-medium text-[rgb(var(--color-accent))] flex items-center gap-1.5">
                 <SparklesIcon className="w-3 h-3" />
                 Row {idx + 1} changed
               </span>
               <button
                 onClick={() => { setDiffExpanded(false); onDismissHighlight?.(); }}
-                className="p-0.5 rounded hover:bg-[var(--color-border)]/30 text-[var(--color-text-secondary)]"
+                className="p-0.5 rounded hover:bg-[rgb(var(--color-border))]/30 text-[rgb(var(--color-text-secondary))]"
               >
                 <XMarkIcon className="w-2.5 h-2.5" />
               </button>
             </div>
             {rowDiff.fields.map((f) => (
               <div key={f.field} className="mb-0.5">
-                <span className="text-[var(--color-text-secondary)] font-medium">{f.field}: </span>
+                <span className="text-[rgb(var(--color-text-secondary))] font-medium">{f.field}: </span>
                 {f.segments.map((seg, si) => (
                   <span key={si} className={
                     seg.type === "added" ? "ai-diff-added" :
@@ -963,7 +963,7 @@ function LocalInput({
       }}
       placeholder={placeholder}
       readOnly={readOnly}
-      className="w-full bg-transparent text-xs px-1 py-0.5 rounded outline-none transition-colors focus:ring-1 focus:ring-[var(--color-accent)]/40 placeholder:text-[var(--color-text-secondary)]/40"
+      className="w-full bg-transparent text-xs px-1 py-0.5 rounded outline-none transition-colors focus:ring-1 focus:ring-[rgb(var(--color-accent))]/40 placeholder:text-[rgb(var(--color-text-secondary))]/40"
     />
   );
 }
@@ -1200,7 +1200,7 @@ function MarkdownCell({
       <div
         data-cell
         tabIndex={readOnly ? undefined : 0}
-        className={`md-cell-preview min-h-[1.5rem] rounded outline-none transition-colors ${!readOnly ? "cursor-text focus:ring-1 focus:ring-[var(--color-accent)]/40" : ""}`}
+        className={`md-cell-preview min-h-[1.5rem] rounded outline-none transition-colors ${!readOnly ? "cursor-text focus:ring-1 focus:ring-[rgb(var(--color-accent))]/40" : ""}`}
         onClick={() => {
           if (!readOnly) setIsEditing(true);
         }}
@@ -1225,7 +1225,7 @@ function MarkdownCell({
         }}
       >
         {rendered || (
-          <span className="text-xs text-[var(--color-text-secondary)] opacity-40">
+          <span className="text-xs text-[rgb(var(--color-text-secondary))] opacity-40">
             {placeholder}
           </span>
         )}
@@ -1241,7 +1241,7 @@ function MarkdownCell({
       onChange={(e) => handleChange(e.target.value)}
       onBlur={() => setIsEditing(false)}
       placeholder={placeholder}
-      className="w-full bg-transparent text-xs px-1 py-0.5 rounded outline-none resize-none ring-1 ring-[var(--color-accent)]/40 placeholder:text-[var(--color-text-secondary)]/40"
+      className="w-full bg-transparent text-xs px-1 py-0.5 rounded outline-none resize-none ring-1 ring-[rgb(var(--color-accent))]/40 placeholder:text-[rgb(var(--color-text-secondary))]/40"
       onKeyDown={(e) => {
         // Tab / Shift+Tab → move to adjacent cell
         if (e.key === "Tab") {
@@ -1313,7 +1313,7 @@ function SparkleButton({ onClick }: { onClick: () => void }) {
   return (
     <button
       onClick={(e) => { e.stopPropagation(); onClick(); }}
-      className="absolute top-0.5 right-0.5 p-0.5 rounded opacity-0 group-hover/cell:opacity-100 transition-opacity text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10"
+      className="absolute top-0.5 right-0.5 p-0.5 rounded opacity-0 group-hover/cell:opacity-100 transition-opacity text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10"
       title="Improve with AI"
     >
       <SparklesIcon className="w-3 h-3" />
@@ -1394,16 +1394,16 @@ function MediaAddPopover({ idx, onCaptureScreenshot, onPickImage, onBrowseImage,
       <button
         ref={buttonRef}
         onClick={toggle}
-        className="w-8 h-8 rounded-md border border-dashed border-[var(--color-border)] hover:border-[var(--color-accent)] hover:bg-[var(--color-accent)]/5 transition-colors flex items-center justify-center"
+        className="w-8 h-8 rounded-md border border-dashed border-[rgb(var(--color-border))] hover:border-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/5 transition-colors flex items-center justify-center"
         title="Add media"
         aria-expanded={state !== null}
         aria-haspopup="true"
       >
-        <PlusIcon className="w-4 h-4 text-[var(--color-text-secondary)]" />
+        <PlusIcon className="w-4 h-4 text-[rgb(var(--color-text-secondary))]" />
       </button>
       {state !== null && pos && createPortal(
         <div
-          className="fixed z-[9999] min-w-[170px] py-1 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg shadow-lg"
+          className="fixed z-[9999] min-w-[170px] py-1 bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-lg shadow-lg"
           style={{ top: pos.top, left: pos.left, transform: "translateY(-100%) translateY(-4px)" }}
           role="menu"
           onMouseDown={(e) => e.stopPropagation()}
@@ -1418,7 +1418,7 @@ function MediaAddPopover({ idx, onCaptureScreenshot, onPickImage, onBrowseImage,
                 tabIndex={0}
                 onClick={() => handleItemClick(item.action)}
                 onKeyDown={(e) => handleKeyDown(e, i)}
-                className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] hover:bg-[var(--color-accent)]/5 transition-colors text-left"
+                className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/5 transition-colors text-left"
               >
                 <Icon className="w-3.5 h-3.5 flex-shrink-0" />
                 {item.label}

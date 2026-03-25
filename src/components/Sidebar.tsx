@@ -77,8 +77,8 @@ export function Sidebar() {
   return (
     <>
       <nav
-        className={`no-select flex flex-col w-12 bg-[var(--color-surface)] items-center py-3 gap-1.5 ${
-          isRight ? "border-l border-[var(--color-border)]" : "border-r border-[var(--color-border)]"
+        className={`no-select flex flex-col w-12 bg-[rgb(var(--color-surface))] items-center py-3 gap-1.5 ${
+          isRight ? "border-l border-[rgb(var(--color-border))]" : "border-r border-[rgb(var(--color-border))]"
         }`}
         onContextMenu={handleContextMenu}
       >
@@ -98,10 +98,10 @@ export function Sidebar() {
                 flex items-center justify-center w-10 h-10 rounded-lg transition-colors relative
                 ${
                   isActive
-                    ? "bg-[var(--color-accent)]/15 text-[var(--color-accent)]"
+                    ? "bg-[rgb(var(--color-accent))]/15 text-[rgb(var(--color-accent))]"
                     : isDisabled
-                      ? "text-[var(--color-text-secondary)]/40 cursor-not-allowed"
-                      : "text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-alt)] hover:text-[var(--color-text)]"
+                      ? "text-[rgb(var(--color-text-secondary))]/40 cursor-not-allowed"
+                      : "text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
                 }
               `}
               title={item.label}
@@ -109,7 +109,7 @@ export function Sidebar() {
               {item.icon}
               {/* Active indicator bar */}
               {isActive && (
-                <span className={`absolute top-1/4 h-1/2 w-[2px] rounded-full bg-[var(--color-accent)] ${
+                <span className={`absolute top-1/4 h-1/2 w-[2px] rounded-full bg-[rgb(var(--color-accent))] ${
                   isRight ? "right-[-6px]" : "left-[-6px]"
                 }`} />
               )}
@@ -134,15 +134,15 @@ export function Sidebar() {
                 flex items-center justify-center w-10 h-10 rounded-lg transition-colors relative
                 ${
                   isActive
-                    ? "bg-[var(--color-accent)]/15 text-[var(--color-accent)]"
-                    : "text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-alt)] hover:text-[var(--color-text)]"
+                    ? "bg-[rgb(var(--color-accent))]/15 text-[rgb(var(--color-accent))]"
+                    : "text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
                 }
               `}
               title="Settings"
             >
               <Cog6ToothIcon className="w-4 h-4" />
               {isActive && (
-                <span className={`absolute top-1/4 h-1/2 w-[2px] rounded-full bg-[var(--color-accent)] ${
+                <span className={`absolute top-1/4 h-1/2 w-[2px] rounded-full bg-[rgb(var(--color-accent))] ${
                   isRight ? "right-[-6px]" : "left-[-6px]"
                 }`} />
               )}
@@ -155,11 +155,11 @@ export function Sidebar() {
       {contextMenu && (
         <div
           ref={menuRef}
-          className="fixed z-[100] py-1 min-w-[200px] bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg shadow-lg"
+          className="fixed z-[100] py-1 min-w-[200px] bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-lg shadow-lg"
           style={{ left: menuPos?.x, top: menuPos?.y }}
         >
           <button
-            className="flex items-center gap-2 w-full px-3 py-1.5 text-[12px] text-left text-[var(--color-text)] hover:bg-[var(--color-accent)]/10 hover:text-[var(--color-accent)] transition-colors"
+            className="flex items-center gap-2 w-full px-3 py-1.5 text-[12px] text-left text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))] transition-colors"
             onClick={() => {
               toggleSidebarPosition();
               closeContextMenu();

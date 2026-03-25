@@ -94,7 +94,7 @@ export function SyncBar() {
   })();
 
   return (
-    <div className="px-3 py-2 border-b border-[var(--color-border)] bg-[var(--color-surface)]/50">
+    <div className="px-3 py-2 border-b border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))]/50">
       {/* Remote URL line */}
       <div className="flex items-center gap-1.5 mb-1.5">
         <span
@@ -106,7 +106,7 @@ export function SyncBar() {
                 : "bg-zinc-400"
           }`}
         />
-        <span className="text-[10px] text-[var(--color-text-secondary)] truncate flex-1">
+        <span className="text-[10px] text-[rgb(var(--color-text-secondary))] truncate flex-1">
           {displayUrl}
         </span>
       </div>
@@ -124,7 +124,7 @@ export function SyncBar() {
             ) : (
               <>
                 {ahead > 0 && (
-                  <span className="text-[var(--color-accent)] flex items-center gap-0.5" title={`${ahead} unpublished snapshot${ahead !== 1 ? "s" : ""}`}>
+                  <span className="text-[rgb(var(--color-accent))] flex items-center gap-0.5" title={`${ahead} unpublished snapshot${ahead !== 1 ? "s" : ""}`}>
                     <ArrowUpIcon className="w-2.5 h-2.5" />
                     {ahead}
                   </span>
@@ -146,7 +146,7 @@ export function SyncBar() {
         <button
           onClick={() => fetchFromRemote()}
           disabled={isSyncing}
-          className="px-2 py-0.5 rounded text-[10px] text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-border)]/50 transition-colors disabled:opacity-40"
+          className="px-2 py-0.5 rounded text-[10px] text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-border))]/50 transition-colors disabled:opacity-40"
           title="Fetch latest from remote"
         >
           Fetch
@@ -157,7 +157,7 @@ export function SyncBar() {
           <button
             onClick={() => actionFn()}
             disabled={isSyncing}
-            className="px-2.5 py-0.5 rounded text-[10px] font-medium bg-[var(--color-accent)] text-white hover:opacity-90 transition-opacity disabled:opacity-40"
+            className="px-2.5 py-0.5 rounded text-[10px] font-medium bg-[rgb(var(--color-accent))] text-white hover:opacity-90 transition-opacity disabled:opacity-40"
           >
             {isSyncing ? "Syncing\u2026" : actionLabel}
           </button>
@@ -167,7 +167,7 @@ export function SyncBar() {
         {currentRemote?.url && prUrl && (
           <button
             onClick={() => window.open(prUrl, "_blank")}
-            className="px-2 py-0.5 rounded text-[10px] text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] hover:bg-[var(--color-accent)]/5 transition-colors"
+            className="px-2 py-0.5 rounded text-[10px] text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/5 transition-colors"
             title="Open Pull Request on GitHub"
           >
             PR

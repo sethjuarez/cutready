@@ -44,19 +44,19 @@ export function MergeConflictPanel() {
   }, [allResolved, mergeConflicts, resolutions, applyMergeResolution]);
 
   return (
-    <div className="flex flex-col h-full bg-[var(--color-bg)]">
+    <div className="flex flex-col h-full bg-[rgb(var(--color-bg))]">
       {/* Header */}
-      <div className="flex items-center gap-3 px-4 py-3 border-b border-[var(--color-border)] bg-[var(--color-surface)]">
+      <div className="flex items-center gap-3 px-4 py-3 border-b border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))]">
         <div className="flex items-center gap-2">
           <div className="p-1.5 rounded-md bg-warning/10">
             <ArrowsRightLeftIcon className="w-4 h-4 text-warning" />
           </div>
           <div>
-            <h2 className="text-sm font-semibold text-[var(--color-text)]">
-              Combining <span className="text-[var(--color-accent)]">{mergeSource}</span> into{" "}
-              <span className="text-[var(--color-accent)]">{mergeTarget}</span>
+            <h2 className="text-sm font-semibold text-[rgb(var(--color-text))]">
+              Combining <span className="text-[rgb(var(--color-accent))]">{mergeSource}</span> into{" "}
+              <span className="text-[rgb(var(--color-accent))]">{mergeTarget}</span>
             </h2>
-            <p className="text-[10px] text-[var(--color-text-secondary)]">
+            <p className="text-[10px] text-[rgb(var(--color-text-secondary))]">
               {mergeConflicts.length} file{mergeConflicts.length !== 1 ? "s" : ""} need{mergeConflicts.length === 1 ? "s" : ""} your attention
             </p>
           </div>
@@ -65,14 +65,14 @@ export function MergeConflictPanel() {
         <div className="flex items-center gap-2">
           <button
             onClick={cancelMerge}
-            className="px-3 py-1.5 rounded-lg text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-border)]/40 transition-colors"
+            className="px-3 py-1.5 rounded-lg text-xs text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-border))]/40 transition-colors"
           >
             Cancel
           </button>
           <button
             onClick={handleApply}
             disabled={!allResolved || applying}
-            className="px-4 py-1.5 rounded-lg text-xs font-medium bg-[var(--color-accent)] text-white hover:bg-[var(--color-accent-hover)] disabled:opacity-40 transition-colors"
+            className="px-4 py-1.5 rounded-lg text-xs font-medium bg-[rgb(var(--color-accent))] text-white hover:bg-[rgb(var(--color-accent-hover))] disabled:opacity-40 transition-colors"
           >
             {applying ? "Combining…" : "Apply & Combine"}
           </button>
@@ -124,10 +124,10 @@ function ConflictCard({
         : "border-warning/30 bg-warning/5"
     }`}>
       {/* File header */}
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-[var(--color-border)]/50">
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-[rgb(var(--color-border))]/50">
         <span className={`inline-block w-1.5 h-1.5 rounded-full ${isResolved ? "bg-success" : "bg-warning"}`} />
-        <span className="text-xs font-medium text-[var(--color-text)]">{conflict.path}</span>
-        <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--color-border)]/50 text-[var(--color-text-secondary)]">
+        <span className="text-xs font-medium text-[rgb(var(--color-text))]">{conflict.path}</span>
+        <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[rgb(var(--color-border))]/50 text-[rgb(var(--color-text-secondary))]">
           {typeLabel}
         </span>
         {isResolved && (
@@ -207,7 +207,7 @@ function JsonFieldResolver({
         />
       ))}
       {!allChosen && (
-        <p className="text-[10px] text-[var(--color-text-secondary)] italic">
+        <p className="text-[10px] text-[rgb(var(--color-text-secondary))] italic">
           Choose a version for each conflicting field
         </p>
       )}
@@ -234,21 +234,21 @@ function FieldConflictRow({
   };
 
   return (
-    <div className="rounded-md border border-[var(--color-border)]/50 bg-[var(--color-surface)] overflow-hidden">
-      <div className="px-3 py-1.5 bg-[var(--color-bg)] border-b border-[var(--color-border)]/30">
-        <span className="text-[10px] font-mono text-[var(--color-text-secondary)]">{field.field_path}</span>
+    <div className="rounded-md border border-[rgb(var(--color-border))]/50 bg-[rgb(var(--color-surface))] overflow-hidden">
+      <div className="px-3 py-1.5 bg-[rgb(var(--color-bg))] border-b border-[rgb(var(--color-border))]/30">
+        <span className="text-[10px] font-mono text-[rgb(var(--color-text-secondary))]">{field.field_path}</span>
       </div>
-      <div className="grid grid-cols-2 gap-px bg-[var(--color-border)]/30">
+      <div className="grid grid-cols-2 gap-px bg-[rgb(var(--color-border))]/30">
         <button
           onClick={() => onChoice("ours")}
           className={`px-3 py-2 text-left transition-colors ${
             choice === "ours"
               ? "bg-blue-500/10 ring-1 ring-inset ring-blue-500/40"
-              : "bg-[var(--color-surface)] hover:bg-[var(--color-border)]/20"
+              : "bg-[rgb(var(--color-surface))] hover:bg-[rgb(var(--color-border))]/20"
           }`}
         >
           <div className="text-[9px] font-medium text-blue-500 mb-1">{targetLabel} (current)</div>
-          <div className="text-[11px] text-[var(--color-text)] font-mono whitespace-pre-wrap break-all">
+          <div className="text-[11px] text-[rgb(var(--color-text))] font-mono whitespace-pre-wrap break-all">
             {formatValue(field.ours)}
           </div>
         </button>
@@ -257,11 +257,11 @@ function FieldConflictRow({
           className={`px-3 py-2 text-left transition-colors ${
             choice === "theirs"
               ? "bg-purple-500/10 ring-1 ring-inset ring-purple-500/40"
-              : "bg-[var(--color-surface)] hover:bg-[var(--color-border)]/20"
+              : "bg-[rgb(var(--color-surface))] hover:bg-[rgb(var(--color-border))]/20"
           }`}
         >
           <div className="text-[9px] font-medium text-purple-500 mb-1">{sourceLabel} (incoming)</div>
-          <div className="text-[11px] text-[var(--color-text)] font-mono whitespace-pre-wrap break-all">
+          <div className="text-[11px] text-[rgb(var(--color-text))] font-mono whitespace-pre-wrap break-all">
             {formatValue(field.theirs)}
           </div>
         </button>
@@ -347,7 +347,7 @@ function TextRegionResolver({
         />
       ))}
       {!allChosen && (
-        <p className="text-[10px] text-[var(--color-text-secondary)] italic">
+        <p className="text-[10px] text-[rgb(var(--color-text-secondary))] italic">
           Choose a version for each conflicting region
         </p>
       )}
@@ -371,23 +371,23 @@ function TextConflictRow({
   targetLabel: string;
 }) {
   return (
-    <div className="rounded-md border border-[var(--color-border)]/50 bg-[var(--color-surface)] overflow-hidden">
-      <div className="px-3 py-1.5 bg-[var(--color-bg)] border-b border-[var(--color-border)]/30">
-        <span className="text-[10px] text-[var(--color-text-secondary)]">
+    <div className="rounded-md border border-[rgb(var(--color-border))]/50 bg-[rgb(var(--color-surface))] overflow-hidden">
+      <div className="px-3 py-1.5 bg-[rgb(var(--color-bg))] border-b border-[rgb(var(--color-border))]/30">
+        <span className="text-[10px] text-[rgb(var(--color-text-secondary))]">
           Conflict region {index + 1} (line {region.start_line + 1})
         </span>
       </div>
-      <div className="grid grid-cols-2 gap-px bg-[var(--color-border)]/30">
+      <div className="grid grid-cols-2 gap-px bg-[rgb(var(--color-border))]/30">
         <button
           onClick={() => onChoice("ours")}
           className={`px-3 py-2 text-left transition-colors ${
             choice === "ours"
               ? "bg-blue-500/10 ring-1 ring-inset ring-blue-500/40"
-              : "bg-[var(--color-surface)] hover:bg-[var(--color-border)]/20"
+              : "bg-[rgb(var(--color-surface))] hover:bg-[rgb(var(--color-border))]/20"
           }`}
         >
           <div className="text-[9px] font-medium text-blue-500 mb-1">{targetLabel} (current)</div>
-          <pre className="text-[11px] text-[var(--color-text)] font-mono whitespace-pre-wrap">
+          <pre className="text-[11px] text-[rgb(var(--color-text))] font-mono whitespace-pre-wrap">
             {region.ours_lines.join("\n") || "(empty)"}
           </pre>
         </button>
@@ -396,11 +396,11 @@ function TextConflictRow({
           className={`px-3 py-2 text-left transition-colors ${
             choice === "theirs"
               ? "bg-purple-500/10 ring-1 ring-inset ring-purple-500/40"
-              : "bg-[var(--color-surface)] hover:bg-[var(--color-border)]/20"
+              : "bg-[rgb(var(--color-surface))] hover:bg-[rgb(var(--color-border))]/20"
           }`}
         >
           <div className="text-[9px] font-medium text-purple-500 mb-1">{sourceLabel} (incoming)</div>
-          <pre className="text-[11px] text-[var(--color-text)] font-mono whitespace-pre-wrap">
+          <pre className="text-[11px] text-[rgb(var(--color-text))] font-mono whitespace-pre-wrap">
             {region.theirs_lines.join("\n") || "(empty)"}
           </pre>
         </button>
@@ -448,17 +448,17 @@ function WholeFileResolver({
   };
 
   return (
-    <div className="grid grid-cols-2 gap-px bg-[var(--color-border)]/30 rounded-md overflow-hidden">
+    <div className="grid grid-cols-2 gap-px bg-[rgb(var(--color-border))]/30 rounded-md overflow-hidden">
       <button
         onClick={() => handleChoice("ours")}
         className={`px-3 py-3 text-left transition-colors ${
           choice === "ours"
             ? "bg-blue-500/10 ring-1 ring-inset ring-blue-500/40"
-            : "bg-[var(--color-surface)] hover:bg-[var(--color-border)]/20"
+            : "bg-[rgb(var(--color-surface))] hover:bg-[rgb(var(--color-border))]/20"
         }`}
       >
         <div className="text-[9px] font-medium text-blue-500 mb-1.5">{targetLabel} (current)</div>
-        <pre className="text-[10px] text-[var(--color-text)] font-mono whitespace-pre-wrap max-h-32 overflow-y-auto">
+        <pre className="text-[10px] text-[rgb(var(--color-text))] font-mono whitespace-pre-wrap max-h-32 overflow-y-auto">
           {conflict.ours.substring(0, 500)}{conflict.ours.length > 500 ? "…" : ""}
         </pre>
       </button>
@@ -467,11 +467,11 @@ function WholeFileResolver({
         className={`px-3 py-3 text-left transition-colors ${
           choice === "theirs"
             ? "bg-purple-500/10 ring-1 ring-inset ring-purple-500/40"
-            : "bg-[var(--color-surface)] hover:bg-[var(--color-border)]/20"
+            : "bg-[rgb(var(--color-surface))] hover:bg-[rgb(var(--color-border))]/20"
         }`}
       >
         <div className="text-[9px] font-medium text-purple-500 mb-1.5">{sourceLabel} (incoming)</div>
-        <pre className="text-[10px] text-[var(--color-text)] font-mono whitespace-pre-wrap max-h-32 overflow-y-auto">
+        <pre className="text-[10px] text-[rgb(var(--color-text))] font-mono whitespace-pre-wrap max-h-32 overflow-y-auto">
           {conflict.theirs.substring(0, 500)}{conflict.theirs.length > 500 ? "…" : ""}
         </pre>
       </button>

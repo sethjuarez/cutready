@@ -49,7 +49,7 @@ function SortableSidebarItem({ id, children }: { id: string; children: React.Rea
           className="shrink-0 w-4 flex items-center justify-center cursor-grab opacity-0 group-hover/item:opacity-50 hover:!opacity-100 transition-opacity"
           title="Drag to reorder"
         >
-          <svg width="8" height="14" viewBox="0 0 8 14" fill="currentColor" className="text-[var(--color-text-secondary)]">
+          <svg width="8" height="14" viewBox="0 0 8 14" fill="currentColor" className="text-[rgb(var(--color-text-secondary))]">
             <circle cx="2" cy="2" r="1.2" />
             <circle cx="6" cy="2" r="1.2" />
             <circle cx="2" cy="7" r="1.2" />
@@ -323,25 +323,25 @@ export function StoryboardList() {
 
   return (
     <div
-      className="flex flex-col h-full bg-[var(--color-surface-inset)]"
+      className="flex flex-col h-full bg-[rgb(var(--color-surface-inset))]"
     >
       {/* ── Project switcher ── */}
       <ProjectSwitcher />
 
       {/* ── Documents header ──────────────────────────────── */}
-      <div className="flex items-center justify-between px-3 h-9 shrink-0 border-b border-[var(--color-border-subtle)]">
-        <span className="text-[12px] font-medium text-[var(--color-text-secondary)]">
+      <div className="flex items-center justify-between px-3 h-9 shrink-0 border-b border-[rgb(var(--color-border-subtle))]">
+        <span className="text-[12px] font-medium text-[rgb(var(--color-text-secondary))]">
           Documents
         </span>
         <div className="flex items-center gap-1">
           <button
             onClick={handleImport}
-            className="p-1 rounded-md text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 transition-colors disabled:opacity-50 disabled:pointer-events-none"
+            className="p-1 rounded-md text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10 transition-colors disabled:opacity-50 disabled:pointer-events-none"
             title="Import .sk, .sb, or document"
             disabled={importing}
           >
             {importing ? (
-              <svg className="w-3 h-3 animate-spin text-[var(--color-text-secondary)]" viewBox="0 0 24 24" fill="none">
+              <svg className="w-3 h-3 animate-spin text-[rgb(var(--color-text-secondary))]" viewBox="0 0 24 24" fill="none">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
               </svg>
@@ -353,13 +353,13 @@ export function StoryboardList() {
       </div>
 
       {/* ── Storyboards section ────────────────────────── */}
-      <div className="flex items-center justify-between px-3 h-9 shrink-0 border-b border-[var(--color-border-subtle)]">
-        <span className="text-[12px] font-medium text-[var(--color-text-secondary)]">
+      <div className="flex items-center justify-between px-3 h-9 shrink-0 border-b border-[rgb(var(--color-border-subtle))]">
+        <span className="text-[12px] font-medium text-[rgb(var(--color-text-secondary))]">
           Storyboards
         </span>
         <button
           onClick={() => setIsCreatingSb(true)}
-          className="p-1 rounded-md text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 transition-colors"
+          className="p-1 rounded-md text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10 transition-colors"
           title="New storyboard"
         >
           <PlusIcon className="w-3.5 h-3.5" />
@@ -367,7 +367,7 @@ export function StoryboardList() {
       </div>
 
       {isCreatingSb && (
-        <div className="px-3 py-2 border-b border-[var(--color-border)]">
+        <div className="px-3 py-2 border-b border-[rgb(var(--color-border))]">
           <input
             type="text"
             value={newSbTitle}
@@ -378,7 +378,7 @@ export function StoryboardList() {
             }}
             placeholder="Storyboard name..."
             autoFocus
-            className="w-full px-2 py-1.5 rounded-md bg-[var(--color-surface)] border border-[var(--color-border)] text-xs text-[var(--color-text)] placeholder:text-[var(--color-text-secondary)]/50 focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)]/40"
+            className="w-full px-2 py-1.5 rounded-md bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] text-xs text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/50 focus:outline-none focus:ring-1 focus:ring-[rgb(var(--color-accent))]/40"
           />
         </div>
       )}
@@ -387,7 +387,7 @@ export function StoryboardList() {
         {orderedStoryboards.length === 0 && !isCreatingSb ? (
           <button
             onClick={() => setIsCreatingSb(true)}
-            className="w-full px-3 py-4 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] transition-colors"
+            className="w-full px-3 py-4 text-xs text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] transition-colors"
           >
             + New storyboard
           </button>
@@ -404,13 +404,13 @@ export function StoryboardList() {
                     className={`group/item w-full flex items-center gap-2 px-3 py-2.5 text-left transition-colors cursor-pointer ${
                       sb.path === activeStoryboardPath
                         ? "bg-emerald-500/10 text-emerald-500"
-                        : "text-[var(--color-text)] hover:bg-[var(--color-surface-alt)]"
+                        : "text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))]"
                     }`}
                   >
                     <StoryboardIcon className="shrink-0" />
                     <div className="flex-1 min-w-0">
                       <div className="text-xs font-medium truncate">{sb.title}</div>
-                      <div className="text-[10px] text-[var(--color-text-secondary)]">
+                      <div className="text-[10px] text-[rgb(var(--color-text-secondary))]">
                         {sb.sketch_count} {sb.sketch_count === 1 ? "sketch" : "sketches"}
                       </div>
                     </div>
@@ -419,7 +419,7 @@ export function StoryboardList() {
                         e.stopPropagation();
                         requestDelete("storyboard", sb.path, sb.title);
                       }}
-                      className="opacity-0 group-hover/item:opacity-100 p-0.5 rounded text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-all"
+                      className="opacity-0 group-hover/item:opacity-100 p-0.5 rounded text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] transition-all"
                       title="Delete storyboard"
                     >
                       <TrashIcon className="w-3 h-3" />
@@ -433,13 +433,13 @@ export function StoryboardList() {
       </div>
 
       {/* ── Sketches section──────────────────────────── */}
-      <div className="flex items-center justify-between px-3 h-9 shrink-0 border-y border-[var(--color-border-subtle)]">
-        <span className="text-[12px] font-medium text-[var(--color-text-secondary)]">
+      <div className="flex items-center justify-between px-3 h-9 shrink-0 border-y border-[rgb(var(--color-border-subtle))]">
+        <span className="text-[12px] font-medium text-[rgb(var(--color-text-secondary))]">
           Sketches
         </span>
         <button
           onClick={() => setIsCreatingSk(true)}
-          className="p-1 rounded-md text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 transition-colors"
+          className="p-1 rounded-md text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10 transition-colors"
           title="New sketch"
         >
           <PlusIcon className="w-3.5 h-3.5" />
@@ -447,7 +447,7 @@ export function StoryboardList() {
       </div>
 
       {isCreatingSk && (
-        <div className="px-3 py-2 border-b border-[var(--color-border)]">
+        <div className="px-3 py-2 border-b border-[rgb(var(--color-border))]">
           <input
             type="text"
             value={newSkTitle}
@@ -458,7 +458,7 @@ export function StoryboardList() {
             }}
             placeholder="Sketch name..."
             autoFocus
-            className="w-full px-2 py-1.5 rounded-md bg-[var(--color-surface)] border border-[var(--color-border)] text-xs text-[var(--color-text)] placeholder:text-[var(--color-text-secondary)]/50 focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)]/40"
+            className="w-full px-2 py-1.5 rounded-md bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] text-xs text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/50 focus:outline-none focus:ring-1 focus:ring-[rgb(var(--color-accent))]/40"
           />
         </div>
       )}
@@ -467,7 +467,7 @@ export function StoryboardList() {
         {orderedSketches.length === 0 && !isCreatingSk ? (
           <button
             onClick={() => setIsCreatingSk(true)}
-            className="w-full px-3 py-4 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] transition-colors"
+            className="w-full px-3 py-4 text-xs text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] transition-colors"
           >
             + New sketch
           </button>
@@ -483,14 +483,14 @@ export function StoryboardList() {
                     onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") handleOpenSketchStandalone(sk.path); }}
                     className={`group/item w-full flex items-center gap-2 px-3 py-2.5 text-left transition-colors cursor-pointer ${
                       sk.path === activeSketchPath
-                        ? "bg-violet-500/10 text-[var(--color-accent)]"
-                        : "text-[var(--color-text)] hover:bg-[var(--color-surface-alt)]"
+                        ? "bg-violet-500/10 text-[rgb(var(--color-accent))]"
+                        : "text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))]"
                     }`}
                   >
                     <SketchIcon className="shrink-0" />
                     <div className="flex-1 min-w-0">
                       <div className="text-xs font-medium truncate">{sk.title}</div>
-                      <div className="text-[10px] text-[var(--color-text-secondary)]">
+                      <div className="text-[10px] text-[rgb(var(--color-text-secondary))]">
                         {sk.row_count} {sk.row_count === 1 ? "row" : "rows"}
                       </div>
                     </div>
@@ -499,7 +499,7 @@ export function StoryboardList() {
                         e.stopPropagation();
                         requestDelete("sketch", sk.path, sk.title);
                       }}
-                      className="opacity-0 group-hover/item:opacity-100 p-0.5 rounded text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-all"
+                      className="opacity-0 group-hover/item:opacity-100 p-0.5 rounded text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] transition-all"
                       title="Delete sketch"
                     >
                       <TrashIcon className="w-3 h-3" />
@@ -513,13 +513,13 @@ export function StoryboardList() {
       </div>
 
       {/* ── Notes section─────────────────────────────── */}
-      <div className="flex items-center justify-between px-3 h-9 shrink-0 border-y border-[var(--color-border-subtle)]">
-        <span className="text-[12px] font-medium text-[var(--color-text-secondary)]">
+      <div className="flex items-center justify-between px-3 h-9 shrink-0 border-y border-[rgb(var(--color-border-subtle))]">
+        <span className="text-[12px] font-medium text-[rgb(var(--color-text-secondary))]">
           Notes
         </span>
         <button
           onClick={() => setIsCreatingNote(true)}
-          className="p-1 rounded-md text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 transition-colors"
+          className="p-1 rounded-md text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10 transition-colors"
           title="New note"
         >
           <PlusIcon className="w-3.5 h-3.5" />
@@ -527,7 +527,7 @@ export function StoryboardList() {
       </div>
 
       {isCreatingNote && (
-        <div className="px-3 py-2 border-b border-[var(--color-border)]">
+        <div className="px-3 py-2 border-b border-[rgb(var(--color-border))]">
           <input
             type="text"
             value={newNoteTitle}
@@ -538,7 +538,7 @@ export function StoryboardList() {
             }}
             placeholder="Note name..."
             autoFocus
-            className="w-full px-2 py-1.5 rounded-md bg-[var(--color-surface)] border border-[var(--color-border)] text-xs text-[var(--color-text)] placeholder:text-[var(--color-text-secondary)]/50 focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)]/40"
+            className="w-full px-2 py-1.5 rounded-md bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] text-xs text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/50 focus:outline-none focus:ring-1 focus:ring-[rgb(var(--color-accent))]/40"
           />
         </div>
       )}
@@ -546,19 +546,19 @@ export function StoryboardList() {
       <div className="flex-1 overflow-y-auto py-1">
         {orderedNotes.length === 0 && !isCreatingNote ? (
           <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
-            <p className="text-xs text-[var(--color-text-secondary)] mb-3 leading-relaxed">
+            <p className="text-xs text-[rgb(var(--color-text-secondary))] mb-3 leading-relaxed">
               Import a document or create a new note
             </p>
             <div className="flex gap-2">
               <button
                 onClick={() => setIsCreatingNote(true)}
-                className="px-3 py-1.5 text-[11px] rounded-lg border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:border-[var(--color-accent)] transition-colors"
+                className="px-3 py-1.5 text-[11px] rounded-lg border border-[rgb(var(--color-border))] text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:border-[rgb(var(--color-accent))] transition-colors"
               >
                 + New note
               </button>
               <button
                 onClick={handleImport}
-                className="px-3 py-1.5 text-[11px] rounded-lg border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:border-[var(--color-accent)] transition-colors"
+                className="px-3 py-1.5 text-[11px] rounded-lg border border-[rgb(var(--color-border))] text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:border-[rgb(var(--color-accent))] transition-colors"
               >
                 Import
               </button>
@@ -577,7 +577,7 @@ export function StoryboardList() {
                     className={`group/item w-full flex items-center gap-2 px-3 py-2.5 text-left transition-colors cursor-pointer ${
                       note.path === activeNotePath
                         ? "bg-rose-500/10 text-rose-500"
-                        : "text-[var(--color-text)] hover:bg-[var(--color-surface-alt)]"
+                        : "text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))]"
                     }`}
                   >
                     <NoteIcon className="shrink-0" />
@@ -589,7 +589,7 @@ export function StoryboardList() {
                         e.stopPropagation();
                         requestDelete("note", note.path, note.title);
                       }}
-                      className="opacity-0 group-hover/item:opacity-100 p-0.5 rounded text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-all"
+                      className="opacity-0 group-hover/item:opacity-100 p-0.5 rounded text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] transition-all"
                       title="Delete note"
                     >
                       <TrashIcon className="w-3 h-3" />
@@ -605,9 +605,9 @@ export function StoryboardList() {
       {/* Delete confirmation overlay */}
       {pendingDelete && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl shadow-xl p-5 max-w-sm mx-4">
-            <p className="text-sm text-[var(--color-text)] mb-1 font-medium">Delete {pendingDelete.type}?</p>
-            <p className="text-xs text-[var(--color-text-secondary)] mb-2">
+          <div className="bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-xl shadow-xl p-5 max-w-sm mx-4">
+            <p className="text-sm text-[rgb(var(--color-text))] mb-1 font-medium">Delete {pendingDelete.type}?</p>
+            <p className="text-xs text-[rgb(var(--color-text-secondary))] mb-2">
               "{pendingDelete.title}" will be permanently deleted.
             </p>
             {pendingDelete.usedBy && pendingDelete.usedBy.length > 0 && (
@@ -622,7 +622,7 @@ export function StoryboardList() {
             <div className="flex gap-2 justify-end">
               <button
                 onClick={() => setPendingDelete(null)}
-                className="px-3 py-1.5 text-xs rounded-lg border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors"
+                className="px-3 py-1.5 text-xs rounded-lg border border-[rgb(var(--color-border))] text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] transition-colors"
               >
                 Cancel
               </button>

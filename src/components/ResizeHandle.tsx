@@ -82,8 +82,8 @@ export function ResizeHandle({ direction, onResize, onResizeEnd }: ResizeHandleP
             : "left-0 right-0 top-0 h-px"
         } ${
           isDragging
-            ? "bg-[var(--color-accent)]"
-            : "bg-[var(--color-border)] group-hover:bg-[var(--color-accent)]/50"
+            ? "bg-[rgb(var(--color-accent))]"
+            : "bg-[rgb(var(--color-border))] group-hover:bg-[rgb(var(--color-accent))]/50"
         }`}
       />
     </div>

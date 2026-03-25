@@ -12,7 +12,7 @@ const HEAD_R = 6.5;       // HEAD dot radius
 const STROKE_W = 2;       // rail line width
 
 const LANE_COLORS = [
-  "var(--color-accent)",      // purple — main / active
+  "rgb(var(--color-accent))",      // purple — main / active
   "#10b981",                  // emerald
   "#f59e0b",                  // amber
   "#ef4444",                  // red
@@ -200,8 +200,8 @@ export function SnapshotGraph({
   if (sorted.length === 0 && !isDirty) {
     return (
       <div className="px-3 py-8 text-center">
-        <div className="text-[var(--color-text-secondary)] text-xs">No snapshots yet</div>
-        <div className="text-[var(--color-text-secondary)]/60 text-[10px] mt-1">
+        <div className="text-[rgb(var(--color-text-secondary))] text-xs">No snapshots yet</div>
+        <div className="text-[rgb(var(--color-text-secondary))]/60 text-[10px] mt-1">
           Save a snapshot of the entire project
         </div>
       </div>
@@ -274,7 +274,7 @@ export function SnapshotGraph({
     const dx = laneX(rows[dirtyRowIdx].laneIdx);
     paths.push({
       d: `M ${dx} ${rowCy(dirtyRowIdx) + 4} L ${dx} ${rowCy(headRowIdx) - HEAD_R}`,
-      color: "var(--color-text-secondary)", opacity: 0.4, dashed: true,
+      color: "rgb(var(--color-text-secondary))", opacity: 0.4, dashed: true,
     });
   }
 
@@ -315,7 +315,7 @@ export function SnapshotGraph({
           const x = laneX(row.laneIdx);
           return (
             <div key="dirty"
-              className="flex items-center overflow-hidden cursor-pointer hover:bg-[var(--color-surface-alt)] transition-colors"
+              className="flex items-center overflow-hidden cursor-pointer hover:bg-[rgb(var(--color-surface-alt))] transition-colors"
               style={{ height: row.h }}
               onClick={() => diffWorkingTree()}
               title="View unsaved changes"
@@ -324,12 +324,12 @@ export function SnapshotGraph({
                 <div className="absolute rounded-full border-[1.5px] border-dashed"
                   style={{
                     left: x - 4, top: "50%", transform: "translateY(-50%)",
-                    width: 8, height: 8, borderColor: "var(--color-text-secondary)", opacity: 0.5,
-                    backgroundColor: "var(--color-surface)", zIndex: 2,
+                    width: 8, height: 8, borderColor: "rgb(var(--color-text-secondary))", opacity: 0.5,
+                    backgroundColor: "rgb(var(--color-surface))", zIndex: 2,
                   }} />
               </div>
               <div className="flex-1 min-w-0 pr-2">
-                <span className="text-[10px] italic text-[var(--color-text-secondary)]/70">Unsaved changes</span>
+                <span className="text-[10px] italic text-[rgb(var(--color-text-secondary))]/70">Unsaved changes</span>
               </div>
             </div>
           );
@@ -340,7 +340,7 @@ export function SnapshotGraph({
           const headColor = lc(0); // trunk is always lane 0
           return (
             <div key="ghost"
-              className="flex items-center overflow-hidden cursor-pointer hover:bg-[var(--color-surface-alt)] transition-colors"
+              className="flex items-center overflow-hidden cursor-pointer hover:bg-[rgb(var(--color-surface-alt))] transition-colors"
               style={{ height: row.h }}
               onClick={() => diffWorkingTree()}
               title="View unsaved changes"
@@ -350,11 +350,11 @@ export function SnapshotGraph({
                   style={{
                     left: x - 3.5, top: "50%", transform: "translateY(-50%)",
                     width: 7, height: 7, borderColor: headColor, opacity: 0.5,
-                    backgroundColor: "var(--color-surface)", zIndex: 2,
+                    backgroundColor: "rgb(var(--color-surface))", zIndex: 2,
                   }} />
               </div>
               <div className="flex-1 min-w-0 pr-2 flex items-center gap-1">
-                <span className="text-[10px] italic text-[var(--color-text-secondary)]/70">New direction</span>
+                <span className="text-[10px] italic text-[rgb(var(--color-text-secondary))]/70">New direction</span>
                 <span className="text-[9px] px-1 py-px rounded-sm bg-warning/10 text-warning">branching</span>
               </div>
             </div>
@@ -395,9 +395,9 @@ export function SnapshotGraph({
                 style={{
                   left: x - r, top: "50%", transform: "translateY(-50%)",
                   width: r * 2, height: r * 2,
-                  backgroundColor: node.is_head || isHov ? color : "var(--color-surface)",
+                  backgroundColor: node.is_head || isHov ? color : "rgb(var(--color-surface))",
                   border: `2px solid ${color}`,
-                  boxShadow: "0 0 0 2px var(--color-surface)",
+                  boxShadow: "0 0 0 2px rgb(var(--color-surface))",
                   cursor: node.is_head ? "default" : "pointer",
                   zIndex: 3, padding: 0,
                 }}
@@ -434,15 +434,15 @@ export function SnapshotGraph({
               onClick={() => !node.is_head && onNodeClick(node.id, node.is_head)}
             >
               <div className={`text-xs truncate leading-tight transition-colors ${
-                node.is_head ? "font-medium text-[var(--color-text)]"
-                  : isHov ? "text-[var(--color-text)]"
-                  : "text-[var(--color-text-secondary)]"
+                node.is_head ? "font-medium text-[rgb(var(--color-text))]"
+                  : isHov ? "text-[rgb(var(--color-text))]"
+                  : "text-[rgb(var(--color-text-secondary))]"
               }`}>{node.message}</div>
               <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="text-[10px] text-[var(--color-text-secondary)]/50">{fmtDate(node.timestamp)}</span>
+                <span className="text-[10px] text-[rgb(var(--color-text-secondary))]/50">{fmtDate(node.timestamp)}</span>
                 {/* Author — only show when remote is configured (collaborator context) */}
                 {currentRemote && node.author && (
-                  <span className="text-[9px] text-[var(--color-text-secondary)]/40" title={`by ${node.author}`}>
+                  <span className="text-[9px] text-[rgb(var(--color-text-secondary))]/40" title={`by ${node.author}`}>
                     {node.author}
                   </span>
                 )}
@@ -454,8 +454,8 @@ export function SnapshotGraph({
                   const aInfo = timelineMap.get(a.timeline);
                   const aLabel = aInfo?.label ?? a.timeline;
                   return (
-                    <span key={a.timeline} className="text-[9px] px-1 py-px rounded-sm leading-tight text-[var(--color-text-secondary)]/50"
-                      style={{ backgroundColor: "var(--color-surface-alt)" }}>+{aLabel}</span>
+                    <span key={a.timeline} className="text-[9px] px-1 py-px rounded-sm leading-tight text-[rgb(var(--color-text-secondary))]/50"
+                      style={{ backgroundColor: "rgb(var(--color-surface-alt))" }}>+{aLabel}</span>
                   );
                 })}
               </div>

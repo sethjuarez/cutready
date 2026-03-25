@@ -106,16 +106,16 @@ export function FeedbackDialog({ isOpen, onClose }: FeedbackDialogProps) {
       onClick={onClose}
     >
       <div
-        className="w-[360px] max-w-[90vw] bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl shadow-2xl p-4 space-y-3"
+        className="w-[360px] max-w-[90vw] bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-xl shadow-2xl p-4 space-y-3"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
         <div className="flex items-center justify-between">
-          <h3 className="text-sm font-medium text-[var(--color-text)]">
+          <h3 className="text-sm font-medium text-[rgb(var(--color-text))]">
             Send Feedback
           </h3>
           <button
-            className="flex items-center justify-center w-6 h-6 rounded text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-alt)] transition-colors"
+            className="flex items-center justify-center w-6 h-6 rounded text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors"
             onClick={onClose}
           >
             <XMarkIcon className="w-3.5 h-3.5" />
@@ -132,8 +132,8 @@ export function FeedbackDialog({ isOpen, onClose }: FeedbackDialogProps) {
                 onClick={() => setCategory(key)}
                 className={`inline-flex items-center gap-1 px-2.5 py-1 text-[11px] rounded-md border transition-colors ${
                   category === key
-                    ? "bg-[var(--color-surface-alt)] text-[var(--color-accent)] border-[var(--color-accent)]/30"
-                    : "bg-[var(--color-surface)] text-[var(--color-text-secondary)] border-[var(--color-border)] hover:text-[var(--color-text)]"
+                    ? "bg-[rgb(var(--color-surface-alt))] text-[rgb(var(--color-accent))] border-[rgb(var(--color-accent))]/30"
+                    : "bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text-secondary))] border-[rgb(var(--color-border))] hover:text-[rgb(var(--color-text))]"
                 }`}
               >
                 <Icon className="w-3 h-3" />
@@ -150,7 +150,7 @@ export function FeedbackDialog({ isOpen, onClose }: FeedbackDialogProps) {
           onChange={(e) => setFeedback(e.target.value)}
           placeholder="What's on your mind?"
           rows={4}
-          className="w-full px-3 py-2.5 rounded-lg bg-[var(--color-surface-alt)] border border-[var(--color-border)] text-[13px] text-[var(--color-text)] placeholder:text-[var(--color-text-secondary)]/50 focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)]/40 resize-none"
+          className="w-full px-3 py-2.5 rounded-lg bg-[rgb(var(--color-surface-alt))] border border-[rgb(var(--color-border))] text-[13px] text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/50 focus:outline-none focus:ring-1 focus:ring-[rgb(var(--color-accent))]/40 resize-none"
         />
 
         {/* Footer: debug toggle + submit */}
@@ -163,8 +163,8 @@ export function FeedbackDialog({ isOpen, onClose }: FeedbackDialogProps) {
               onClick={() => setIncludeDebug(!includeDebug)}
               className={`relative inline-flex h-[16px] w-[28px] shrink-0 rounded-full border transition-colors ${
                 includeDebug
-                  ? "bg-[var(--color-accent)] border-[var(--color-accent)]"
-                  : "bg-[var(--color-surface-alt)] border-[var(--color-border)]"
+                  ? "bg-[rgb(var(--color-accent))] border-[rgb(var(--color-accent))]"
+                  : "bg-[rgb(var(--color-surface-alt))] border-[rgb(var(--color-border))]"
               }`}
             >
               <span
@@ -173,7 +173,7 @@ export function FeedbackDialog({ isOpen, onClose }: FeedbackDialogProps) {
                 }`}
               />
             </button>
-            <span className="text-[11px] text-[var(--color-text-secondary)] group-hover:text-[var(--color-text)] transition-colors select-none">
+            <span className="text-[11px] text-[rgb(var(--color-text-secondary))] group-hover:text-[rgb(var(--color-text))] transition-colors select-none">
               Include debug log
             </span>
           </label>
@@ -183,10 +183,10 @@ export function FeedbackDialog({ isOpen, onClose }: FeedbackDialogProps) {
             disabled={!feedback.trim()}
             className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium rounded-lg transition-colors ${
               !feedback.trim()
-                ? "text-[var(--color-text-secondary)]/30 bg-[var(--color-surface-alt)] cursor-not-allowed"
+                ? "text-[rgb(var(--color-text-secondary))]/30 bg-[rgb(var(--color-surface-alt))] cursor-not-allowed"
                 : copied
                   ? "text-emerald-500 bg-emerald-500/15"
-                  : "text-white bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)]"
+                  : "text-white bg-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent-hover))]"
             }`}
           >
             {copied ? (

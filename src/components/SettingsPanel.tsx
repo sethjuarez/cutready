@@ -113,7 +113,7 @@ export function SettingsPanel({ mode = "global" }: { mode?: "global" | "workspac
 
   if (!loaded) {
     return (
-      <div className="flex items-center justify-center h-full text-[var(--color-text-secondary)]">
+      <div className="flex items-center justify-center h-full text-[rgb(var(--color-text-secondary))]">
         Loading settings...
       </div>
     );
@@ -142,14 +142,14 @@ export function SettingsPanel({ mode = "global" }: { mode?: "global" | "workspac
       <h1 className="text-2xl font-semibold tracking-tight mb-2">
         {mode === "workspace" ? "Workspace Settings" : "Settings"}
       </h1>
-      <p className="text-sm text-[var(--color-text-secondary)] mb-6">
+      <p className="text-sm text-[rgb(var(--color-text-secondary))] mb-6">
         {mode === "workspace"
           ? "Settings for this workspace. Overrides apply only here."
           : "Global preferences that apply to all workspaces."}
       </p>
 
       {/* Tab bar */}
-      <div className="flex items-stretch border-b border-[var(--color-border)] mb-6">
+      <div className="flex items-stretch border-b border-[rgb(var(--color-border))] mb-6">
         {tabs.map((tab) => (
           <button
             key={tab}
@@ -158,7 +158,7 @@ export function SettingsPanel({ mode = "global" }: { mode?: "global" | "workspac
           >
             {tabLabels[tab]}
             {mode === "workspace" && tab !== "repository" && (
-              <span className="ml-1.5 text-[10px] text-[var(--color-text-secondary)]" title="Override global setting for this workspace">⟳</span>
+              <span className="ml-1.5 text-[10px] text-[rgb(var(--color-text-secondary))]" title="Override global setting for this workspace">⟳</span>
             )}
           </button>
         ))}
@@ -235,8 +235,8 @@ function DisplayTab({ settings, updateSetting }: {
               onClick={() => updateSetting("displayFontFamily", f.id)}
               className={`flex-1 flex flex-col items-center gap-1 px-3 py-2.5 rounded-lg text-sm transition-colors border ${
                 settings.displayFontFamily === f.id
-                  ? "bg-[var(--color-accent)] text-white border-[var(--color-accent)]"
-                  : "bg-[var(--color-surface-alt)] border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"
+                  ? "bg-[rgb(var(--color-accent))] text-white border-[rgb(var(--color-accent))]"
+                  : "bg-[rgb(var(--color-surface-alt))] border-[rgb(var(--color-border))] text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))]"
               }`}
             >
               <span
@@ -252,7 +252,7 @@ function DisplayTab({ settings, updateSetting }: {
             </button>
           ))}
         </div>
-        <p className="text-xs text-[var(--color-text-secondary)]">Font used throughout the app. Serif and Sans require web fonts to be available.</p>
+        <p className="text-xs text-[rgb(var(--color-text-secondary))]">Font used throughout the app. Serif and Sans require web fonts to be available.</p>
       </fieldset>
 
       {/* Editor text size */}
@@ -267,7 +267,7 @@ function DisplayTab({ settings, updateSetting }: {
             <option key={s.value} value={s.value}>{s.label}</option>
           ))}
         </select>
-        <p className="text-xs text-[var(--color-text-secondary)]">Text size for the sketch editor and planning table.</p>
+        <p className="text-xs text-[rgb(var(--color-text-secondary))]">Text size for the sketch editor and planning table.</p>
       </fieldset>
 
       {/* Chat text size */}
@@ -282,7 +282,7 @@ function DisplayTab({ settings, updateSetting }: {
             <option key={s.value} value={s.value}>{s.label}</option>
           ))}
         </select>
-        <p className="text-xs text-[var(--color-text-secondary)]">Text size for the chat panel.</p>
+        <p className="text-xs text-[rgb(var(--color-text-secondary))]">Text size for the chat panel.</p>
       </fieldset>
 
       {/* Row density */}
@@ -295,15 +295,15 @@ function DisplayTab({ settings, updateSetting }: {
               onClick={() => updateSetting("displayRowDensity", d)}
               className={`px-3 py-1.5 rounded-lg text-sm capitalize transition-colors border ${
                 settings.displayRowDensity === d
-                  ? "bg-[var(--color-accent)] text-white border-[var(--color-accent)]"
-                  : "bg-[var(--color-surface-alt)] border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"
+                  ? "bg-[rgb(var(--color-accent))] text-white border-[rgb(var(--color-accent))]"
+                  : "bg-[rgb(var(--color-surface-alt))] border-[rgb(var(--color-border))] text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))]"
               }`}
             >
               {d}
             </button>
           ))}
         </div>
-        <p className="text-xs text-[var(--color-text-secondary)]">Controls padding and line-height in planning table rows.</p>
+        <p className="text-xs text-[rgb(var(--color-text-secondary))]">Controls padding and line-height in planning table rows.</p>
       </fieldset>
 
       {/* Row colors */}
@@ -316,15 +316,15 @@ function DisplayTab({ settings, updateSetting }: {
               onClick={() => updateSetting("displayRowColors", c)}
               className={`px-3 py-1.5 rounded-lg text-sm capitalize transition-colors border ${
                 settings.displayRowColors === c
-                  ? "bg-[var(--color-accent)] text-white border-[var(--color-accent)]"
-                  : "bg-[var(--color-surface-alt)] border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"
+                  ? "bg-[rgb(var(--color-accent))] text-white border-[rgb(var(--color-accent))]"
+                  : "bg-[rgb(var(--color-surface-alt))] border-[rgb(var(--color-border))] text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))]"
               }`}
             >
               {c}
             </button>
           ))}
         </div>
-        <p className="text-xs text-[var(--color-text-secondary)]">Color intensity of the left stripe on planning rows.</p>
+        <p className="text-xs text-[rgb(var(--color-text-secondary))]">Color intensity of the left stripe on planning rows.</p>
       </fieldset>
 
       {/* Editor width */}
@@ -337,15 +337,15 @@ function DisplayTab({ settings, updateSetting }: {
               onClick={() => updateSetting("displayEditorWidth", w)}
               className={`px-3 py-1.5 rounded-lg text-sm capitalize transition-colors border ${
                 settings.displayEditorWidth === w
-                  ? "bg-[var(--color-accent)] text-white border-[var(--color-accent)]"
-                  : "bg-[var(--color-surface-alt)] border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"
+                  ? "bg-[rgb(var(--color-accent))] text-white border-[rgb(var(--color-accent))]"
+                  : "bg-[rgb(var(--color-surface-alt))] border-[rgb(var(--color-border))] text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))]"
               }`}
             >
               {w === "centered" ? "Centered (896px)" : "Full Width"}
             </button>
           ))}
         </div>
-        <p className="text-xs text-[var(--color-text-secondary)]">Whether the sketch editor uses a max-width or expands to fill available space.</p>
+        <p className="text-xs text-[rgb(var(--color-text-secondary))]">Whether the sketch editor uses a max-width or expands to fill available space.</p>
       </fieldset>
     </div>
   );
@@ -423,13 +423,13 @@ function CopilotStatus({ setModels }: {
   }, [status?.available, loadCopilotModels]);
 
   return (
-    <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-alt)] p-3 flex flex-col gap-2">
+    <div className="rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] p-3 flex flex-col gap-2">
       <div className="flex items-center gap-2">
-        <svg className="w-4 h-4 text-[var(--color-text-secondary)]" viewBox="0 0 16 16" fill="currentColor">
+        <svg className="w-4 h-4 text-[rgb(var(--color-text-secondary))]" viewBox="0 0 16 16" fill="currentColor">
           <path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/>
         </svg>
         {status === null ? (
-          <span className="text-sm text-[var(--color-text-secondary)]">Checking Copilot CLI…</span>
+          <span className="text-sm text-[rgb(var(--color-text-secondary))]">Checking Copilot CLI…</span>
         ) : status.available ? (
           <span className="text-sm text-success font-medium">
             ✓ Copilot CLI{status.version ? ` v${status.version}` : ""}{status.protocol_version ? ` (protocol ${status.protocol_version})` : ""}
@@ -438,14 +438,14 @@ function CopilotStatus({ setModels }: {
           <span className="text-sm text-warning">Copilot CLI not found — looking for it… (install from github.com/github/copilot)</span>
         )}
       </div>
-      <p className="text-xs text-[var(--color-text-secondary)]">
-        Uses your GitHub CLI credentials (<code className="text-[var(--color-accent)]">gh auth login</code>). No API key needed.
+      <p className="text-xs text-[rgb(var(--color-text-secondary))]">
+        Uses your GitHub CLI credentials (<code className="text-[rgb(var(--color-accent))]">gh auth login</code>). No API key needed.
       </p>
       {status?.available && (
         <button
           onClick={loadCopilotModels}
           disabled={loading}
-          className="w-fit px-3 py-1.5 rounded-lg text-xs font-medium bg-[var(--color-accent)] text-accent-fg hover:bg-[var(--color-accent-hover)] disabled:opacity-50 transition-colors"
+          className="w-fit px-3 py-1.5 rounded-lg text-xs font-medium bg-[rgb(var(--color-accent))] text-accent-fg hover:bg-[rgb(var(--color-accent-hover))] disabled:opacity-50 transition-colors"
         >
           {loading ? "Loading models…" : "Reload models"}
         </button>
@@ -453,7 +453,7 @@ function CopilotStatus({ setModels }: {
       {!status?.available && status !== null && (
         <button
           onClick={checkAvailability}
-          className="w-fit px-3 py-1.5 rounded-lg text-xs font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-text)] border border-[var(--color-border)] hover:bg-[var(--color-surface-alt)] transition-colors"
+          className="w-fit px-3 py-1.5 rounded-lg text-xs font-medium text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] border border-[rgb(var(--color-border))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors"
         >
           Check again
         </button>
@@ -568,7 +568,7 @@ function AIProviderTab({ settings, updateSetting, isAzure, isOAuth, hasToken, ca
           <fieldset className="flex flex-col gap-2">
             <label className="text-sm font-medium">
               Tenant ID{" "}
-              <span className="text-[var(--color-text-secondary)] font-normal">
+              <span className="text-[rgb(var(--color-text-secondary))] font-normal">
                 (optional — defaults to "organizations")
               </span>
             </label>
@@ -584,7 +584,7 @@ function AIProviderTab({ settings, updateSetting, isAzure, isOAuth, hasToken, ca
           <fieldset className="flex flex-col gap-2">
             <label className="text-sm font-medium">
               Client ID{" "}
-              <span className="text-[var(--color-text-secondary)] font-normal">
+              <span className="text-[rgb(var(--color-text-secondary))] font-normal">
                 (optional — defaults to Azure PowerShell)
               </span>
             </label>
@@ -604,7 +604,7 @@ function AIProviderTab({ settings, updateSetting, isAzure, isOAuth, hasToken, ca
               </span>
               <button
                 onClick={signOut}
-                className="px-3 py-1.5 rounded-lg border border-[var(--color-border)] text-sm hover:bg-[var(--color-surface-alt)] transition-colors"
+                className="px-3 py-1.5 rounded-lg border border-[rgb(var(--color-border))] text-sm hover:bg-[rgb(var(--color-surface-alt))] transition-colors"
               >
                 Sign out
               </button>
@@ -624,7 +624,7 @@ function AIProviderTab({ settings, updateSetting, isAzure, isOAuth, hasToken, ca
               </button>
 
               {oauthStatus === "polling" && (
-                <p className="text-xs text-[var(--color-text-secondary)]">
+                <p className="text-xs text-[rgb(var(--color-text-secondary))]">
                   Complete sign-in in your browser. This page will update automatically.
                 </p>
               )}
@@ -664,7 +664,7 @@ function AIProviderTab({ settings, updateSetting, isAzure, isOAuth, hasToken, ca
               }
             }}
             disabled={loadingModels || (!canFetchModels && models.length === 0)}
-            className="px-3 py-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-alt)] text-sm text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:border-[var(--color-accent)]/40 disabled:opacity-40 transition-colors"
+            className="px-3 py-2 rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] text-sm text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:border-[rgb(var(--color-accent))]/40 disabled:opacity-40 transition-colors"
             title={models.length > 0 ? "Clear list" : "Fetch available models"}
           >
             {loadingModels ? (
@@ -679,7 +679,7 @@ function AIProviderTab({ settings, updateSetting, isAzure, isOAuth, hasToken, ca
           </button>
         </div>
         {models.length > 0 && (
-          <div className="max-h-48 overflow-y-auto rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-alt)]">
+          <div className="max-h-48 overflow-y-auto rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]">
             {models
               .filter((m) =>
                 m.id.toLowerCase().includes(modelFilter.toLowerCase())
@@ -697,10 +697,10 @@ function AIProviderTab({ settings, updateSetting, isAzure, isOAuth, hasToken, ca
                     setModels([]);
                     setModelFilter("");
                   }}
-                  className={`w-full text-left px-3 py-1.5 text-sm hover:bg-[var(--color-accent)]/10 transition-colors ${
+                  className={`w-full text-left px-3 py-1.5 text-sm hover:bg-[rgb(var(--color-accent))]/10 transition-colors ${
                     settings.aiModel === m.id
-                      ? "text-[var(--color-accent)] font-medium"
-                      : "text-[var(--color-text)]"
+                      ? "text-[rgb(var(--color-accent))] font-medium"
+                      : "text-[rgb(var(--color-text))]"
                   }`}
                 >
                   {m.id}
@@ -709,7 +709,7 @@ function AIProviderTab({ settings, updateSetting, isAzure, isOAuth, hasToken, ca
           </div>
         )}
         {settings.aiModel && models.length === 0 && (
-          <p className="text-xs text-[var(--color-text-secondary)]">
+          <p className="text-xs text-[rgb(var(--color-text-secondary))]">
             Selected: <span className="font-medium">{settings.aiModel}</span>
           </p>
         )}
@@ -724,13 +724,13 @@ function AIProviderTab({ settings, updateSetting, isAzure, isOAuth, hasToken, ca
         <select
           value={settings.aiVisionMode || "notes_and_sketches"}
           onChange={(e) => updateSetting("aiVisionMode", e.target.value as "off" | "notes" | "notes_and_sketches")}
-          className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded px-3 py-1.5 text-sm"
+          className="bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded px-3 py-1.5 text-sm"
         >
           <option value="off">Off — text only</option>
           <option value="notes">Notes only — images in markdown notes</option>
           <option value="notes_and_sketches">Notes + Sketches — all workspace images</option>
         </select>
-        <p className="text-xs text-[var(--color-text-secondary)]">
+        <p className="text-xs text-[rgb(var(--color-text-secondary))]">
           When enabled and the model supports vision, images referenced in notes and sketches are sent to the AI.
         </p>
         {settings.aiModelSupportsVision === "false" && settings.aiVisionMode && settings.aiVisionMode !== "off" && (
@@ -780,23 +780,23 @@ function AgentsTab({ settings, updateSetting }: {
 
   return (
     <div className="flex flex-col gap-6">
-      <p className="text-xs text-[var(--color-text-secondary)]">
+      <p className="text-xs text-[rgb(var(--color-text-secondary))]">
         Agents are AI personas with different system prompts. Select an agent in the chat toolbar to change how the AI responds. Built-in agents ship with CutReady; custom agents are yours to create.
       </p>
 
       {/* Built-in agents (read-only) */}
       <div>
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)] mb-3">Built-in Agents</h3>
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-[rgb(var(--color-text-secondary))] mb-3">Built-in Agents</h3>
         <div className="flex flex-col gap-2">
           {BUILT_IN_AGENTS.map((agent) => (
-            <div key={agent.id} className="border border-[var(--color-border)] rounded-lg p-3">
+            <div key={agent.id} className="border border-[rgb(var(--color-border))] rounded-lg p-3">
               <div className="flex items-center gap-2 mb-1">
                 <span className="text-sm font-medium">{agent.name}</span>
                 {settings.aiSelectedAgent === agent.id && (
-                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[var(--color-accent)]/10 text-[var(--color-accent)] font-medium">Active</span>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))] font-medium">Active</span>
                 )}
               </div>
-              <p className="text-xs text-[var(--color-text-secondary)] line-clamp-2">
+              <p className="text-xs text-[rgb(var(--color-text-secondary))] line-clamp-2">
                 {agent.prompt.split("\n").find((l) => l.trim() && !l.startsWith("#") && !l.startsWith("You are")) || agent.prompt.slice(0, 120)}
               </p>
             </div>
@@ -806,13 +806,13 @@ function AgentsTab({ settings, updateSetting }: {
 
       {/* Custom agents */}
       <div>
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)] mb-3">Custom Agents</h3>
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-[rgb(var(--color-text-secondary))] mb-3">Custom Agents</h3>
         {customAgents.length === 0 && (
-          <p className="text-xs text-[var(--color-text-secondary)] italic mb-3">No custom agents yet.</p>
+          <p className="text-xs text-[rgb(var(--color-text-secondary))] italic mb-3">No custom agents yet.</p>
         )}
         <div className="flex flex-col gap-3">
           {customAgents.map((agent) => (
-            <div key={agent.id} className="border border-[var(--color-border)] rounded-lg p-3">
+            <div key={agent.id} className="border border-[rgb(var(--color-border))] rounded-lg p-3">
               {editingId === agent.id ? (
                 <div className="flex flex-col gap-2">
                   <input
@@ -830,7 +830,7 @@ function AgentsTab({ settings, updateSetting }: {
                   />
                   <button
                     onClick={() => setEditingId(null)}
-                    className="text-xs text-[var(--color-accent)] hover:underline self-start"
+                    className="text-xs text-[rgb(var(--color-accent))] hover:underline self-start"
                   >
                     Done editing
                   </button>
@@ -840,12 +840,12 @@ function AgentsTab({ settings, updateSetting }: {
                   <div className="flex items-center gap-2 mb-1">
                     <span className="text-sm font-medium">{agent.name}</span>
                     {settings.aiSelectedAgent === agent.id && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[var(--color-accent)]/10 text-[var(--color-accent)] font-medium">Active</span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))] font-medium">Active</span>
                     )}
                     <div className="flex-1" />
                     <button
                       onClick={() => setEditingId(agent.id)}
-                      className="text-[11px] text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors"
+                      className="text-[11px] text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] transition-colors"
                     >
                       Edit
                     </button>
@@ -856,7 +856,7 @@ function AgentsTab({ settings, updateSetting }: {
                       Delete
                     </button>
                   </div>
-                  <p className="text-xs text-[var(--color-text-secondary)] line-clamp-2">
+                  <p className="text-xs text-[rgb(var(--color-text-secondary))] line-clamp-2">
                     {agent.prompt.slice(0, 150)}{agent.prompt.length > 150 ? "…" : ""}
                   </p>
                 </>
@@ -867,8 +867,8 @@ function AgentsTab({ settings, updateSetting }: {
       </div>
 
       {/* Add new agent */}
-      <div className="border border-dashed border-[var(--color-border)] rounded-lg p-4 flex flex-col gap-3">
-        <h4 className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">New Agent</h4>
+      <div className="border border-dashed border-[rgb(var(--color-border))] rounded-lg p-4 flex flex-col gap-3">
+        <h4 className="text-xs font-semibold uppercase tracking-wider text-[rgb(var(--color-text-secondary))]">New Agent</h4>
         <input
           type="text"
           value={newName}
@@ -885,7 +885,7 @@ function AgentsTab({ settings, updateSetting }: {
         <button
           onClick={addAgent}
           disabled={!newName.trim() || !newPrompt.trim()}
-          className="px-4 py-2 rounded-lg bg-[var(--color-accent)] text-white text-sm font-medium hover:opacity-90 disabled:opacity-40 transition-opacity w-fit"
+          className="px-4 py-2 rounded-lg bg-[rgb(var(--color-accent))] text-white text-sm font-medium hover:opacity-90 disabled:opacity-40 transition-opacity w-fit"
         >
           Add Agent
         </button>
@@ -1105,13 +1105,13 @@ function FeedbackListTab() {
   };
 
   if (loading) {
-    return <p className="text-xs text-[var(--color-text-secondary)]">Loading…</p>;
+    return <p className="text-xs text-[rgb(var(--color-text-secondary))]">Loading…</p>;
   }
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <p className="text-xs text-[var(--color-text-secondary)]">
+        <p className="text-xs text-[rgb(var(--color-text-secondary))]">
           {entries.length === 0
             ? <>No feedback submitted yet. Use the <ChatBubbleLeftIcon className="w-3 h-3 inline -mt-0.5" /> button in the title bar.</>
             : `${entries.length} feedback item${entries.length === 1 ? "" : "s"}`}
@@ -1123,7 +1123,7 @@ function FeedbackListTab() {
               className={`flex items-center gap-1.5 px-3 py-1.5 text-[11px] rounded-lg font-medium transition-colors border ${
                 copied
                   ? "bg-emerald-500/15 text-emerald-500 border-emerald-500/30"
-                  : "bg-[var(--color-surface-alt)] text-[var(--color-text-secondary)] border-[var(--color-border)] hover:text-[var(--color-text)] hover:border-[var(--color-text-secondary)]/40"
+                  : "bg-[rgb(var(--color-surface-alt))] text-[rgb(var(--color-text-secondary))] border-[rgb(var(--color-border))] hover:text-[rgb(var(--color-text))] hover:border-[rgb(var(--color-text-secondary))]/40"
               }`}
             >
               {copied ? (
@@ -1140,7 +1140,7 @@ function FeedbackListTab() {
             </button>
             <button
               onClick={clearAll}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] rounded-lg font-medium transition-colors border bg-[var(--color-surface-alt)] text-[var(--color-text-secondary)] border-[var(--color-border)] hover:text-error hover:border-error/40"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] rounded-lg font-medium transition-colors border bg-[rgb(var(--color-surface-alt))] text-[rgb(var(--color-text-secondary))] border-[rgb(var(--color-border))] hover:text-error hover:border-error/40"
             >
               <TrashIcon className="w-3 h-3" />
               Clear All
@@ -1157,19 +1157,19 @@ function FeedbackListTab() {
             return (
             <div
               key={i}
-              className="group relative px-3 py-2.5 rounded-lg bg-[var(--color-surface-alt)] border border-[var(--color-border)]"
+              className="group relative px-3 py-2.5 rounded-lg bg-[rgb(var(--color-surface-alt))] border border-[rgb(var(--color-border))]"
             >
               <div className="flex items-center gap-2 mb-1">
-                <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-[var(--color-accent)]/10 text-[var(--color-accent)] border border-[var(--color-accent)]/20">
+                <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))] border border-[rgb(var(--color-accent))]/20">
                   {entry.category}
                 </span>
-                <span className="text-[10px] text-[var(--color-text-secondary)]">
+                <span className="text-[10px] text-[rgb(var(--color-text-secondary))]">
                   {entry.date.split("T")[0]}
                 </span>
               </div>
-              <p className="text-xs text-[var(--color-text)] whitespace-pre-wrap">{entry.feedback}</p>
+              <p className="text-xs text-[rgb(var(--color-text))] whitespace-pre-wrap">{entry.feedback}</p>
               {entry.debug_log && (
-                <div className="mt-1.5 flex items-center gap-1 text-[10px] text-[var(--color-text-secondary)]">
+                <div className="mt-1.5 flex items-center gap-1 text-[10px] text-[rgb(var(--color-text-secondary))]">
                   <Squares2X2Icon className="w-2.5 h-2.5" />
                   Debug log attached ({entry.debug_log.split("\n").length} lines)
                 </div>
@@ -1186,7 +1186,7 @@ function FeedbackListTab() {
                   </button>
                   <button
                     onClick={() => setConfirmDelete(null)}
-                    className="px-2 py-0.5 text-[11px] rounded text-[var(--color-text-secondary)] hover:bg-[var(--color-surface)] transition-colors"
+                    className="px-2 py-0.5 text-[11px] rounded text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface))] transition-colors"
                   >
                     Cancel
                   </button>
@@ -1195,14 +1195,14 @@ function FeedbackListTab() {
               {/* Action buttons — hover to reveal */}
               <button
                 onClick={() => copySingle(entry)}
-                className="absolute top-2 right-16 opacity-0 group-hover:opacity-100 p-1 rounded text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)] transition-all"
+                className="absolute top-2 right-16 opacity-0 group-hover:opacity-100 p-1 rounded text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface))] transition-all"
                 title="Copy this item"
               >
                 <ClipboardDocumentIcon className="w-3 h-3" />
               </button>
               <button
                 onClick={() => setConfirmDelete(isConfirming ? null : realIndex)}
-                className="absolute top-2 right-9 opacity-0 group-hover:opacity-100 p-1 rounded text-[var(--color-text-secondary)] hover:text-error hover:bg-[var(--color-surface)] transition-all"
+                className="absolute top-2 right-9 opacity-0 group-hover:opacity-100 p-1 rounded text-[rgb(var(--color-text-secondary))] hover:text-error hover:bg-[rgb(var(--color-surface))] transition-all"
                 title="Delete this item"
               >
                 <TrashIcon className="w-3 h-3" />
@@ -1212,8 +1212,8 @@ function FeedbackListTab() {
                 disabled={issuePending !== null}
                 className={`absolute top-2 right-2 opacity-0 group-hover:opacity-100 p-1 rounded transition-all ${
                   issuePending === i
-                    ? "text-[var(--color-accent)] animate-pulse"
-                    : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)]"
+                    ? "text-[rgb(var(--color-accent))] animate-pulse"
+                    : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface))]"
                 }`}
                 title="Create GitHub Issue"
               >
@@ -1291,17 +1291,17 @@ function RepositoryTab({ settings, updateSetting }: {
 
   return (
     <div className="flex flex-col gap-6">
-      <p className="text-xs text-[var(--color-text-secondary)]">
+      <p className="text-xs text-[rgb(var(--color-text-secondary))]">
         Connect to a GitHub remote to collaborate with others. Your snapshots and timelines sync as git commits and branches.
       </p>
 
       {detectedRemote && !settings.repoRemoteUrl && (
-        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[var(--color-accent)]/10 border border-[var(--color-accent)]/20 text-xs text-[var(--color-accent)]">
+        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[rgb(var(--color-accent))]/10 border border-[rgb(var(--color-accent))]/20 text-xs text-[rgb(var(--color-accent))]">
           <InformationCircleIcon className="w-3.5 h-3.5" />
           Detected remote: <strong>{detectedRemote.url}</strong>
           <button
             onClick={() => updateSetting("repoRemoteUrl", detectedRemote.url)}
-            className="ml-auto text-[var(--color-accent)] underline hover:no-underline"
+            className="ml-auto text-[rgb(var(--color-accent))] underline hover:no-underline"
           >
             Use this
           </button>
@@ -1309,7 +1309,7 @@ function RepositoryTab({ settings, updateSetting }: {
       )}
 
       <fieldset className="flex flex-col gap-2">
-        <label className="text-sm font-medium text-[var(--color-text)]">Remote URL</label>
+        <label className="text-sm font-medium text-[rgb(var(--color-text))]">Remote URL</label>
         <div className="flex gap-2">
           <input
             type="text"
@@ -1321,7 +1321,7 @@ function RepositoryTab({ settings, updateSetting }: {
           <button
             onClick={handleTestConnection}
             disabled={testStatus === "testing"}
-            className="px-3 py-2 rounded-lg text-xs font-medium bg-[var(--color-accent)] text-white hover:opacity-90 transition-opacity disabled:opacity-50"
+            className="px-3 py-2 rounded-lg text-xs font-medium bg-[rgb(var(--color-accent))] text-white hover:opacity-90 transition-opacity disabled:opacity-50"
           >
             {testStatus === "testing" ? "Testing\u2026" : "Test"}
           </button>
@@ -1335,15 +1335,15 @@ function RepositoryTab({ settings, updateSetting }: {
       </fieldset>
 
       <fieldset className="flex flex-col gap-3">
-        <label className="text-sm font-medium text-[var(--color-text)]">Authentication</label>
+        <label className="text-sm font-medium text-[rgb(var(--color-text))]">Authentication</label>
         <div className="flex flex-col gap-2">
           {authOptions.map((opt) => (
             <label
               key={opt.value}
               className={`flex items-start gap-3 px-3 py-2.5 rounded-lg border cursor-pointer transition-colors ${
                 settings.repoAuthMethod === opt.value
-                  ? "border-[var(--color-accent)] bg-[var(--color-accent)]/5"
-                  : "border-[var(--color-border)] hover:border-[var(--color-text-secondary)]/30"
+                  ? "border-[rgb(var(--color-accent))] bg-[rgb(var(--color-accent))]/5"
+                  : "border-[rgb(var(--color-border))] hover:border-[rgb(var(--color-text-secondary))]/30"
               }`}
             >
               <input
@@ -1352,11 +1352,11 @@ function RepositoryTab({ settings, updateSetting }: {
                 value={opt.value}
                 checked={settings.repoAuthMethod === opt.value}
                 onChange={() => updateSetting("repoAuthMethod", opt.value)}
-                className="mt-0.5 accent-[var(--color-accent)]"
+                className="mt-0.5 accent-[rgb(var(--color-accent))]"
               />
               <div>
-                <span className="text-sm font-medium text-[var(--color-text)]">{opt.label}</span>
-                <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">{opt.desc}</p>
+                <span className="text-sm font-medium text-[rgb(var(--color-text))]">{opt.label}</span>
+                <p className="text-xs text-[rgb(var(--color-text-secondary))] mt-0.5">{opt.desc}</p>
               </div>
             </label>
           ))}
@@ -1365,7 +1365,7 @@ function RepositoryTab({ settings, updateSetting }: {
 
       {settings.repoAuthMethod === "pat" && (
         <fieldset className="flex flex-col gap-2">
-          <label className="text-sm font-medium text-[var(--color-text)]">Personal Access Token</label>
+          <label className="text-sm font-medium text-[rgb(var(--color-text))]">Personal Access Token</label>
           <input
             type="password"
             value={settings.repoToken}
@@ -1373,15 +1373,15 @@ function RepositoryTab({ settings, updateSetting }: {
             placeholder="ghp_xxxxxxxxxxxx"
             className={inputClass}
           />
-          <p className="text-xs text-[var(--color-text-secondary)]">
+          <p className="text-xs text-[rgb(var(--color-text-secondary))]">
             Create a token at github.com/settings/tokens with &quot;repo&quot; scope.
           </p>
         </fieldset>
       )}
 
       <fieldset className="flex flex-col gap-2">
-        <label className="text-sm font-medium text-[var(--color-text)]">Git Identity</label>
-        <p className="text-xs text-[var(--color-text-secondary)] mb-1">
+        <label className="text-sm font-medium text-[rgb(var(--color-text))]">Git Identity</label>
+        <p className="text-xs text-[rgb(var(--color-text-secondary))] mb-1">
           Name and email used for your snapshots. Leave empty to use system git config.
         </p>
         <div className="grid grid-cols-2 gap-3">
@@ -1486,14 +1486,14 @@ function MemoryTab() {
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-sm font-medium">AI Memory</h3>
-          <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">
+          <p className="text-xs text-[rgb(var(--color-text-secondary))] mt-0.5">
             {memories.length} {memories.length === 1 ? "memory" : "memories"} stored
           </p>
         </div>
         <div className="flex items-center gap-2">
           <button
             onClick={loadMemories}
-            className="px-2 py-1 text-xs rounded border border-[var(--color-border)] hover:bg-[var(--color-surface-alt)] transition-colors"
+            className="px-2 py-1 text-xs rounded border border-[rgb(var(--color-border))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors"
             title="Refresh"
           >
             ↻
@@ -1519,8 +1519,8 @@ function MemoryTab() {
               onClick={() => setFilter(cat)}
               className={`px-2.5 py-1 text-xs rounded-full transition-colors ${
                 filter === cat
-                  ? "bg-[var(--color-accent)]/20 text-[var(--color-accent)]"
-                  : "text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-alt)]"
+                  ? "bg-[rgb(var(--color-accent))]/20 text-[rgb(var(--color-accent))]"
+                  : "text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-alt))]"
               }`}
             >
               {cat === "all" ? "All" : cat.charAt(0).toUpperCase() + cat.slice(1)} ({count})
@@ -1531,9 +1531,9 @@ function MemoryTab() {
 
       {/* Memory list */}
       {loading ? (
-        <p className="text-xs text-[var(--color-text-secondary)] py-4 text-center">Loading…</p>
+        <p className="text-xs text-[rgb(var(--color-text-secondary))] py-4 text-center">Loading…</p>
       ) : filtered.length === 0 ? (
-        <div className="text-center py-8 text-[var(--color-text-secondary)]">
+        <div className="text-center py-8 text-[rgb(var(--color-text-secondary))]">
           <p className="text-sm">No memories yet</p>
           <p className="text-xs mt-1">The AI assistant will save memories as you chat.</p>
         </div>
@@ -1545,7 +1545,7 @@ function MemoryTab() {
             return (
               <div
                 key={idx}
-                className="group flex flex-col gap-1 p-2.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-alt)] hover:border-[var(--color-text-secondary)]/30 transition-colors"
+                className="group flex flex-col gap-1 p-2.5 rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] hover:border-[rgb(var(--color-text-secondary))]/30 transition-colors"
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex items-center gap-2 min-w-0">
@@ -1553,7 +1553,7 @@ function MemoryTab() {
                       {m.category}
                     </span>
                     {m.tags.length > 0 && (
-                      <span className="text-[10px] text-[var(--color-text-secondary)] truncate">
+                      <span className="text-[10px] text-[rgb(var(--color-text-secondary))] truncate">
                         {m.tags.join(", ")}
                       </span>
                     )}
@@ -1568,7 +1568,7 @@ function MemoryTab() {
                           setEditContent(m.content);
                         }
                       }}
-                      className="px-1.5 py-0.5 text-[10px] rounded hover:bg-[var(--color-accent)]/10 text-[var(--color-text-secondary)]"
+                      className="px-1.5 py-0.5 text-[10px] rounded hover:bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-text-secondary))]"
                     >
                       {isEditing ? "Cancel" : "Edit"}
                     </button>
@@ -1587,20 +1587,20 @@ function MemoryTab() {
                       value={editContent}
                       onChange={(e) => setEditContent(e.target.value)}
                       onKeyDown={(e) => { if (e.key === "Enter") handleUpdate(idx); if (e.key === "Escape") setEditingIndex(null); }}
-                      className="flex-1 px-2 py-1 text-xs rounded bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text)] focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)]/40"
+                      className="flex-1 px-2 py-1 text-xs rounded bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] text-[rgb(var(--color-text))] focus:outline-none focus:ring-1 focus:ring-[rgb(var(--color-accent))]/40"
                       autoFocus
                     />
                     <button
                       onClick={() => handleUpdate(idx)}
-                      className="px-2 py-1 text-xs rounded bg-[var(--color-accent)]/20 text-[var(--color-accent)] hover:bg-[var(--color-accent)]/30"
+                      className="px-2 py-1 text-xs rounded bg-[rgb(var(--color-accent))]/20 text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/30"
                     >
                       Save
                     </button>
                   </div>
                 ) : (
-                  <p className="text-xs text-[var(--color-text)] leading-relaxed">{m.content}</p>
+                  <p className="text-xs text-[rgb(var(--color-text))] leading-relaxed">{m.content}</p>
                 )}
-                <span className="text-[10px] text-[var(--color-text-secondary)]/50">
+                <span className="text-[10px] text-[rgb(var(--color-text-secondary))]/50">
                   {new Date(m.created_at).toLocaleDateString()}
                 </span>
               </div>

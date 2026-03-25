@@ -72,14 +72,14 @@ export default memo(function EditorWrapper({
   return (
     <ErrorBoundary
       fallback={
-        <div className="w-full h-full flex items-center justify-center text-sm text-[var(--color-error)]">
+        <div className="w-full h-full flex items-center justify-center text-sm text-[rgb(var(--color-error))]">
           Editor failed to render
         </div>
       }
     >
       <Suspense
         fallback={
-          <div className="w-full h-full flex items-center justify-center text-[var(--color-text-secondary)]">
+          <div className="w-full h-full flex items-center justify-center text-[rgb(var(--color-text-secondary))]">
             Loading editor…
           </div>
         }

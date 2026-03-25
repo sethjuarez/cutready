@@ -104,17 +104,17 @@ export function IdentityDialog() {
       <div className="absolute inset-0 bg-black/40" />
 
       {/* Dialog */}
-      <div className="relative bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
+      <div className="relative bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
         {/* Header */}
         <div className="flex items-center gap-2.5 px-5 pt-5 pb-3">
-          <div className="p-2 rounded-lg bg-[var(--color-accent)]/10">
-            <UserIcon className="w-5 h-5" style={{ stroke: "var(--color-accent)" }} />
+          <div className="p-2 rounded-lg bg-[rgb(var(--color-accent))]/10">
+            <UserIcon className="w-5 h-5" style={{ stroke: "rgb(var(--color-accent))" }} />
           </div>
           <div>
-            <h2 className="text-sm font-semibold text-[var(--color-text)]">
+            <h2 className="text-sm font-semibold text-[rgb(var(--color-text))]">
               Set Your Identity
             </h2>
-            <p className="text-[11px] text-[var(--color-text-secondary)]">
+            <p className="text-[11px] text-[rgb(var(--color-text-secondary))]">
               Used to attribute your snapshots
             </p>
           </div>
@@ -122,7 +122,7 @@ export function IdentityDialog() {
 
         {/* Body */}
         <div className="px-5 pb-5 flex flex-col gap-3">
-          <p className="text-xs text-[var(--color-text-secondary)]">
+          <p className="text-xs text-[rgb(var(--color-text-secondary))]">
             We couldn&apos;t detect your identity from git or GitHub CLI.
             Please enter your name and email — this is saved once per
             workspace.
@@ -130,7 +130,7 @@ export function IdentityDialog() {
 
           {/* Name */}
           <div>
-            <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1.5">
+            <label className="block text-xs font-medium text-[rgb(var(--color-text-secondary))] mb-1.5">
               Name
             </label>
             <input
@@ -142,13 +142,13 @@ export function IdentityDialog() {
                 if (e.key === "Enter" && isValid) handleSave();
               }}
               placeholder="Your name"
-              className="w-full px-3 py-2 rounded-lg bg-[var(--color-surface-alt)] border border-[var(--color-border)] text-sm text-[var(--color-text)] placeholder:text-[var(--color-text-secondary)]/40 focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]/40"
+              className="w-full px-3 py-2 rounded-lg bg-[rgb(var(--color-surface-alt))] border border-[rgb(var(--color-border))] text-sm text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/40 focus:outline-none focus:ring-2 focus:ring-[rgb(var(--color-accent))]/40"
             />
           </div>
 
           {/* Email */}
           <div>
-            <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1.5">
+            <label className="block text-xs font-medium text-[rgb(var(--color-text-secondary))] mb-1.5">
               Email
             </label>
             <input
@@ -159,7 +159,7 @@ export function IdentityDialog() {
                 if (e.key === "Enter" && isValid) handleSave();
               }}
               placeholder="you@example.com"
-              className="w-full px-3 py-2 rounded-lg bg-[var(--color-surface-alt)] border border-[var(--color-border)] text-sm text-[var(--color-text)] placeholder:text-[var(--color-text-secondary)]/40 focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]/40"
+              className="w-full px-3 py-2 rounded-lg bg-[rgb(var(--color-surface-alt))] border border-[rgb(var(--color-border))] text-sm text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/40 focus:outline-none focus:ring-2 focus:ring-[rgb(var(--color-accent))]/40"
             />
           </div>
 
@@ -174,14 +174,14 @@ export function IdentityDialog() {
                 setName("");
                 setEmail("");
               }}
-              className="px-3 py-1.5 rounded-lg text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors"
+              className="px-3 py-1.5 rounded-lg text-xs text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] transition-colors"
             >
               Cancel
             </button>
             <button
               onClick={handleSave}
               disabled={!isValid || saving}
-              className="px-4 py-1.5 rounded-lg text-xs font-medium bg-[var(--color-accent)] text-white hover:bg-[var(--color-accent-hover)] disabled:opacity-40 transition-colors"
+              className="px-4 py-1.5 rounded-lg text-xs font-medium bg-[rgb(var(--color-accent))] text-white hover:bg-[rgb(var(--color-accent-hover))] disabled:opacity-40 transition-colors"
             >
               {saving ? "Saving..." : "Continue"}
             </button>

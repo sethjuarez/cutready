@@ -6,7 +6,7 @@ export function ScriptEditorPanel() {
 
   if (!project) {
     return (
-      <div className="flex items-center justify-center h-full text-[var(--color-text-secondary)]">
+      <div className="flex items-center justify-center h-full text-[rgb(var(--color-text-secondary))]">
         No workspace open. Go to Home to select one.
       </div>
     );
@@ -20,13 +20,13 @@ export function ScriptEditorPanel() {
           <h2 className="text-xl font-semibold tracking-tight">
             {project.name}
           </h2>
-          <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">
+          <p className="text-xs text-[rgb(var(--color-text-secondary))] mt-0.5">
             Script Editor
           </p>
         </div>
         <button
           onClick={closeProject}
-          className="px-3 py-1.5 rounded-lg text-sm text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-alt)] transition-colors"
+          className="px-3 py-1.5 rounded-lg text-sm text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors"
         >
           Close
         </button>
@@ -36,14 +36,14 @@ export function ScriptEditorPanel() {
       <div className="text-center py-20">
         <div className="text-4xl mb-4">🎬</div>
         <h3 className="text-lg font-medium mb-2">No script yet</h3>
-        <p className="text-sm text-[var(--color-text-secondary)] max-w-sm mx-auto">
+        <p className="text-sm text-[rgb(var(--color-text-secondary))] max-w-sm mx-auto">
           Record a demo walkthrough to generate your first script, or add
           segments manually.
         </p>
         <div className="flex justify-center gap-3 mt-6">
           <button
             disabled
-            className="px-4 py-2 rounded-lg bg-[var(--color-accent)] text-white text-sm font-medium opacity-50 cursor-not-allowed"
+            className="px-4 py-2 rounded-lg bg-[rgb(var(--color-accent))] text-white text-sm font-medium opacity-50 cursor-not-allowed"
             title="Recording not yet implemented"
           >
             Record Demo

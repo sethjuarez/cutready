@@ -100,17 +100,17 @@ export function CommandPalette({
       onClick={onClose}
     >
       <div
-        className="w-[520px] max-w-[90vw] max-h-[60vh] bg-[var(--color-surface)] border border-[var(--color-border)] rounded-b-xl shadow-2xl flex flex-col overflow-hidden h-fit"
+        className="w-[520px] max-w-[90vw] max-h-[60vh] bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-b-xl shadow-2xl flex flex-col overflow-hidden h-fit"
         onClick={(e) => e.stopPropagation()}
         onKeyDown={handleKeyDown}
         tabIndex={-1}
       >
         {/* Input */}
-        <div className="flex items-center px-3 py-2 border-b border-[var(--color-border)]">
+        <div className="flex items-center px-3 py-2 border-b border-[rgb(var(--color-border))]">
           <input
             ref={inputRef}
             type="text"
-            className="flex-1 bg-transparent border-none outline-none text-[var(--color-text)] text-sm py-1"
+            className="flex-1 bg-transparent border-none outline-none text-[rgb(var(--color-text))] text-sm py-1"
             placeholder="Type a command..."
             value={query}
             onChange={(e) => {
@@ -119,7 +119,7 @@ export function CommandPalette({
             }}
           />
           <button
-            className="flex items-center justify-center w-6 h-6 rounded text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-alt)] transition-colors shrink-0"
+            className="flex items-center justify-center w-6 h-6 rounded text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors shrink-0"
             onClick={onClose}
           >
             <XMarkIcon className="w-3.5 h-3.5" />
@@ -129,7 +129,7 @@ export function CommandPalette({
         {/* List */}
         <div className="overflow-y-auto max-h-[350px] p-1" ref={listRef}>
           {filteredCommands.length === 0 && (
-            <div className="px-4 py-4 text-center text-[var(--color-text-secondary)] text-[13px]">
+            <div className="px-4 py-4 text-center text-[rgb(var(--color-text-secondary))] text-[13px]">
               No commands found
             </div>
           )}
@@ -138,8 +138,8 @@ export function CommandPalette({
               key={cmd.id}
               className={`flex items-center justify-between px-3 py-1.5 rounded cursor-pointer text-[13px] transition-colors ${
                 index === selectedIndex
-                  ? "bg-[var(--color-surface-alt)] text-[var(--color-accent)]"
-                  : "hover:bg-[var(--color-surface-alt)]"
+                  ? "bg-[rgb(var(--color-surface-alt))] text-[rgb(var(--color-accent))]"
+                  : "hover:bg-[rgb(var(--color-surface-alt))]"
               }`}
               onClick={() => {
                 onExecute(cmd.id);
@@ -149,15 +149,15 @@ export function CommandPalette({
             >
               <div className="flex items-center gap-2 min-w-0">
                 {cmd.icon && (
-                  <span className="shrink-0 w-4 h-4 flex items-center justify-center text-[var(--color-text-secondary)]">{cmd.icon}</span>
+                  <span className="shrink-0 w-4 h-4 flex items-center justify-center text-[rgb(var(--color-text-secondary))]">{cmd.icon}</span>
                 )}
                 {cmd.category && (
-                  <span className="text-[var(--color-text-secondary)]">{cmd.category}:</span>
+                  <span className="text-[rgb(var(--color-text-secondary))]">{cmd.category}:</span>
                 )}
-                <span className="text-[var(--color-text)]">{cmd.title}</span>
+                <span className="text-[rgb(var(--color-text))]">{cmd.title}</span>
               </div>
               {cmd.keybinding && (
-                <kbd className="text-[11px] px-1.5 py-0.5 rounded bg-[var(--color-surface-alt)] border border-[var(--color-border)] text-[var(--color-text-secondary)] font-[inherit] shrink-0 ml-3">
+                <kbd className="text-[11px] px-1.5 py-0.5 rounded bg-[rgb(var(--color-surface-alt))] border border-[rgb(var(--color-border))] text-[rgb(var(--color-text-secondary))] font-[inherit] shrink-0 ml-3">
                   {cmd.keybinding}
                 </kbd>
               )}

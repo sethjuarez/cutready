@@ -235,7 +235,7 @@ export function StoryboardView() {
                 updateStoryboard({ title: val });
               }
             }}
-            className="flex-1 text-2xl font-semibold bg-transparent text-[var(--color-text)] placeholder:text-[var(--color-text-secondary)]/40 outline-none border-none"
+            className="flex-1 text-2xl font-semibold bg-transparent text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/40 outline-none border-none"
             placeholder="Storyboard title..."
           />
           {activeStoryboard.items.length > 0 && (
@@ -263,7 +263,7 @@ export function StoryboardView() {
               />
               <button
                 onClick={handlePreviewClick}
-                className="flex items-center gap-1.5 shrink-0 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] px-3 py-1.5 rounded-lg border border-[var(--color-border)] hover:border-[var(--color-accent)]/40 hover:bg-[var(--color-accent)]/5 transition-colors"
+                className="flex items-center gap-1.5 shrink-0 text-xs text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] px-3 py-1.5 rounded-lg border border-[rgb(var(--color-border))] hover:border-[rgb(var(--color-accent))]/40 hover:bg-[rgb(var(--color-accent))]/5 transition-colors"
                 title="Preview storyboard (presentation mode)"
               >
                 <PlayIcon className="w-3.5 h-3.5" />
@@ -274,20 +274,20 @@ export function StoryboardView() {
               {showMonitorPicker && (
                 <>
                   <div className="fixed inset-0 z-40" onClick={() => setShowMonitorPicker(false)} />
-                  <div className="absolute right-0 top-full mt-2 z-50 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg shadow-lg py-1 min-w-[200px]">
-                    <div className="px-3 py-2 text-xs font-medium text-[var(--color-text-secondary)] uppercase tracking-wider border-b border-[var(--color-border)]">
+                  <div className="absolute right-0 top-full mt-2 z-50 bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-lg shadow-lg py-1 min-w-[200px]">
+                    <div className="px-3 py-2 text-xs font-medium text-[rgb(var(--color-text-secondary))] uppercase tracking-wider border-b border-[rgb(var(--color-border))]">
                       Present on
                     </div>
                     {availableMonitors.map((m) => (
                       <button
                         key={m.id}
                         onClick={() => launchPreviewOnMonitor(m)}
-                        className="w-full px-3 py-2 text-left text-sm text-[var(--color-text)] hover:bg-[var(--color-surface-alt)] transition-colors flex items-center gap-2"
+                        className="w-full px-3 py-2 text-left text-sm text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors flex items-center gap-2"
                       >
                         <ComputerDesktopIcon className="w-3.5 h-3.5" />
                         <span>{m.name || `Monitor ${m.id}`}</span>
                         {m.is_primary && (
-                          <span className="text-[10px] text-[var(--color-accent)] font-medium ml-auto">Primary</span>
+                          <span className="text-[10px] text-[rgb(var(--color-accent))] font-medium ml-auto">Primary</span>
                         )}
                       </button>
                     ))}
@@ -310,7 +310,7 @@ export function StoryboardView() {
               onBlur={() => setEditingDesc(false)}
               placeholder="Describe this storyboard..."
               rows={3}
-              className="w-full text-sm bg-transparent text-[var(--color-text)] placeholder:text-[var(--color-text-secondary)]/40 outline-none border border-[var(--color-border)] rounded-lg px-3 py-2 resize-none focus:ring-1 focus:ring-[var(--color-accent)]/40 transition-colors"
+              className="w-full text-sm bg-transparent text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/40 outline-none border border-[rgb(var(--color-border))] rounded-lg px-3 py-2 resize-none focus:ring-1 focus:ring-[rgb(var(--color-accent))]/40 transition-colors"
               autoFocus
             />
           ) : (
@@ -318,14 +318,14 @@ export function StoryboardView() {
               tabIndex={0}
               onClick={() => setEditingDesc(true)}
               onFocus={() => setEditingDesc(true)}
-              className="min-h-[2rem] rounded-lg px-3 py-2 text-sm cursor-text border border-transparent hover:border-[var(--color-border)] transition-colors"
+              className="min-h-[2rem] rounded-lg px-3 py-2 text-sm cursor-text border border-transparent hover:border-[rgb(var(--color-border))] transition-colors"
             >
               {localDesc ? (
-                <div className="prose-desc text-[var(--color-text-secondary)] leading-relaxed">
+                <div className="prose-desc text-[rgb(var(--color-text-secondary))] leading-relaxed">
                   <SafeMarkdown>{localDesc}</SafeMarkdown>
                 </div>
               ) : (
-                <span className="text-[var(--color-text-secondary)]/40">
+                <span className="text-[rgb(var(--color-text-secondary))]/40">
                   Describe this storyboard...
                 </span>
               )}
@@ -339,7 +339,7 @@ export function StoryboardView() {
                 : `Write a description for the storyboard "${activeStoryboard.title}" (path: "${activeStoryboardPath}"). Look at the sketches to understand the demo flow and write a concise (2-3 sentence) description. Use the update_storyboard tool to save the description.`,
               { silent: true }
             )}
-            className="absolute right-1 top-1 opacity-60 hover:opacity-100 p-1 rounded text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 transition-all"
+            className="absolute right-1 top-1 opacity-60 hover:opacity-100 p-1 rounded text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10 transition-all"
             title={localDesc ? "Improve description with AI" : "Generate description with AI"}
           >
             <SparklesIcon className="w-3 h-3" />
@@ -353,7 +353,7 @@ export function StoryboardView() {
               `Review the storyboard "${activeStoryboard.title}" and suggest improvements. List the current sketches, then recommend any changes to ordering, pacing, or suggest new sketches that would strengthen the demo flow. Read each sketch first to understand the content.`,
               { silent: true }
             )}
-            className="flex items-center gap-1 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] px-2 py-1 rounded-md hover:bg-[var(--color-accent)]/10 transition-colors"
+            className="flex items-center gap-1 text-xs text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] px-2 py-1 rounded-md hover:bg-[rgb(var(--color-accent))]/10 transition-colors"
             title="Review storyboard with AI"
           >
             <SparklesIcon className="w-3 h-3" />
@@ -364,7 +364,7 @@ export function StoryboardView() {
               `Generate a new sketch for the storyboard "${activeStoryboard.title}". Look at the existing sketches to understand the demo flow, then create a new sketch that would complement them. Pick an appropriate name and generate 3-5 planning rows.`,
               { silent: true }
             )}
-            className="flex items-center gap-1 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] px-2 py-1 rounded-md hover:bg-[var(--color-accent)]/10 transition-colors"
+            className="flex items-center gap-1 text-xs text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] px-2 py-1 rounded-md hover:bg-[rgb(var(--color-accent))]/10 transition-colors"
             title="Generate a new sketch with AI"
           >
             <SparklesIcon className="w-3 h-3" />
@@ -382,7 +382,7 @@ export function StoryboardView() {
           <>
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
             <SortableContext items={activeStoryboard.items.map((_, i) => i)} strategy={verticalListSortingStrategy}>
-              <div className="divide-y divide-[var(--color-border)]">
+              <div className="divide-y divide-[rgb(var(--color-border))]">
                 {activeStoryboard.items.map((item, idx) => (
                   <div key={idx} className="py-6 first:pt-0">
                     <SortableStoryboardItem id={idx}>
@@ -403,7 +403,7 @@ export function StoryboardView() {
                         />
                       ) : (
                         /* Legacy section — render title only */
-                        <div className="text-xs font-medium text-[var(--color-text-secondary)] uppercase tracking-wider py-2">
+                        <div className="text-xs font-medium text-[rgb(var(--color-text-secondary))] uppercase tracking-wider py-2">
                           {item.title}
                         </div>
                       )}
@@ -514,7 +514,7 @@ function ExpandableSketchCard({
           className="shrink-0 cursor-grab active:cursor-grabbing opacity-30 hover:opacity-100 transition-opacity"
           title="Drag to reorder"
         >
-          <svg width="8" height="14" viewBox="0 0 8 14" fill="currentColor" className="text-[var(--color-text-secondary)]">
+          <svg width="8" height="14" viewBox="0 0 8 14" fill="currentColor" className="text-[rgb(var(--color-text-secondary))]">
             <circle cx="2" cy="2" r="1.2" />
             <circle cx="6" cy="2" r="1.2" />
             <circle cx="2" cy="7" r="1.2" />
@@ -527,28 +527,28 @@ function ExpandableSketchCard({
         {/* Collapse toggle */}
         <button
           onClick={onToggleCollapse}
-          className="shrink-0 text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] transition-colors"
+          className="shrink-0 text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] transition-colors"
           title={collapsed ? "Show table" : "Hide table"}
         >
           <ChevronRightIcon className={`w-3.5 h-3.5 transition-transform ${collapsed ? "" : "rotate-90"}`} />
         </button>
 
-        <h3 className="text-base font-semibold text-[var(--color-text)] truncate">
+        <h3 className="text-base font-semibold text-[rgb(var(--color-text))] truncate">
           {sketch.title}
         </h3>
 
-        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[var(--color-accent)]/10 text-[var(--color-accent)] shrink-0">
+        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))] shrink-0">
           {stateLabels[sketch.state] ?? sketch.state}
         </span>
 
-        <span className="text-[10px] text-[var(--color-text-secondary)] shrink-0">
+        <span className="text-[10px] text-[rgb(var(--color-text-secondary))] shrink-0">
           {sketch.row_count} {sketch.row_count === 1 ? "row" : "rows"}
         </span>
 
         {/* Edit pencil */}
         <button
           onClick={onOpen}
-          className="shrink-0 p-1 rounded text-[var(--color-text-secondary)] opacity-0 group-hover/sketch:opacity-100 hover:text-[var(--color-accent)] transition-all"
+          className="shrink-0 p-1 rounded text-[rgb(var(--color-text-secondary))] opacity-0 group-hover/sketch:opacity-100 hover:text-[rgb(var(--color-accent))] transition-all"
           title="Open in editor"
         >
           <PencilIcon className="w-3.5 h-3.5" />
@@ -557,7 +557,7 @@ function ExpandableSketchCard({
         {/* Remove */}
         <button
           onClick={onRemove}
-          className="shrink-0 p-1 rounded text-[var(--color-text-secondary)] opacity-0 group-hover/sketch:opacity-100 hover:text-error transition-all"
+          className="shrink-0 p-1 rounded text-[rgb(var(--color-text-secondary))] opacity-0 group-hover/sketch:opacity-100 hover:text-error transition-all"
           title="Remove from storyboard"
         >
           <XMarkIcon className="w-3 h-3" />
@@ -566,7 +566,7 @@ function ExpandableSketchCard({
 
       {/* Description (from full sketch if loaded) */}
       {fullSketch && typeof fullSketch.description === "string" && fullSketch.description.trim() && (
-        <div className="prose-desc text-sm text-[var(--color-text-secondary)] mb-2 leading-relaxed">
+        <div className="prose-desc text-sm text-[rgb(var(--color-text-secondary))] mb-2 leading-relaxed">
           <SafeMarkdown>{fullSketch.description}</SafeMarkdown>
         </div>
       )}
@@ -581,12 +581,12 @@ function ExpandableSketchCard({
             projectRoot={projectRoot}
           />
         ) : (
-          <p className="text-xs text-[var(--color-text-secondary)] py-2">No rows yet</p>
+          <p className="text-xs text-[rgb(var(--color-text-secondary))] py-2">No rows yet</p>
         )
       ) : (
         <div className="flex items-center gap-2 py-3">
-          <div className="w-3 h-3 border-2 border-[var(--color-text-secondary)]/30 border-t-[var(--color-accent)] rounded-full animate-spin" />
-          <span className="text-xs text-[var(--color-text-secondary)]">Loading sketch…</span>
+          <div className="w-3 h-3 border-2 border-[rgb(var(--color-text-secondary))]/30 border-t-[rgb(var(--color-accent))] rounded-full animate-spin" />
+          <span className="text-xs text-[rgb(var(--color-text-secondary))]">Loading sketch…</span>
         </div>
       ))}
     </div>
@@ -602,24 +602,24 @@ function EmptyState({
 }) {
   return (
     <div className="flex flex-col items-center justify-center py-16 text-center">
-      <div className="w-12 h-12 rounded-full bg-[var(--color-accent)]/10 flex items-center justify-center mb-4">
-        <PlayIcon className="w-6 h-6 text-[var(--color-accent)]" />
+      <div className="w-12 h-12 rounded-full bg-[rgb(var(--color-accent))]/10 flex items-center justify-center mb-4">
+        <PlayIcon className="w-6 h-6 text-[rgb(var(--color-accent))]" />
       </div>
-      <p className="text-sm font-medium text-[var(--color-text)] mb-1">No sketches yet</p>
-      <p className="text-xs text-[var(--color-text-secondary)] max-w-[280px] leading-relaxed mb-6">
+      <p className="text-sm font-medium text-[rgb(var(--color-text))] mb-1">No sketches yet</p>
+      <p className="text-xs text-[rgb(var(--color-text-secondary))] max-w-[280px] leading-relaxed mb-6">
         A storyboard sequences your sketches into a complete demo flow. Add sketches to build your narrative.
       </p>
       <div className="flex gap-3">
         <button
           onClick={onAddNew}
-          className="flex items-center gap-2 px-4 py-2.5 text-xs font-medium rounded-xl bg-[var(--color-accent)] text-white hover:bg-[var(--color-accent-hover)] transition-colors"
+          className="flex items-center gap-2 px-4 py-2.5 text-xs font-medium rounded-xl bg-[rgb(var(--color-accent))] text-white hover:bg-[rgb(var(--color-accent-hover))] transition-colors"
         >
           <PlusIcon className="w-3.5 h-3.5" />
           New Sketch
         </button>
         <button
           onClick={onPickExisting}
-          className="flex items-center gap-2 px-4 py-2.5 text-xs font-medium rounded-xl border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:border-[var(--color-accent)]/40 transition-colors"
+          className="flex items-center gap-2 px-4 py-2.5 text-xs font-medium rounded-xl border border-[rgb(var(--color-border))] text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:border-[rgb(var(--color-accent))]/40 transition-colors"
         >
           Add Existing
         </button>
@@ -652,14 +652,14 @@ function AddItemButton({
       <div className="flex gap-1 opacity-0 hover:opacity-100 focus-within:opacity-100 transition-opacity">
         <button
           onClick={() => onAddNew(position)}
-          className="px-2 py-1 text-[10px] rounded-md text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 transition-colors"
+          className="px-2 py-1 text-[10px] rounded-md text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10 transition-colors"
           title="New sketch"
         >
           + Sketch
         </button>
         <button
           onClick={() => setShowPicker(showPicker === position ? null : position)}
-          className="px-2 py-1 text-[10px] rounded-md text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 transition-colors"
+          className="px-2 py-1 text-[10px] rounded-md text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10 transition-colors"
           title="Add existing sketch"
         >
           + Existing
@@ -695,8 +695,8 @@ function SketchPicker({
   onClose: () => void;
 }) {
   return (
-    <div className="w-64 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-lg overflow-hidden">
-      <div className="p-2 border-b border-[var(--color-border)]">
+    <div className="w-64 rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] shadow-lg overflow-hidden">
+      <div className="p-2 border-b border-[rgb(var(--color-border))]">
         <input
           type="text"
           value={search}
@@ -704,12 +704,12 @@ function SketchPicker({
           placeholder="Search sketches..."
           autoFocus
           onKeyDown={(e) => { if (e.key === "Escape") onClose(); }}
-          className="w-full px-2 py-1.5 text-xs bg-transparent text-[var(--color-text)] placeholder:text-[var(--color-text-secondary)]/50 outline-none"
+          className="w-full px-2 py-1.5 text-xs bg-transparent text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/50 outline-none"
         />
       </div>
       <div className="max-h-48 overflow-y-auto p-1">
         {sketches.length === 0 ? (
-          <p className="text-xs text-[var(--color-text-secondary)] text-center py-4">
+          <p className="text-xs text-[rgb(var(--color-text-secondary))] text-center py-4">
             No sketches found
           </p>
         ) : (
@@ -731,24 +731,24 @@ function AddBar({
 }) {
   return (
     <div className="flex items-center gap-2 pt-4 pb-2">
-      <div className="h-px flex-1 bg-[var(--color-border)]" />
+      <div className="h-px flex-1 bg-[rgb(var(--color-border))]" />
       <div className="flex gap-1.5">
         <button
           onClick={onAddNew}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-[var(--color-accent)] text-white hover:bg-[var(--color-accent-hover)] transition-colors"
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-[rgb(var(--color-accent))] text-white hover:bg-[rgb(var(--color-accent-hover))] transition-colors"
         >
           <PlusIcon className="w-3 h-3" />
           New Sketch
         </button>
         <button
           onClick={onPickExisting}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:border-[var(--color-accent)]/40 transition-colors"
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-[rgb(var(--color-border))] text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:border-[rgb(var(--color-accent))]/40 transition-colors"
         >
           <DocumentIcon className="w-3 h-3" />
           Add Existing
         </button>
       </div>
-      <div className="h-px flex-1 bg-[var(--color-border)]" />
+      <div className="h-px flex-1 bg-[rgb(var(--color-border))]" />
     </div>
   );
 }

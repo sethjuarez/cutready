@@ -202,10 +202,10 @@ export function NoteEditor() {
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
       {/* Title bar */}
-      <div className="flex items-center gap-2 px-6 py-3 border-b border-[var(--color-border)] shrink-0">
-        <DocumentIcon className="w-5 h-5 text-[var(--color-text-secondary)] shrink-0" />
-        <h1 className="text-lg font-semibold text-[var(--color-text)]">{displayTitle}</h1>
-        <span className="text-[10px] text-[var(--color-text-secondary)] px-1.5 py-0.5 rounded bg-[var(--color-surface-alt)]">.md</span>
+      <div className="flex items-center gap-2 px-6 py-3 border-b border-[rgb(var(--color-border))] shrink-0">
+        <DocumentIcon className="w-5 h-5 text-[rgb(var(--color-text-secondary))] shrink-0" />
+        <h1 className="text-lg font-semibold text-[rgb(var(--color-text))]">{displayTitle}</h1>
+        <span className="text-[10px] text-[rgb(var(--color-text-secondary))] px-1.5 py-0.5 rounded bg-[rgb(var(--color-surface-alt))]">.md</span>
 
         <div className="ml-auto flex items-center gap-1">
           {/* Export to Word */}
@@ -213,14 +213,14 @@ export function NoteEditor() {
             onExport={handleExportToWord}
             disabled={exporting || !activeNoteContent}
             defaultOrientation="portrait"
-            className="flex items-center justify-center w-7 h-7 rounded-md text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+            className="flex items-center justify-center w-7 h-7 rounded-md text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
           />
 
           {/* AI cleanup sparkle button */}
           <button
             onClick={handleAiCleanup}
             disabled={aiCleaning || !settings.aiModel || !activeNoteContent}
-            className="flex items-center justify-center w-7 h-7 rounded-md text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+            className="flex items-center justify-center w-7 h-7 rounded-md text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
             title="Clean up with AI"
           >
             {aiCleaning ? (
@@ -232,16 +232,16 @@ export function NoteEditor() {
             )}
           </button>
 
-          <div className="w-px h-4 bg-[var(--color-border)] mx-0.5" />
+          <div className="w-px h-4 bg-[rgb(var(--color-border))] mx-0.5" />
 
           {/* Edit / Preview toggle */}
-          <div className="flex items-center gap-0.5 bg-[var(--color-surface-alt)] rounded-lg p-0.5">
+          <div className="flex items-center gap-0.5 bg-[rgb(var(--color-surface-alt))] rounded-lg p-0.5">
             <button
               onClick={() => setMode("edit")}
               className={`flex items-center justify-center w-7 h-7 rounded-md transition-colors ${
                 mode === "edit"
-                  ? "bg-[var(--color-surface)] text-[var(--color-text)] shadow-sm"
-                  : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"
+                  ? "bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text))] shadow-sm"
+                  : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))]"
               }`}
               title="Edit"
             >
@@ -252,8 +252,8 @@ export function NoteEditor() {
               onClick={() => setMode("preview")}
               className={`flex items-center justify-center w-7 h-7 rounded-md transition-colors ${
                 mode === "preview"
-                  ? "bg-[var(--color-surface)] text-[var(--color-text)] shadow-sm"
-                  : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"
+                  ? "bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text))] shadow-sm"
+                  : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))]"
               }`}
               title="Preview"
             >
@@ -266,7 +266,7 @@ export function NoteEditor() {
 
       {/* AI updated indicator */}
       {aiUpdatedFlash && (
-        <div className="mx-6 mb-2 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[var(--color-accent)]/10 border border-[var(--color-accent)]/20 text-xs text-[var(--color-accent)] animate-pulse">
+        <div className="mx-6 mb-2 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[rgb(var(--color-accent))]/10 border border-[rgb(var(--color-accent))]/20 text-xs text-[rgb(var(--color-accent))] animate-pulse">
           <SparklesIcon className="w-3 h-3" />
           Updated by AI
         </div>
@@ -298,7 +298,7 @@ export function NoteEditor() {
       ) : (
         <div className="flex-1 overflow-auto px-6">
           <div className="max-w-3xl mx-auto py-6">
-            <div className="prose-desc text-sm text-[var(--color-text)] leading-relaxed">
+            <div className="prose-desc text-sm text-[rgb(var(--color-text))] leading-relaxed">
             {activeNoteContent ? (
               <SafeMarkdown
                 components={{
@@ -314,7 +314,7 @@ export function NoteEditor() {
                 {activeNoteContent}
               </SafeMarkdown>
             ) : (
-              <p className="text-[var(--color-text-secondary)] italic">Nothing to preview</p>
+              <p className="text-[rgb(var(--color-text-secondary))] italic">Nothing to preview</p>
             )}
             </div>
           </div>

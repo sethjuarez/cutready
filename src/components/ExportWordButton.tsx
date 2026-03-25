@@ -44,7 +44,7 @@ export function ExportWordButton({
   };
 
   const btnClass = className ??
-    "flex items-center gap-1.5 shrink-0 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] px-3 py-1.5 rounded-lg border border-[var(--color-border)] hover:border-[var(--color-accent)]/40 hover:bg-[var(--color-accent)]/5 transition-colors disabled:opacity-30 disabled:cursor-not-allowed";
+    "flex items-center gap-1.5 shrink-0 text-xs text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] px-3 py-1.5 rounded-lg border border-[rgb(var(--color-border))] hover:border-[rgb(var(--color-accent))]/40 hover:bg-[rgb(var(--color-accent))]/5 transition-colors disabled:opacity-30 disabled:cursor-not-allowed";
 
   return (
     <div className="relative" ref={ref}>
@@ -65,17 +65,17 @@ export function ExportWordButton({
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full mt-1 z-50 min-w-[140px] rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] shadow-lg overflow-hidden">
+        <div className="absolute right-0 top-full mt-1 z-50 min-w-[140px] rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] shadow-lg overflow-hidden">
           <button
             onClick={() => handlePick("portrait")}
-            className={`w-full flex items-center gap-2 px-3 py-2 text-xs transition-colors hover:bg-[var(--color-accent)]/10 ${defaultOrientation === "portrait" ? "text-[var(--color-accent)] font-medium" : "text-[var(--color-text)]"}`}
+            className={`w-full flex items-center gap-2 px-3 py-2 text-xs transition-colors hover:bg-[rgb(var(--color-accent))]/10 ${defaultOrientation === "portrait" ? "text-[rgb(var(--color-accent))] font-medium" : "text-[rgb(var(--color-text))]"}`}
           >
             <DocumentIcon className="shrink-0 w-3.5 h-3.5" />
             Portrait
           </button>
           <button
             onClick={() => handlePick("landscape")}
-            className={`w-full flex items-center gap-2 px-3 py-2 text-xs transition-colors hover:bg-[var(--color-accent)]/10 ${defaultOrientation === "landscape" ? "text-[var(--color-accent)] font-medium" : "text-[var(--color-text)]"}`}
+            className={`w-full flex items-center gap-2 px-3 py-2 text-xs transition-colors hover:bg-[rgb(var(--color-accent))]/10 ${defaultOrientation === "landscape" ? "text-[rgb(var(--color-accent))] font-medium" : "text-[rgb(var(--color-text))]"}`}
           >
             <DocumentIcon className="shrink-0 w-3.5 h-3.5" />
             Landscape

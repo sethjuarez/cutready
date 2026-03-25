@@ -97,15 +97,15 @@ export function SnapshotDialog() {
       <div className="absolute inset-0 bg-black/40" onClick={close} />
 
       {/* Dialog */}
-      <div className="relative bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
+      <div className="relative bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
         {/* Header */}
         <div className="flex items-center gap-2.5 px-5 pt-5 pb-3">
-          <div className="p-2 rounded-lg bg-[var(--color-accent)]/10">
-            <ArrowDownTrayIcon className="w-5 h-5" style={{ stroke: "var(--color-accent)" }} />
+          <div className="p-2 rounded-lg bg-[rgb(var(--color-accent))]/10">
+            <ArrowDownTrayIcon className="w-5 h-5" style={{ stroke: "rgb(var(--color-accent))" }} />
           </div>
           <div>
-            <h2 className="text-sm font-semibold text-[var(--color-text)]">Save Snapshot</h2>
-            <p className="text-[11px] text-[var(--color-text-secondary)]">
+            <h2 className="text-sm font-semibold text-[rgb(var(--color-text))]">Save Snapshot</h2>
+            <p className="text-[11px] text-[rgb(var(--color-text-secondary))]">
               Save the current state of your project
             </p>
           </div>
@@ -115,13 +115,13 @@ export function SnapshotDialog() {
         <div className="px-5 pb-5 flex flex-col gap-3">
           {/* Fork warning */}
           {willFork && (
-            <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg bg-[var(--color-accent)]/10 border border-[var(--color-accent)]/20">
-              <ExclamationCircleIcon className="w-3.5 h-3.5 text-[var(--color-accent)] shrink-0 mt-0.5" />
+            <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg bg-[rgb(var(--color-accent))]/10 border border-[rgb(var(--color-accent))]/20">
+              <ExclamationCircleIcon className="w-3.5 h-3.5 text-[rgb(var(--color-accent))] shrink-0 mt-0.5" />
               <div className="flex-1">
-                <div className="text-[11px] font-medium text-[var(--color-accent)] mb-0.5">
+                <div className="text-[11px] font-medium text-[rgb(var(--color-accent))] mb-0.5">
                   Creating a new branch
                 </div>
-                <div className="text-[10px] text-[var(--color-text-secondary)] mb-2">
+                <div className="text-[10px] text-[rgb(var(--color-text-secondary))] mb-2">
                   Your changes will be saved on a separate timeline, so the original history stays safe.
                 </div>
                 <input
@@ -129,7 +129,7 @@ export function SnapshotDialog() {
                   value={forkLabel}
                   onChange={(e) => setForkLabel(e.target.value)}
                   placeholder="e.g. Alternative intro, V2 approach..."
-                  className="w-full px-2.5 py-1.5 rounded-md bg-[var(--color-surface)] border border-[var(--color-accent)]/20 text-xs text-[var(--color-text)] placeholder:text-[var(--color-text-secondary)]/50 focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)]/40"
+                  className="w-full px-2.5 py-1.5 rounded-md bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-accent))]/20 text-xs text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/50 focus:outline-none focus:ring-1 focus:ring-[rgb(var(--color-accent))]/40"
                 />
               </div>
             </div>
@@ -137,7 +137,7 @@ export function SnapshotDialog() {
 
           {/* Snapshot name */}
           <div>
-            <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1.5">
+            <label className="block text-xs font-medium text-[rgb(var(--color-text-secondary))] mb-1.5">
               Snapshot name
             </label>
             <input
@@ -149,7 +149,7 @@ export function SnapshotDialog() {
                 if (e.key === "Enter") handleSave();
               }}
               placeholder="e.g. Added intro sketch, refined transitions..."
-              className="w-full px-3 py-2 rounded-lg bg-[var(--color-surface-alt)] border border-[var(--color-border)] text-sm text-[var(--color-text)] placeholder:text-[var(--color-text-secondary)]/40 focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]/40"
+              className="w-full px-3 py-2 rounded-lg bg-[rgb(var(--color-surface-alt))] border border-[rgb(var(--color-border))] text-sm text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/40 focus:outline-none focus:ring-2 focus:ring-[rgb(var(--color-accent))]/40"
             />
           </div>
 
@@ -157,14 +157,14 @@ export function SnapshotDialog() {
           <div className="flex items-center justify-end gap-2 pt-1">
             <button
               onClick={close}
-              className="px-3 py-1.5 rounded-lg text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors"
+              className="px-3 py-1.5 rounded-lg text-xs text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] transition-colors"
             >
               Cancel
             </button>
             <button
               onClick={handleSave}
               disabled={!label.trim() || (willFork && !forkLabel.trim()) || saving}
-              className="px-4 py-1.5 rounded-lg text-xs font-medium bg-[var(--color-accent)] text-white hover:bg-[var(--color-accent-hover)] disabled:opacity-40 transition-colors"
+              className="px-4 py-1.5 rounded-lg text-xs font-medium bg-[rgb(var(--color-accent))] text-white hover:bg-[rgb(var(--color-accent-hover))] disabled:opacity-40 transition-colors"
             >
               {saving ? "Saving..." : "Save Snapshot"}
             </button>

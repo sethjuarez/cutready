@@ -136,26 +136,26 @@ export function ProjectSwitcher() {
   });
 
   return (
-    <div ref={dropdownRef} className="relative shrink-0 border-b border-[var(--color-border)]">
+    <div ref={dropdownRef} className="relative shrink-0 border-b border-[rgb(var(--color-border))]">
       {/* Trigger */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 w-full px-3 py-1.5 text-left hover:bg-[var(--color-surface)] transition-colors"
+        className="flex items-center gap-2 w-full px-3 py-1.5 text-left hover:bg-[rgb(var(--color-surface))] transition-colors"
       >
         {/* Project icon */}
-        <FolderIcon className="text-[var(--color-accent)] shrink-0 w-3.5 h-3.5" />
-        <span className="text-[12px] font-medium text-[var(--color-text)] truncate flex-1">
+        <FolderIcon className="text-[rgb(var(--color-accent))] shrink-0 w-3.5 h-3.5" />
+        <span className="text-[12px] font-medium text-[rgb(var(--color-text))] truncate flex-1">
           {activeEntry?.name ?? currentProject?.name ?? "Select project"}
         </span>
         {/* Chevron */}
         <ChevronDownIcon
-          className={`text-[var(--color-text-secondary)] shrink-0 transition-transform w-2.5 h-2.5 ${isOpen ? "rotate-180" : ""}`}
+          className={`text-[rgb(var(--color-text-secondary))] shrink-0 transition-transform w-2.5 h-2.5 ${isOpen ? "rotate-180" : ""}`}
         />
       </button>
 
       {/* Dropdown */}
       {isOpen && (
-        <div className="absolute left-0 right-0 top-full z-50 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-b-lg shadow-lg overflow-hidden">
+        <div className="absolute left-0 right-0 top-full z-50 bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-b-lg shadow-lg overflow-hidden">
           {projects.map((p) => {
             const isActive = activeEntry?.path === p.path;
             const isRenaming = renamingPath === p.path;
@@ -171,12 +171,12 @@ export function ProjectSwitcher() {
                       if (e.key === "Enter") handleRename();
                       if (e.key === "Escape") { setRenamingPath(null); setRenameValue(""); }
                     }}
-                    className="flex-1 text-[12px] px-2 py-0.5 bg-[var(--color-surface-alt)] border border-[var(--color-accent)] rounded text-[var(--color-text)] outline-none"
+                    className="flex-1 text-[12px] px-2 py-0.5 bg-[rgb(var(--color-surface-alt))] border border-[rgb(var(--color-accent))] rounded text-[rgb(var(--color-text))] outline-none"
                   />
                   <button
                     onClick={handleRename}
                     disabled={!renameValue.trim()}
-                    className="text-[11px] px-1.5 py-0.5 rounded bg-[var(--color-accent)] text-white disabled:opacity-40"
+                    className="text-[11px] px-1.5 py-0.5 rounded bg-[rgb(var(--color-accent))] text-white disabled:opacity-40"
                   >
                     ✓
                   </button>
@@ -189,8 +189,8 @@ export function ProjectSwitcher() {
                 key={p.path}
                 className={`group flex items-center gap-2 w-full px-3 py-1.5 text-left transition-colors text-[12px] ${
                   isActive
-                    ? "bg-[var(--color-accent)]/10 text-[var(--color-accent)]"
-                    : "text-[var(--color-text)] hover:bg-[var(--color-surface-alt)]"
+                    ? "bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))]"
+                    : "text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))]"
                 }`}
               >
                 <button
@@ -205,7 +205,7 @@ export function ProjectSwitcher() {
                     setRenamingPath(p.path);
                     setRenameValue(p.name);
                   }}
-                  className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-[var(--color-surface)] transition-opacity"
+                  className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-[rgb(var(--color-surface))] transition-opacity"
                   title="Rename project"
                 >
                   <PencilIcon className="w-2.5 h-2.5" />
@@ -218,11 +218,11 @@ export function ProjectSwitcher() {
           })}
 
           {/* Divider + New Project / Migration */}
-          <div className="border-t border-[var(--color-border)]">
+          <div className="border-t border-[rgb(var(--color-border))]">
             {isMigrating ? (
               <div className="px-2 py-2">
-                <p className="text-[11px] text-[var(--color-text-secondary)] mb-1.5 leading-relaxed">
-                  <strong className="text-[var(--color-text)]">Reorganizing workspace.</strong>{" "}
+                <p className="text-[11px] text-[rgb(var(--color-text-secondary))] mb-1.5 leading-relaxed">
+                  <strong className="text-[rgb(var(--color-text))]">Reorganizing workspace.</strong>{" "}
                   Your current files will move into their own project folder.
                   Give this existing project a name:
                 </p>
@@ -239,12 +239,12 @@ export function ProjectSwitcher() {
                       }
                     }}
                     placeholder="e.g. My Demo"
-                    className="flex-1 text-[12px] px-2 py-1 bg-[var(--color-surface-alt)] border border-[var(--color-border)] rounded text-[var(--color-text)] placeholder:text-[var(--color-text-secondary)]/50 outline-none focus:border-[var(--color-accent)]"
+                    className="flex-1 text-[12px] px-2 py-1 bg-[rgb(var(--color-surface-alt))] border border-[rgb(var(--color-border))] rounded text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/50 outline-none focus:border-[rgb(var(--color-accent))]"
                   />
                   <button
                     onClick={handleMigrate}
                     disabled={!migrateName.trim()}
-                    className="text-[11px] px-2 py-1 rounded bg-[var(--color-accent)] text-white disabled:opacity-40 hover:bg-[var(--color-accent-hover)] transition-colors"
+                    className="text-[11px] px-2 py-1 rounded bg-[rgb(var(--color-accent))] text-white disabled:opacity-40 hover:bg-[rgb(var(--color-accent-hover))] transition-colors"
                   >
                     Next →
                   </button>
@@ -264,12 +264,12 @@ export function ProjectSwitcher() {
                     }
                   }}
                   placeholder="New project name…"
-                  className="flex-1 text-[12px] px-2 py-1 bg-[var(--color-surface-alt)] border border-[var(--color-border)] rounded text-[var(--color-text)] placeholder:text-[var(--color-text-secondary)]/50 outline-none focus:border-[var(--color-accent)]"
+                  className="flex-1 text-[12px] px-2 py-1 bg-[rgb(var(--color-surface-alt))] border border-[rgb(var(--color-border))] rounded text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/50 outline-none focus:border-[rgb(var(--color-accent))]"
                 />
                 <button
                   onClick={handleCreate}
                   disabled={!newName.trim()}
-                  className="text-[11px] px-2 py-1 rounded bg-[var(--color-accent)] text-white disabled:opacity-40 hover:bg-[var(--color-accent-hover)] transition-colors"
+                  className="text-[11px] px-2 py-1 rounded bg-[rgb(var(--color-accent))] text-white disabled:opacity-40 hover:bg-[rgb(var(--color-accent-hover))] transition-colors"
                 >
                   Add
                 </button>
@@ -277,7 +277,7 @@ export function ProjectSwitcher() {
             ) : (
               <button
                 onClick={handleNewProjectClick}
-                className="flex items-center gap-2 w-full px-3 py-1.5 text-left text-[12px] text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] hover:bg-[var(--color-surface-alt)] transition-colors"
+                className="flex items-center gap-2 w-full px-3 py-1.5 text-left text-[12px] text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors"
               >
                 <PlusIcon className="w-3 h-3" />
                 New Project

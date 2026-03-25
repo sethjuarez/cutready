@@ -32,7 +32,7 @@ const THEME = ELUCIM_THEME;
 
 /** Error fallback shown when DslRenderer crashes. */
 const ERROR_FALLBACK = (
-  <div className="flex items-center justify-center w-full h-full text-[10px] text-[var(--color-error)]">
+  <div className="flex items-center justify-center w-full h-full text-[10px] text-[rgb(var(--color-error))]">
     Render error
   </div>
 );
@@ -131,9 +131,9 @@ export default function VisualCell({ visualPath, mode, onClick, className, contr
   if (hasError) {
     return (
       <div
-        className={`flex items-center justify-center text-[10px] text-[var(--color-error)] ${
+        className={`flex items-center justify-center text-[10px] text-[rgb(var(--color-error))] ${
           mode === "thumbnail" ? "w-40 h-24" : "w-full h-full"
-        } rounded-md border border-[var(--color-error)]/30 bg-[var(--color-error)]/5 ${className ?? ""}`}
+        } rounded-md border border-[rgb(var(--color-error))]/30 bg-[rgb(var(--color-error))]/5 ${className ?? ""}`}
       >
         <span>Invalid visual</span>
       </div>
@@ -143,9 +143,9 @@ export default function VisualCell({ visualPath, mode, onClick, className, contr
   if (!visual || !dsl) {
     return (
       <div
-        className={`flex items-center justify-center text-[10px] text-[var(--color-text-secondary)] ${
+        className={`flex items-center justify-center text-[10px] text-[rgb(var(--color-text-secondary))] ${
           mode === "thumbnail" ? "w-40 h-24" : "w-full h-full"
-        } rounded-md bg-[var(--color-surface-alt)] border border-[var(--color-border)] ${className ?? ""}`}
+        } rounded-md bg-[rgb(var(--color-surface-alt))] border border-[rgb(var(--color-border))] ${className ?? ""}`}
       >
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="animate-spin">
           <path d="M21 12a9 9 0 1 1-6.219-8.56" />
@@ -157,7 +157,7 @@ export default function VisualCell({ visualPath, mode, onClick, className, contr
   if (mode === "thumbnail") {
     return (
       <div
-        className={`relative group/vis w-40 h-24 rounded-md bg-[var(--color-surface-alt)] border border-[var(--color-border)] overflow-hidden cursor-pointer ${className ?? ""}`}
+        className={`relative group/vis w-40 h-24 rounded-md bg-[rgb(var(--color-surface-alt))] border border-[rgb(var(--color-border))] overflow-hidden cursor-pointer ${className ?? ""}`}
         onClick={handleClick}
       >
         <ErrorBoundary fallback={ERROR_FALLBACK} resetKey={visualPath} onError={() => setHasError(true)}>

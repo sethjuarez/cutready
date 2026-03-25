@@ -384,15 +384,15 @@ export function ChatPanel() {
   }, [showMenu]);
 
   return (
-    <div className="flex flex-col h-full bg-[var(--color-surface-inset)]">
+    <div className="flex flex-col h-full bg-[rgb(var(--color-surface-inset))]">
       {/* Header with back navigation / overflow menu */}
-      <div className="flex items-center justify-between px-3 h-10 border-b border-[var(--color-border)] shrink-0">
+      <div className="flex items-center justify-between px-3 h-10 border-b border-[rgb(var(--color-border))] shrink-0">
         {activeTab === "chat" ? (
-          <span className="text-[13px] font-medium text-[var(--color-text)]">Chat</span>
+          <span className="text-[13px] font-medium text-[rgb(var(--color-text))]">Chat</span>
         ) : (
           <button
             onClick={() => setActiveTab("chat")}
-            className="flex items-center gap-1.5 text-[13px] font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors"
+            className="flex items-center gap-1.5 text-[13px] font-medium text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] transition-colors"
           >
             <ChevronLeftIcon className="w-3.5 h-3.5" />
             {activeTab === "sessions" ? "Sessions" : "Snapshots"}
@@ -402,23 +402,23 @@ export function ChatPanel() {
           <div className="relative" ref={menuRef}>
             <button
               onClick={() => setShowMenu(!showMenu)}
-              className="p-1 rounded-md text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-alt)] transition-colors"
+              className="p-1 rounded-md text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors"
               title="More options"
             >
               <EllipsisVerticalIcon className="w-4 h-4" />
             </button>
             {showMenu && (
-              <div className="absolute right-0 top-full mt-1 z-20 w-[180px] py-1 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg shadow-lg">
+              <div className="absolute right-0 top-full mt-1 z-20 w-[180px] py-1 bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-lg shadow-lg">
                 <button
                   onClick={() => { setActiveTab("sessions"); setShowMenu(false); }}
-                  className="w-full px-3 py-2 text-left text-[12px] text-[var(--color-text)] hover:bg-[var(--color-surface-alt)] transition-colors flex items-center gap-2"
+                  className="w-full px-3 py-2 text-left text-[12px] text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors flex items-center gap-2"
                 >
                   <IconHistory size={14} />
                   Session History
                 </button>
                 <button
                   onClick={() => { setActiveTab("snapshots"); setShowMenu(false); }}
-                  className="w-full px-3 py-2 text-left text-[12px] text-[var(--color-text)] hover:bg-[var(--color-surface-alt)] transition-colors flex items-center gap-2"
+                  className="w-full px-3 py-2 text-left text-[12px] text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors flex items-center gap-2"
                 >
                   <IconSave size={14} />
                   Snapshots
@@ -1142,7 +1142,7 @@ function ChatTab() {
   if (!currentProject) {
     return (
       <div className="flex-1 flex items-center justify-center p-4">
-        <p className="text-xs text-[var(--color-text-secondary)] text-center">
+        <p className="text-xs text-[rgb(var(--color-text-secondary))] text-center">
           Open a workspace to start chatting
         </p>
       </div>
@@ -1153,11 +1153,11 @@ function ChatTab() {
     return (
       <div className="flex-1 flex items-center justify-center p-4">
         <div className="text-center">
-          <p className="text-xs text-[var(--color-text-secondary)] mb-2">
+          <p className="text-xs text-[rgb(var(--color-text-secondary))] mb-2">
             Configure an AI provider in Settings to use the assistant
           </p>
           <button
-            className="text-xs text-[var(--color-accent)] hover:underline"
+            className="text-xs text-[rgb(var(--color-accent))] hover:underline"
             onClick={() => useAppStore.getState().setView("settings")}
           >
             Open Settings →
@@ -1170,9 +1170,9 @@ function ChatTab() {
   return (
     <div className="flex flex-col h-full">
       {/* Top toolbar — session controls */}
-      <div className="flex items-center gap-0.5 px-2 h-[30px] border-b border-[var(--color-border)] shrink-0">
+      <div className="flex items-center gap-0.5 px-2 h-[30px] border-b border-[rgb(var(--color-border))] shrink-0">
         <button
-          className="flex items-center justify-center w-[26px] h-[26px] rounded text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-toolbar)] transition-colors"
+          className="flex items-center justify-center w-[26px] h-[26px] rounded text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-toolbar))] transition-colors"
           onClick={clearChat}
           title="New Chat"
         >
@@ -1185,14 +1185,14 @@ function ChatTab() {
       <div className="flex-1 overflow-y-auto min-h-0 py-2" style={{ fontSize: "var(--chat-font-size, 13px)" }}>
         {messages.length === 0 && !loading && (
           <div className="flex flex-col items-center justify-center h-full text-center px-4">
-            <div className="w-10 h-10 rounded-full bg-[var(--color-accent)]/10 flex items-center justify-center mb-3 text-[var(--color-accent)]">
+            <div className="w-10 h-10 rounded-full bg-[rgb(var(--color-accent))]/10 flex items-center justify-center mb-3 text-[rgb(var(--color-accent))]">
               <IconSparkles size={20} />
             </div>
-            <p className="text-[13px] font-medium text-[var(--color-text)] mb-1">
+            <p className="text-[13px] font-medium text-[rgb(var(--color-text))] mb-1">
               CutReady AI
             </p>
-            <p className="text-xs text-[var(--color-text-secondary)] max-w-[220px] leading-relaxed mb-4">
-              I can help plan your demo, generate sketches, or refine your script. Use <kbd className="px-1 py-0.5 text-[10px] bg-[var(--color-surface-alt)] rounded border border-[var(--color-border)]">#</kbd> to reference files and websites.
+            <p className="text-xs text-[rgb(var(--color-text-secondary))] max-w-[220px] leading-relaxed mb-4">
+              I can help plan your demo, generate sketches, or refine your script. Use <kbd className="px-1 py-0.5 text-[10px] bg-[rgb(var(--color-surface-alt))] rounded border border-[rgb(var(--color-border))]">#</kbd> to reference files and websites.
             </p>
             <div className="flex flex-wrap gap-1.5 justify-center max-w-[260px]">
               {(() => {
@@ -1210,7 +1210,7 @@ function ChatTab() {
                 return suggestions.map((suggestion) => (
                   <button
                     key={suggestion}
-                    className="px-2.5 py-1 text-[11px] rounded-full border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:border-[var(--color-accent)] hover:bg-[var(--color-accent)]/5 transition-colors"
+                    className="px-2.5 py-1 text-[11px] rounded-full border border-[rgb(var(--color-border))] text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:border-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/5 transition-colors"
                     onClick={() => {
                       // Auto-add active note as reference for note-specific suggestions
                       if (activeNotePath && suggestion === "Improve this note") {
@@ -1244,22 +1244,22 @@ function ChatTab() {
         {loading && (
           <div className="px-3.5 py-2">
             {streamingThinking && (
-              <details className="mb-2 text-xs border border-[var(--color-border)] rounded-md overflow-hidden">
-                <summary className="px-2.5 py-1.5 cursor-pointer text-[var(--color-text-secondary)] bg-[var(--color-surface-alt)] hover:bg-[var(--color-border)] select-none flex items-center gap-1.5">
-                  <span className="opacity-60">💭</span> Thinking{!streamingText && <span className="inline-block w-1 h-3 bg-[var(--color-accent)] animate-pulse ml-1 rounded-sm" />}
+              <details className="mb-2 text-xs border border-[rgb(var(--color-border))] rounded-md overflow-hidden">
+                <summary className="px-2.5 py-1.5 cursor-pointer text-[rgb(var(--color-text-secondary))] bg-[rgb(var(--color-surface-alt))] hover:bg-[rgb(var(--color-border))] select-none flex items-center gap-1.5">
+                  <span className="opacity-60">💭</span> Thinking{!streamingText && <span className="inline-block w-1 h-3 bg-[rgb(var(--color-accent))] animate-pulse ml-1 rounded-sm" />}
                 </summary>
-                <div className="px-2.5 py-2 text-[var(--color-text-secondary)] leading-[1.5] whitespace-pre-wrap max-h-48 overflow-y-auto">
+                <div className="px-2.5 py-2 text-[rgb(var(--color-text-secondary))] leading-[1.5] whitespace-pre-wrap max-h-48 overflow-y-auto">
                   {streamingThinking}
                 </div>
               </details>
             )}
             {streamingText ? (
-              <div className="text-[13px] text-[var(--color-text)] leading-[1.6]">
+              <div className="text-[13px] text-[rgb(var(--color-text))] leading-[1.6]">
                 <MarkdownContent content={streamingText} projectRoot={currentProject?.root} />
-                <span className="inline-block w-1.5 h-4 bg-[var(--color-accent)] animate-pulse ml-0.5 align-text-bottom rounded-sm" />
+                <span className="inline-block w-1.5 h-4 bg-[rgb(var(--color-accent))] animate-pulse ml-0.5 align-text-bottom rounded-sm" />
               </div>
             ) : (
-              <span className="text-xs text-[var(--color-text-secondary)] italic">{streamingStatus || "Thinking…"}</span>
+              <span className="text-xs text-[rgb(var(--color-text-secondary))] italic">{streamingStatus || "Thinking…"}</span>
             )}
           </div>
         )}
@@ -1272,7 +1272,7 @@ function ChatTab() {
       </div>
 
       {/* Input area — VS Code Copilot chat style */}
-      <div className="shrink-0 mx-2.5 mb-2.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] shadow-sm transition-colors focus-within:border-[var(--color-accent)]">
+      <div className="shrink-0 mx-2.5 mb-2.5 rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] shadow-sm transition-colors focus-within:border-[rgb(var(--color-accent))]">
         {/* Reference chips (shown above textarea) */}
         {references.length > 0 && (
           <div className="px-2.5 pt-2 space-y-1">
@@ -1303,7 +1303,7 @@ function ChatTab() {
                     <span className="max-w-[120px] truncate">{ref.title}</span>
                   )}
                   <button
-                    className="text-[var(--color-text-secondary)] hover:text-error transition-colors"
+                    className="text-[rgb(var(--color-text-secondary))] hover:text-error transition-colors"
                     onClick={() => { removeReference(ref.path); if (expandedWebRef === ref.path) setExpandedWebRef(null); }}
                     title="Remove"
                   >
@@ -1318,8 +1318,8 @@ function ChatTab() {
               const ref = references.find((r) => r.path === expandedWebRef);
               if (!ref?.webContent) return null;
               return (
-                <div className="rounded border border-[var(--color-border)] bg-[var(--color-surface-alt)] text-[11px] text-[var(--color-text-secondary)] overflow-hidden">
-                  <div className="flex items-center justify-between px-2 py-1 border-b border-[var(--color-border)]">
+                <div className="rounded border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] text-[11px] text-[rgb(var(--color-text-secondary))] overflow-hidden">
+                  <div className="flex items-center justify-between px-2 py-1 border-b border-[rgb(var(--color-border))]">
                     <span className="truncate font-medium">{ref.path}</span>
                     <span className="shrink-0 text-[10px] tabular-nums">{ref.webContent.length.toLocaleString()} chars</span>
                   </div>
@@ -1335,21 +1335,21 @@ function ChatTab() {
         {/* Textarea with # autocomplete */}
         <div className="relative" ref={autocompleteRef}>
           {showAutocomplete && autocompleteOptions.length > 0 && (
-            <div className="absolute bottom-full left-0 right-0 mb-1 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-md shadow-lg overflow-hidden z-10 overflow-y-auto" style={{ maxHeight: acMaxH }}>
+            <div className="absolute bottom-full left-0 right-0 mb-1 bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-md shadow-lg overflow-hidden z-10 overflow-y-auto" style={{ maxHeight: acMaxH }}>
               {autocompleteOptions.map((file, i) => (
                 <button
                   key={file.path}
                   className={`w-full flex items-center gap-2 px-2.5 py-1.5 text-left text-xs transition-colors ${
                     i === autocompleteIndex
-                      ? "bg-[var(--color-accent)]/10 text-[var(--color-text)]"
-                      : "text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-alt)]"
+                      ? "bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-text))]"
+                      : "text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-alt))]"
                   }`}
                   onClick={() => insertReference(file)}
                   onMouseEnter={() => setAutocompleteIndex(i)}
                 >
                   <FileTypeIcon type={file.type} />
                   <span className="flex-1 truncate">{file.title}</span>
-                  <span className="text-[10px] text-[var(--color-text-secondary)] opacity-50">{file.type}</span>
+                  <span className="text-[10px] text-[rgb(var(--color-text-secondary))] opacity-50">{file.type}</span>
                 </button>
               ))}
             </div>
@@ -1357,7 +1357,7 @@ function ChatTab() {
 
           <textarea
             ref={inputRef}
-            className="w-full resize-none bg-transparent px-2.5 py-2 text-[13px] text-[var(--color-text)] placeholder-[var(--color-text-secondary)]/60 focus:outline-none leading-[1.5]"
+            className="w-full resize-none bg-transparent px-2.5 py-2 text-[13px] text-[rgb(var(--color-text))] placeholder-[rgb(var(--color-text-secondary))]/60 focus:outline-none leading-[1.5]"
             style={{ maxHeight: 300 }}
             rows={3}
             placeholder="Ask about your demo plan… (# to reference files)"
@@ -1375,8 +1375,8 @@ function ChatTab() {
             <button
               className={`flex items-center gap-1 px-1.5 h-[26px] rounded text-[11px] transition-colors ${
                 showContextPicker
-                  ? "bg-[var(--color-surface)] text-[var(--color-text)]"
-                  : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)]"
+                  ? "bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text))]"
+                  : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface))]"
               }`}
               onClick={() => { setShowContextPicker(!showContextPicker); setContextFilter(""); }}
               title="Add Context (#)"
@@ -1384,10 +1384,10 @@ function ChatTab() {
               <IconPaperclip size={12} />
             </button>
             {showContextPicker && (
-              <div className="absolute bottom-full left-0 mb-1 w-[240px] bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg shadow-lg overflow-hidden z-20 flex flex-col" style={{ maxHeight: ctxMaxH }}>
+              <div className="absolute bottom-full left-0 mb-1 w-[240px] bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-lg shadow-lg overflow-hidden z-20 flex flex-col" style={{ maxHeight: ctxMaxH }}>
                 <div className="px-2.5 pt-2 pb-1 shrink-0">
                   <input
-                    className="w-full px-2 py-1 text-[11px] bg-[var(--color-surface-alt)] border border-[var(--color-border)] rounded text-[var(--color-text)] placeholder-[var(--color-text-secondary)] focus:outline-none focus:border-[var(--color-accent)]"
+                    className="w-full px-2 py-1 text-[11px] bg-[rgb(var(--color-surface-alt))] border border-[rgb(var(--color-border))] rounded text-[rgb(var(--color-text))] placeholder-[rgb(var(--color-text-secondary))] focus:outline-none focus:border-[rgb(var(--color-accent))]"
                     placeholder="Search files…"
                     value={contextFilter}
                     onChange={(e) => setContextFilter(e.target.value)}
@@ -1396,14 +1396,14 @@ function ChatTab() {
                 </div>
                 <div className="flex-1 overflow-y-auto">
                   {contextPickerOptions.length === 0 ? (
-                    <div className="px-3 py-2 text-[11px] text-[var(--color-text-secondary)]">
+                    <div className="px-3 py-2 text-[11px] text-[rgb(var(--color-text-secondary))]">
                       No matching files
                     </div>
                   ) : (
                     contextPickerOptions.map((file) => (
                       <button
                         key={file.path}
-                        className="w-full flex items-center gap-2 px-2.5 py-1.5 text-left text-[11px] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-alt)] hover:text-[var(--color-text)] transition-colors"
+                        className="w-full flex items-center gap-2 px-2.5 py-1.5 text-left text-[11px] text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))] transition-colors"
                         onClick={() => {
                           setReferences((prev) => [...prev, file]);
                           setShowContextPicker(false);
@@ -1423,8 +1423,8 @@ function ChatTab() {
 
           {/* Expand toggle */}
           <button
-            className={`flex items-center justify-center w-[26px] h-[26px] rounded text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)] transition-colors ${
-              toolbarExpanded ? "bg-[var(--color-surface)]" : ""
+            className={`flex items-center justify-center w-[26px] h-[26px] rounded text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface))] transition-colors ${
+              toolbarExpanded ? "bg-[rgb(var(--color-surface))]" : ""
             }`}
             onClick={toggleToolbar}
             title={toolbarExpanded ? "Hide options" : "Show agent, model & tools"}
@@ -1444,8 +1444,8 @@ function ChatTab() {
                 <button
                   className={`flex items-center gap-1 px-1.5 h-[26px] rounded text-[11px] transition-colors ${
                     showAgentPicker
-                      ? "bg-[var(--color-surface)] text-[var(--color-text)]"
-                      : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)]"
+                      ? "bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text))]"
+                      : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface))]"
                   }`}
                   onClick={() => setShowAgentPicker(!showAgentPicker)}
                   title="Select Agent"
@@ -1455,11 +1455,11 @@ function ChatTab() {
                   <IconChevronDown size={10} />
                 </button>
                 {showAgentPicker && (
-                  <div className="absolute bottom-full left-0 mb-1 w-[240px] bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg shadow-lg overflow-hidden z-20 flex flex-col" style={{ maxHeight: agentMaxH }}>
+                  <div className="absolute bottom-full left-0 mb-1 w-[240px] bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-lg shadow-lg overflow-hidden z-20 flex flex-col" style={{ maxHeight: agentMaxH }}>
                     {BUILT_IN_AGENTS.length > 0 && (
                       <>
-                        <div className="px-3 py-1.5 border-b border-[var(--color-border)] shrink-0">
-                          <span className="text-[10px] font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">Built-in</span>
+                        <div className="px-3 py-1.5 border-b border-[rgb(var(--color-border))] shrink-0">
+                          <span className="text-[10px] font-medium text-[rgb(var(--color-text-secondary))] uppercase tracking-wider">Built-in</span>
                         </div>
                         <div className="py-0.5">
                           {BUILT_IN_AGENTS.map((agent) => (
@@ -1467,8 +1467,8 @@ function ChatTab() {
                               key={agent.id}
                               className={`w-full flex items-center gap-2 px-3 py-1.5 text-[11px] text-left transition-colors ${
                                 selectedAgent.id === agent.id
-                                  ? "bg-[var(--color-accent)]/10 text-[var(--color-text)]"
-                                  : "text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-alt)] hover:text-[var(--color-text)]"
+                                  ? "bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-text))]"
+                                  : "text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
                               }`}
                               onClick={() => {
                                 updateSetting("aiSelectedAgent", agent.id);
@@ -1480,11 +1480,11 @@ function ChatTab() {
                                 <div className="flex items-center gap-1">
                                   <span>{agent.name}</span>
                                   {agent.modelOverride && (
-                                    <span className="text-[9px] text-[var(--color-text-secondary)] opacity-60">{agent.modelOverride}</span>
+                                    <span className="text-[9px] text-[rgb(var(--color-text-secondary))] opacity-60">{agent.modelOverride}</span>
                                   )}
                                 </div>
                                 {agent.description && (
-                                  <div className="text-[9px] text-[var(--color-text-secondary)] opacity-70 truncate">{agent.description}</div>
+                                  <div className="text-[9px] text-[rgb(var(--color-text-secondary))] opacity-70 truncate">{agent.description}</div>
                                 )}
                               </div>
                               {selectedAgent.id === agent.id && <IconCheck size={11} />}
@@ -1495,8 +1495,8 @@ function ChatTab() {
                     )}
                     {(settings.aiAgents?.length ?? 0) > 0 && (
                       <>
-                        <div className="px-3 py-1.5 border-t border-[var(--color-border)] shrink-0">
-                          <span className="text-[10px] font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">Custom</span>
+                        <div className="px-3 py-1.5 border-t border-[rgb(var(--color-border))] shrink-0">
+                          <span className="text-[10px] font-medium text-[rgb(var(--color-text-secondary))] uppercase tracking-wider">Custom</span>
                         </div>
                         <div className="py-0.5 overflow-y-auto">
                           {(settings.aiAgents || []).map((agent) => (
@@ -1504,8 +1504,8 @@ function ChatTab() {
                               key={agent.id}
                               className={`w-full flex items-center gap-2 px-3 py-1.5 text-[11px] text-left transition-colors ${
                                 selectedAgent.id === agent.id
-                                  ? "bg-[var(--color-accent)]/10 text-[var(--color-text)]"
-                                  : "text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-alt)] hover:text-[var(--color-text)]"
+                                  ? "bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-text))]"
+                                  : "text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
                               }`}
                               onClick={() => {
                                 updateSetting("aiSelectedAgent", agent.id);
@@ -1529,8 +1529,8 @@ function ChatTab() {
                 <button
                   className={`flex items-center gap-1 px-1.5 h-[26px] rounded text-[11px] transition-colors ${
                     showModelPicker
-                      ? "bg-[var(--color-surface)] text-[var(--color-text)]"
-                      : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)]"
+                      ? "bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text))]"
+                      : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface))]"
                   }`}
                   onClick={() => setShowModelPicker(!showModelPicker)}
                   title="Select Model"
@@ -1563,7 +1563,7 @@ function ChatTab() {
             </button>
           ) : (
             <button
-              className="flex items-center justify-center w-[26px] h-[26px] rounded text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+              className="flex items-center justify-center w-[26px] h-[26px] rounded text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface))] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
               onClick={() => handleSend()}
               disabled={!input.trim()}
               title="Send (Enter)"
@@ -1614,7 +1614,7 @@ function UserContent({ content }: { content: string }) {
           parts.push(
             <span
               key={`${match!.index}-${i}`}
-              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[var(--color-surface)] border border-[var(--color-border)] text-[11px] text-[var(--color-text-secondary)] font-mono align-baseline mr-0.5"
+              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] text-[11px] text-[rgb(var(--color-text-secondary))] font-mono align-baseline mr-0.5"
             >
               <FileTypeIcon type="file" />
               <span className="max-w-[140px] truncate">{ref}</span>
@@ -1625,8 +1625,8 @@ function UserContent({ content }: { content: string }) {
     } else if (match[3]) {
       // Inline #URL — styled as accent link
       parts.push(
-        <span key={match.index} className="text-[var(--color-accent)] font-mono text-[12px]">
-          #<span className="underline decoration-[var(--color-accent)]/40">{match[3]}</span>
+        <span key={match.index} className="text-[rgb(var(--color-accent))] font-mono text-[12px]">
+          #<span className="underline decoration-[rgb(var(--color-accent))]/40">{match[3]}</span>
         </span>
       );
     }
@@ -1663,7 +1663,7 @@ function WebRefChip({ url }: { url: string }) {
     <>
       <button
         onClick={handleExpand}
-        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[var(--color-surface)] border border-[var(--color-border)] text-[11px] text-[var(--color-accent)] hover:bg-[var(--color-surface-toolbar)] transition-colors font-mono align-baseline"
+        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] text-[11px] text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-surface-toolbar))] transition-colors font-mono align-baseline"
       >
         <GlobeAltIcon className="w-2.5 h-2.5 shrink-0" />
         <span className="max-w-[200px] truncate">{shortUrl}</span>
@@ -1671,12 +1671,12 @@ function WebRefChip({ url }: { url: string }) {
       </button>
       {expanded && (
         <span className="block mt-1">
-          <span className="block rounded border border-[var(--color-border)] bg-[var(--color-surface)] overflow-hidden">
-            <span className="flex items-center justify-between px-2 py-1 border-b border-[var(--color-border)] bg-[var(--color-surface-toolbar)]">
-              <span className="text-[10px] text-[var(--color-text-secondary)] font-mono truncate">{url}</span>
-              {content && <span className="shrink-0 text-[10px] text-[var(--color-text-secondary)] tabular-nums ml-2">{content.length.toLocaleString()} chars</span>}
+          <span className="block rounded border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] overflow-hidden">
+            <span className="flex items-center justify-between px-2 py-1 border-b border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-toolbar))]">
+              <span className="text-[10px] text-[rgb(var(--color-text-secondary))] font-mono truncate">{url}</span>
+              {content && <span className="shrink-0 text-[10px] text-[rgb(var(--color-text-secondary))] tabular-nums ml-2">{content.length.toLocaleString()} chars</span>}
             </span>
-            <span className="block max-h-[150px] overflow-y-auto p-2 text-[11px] font-mono text-[var(--color-text-secondary)] whitespace-pre-wrap break-words leading-[1.4]">
+            <span className="block max-h-[150px] overflow-y-auto p-2 text-[11px] font-mono text-[rgb(var(--color-text-secondary))] whitespace-pre-wrap break-words leading-[1.4]">
               {loading ? "Loading…" : content || "No content"}
             </span>
           </span>
@@ -1695,19 +1695,19 @@ function MessageRow({ message, projectRoot, onDelete }: { message: ChatMessage; 
         {onDelete && (
           <button
             onClick={onDelete}
-            className="shrink-0 mt-2 p-1 rounded opacity-0 group-hover:opacity-100 text-[var(--color-text-secondary)] hover:text-error hover:bg-error/10 transition-all"
+            className="shrink-0 mt-2 p-1 rounded opacity-0 group-hover:opacity-100 text-[rgb(var(--color-text-secondary))] hover:text-error hover:bg-error/10 transition-all"
             title="Remove message"
           >
             <XMarkIcon className="w-3 h-3" />
           </button>
         )}
-        <div className={`rounded-xl rounded-br-sm px-3 py-2 text-[13px] text-[var(--color-text)] whitespace-pre-wrap break-words leading-[1.6] max-w-[85%] ${
+        <div className={`rounded-xl rounded-br-sm px-3 py-2 text-[13px] text-[rgb(var(--color-text))] whitespace-pre-wrap break-words leading-[1.6] max-w-[85%] ${
           message.pending
-            ? "bg-[var(--color-surface-alt)] border border-dashed border-[var(--color-border)] opacity-70"
+            ? "bg-[rgb(var(--color-surface-alt))] border border-dashed border-[rgb(var(--color-border))] opacity-70"
             : "bg-[#6b5ce7]/[0.05] border border-[#6b5ce7]/40 dark:bg-[#a49afa]/10 dark:border-[#a49afa]/40"
         }`}>
           {message.pending && (
-            <span className="inline-flex items-center gap-1 text-[10px] text-[var(--color-text-secondary)] mb-1">
+            <span className="inline-flex items-center gap-1 text-[10px] text-[rgb(var(--color-text-secondary))] mb-1">
               <ClockIcon className="w-2.5 h-2.5" />
               Queued
             </span>
@@ -1734,7 +1734,7 @@ function MessageRow({ message, projectRoot, onDelete }: { message: ChatMessage; 
   if (message.role === "system" && message.content) {
     return (
       <div className="px-3.5 py-1">
-        <div className="inline-flex items-center gap-1.5 px-2 py-0.5 text-[11px] rounded border transition-colors bg-[var(--color-accent)]/10 text-[var(--color-text-secondary)] border-[var(--color-border)]">
+        <div className="inline-flex items-center gap-1.5 px-2 py-0.5 text-[11px] rounded border transition-colors bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-text-secondary))] border-[rgb(var(--color-border))]">
           <Bars3Icon className="w-3 h-3 opacity-70 shrink-0" />
           <span className="font-medium truncate">{textContent(message.content)}</span>
         </div>
@@ -1745,7 +1745,7 @@ function MessageRow({ message, projectRoot, onDelete }: { message: ChatMessage; 
   if (message.role === "assistant") {
     return (
       <div className="px-3.5 py-2">
-        <div className="border-l-2 border-[var(--color-accent)]/30 pl-3 text-[13px] text-[var(--color-text)] leading-[1.6]">
+        <div className="border-l-2 border-[rgb(var(--color-accent))]/30 pl-3 text-[13px] text-[rgb(var(--color-text))] leading-[1.6]">
           <MarkdownContent content={textContent(message.content)} projectRoot={projectRoot} />
         </div>
       </div>
@@ -1802,8 +1802,8 @@ function ToolCallsRow({ toolCalls }: { toolCalls: ToolCall[] }) {
             try { parsed = JSON.stringify(JSON.parse(tc.function.arguments), null, 2); } catch { /* ignore */ }
             return (
               <div key={tc.id} className="text-[11px]">
-                <div className="font-medium text-[var(--color-text-secondary)]">{name}</div>
-                <pre className="p-2 rounded bg-[var(--color-surface-alt)] border border-[var(--color-border)] overflow-x-auto text-[var(--color-text-secondary)] leading-relaxed text-[10px]">
+                <div className="font-medium text-[rgb(var(--color-text-secondary))]">{name}</div>
+                <pre className="p-2 rounded bg-[rgb(var(--color-surface-alt))] border border-[rgb(var(--color-border))] overflow-x-auto text-[rgb(var(--color-text-secondary))] leading-relaxed text-[10px]">
                   {parsed}
                 </pre>
               </div>
@@ -1825,13 +1825,13 @@ function MarkdownContent({ content, projectRoot }: { content: string; projectRoo
         h2: ({ children }) => <div className="font-semibold text-[11px] mt-2 mb-0.5">{children}</div>,
         h3: ({ children }) => <div className="font-semibold text-[11px] mt-2 mb-0.5">{children}</div>,
         p: ({ children }) => <div className="my-0.5">{children}</div>,
-        strong: ({ children }) => <strong className="font-bold text-[var(--color-text)]">{children}</strong>,
-        em: ({ children }) => <em className="italic text-[var(--color-accent)]">{children}</em>,
+        strong: ({ children }) => <strong className="font-bold text-[rgb(var(--color-text))]">{children}</strong>,
+        em: ({ children }) => <em className="italic text-[rgb(var(--color-accent))]">{children}</em>,
         code: ({ className, children }) => {
           const isBlock = className?.includes("language-");
           if (isBlock) {
             return (
-              <pre className="my-1.5 p-2 rounded bg-[var(--color-surface-alt)] border border-[var(--color-border)] overflow-x-auto text-[10px] leading-relaxed">
+              <pre className="my-1.5 p-2 rounded bg-[rgb(var(--color-surface-alt))] border border-[rgb(var(--color-border))] overflow-x-auto text-[10px] leading-relaxed">
                 <code>{children}</code>
               </pre>
             );
@@ -1848,7 +1848,7 @@ function MarkdownContent({ content, projectRoot }: { content: string; projectRoo
             );
           }
           return (
-            <code className="px-1 py-0.5 bg-[var(--color-surface-alt)] rounded text-[10px] border border-[var(--color-border)]">
+            <code className="px-1 py-0.5 bg-[rgb(var(--color-surface-alt))] rounded text-[10px] border border-[rgb(var(--color-border))]">
               {children}
             </code>
           );
@@ -1860,26 +1860,26 @@ function MarkdownContent({ content, projectRoot }: { content: string; projectRoo
           <li className="my-0.5 pl-0.5">{children}</li>
         ),
         table: ({ children }) => (
-          <div className="my-1.5 overflow-x-auto rounded border border-[var(--color-border)]">
+          <div className="my-1.5 overflow-x-auto rounded border border-[rgb(var(--color-border))]">
             <table className="w-full text-[10px] border-collapse">{children}</table>
           </div>
         ),
         thead: ({ children }) => (
-          <thead className="bg-[var(--color-surface-alt)] text-[var(--color-text-secondary)]">{children}</thead>
+          <thead className="bg-[rgb(var(--color-surface-alt))] text-[rgb(var(--color-text-secondary))]">{children}</thead>
         ),
         th: ({ children }) => (
-          <th className="px-2 py-1 text-left font-medium border-b border-[var(--color-border)]">{children}</th>
+          <th className="px-2 py-1 text-left font-medium border-b border-[rgb(var(--color-border))]">{children}</th>
         ),
         td: ({ children }) => (
-          <td className="px-2 py-1 border-b border-[var(--color-border)]">{children}</td>
+          <td className="px-2 py-1 border-b border-[rgb(var(--color-border))]">{children}</td>
         ),
         a: ({ href, children }) => (
-          <a href={href} className="text-[var(--color-accent)] hover:underline" target="_blank" rel="noopener noreferrer">{children}</a>
+          <a href={href} className="text-[rgb(var(--color-accent))] hover:underline" target="_blank" rel="noopener noreferrer">{children}</a>
         ),
         blockquote: ({ children }) => (
-          <div className="border-l-2 border-[var(--color-accent)] pl-2 my-1 text-[var(--color-text-secondary)]">{children}</div>
+          <div className="border-l-2 border-[rgb(var(--color-accent))] pl-2 my-1 text-[rgb(var(--color-text-secondary))]">{children}</div>
         ),
-        hr: () => <div className="border-t border-[var(--color-border)] my-2" />,
+        hr: () => <div className="border-t border-[rgb(var(--color-border))] my-2" />,
         img: ({ src, alt, ...props }) => {
           let resolvedSrc = src ?? "";
           if (projectRoot && resolvedSrc.includes(".cutready/screenshots/")) {
@@ -1961,21 +1961,21 @@ function ModelPickerDropdown({
   }, [settings, currentModel]);
 
   return (
-    <div className="absolute bottom-full left-0 mb-1 w-[200px] bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg shadow-lg overflow-hidden z-20 flex flex-col" style={{ maxHeight }}>
-      <div className="px-3 py-2 border-b border-[var(--color-border)] shrink-0">
-        <span className="text-[10px] font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">Model</span>
+    <div className="absolute bottom-full left-0 mb-1 w-[200px] bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-lg shadow-lg overflow-hidden z-20 flex flex-col" style={{ maxHeight }}>
+      <div className="px-3 py-2 border-b border-[rgb(var(--color-border))] shrink-0">
+        <span className="text-[10px] font-medium text-[rgb(var(--color-text-secondary))] uppercase tracking-wider">Model</span>
       </div>
       <div className="flex-1 overflow-y-auto py-1">
         {loadingModels ? (
-          <div className="px-3 py-2 text-[11px] text-[var(--color-text-secondary)] italic">Loading…</div>
+          <div className="px-3 py-2 text-[11px] text-[rgb(var(--color-text-secondary))] italic">Loading…</div>
         ) : (
           models.map((model) => (
             <button
               key={model}
               className={`w-full flex items-center gap-2 px-3 py-1.5 text-left text-[11px] transition-colors ${
                 model === currentModel
-                  ? "text-[var(--color-accent)] bg-[var(--color-accent)]/5"
-                  : "text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-alt)] hover:text-[var(--color-text)]"
+                  ? "text-[rgb(var(--color-accent))] bg-[rgb(var(--color-accent))]/5"
+                  : "text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
               }`}
               onClick={() => {
                 updateSetting("aiModel", model);
@@ -2021,25 +2021,25 @@ function ChatErrorCard({ error, onRetry, onDismiss }: { error: string; onRetry: 
     <div className="mx-3 rounded-lg border border-error/20 bg-error/5 overflow-hidden">
       <div className="px-3 py-2.5">
         <div className="text-xs font-medium text-error mb-0.5">{title}</div>
-        <div className="text-[11px] text-[var(--color-text-secondary)] leading-relaxed">{suggestion}</div>
+        <div className="text-[11px] text-[rgb(var(--color-text-secondary))] leading-relaxed">{suggestion}</div>
       </div>
       <div className="flex items-center gap-2 px-3 pb-2">
         <button
           onClick={onRetry}
-          className="text-[11px] font-medium text-[var(--color-accent)] hover:underline"
+          className="text-[11px] font-medium text-[rgb(var(--color-accent))] hover:underline"
         >
           Try again
         </button>
         <button
           onClick={() => setShowRaw(!showRaw)}
-          className="text-[11px] text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors"
+          className="text-[11px] text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] transition-colors"
         >
           {showRaw ? "Hide details" : "Show details"}
         </button>
         <div className="flex-1" />
         <button
           onClick={onDismiss}
-          className="text-[11px] text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors"
+          className="text-[11px] text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] transition-colors"
         >
           Dismiss
         </button>
@@ -2069,7 +2069,7 @@ function typeColors(type: string): { text: string; bg: string; border: string } 
     case "web":
       return { text: "text-blue-400", bg: "bg-blue-400/10", border: "border-blue-400/25" };
     default:
-      return { text: "text-[var(--color-text-secondary)]", bg: "bg-[var(--color-surface)]", border: "border-[var(--color-border)]" };
+      return { text: "text-[rgb(var(--color-text-secondary))]", bg: "bg-[rgb(var(--color-surface))]", border: "border-[rgb(var(--color-border))]" };
   }
 }
 
@@ -2162,13 +2162,13 @@ function ChatHistory({ onOpenSession }: { onOpenSession: () => void }) {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-[var(--color-border)]">
-        <span className="text-[11px] font-medium text-[var(--color-text-secondary)]">
+      <div className="flex items-center justify-between px-3 py-2 border-b border-[rgb(var(--color-border))]">
+        <span className="text-[11px] font-medium text-[rgb(var(--color-text-secondary))]">
           {sessions.length} session{sessions.length !== 1 ? "s" : ""}
         </span>
         <button
           onClick={handleNewChat}
-          className="flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 transition-colors"
+          className="flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10 transition-colors"
           title="New chat"
         >
           <IconPlus size={12} />
@@ -2179,14 +2179,14 @@ function ChatHistory({ onOpenSession }: { onOpenSession: () => void }) {
       {/* Session list */}
       <div className="flex-1 overflow-y-auto">
         {loading ? (
-          <div className="flex items-center justify-center py-8 text-[var(--color-text-secondary)] text-xs">
+          <div className="flex items-center justify-center py-8 text-[rgb(var(--color-text-secondary))] text-xs">
             Loading…
           </div>
         ) : sessions.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 px-4 text-center gap-2">
             <IconHistory size={24} />
-            <span className="text-[12px] text-[var(--color-text-secondary)]">No chat sessions yet</span>
-            <span className="text-[11px] text-[var(--color-text-secondary)]/60">
+            <span className="text-[12px] text-[rgb(var(--color-text-secondary))]">No chat sessions yet</span>
+            <span className="text-[11px] text-[rgb(var(--color-text-secondary))]/60">
               Start a conversation and it will appear here
             </span>
           </div>
@@ -2203,21 +2203,21 @@ function ChatHistory({ onOpenSession }: { onOpenSession: () => void }) {
                   onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") handleOpen(s.path); }}
                   className={`group w-full text-left px-3 py-2.5 flex items-start gap-2 transition-colors border-l-2 cursor-pointer ${
                     isActive
-                      ? "border-[var(--color-accent)] bg-[var(--color-accent)]/8"
-                      : "border-transparent hover:bg-[var(--color-surface-hover)]"
+                      ? "border-[rgb(var(--color-accent))] bg-[rgb(var(--color-accent))]/8"
+                      : "border-transparent hover:bg-[rgb(var(--color-surface-hover))]"
                   }`}
                 >
                   <IconSparkles size={14} />
                   <div className="flex-1 min-w-0">
-                    <div className="text-[12px] font-medium text-[var(--color-text)] truncate leading-tight">
+                    <div className="text-[12px] font-medium text-[rgb(var(--color-text))] truncate leading-tight">
                       {s.title || "Untitled chat"}
                     </div>
                     <div className="flex items-center gap-2 mt-0.5">
-                      <span className="text-[10px] text-[var(--color-text-secondary)]">
+                      <span className="text-[10px] text-[rgb(var(--color-text-secondary))]">
                         {s.message_count} message{s.message_count !== 1 ? "s" : ""}
                       </span>
-                      <span className="text-[10px] text-[var(--color-text-secondary)]/50">·</span>
-                      <span className="text-[10px] text-[var(--color-text-secondary)]">
+                      <span className="text-[10px] text-[rgb(var(--color-text-secondary))]/50">·</span>
+                      <span className="text-[10px] text-[rgb(var(--color-text-secondary))]">
                         {formatDate(s.updated_at)}
                       </span>
                     </div>
@@ -2225,7 +2225,7 @@ function ChatHistory({ onOpenSession }: { onOpenSession: () => void }) {
                   {/* Delete button — visible on hover */}
                   <button
                     onClick={(e) => handleDelete(e, s.path)}
-                    className="shrink-0 p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-[var(--color-surface-hover)] text-[var(--color-text-secondary)] hover:text-error transition-all"
+                    className="shrink-0 p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-[rgb(var(--color-surface-hover))] text-[rgb(var(--color-text-secondary))] hover:text-error transition-all"
                     title="Delete session"
                   >
                     <IconTrash size={12} />

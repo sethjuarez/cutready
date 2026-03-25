@@ -32,7 +32,7 @@ export function TabBar() {
 
   return (
     <div
-      className="no-select flex items-stretch bg-[var(--color-surface-alt)] shrink-0 overflow-x-auto"
+      className="no-select flex items-stretch bg-[rgb(var(--color-surface-alt))] shrink-0 overflow-x-auto"
       style={{ scrollbarWidth: "none" }}
     >
       {openTabs.map((tab) => (
@@ -47,18 +47,18 @@ export function TabBar() {
         />
       ))}
       {/* Fill remaining space with border-bottom */}
-      <div className="flex-1 border-b border-[var(--color-border)]" />
+      <div className="flex-1 border-b border-[rgb(var(--color-border))]" />
 
       {/* Tab context menu */}
       {contextMenu && (
         <div
           ref={menuRef}
-          className="fixed z-[100] py-1 min-w-[200px] bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg shadow-lg"
+          className="fixed z-[100] py-1 min-w-[200px] bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-lg shadow-lg"
           style={{ left: menuPos?.x, top: menuPos?.y }}
         >
           {contextTabIdRef.current !== splitTabId && (
             <button
-              className="flex items-center gap-2 w-full px-3 py-1.5 text-[12px] text-left text-[var(--color-text)] hover:bg-[var(--color-accent)]/10 hover:text-[var(--color-accent)] transition-colors"
+              className="flex items-center gap-2 w-full px-3 py-1.5 text-[12px] text-left text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))] transition-colors"
               onClick={() => { openTabInSplit(contextTabIdRef.current); closeContextMenu(); }}
             >
               <Squares2X2Icon className="w-3.5 h-3.5" />
@@ -67,7 +67,7 @@ export function TabBar() {
           )}
           {splitTabId && contextTabIdRef.current === splitTabId && (
             <button
-              className="flex items-center gap-2 w-full px-3 py-1.5 text-[12px] text-left text-[var(--color-text)] hover:bg-[var(--color-accent)]/10 hover:text-[var(--color-accent)] transition-colors"
+              className="flex items-center gap-2 w-full px-3 py-1.5 text-[12px] text-left text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))] transition-colors"
               onClick={() => { closeSplit(); closeContextMenu(); }}
             >
               <StopIcon className="w-3.5 h-3.5" />
@@ -75,7 +75,7 @@ export function TabBar() {
             </button>
           )}
           <button
-            className="flex items-center gap-2 w-full px-3 py-1.5 text-[12px] text-left text-[var(--color-text)] hover:bg-[var(--color-accent)]/10 hover:text-[var(--color-accent)] transition-colors"
+            className="flex items-center gap-2 w-full px-3 py-1.5 text-[12px] text-left text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))] transition-colors"
             onClick={() => { closeTab(contextTabIdRef.current); closeContextMenu(); }}
           >
             <XMarkIcon className="w-3.5 h-3.5" />
@@ -116,7 +116,7 @@ function Tab({
   /* Explicit RGB so inline styles always resolve (CSS vars don't work in all inline contexts) */
   const typeClasses =
     tab.type === "sketch"
-      ? { bar: "bg-[var(--color-accent)]", icon: "text-[var(--color-accent)]", tint: "bg-[var(--color-accent)]" }
+      ? { bar: "bg-[rgb(var(--color-accent))]", icon: "text-[rgb(var(--color-accent))]", tint: "bg-[rgb(var(--color-accent))]" }
       : tab.type === "storyboard"
         ? { bar: "bg-emerald-500", icon: "text-emerald-500", tint: "bg-emerald-500" }
         : tab.type === "history"
@@ -139,10 +139,10 @@ function Tab({
     <div
       className={`group relative flex items-center gap-1.5 px-3 h-[36px] text-[12px] cursor-pointer shrink-0 select-none transition-colors ${
         isActive
-          ? "bg-[var(--color-surface)] text-[var(--color-text)]"
+          ? "bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text))]"
           : isSplit
-            ? "bg-[var(--color-surface-inset)] text-[var(--color-text)]"
-            : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)] border-b border-[var(--color-border)]"
+            ? "bg-[rgb(var(--color-surface-inset))] text-[rgb(var(--color-text))]"
+            : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] border-b border-[rgb(var(--color-border))]"
       }`}
       onClick={onSelect}
       onContextMenu={onContextMenu}
@@ -164,14 +164,14 @@ function Tab({
 
       {/* Separator between tabs */}
       <span className={`absolute top-[6px] bottom-[6px] right-0 w-px ${
-        isActive ? "bg-transparent" : "bg-[var(--color-border)]"
+        isActive ? "bg-transparent" : "bg-[rgb(var(--color-border))]"
       }`} />
 
       {/* Type icon */}
       <span className={`shrink-0 transition-colors ${
         isActive
           ? typeClasses.icon
-          : "text-[var(--color-text-secondary)] opacity-60"
+          : "text-[rgb(var(--color-text-secondary))] opacity-60"
       }`}>
         <TabIcon size={13} />
       </span>
@@ -185,8 +185,8 @@ function Tab({
       <button
         className={`flex items-center justify-center w-[18px] h-[18px] rounded transition-all shrink-0 ${
           isActive
-            ? "opacity-60 hover:opacity-100 hover:bg-[var(--color-surface-alt)]"
-            : "opacity-0 group-hover:opacity-60 hover:!opacity-100 hover:bg-[var(--color-surface)]"
+            ? "opacity-60 hover:opacity-100 hover:bg-[rgb(var(--color-surface-alt))]"
+            : "opacity-0 group-hover:opacity-60 hover:!opacity-100 hover:bg-[rgb(var(--color-surface))]"
         }`}
         title="Close tab"
         onClick={(e) => {

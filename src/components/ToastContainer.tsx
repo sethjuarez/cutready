@@ -11,10 +11,10 @@ const toastIconMap: Record<
   ToastType,
   { icon: React.ComponentType<React.SVGProps<SVGSVGElement>>; color: string }
 > = {
-  success: { icon: CheckIcon, color: "var(--color-success)" },
-  error: { icon: XCircleIcon, color: "var(--color-error)" },
-  warning: { icon: ExclamationTriangleIcon, color: "var(--color-warning)" },
-  info: { icon: InformationCircleIcon, color: "var(--color-accent)" },
+  success: { icon: CheckIcon, color: "rgb(var(--color-success))" },
+  error: { icon: XCircleIcon, color: "rgb(var(--color-error))" },
+  warning: { icon: ExclamationTriangleIcon, color: "rgb(var(--color-warning))" },
+  info: { icon: InformationCircleIcon, color: "rgb(var(--color-accent))" },
 };
 
 export function ToastContainer() {
@@ -30,7 +30,7 @@ export function ToastContainer() {
         return (
           <div
             key={t.id}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] shadow-lg text-[12px] text-[var(--color-text)]"
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] shadow-lg text-[12px] text-[rgb(var(--color-text))]"
             style={{
               animation: "toastIn 0.2s ease-out",
               borderLeftWidth: 3,
@@ -41,7 +41,7 @@ export function ToastContainer() {
             <span>{t.message}</span>
             <button
               onClick={() => dismiss(t.id)}
-              className="p-0.5 ml-1 text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors"
+              className="p-0.5 ml-1 text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] transition-colors"
             >
               <XMarkIcon className="w-2.5 h-2.5" />
             </button>

@@ -72,9 +72,9 @@ export function ActionCard({ action, index }: ActionCardProps) {
   const timestamp = new Date(action.metadata.timestamp_ms).toLocaleTimeString();
 
   return (
-    <div className="flex items-start gap-3 rounded-xl bg-[var(--color-surface-alt)] p-3 transition-colors hover:bg-[var(--color-surface-alt)]/80">
+    <div className="flex items-start gap-3 rounded-xl bg-[rgb(var(--color-surface-alt))] p-3 transition-colors hover:bg-[rgb(var(--color-surface-alt))]/80">
       {/* Index */}
-      <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-[var(--color-border)]/30 text-xs font-medium text-[var(--color-text-secondary)]">
+      <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-[rgb(var(--color-border))]/30 text-xs font-medium text-[rgb(var(--color-text-secondary))]">
         {index + 1}
       </span>
 
@@ -88,13 +88,13 @@ export function ActionCard({ action, index }: ActionCardProps) {
             {label}
           </span>
           {/* Timestamp */}
-          <span className="text-xs text-[var(--color-text-secondary)]">
+          <span className="text-xs text-[rgb(var(--color-text-secondary))]">
             {timestamp}
           </span>
         </div>
 
         {/* Description */}
-        <p className="mt-1 truncate text-sm text-[var(--color-text)]">
+        <p className="mt-1 truncate text-sm text-[rgb(var(--color-text))]">
           {description}
         </p>
 
@@ -111,7 +111,7 @@ export function ActionCard({ action, index }: ActionCardProps) {
         <img
           src={convertFileSrc(screenshot)}
           alt={`Step ${index + 1}`}
-          className="h-14 w-24 shrink-0 rounded-lg border border-[var(--color-border)] object-cover"
+          className="h-14 w-24 shrink-0 rounded-lg border border-[rgb(var(--color-border))] object-cover"
           loading="lazy"
         />
       )}

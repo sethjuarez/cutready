@@ -28,26 +28,26 @@ const editorTheme = EditorView.theme({
     fontSize: "0.85rem",
     fontFamily: '"Geist Mono", "Cascadia Code", "Fira Code", ui-monospace, monospace',
     backgroundColor: "transparent",
-    color: "var(--color-text)",
+    color: "rgb(var(--color-text))",
   },
   ".cm-content": {
     padding: "1.5rem 0",
-    caretColor: "var(--color-accent)",
+    caretColor: "rgb(var(--color-accent))",
     lineHeight: "1.75",
   },
   ".cm-line": {
     padding: "2px 0",
   },
-  ".cm-cursor": { borderLeftColor: "var(--color-accent)" },
-  ".cm-activeLine": { backgroundColor: "color-mix(in srgb, var(--color-text) 4%, transparent)" },
+  ".cm-cursor": { borderLeftColor: "rgb(var(--color-accent))" },
+  ".cm-activeLine": { backgroundColor: "color-mix(in srgb, rgb(var(--color-text)) 4%, transparent)" },
   ".cm-selectionBackground, &.cm-focused .cm-selectionBackground": {
-    backgroundColor: "color-mix(in srgb, var(--color-accent) 18%, transparent) !important",
+    backgroundColor: "color-mix(in srgb, rgb(var(--color-accent)) 18%, transparent) !important",
   },
   ".cm-gutters": { display: "none" },
   "&.cm-focused": { outline: "none" },
   ".cm-scroller": { overflow: "auto" },
   ".cm-placeholder": {
-    color: "var(--color-text-secondary)",
+    color: "rgb(var(--color-text-secondary))",
     fontStyle: "italic",
   },
 });

@@ -147,7 +147,7 @@ export function FileTreeView() {
   if (loading) {
     return (
       <div className="flex-1 flex items-center justify-center px-3">
-        <p className="text-xs text-[var(--color-text-secondary)]">Loading…</p>
+        <p className="text-xs text-[rgb(var(--color-text-secondary))]">Loading…</p>
       </div>
     );
   }
@@ -155,7 +155,7 @@ export function FileTreeView() {
   if (tree.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center px-3">
-        <p className="text-xs text-[var(--color-text-secondary)] text-center">
+        <p className="text-xs text-[rgb(var(--color-text-secondary))] text-center">
           No files yet. Create a sketch or note to get started.
         </p>
       </div>
@@ -210,13 +210,13 @@ function TreeNodeRow({
       <>
         <button
           onClick={() => setExpanded((e) => !e)}
-          className="w-full flex items-center gap-1.5 px-3 py-1 text-left text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-alt)] transition-colors"
+          className="w-full flex items-center gap-1.5 px-3 py-1 text-left text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors"
           style={{ paddingLeft: `${12 + depth * 16}px` }}
         >
           <ChevronRightIcon className={`w-3 h-3 shrink-0 transition-transform ${expanded ? "rotate-90" : ""}`} />
           <FolderIcon className="w-3.5 h-3.5 shrink-0" />
           <span className="text-xs font-medium truncate">{node.name}</span>
-          <span className="text-[10px] text-[var(--color-text-secondary)]/50 ml-auto shrink-0">
+          <span className="text-[10px] text-[rgb(var(--color-text-secondary))]/50 ml-auto shrink-0">
             {node.children.length}
           </span>
         </button>
@@ -242,10 +242,10 @@ function TreeNodeRow({
       onClick={isClickable ? () => onClick(node) : undefined}
       className={`w-full flex items-center gap-1.5 px-3 py-1 text-left transition-colors ${
         isActive
-          ? "bg-[var(--color-accent)]/10 text-[var(--color-accent)]"
+          ? "bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))]"
           : isClickable
-            ? "text-[var(--color-text)] hover:bg-[var(--color-surface-alt)]"
-            : "text-[var(--color-text-secondary)] opacity-60"
+            ? "text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))]"
+            : "text-[rgb(var(--color-text-secondary))] opacity-60"
       }`}
       style={{ paddingLeft: `${12 + depth * 16}px`, cursor: isClickable ? "pointer" : "default" }}
       title={`${node.path} (${formatSize(node.size)})`}
@@ -253,7 +253,7 @@ function TreeNodeRow({
       <span className="w-3 shrink-0" />
       {fileIcon(node.ext)}
       <span className="text-xs truncate">{node.name}</span>
-      <span className="text-[10px] text-[var(--color-text-secondary)]/40 ml-auto shrink-0">
+      <span className="text-[10px] text-[rgb(var(--color-text-secondary))]/40 ml-auto shrink-0">
         {formatSize(node.size)}
       </span>
     </button>

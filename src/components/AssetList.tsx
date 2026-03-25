@@ -108,15 +108,15 @@ export function AssetList() {
   const SortDirIcon = sortDir === "asc" ? BarsArrowUpIcon : BarsArrowDownIcon;
 
   return (
-    <div className="flex flex-col h-full bg-[var(--color-surface)] text-[var(--color-text)]">
+    <div className="flex flex-col h-full bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text))]">
       {/* Header */}
-      <div className="flex items-center gap-2 px-3 h-10 shrink-0 border-b border-[var(--color-border)]">
-        <span className="text-[11px] font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider">
+      <div className="flex items-center gap-2 px-3 h-10 shrink-0 border-b border-[rgb(var(--color-border))]">
+        <span className="text-[11px] font-semibold text-[rgb(var(--color-text-secondary))] uppercase tracking-wider">
           Assets
         </span>
         <button
           onClick={importAsset}
-          className="p-1 rounded-md text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 transition-colors"
+          className="p-1 rounded-md text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10 transition-colors"
           title="Import image"
         >
           <ArrowDownTrayIcon className="w-3.5 h-3.5" />
@@ -127,7 +127,7 @@ export function AssetList() {
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value as SortBy)}
-              className="text-[10px] bg-transparent text-[var(--color-text-secondary)] border-none outline-none cursor-pointer"
+              className="text-[10px] bg-transparent text-[rgb(var(--color-text-secondary))] border-none outline-none cursor-pointer"
             >
               <option value="type">Type</option>
               <option value="reference">Reference</option>
@@ -135,7 +135,7 @@ export function AssetList() {
             </select>
             <button
               onClick={toggleDir}
-              className="p-0.5 rounded text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors"
+              className="p-0.5 rounded text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] transition-colors"
               title={sortDir === "asc" ? "Ascending" : "Descending"}
             >
               <SortDirIcon className="w-3.5 h-3.5" />
@@ -147,12 +147,12 @@ export function AssetList() {
       {/* Asset list */}
       <div className="flex-1 overflow-y-auto">
         {assets.length === 0 ? (
-          <div className="px-3 py-8 text-center text-[12px] text-[var(--color-text-secondary)]">
+          <div className="px-3 py-8 text-center text-[12px] text-[rgb(var(--color-text-secondary))]">
             No assets yet.
             <br />
             <button
               onClick={importAsset}
-              className="mt-2 text-[var(--color-accent)] hover:underline"
+              className="mt-2 text-[rgb(var(--color-accent))] hover:underline"
             >
               Import an image
             </button>
@@ -198,8 +198,8 @@ function AssetGroupSection({
           onClick={() => setCollapsed((c) => !c)}
           className={`w-full flex items-center gap-1.5 px-3 h-6 text-[10px] transition-colors ${
             isUnlinked
-              ? "text-[var(--color-warning)] hover:bg-[var(--color-warning)]/5"
-              : "text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-alt)]"
+              ? "text-[rgb(var(--color-warning))] hover:bg-[rgb(var(--color-warning))]/5"
+              : "text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-alt))]"
           }`}
         >
           <ChevronRightIcon
@@ -250,12 +250,12 @@ function AssetItem({
       }}
       className={`group flex items-center gap-2 px-3 py-1.5 cursor-pointer transition-colors ${
         isActive
-          ? "bg-[var(--color-accent)]/10 text-[var(--color-accent)]"
-          : "text-[var(--color-text)] hover:bg-[var(--color-surface-alt)]"
+          ? "bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))]"
+          : "text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))]"
       }`}
     >
       {/* Thumbnail */}
-      <div className="w-10 h-7 rounded border border-[var(--color-border)] overflow-hidden shrink-0 bg-[var(--color-surface-alt)]">
+      <div className="w-10 h-7 rounded border border-[rgb(var(--color-border))] overflow-hidden shrink-0 bg-[rgb(var(--color-surface-alt))]">
         {asset.assetType === "visual" ? (
           <Suspense fallback={<div className="w-full h-full animate-pulse" />}>
             <VisualCell
@@ -284,7 +284,7 @@ function AssetItem({
           e.stopPropagation();
           onDelete();
         }}
-        className="p-1 rounded opacity-0 group-hover:opacity-100 text-[var(--color-text-secondary)] hover:text-[var(--color-error)] transition-all"
+        className="p-1 rounded opacity-0 group-hover:opacity-100 text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-error))] transition-all"
         title="Delete asset"
       >
         <TrashIcon className="w-3 h-3" />

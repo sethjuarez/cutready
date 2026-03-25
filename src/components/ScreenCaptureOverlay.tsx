@@ -172,7 +172,7 @@ export function ScreenCaptureOverlay({ onCapture, onCancel }: ScreenCaptureOverl
           <button
             key={m.id}
             onClick={() => openCaptureOnMonitor(m)}
-            className="group flex flex-col items-center gap-2 p-2 rounded-lg border-2 border-transparent hover:border-[var(--color-accent)] transition-colors"
+            className="group flex flex-col items-center gap-2 p-2 rounded-lg border-2 border-transparent hover:border-[rgb(var(--color-accent))] transition-colors"
           >
             <div className="w-48 h-28 rounded-md overflow-hidden bg-black/50 border border-white/10 group-hover:border-white/30 transition-colors">
               {monitorPreviews.get(m.id) ? (

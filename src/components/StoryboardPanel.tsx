@@ -53,7 +53,7 @@ export function StoryboardPanel() {
   const secondaryPanel = showVersionHistory ? (
     <>
       {!secondaryOnLeft && <ResizeHandle direction="horizontal" onResize={handleSecondaryResize} />}
-      <div className="shrink-0 h-full bg-[var(--color-surface-inset)] border-l border-[var(--color-border)]" style={{ width: secondaryWidth }}>
+      <div className="shrink-0 h-full bg-[rgb(var(--color-surface-inset))] border-l border-[rgb(var(--color-border))]" style={{ width: secondaryWidth }}>
         <ChatPanel />
       </div>
       {secondaryOnLeft && <ResizeHandle direction="horizontal" onResize={handleSecondaryResize} />}
@@ -77,7 +77,7 @@ export function StoryboardPanel() {
             {isHistoryTab ? (
               <ErrorBoundary
                 fallback={
-                  <div className="flex-1 flex items-center justify-center text-sm text-[var(--color-error)]">
+                  <div className="flex-1 flex items-center justify-center text-sm text-[rgb(var(--color-error))]">
                     History graph failed to render
                   </div>
                 }
@@ -98,7 +98,7 @@ export function StoryboardPanel() {
                   <div className="relative w-12 h-12">
                     <div
                       className="absolute inset-0 rounded-xl blur-xl opacity-30"
-                      style={{ background: "linear-gradient(135deg, var(--color-accent), #e879a8)" }}
+                      style={{ background: "linear-gradient(135deg, rgb(var(--color-accent)), #e879a8)" }}
                     />
                     <img
                       src="/cutready.svg"
@@ -107,7 +107,7 @@ export function StoryboardPanel() {
                       draggable={false}
                     />
                   </div>
-                  <p className="text-sm text-[var(--color-text-secondary)]">
+                  <p className="text-sm text-[rgb(var(--color-text-secondary))]">
                     Create a sketch or storyboard to get started
                   </p>
                 </div>
@@ -119,7 +119,7 @@ export function StoryboardPanel() {
           {splitTabId && (
             <>
               <ResizeHandle direction="horizontal" onResize={handleSplitResize} />
-              <div className="shrink-0 h-full border-l border-[var(--color-border)]" style={{ width: splitWidth ?? "40%" }}>
+              <div className="shrink-0 h-full border-l border-[rgb(var(--color-border))]" style={{ width: splitWidth ?? "40%" }}>
                 <SplitPreviewPane />
               </div>
             </>

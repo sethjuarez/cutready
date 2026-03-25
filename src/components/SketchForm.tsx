@@ -375,7 +375,7 @@ The Actions describe what happens on screen — use them as visual design hints.
         {activeStoryboard && (
           <button
             onClick={closeSketch}
-            className="flex items-center gap-1.5 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors mb-6"
+            className="flex items-center gap-1.5 text-xs text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] transition-colors mb-6"
           >
             <ChevronLeftIcon className="w-3.5 h-3.5" />
             Back to storyboard
@@ -384,7 +384,7 @@ The Actions describe what happens on screen — use them as visual design hints.
 
         {/* AI updated indicator */}
         {aiUpdatedFlash && (
-          <div className="mb-4 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[var(--color-accent)]/10 border border-[var(--color-accent)]/20 text-xs text-[var(--color-accent)] animate-pulse">
+          <div className="mb-4 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[rgb(var(--color-accent))]/10 border border-[rgb(var(--color-accent))]/20 text-xs text-[rgb(var(--color-accent))] animate-pulse">
             <SparklesIcon className="w-3 h-3" />
             Updated by AI
           </div>
@@ -398,7 +398,7 @@ The Actions describe what happens on screen — use them as visual design hints.
               value={localTitle}
               onChange={(e) => handleTitleChange(e.target.value)}
               placeholder="Sketch title..."
-              className="w-full text-2xl font-semibold bg-transparent text-[var(--color-text)] placeholder:text-[var(--color-text-secondary)]/40 outline-none border-none"
+              className="w-full text-2xl font-semibold bg-transparent text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/40 outline-none border-none"
             />
             {localTitle && (
               <button
@@ -406,7 +406,7 @@ The Actions describe what happens on screen — use them as visual design hints.
                   `Improve the title of sketch "${activeSketchPath ?? "current"}". Current title: "${localTitle}". Suggest a more compelling, concise title. IMPORTANT: Only update the title — do NOT change the description or any rows. Use set_planning_rows with the improved title but keep the existing description and all rows exactly as they are.`,
                   { silent: true }
                 )}
-                className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover/title:opacity-100 p-1 rounded text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 transition-all"
+                className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover/title:opacity-100 p-1 rounded text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10 transition-all"
                 title="Improve title with AI"
               >
                 <SparklesIcon className="w-3.5 h-3.5" />
@@ -418,7 +418,7 @@ The Actions describe what happens on screen — use them as visual design hints.
             <div className="relative">
               <button
                 onClick={() => setShowOverflow(!showOverflow)}
-                className="p-1.5 rounded-md text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-alt)] transition-colors"
+                className="p-1.5 rounded-md text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors"
                 title="More actions"
               >
                 <EllipsisHorizontalIcon className="w-4 h-4" />
@@ -426,7 +426,7 @@ The Actions describe what happens on screen — use them as visual design hints.
               {showOverflow && (
                 <>
                   <div className="fixed inset-0 z-40" onClick={() => setShowOverflow(false)} />
-                  <div className="absolute right-0 top-full mt-1 z-50 w-[180px] py-1 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg shadow-lg">
+                  <div className="absolute right-0 top-full mt-1 z-50 w-[180px] py-1 bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-lg shadow-lg">
                     <button
                       onClick={() => {
                         if (!activeSketch) return;
@@ -436,13 +436,13 @@ The Actions describe what happens on screen — use them as visual design hints.
                           useAppStore.getState().addActivityEntries([{ id: crypto.randomUUID(), timestamp: new Date(), source: "export", content: `Exported "${activeSketch.title}" to Word`, level: "success" }]);
                         }).catch(err => console.error("Word export failed:", err));
                       }}
-                      className="w-full px-3 py-2 text-left text-[12px] text-[var(--color-text)] hover:bg-[var(--color-surface-alt)] transition-colors flex items-center gap-2"
+                      className="w-full px-3 py-2 text-left text-[12px] text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors flex items-center gap-2"
                     >
                       Export to Word
                     </button>
                     <button
                       onClick={() => { handlePreviewClick(); setShowOverflow(false); }}
-                      className="w-full px-3 py-2 text-left text-[12px] text-[var(--color-text)] hover:bg-[var(--color-surface-alt)] transition-colors flex items-center gap-2"
+                      className="w-full px-3 py-2 text-left text-[12px] text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors flex items-center gap-2"
                     >
                       Preview
                     </button>
@@ -454,27 +454,27 @@ The Actions describe what happens on screen — use them as visual design hints.
               {showMonitorPicker && (
                 <>
                   <div className="fixed inset-0 z-40" onClick={() => setShowMonitorPicker(false)} />
-                  <div className="absolute right-0 top-full mt-2 z-50 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg shadow-lg py-1 min-w-[200px]">
-                    <div className="px-3 py-2 text-xs font-medium text-[var(--color-text-secondary)] uppercase tracking-wider border-b border-[var(--color-border)]">
+                  <div className="absolute right-0 top-full mt-2 z-50 bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-lg shadow-lg py-1 min-w-[200px]">
+                    <div className="px-3 py-2 text-xs font-medium text-[rgb(var(--color-text-secondary))] uppercase tracking-wider border-b border-[rgb(var(--color-border))]">
                       Present on
                     </div>
                     {availableMonitors.map((m) => (
                       <button
                         key={m.id}
                         onClick={() => launchPreviewOnMonitor(m)}
-                        className="w-full px-3 py-2 text-left text-sm text-[var(--color-text)] hover:bg-[var(--color-surface-alt)] transition-colors flex items-center gap-2"
+                        className="w-full px-3 py-2 text-left text-sm text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors flex items-center gap-2"
                       >
                         <ComputerDesktopIcon className="w-3.5 h-3.5" />
                         <span>{m.name || `Monitor ${m.id}`}</span>
                         {m.is_primary && (
-                          <span className="text-[10px] text-[var(--color-accent)] font-medium ml-auto">Primary</span>
+                          <span className="text-[10px] text-[rgb(var(--color-accent))] font-medium ml-auto">Primary</span>
                         )}
                       </button>
                     ))}
-                    <div className="border-t border-[var(--color-border)]">
+                    <div className="border-t border-[rgb(var(--color-border))]">
                       <button
                         onClick={() => { setShowMonitorPicker(false); setShowPreview(true); }}
-                        className="w-full px-3 py-2 text-left text-xs text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-alt)] transition-colors"
+                        className="w-full px-3 py-2 text-left text-xs text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors"
                       >
                         Preview in window instead
                       </button>
@@ -499,7 +499,7 @@ The Actions describe what happens on screen — use them as visual design hints.
               onBlur={() => setEditingDesc(false)}
               placeholder="Describe what this sketch covers..."
               rows={4}
-              className="w-full text-sm bg-transparent text-[var(--color-text)] placeholder:text-[var(--color-text-secondary)]/40 outline-none border border-[var(--color-border)] rounded-lg px-3 py-2 resize-none focus:ring-1 focus:ring-[var(--color-accent)]/40 transition-colors"
+              className="w-full text-sm bg-transparent text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/40 outline-none border border-[rgb(var(--color-border))] rounded-lg px-3 py-2 resize-none focus:ring-1 focus:ring-[rgb(var(--color-accent))]/40 transition-colors"
               autoFocus
             />
           ) : (
@@ -507,14 +507,14 @@ The Actions describe what happens on screen — use them as visual design hints.
               tabIndex={0}
               onClick={() => setEditingDesc(true)}
               onFocus={() => setEditingDesc(true)}
-              className="min-h-[2rem] rounded-lg px-3 py-2 text-sm cursor-text border border-transparent hover:border-[var(--color-border)] transition-colors"
+              className="min-h-[2rem] rounded-lg px-3 py-2 text-sm cursor-text border border-transparent hover:border-[rgb(var(--color-border))] transition-colors"
             >
               {localDesc ? (
-                <div className="prose-desc text-[var(--color-text)] leading-relaxed">
+                <div className="prose-desc text-[rgb(var(--color-text))] leading-relaxed">
                   <SafeMarkdown>{localDesc}</SafeMarkdown>
                 </div>
               ) : (
-                <span className="text-[var(--color-text-secondary)]/40">
+                <span className="text-[rgb(var(--color-text-secondary))]/40">
                   Describe what this sketch covers...
                 </span>
               )}
@@ -528,7 +528,7 @@ The Actions describe what happens on screen — use them as visual design hints.
                   : `Write a description for sketch "${activeSketchPath ?? "current"}" titled "${localTitle}". Look at the planning rows to understand what the sketch covers and write a concise description. IMPORTANT: Only update the description — do NOT change the title or any rows. Use set_planning_rows with the new description but keep the existing title and all rows exactly as they are.`,
                 { silent: true }
               )}
-              className="absolute right-2 top-2 flex items-center gap-1 opacity-0 group-hover/desc:opacity-100 p-1 rounded text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 transition-all"
+              className="absolute right-2 top-2 flex items-center gap-1 opacity-0 group-hover/desc:opacity-100 p-1 rounded text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10 transition-all"
               title={localDesc ? "Improve description with AI" : "Generate description with AI"}
             >
               <SparklesIcon className="w-3 h-3" />
@@ -547,7 +547,7 @@ The Actions describe what happens on screen — use them as visual design hints.
                   : `Review and improve the entire sketch "${activeSketchPath ?? "current"}". Refine the narrative flow, tighten timing, and make demo actions more specific. Use set_planning_rows to apply changes.`,
                 { silent: true }
               )}
-              className="flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 transition-colors"
+              className="flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10 transition-colors"
               title={localRows.length === 0 ? "Generate plan with AI" : "Improve entire sketch with AI"}
             >
               <SparklesIcon className="w-3 h-3" />
@@ -607,7 +607,7 @@ The row already has a visual and design_plan. Read the sketch with read_sketch f
               const updated = [...localRows, newRow];
               handleRowsChange(updated);
             }}
-            className="flex items-center gap-1.5 mt-3 px-3 py-2 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] border border-dashed border-[var(--color-border)] hover:border-[var(--color-accent)]/40 rounded-lg transition-colors w-full justify-center"
+            className="flex items-center gap-1.5 mt-3 px-3 py-2 text-xs text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] border border-dashed border-[rgb(var(--color-border))] hover:border-[rgb(var(--color-accent))]/40 rounded-lg transition-colors w-full justify-center"
           >
             <PlusIcon className="w-3.5 h-3.5" />
             Add Row
@@ -626,23 +626,23 @@ The row already has a visual and design_plan. Read the sketch with read_sketch f
       {/* Asset picker overlay — screenshots + visuals */}
       {imagePickerRowIdx !== null && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setImagePickerRowIdx(null)}>
-          <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl shadow-2xl max-w-md w-full max-h-[60vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--color-border)]">
-              <span className="text-sm font-medium text-[var(--color-text)]">Pick an image or visual</span>
-              <button onClick={() => setImagePickerRowIdx(null)} className="text-[var(--color-text-secondary)] hover:text-[var(--color-text)]">
+          <div className="bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-xl shadow-2xl max-w-md w-full max-h-[60vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-4 py-3 border-b border-[rgb(var(--color-border))]">
+              <span className="text-sm font-medium text-[rgb(var(--color-text))]">Pick an image or visual</span>
+              <button onClick={() => setImagePickerRowIdx(null)} className="text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))]">
                 <XMarkIcon className="w-3.5 h-3.5" />
               </button>
             </div>
             <div className="flex-1 overflow-y-auto p-3">
               {projectAssets.length === 0 ? (
-                <div className="text-center text-sm text-[var(--color-text-secondary)] py-8">No images or visuals in workspace</div>
+                <div className="text-center text-sm text-[rgb(var(--color-text-secondary))] py-8">No images or visuals in workspace</div>
               ) : (
                 <div className="grid grid-cols-3 gap-2">
                   {projectAssets.map((asset) => (
                     <button
                       key={asset.path}
                       onClick={() => handleAssetPicked(asset)}
-                      className="rounded-lg border border-[var(--color-border)] hover:border-[var(--color-accent)] overflow-hidden transition-colors group"
+                      className="rounded-lg border border-[rgb(var(--color-border))] hover:border-[rgb(var(--color-accent))] overflow-hidden transition-colors group"
                       title={asset.path}
                     >
                       {asset.assetType === "visual" ? (
@@ -656,7 +656,7 @@ The row already has a visual and design_plan. Read the sketch with read_sketch f
                           className="w-full aspect-video object-cover"
                         />
                       )}
-                      <div className="px-1.5 py-1 text-[10px] text-[var(--color-text-secondary)] group-hover:text-[var(--color-accent)] truncate">
+                      <div className="px-1.5 py-1 text-[10px] text-[rgb(var(--color-text-secondary))] group-hover:text-[rgb(var(--color-accent))] truncate">
                         {asset.assetType === "visual" ? "🎬 " : ""}{asset.path.split("/").pop()}
                       </div>
                     </button>
@@ -664,14 +664,14 @@ The row already has a visual and design_plan. Read the sketch with read_sketch f
                 </div>
               )}
             </div>
-            <div className="px-3 pb-3 pt-1 border-t border-[var(--color-border)]">
+            <div className="px-3 pb-3 pt-1 border-t border-[rgb(var(--color-border))]">
               <button
                 onClick={async () => {
                   if (imagePickerRowIdx === null) return;
                   setImagePickerRowIdx(null);
                   await handleBrowseImage(imagePickerRowIdx);
                 }}
-                className="w-full flex items-center justify-center gap-1.5 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] px-3 py-2 rounded-lg border border-dashed border-[var(--color-border)] hover:border-[var(--color-accent)] hover:bg-[var(--color-accent)]/5 transition-colors"
+                className="w-full flex items-center justify-center gap-1.5 text-xs text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] px-3 py-2 rounded-lg border border-dashed border-[rgb(var(--color-border))] hover:border-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/5 transition-colors"
               >
                 <FolderIcon className="w-3 h-3" />
                 Browse files...
@@ -684,17 +684,17 @@ The row already has a visual and design_plan. Read the sketch with read_sketch f
       {/* Visual generation instructions popup */}
       {visualPromptRow !== null && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setVisualPromptRow(null)}>
-          <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl shadow-2xl w-full max-w-md flex flex-col" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--color-border)]">
-              <span className="text-sm font-medium text-[var(--color-text)]">
+          <div className="bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-xl shadow-2xl w-full max-w-md flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-4 py-3 border-b border-[rgb(var(--color-border))]">
+              <span className="text-sm font-medium text-[rgb(var(--color-text))]">
                 Generate Visual — Row {visualPromptRow + 1}
               </span>
-              <button onClick={() => setVisualPromptRow(null)} className="text-[var(--color-text-secondary)] hover:text-[var(--color-text)]">
+              <button onClick={() => setVisualPromptRow(null)} className="text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))]">
                 <XMarkIcon className="w-3.5 h-3.5" />
               </button>
             </div>
             <div className="px-4 py-3 flex flex-col gap-3">
-              <div className="text-xs text-[var(--color-text-secondary)]">
+              <div className="text-xs text-[rgb(var(--color-text-secondary))]">
                 {localRows[visualPromptRow]?.narrative
                   ? `"${localRows[visualPromptRow].narrative.slice(0, 120)}${localRows[visualPromptRow].narrative.length > 120 ? "…" : ""}"`
                   : "No narrative for this row yet."}
@@ -710,19 +710,19 @@ The row already has a visual and design_plan. Read the sketch with read_sketch f
                   }
                 }}
                 placeholder="Additional instructions for the AI (optional)&#10;e.g. &quot;Use blue tones&quot;, &quot;Show a flowchart&quot;, &quot;Minimalist style&quot;"
-                className="w-full h-24 px-3 py-2 text-sm bg-[var(--color-surface-alt)] border border-[var(--color-border)] rounded-lg text-[var(--color-text)] placeholder:text-[var(--color-text-secondary)]/50 resize-none focus:outline-none focus:border-[var(--color-accent)]"
+                className="w-full h-24 px-3 py-2 text-sm bg-[rgb(var(--color-surface-alt))] border border-[rgb(var(--color-border))] rounded-lg text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/50 resize-none focus:outline-none focus:border-[rgb(var(--color-accent))]"
               />
             </div>
-            <div className="flex items-center justify-end gap-2 px-4 py-3 border-t border-[var(--color-border)]">
+            <div className="flex items-center justify-end gap-2 px-4 py-3 border-t border-[rgb(var(--color-border))]">
               <button
                 onClick={() => setVisualPromptRow(null)}
-                className="px-3 py-1.5 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text)] rounded-md transition-colors"
+                className="px-3 py-1.5 text-xs text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] rounded-md transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={handleGenerateVisual}
-                className="px-4 py-1.5 text-xs font-medium text-white bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] rounded-md transition-colors flex items-center gap-1.5"
+                className="px-4 py-1.5 text-xs font-medium text-white bg-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent-hover))] rounded-md transition-colors flex items-center gap-1.5"
               >
                 <SparklesIcon className="w-3 h-3" />
                 Generate

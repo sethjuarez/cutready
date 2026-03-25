@@ -35,7 +35,7 @@ export function SafeMarkdown({
       resetKey={resetKey}
       fallback={
         <pre
-          className={`whitespace-pre-wrap text-[var(--color-text-secondary)] text-xs p-2 ${fallbackClassName ?? ""}`}
+          className={`whitespace-pre-wrap text-[rgb(var(--color-text-secondary))] text-xs p-2 ${fallbackClassName ?? ""}`}
         >
           {children}
         </pre>

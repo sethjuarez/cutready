@@ -42,12 +42,12 @@ function ImageAssetViewer({
   const filename = assetPath.split("/").pop() ?? assetPath;
 
   return (
-    <div className="flex flex-col h-full bg-[var(--color-surface)]">
+    <div className="flex flex-col h-full bg-[rgb(var(--color-surface))]">
       {/* Metadata bar */}
       <MetadataBar filename={filename} asset={asset} />
 
       {/* Image viewer */}
-      <div className="flex-1 flex items-center justify-center overflow-auto p-4 bg-[var(--color-surface-alt)]">
+      <div className="flex-1 flex items-center justify-center overflow-auto p-4 bg-[rgb(var(--color-surface-alt))]">
         <img
           src={src}
           alt={filename}
@@ -111,22 +111,22 @@ function VisualAssetViewer({
   }, []);
 
   return (
-    <div className="flex flex-col h-full bg-[var(--color-surface)]">
+    <div className="flex flex-col h-full bg-[rgb(var(--color-surface))]">
       {/* Metadata bar with controls */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-[var(--color-border)] bg-[var(--color-surface-alt)] shrink-0">
+      <div className="flex items-center justify-between px-4 py-2 border-b border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] shrink-0">
         <MetadataBar filename={filename} asset={asset} inline />
         <div className="flex items-center gap-1.5">
           <button
             onClick={handleReplay}
             disabled={isPlaying}
-            className="p-1.5 rounded-lg text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)] transition-colors disabled:opacity-40"
+            className="p-1.5 rounded-lg text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface))] transition-colors disabled:opacity-40"
             title="Replay animation"
           >
             <ArrowPathIcon className="w-4 h-4" />
           </button>
           <button
             onClick={() => setEditorOpen(true)}
-            className="p-1.5 rounded-lg text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)] transition-colors"
+            className="p-1.5 rounded-lg text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface))] transition-colors"
             title="Edit visual"
           >
             <PencilIcon className="w-4 h-4" />
@@ -136,7 +136,7 @@ function VisualAssetViewer({
 
       {/* Preview */}
       <div className="flex-1 min-h-0 overflow-hidden">
-        <Suspense fallback={<div className="flex-1 flex items-center justify-center text-[var(--color-text-secondary)]">Loading...</div>}>
+        <Suspense fallback={<div className="flex-1 flex items-center justify-center text-[rgb(var(--color-text-secondary))]">Loading...</div>}>
           <VisualCell
             visualPath={assetPath}
             mode="full"
@@ -155,16 +155,16 @@ function VisualAssetViewer({
           onClick={() => { if (!editorDirty && !saving) closeLightbox(); }}
         >
           <div
-            className="relative flex flex-col rounded-xl overflow-hidden shadow-2xl bg-[var(--color-surface)]"
+            className="relative flex flex-col rounded-xl overflow-hidden shadow-2xl bg-[rgb(var(--color-surface))]"
             style={{ width: "calc(100vw - 60px)", height: "calc(100vh - 60px)" }}
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
-            <div className="flex items-center justify-between px-4 py-2 border-b border-[var(--color-border)] bg-[var(--color-surface-alt)] shrink-0">
+            <div className="flex items-center justify-between px-4 py-2 border-b border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] shrink-0">
               <div className="flex items-center gap-3">
-                <span className="text-[13px] font-medium text-[var(--color-text)]">{filename}</span>
+                <span className="text-[13px] font-medium text-[rgb(var(--color-text))]">{filename}</span>
                 {editorDirty && (
-                  <span className="text-[11px] text-[var(--color-accent)] font-medium">● Unsaved</span>
+                  <span className="text-[11px] text-[rgb(var(--color-accent))] font-medium">● Unsaved</span>
                 )}
               </div>
               <div className="flex items-center gap-2">
@@ -173,7 +173,7 @@ function VisualAssetViewer({
                     onClick={() => saveEditorChanges(editorDsl)}
                     disabled={saving}
                     title="Save changes"
-                    className="p-1.5 rounded-lg text-[var(--color-accent)] hover:text-[var(--color-accent-hover)] hover:bg-[var(--color-surface)] transition-colors disabled:opacity-40"
+                    className="p-1.5 rounded-lg text-[rgb(var(--color-accent))] hover:text-[rgb(var(--color-accent-hover))] hover:bg-[rgb(var(--color-surface))] transition-colors disabled:opacity-40"
                   >
                     <CheckIcon className="w-4 h-4" />
                   </button>
@@ -181,7 +181,7 @@ function VisualAssetViewer({
                 <button
                   onClick={closeLightbox}
                   disabled={saving}
-                  className="p-1.5 rounded-lg text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)] transition-colors disabled:opacity-40"
+                  className="p-1.5 rounded-lg text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface))] transition-colors disabled:opacity-40"
                 >
                   <XMarkIcon className="w-5 h-5" />
                 </button>
@@ -190,14 +190,14 @@ function VisualAssetViewer({
 
             {/* Editor */}
             <div className="flex-1 min-h-0 relative overflow-hidden">
-              <Suspense fallback={<div className="w-full h-full flex items-center justify-center text-[var(--color-text-secondary)]">Loading editor…</div>}>
+              <Suspense fallback={<div className="w-full h-full flex items-center justify-center text-[rgb(var(--color-text-secondary))]">Loading editor…</div>}>
                 {editorDsl ? (
                   <EditorWrapper
                     dsl={editorDsl}
                     onDocumentChange={(doc) => { setEditorDsl(doc); setEditorDirty(true); }}
                   />
                 ) : (
-                  <div className="w-full h-full flex items-center justify-center text-[var(--color-text-secondary)]">Loading…</div>
+                  <div className="w-full h-full flex items-center justify-center text-[rgb(var(--color-text-secondary))]">Loading…</div>
                 )}
               </Suspense>
             </div>
@@ -224,10 +224,10 @@ function MetadataBar({
   if (inline) {
     return (
       <div className="flex items-center gap-3 text-[12px]">
-        <span className="font-medium text-[var(--color-text)]">{filename}</span>
-        {sizeLabel && <span className="text-[var(--color-text-secondary)]">{sizeLabel}</span>}
+        <span className="font-medium text-[rgb(var(--color-text))]">{filename}</span>
+        {sizeLabel && <span className="text-[rgb(var(--color-text-secondary))]">{sizeLabel}</span>}
         {refs.length > 0 && (
-          <span className="text-[var(--color-text-secondary)]">
+          <span className="text-[rgb(var(--color-text-secondary))]">
             Used in: {refs.map((r) => r.split("/").pop()).join(", ")}
           </span>
         )}
@@ -236,11 +236,11 @@ function MetadataBar({
   }
 
   return (
-    <div className="flex items-center gap-3 px-4 py-2 border-b border-[var(--color-border)] bg-[var(--color-surface-alt)] shrink-0 text-[12px]">
-      <span className="font-medium text-[var(--color-text)]">{filename}</span>
-      {sizeLabel && <span className="text-[var(--color-text-secondary)]">{sizeLabel}</span>}
+    <div className="flex items-center gap-3 px-4 py-2 border-b border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] shrink-0 text-[12px]">
+      <span className="font-medium text-[rgb(var(--color-text))]">{filename}</span>
+      {sizeLabel && <span className="text-[rgb(var(--color-text-secondary))]">{sizeLabel}</span>}
       {refs.length > 0 && (
-        <span className="text-[var(--color-text-secondary)]">
+        <span className="text-[rgb(var(--color-text-secondary))]">
           Used in: {refs.map((r) => r.split("/").pop()).join(", ")}
         </span>
       )}
