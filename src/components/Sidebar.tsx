@@ -1,9 +1,10 @@
 import { type ReactNode, useCallback } from "react";
-import { HomeIcon, RectangleStackIcon, FilmIcon, FolderOpenIcon, DocumentIcon, ComputerDesktopIcon, Cog6ToothIcon } from "@heroicons/react/24/outline";
+import { HomeIcon, RectangleStackIcon, FilmIcon, FolderOpenIcon, ComputerDesktopIcon, Cog6ToothIcon } from "@heroicons/react/24/outline";
 import type { AppView } from "../stores/appStore";
 import { useAppStore } from "../stores/appStore";
 import { usePopover } from "../hooks/usePopover";
 
+// Planned: "recording" and "editor" nav items will be added when those features are implemented
 const navItems: { id: AppView; label: string; icon: ReactNode }[] = [
   {
     id: "home",
@@ -26,30 +27,6 @@ const navItems: { id: AppView; label: string; icon: ReactNode }[] = [
     icon: <FolderOpenIcon className="w-4 h-4" />,
   },
   {
-    id: "recording",
-    label: "Record",
-    icon: (
-      <svg
-        width="16"
-        height="16"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <circle cx="12" cy="12" r="10" />
-        <circle cx="12" cy="12" r="4" fill="currentColor" />
-      </svg>
-    ),
-  },
-  {
-    id: "editor",
-    label: "Script",
-    icon: <DocumentIcon className="w-4 h-4" />,
-  },
-  {
     id: "workspace",
     label: "Workspace",
     icon: <ComputerDesktopIcon className="w-4 h-4" />,
@@ -60,7 +37,7 @@ export function Sidebar() {
   const view = useAppStore((s) => s.view);
   const setView = useAppStore((s) => s.setView);
   const currentProject = useAppStore((s) => s.currentProject);
-  const isRecording = useAppStore((s) => s.isRecording);
+
   const sidebarPosition = useAppStore((s) => s.sidebarPosition);
   const toggleSidebarPosition = useAppStore((s) => s.toggleSidebarPosition);
 
@@ -82,11 +59,9 @@ export function Sidebar() {
         }`}
         onContextMenu={handleContextMenu}
       >
-        {navItems
-          .filter((item) => item.id !== "recording" && item.id !== "editor")
-          .map((item) => {
+        {navItems.map((item) => {
           const isActive = view === item.id;
-          const requiresProject = item.id === "sketch" || item.id === "assets" || item.id === "explorer" || item.id === "editor" || item.id === "recording" || item.id === "workspace";
+          const requiresProject = item.id === "sketch" || item.id === "assets" || item.id === "explorer" || item.id === "workspace";
           const isDisabled = requiresProject && !currentProject;
 
           return (
@@ -113,10 +88,7 @@ export function Sidebar() {
                   isRight ? "right-[-6px]" : "left-[-6px]"
                 }`} />
               )}
-              {/* Recording indicator dot */}
-              {item.id === "recording" && isRecording && (
-                <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-error animate-pulse" />
-              )}
+
             </button>
           );
         })}
