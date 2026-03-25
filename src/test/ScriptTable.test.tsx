@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { render } from "@testing-library/react";
+import { render, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 // Mock elucim packages before importing components
@@ -60,23 +60,25 @@ describe("ScriptTable tab order", () => {
     const onChange = vi.fn();
     render(<ScriptTable rows={rows} onChange={onChange} />);
 
-    // Focus the Actions cell of row 0 — onFocus enters edit mode (textarea)
+    // Click the Actions cell of row 0 — enters edit mode (textarea)
     const actionsCell = getTabCells()[2];
     const focusable = actionsCell.querySelector<HTMLElement>("[data-cell]") ??
       actionsCell.querySelector<HTMLElement>("input");
-    focusable!.focus();
+    await user.click(focusable!);
 
     // Wait for edit mode to render the textarea
-    await new Promise((r) => setTimeout(r, 50));
+    await waitFor(() => {
+      expect(actionsCell.querySelector("textarea")).toBeTruthy();
+    });
 
     // Now Tab from the textarea — should move to next row's Time
     await user.tab();
 
     // Wait for requestAnimationFrame in Tab handler
-    await new Promise((r) => setTimeout(r, 50));
-
-    const nextTimeCell = getTabCells()[3];
-    expect(nextTimeCell.contains(document.activeElement)).toBe(true);
+    await waitFor(() => {
+      const nextTimeCell = getTabCells()[3];
+      expect(nextTimeCell.contains(document.activeElement)).toBe(true);
+    });
   });
 
   it("Tab from last Actions cell triggers addRow", async () => {
@@ -85,23 +87,24 @@ describe("ScriptTable tab order", () => {
     const onChange = vi.fn();
     render(<ScriptTable rows={rows} onChange={onChange} />);
 
-    // Focus the Actions cell of row 0 (last row, data-tab-cell=2)
+    // Click the Actions cell of row 0 (last row, data-tab-cell=2)
     const actionsCell = getTabCells()[2];
     const focusable = actionsCell.querySelector<HTMLElement>("[data-cell]") ??
       actionsCell.querySelector<HTMLElement>("input");
-    focusable!.focus();
+    await user.click(focusable!);
 
     // Wait for edit mode
-    await new Promise((r) => setTimeout(r, 50));
+    await waitFor(() => {
+      expect(actionsCell.querySelector("textarea")).toBeTruthy();
+    });
 
     // Tab past the last cell — should trigger addRow via onChange
     await user.tab();
 
     // Wait for requestAnimationFrame in Tab handler
-    await new Promise((r) => setTimeout(r, 50));
-
-    // onChange should have been called with 2 rows (original + new empty)
-    expect(onChange).toHaveBeenCalled();
+    await waitFor(() => {
+      expect(onChange).toHaveBeenCalled();
+    });
     const lastCall = onChange.mock.calls[onChange.mock.calls.length - 1][0];
     expect(lastCall).toHaveLength(2);
     expect(lastCall[1].time).toBe("");

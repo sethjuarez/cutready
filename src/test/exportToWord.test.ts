@@ -24,6 +24,12 @@ const mockInvoke = vi.fn().mockImplementation((cmd: string) => {
 });
 vi.mock("@tauri-apps/api/core", () => ({ invoke: (...args: unknown[]) => mockInvoke(...args), convertFileSrc: (p: string) => p }));
 
+// Mock Tauri opener
+const mockOpenPath = vi.fn().mockResolvedValue(undefined);
+vi.mock("@tauri-apps/plugin-opener", () => ({
+  openPath: (...args: unknown[]) => mockOpenPath(...args),
+}));
+
 // Mock elucim packages
 vi.mock("@elucim/dsl", () => ({
   DslRenderer: () => null,
@@ -63,9 +69,11 @@ beforeEach(() => {
   mockSave.mockReset();
   mockWriteFile.mockReset();
   mockReadFile.mockReset();
+  mockOpenPath.mockReset();
   mockSave.mockResolvedValue("/tmp/test.docx");
   mockWriteFile.mockResolvedValue(undefined);
   mockReadFile.mockResolvedValue(new Uint8Array([0xFF, 0xD8, 0xFF])); // minimal JPEG header
+  mockOpenPath.mockResolvedValue(undefined);
 });
 
 describe("exportSketchToWord", () => {
