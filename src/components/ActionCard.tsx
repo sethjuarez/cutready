@@ -21,9 +21,9 @@ const actionLabels: Record<string, string> = {
 
 /** Badge color classes for action types. */
 const badgeColors: Record<string, string> = {
-  BrowserNavigate: "bg-blue-500/20 text-blue-400",
+  BrowserNavigate: "bg-accent/20 text-accent",
   BrowserClick: "bg-success/20 text-success",
-  BrowserType: "bg-yellow-500/20 text-yellow-400",
+  BrowserType: "bg-warning/20 text-warning",
   BrowserSelect: "bg-purple-500/20 text-purple-400",
   BrowserScroll: "bg-gray-500/20 text-gray-400",
   Wait: "bg-gray-500/20 text-gray-400",
@@ -100,7 +100,7 @@ export function ActionCard({ action, index }: ActionCardProps) {
 
         {/* Confidence */}
         {action.metadata.confidence < 0.8 && (
-          <p className="mt-0.5 text-xs text-yellow-500">
+          <p className="mt-0.5 text-xs text-warning">
             Low confidence ({Math.round(action.metadata.confidence * 100)}%)
           </p>
         )}

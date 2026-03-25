@@ -243,11 +243,11 @@ function FieldConflictRow({
           onClick={() => onChoice("ours")}
           className={`px-3 py-2 text-left transition-colors ${
             choice === "ours"
-              ? "bg-blue-500/10 ring-1 ring-inset ring-blue-500/40"
+              ? "bg-accent/10 ring-1 ring-inset ring-accent/40"
               : "bg-[rgb(var(--color-surface))] hover:bg-[rgb(var(--color-border))]/20"
           }`}
         >
-          <div className="text-[9px] font-medium text-blue-500 mb-1">{targetLabel} (current)</div>
+          <div className="text-[9px] font-medium text-accent mb-1">{targetLabel} (current)</div>
           <div className="text-[11px] text-[rgb(var(--color-text))] font-mono whitespace-pre-wrap break-all">
             {formatValue(field.ours)}
           </div>
@@ -382,11 +382,11 @@ function TextConflictRow({
           onClick={() => onChoice("ours")}
           className={`px-3 py-2 text-left transition-colors ${
             choice === "ours"
-              ? "bg-blue-500/10 ring-1 ring-inset ring-blue-500/40"
+              ? "bg-accent/10 ring-1 ring-inset ring-accent/40"
               : "bg-[rgb(var(--color-surface))] hover:bg-[rgb(var(--color-border))]/20"
           }`}
         >
-          <div className="text-[9px] font-medium text-blue-500 mb-1">{targetLabel} (current)</div>
+          <div className="text-[9px] font-medium text-accent mb-1">{targetLabel} (current)</div>
           <pre className="text-[11px] text-[rgb(var(--color-text))] font-mono whitespace-pre-wrap">
             {region.ours_lines.join("\n") || "(empty)"}
           </pre>
@@ -453,11 +453,11 @@ function WholeFileResolver({
         onClick={() => handleChoice("ours")}
         className={`px-3 py-3 text-left transition-colors ${
           choice === "ours"
-            ? "bg-blue-500/10 ring-1 ring-inset ring-blue-500/40"
+            ? "bg-accent/10 ring-1 ring-inset ring-accent/40"
             : "bg-[rgb(var(--color-surface))] hover:bg-[rgb(var(--color-border))]/20"
         }`}
       >
-        <div className="text-[9px] font-medium text-blue-500 mb-1.5">{targetLabel} (current)</div>
+        <div className="text-[9px] font-medium text-accent mb-1.5">{targetLabel} (current)</div>
         <pre className="text-[10px] text-[rgb(var(--color-text))] font-mono whitespace-pre-wrap max-h-32 overflow-y-auto">
           {conflict.ours.substring(0, 500)}{conflict.ours.length > 500 ? "…" : ""}
         </pre>

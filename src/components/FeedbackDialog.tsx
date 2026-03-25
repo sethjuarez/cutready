@@ -185,7 +185,7 @@ export function FeedbackDialog({ isOpen, onClose }: FeedbackDialogProps) {
               !feedback.trim()
                 ? "text-[rgb(var(--color-text-secondary))]/30 bg-[rgb(var(--color-surface-alt))] cursor-not-allowed"
                 : copied
-                  ? "text-emerald-500 bg-emerald-500/15"
+                  ? "text-success bg-success/15"
                   : "text-white bg-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent-hover))]"
             }`}
           >

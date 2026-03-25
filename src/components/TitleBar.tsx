@@ -145,7 +145,7 @@ export function TitleBar({
         </button>
         <button
           onClick={handleClose}
-          className="inline-flex items-center justify-center w-11 h-full hover:bg-red-500 hover:text-white transition-colors"
+          className="inline-flex items-center justify-center w-11 h-full hover:bg-error hover:text-white transition-colors"
           aria-label="Close"
         >
           <XMarkIcon className="w-2.5 h-2.5" />
@@ -195,13 +195,13 @@ function UpdateIndicator() {
       style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
     >
       <button
-        className="relative flex items-center justify-center w-7 h-[22px] rounded text-indigo-400 hover:text-indigo-300 hover:bg-[rgb(var(--color-surface-alt))] transition-colors"
+        className="relative flex items-center justify-center w-7 h-[22px] rounded text-accent hover:text-accent-hover hover:bg-[rgb(var(--color-surface-alt))] transition-colors"
         onClick={() => toggle()}
         title={`Update available: v${update.version}${update.body ? `\n${update.body.slice(0, 200)}` : ""}`}
       >
         <ArrowDownTrayIcon className="w-3.5 h-3.5" />
         {/* Notification dot */}
-        <span className="absolute top-0.5 right-0.5 w-2 h-2 rounded-full bg-indigo-400 animate-pulse" />
+        <span className="absolute top-0.5 right-0.5 w-2 h-2 rounded-full bg-accent animate-pulse" />
       </button>
 
       {open && (
@@ -218,11 +218,11 @@ function UpdateIndicator() {
             )}
           </div>
           {installing ? (
-            <div className="text-[11px] text-indigo-400">{progress}</div>
+            <div className="text-[11px] text-accent">{progress}</div>
           ) : (
             <button
               onClick={handleInstall}
-              className="w-full h-[26px] rounded text-[11px] font-medium bg-indigo-600 hover:bg-indigo-500 text-white transition-colors"
+              className="w-full h-[26px] rounded text-[11px] font-medium bg-accent hover:bg-accent-hover text-white transition-colors"
             >
               Download &amp; Install
             </button>

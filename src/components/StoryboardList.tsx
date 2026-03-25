@@ -403,7 +403,7 @@ export function StoryboardList() {
                     onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") openStoryboard(sb.path); }}
                     className={`group/item w-full flex items-center gap-2 px-3 py-2.5 text-left transition-colors cursor-pointer ${
                       sb.path === activeStoryboardPath
-                        ? "bg-emerald-500/10 text-emerald-500"
+                        ? "bg-success/10 text-success"
                         : "text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))]"
                     }`}
                   >

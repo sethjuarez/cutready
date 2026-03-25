@@ -2065,9 +2065,9 @@ function typeColors(type: string): { text: string; bg: string; border: string } 
     case "note":
       return { text: "text-rose-500", bg: "bg-rose-500/10", border: "border-rose-500/25" };
     case "storyboard":
-      return { text: "text-emerald-500", bg: "bg-emerald-500/10", border: "border-emerald-500/25" };
+      return { text: "text-success", bg: "bg-success/10", border: "border-success/25" };
     case "web":
-      return { text: "text-blue-400", bg: "bg-blue-400/10", border: "border-blue-400/25" };
+      return { text: "text-accent", bg: "bg-accent/10", border: "border-accent/25" };
     default:
       return { text: "text-[rgb(var(--color-text-secondary))]", bg: "bg-[rgb(var(--color-surface))]", border: "border-[rgb(var(--color-border))]" };
   }

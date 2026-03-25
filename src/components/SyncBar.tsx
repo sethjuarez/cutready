@@ -102,7 +102,7 @@ export function SyncBar() {
             isSyncing
               ? "bg-warning animate-pulse"
               : currentRemote
-                ? "bg-emerald-400"
+                ? "bg-success"
                 : "bg-zinc-400"
           }`}
         />
@@ -117,7 +117,7 @@ export function SyncBar() {
         {syncStatus && (
           <div className="flex items-center gap-1.5 text-[10px]">
             {isUpToDate ? (
-              <span className="text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+              <span className="text-success flex items-center gap-1">
                 <CheckIcon className="w-2.5 h-2.5" />
                 Up to date
               </span>

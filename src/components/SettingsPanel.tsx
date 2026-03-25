@@ -1122,7 +1122,7 @@ function FeedbackListTab() {
               onClick={copyAll}
               className={`flex items-center gap-1.5 px-3 py-1.5 text-[11px] rounded-lg font-medium transition-colors border ${
                 copied
-                  ? "bg-emerald-500/15 text-emerald-500 border-emerald-500/30"
+                  ? "bg-success/15 text-success border-success/30"
                   : "bg-[rgb(var(--color-surface-alt))] text-[rgb(var(--color-text-secondary))] border-[rgb(var(--color-border))] hover:text-[rgb(var(--color-text))] hover:border-[rgb(var(--color-text-secondary))]/40"
               }`}
             >
@@ -1327,7 +1327,7 @@ function RepositoryTab({ settings, updateSetting }: {
           </button>
         </div>
         {testStatus === "success" && (
-          <p className="text-xs text-emerald-600 dark:text-emerald-400">{testMessage}</p>
+          <p className="text-xs text-success">{testMessage}</p>
         )}
         {testStatus === "error" && (
           <p className="text-xs text-error">{testMessage}</p>
@@ -1473,7 +1473,7 @@ function MemoryTab() {
   const categoryBadge = (cat: string) => {
     const colors: Record<string, string> = {
       core: "bg-purple-500/20 text-purple-400",
-      archival: "bg-blue-500/20 text-blue-400",
+      archival: "bg-accent/20 text-accent",
       insight: "bg-warning/20 text-warning",
     };
     return colors[cat] || "bg-gray-500/20 text-gray-400";

@@ -118,7 +118,7 @@ function Tab({
     tab.type === "sketch"
       ? { bar: "bg-[rgb(var(--color-accent))]", icon: "text-[rgb(var(--color-accent))]", tint: "bg-[rgb(var(--color-accent))]" }
       : tab.type === "storyboard"
-        ? { bar: "bg-emerald-500", icon: "text-emerald-500", tint: "bg-emerald-500" }
+        ? { bar: "bg-success", icon: "text-success", tint: "bg-success" }
         : tab.type === "history"
           ? { bar: "bg-sky-500", icon: "text-sky-500", tint: "bg-sky-500" }
           : isImage
