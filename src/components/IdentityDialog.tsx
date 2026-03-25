@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { UserIcon } from "@heroicons/react/24/outline";
 import { useAppStore } from "../stores/appStore";
+import { Dialog } from "./Dialog";
 
 interface IdentityStatus {
   name: string;
@@ -75,36 +76,23 @@ export function IdentityDialog() {
     }
   }, [name, email, identityPromptCallback]);
 
-  // Close on Escape only — no backdrop dismiss (identity is required)
-  useEffect(() => {
-    if (!identityPromptOpen) return;
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        useAppStore.setState({
-          identityPromptOpen: false,
-          identityPromptCallback: null,
-        });
-        setName("");
-        setEmail("");
-        setSaving(false);
-      }
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [identityPromptOpen]);
+  const handleClose = useCallback(() => {
+    useAppStore.setState({
+      identityPromptOpen: false,
+      identityPromptCallback: null,
+    });
+    setName("");
+    setEmail("");
+    setSaving(false);
+  }, []);
 
   if (!identityPromptOpen) return null;
 
   const isValid = name.trim().length > 0 && email.trim().length > 0;
 
   return (
-    <div className="fixed inset-0 z-modal flex items-start justify-center pt-[20vh]">
-      {/* Backdrop — no click-to-close since identity is needed */}
-      <div className="absolute inset-0 bg-black/40" />
-
-      {/* Dialog */}
-      <div className="relative bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
+    <Dialog isOpen={identityPromptOpen} onClose={handleClose} align="top" topOffset="20vh" width="w-full max-w-md mx-4" backdropClass="bg-black/40">
+      <div className="bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-xl shadow-2xl overflow-hidden">
         {/* Header */}
         <div className="flex items-center gap-2.5 px-5 pt-5 pb-3">
           <div className="p-2 rounded-lg bg-[rgb(var(--color-accent))]/10">
@@ -166,14 +154,7 @@ export function IdentityDialog() {
           {/* Actions */}
           <div className="flex items-center justify-end gap-2 pt-1">
             <button
-              onClick={() => {
-                useAppStore.setState({
-                  identityPromptOpen: false,
-                  identityPromptCallback: null,
-                });
-                setName("");
-                setEmail("");
-              }}
+              onClick={handleClose}
               className="px-3 py-1.5 rounded-lg text-xs text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] transition-colors"
             >
               Cancel
@@ -188,6 +169,6 @@ export function IdentityDialog() {
           </div>
         </div>
       </div>
-    </div>
+    </Dialog>
   );
 }

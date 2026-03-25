@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { Dialog } from "./Dialog";
 
 interface ConfirmDialogProps {
   open: boolean;
@@ -30,16 +31,6 @@ export function ConfirmDialog({
     }
   }, [open]);
 
-  // Close on Escape
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") { e.preventDefault(); onCancel(); }
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [open, onCancel]);
-
   if (!open) return null;
 
   const variantColors = {
@@ -50,9 +41,8 @@ export function ConfirmDialog({
   const colors = variantColors[variant];
 
   return (
-    <div className="fixed inset-0 z-modal flex items-start justify-center pt-[20vh]">
-      <div className="absolute inset-0 bg-black/40" onClick={onCancel} />
-      <div className="relative bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-xl shadow-2xl w-full max-w-sm mx-4 overflow-hidden">
+    <Dialog isOpen={open} onClose={onCancel} align="top" topOffset="20vh" width="w-full max-w-sm mx-4" backdropClass="bg-black/40">
+      <div className="bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-xl shadow-2xl overflow-hidden">
         <div className="px-5 pt-5 pb-4">
           <h2 className="text-sm font-semibold text-[rgb(var(--color-text))] mb-2">{title}</h2>
           <p className="text-xs text-[rgb(var(--color-text-secondary))] leading-relaxed whitespace-pre-line">{message}</p>
@@ -74,6 +64,6 @@ export function ConfirmDialog({
           </button>
         </div>
       </div>
-    </div>
+    </Dialog>
   );
 }

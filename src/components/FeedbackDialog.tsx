@@ -10,6 +10,7 @@ import {
   XMarkIcon,
 } from "@heroicons/react/24/outline";
 import { useAppStore } from "../stores/appStore";
+import { Dialog } from "./Dialog";
 
 interface FeedbackDialogProps {
   isOpen: boolean;
@@ -42,17 +43,6 @@ export function FeedbackDialog({ isOpen, onClose }: FeedbackDialogProps) {
     }
   }, [isOpen]);
 
-  useEffect(() => {
-    if (!isOpen) return;
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        onClose();
-      }
-    };
-    window.addEventListener("keydown", handleKey);
-    return () => window.removeEventListener("keydown", handleKey);
-  }, [isOpen, onClose]);
 
   const handleSubmit = async () => {
     if (!feedback.trim()) return;
@@ -98,17 +88,9 @@ export function FeedbackDialog({ isOpen, onClose }: FeedbackDialogProps) {
     }, 1200);
   };
 
-  if (!isOpen) return null;
-
   return (
-    <div
-      className="fixed inset-0 z-modal flex items-start justify-center pt-[20vh] bg-black/25"
-      onClick={onClose}
-    >
-      <div
-        className="w-[360px] max-w-[90vw] bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-xl shadow-2xl p-4 space-y-3"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <Dialog isOpen={isOpen} onClose={onClose} align="top" topOffset="20vh" width="w-[360px] max-w-[90vw]">
+      <div className="bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-xl shadow-2xl p-4 space-y-3">
         {/* Header */}
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-medium text-[rgb(var(--color-text))]">
@@ -203,6 +185,6 @@ export function FeedbackDialog({ isOpen, onClose }: FeedbackDialogProps) {
           </button>
         </div>
       </div>
-    </div>
+    </Dialog>
   );
 }

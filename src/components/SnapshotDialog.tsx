@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowDownTrayIcon, ExclamationCircleIcon } from "@heroicons/react/24/outline";
 import { useAppStore } from "../stores/appStore";
+import { Dialog } from "./Dialog";
 import { generateSnapshotName } from "../utils/snapshotName";
 
 /**
@@ -74,30 +75,13 @@ export function SnapshotDialog() {
     }
   }, [snapshotPromptOpen]);
 
-  // Close on Escape
-  useEffect(() => {
-    if (!snapshotPromptOpen) return;
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        close();
-      }
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [snapshotPromptOpen, close]);
-
   if (!snapshotPromptOpen) return null;
 
   const willFork = isRewound;
 
   return (
-    <div className="fixed inset-0 z-modal flex items-start justify-center pt-[20vh]">
-      {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/40" onClick={close} />
-
-      {/* Dialog */}
-      <div className="relative bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
+    <Dialog isOpen={snapshotPromptOpen} onClose={close} align="top" topOffset="20vh" width="w-full max-w-md mx-4" backdropClass="bg-black/40">
+      <div className="bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-xl shadow-2xl overflow-hidden">
         {/* Header */}
         <div className="flex items-center gap-2.5 px-5 pt-5 pb-3">
           <div className="p-2 rounded-lg bg-[rgb(var(--color-accent))]/10">
@@ -171,6 +155,6 @@ export function SnapshotDialog() {
           </div>
         </div>
       </div>
-    </div>
+    </Dialog>
   );
 }

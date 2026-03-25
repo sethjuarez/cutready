@@ -1,6 +1,6 @@
-import { useEffect } from "react";
 import { CommandLineIcon, XMarkIcon } from "@heroicons/react/20/solid";
 import { useCommands } from "../services/commandRegistry";
+import { Dialog } from "./Dialog";
 
 interface KeyboardShortcutsDialogProps {
   open: boolean;
@@ -38,20 +38,6 @@ function KeybindingBadge({ keybinding }: { keybinding: string }) {
 export function KeyboardShortcutsDialog({ open, onClose }: KeyboardShortcutsDialogProps) {
   const commands = useCommands();
 
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        onClose();
-      }
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [open, onClose]);
-
-  if (!open) return null;
-
   // Filter to commands with keybindings and group by category
   const withKeybindings = commands.filter((cmd) => cmd.keybinding);
   const groups = new Map<string, { title: string; keybinding: string }[]>();
@@ -62,9 +48,8 @@ export function KeyboardShortcutsDialog({ open, onClose }: KeyboardShortcutsDial
   }
 
   return (
-    <div className="fixed inset-0 z-modal flex items-start justify-center pt-[18vh]">
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="relative bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden">
+    <Dialog isOpen={open} onClose={onClose} align="top" topOffset="18vh" width="w-full max-w-lg mx-4" backdropClass="bg-black/40">
+      <div className="bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-xl shadow-2xl overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-[rgb(var(--color-border))]">
           <div className="flex items-center gap-2">
@@ -113,6 +98,6 @@ export function KeyboardShortcutsDialog({ open, onClose }: KeyboardShortcutsDial
           </section>
         </div>
       </div>
-    </div>
+    </Dialog>
   );
 }
