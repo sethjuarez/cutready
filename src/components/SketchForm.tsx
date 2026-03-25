@@ -10,6 +10,7 @@ import { ScreenCaptureOverlay } from "./ScreenCaptureOverlay";
 import { SketchPreview } from "./SketchPreview";
 import VisualCell from "./VisualCell";
 import { exportSketchToWord } from "../utils/exportToWord";
+import { usePopover } from "../hooks/usePopover";
 import type { PlanningRow } from "../types/sketch";
 import { diffRow, type RowDiff } from "../utils/textDiff";
 
@@ -51,7 +52,7 @@ export function SketchForm() {
   const lastAiDiffs = useRef<{ rows: Set<number>; diffs: RowDiff[] } | null>(null);
   // Snapshot of rows before an AI edit lands — used for diff computation
   const aiSnapshotRef = useRef<{ rows: PlanningRow[]; changedIndices: number[] } | null>(null);
-  const [showOverflow, setShowOverflow] = useState(false);
+  const { state: showOverflow, toggle: toggleOverflow, close: closeOverflow, ref: overflowRef } = usePopover();
   const [visualPromptRow, setVisualPromptRow] = useState<number | null>(null);
   const [visualInstructions, setVisualInstructions] = useState("");
   const [localDesc, setLocalDesc] = useState(
@@ -415,39 +416,36 @@ The Actions describe what happens on screen — use them as visual design hints.
             )}
           </div>
           {localRows.length > 0 && (
-            <div className="relative">
+            <div className="relative" ref={overflowRef}>
               <button
-                onClick={() => setShowOverflow(!showOverflow)}
+                onClick={toggleOverflow}
                 className="p-1.5 rounded-md text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors"
                 title="More actions"
               >
                 <EllipsisHorizontalIcon className="w-4 h-4" />
               </button>
               {showOverflow && (
-                <>
-                  <div className="fixed inset-0 z-overlay" onClick={() => setShowOverflow(false)} />
-                  <div className="absolute right-0 top-full mt-1 z-dropdown w-[180px] py-1 bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-lg shadow-lg">
-                    <button
-                      onClick={() => {
-                        if (!activeSketch) return;
-                        setShowOverflow(false);
-                        exportSketchToWord(activeSketch, projectRoot, "landscape").then(() => {
-                          useToastStore.getState().show("Export complete");
-                          useAppStore.getState().addActivityEntries([{ id: crypto.randomUUID(), timestamp: new Date(), source: "export", content: `Exported "${activeSketch.title}" to Word`, level: "success" }]);
-                        }).catch(err => console.error("Word export failed:", err));
-                      }}
-                      className="w-full px-3 py-2 text-left text-[12px] text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors flex items-center gap-2"
-                    >
-                      Export to Word
-                    </button>
-                    <button
-                      onClick={() => { handlePreviewClick(); setShowOverflow(false); }}
-                      className="w-full px-3 py-2 text-left text-[12px] text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors flex items-center gap-2"
-                    >
-                      Preview
-                    </button>
-                  </div>
-                </>
+                <div className="absolute right-0 top-full mt-1 z-dropdown w-[180px] py-1 bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-lg shadow-lg">
+                  <button
+                    onClick={() => {
+                      if (!activeSketch) return;
+                      closeOverflow();
+                      exportSketchToWord(activeSketch, projectRoot, "landscape").then(() => {
+                        useToastStore.getState().show("Export complete");
+                        useAppStore.getState().addActivityEntries([{ id: crypto.randomUUID(), timestamp: new Date(), source: "export", content: `Exported "${activeSketch.title}" to Word`, level: "success" }]);
+                      }).catch(err => console.error("Word export failed:", err));
+                    }}
+                    className="w-full px-3 py-2 text-left text-[12px] text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors flex items-center gap-2"
+                  >
+                    Export to Word
+                  </button>
+                  <button
+                    onClick={() => { handlePreviewClick(); closeOverflow(); }}
+                    className="w-full px-3 py-2 text-left text-[12px] text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors flex items-center gap-2"
+                  >
+                    Preview
+                  </button>
+                </div>
               )}
 
               {/* Monitor picker dropdown */}
