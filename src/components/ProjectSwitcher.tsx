@@ -155,7 +155,7 @@ export function ProjectSwitcher() {
 
       {/* Dropdown */}
       {isOpen && (
-        <div className="absolute left-0 right-0 top-full z-50 bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-b-lg shadow-lg overflow-hidden">
+        <div className="absolute left-0 right-0 top-full z-dropdown bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-b-lg shadow-lg overflow-hidden">
           {projects.map((p) => {
             const isActive = activeEntry?.path === p.path;
             const isRenaming = renamingPath === p.path;

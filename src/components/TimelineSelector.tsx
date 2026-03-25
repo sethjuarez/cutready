@@ -122,7 +122,7 @@ export function TimelineSelector() {
 
       {/* Dropdown */}
       {open && (
-        <div className="absolute top-full left-0 mt-1 w-56 rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] shadow-lg z-50 overflow-hidden">
+        <div className="absolute top-full left-0 mt-1 w-56 rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] shadow-lg z-dropdown overflow-hidden">
           {/* Search filter */}
           {timelines.length > 3 && (
             <div className="px-2 pt-2">

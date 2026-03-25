@@ -558,7 +558,7 @@ export function HistoryGraphTab() {
           const color = lc(ln.colorIndex);
           return (
             <div
-              className="absolute pointer-events-none z-50 max-w-xs"
+              className="absolute pointer-events-none z-dropdown max-w-xs"
               style={{ left: tooltipPos.x, top: tooltipPos.y }}
             >
               <div className="bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-lg shadow-lg px-3 py-2">

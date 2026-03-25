@@ -65,7 +65,7 @@ export function ExportWordButton({
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full mt-1 z-50 min-w-[140px] rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] shadow-lg overflow-hidden">
+        <div className="absolute right-0 top-full mt-1 z-dropdown min-w-[140px] rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] shadow-lg overflow-hidden">
           <button
             onClick={() => handlePick("portrait")}
             className={`w-full flex items-center gap-2 px-3 py-2 text-xs transition-colors hover:bg-[rgb(var(--color-accent))]/10 ${defaultOrientation === "portrait" ? "text-[rgb(var(--color-accent))] font-medium" : "text-[rgb(var(--color-text))]"}`}

@@ -425,8 +425,8 @@ The Actions describe what happens on screen — use them as visual design hints.
               </button>
               {showOverflow && (
                 <>
-                  <div className="fixed inset-0 z-40" onClick={() => setShowOverflow(false)} />
-                  <div className="absolute right-0 top-full mt-1 z-50 w-[180px] py-1 bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-lg shadow-lg">
+                  <div className="fixed inset-0 z-overlay" onClick={() => setShowOverflow(false)} />
+                  <div className="absolute right-0 top-full mt-1 z-dropdown w-[180px] py-1 bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-lg shadow-lg">
                     <button
                       onClick={() => {
                         if (!activeSketch) return;
@@ -453,8 +453,8 @@ The Actions describe what happens on screen — use them as visual design hints.
               {/* Monitor picker dropdown */}
               {showMonitorPicker && (
                 <>
-                  <div className="fixed inset-0 z-40" onClick={() => setShowMonitorPicker(false)} />
-                  <div className="absolute right-0 top-full mt-2 z-50 bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-lg shadow-lg py-1 min-w-[200px]">
+                  <div className="fixed inset-0 z-overlay" onClick={() => setShowMonitorPicker(false)} />
+                  <div className="absolute right-0 top-full mt-2 z-dropdown bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-lg shadow-lg py-1 min-w-[200px]">
                     <div className="px-3 py-2 text-xs font-medium text-[rgb(var(--color-text-secondary))] uppercase tracking-wider border-b border-[rgb(var(--color-border))]">
                       Present on
                     </div>
@@ -625,7 +625,7 @@ The row already has a visual and design_plan. Read the sketch with read_sketch f
 
       {/* Asset picker overlay — screenshots + visuals */}
       {imagePickerRowIdx !== null && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setImagePickerRowIdx(null)}>
+        <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/40" onClick={() => setImagePickerRowIdx(null)}>
           <div className="bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-xl shadow-2xl max-w-md w-full max-h-[60vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-4 py-3 border-b border-[rgb(var(--color-border))]">
               <span className="text-sm font-medium text-[rgb(var(--color-text))]">Pick an image or visual</span>
@@ -683,7 +683,7 @@ The row already has a visual and design_plan. Read the sketch with read_sketch f
 
       {/* Visual generation instructions popup */}
       {visualPromptRow !== null && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setVisualPromptRow(null)}>
+        <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/40" onClick={() => setVisualPromptRow(null)}>
           <div className="bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-xl shadow-2xl w-full max-w-md flex flex-col" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-4 py-3 border-b border-[rgb(var(--color-border))]">
               <span className="text-sm font-medium text-[rgb(var(--color-text))]">

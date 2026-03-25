@@ -148,7 +148,7 @@ export function ScreenCaptureOverlay({ onCapture, onCancel }: ScreenCaptureOverl
   // ── Waiting for capture window ──
   if (waitingForCapture) {
     return (
-      <div className="fixed inset-0 z-[9999] bg-black/60 flex items-center justify-center">
+      <div className="fixed inset-0 z-modal bg-black/60 flex items-center justify-center">
         <div className="text-white/60 text-sm animate-pulse">Capture in progress...</div>
       </div>
     );
@@ -157,7 +157,7 @@ export function ScreenCaptureOverlay({ onCapture, onCancel }: ScreenCaptureOverl
   // ── Loading ──
   if (loading) {
     return (
-      <div className="fixed inset-0 z-[9999] bg-black/90 flex items-center justify-center">
+      <div className="fixed inset-0 z-modal bg-black/90 flex items-center justify-center">
         <div className="text-white text-sm animate-pulse">Preparing capture...</div>
       </div>
     );
@@ -165,7 +165,7 @@ export function ScreenCaptureOverlay({ onCapture, onCancel }: ScreenCaptureOverl
 
   // ── Monitor picker (multi-monitor only) ──
   return (
-    <div className="fixed inset-0 z-[9999] bg-black/90 flex flex-col items-center justify-center gap-6">
+    <div className="fixed inset-0 z-modal bg-black/90 flex flex-col items-center justify-center gap-6">
       <div className="text-white text-base font-medium">Select a screen to capture</div>
       <div className="flex gap-4">
         {monitors.map((m) => (

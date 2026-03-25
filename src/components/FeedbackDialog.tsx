@@ -102,7 +102,7 @@ export function FeedbackDialog({ isOpen, onClose }: FeedbackDialogProps) {
 
   return (
     <div
-      className="fixed inset-0 z-[10001] flex items-start justify-center pt-[20vh] bg-black/25"
+      className="fixed inset-0 z-modal flex items-start justify-center pt-[20vh] bg-black/25"
       onClick={onClose}
     >
       <div

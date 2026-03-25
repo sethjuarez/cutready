@@ -604,7 +604,7 @@ export function StoryboardList() {
 
       {/* Delete confirmation overlay */}
       {pendingDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+        <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/40">
           <div className="bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-xl shadow-xl p-5 max-w-sm mx-4">
             <p className="text-sm text-[rgb(var(--color-text))] mb-1 font-medium">Delete {pendingDelete.type}?</p>
             <p className="text-xs text-[rgb(var(--color-text-secondary))] mb-2">

@@ -155,7 +155,7 @@ export function Sidebar() {
       {contextMenu && (
         <div
           ref={menuRef}
-          className="fixed z-[100] py-1 min-w-[200px] bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-lg shadow-lg"
+          className="fixed z-dropdown py-1 min-w-[200px] bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-lg shadow-lg"
           style={{ left: menuPos?.x, top: menuPos?.y }}
         >
           <button

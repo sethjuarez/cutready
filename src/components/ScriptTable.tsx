@@ -408,7 +408,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
       {/* Lightbox overlay */}
       {lightboxSrc && (
         <div
-          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 cursor-pointer"
+          className="fixed inset-0 z-modal flex items-center justify-center bg-black/80 cursor-pointer"
           onClick={() => setLightboxSrc(null)}
         >
           <img
@@ -429,7 +429,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
       {/* Visual lightbox — near-fullscreen with preview/edit toggle */}
       {visualLightbox && (
         <div
-          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80"
+          className="fixed inset-0 z-modal flex items-center justify-center bg-black/80"
           onClick={() => {
             if (lightboxMode === "edit" && editorDirty) return; // don't close dirty editor by backdrop click
             closeLightbox();
@@ -562,7 +562,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
 
       {/* Undo toast */}
       {undoToast && (
-        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[9999] flex items-center gap-2 px-3 py-2 rounded-lg bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] shadow-lg text-[12px] text-[rgb(var(--color-text))]">
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-dropdown flex items-center gap-2 px-3 py-2 rounded-lg bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] shadow-lg text-[12px] text-[rgb(var(--color-text))]">
           <span>{undoToast}</span>
           <button
             onClick={() => { popUndo(); setUndoToast(null); }}
@@ -1403,7 +1403,7 @@ function MediaAddPopover({ idx, onCaptureScreenshot, onPickImage, onBrowseImage,
       </button>
       {state !== null && pos && createPortal(
         <div
-          className="fixed z-[9999] min-w-[170px] py-1 bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-lg shadow-lg"
+          className="fixed z-dropdown min-w-[170px] py-1 bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-lg shadow-lg"
           style={{ top: pos.top, left: pos.left, transform: "translateY(-100%) translateY(-4px)" }}
           role="menu"
           onMouseDown={(e) => e.stopPropagation()}

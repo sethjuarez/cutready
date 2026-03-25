@@ -68,7 +68,7 @@ export function ResizeHandle({ direction, onResize, onResizeEnd }: ResizeHandleP
     >
       {/* Invisible wider hit area overlapping adjacent panels */}
       <div
-        className={`absolute z-10 ${
+        className={`absolute z-sticky ${
           isHorizontal
             ? "top-0 bottom-0 -left-[3px] w-[7px] cursor-col-resize"
             : "left-0 right-0 -top-[3px] h-[7px] cursor-row-resize"

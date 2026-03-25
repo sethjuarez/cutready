@@ -34,6 +34,14 @@ export default {
       fontFamily: {
         sans: ['"Geist Sans"', '-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'system-ui', 'sans-serif'],
       },
+      zIndex: {
+        sticky: "var(--z-sticky)",
+        dropdown: "var(--z-dropdown)",
+        chrome: "var(--z-chrome)",
+        overlay: "var(--z-overlay)",
+        modal: "var(--z-modal)",
+        toast: "var(--z-toast)",
+      },
     },
   },
   plugins: [],

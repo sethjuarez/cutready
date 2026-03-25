@@ -96,7 +96,7 @@ export function CommandPalette({
 
   return (
     <div
-      className="fixed inset-0 z-[10001] flex justify-center pt-[36px] bg-black/25"
+      className="fixed inset-0 z-modal flex justify-center pt-[36px] bg-black/25"
       onClick={onClose}
     >
       <div

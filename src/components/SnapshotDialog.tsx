@@ -92,7 +92,7 @@ export function SnapshotDialog() {
   const willFork = isRewound;
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-start justify-center pt-[20vh]">
+    <div className="fixed inset-0 z-modal flex items-start justify-center pt-[20vh]">
       {/* Backdrop */}
       <div className="absolute inset-0 bg-black/40" onClick={close} />
 

@@ -99,7 +99,7 @@ export function IdentityDialog() {
   const isValid = name.trim().length > 0 && email.trim().length > 0;
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-start justify-center pt-[20vh]">
+    <div className="fixed inset-0 z-modal flex items-start justify-center pt-[20vh]">
       {/* Backdrop — no click-to-close since identity is needed */}
       <div className="absolute inset-0 bg-black/40" />
 

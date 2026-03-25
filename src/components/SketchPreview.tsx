@@ -133,7 +133,7 @@ export function SketchPreview({ rows, projectRoot, title, onClose, slides: slide
     : null;
 
   return (
-    <div className="fixed inset-0 z-[9999] bg-[rgb(var(--color-surface))] flex flex-col select-none">
+    <div className="fixed inset-0 z-modal bg-[rgb(var(--color-surface))] flex flex-col select-none">
       {/* Top bar */}
       <div className="flex items-center justify-between px-6 py-3 shrink-0 border-b border-[rgb(var(--color-border))]">
         <div className="flex items-center gap-3">

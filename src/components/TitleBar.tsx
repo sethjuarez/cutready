@@ -52,7 +52,7 @@ export function TitleBar({
   return (
     <div
       data-tauri-drag-region
-      className="no-select fixed top-0 left-0 right-0 z-50 flex items-center justify-between bg-[rgb(var(--color-surface))] border-b border-[rgb(var(--color-border))]"
+      className="no-select fixed top-0 left-0 right-0 z-chrome flex items-center justify-between bg-[rgb(var(--color-surface))] border-b border-[rgb(var(--color-border))]"
       style={{ height: "var(--titlebar-height)" }}
     >
       {/* Left: App branding */}
@@ -205,7 +205,7 @@ function UpdateIndicator() {
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full mt-1 z-[100] w-[240px] py-2.5 px-3 bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-lg shadow-lg">
+        <div className="absolute right-0 top-full mt-1 z-dropdown w-[240px] py-2.5 px-3 bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-lg shadow-lg">
           <div className="text-[10px] font-medium text-[rgb(var(--color-text-secondary))] uppercase tracking-wider mb-1.5">
             Update Available
           </div>

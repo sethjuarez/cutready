@@ -62,7 +62,7 @@ export function KeyboardShortcutsDialog({ open, onClose }: KeyboardShortcutsDial
   }
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-start justify-center pt-[18vh]">
+    <div className="fixed inset-0 z-modal flex items-start justify-center pt-[18vh]">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
       <div className="relative bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden">
         {/* Header */}
