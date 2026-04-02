@@ -128,8 +128,8 @@ cutready/
 | engine/versioning_merge.rs | ✅ Implemented | Three-way merge engine for .sk/.sb/.md |
 | engine/versioning_remote.rs | ✅ Implemented | Git remote sync (push/pull/fetch via `gh`) |
 | engine/agent/ | ✅ Implemented | Multi-agent AI system (Planner, Writer, Editor, Designer) |
-| engine/agent/llm.rs | ✅ Implemented | Foundry API client, Chat Completions + Responses API auto-routing |
-| engine/agent/runner.rs | ✅ Implemented | Agent loop with tool execution, context compaction |
+| engine/agent/llm.rs | ⚠️ Replace | Foundry API client — migrate to agentive crate |
+| engine/agent/runner.rs | ⚠️ Replace | Agent loop — migrate to agentive crate |
 | engine/agent/tools.rs | ✅ Implemented | Agent tool definitions (read/write sketches, web fetch, visuals) |
 | engine/import.rs | ✅ Implemented | .docx/.pdf/.pptx import to sketches/notes |
 | engine/memory.rs | ✅ Implemented | Agent memory system (core, procedural, archival) |
@@ -178,6 +178,40 @@ cutready/
 - **Path safety**: All user-provided paths go through `safe_resolve()` before filesystem access.
 - **Web shim**: `devMock.ts` activated when `import.meta.env.DEV && !__TAURI_INTERNALS__`. Enables Playwright E2E testing and browser development without the Tauri shell.
 - **Command palette**: Ctrl+Shift+P — commands registered via `commandRegistry.registerMany()` in AppLayout.
+
+## Shared Agentive Crate
+
+The LLM engine (`src-tauri/src/engine/agent/llm.rs` + `runner.rs`) should be migrated to use the shared **agentive** crate at `D:\projects\agentive` (GitHub: `sethjuarez/agentive`).
+
+### What agentive provides
+
+- `Provider` trait with `OpenAiProvider`, `AnthropicProvider`, `ResponsesProvider`
+- `AuthStrategy` enum — `ApiKey`, `Bearer`, `Dynamic(Arc<dyn Fn() -> String>)` for Entra/Foundry tokens
+- `run()` agentic loop with streaming, tool execution, retries, cancellation, guardrails, steering
+- Core types: `ChatMessage`, `ToolCall`, `ToolResult`, `ChatEvent`, `Usage`
+- SSE parser hardened against UTF-8 edge cases
+- Context window trimming
+- 117 tests including live integration against OpenAI, Azure OpenAI, and Anthropic
+
+### Migration plan
+
+1. Add `agentive` as a git dependency in `src-tauri/Cargo.toml`
+2. Replace `LlmClient` / `LlmProvider` with agentive's `OpenAiProvider` / `ResponsesProvider`
+3. Replace local chat/message/tool types with `agentive::types::*`
+4. Replace the custom runner loop with agentive's `run()` + `RunnerEvent` stream
+5. Wire `AuthStrategy::Dynamic` with the existing `azure_auth.rs` token refresh
+6. Keep `azure_auth.rs` — OAuth/PKCE/device-code flows are app-specific UX
+7. Keep `tools.rs` — sketch/storyboard/web tools are app-specific
+8. Keep `web.rs` — web fetch tool implementation
+9. Map agentive `RunnerEvent` to existing `AgentEvent` for Tauri channel streaming
+
+### What stays app-specific
+
+- `azure_auth.rs` — Entra OAuth UX (browser flow, device code, token refresh)
+- `tools.rs` — domain tools (read/write sketches, web fetch, visuals, image encoding)
+- `web.rs` — web page fetching for agent tools
+- `runner.rs` agent orchestration (Planner/Writer/Editor/Designer routing) — may wrap agentive's `run()`
+- `engine/memory.rs` — agent memory system (core, procedural, archival)
 
 ## Testing & Validation
 
