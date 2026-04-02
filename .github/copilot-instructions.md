@@ -207,11 +207,18 @@ The LLM engine (`src-tauri/src/engine/agent/llm.rs` + `runner.rs`) should be mig
 
 ### What stays app-specific
 
-- `azure_auth.rs` — Entra OAuth UX (browser flow, device code, token refresh)
+- ~~`azure_auth.rs`~~ — **Migrating to agentive** as `azure_oauth` module. OAuth protocol logic (PKCE, token exchange, refresh, device code) is now shared. CutReady keeps only the Tauri command wrappers (`azure_browser_auth_start`, `azure_browser_auth_complete`, `azure_token_refresh`) and the `PendingBrowserAuth` state.
 - `tools.rs` — domain tools (read/write sketches, web fetch, visuals, image encoding)
 - `web.rs` — web page fetching for agent tools
 - `runner.rs` agent orchestration (Planner/Writer/Editor/Designer routing) — may wrap agentive's `run()`
 - `engine/memory.rs` — agent memory system (core, procedural, archival)
+
+### TODO: CutReady agentive migration
+
+After the agentive `azure_oauth` module lands, CutReady's migration should also:
+- Replace `engine/agent/azure_auth.rs` internals with calls to `agentive::azure_oauth::*`
+- Keep the Tauri command wrappers in `commands/agent.rs` (they call agentive functions)
+- Replace `LlmClient` / `LlmProvider` with agentive providers (per migration plan above)
 
 ## Testing & Validation
 
