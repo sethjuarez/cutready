@@ -57,6 +57,9 @@ tauri-plugin-stronghold = "2"
 # Copilot SDK (community Rust SDK for GitHub Copilot CLI)
 copilot-sdk = { git = "https://github.com/sethjuarez/copilot-sdk-rust.git", rev = "96ef003" }
 
+# Shared agentic substrate
+agentive = { path = "../../agentive/lib" }
+
 # Vendor OpenSSL on macOS to support cross-compilation (ARM → Intel)
 [target.'cfg(target_os = "macos")'.dependencies]
 openssl-sys = { version = "0.9", features = ["vendored"] }

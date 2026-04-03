@@ -37,201 +37,14 @@ pub struct LlmConfig {
 }
 
 // ---------------------------------------------------------------------------
-// Chat message types (OpenAI-compatible, with multimodal support)
+// Shared types — re-exported from agentive
 // ---------------------------------------------------------------------------
 
-/// A single content part in a multimodal message.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type")]
-pub enum ContentPart {
-    #[serde(rename = "text")]
-    Text { text: String },
-    #[serde(rename = "image_url")]
-    ImageUrl { image_url: ImageUrlData },
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ImageUrlData {
-    /// Either a URL or a `data:image/png;base64,...` data URI.
-    pub url: String,
-    /// "low" (512px, 85 tokens) or "high" (full res). Default "low" for cost.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub detail: Option<String>,
-}
-
-/// Message content that can be either a plain string or a multimodal array.
-/// Serializes as a plain JSON string for text-only (backward compat) or
-/// as an array of content parts for multimodal messages.
-#[derive(Debug, Clone)]
-pub enum MessageContent {
-    Text(String),
-    Parts(Vec<ContentPart>),
-}
-
-impl MessageContent {
-    /// Get the text content (ignoring images).
-    pub fn text(&self) -> &str {
-        match self {
-            MessageContent::Text(s) => s,
-            MessageContent::Parts(parts) => {
-                for p in parts {
-                    if let ContentPart::Text { text } = p {
-                        return text;
-                    }
-                }
-                ""
-            }
-        }
-    }
-
-    /// Estimated character length (text only, images counted as fixed overhead).
-    pub fn char_len(&self) -> usize {
-        match self {
-            MessageContent::Text(s) => s.len(),
-            MessageContent::Parts(parts) => parts.iter().map(|p| match p {
-                ContentPart::Text { text } => text.len(),
-                ContentPart::ImageUrl { .. } => 200, // ~85 tokens at low detail
-            }).sum(),
-        }
-    }
-}
-
-impl Serialize for MessageContent {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        match self {
-            MessageContent::Text(s) => serializer.serialize_str(s),
-            MessageContent::Parts(parts) => parts.serialize(serializer),
-        }
-    }
-}
-
-impl<'de> Deserialize<'de> for MessageContent {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = serde_json::Value::deserialize(deserializer)?;
-        match value {
-            serde_json::Value::String(s) => Ok(MessageContent::Text(s)),
-            serde_json::Value::Array(_) => {
-                let parts: Vec<ContentPart> = serde_json::from_value(value)
-                    .map_err(serde::de::Error::custom)?;
-                Ok(MessageContent::Parts(parts))
-            }
-            _ => Err(serde::de::Error::custom("content must be a string or array")),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ChatMessage {
-    pub role: String,
-    /// Content is serialized as `null` (not omitted) when None. The OpenAI API
-    /// requires `"content": null` on assistant messages that have tool_calls.
-    pub content: Option<MessageContent>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub tool_calls: Option<Vec<ToolCall>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub tool_call_id: Option<String>,
-}
-
-impl ChatMessage {
-    pub fn system(content: &str) -> Self {
-        Self {
-            role: "system".into(),
-            content: Some(MessageContent::Text(content.into())),
-            tool_calls: None,
-            tool_call_id: None,
-        }
-    }
-    pub fn user(content: &str) -> Self {
-        Self {
-            role: "user".into(),
-            content: Some(MessageContent::Text(content.into())),
-            tool_calls: None,
-            tool_call_id: None,
-        }
-    }
-    pub fn user_with_images(text: &str, parts: Vec<ContentPart>) -> Self {
-        let mut all_parts = vec![ContentPart::Text { text: text.into() }];
-        all_parts.extend(parts);
-        Self {
-            role: "user".into(),
-            content: Some(MessageContent::Parts(all_parts)),
-            tool_calls: None,
-            tool_call_id: None,
-        }
-    }
-    pub fn tool_result(tool_call_id: &str, content: &str) -> Self {
-        Self {
-            role: "tool".into(),
-            content: Some(MessageContent::Text(content.into())),
-            tool_calls: None,
-            tool_call_id: Some(tool_call_id.into()),
-        }
-    }
-    /// Get text content as a string reference (convenience).
-    pub fn text(&self) -> Option<&str> {
-        self.content.as_ref().map(|c| c.text())
-    }
-
-    /// Strip control characters (except \n, \r, \t) and lone surrogates from all
-    /// text in this message: content text, content parts text, and tool call
-    /// arguments. This prevents JSON parse errors on the server side.
-    pub fn sanitize(&mut self) {
-        fn clean(s: &str) -> String {
-            s.chars()
-                .filter(|c| !c.is_control() || matches!(c, '\n' | '\r' | '\t'))
-                .collect()
-        }
-        if let Some(content) = &mut self.content {
-            match content {
-                MessageContent::Text(t) => *t = clean(t),
-                MessageContent::Parts(parts) => {
-                    for p in parts {
-                        if let ContentPart::Text { text } = p {
-                            *text = clean(text);
-                        }
-                    }
-                }
-            }
-        }
-        if let Some(tool_calls) = &mut self.tool_calls {
-            for tc in tool_calls {
-                tc.function.arguments = clean(&tc.function.arguments);
-            }
-        }
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Tool / function calling types
-// ---------------------------------------------------------------------------
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ToolDefinition {
-    #[serde(rename = "type")]
-    pub tool_type: String,
-    pub function: FunctionDefinition,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FunctionDefinition {
-    pub name: String,
-    pub description: String,
-    pub parameters: serde_json::Value,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ToolCall {
-    pub id: String,
-    #[serde(rename = "type")]
-    pub call_type: String,
-    pub function: FunctionCall,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FunctionCall {
-    pub name: String,
-    pub arguments: String,
-}
+pub use agentive::{ChatMessage, ContentPart, FunctionCall, MessageContent, ToolCall};
+pub use agentive::Tool as ToolDefinition;
+pub use agentive::ToolFunction as FunctionDefinition;
+pub use agentive::ImageUrl as ImageUrlData;
+pub use agentive::sanitize_message;
 
 // ---------------------------------------------------------------------------
 // API request / response types
@@ -624,7 +437,7 @@ impl LlmClient {
                     if let Some(content) = &msg.content {
                         input.push(serde_json::json!({
                             "role": "developer",
-                            "content": content.text()
+                            "content": content.text().unwrap_or("")
                         }));
                     }
                 }
@@ -670,7 +483,7 @@ impl LlmClient {
                     if let Some(tool_calls) = &msg.tool_calls {
                         // Emit text content before tool calls
                         if let Some(content) = &msg.content {
-                            let text = content.text();
+                            let text = content.text().unwrap_or("");
                             if !text.is_empty() {
                                 input.push(serde_json::json!({
                                     "type": "message",
@@ -692,7 +505,7 @@ impl LlmClient {
                         input.push(serde_json::json!({
                             "type": "message",
                             "role": "assistant",
-                            "content": [{"type": "output_text", "text": content.text()}]
+                            "content": [{"type": "output_text", "text": content.text().unwrap_or("")}]
                         }));
                     }
                 }
@@ -703,7 +516,7 @@ impl LlmClient {
                         input.push(serde_json::json!({
                             "type": "function_call_output",
                             "call_id": call_id,
-                            "output": content.text()
+                            "output": content.text().unwrap_or("")
                         }));
                     }
                 }
@@ -711,7 +524,7 @@ impl LlmClient {
                     if let Some(content) = &msg.content {
                         input.push(serde_json::json!({
                             "role": msg.role,
-                            "content": content.text()
+                            "content": content.text().unwrap_or("")
                         }));
                     }
                 }
@@ -1210,7 +1023,7 @@ impl LlmClient {
     ) -> Result<ChatCompletionResponse, String> {
         let mut clean_messages = messages.to_vec();
         for msg in &mut clean_messages {
-            msg.sanitize();
+            sanitize_message(msg);
         }
 
         // Codex/Pro models require the Responses API
@@ -1375,7 +1188,7 @@ impl LlmClient {
         // JSON parse errors from control characters in tool results, user input,
         // or model-generated content.
         for msg in &mut final_messages {
-            msg.sanitize();
+            sanitize_message(msg);
         }
 
         // Build the appropriate request body and URL
