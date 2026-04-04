@@ -401,7 +401,7 @@ pub async fn azure_device_code_start(
     client_id: Option<String>,
 ) -> Result<DeviceCodeResponse, String> {
     let tid = if tenant_id.is_empty() { "organizations" } else { &tenant_id };
-    azure_auth::request_device_code(tid, client_id.as_deref()).await
+    azure_auth::request_device_code(tid, client_id.as_deref(), None).await
 }
 
 /// Poll for the token after the user has completed sign-in.
@@ -426,7 +426,7 @@ pub async fn azure_token_refresh(
     client_id: Option<String>,
 ) -> Result<TokenResponse, String> {
     let tid = if tenant_id.is_empty() { "organizations" } else { &tenant_id };
-    azure_auth::refresh_token(tid, &refresh_token, client_id.as_deref()).await
+    azure_auth::refresh_token(tid, &refresh_token, client_id.as_deref(), None).await
 }
 
 // ---------------------------------------------------------------------------
@@ -454,7 +454,7 @@ pub async fn azure_browser_auth_start(
 ) -> Result<AuthCodeFlowInit, String> {
     let tid = if tenant_id.is_empty() { "organizations" } else { &tenant_id };
     let (init, verifier) =
-        azure_auth::start_auth_code_flow(tid, client_id.as_deref()).await?;
+        azure_auth::start_auth_code_flow(tid, client_id.as_deref(), None).await?;
 
     // Store verifier + port for the exchange step
     let mut guard = pending_auth().lock().await;
@@ -483,7 +483,7 @@ pub async fn azure_browser_auth_complete(
         (p.code_verifier.clone(), p.port)
     };
 
-    let code = azure_auth::wait_for_auth_code(port, timeout.unwrap_or(300)).await?;
+    let code = azure_auth::wait_for_auth_code(port, timeout.unwrap_or(300), "CutReady").await?;
 
     let redirect_uri = format!("http://localhost:{port}");
     let token = azure_auth::exchange_code_for_token(
@@ -492,6 +492,7 @@ pub async fn azure_browser_auth_complete(
         &redirect_uri,
         &verifier,
         client_id.as_deref(),
+        None,
     )
     .await?;
 
