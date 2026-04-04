@@ -61,6 +61,28 @@ fn strip_inline_base64(s: &str) -> String {
     result
 }
 
+/// Parse a raw tool result into a `ToolOutput`, extracting any `[VISION_IMAGES]`
+/// section into image content parts.  The text portion is sanitized for the API.
+fn parse_tool_output(raw: &str) -> agentive::ToolOutput {
+    use crate::engine::agent::llm::ContentPart;
+
+    if let Some(marker_pos) = raw.find("\n[VISION_IMAGES]") {
+        let text = sanitize_for_api(&raw[..marker_pos]);
+        let images_section = &raw[marker_pos + "\n[VISION_IMAGES]".len()..];
+        let images: Vec<ContentPart> = images_section
+            .lines()
+            .filter_map(|line| serde_json::from_str::<ContentPart>(line).ok())
+            .collect();
+        if images.is_empty() {
+            agentive::ToolOutput::Text(text)
+        } else {
+            agentive::ToolOutput::with_images(text, images)
+        }
+    } else {
+        agentive::ToolOutput::Text(sanitize_for_api(raw))
+    }
+}
+
 
 // ---------------------------------------------------------------------------
 // Event types
@@ -228,7 +250,7 @@ fn run_inner<'a>(
         let vision_enabled = vision.enabled;
         let tool_depth = depth;
 
-        let tool_executor = move |tool_call: agentive::ToolCall| -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<String, String>> + Send>> {
+        let tool_executor = move |tool_call: agentive::ToolCall| -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<agentive::ToolOutput, String>> + Send>> {
             let project_root = project_root_str.clone();
             let agent_prompts = agent_prompts_owned.clone();
             let provider = provider_for_tools.clone();
@@ -242,18 +264,15 @@ fn run_inner<'a>(
                 )
             } else if tool_call.function.name == "fetch_url" {
                 let tc = tool_call;
-                Box::pin(async move { exec_fetch_url(&tc).await })
+                Box::pin(async move {
+                    exec_fetch_url(&tc).await.map(agentive::ToolOutput::from)
+                })
             } else {
                 let result = tools::execute_tool(
                     &tool_call, Path::new(&project_root), vision_enabled,
                 );
-                // Strip vision image markers (option a — images dropped for now)
-                let clean = if let Some(pos) = result.find("\n[VISION_IMAGES]") {
-                    result[..pos].to_string()
-                } else {
-                    result
-                };
-                Box::pin(std::future::ready(Ok(sanitize_for_api(&clean))))
+                let output = parse_tool_output(&result);
+                Box::pin(std::future::ready(Ok(output)))
             }
         };
 
@@ -305,10 +324,10 @@ fn exec_delegation(
     depth: usize,
     vision_enabled: bool,
     emit: Arc<dyn Fn(AgentEvent) + Send + Sync + 'static>,
-) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<String, String>> + Send>> {
+) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<agentive::ToolOutput, String>> + Send>> {
     if depth >= MAX_DELEGATION_DEPTH {
         return Box::pin(std::future::ready(
-            Ok("Error: maximum delegation depth reached — cannot delegate further".into()),
+            Ok(agentive::ToolOutput::from("Error: maximum delegation depth reached — cannot delegate further")),
         ));
     }
 
@@ -317,11 +336,11 @@ fn exec_delegation(
 
     let agent_id = match args.get("agent_id").and_then(|v| v.as_str()) {
         Some(id) => id.to_string(),
-        None => return Box::pin(std::future::ready(Ok("Error: missing 'agent_id' argument".into()))),
+        None => return Box::pin(std::future::ready(Ok(agentive::ToolOutput::from("Error: missing 'agent_id' argument")))),
     };
     let message = match args.get("message").and_then(|v| v.as_str()) {
         Some(m) => m.to_string(),
-        None => return Box::pin(std::future::ready(Ok("Error: missing 'message' argument".into()))),
+        None => return Box::pin(std::future::ready(Ok(agentive::ToolOutput::from("Error: missing 'message' argument")))),
     };
 
     let prompt = match agent_prompts.get(&agent_id) {
@@ -329,7 +348,7 @@ fn exec_delegation(
         None => {
             let available = agent_prompts.keys().cloned().collect::<Vec<_>>().join(", ");
             return Box::pin(std::future::ready(
-                Ok(format!("Error: unknown agent '{agent_id}'. Available: {available}")),
+                Ok(agentive::ToolOutput::from(format!("Error: unknown agent '{agent_id}'. Available: {available}"))),
             ));
         }
     };
@@ -364,7 +383,7 @@ fn exec_delegation(
         let tools_for_tools = tools.clone();
         let emit_for_tools = emit.clone();
 
-        let sub_tool_executor = move |tool_call: agentive::ToolCall| -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<String, String>> + Send>> {
+        let sub_tool_executor = move |tool_call: agentive::ToolCall| -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<agentive::ToolOutput, String>> + Send>> {
             let project_root = project_root_for_tools.clone();
             let agent_prompts = agent_prompts_for_tools.clone();
             let provider = provider_for_tools.clone();
@@ -378,17 +397,15 @@ fn exec_delegation(
                 )
             } else if tool_call.function.name == "fetch_url" {
                 let tc = tool_call;
-                Box::pin(async move { exec_fetch_url(&tc).await })
+                Box::pin(async move {
+                    exec_fetch_url(&tc).await.map(agentive::ToolOutput::from)
+                })
             } else {
                 let result = tools::execute_tool(
                     &tool_call, Path::new(&project_root), vision_enabled,
                 );
-                let clean = if let Some(pos) = result.find("\n[VISION_IMAGES]") {
-                    result[..pos].to_string()
-                } else {
-                    result
-                };
-                Box::pin(std::future::ready(Ok(sanitize_for_api(&clean))))
+                let output = parse_tool_output(&result);
+                Box::pin(std::future::ready(Ok(output)))
             }
         };
 
@@ -431,7 +448,7 @@ fn exec_delegation(
             agent_id: agent_id.clone(),
         });
 
-        Ok(result_text)
+        Ok(agentive::ToolOutput::from(result_text))
     })
 }
 
@@ -496,5 +513,31 @@ mod tests {
         let result = sanitize_for_api(&input);
         assert!(result.contains("[base64 image removed]"));
         assert!(!result.contains(&big));
+    }
+
+    #[test]
+    fn parse_tool_output_text_only() {
+        let output = parse_tool_output("Hello world");
+        assert!(matches!(output, agentive::ToolOutput::Text(_)));
+        assert_eq!(output.text(), "Hello world");
+    }
+
+    #[test]
+    fn parse_tool_output_with_images() {
+        let image_json = r#"{"type":"image_url","image_url":{"url":"data:image/png;base64,abc"}}"#;
+        let raw = format!("Sketch: Login Page\n[VISION_IMAGES]{image_json}");
+        let output = parse_tool_output(&raw);
+        assert_eq!(output.text(), "Sketch: Login Page");
+        assert!(output.images().is_some());
+        assert_eq!(output.images().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn parse_tool_output_bad_image_json_falls_back() {
+        let raw = "Some text\n[VISION_IMAGES]not-valid-json";
+        let output = parse_tool_output(raw);
+        // Bad JSON lines are skipped, resulting in no images → text-only
+        assert!(matches!(output, agentive::ToolOutput::Text(_)));
+        assert_eq!(output.text(), "Some text");
     }
 }
