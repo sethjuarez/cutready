@@ -38,6 +38,7 @@ interface AuthCodeFlowInit {
 type SettingsTab = "ai" | "agents" | "memory" | "display" | "feedback" | "repository";
 
 import { inputClass, tabBtnClass } from "../styles";
+import { FoundryResourcePicker } from "./FoundryResourcePicker";
 
 export function SettingsPanel({ mode = "global" }: { mode?: "global" | "workspace" }) {
   const { settings, updateSetting, loaded } = useSettings();
@@ -57,7 +58,11 @@ export function SettingsPanel({ mode = "global" }: { mode?: "global" | "workspac
     api_key: settings.aiApiKey,
     model: settings.aiModel || "unused",
     bearer_token:
-      settings.aiAuthMode === "azure_oauth" ? settings.aiAccessToken : null,
+      settings.aiProvider === "microsoft_foundry"
+        ? settings.aiAccessToken
+        : settings.aiAuthMode === "azure_oauth"
+          ? settings.aiAccessToken
+          : null,
   });
 
   const fetchModels = async () => {
@@ -108,6 +113,10 @@ export function SettingsPanel({ mode = "global" }: { mode?: "global" | "workspac
   const signOut = async () => {
     await updateSetting("aiAccessToken", "");
     await updateSetting("aiRefreshToken", "");
+    await updateSetting("aiManagementToken", "");
+    await updateSetting("aiSubscriptionId", "");
+    await updateSetting("aiResourceGroup", "");
+    await updateSetting("aiResourceName", "");
     setOauthStatus("idle");
   };
 
@@ -120,9 +129,16 @@ export function SettingsPanel({ mode = "global" }: { mode?: "global" | "workspac
   }
 
   const isAzure = settings.aiProvider === "azure_openai";
-  const isOAuth = isAzure && settings.aiAuthMode === "azure_oauth";
+  const isFoundry = settings.aiProvider === "microsoft_foundry";
+  const isAnthropic = settings.aiProvider === "anthropic";
+  const isOAuth =
+    (isAzure && settings.aiAuthMode === "azure_oauth") || isFoundry;
   const hasToken = !!settings.aiAccessToken;
-  const canFetchModels = isOAuth ? hasToken : !!settings.aiApiKey;
+  const canFetchModels = isAnthropic
+    ? true
+    : isOAuth
+      ? hasToken
+      : !!settings.aiApiKey;
 
   // Tabs depend on mode
   const globalTabs = ["display", "ai", "agents", "feedback"] as const;
@@ -173,6 +189,8 @@ export function SettingsPanel({ mode = "global" }: { mode?: "global" | "workspac
           settings={settings}
           updateSetting={updateSetting}
           isAzure={isAzure}
+          isFoundry={isFoundry}
+          isAnthropic={isAnthropic}
           isOAuth={isOAuth}
           hasToken={hasToken}
           canFetchModels={canFetchModels}
@@ -353,10 +371,12 @@ function DisplayTab({ settings, updateSetting }: {
 
 // ── AI Provider Tab ──────────────────────────────────────────────
 
-function AIProviderTab({ settings, updateSetting, isAzure, isOAuth, hasToken, canFetchModels, models, setModels, loadingModels, modelFilter, setModelFilter, modelError, fetchModels, oauthStatus, oauthError, startOAuthFlow, signOut }: {
+function AIProviderTab({ settings, updateSetting, isAzure, isFoundry, isAnthropic, isOAuth, hasToken, canFetchModels, models, setModels, loadingModels, modelFilter, setModelFilter, modelError, fetchModels, oauthStatus, oauthError, startOAuthFlow, signOut }: {
   settings: ReturnType<typeof useSettings>["settings"];
   updateSetting: ReturnType<typeof useSettings>["updateSetting"];
   isAzure: boolean;
+  isFoundry: boolean;
+  isAnthropic: boolean;
   isOAuth: boolean;
   hasToken: boolean;
   canFetchModels: boolean;
@@ -382,36 +402,62 @@ function AIProviderTab({ settings, updateSetting, isAzure, isOAuth, hasToken, ca
           onChange={(e) => {
             updateSetting("aiProvider", e.target.value);
             setModels([]);
-            if (e.target.value !== "azure_openai") {
+            if (
+              e.target.value !== "azure_openai" &&
+              e.target.value !== "microsoft_foundry"
+            ) {
               updateSetting("aiAuthMode", "api_key");
+            }
+            if (e.target.value === "microsoft_foundry") {
+              updateSetting("aiAuthMode", "azure_oauth");
             }
           }}
           className={inputClass}
         >
+          <option value="microsoft_foundry">Microsoft Foundry</option>
           <option value="azure_openai">Azure OpenAI</option>
           <option value="openai">OpenAI</option>
+          <option value="anthropic">Anthropic</option>
         </select>
       </fieldset>
 
-      {/* Endpoint */}
-      <fieldset className="flex flex-col gap-2">
-        <label className="text-sm font-medium">
-          {isAzure ? "Endpoint" : "Endpoint (optional)"}
-        </label>
-        <input
-          type="text"
-          value={settings.aiEndpoint}
-          onChange={(e) => updateSetting("aiEndpoint", e.target.value)}
-          placeholder={
-            isAzure
-              ? "https://your-resource.openai.azure.com"
-              : "https://api.openai.com (default)"
-          }
-          className={inputClass}
-        />
-      </fieldset>
+      {/* Endpoint — hidden for Anthropic, auto-set for Foundry */}
+      {!isAnthropic && !isFoundry && (
+        <fieldset className="flex flex-col gap-2">
+          <label className="text-sm font-medium">
+            {isAzure ? "Endpoint" : "Endpoint (optional)"}
+          </label>
+          <input
+            type="text"
+            value={settings.aiEndpoint}
+            onChange={(e) => updateSetting("aiEndpoint", e.target.value)}
+            placeholder={
+              isAzure
+                ? "https://your-resource.openai.azure.com"
+                : "https://api.openai.com (default)"
+            }
+            className={inputClass}
+          />
+        </fieldset>
+      )}
 
-      {/* Auth Mode (Azure only) */}
+      {/* Foundry endpoint (read-only, set by resource picker) */}
+      {isFoundry && settings.aiEndpoint && (
+        <fieldset className="flex flex-col gap-2">
+          <label className="text-sm font-medium">Endpoint</label>
+          <input
+            type="text"
+            value={settings.aiEndpoint}
+            readOnly
+            className={inputClass + " opacity-60 cursor-not-allowed"}
+          />
+          <p className="text-xs text-[rgb(var(--color-text-secondary))]">
+            Set automatically from resource selection below.
+          </p>
+        </fieldset>
+      )}
+
+      {/* Auth Mode (Azure OpenAI only — Foundry always uses Entra) */}
       {isAzure && (
         <fieldset className="flex flex-col gap-2">
           <label className="text-sm font-medium">Authentication</label>
@@ -426,8 +472,8 @@ function AIProviderTab({ settings, updateSetting, isAzure, isOAuth, hasToken, ca
         </fieldset>
       )}
 
-      {/* API Key (not for OAuth) */}
-      {!isOAuth && (
+      {/* API Key (OpenAI / Anthropic / Azure api_key mode) */}
+      {!isOAuth && !isFoundry && (
         <fieldset className="flex flex-col gap-2">
           <label className="text-sm font-medium">API Key</label>
           <input
@@ -440,14 +486,15 @@ function AIProviderTab({ settings, updateSetting, isAzure, isOAuth, hasToken, ca
         </fieldset>
       )}
 
-      {/* Azure OAuth Flow */}
+      {/* Azure / Foundry OAuth Flow */}
       {isOAuth && (
         <div className="flex flex-col gap-3">
+          {/* Tenant/Client — show for both Azure OAuth and Foundry */}
           <fieldset className="flex flex-col gap-2">
             <label className="text-sm font-medium">
               Tenant ID{" "}
               <span className="text-[rgb(var(--color-text-secondary))] font-normal">
-                (optional — defaults to "organizations")
+                (optional — defaults to &quot;organizations&quot;)
               </span>
             </label>
             <input
@@ -498,7 +545,9 @@ function AIProviderTab({ settings, updateSetting, isAzure, isOAuth, hasToken, ca
                   ? "Starting…"
                   : oauthStatus === "polling"
                     ? "Waiting for browser sign-in…"
-                    : "Sign in with Azure"}
+                    : isFoundry
+                      ? "Sign in with Microsoft Entra"
+                      : "Sign in with Azure"}
               </button>
 
               {oauthStatus === "polling" && (
@@ -515,6 +564,14 @@ function AIProviderTab({ settings, updateSetting, isAzure, isOAuth, hasToken, ca
         </div>
       )}
 
+      {/* Foundry Resource Picker */}
+      {isFoundry && hasToken && (
+        <FoundryResourcePicker
+          settings={settings}
+          updateSetting={updateSetting}
+        />
+      )}
+
       {/* Model Selection */}
       <fieldset className="flex flex-col gap-2">
         <label className="text-sm font-medium">Model</label>
@@ -529,7 +586,7 @@ function AIProviderTab({ settings, updateSetting, isAzure, isOAuth, hasToken, ca
                 updateSetting("aiModel", e.target.value);
               }
             }}
-            placeholder={models.length > 0 ? "Filter models…" : (isAzure ? "gpt-4o" : "gpt-4o")}
+            placeholder={models.length > 0 ? "Filter models…" : (isAnthropic ? "claude-sonnet-4-20250514" : "gpt-4o")}
             className={inputClass + " flex-1"}
           />
           <button

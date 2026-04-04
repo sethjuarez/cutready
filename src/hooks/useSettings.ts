@@ -18,11 +18,11 @@ export interface AgentPreset {
 
 export interface GlobalSettings {
   outputDirectory: string;
-  /** "azure_openai" or "openai" */
+  /** "microsoft_foundry" | "azure_openai" | "openai" | "anthropic" */
   aiProvider: string;
   /** "api_key" or "azure_oauth" */
   aiAuthMode: string;
-  /** Azure: resource endpoint. OpenAI: leave empty for default. */
+  /** Azure/Foundry: resource endpoint. OpenAI: leave empty for default. Anthropic: ignored. */
   aiEndpoint: string;
   /** API key for the selected provider. */
   aiApiKey: string;
@@ -36,6 +36,14 @@ export interface GlobalSettings {
   aiAccessToken: string;
   /** Azure OAuth refresh token (for silent re-auth). */
   aiRefreshToken: string;
+  /** ARM management token (for Foundry resource/project discovery). */
+  aiManagementToken: string;
+  /** Selected Azure subscription ID (Foundry). */
+  aiSubscriptionId: string;
+  /** Selected Azure resource group (Foundry). */
+  aiResourceGroup: string;
+  /** Selected Azure AI resource name (Foundry). */
+  aiResourceName: string;
   audioDevice: string;
   /** Currently selected agent ID (default: "planner"). */
   aiSelectedAgent: string;
@@ -95,6 +103,10 @@ const defaultGlobalSettings: GlobalSettings = {
   aiClientId: "",
   aiAccessToken: "",
   aiRefreshToken: "",
+  aiManagementToken: "",
+  aiSubscriptionId: "",
+  aiResourceGroup: "",
+  aiResourceName: "",
   audioDevice: "",
   aiSelectedAgent: "planner",
   aiAgents: [],
@@ -202,7 +214,10 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
     set({ settings: { ...get().settings, ...result }, loaded: true });
 
     // Auto-refresh OAuth token on startup if we have a refresh token
-    if (result.aiAuthMode === "azure_oauth" && result.aiRefreshToken) {
+    const needsOAuth =
+      (result.aiProvider === "azure_openai" && result.aiAuthMode === "azure_oauth") ||
+      result.aiProvider === "microsoft_foundry";
+    if (needsOAuth && result.aiRefreshToken) {
       try {
         const tokenResult = await invoke<{ access_token: string; refresh_token?: string }>(
           "azure_token_refresh",

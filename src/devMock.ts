@@ -206,7 +206,28 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
     case "delete_feedback":
       return null;
     case "list_models":
-      return ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-35-turbo", "o1-preview"];
+      return [
+        { id: "gpt-4o", owned_by: "openai", capabilities: { vision: "true" }, context_length: 128000 },
+        { id: "gpt-4o-mini", owned_by: "openai", capabilities: {}, context_length: 128000 },
+        { id: "gpt-4-turbo", owned_by: "openai", capabilities: { vision: "true" }, context_length: 128000 },
+        { id: "o1-preview", owned_by: "openai", capabilities: {}, context_length: 128000 },
+      ];
+    case "list_azure_subscriptions":
+      return [
+        { subscription_id: "00000000-0000-0000-0000-000000000001", display_name: "Dev Subscription", state: "Enabled" },
+        { subscription_id: "00000000-0000-0000-0000-000000000002", display_name: "Production", state: "Enabled" },
+      ];
+    case "list_azure_ai_resources":
+      return [
+        { name: "my-ai-services", resource_group: "rg-ai", kind: "AIServices", endpoint: "https://my-ai-services.services.ai.azure.com", location: "eastus2" },
+        { name: "my-openai", resource_group: "rg-ai", kind: "OpenAI", endpoint: "https://my-openai.openai.azure.com", location: "westus" },
+      ];
+    case "list_foundry_projects":
+      return [
+        { name: "demo-project", endpoint: "https://my-ai-services.services.ai.azure.com/api/projects/demo-project" },
+      ];
+    case "azure_token_refresh":
+      return { access_token: "mock-access-token", token_type: "Bearer", expires_in: 3600, refresh_token: "mock-refresh-token" };
     case "agent_chat_with_tools": {
       // Simulate streaming with agent events
       const userMsgs = (args?.messages as Array<{ role: string; content: string }>) || [];

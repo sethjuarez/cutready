@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 // ---------------------------------------------------------------------------
 
 pub use agentive::{
-    ChatMessage, ContentPart, FunctionCall, ImageUrl, MessageContent,
+    ChatMessage, ContentPart, ImageUrl,
     Provider, Tool, ToolCall, ToolFunction,
     context_budget, needs_responses_api, simple_chat, supports_vision,
 };
@@ -26,22 +26,24 @@ pub use agentive::discovery::ModelInfo;
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum LlmProvider {
+    MicrosoftFoundry,
     AzureOpenai,
     Openai,
+    Anthropic,
 }
 
 /// Full configuration for an LLM provider.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LlmConfig {
     pub provider: LlmProvider,
-    /// For Azure: `https://<resource>.openai.azure.com`
-    /// For OpenAI: `https://api.openai.com` (or omit — defaults applied)
+    /// For Azure/Foundry: resource endpoint.  For OpenAI: optional.
+    /// For Anthropic: ignored (fixed to api.anthropic.com).
     pub endpoint: String,
-    /// API key (used when auth_mode is "api_key").
+    /// API key (OpenAI, Azure api_key mode, Anthropic).
     pub api_key: String,
-    /// Deployment / model name (e.g. "gpt-4o", "gpt-4.1").
+    /// Deployment / model name (e.g. "gpt-4o", "claude-sonnet-4").
     pub model: String,
-    /// Optional bearer token (used when auth_mode is "azure_oauth").
+    /// Bearer token (Entra OAuth for Azure/Foundry).
     #[serde(default)]
     pub bearer_token: Option<String>,
 }
@@ -55,10 +57,18 @@ pub fn build_provider(
     config: &LlmConfig,
     reported_context_length: Option<usize>,
 ) -> Arc<dyn Provider + Send + Sync> {
-    let endpoint = config.endpoint.trim_end_matches('/');
-    let auth = resolve_auth(config);
     let budget = context_budget(&config.model, reported_context_length);
     let vision = supports_vision(&config.model);
+
+    if config.provider == LlmProvider::Anthropic {
+        return Arc::new(
+            agentive::AnthropicProvider::new(&config.api_key, &config.model)
+                .with_context_budget(budget),
+        );
+    }
+
+    let endpoint = config.endpoint.trim_end_matches('/');
+    let auth = resolve_auth(config);
 
     if needs_responses_api(&config.model) {
         Arc::new(
@@ -76,7 +86,12 @@ pub fn build_provider(
 }
 
 /// List available models from the provider via agentive discovery.
+///
+/// For Anthropic, returns a hardcoded list (no discovery API).
 pub async fn list_models(config: &LlmConfig) -> Result<Vec<ModelInfo>, String> {
+    if config.provider == LlmProvider::Anthropic {
+        return Ok(anthropic_models());
+    }
     let auth = resolve_auth(config);
     agentive::discovery::list_models(&config.endpoint, &auth).await
 }
@@ -89,7 +104,34 @@ fn resolve_auth(config: &LlmConfig) -> agentive::AuthStrategy {
         }
     }
     match config.provider {
+        LlmProvider::MicrosoftFoundry => {
+            // Foundry should always have a bearer token from Entra.
+            // Fall back to ApiKey if somehow set without OAuth.
+            agentive::AuthStrategy::ApiKey(config.api_key.clone())
+        }
         LlmProvider::AzureOpenai => agentive::AuthStrategy::ApiKey(config.api_key.clone()),
         LlmProvider::Openai => agentive::AuthStrategy::Bearer(config.api_key.clone()),
+        LlmProvider::Anthropic => {
+            // Anthropic uses its own header (x-api-key), handled by AnthropicProvider.
+            // This shouldn't be called for Anthropic, but return a placeholder.
+            agentive::AuthStrategy::ApiKey(config.api_key.clone())
+        }
     }
+}
+
+/// Known Anthropic models (no discovery API available).
+fn anthropic_models() -> Vec<ModelInfo> {
+    [
+        ("claude-sonnet-4-20250514", "Anthropic"),
+        ("claude-opus-4-20250514", "Anthropic"),
+        ("claude-haiku-3-5-20241022", "Anthropic"),
+    ]
+    .into_iter()
+    .map(|(id, owner)| ModelInfo {
+        id: id.into(),
+        owned_by: Some(owner.into()),
+        capabilities: None,
+        context_length: None,
+    })
+    .collect()
 }

@@ -31,6 +31,8 @@ impl From<ProviderConfig> for LlmConfig {
         Self {
             provider: match c.provider.as_str() {
                 "openai" => LlmProvider::Openai,
+                "anthropic" => LlmProvider::Anthropic,
+                "microsoft_foundry" => LlmProvider::MicrosoftFoundry,
                 _ => LlmProvider::AzureOpenai,
             },
             endpoint: c.endpoint,
@@ -336,9 +338,10 @@ pub async fn azure_token_refresh(
     tenant_id: String,
     refresh_token: String,
     client_id: Option<String>,
+    scope: Option<String>,
 ) -> Result<TokenResponse, String> {
     let tid = if tenant_id.is_empty() { "organizations" } else { &tenant_id };
-    azure_auth::refresh_token(tid, &refresh_token, client_id.as_deref(), None).await
+    azure_auth::refresh_token(tid, &refresh_token, client_id.as_deref(), scope.as_deref()).await
 }
 
 // ---------------------------------------------------------------------------
@@ -413,4 +416,44 @@ pub async fn azure_browser_auth_complete(
     *guard = None;
 
     Ok(token)
+}
+
+// ---------------------------------------------------------------------------
+// ARM Resource Discovery (Microsoft Foundry setup wizard)
+// ---------------------------------------------------------------------------
+
+use agentive::arm_discovery::{AiResource, FoundryProject, Subscription};
+
+/// List Azure subscriptions accessible to the user.
+#[tauri::command]
+pub async fn list_azure_subscriptions(
+    management_token: String,
+) -> Result<Vec<Subscription>, String> {
+    agentive::arm_discovery::list_subscriptions(&management_token).await
+}
+
+/// List AI resources (Azure OpenAI / AI Services) in a subscription.
+#[tauri::command]
+pub async fn list_azure_ai_resources(
+    management_token: String,
+    subscription_id: String,
+) -> Result<Vec<AiResource>, String> {
+    agentive::arm_discovery::list_ai_resources(&management_token, &subscription_id).await
+}
+
+/// List Foundry projects under an AI resource.
+#[tauri::command]
+pub async fn list_foundry_projects(
+    management_token: String,
+    subscription_id: String,
+    resource_group: String,
+    resource_name: String,
+) -> Result<Vec<FoundryProject>, String> {
+    agentive::arm_discovery::list_foundry_projects(
+        &management_token,
+        &subscription_id,
+        &resource_group,
+        &resource_name,
+    )
+    .await
 }
