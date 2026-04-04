@@ -102,8 +102,7 @@ pub async fn agent_chat_with_tools(
 
     // Determine effective vision: user setting AND model capability
     let vision_enabled = vision_mode != "off" && llm::supports_vision(&llm_config.model);
-    let include_sketches = vision_mode == "notes_and_sketches";
-    let vision = runner::VisionConfig { enabled: vision_enabled, include_sketches };
+    let vision = runner::VisionConfig { enabled: vision_enabled };
 
     let provider = llm::build_provider(&llm_config, reported_context);
 

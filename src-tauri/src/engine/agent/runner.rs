@@ -61,95 +61,6 @@ fn strip_inline_base64(s: &str) -> String {
     result
 }
 
-/// Estimate the character cost of a message slice.
-#[cfg(test)]
-fn estimate_chars(msgs: &[ChatMessage]) -> usize {
-    msgs.iter().map(|m| {
-        let content_len = m.content.as_ref().map_or(0, |c| c.char_len());
-        let tool_len = m.tool_calls.as_ref().map_or(0, |tc| {
-            tc.iter().map(|t| t.function.name.len() + t.function.arguments.len()).sum()
-        });
-        let tool_id_len = m.tool_call_id.as_ref().map_or(0, |id| id.len());
-        content_len + tool_len + tool_id_len + 20
-    }).sum()
-}
-
-/// Build a compact memory summary from messages that are about to be dropped.
-/// Extracts key user requests, assistant decisions, and tool actions without
-/// needing an LLM call.
-#[cfg(test)]
-pub fn summarize_dropped(dropped: &[ChatMessage]) -> String {
-    let mut summary_parts: Vec<String> = Vec::new();
-
-    for msg in dropped {
-        match msg.role.as_str() {
-            "user" => {
-                if let Some(text) = msg.text() {
-                    let truncated = if text.len() > 200 { &text[..200] } else { text };
-                    summary_parts.push(format!("\u{2022} User asked: {truncated}"));
-                }
-            }
-            "assistant" => {
-                if let Some(text) = msg.text() {
-                    let truncated = if text.len() > 200 { &text[..200] } else { text };
-                    summary_parts.push(format!("\u{2022} Assistant: {truncated}"));
-                }
-                if let Some(tool_calls) = &msg.tool_calls {
-                    for tc in tool_calls {
-                        summary_parts.push(format!("\u{2022} Called tool: {}", tc.function.name));
-                    }
-                }
-            }
-            "tool" => {}
-            _ => {}
-        }
-    }
-
-    if summary_parts.is_empty() {
-        return String::new();
-    }
-
-    let mut result = String::from("[Earlier conversation summary]\n");
-    for part in &summary_parts {
-        if result.len() + part.len() > 4000 {
-            result.push_str("\n\u{2022} ... (older messages omitted)");
-            break;
-        }
-        result.push_str(part);
-        result.push('\n');
-    }
-    result
-}
-
-/// Trim messages to fit within the character budget, preserving context
-/// via a compact summary of dropped messages.
-#[cfg(test)]
-fn trim_to_context_window(messages: &mut Vec<ChatMessage>, max_chars: usize) -> (usize, Vec<ChatMessage>) {
-    if estimate_chars(messages) <= max_chars {
-        return (0, Vec::new());
-    }
-
-    let system_end = messages.iter().position(|m| m.role != "system").unwrap_or(messages.len());
-    let system_msgs: Vec<ChatMessage> = messages.drain(..system_end).collect();
-    let system_chars = estimate_chars(&system_msgs);
-    let budget = max_chars.saturating_sub(system_chars).saturating_sub(5000);
-
-    let mut dropped: Vec<ChatMessage> = Vec::new();
-    while estimate_chars(messages) > budget && messages.len() > 2 {
-        dropped.push(messages.remove(0));
-    }
-
-    let dropped_count = dropped.len();
-    let summary = summarize_dropped(&dropped);
-
-    let recent = std::mem::take(messages);
-    *messages = system_msgs;
-    if !summary.is_empty() {
-        messages.push(ChatMessage::user(&summary));
-    }
-    messages.extend(recent);
-    (dropped_count, dropped)
-}
 
 // ---------------------------------------------------------------------------
 // Event types
@@ -204,9 +115,6 @@ pub struct AgentResult {
 pub struct VisionConfig {
     /// Whether vision is enabled (user setting AND model support).
     pub enabled: bool,
-    /// Whether to include sketch screenshots (vs notes only).
-    #[allow(dead_code)]
-    pub include_sketches: bool,
 }
 
 // ---------------------------------------------------------------------------
@@ -362,11 +270,12 @@ fn run_inner<'a>(
             agentive::Guardrails::default(),
             on_event,
         )
-        .await
-        .map_err(|e| format!("Agent error: {e}"))?;
+        .await;
 
-        // Clean up the forwarding task
+        // Always clean up the forwarding task
         forward_task.abort();
+
+        let result = result.map_err(|e| format!("Agent error: {e}"))?;
 
         crate::util::trace::emit("agent_done", "agent", serde_json::json!({
             "rounds": result.total_usage.total_tokens,
@@ -549,85 +458,6 @@ async fn exec_fetch_url(call: &agentive::ToolCall) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::agent::llm::{ChatMessage, FunctionCall, MessageContent, ToolCall};
-
-    #[test]
-    fn summarize_dropped_empty() {
-        assert_eq!(summarize_dropped(&[]), "");
-    }
-
-    #[test]
-    fn summarize_dropped_user_and_assistant() {
-        let msgs = vec![
-            ChatMessage::user("What files exist?"),
-            ChatMessage {
-                role: "assistant".into(),
-                content: Some(MessageContent::Text("Here are the files.".into())),
-                tool_calls: Some(vec![ToolCall {
-                    id: "c1".into(),
-                    call_type: "function".into(),
-                    function: FunctionCall {
-                        name: "list_files".into(),
-                        arguments: "{}".into(),
-                    },
-                }]),
-                tool_call_id: None,
-            },
-            ChatMessage::tool_result("c1", "file1.txt\nfile2.txt"),
-        ];
-        let summary = summarize_dropped(&msgs);
-        assert!(summary.contains("User asked: What files exist?"));
-        assert!(summary.contains("Assistant: Here are the files."));
-        assert!(summary.contains("Called tool: list_files"));
-        assert!(!summary.contains("file1.txt"));
-    }
-
-    #[test]
-    fn summarize_dropped_truncates_long_messages() {
-        let long_msg = "x".repeat(500);
-        let msgs = vec![ChatMessage::user(&long_msg)];
-        let summary = summarize_dropped(&msgs);
-        assert!(summary.len() < 300);
-    }
-
-    #[test]
-    fn summarize_dropped_caps_at_4000_chars() {
-        let msgs: Vec<ChatMessage> = (0..100)
-            .map(|i| ChatMessage::user(&format!("Message number {} with some content here", i)))
-            .collect();
-        let summary = summarize_dropped(&msgs);
-        assert!(summary.len() <= 4100);
-        assert!(summary.contains("older messages omitted"));
-    }
-
-    #[test]
-    fn trim_to_context_window_no_trim_needed() {
-        let mut msgs = vec![
-            ChatMessage::system("You are helpful"),
-            ChatMessage::user("Hello"),
-        ];
-        let (dropped, dropped_msgs) = trim_to_context_window(&mut msgs, 100_000);
-        assert_eq!(dropped, 0);
-        assert!(dropped_msgs.is_empty());
-        assert_eq!(msgs.len(), 2);
-    }
-
-    #[test]
-    fn trim_to_context_window_drops_oldest() {
-        let mut msgs = vec![
-            ChatMessage::system("You are an AI assistant that helps users"),
-            ChatMessage::user(&"A".repeat(500)),
-            ChatMessage::user(&"B".repeat(500)),
-            ChatMessage::user("recent question"),
-        ];
-        let (dropped, dropped_msgs) = trim_to_context_window(&mut msgs, 700);
-        assert!(dropped > 0);
-        assert!(!dropped_msgs.is_empty());
-        assert_eq!(msgs[0].role, "system");
-        assert!(msgs.iter().any(|m| {
-            m.text().map_or(false, |t| t.contains("[Earlier conversation summary]"))
-        }));
-    }
 
     #[test]
     fn strip_inline_base64_replaces_large_data_uris() {
