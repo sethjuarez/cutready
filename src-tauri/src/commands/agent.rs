@@ -56,7 +56,7 @@ pub async fn agent_chat(
 ) -> Result<ChatMessage, String> {
     let llm_config: LlmConfig = config.into();
     let provider = llm::build_provider(&llm_config, None);
-    llm::simple_chat(provider, messages).await
+    llm::simple_chat(provider, messages).await.map_err(|e| e.to_string())
 }
 
 /// Push a message onto the pending stack while the agent loop is running.
