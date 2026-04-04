@@ -55,7 +55,7 @@ tauri-plugin-opener = "2.5.3"
 tauri-plugin-stronghold = "2"
 
 # Shared agentic substrate
-agentive = { path = "../../agentive/lib" }
+agentive = { git = "https://github.com/sethjuarez/agentive.git" }
 
 # Vendor OpenSSL on macOS to support cross-compilation (ARM → Intel)
 [target.'cfg(target_os = "macos")'.dependencies]

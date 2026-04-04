@@ -61,6 +61,7 @@ dependencies = [
 [[package]]
 name = "agentive"
 version = "0.1.0"
+source = "git+https://github.com/sethjuarez/agentive.git#aedf0200ce57d7006156bd90472591f1d9188a61"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
