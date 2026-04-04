@@ -41,10 +41,7 @@ pub struct LlmConfig {
 // Shared types — re-exported from agentive
 // ---------------------------------------------------------------------------
 
-pub use agentive::{ChatMessage, ContentPart, FunctionCall, MessageContent, ToolCall};
-pub use agentive::Tool as ToolDefinition;
-pub use agentive::ToolFunction as FunctionDefinition;
-pub use agentive::ImageUrl as ImageUrlData;
+pub use agentive::{ChatMessage, ContentPart, FunctionCall, ImageUrl, MessageContent, Tool, ToolCall, ToolFunction};
 pub use agentive::Provider;
 
 // ---------------------------------------------------------------------------
@@ -624,7 +621,7 @@ mod tests {
     fn message_content_parts_serializes_as_array() {
         let msg = ChatMessage::user_with_images("describe this", vec![
             ContentPart::ImageUrl {
-                image_url: ImageUrlData {
+                image_url: ImageUrl {
                     url: "data:image/png;base64,abc123".into(),
                     detail: Some("low".into()),
                 },
@@ -651,7 +648,7 @@ mod tests {
         let parts = MessageContent::Parts(vec![
             ContentPart::Text { text: "hello".into() },
             ContentPart::ImageUrl {
-                image_url: ImageUrlData { url: "data:...".into(), detail: None },
+                image_url: ImageUrl { url: "data:...".into(), detail: None },
             },
         ]);
         assert_eq!(parts.char_len(), 205);

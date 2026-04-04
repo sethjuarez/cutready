@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 
 use serde_json::{json, Value};
 
-use crate::engine::agent::llm::{ContentPart, FunctionDefinition, ImageUrlData, ToolCall, ToolDefinition};
+use crate::engine::agent::llm::{ContentPart, ImageUrl, Tool, ToolCall, ToolFunction};
 use crate::engine::project;
 use crate::engine::versioning;
 use crate::models::sketch::PlanningRow;
@@ -149,7 +149,7 @@ fn encode_image_file(root: &Path, rel_path: &str) -> Option<(ContentPart, usize)
 
     Some((
         ContentPart::ImageUrl {
-            image_url: ImageUrlData {
+            image_url: ImageUrl {
                 url: data_uri,
                 detail: Some("low".into()),
             },
@@ -205,7 +205,7 @@ pub fn encode_image_at_path(root: &Path, rel_path: &str) -> Option<ContentPart> 
 // ---------------------------------------------------------------------------
 
 /// All tools available to the AI assistant.
-pub fn all_tools() -> Vec<ToolDefinition> {
+pub fn all_tools() -> Vec<Tool> {
     vec![
         tool_def(
             "list_project_files",
@@ -483,10 +483,10 @@ pub fn all_tools() -> Vec<ToolDefinition> {
     ]
 }
 
-fn tool_def(name: &str, description: &str, parameters: Value) -> ToolDefinition {
-    ToolDefinition {
+fn tool_def(name: &str, description: &str, parameters: Value) -> Tool {
+    Tool {
         tool_type: "function".into(),
-        function: FunctionDefinition {
+        function: ToolFunction {
             name: name.into(),
             description: description.into(),
             parameters,
