@@ -4,7 +4,7 @@ use serde::Deserialize;
 
 use crate::engine::agent::azure_auth::{self, AuthCodeFlowInit, DeviceCodeResponse, TokenResponse};
 use crate::engine::agent::llm::{
-    ChatMessage, LlmClient, LlmConfig, LlmProvider, ModelInfo,
+    self, ChatMessage, LlmConfig, LlmProvider, ModelInfo,
 };
 use crate::engine::agent::runner::{self, AgentEvent};
 use crate::AppState;
@@ -44,8 +44,8 @@ impl From<ProviderConfig> for LlmConfig {
 /// List available models for the configured provider.
 #[tauri::command]
 pub async fn list_models(config: ProviderConfig) -> Result<Vec<ModelInfo>, String> {
-    let client = LlmClient::new(config.into());
-    client.list_models().await
+    let llm_config: LlmConfig = config.into();
+    llm::list_models(&llm_config).await
 }
 
 /// A single chat turn (non-streaming) for quick operations like ✨ field fill.
@@ -54,13 +54,9 @@ pub async fn agent_chat(
     config: ProviderConfig,
     messages: Vec<ChatMessage>,
 ) -> Result<ChatMessage, String> {
-    let client = LlmClient::new(config.into());
-    let resp = client.chat(&messages, None).await?;
-    resp.choices
-        .into_iter()
-        .next()
-        .map(|c| c.message)
-        .ok_or_else(|| "No response from model".into())
+    let llm_config: LlmConfig = config.into();
+    let provider = llm::build_provider(&llm_config, None);
+    llm::simple_chat(provider, messages).await
 }
 
 /// Push a message onto the pending stack while the agent loop is running.
@@ -102,19 +98,18 @@ pub async fn agent_chat_with_tools(
     let prompts = agent_prompts.unwrap_or_default();
     let reported_context = config.context_length;
     let vision_mode = config.vision_mode.clone().unwrap_or_else(|| "off".into());
-    let client = LlmClient::new(config.into());
-    if let Some(ctx) = reported_context {
-        client.set_reported_context_length(ctx);
-    }
+    let llm_config: LlmConfig = config.into();
 
     // Determine effective vision: user setting AND model capability
-    let vision_enabled = vision_mode != "off" && client.supports_vision();
+    let vision_enabled = vision_mode != "off" && llm::supports_vision(&llm_config.model);
     let include_sketches = vision_mode == "notes_and_sketches";
     let vision = runner::VisionConfig { enabled: vision_enabled, include_sketches };
 
+    let provider = llm::build_provider(&llm_config, reported_context);
+
     let emit_handle = app.clone();
     let result = runner::run(
-        &client,
+        provider,
         messages,
         &project_root,
         &prompts,
