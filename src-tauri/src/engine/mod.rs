@@ -1,7 +1,6 @@
 pub mod agent;
 pub mod animation;
 pub mod automation;
-pub mod copilot;
 pub mod export;
 pub mod import;
 pub mod interaction;

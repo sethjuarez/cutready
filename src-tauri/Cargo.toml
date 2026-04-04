@@ -54,9 +54,6 @@ scraper = "0.25.0"
 tauri-plugin-opener = "2.5.3"
 tauri-plugin-stronghold = "2"
 
-# Copilot SDK (community Rust SDK for GitHub Copilot CLI)
-copilot-sdk = { git = "https://github.com/sethjuarez/copilot-sdk-rust.git", rev = "96ef003" }
-
 # Shared agentic substrate
 agentive = { path = "../../agentive/lib" }
 

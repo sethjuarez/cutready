@@ -17,95 +17,9 @@ project. This guide covers how to connect CutReady to a model provider.
 
 | Provider | Endpoint Format | Auth Methods |
 | --- | --- | --- |
-| **GitHub Copilot** | Uses local `copilot` CLI | GitHub authentication (via `gh auth login`) |
 | **Azure OpenAI** | `https://your-resource.openai.azure.com` | API Key, Azure OAuth |
 | **Microsoft AI Foundry** | `https://your-hub.services.ai.azure.com/api/projects/your-project` | API Key, Azure OAuth |
 | **OpenAI** | `https://api.openai.com` (default) | API Key |
-
-<Aside type="tip">
-  **GitHub Copilot** is the simplest option — no API keys, no endpoints, no
-  configuration. If you have the Copilot CLI installed and authenticated, just
-  select it and go.
-</Aside>
-
-## GitHub Copilot (Simplest)
-
-GitHub Copilot uses your existing Copilot subscription and the local `copilot`
-CLI to power CutReady's AI features. No API keys or endpoint configuration needed.
-
-### Prerequisites
-
-- A [GitHub Copilot](https://github.com/features/copilot) subscription (Individual, Business, or Enterprise)
-- The **Copilot CLI** installed on your machine
-- Authenticated via `gh auth login`
-
-### Installing the Copilot CLI
-
-The Copilot CLI can be installed via several package managers:
-
-<Tabs>
-<TabItem label="WinGet (Windows)">
-
-```sh
-winget install GitHub.Copilot
-```
-
-</TabItem>
-<TabItem label="npm">
-
-```sh
-npm install -g @github/copilot
-```
-
-</TabItem>
-<TabItem label="Manual">
-
-Download the latest release from the
-[GitHub Copilot CLI releases page](https://github.com/github/copilot-cli/releases)
-and add it to your PATH.
-
-</TabItem>
-</Tabs>
-
-After installation, verify it works:
-
-```sh
-copilot --version
-```
-
-### Setup Steps
-
-<Steps>
-
-1. **Authenticate with GitHub**
-
-   If you haven't already, sign in to GitHub CLI:
-
-   ```sh
-   gh auth login
-   ```
-
-2. **Open CutReady Settings**
-
-   Click the **gear icon** (⚙️) → **AI Provider** tab.
-
-3. **Select GitHub Copilot**
-
-   Choose **GitHub Copilot** from the provider dropdown. CutReady will
-   automatically detect the CLI and show its status.
-
-4. **Select a model**
-
-   Click **Refresh** to load available models from your Copilot subscription.
-   Select the model you want to use (e.g., `claude-sonnet-4-5`, `gpt-4o`).
-
-</Steps>
-
-<Aside type="note">
-  CutReady uses whatever `copilot` binary is on your PATH. This means updates
-  to the CLI happen independently — CutReady always uses your latest installed
-  version.
-</Aside>
 
 ## Microsoft AI Foundry (Recommended)
 
@@ -228,8 +142,6 @@ For direct OpenAI API access:
 | --- | --- | --- |
 | **gpt-4o** | Best quality | All providers |
 | **gpt-4o-mini** | Faster responses | All providers |
-| **claude-sonnet-4-5** | Strong reasoning | GitHub Copilot |
-| **gpt-4.1** | Latest GPT model | GitHub Copilot |
 
 <Aside type="note">
   CutReady requires models that support **function calling** (tool use). This
@@ -248,12 +160,6 @@ any plaintext credentials from `settings.json` to the encrypted vault on first
 launch. No action is needed.
 
 ## Troubleshooting
-
-### Copilot: "CLI not found"
-
-- Verify `copilot` is on your PATH: run `copilot --version` in a terminal
-- If installed via WinGet, you may need to restart your terminal or CutReady
-- Check that `gh auth login` has been completed
 
 ### "No models found"
 

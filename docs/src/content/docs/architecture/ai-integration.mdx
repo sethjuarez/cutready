@@ -33,7 +33,6 @@ application. Currently supported:
 
 | Provider | Auth Method | Notes |
 | --- | --- | --- |
-| **GitHub Copilot** | GitHub auth (local CLI) | Uses Copilot SDK — no API keys needed |
 | **Azure OpenAI** | OAuth (Azure AD) or API key | Default provider, uses Azure Foundry API |
 | **OpenAI** | API key | Direct OpenAI API access |
 
@@ -114,21 +113,6 @@ Users can define custom agents in **Settings → Agents** with:
 
 Custom agents use the same tool set and model as built-in agents, but with a
 different system prompt that shapes the AI's approach.
-
-## GitHub Copilot SDK Integration
-
-When the **GitHub Copilot** provider is selected, CutReady delegates the entire
-agent runtime to the Copilot SDK (`engine/copilot.rs`). The SDK manages:
-
-- **Agent loop** — tool dispatch, context compaction, streaming
-- **Tool execution** — CutReady registers its tools and the SDK calls them via
-  protocol v3 broadcast requests (`external_tool.requested` events)
-- **Model selection** — models are fetched from the user's Copilot subscription
-- **Custom agents** — CutReady's agent prompts are registered as SDK custom agents
-
-The integration uses the local `copilot` CLI binary (found on PATH) over a
-JSON-RPC stdio transport. No API keys or endpoints are needed — authentication
-is handled by the user's existing GitHub Copilot subscription.
 
 ## Streaming Architecture
 

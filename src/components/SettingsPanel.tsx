@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useSettings, useSettingsStore, type AgentPreset } from "../hooks/useSettings";
 import { invoke } from "@tauri-apps/api/core";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
@@ -351,120 +351,6 @@ function DisplayTab({ settings, updateSetting }: {
   );
 }
 
-// ── Copilot Status Sub-component ─────────────────────────────────
-
-interface CopilotCliStatus {
-  available: boolean;
-  version?: string;
-  protocol_version?: number;
-}
-
-interface CopilotModelInfo {
-  id: string;
-  name: string;
-  supports_vision: boolean;
-  supports_reasoning: boolean;
-  billing?: string;
-}
-
-function CopilotStatus({ setModels }: {
-  fetchModels: () => void;
-  setModels: (m: ModelInfo[]) => void;
-}) {
-  const [status, setStatus] = useState<CopilotCliStatus | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const checkAvailability = useCallback(() => {
-    invoke<CopilotCliStatus>("check_copilot_available")
-      .then(setStatus)
-      .catch(() => setStatus({ available: false }));
-  }, []);
-
-  // Check on mount
-  useEffect(() => { checkAvailability(); }, [checkAvailability]);
-
-  // Re-check when window regains focus (user may have installed CLI in another window)
-  useEffect(() => {
-    if (status?.available) return;
-    const onFocus = () => checkAvailability();
-    window.addEventListener("focus", onFocus);
-    return () => window.removeEventListener("focus", onFocus);
-  }, [status?.available, checkAvailability]);
-
-  const loadCopilotModels = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const models = await invoke<CopilotModelInfo[]>("list_copilot_models");
-      setModels(models.map(m => ({
-        id: m.id,
-        owned_by: "github-copilot",
-        capabilities: {
-          ...(m.supports_vision ? { vision: "true" } : {}),
-          ...(m.supports_reasoning ? { reasoning: "true" } : {}),
-        },
-      })));
-    } catch (e) {
-      console.error("Failed to load Copilot models:", e);
-      setError(String(e));
-    } finally {
-      setLoading(false);
-    }
-  }, [setModels]);
-
-  // Auto-load models once CLI is detected
-  const autoLoaded = useRef(false);
-  useEffect(() => {
-    if (status?.available && !autoLoaded.current) {
-      autoLoaded.current = true;
-      loadCopilotModels();
-    }
-  }, [status?.available, loadCopilotModels]);
-
-  return (
-    <div className="rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] p-3 flex flex-col gap-2">
-      <div className="flex items-center gap-2">
-        <svg className="w-4 h-4 text-[rgb(var(--color-text-secondary))]" viewBox="0 0 16 16" fill="currentColor">
-          <path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/>
-        </svg>
-        {status === null ? (
-          <span className="text-sm text-[rgb(var(--color-text-secondary))]">Checking Copilot CLI…</span>
-        ) : status.available ? (
-          <span className="text-sm text-success font-medium">
-            ✓ Copilot CLI{status.version ? ` v${status.version}` : ""}{status.protocol_version ? ` (protocol ${status.protocol_version})` : ""}
-          </span>
-        ) : (
-          <span className="text-sm text-warning">Copilot CLI not found — looking for it… (install from github.com/github/copilot)</span>
-        )}
-      </div>
-      <p className="text-xs text-[rgb(var(--color-text-secondary))]">
-        Uses your GitHub CLI credentials (<code className="text-[rgb(var(--color-accent))]">gh auth login</code>). No API key needed.
-      </p>
-      {status?.available && (
-        <button
-          onClick={loadCopilotModels}
-          disabled={loading}
-          className="w-fit px-3 py-1.5 rounded-lg text-xs font-medium bg-[rgb(var(--color-accent))] text-accent-fg hover:bg-[rgb(var(--color-accent-hover))] disabled:opacity-50 transition-colors"
-        >
-          {loading ? "Loading models…" : "Reload models"}
-        </button>
-      )}
-      {!status?.available && status !== null && (
-        <button
-          onClick={checkAvailability}
-          className="w-fit px-3 py-1.5 rounded-lg text-xs font-medium text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] border border-[rgb(var(--color-border))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors"
-        >
-          Check again
-        </button>
-      )}
-      {error && (
-        <p className="text-xs text-error">Failed to load models: {error}</p>
-      )}
-    </div>
-  );
-}
-
 // ── AI Provider Tab ──────────────────────────────────────────────
 
 function AIProviderTab({ settings, updateSetting, isAzure, isOAuth, hasToken, canFetchModels, models, setModels, loadingModels, modelFilter, setModelFilter, modelError, fetchModels, oauthStatus, oauthError, startOAuthFlow, signOut }: {
@@ -504,17 +390,10 @@ function AIProviderTab({ settings, updateSetting, isAzure, isOAuth, hasToken, ca
         >
           <option value="azure_openai">Azure OpenAI</option>
           <option value="openai">OpenAI</option>
-          <option value="copilot_sdk">GitHub Copilot</option>
         </select>
       </fieldset>
 
-      {/* GitHub Copilot Status */}
-      {settings.aiProvider === "copilot_sdk" && (
-        <CopilotStatus fetchModels={fetchModels} setModels={setModels} />
-      )}
-
-      {/* Endpoint (not shown for Copilot) */}
-      {settings.aiProvider !== "copilot_sdk" && (
+      {/* Endpoint */}
       <fieldset className="flex flex-col gap-2">
         <label className="text-sm font-medium">
           {isAzure ? "Endpoint" : "Endpoint (optional)"}
@@ -531,10 +410,9 @@ function AIProviderTab({ settings, updateSetting, isAzure, isOAuth, hasToken, ca
           className={inputClass}
         />
       </fieldset>
-      )}
 
-      {/* Auth Mode (Azure only, not Copilot) */}
-      {isAzure && settings.aiProvider !== "copilot_sdk" && (
+      {/* Auth Mode (Azure only) */}
+      {isAzure && (
         <fieldset className="flex flex-col gap-2">
           <label className="text-sm font-medium">Authentication</label>
           <select
@@ -548,8 +426,8 @@ function AIProviderTab({ settings, updateSetting, isAzure, isOAuth, hasToken, ca
         </fieldset>
       )}
 
-      {/* API Key (not for OAuth or Copilot) */}
-      {!isOAuth && settings.aiProvider !== "copilot_sdk" && (
+      {/* API Key (not for OAuth) */}
+      {!isOAuth && (
         <fieldset className="flex flex-col gap-2">
           <label className="text-sm font-medium">API Key</label>
           <input
@@ -1032,24 +910,14 @@ function FeedbackListTab() {
 
         let aiContent: string | null = null;
 
-        if (config.provider === "copilot_sdk") {
-          try {
-            aiContent = await invoke<string>("agent_chat_copilot_simple", {
-              model: config.model,
-              systemPrompt: ISSUE_FORMAT_PROMPT,
-              userMessage: userContent,
-            });
-          } catch { /* fall through to fallback */ }
-        } else {
-          const result = await invoke<{ role: string; content: string | null }>("agent_chat", {
-            config,
-            messages: [
-              { role: "system", content: ISSUE_FORMAT_PROMPT },
-              { role: "user", content: userContent },
-            ],
-          });
-          aiContent = result.content;
-        }
+        const result = await invoke<{ role: string; content: string | null }>("agent_chat", {
+          config,
+          messages: [
+            { role: "system", content: ISSUE_FORMAT_PROMPT },
+            { role: "user", content: userContent },
+          ],
+        });
+        aiContent = result.content;
 
         if (aiContent) {
           const parsed = JSON.parse(aiContent.trim());
