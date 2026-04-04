@@ -9,6 +9,41 @@
 Covector manages this changelog. Do not edit manually.
 Each release section is generated from `.changes/*.md` files.
 
+## [1.0.0](https://github.com/sethjuarez/cutready/compare/v0.18.0...v1.0.0) (2026-04-04)
+
+
+### ⚠ BREAKING CHANGES
+
+* The copilot_sdk AI provider option is no longer available. Users with this setting will need to switch to azure_openai or openai.
+* LlmClient removed. Use build_provider() + agentive.
+
+### Features
+
+* add Microsoft Foundry and Anthropic provider support ([daafe77](https://github.com/sethjuarez/cutready/commit/daafe77b4893840ae41724dcb72e98217380bef0))
+* add multi-ref support to usePopover ([3144393](https://github.com/sethjuarez/cutready/commit/314439321b20be523b550fb4bd9ac80973ea1b5b))
+* add standalone feedback dialog for command palette ([ba583be](https://github.com/sethjuarez/cutready/commit/ba583be4a88890f0d1618c71e59cf3a8c052511c))
+* **ai-ux:** stop button, friendly errors, pending styling, agent descriptions ([b8782b8](https://github.com/sethjuarez/cutready/commit/b8782b8f1f3f74b83e2f11db0ee7d8551f2d8be5))
+* replace shared types with agentive re-exports ([f2898ec](https://github.com/sethjuarez/cutready/commit/f2898ecda601d85256007a2d6687b96ff1749bb1))
+* restore vision image support via agentive ToolOutput ([bfc0332](https://github.com/sethjuarez/cutready/commit/bfc03328e7d92a752055ce3d1c113383e1f45683))
+* **ux:** keyboard shortcuts dialog, tooltips, and loading indicators ([6020863](https://github.com/sethjuarez/cutready/commit/60208638d4b021ccb163fbcd1986bc62952d992e))
+
+
+### Bug Fixes
+
+* add ARIA listbox to CommandPalette and fix titlebar coupling ([31431a3](https://github.com/sethjuarez/cutready/commit/31431a354e78ee4bb8768e3db7d0009979ec96fe))
+* close media popover on scroll ([1e567c8](https://github.com/sethjuarez/cutready/commit/1e567c848648603a9eef3186a76f19fd6f1d0b53))
+* command palette arrow key navigation and selection highlight ([fb5f555](https://github.com/sethjuarez/cutready/commit/fb5f55521e10592ba3bd8f595490a1ce6318267e))
+* command palette arrow navigation + add icons to commands ([669961d](https://github.com/sethjuarez/cutready/commit/669961dbc2d1ceee33d9632a0906c681b22ec411))
+* media add popover clipped by overflow-hidden container ([da27db8](https://github.com/sethjuarez/cutready/commit/da27db84616ba7d4119b35b7bab8100d1b6ce133))
+* overlay button theming for both themes ([b1120ee](https://github.com/sethjuarez/cutready/commit/b1120ee298f3af67f278a24b92ae01767c2ecd44))
+* **ux:** implement 10 UX improvements from review ([16a7386](https://github.com/sethjuarez/cutready/commit/16a7386e02235e78e4b826e9c1a822e178b3875c))
+
+
+### Code Refactoring
+
+* remove GitHub Copilot SDK integration (-1,748 lines) ([1a7066c](https://github.com/sethjuarez/cutready/commit/1a7066c39f05a57caa7b7892407e5821519a2ca9))
+* replace LlmClient and runner with agentive crate ([a7b244b](https://github.com/sethjuarez/cutready/commit/a7b244b73687c513e1348ab53bf7e565775afbb6))
+
 ## [0.18.0](https://github.com/sethjuarez/cutready/compare/v0.17.1...v0.18.0) (2026-03-21)
 
 
