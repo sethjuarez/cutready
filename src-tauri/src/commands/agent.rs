@@ -457,3 +457,55 @@ pub async fn list_foundry_projects(
     )
     .await
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::engine::agent::llm::LlmProvider;
+
+    fn make_config(provider: &str) -> ProviderConfig {
+        ProviderConfig {
+            provider: provider.into(),
+            endpoint: "https://example.com".into(),
+            api_key: "key".into(),
+            model: "gpt-4o".into(),
+            bearer_token: Some("token".into()),
+            context_length: Some(128_000),
+            vision_mode: Some("off".into()),
+        }
+    }
+
+    #[test]
+    fn provider_config_to_llm_config_azure() {
+        let config: LlmConfig = make_config("azure_openai").into();
+        assert_eq!(config.provider, LlmProvider::AzureOpenai);
+        assert_eq!(config.endpoint, "https://example.com");
+        assert_eq!(config.api_key, "key");
+        assert_eq!(config.model, "gpt-4o");
+        assert_eq!(config.bearer_token, Some("token".into()));
+    }
+
+    #[test]
+    fn provider_config_to_llm_config_foundry() {
+        let config: LlmConfig = make_config("microsoft_foundry").into();
+        assert_eq!(config.provider, LlmProvider::MicrosoftFoundry);
+    }
+
+    #[test]
+    fn provider_config_to_llm_config_openai() {
+        let config: LlmConfig = make_config("openai").into();
+        assert_eq!(config.provider, LlmProvider::Openai);
+    }
+
+    #[test]
+    fn provider_config_to_llm_config_anthropic() {
+        let config: LlmConfig = make_config("anthropic").into();
+        assert_eq!(config.provider, LlmProvider::Anthropic);
+    }
+
+    #[test]
+    fn provider_config_unknown_defaults_to_azure() {
+        let config: LlmConfig = make_config("some_future_provider").into();
+        assert_eq!(config.provider, LlmProvider::AzureOpenai);
+    }
+}

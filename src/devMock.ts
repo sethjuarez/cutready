@@ -228,6 +228,10 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
       ];
     case "azure_token_refresh":
       return { access_token: "mock-access-token", token_type: "Bearer", expires_in: 3600, refresh_token: "mock-refresh-token" };
+    case "azure_browser_auth_start":
+      return { auth_url: "https://login.microsoftonline.com/organizations/oauth2/v2.0/authorize?mock=true", port: 54321 };
+    case "azure_browser_auth_complete":
+      return { access_token: "mock-oauth-token", token_type: "Bearer", expires_in: 3600, refresh_token: "mock-refresh-token" };
     case "agent_chat_with_tools": {
       // Simulate streaming with agent events
       const userMsgs = (args?.messages as Array<{ role: string; content: string }>) || [];
