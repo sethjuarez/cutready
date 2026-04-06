@@ -300,22 +300,9 @@ test.describe("VisualCell — elucim DSL rendering", () => {
     await openSketch(page);
     await page.waitForTimeout(300);
 
-    // Force the in-window preview by setting showPreview directly
-    // (The Preview button tries to launch a Tauri window, which doesn't work in dev mock)
-    await page.evaluate(() => {
-      // Override list_monitors to return empty so it falls back to in-window preview
-      const w = window as any;
-      if (!w.__MOCK_OVERRIDES__) w.__MOCK_OVERRIDES__ = {};
-      w.__MOCK_OVERRIDES__["list_monitors"] = [];
-    });
-    
-    // Now click Preview — with no monitors, it opens the monitor picker;
-    // but with empty array, it should show the picker with "Preview in window" option
-    // Actually, let's directly trigger the fallback by making it throw
+    // Force list_monitors to throw so handlePreviewClick falls back to in-window preview
     await page.evaluate(() => {
       const w = window as any;
-      w.__MOCK_OVERRIDES__["list_monitors"] = undefined;
-      // Force invoke to throw for list_monitors
       const orig = w.__TAURI_INTERNALS__.invoke;
       w.__TAURI_INTERNALS__.invoke = (cmd: string, ...args: unknown[]) => {
         if (cmd === "list_monitors") return Promise.reject(new Error("mock"));
@@ -323,8 +310,9 @@ test.describe("VisualCell — elucim DSL rendering", () => {
       };
     });
 
-    const previewBtn = page.locator('button[title="Preview sketch (presentation mode)"]');
-    await previewBtn.click();
+    // Preview is inside "More actions" overflow menu
+    await page.locator('button[title="More actions"]').click();
+    await page.getByText("Preview", { exact: true }).click();
     await page.waitForTimeout(2000); // Let animation auto-play
 
     // Screenshot in dark mode
