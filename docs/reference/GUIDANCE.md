@@ -228,24 +228,25 @@ Generate programmatic animations for concept explanations — architecture diagr
 ### Workflow
 
 1. **Describe** the concept in natural language: _"Show three microservices communicating through a message queue, with messages flowing left to right."_
-2. **Generate**: The LLM produces ManimCE (Manim Community Edition) Python code that renders the described animation.
-3. **Preview**: CutReady renders the animation and displays it in an inline video player. The user can iterate on the description or edit the generated code directly.
-4. **Render**: Final render at project quality settings (resolution, frame rate) to a video file.
-5. **Place**: The rendered animation clip is added to the script table at the appropriate position and included in the export package.
+2. **Generate**: The AI agent produces Elucim DSL JSON describing the animation scene — primitives, layout, animations, timing.
+3. **Preview**: CutReady renders the animation live in the editor via `DslRenderer`. The user can iterate on the description or edit the DSL in the visual editor.
+4. **Export**: The animation is rendered to video via Elucim's built-in export, or included as an SVG/PNG frame in the output package.
+5. **Place**: The animation clip is added to the script table at the appropriate position and included in the FCPXML timeline.
 
 ### Capabilities
 
 - Architectural diagrams with animated transitions.
 - Data flow visualizations (arrows, nodes, labels).
 - Step-by-step process breakdowns.
-- Math/equation animations (Manim's core strength).
+- Math/equation animations (Axes, FunctionPlot, Vector, Matrix, LaTeX via KaTeX).
 - Text animations (bullet points appearing, highlighting, callouts).
-- Custom animations via direct ManimCE code editing.
+- Custom animations via the Elucim visual editor or direct DSL JSON editing.
 
 ### Safety
 
-- LLM-generated Python code runs in a **sandboxed environment**: restricted imports (only `manim` and standard library), AST validation before execution, resource limits (timeout, memory).
-- Generated code is always shown to the user before execution.
+- Animations are described as **declarative JSON** (Elucim DSL), not executable code — no sandboxing required.
+- The DSL includes a safe math evaluator for expressions (no `eval` or arbitrary code execution).
+- Generated DSL is validated against the Elucim JSON schema before rendering.
 
 ---
 
@@ -263,7 +264,7 @@ project-name/
 │   ├── narration.wav                  # Microphone track (PCM)
 │   └── system-audio.wav              # System audio track (optional)
 ├── animations/
-│   ├── concept-01.mp4                 # Rendered Manim animation
+│   ├── concept-01.mp4                 # Rendered Elucim animation
 │   └── concept-02.mp4
 ├── screenshots/
 │   ├── step-01.png                    # Per-segment reference screenshots

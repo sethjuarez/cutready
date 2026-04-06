@@ -46,7 +46,7 @@ CutReady doesn't ask you to become a scriptwriter or an automation engineer. Jus
 
 - **Edit-ready output.** Not just raw footage. An FCPXML timeline with video, narration audio, system audio, and animation clips on separate tracks, with markers at each script segment boundary. Import into DaVinci Resolve and start editing immediately.
 
-- **Motion animations from natural language.** Describe a concept ("show data flowing from the API gateway to three microservices") and the AI generates a Manim animation, rendered to video and placed on your timeline.
+- **Motion animations from natural language.** Describe a concept ("show data flowing from the API gateway to three microservices") and the AI generates an Elucim animation — rendered as SVG in the browser, exportable to video, and placed on your timeline.
 
 - **Browser and native app support.** Playwright-driven browser automation and Windows UI Automation in the same script, seamlessly interleaved.
 

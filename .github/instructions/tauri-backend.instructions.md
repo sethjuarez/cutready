@@ -74,7 +74,7 @@ The backend is organized as independent engines:
 | Recording | `engine/recording.rs` | 🔲 | FFmpeg process management for screen + audio capture |
 | Automation | `engine/automation.rs` | 🔲 | Replay actions via Playwright sidecar + windows-rs UIA |
 | Interaction | `engine/interaction.rs` | 🔲 | Capture user interactions during demo recording |
-| Animation | `engine/animation.rs` | 🔲 | ManimCE Python subprocess for motion graphics |
+| Animation | `engine/animation.rs` | 🔲 | Elucim animation rendering and video export |
 | Export | `engine/export.rs` | 🔲 | FCPXML 1.9 generation + output folder assembly |
 
 ## Agent Architecture

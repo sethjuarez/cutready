@@ -464,31 +464,31 @@ Created the full directory structure from ARCHITECTURE.md with type definitions 
 
 ---
 
-## Phase 9 — Motion Animations (ManimCE)
+## Phase 9 — Motion Animations (Elucim)
 
-> Goal: Generate and render concept animations from natural language.
+> Goal: Generate and render concept animations from natural language via Elucim DSL.
 
-### 9.1 ManimCE Integration
-
-| Task | Details | Test |
-| --- | --- | --- |
-| Implement `engine/animation.rs` — `render_animation()` | Write Python to temp file, spawn `manim render`, parse progress, return video path | Integration test: render a simple scene, output MP4 exists |
-| AST validation | Parse Python AST, reject dangerous imports (`os`, `subprocess`, `sys`, etc.) | Unit test: safe code passes, unsafe code rejected |
-| Resource limits | Render timeout (5 min default), memory limit via subprocess constraints | Test: infinite loop scene times out |
-
-### 9.2 LLM Animation Code Generation
+### 9.1 Elucim Integration
 
 | Task | Details | Test |
 | --- | --- | --- |
-| Implement `engine/agent/animations.rs` | Natural language → ManimCE code via LLM. Validate → render → return | Unit test with mock: description → valid ManimCE code |
+| Implement `engine/animation.rs` — `export_animation()` | Take Elucim DSL JSON, render via `@elucim/core` export, return video/image path | Integration test: valid DSL → MP4/PNG output |
+| DSL validation | Validate JSON against `@elucim/dsl` schema before rendering | Unit test: valid DSL passes, invalid DSL rejected |
+| Video export pipeline | Use Elucim's built-in frame-by-frame export → FFmpeg encode | Test: animation scene exports to MP4 |
+
+### 9.2 LLM Animation Generation
+
+| Task | Details | Test |
+| --- | --- | --- |
+| Enhance `create_visual` agent tool | Natural language → Elucim DSL JSON via LLM with structured output | Unit test with mock: description → valid DSL JSON |
 | Animation suggestion during refinement | Agent identifies steps that could benefit from animations, generates descriptions | Suggestions appear in refined script |
 
 ### 9.3 Animation UI
 
 | Task | Details | Test |
 | --- | --- | --- |
-| Create `AnimationPanel` component | Text input for description, "Generate" button, code editor (CodeMirror/Monaco), preview player | Visual: type description → see code → preview video |
-| Inline animation placement | Drag rendered animation into script table at desired position | Animation appears as script row with video |
+| Expand `VisualCell` for animation preview | Live preview via `DslRenderer`, play/pause controls for animated scenes | Visual: DSL renders with animation playback |
+| Inline animation placement | Drag rendered animation into script table at desired position | Animation appears as script row with visual |
 
 **Deliverable**: Natural language → rendered animation → placed in timeline.
 
@@ -631,7 +631,7 @@ These phases can be worked on simultaneously:
 | 6 — FFmpeg Recording | Process mgmt + audio + progress | Medium |
 | 7 — Teleprompter | UI panel + sync + detachable window | Small |
 | 8 — Native Recording | Win32 hooks + UIA + replay | Large |
-| 9 — Animations | ManimCE subprocess + LLM codegen + UI | Medium |
+| 9 — Animations | Elucim DSL generation + video export + UI | Medium |
 | 10 — Export | Folder assembly + FCPXML generation | Medium |
 | 11 — Polish | Re-record, recovery, packaging | Medium |
 

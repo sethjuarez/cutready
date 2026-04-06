@@ -35,8 +35,8 @@ Built with [Tauri v2](https://tauri.app/) (Rust + React/TypeScript).
 | Screen recording | FFmpeg (FFV1 lossless in MKV) |
 | Browser automation | Playwright (Node.js sidecar) |
 | Native app automation | windows-rs + UI Automation |
-| Motion graphics | ManimCE (Community Edition) |
-| LLM | Azure OpenAI API (pluggable) |
+| Motion graphics | Elucim (`@elucim/core` + `@elucim/dsl`) |
+| LLM | agentive crate (Azure OpenAI, OpenAI, Foundry, Anthropic) |
 | Video editor export | FCPXML 1.9 → DaVinci Resolve |
 
 ## Status

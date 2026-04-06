@@ -128,14 +128,14 @@ cutready/
 | engine/versioning_merge.rs | ✅ Implemented | Three-way merge engine for .sk/.sb/.md |
 | engine/versioning_remote.rs | ✅ Implemented | Git remote sync (push/pull/fetch via `gh`) |
 | engine/agent/ | ✅ Implemented | Multi-agent AI system (Planner, Writer, Editor, Designer) |
-| engine/agent/llm.rs | ⚠️ Replace | Foundry API client — migrate to agentive crate |
-| engine/agent/runner.rs | ⚠️ Replace | Agent loop — migrate to agentive crate |
+| engine/agent/llm.rs | ✅ Implemented | Thin bridge: LlmConfig → agentive providers |
+| engine/agent/runner.rs | ✅ Implemented | Agentic loop (delegates to agentive::run) |
 | engine/agent/tools.rs | ✅ Implemented | Agent tool definitions (read/write sketches, web fetch, visuals) |
 | engine/import.rs | ✅ Implemented | .docx/.pdf/.pptx import to sketches/notes |
 | engine/memory.rs | ✅ Implemented | Agent memory system (core, procedural, archival) |
 | engine/recording.rs | 🔲 Placeholder | FFmpeg screen recording |
 | engine/automation.rs | 🔲 Placeholder | Playwright replay automation |
-| engine/animation.rs | 🔲 Placeholder | ManimCE motion graphics |
+| engine/animation.rs | 🔲 Placeholder | Elucim animation export |
 | engine/export.rs | 🔲 Placeholder | FCPXML timeline generation |
 
 ## Current Status (v0.9.0)
@@ -160,7 +160,7 @@ cutready/
 - Docs site (Astro Starlight) published to GitHub Pages
 - E2E test suite via Playwright (web shim mode)
 
-**Not yet implemented:** Recording, automation replay, FCPXML export, ManimCE animations.
+**Not yet implemented:** Recording, automation replay, FCPXML export, Elucim animation export.
 
 ## Design Decisions
 

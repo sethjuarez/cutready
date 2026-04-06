@@ -1,4 +1,4 @@
-//! Animation engine — ManimCE Python subprocess management.
+//! Animation engine — Elucim animation rendering and video export.
 //!
-//! Not yet implemented. Will write Python source, spawn manim render, parse
-//! progress, validate AST for safety, and enforce resource limits.
+//! Not yet implemented. Will coordinate with the frontend `@elucim/core`
+//! export pipeline to render Elucim DSL scenes to video (MP4/PNG).

@@ -46,10 +46,10 @@
 └──────────┬───────────┬───────────┬──────────────────────┘
            │           │           │
     ┌──────┴──┐  ┌─────┴────┐ ┌───┴──────────┐
-    │ FFmpeg  │  │Playwright│ │ Python +     │
-    │(sidecar)│  │(Node.js  │ │ ManimCE      │
-    │         │  │ sidecar) │ │ (subprocess) │
-    └─────────┘  └──────────┘ └──────────────┘
+    │ FFmpeg  │  │Playwright│
+    │(sidecar)│  │(Node.js  │
+    │         │  │ sidecar) │
+    └─────────┘  └──────────┘
                                      │
                               ┌──────┴───────┐
                               │ Azure OpenAI │
@@ -80,7 +80,7 @@ Tauri v2 provides three IPC mechanisms, used as follows:
 | Mechanism | Use Case | Direction |
 | ----------- | ---------- | ----------- |
 | **Commands** | Discrete request/response: list audio devices, start recording, generate FCPXML, get project metadata | Frontend → Backend → Frontend |
-| **Channels** | Streaming data: FFmpeg recording progress, manim render progress, interaction capture events, agent refinement progress | Backend → Frontend (continuous) |
+| **Channels** | Streaming data: FFmpeg recording progress, Elucim render/export progress, interaction capture events, agent refinement progress | Backend → Frontend (continuous) |
 | **Events** | Global state broadcasts: recording started/stopped, project saved, agent task completed | Backend → Frontend (broadcast) |
 
 ```typescript
@@ -113,7 +113,7 @@ await invoke('start_recording', {
 | `@lexical/rich-text` / `@lexical/list` / `@lexical/table` | Core Lexical plugins (rich text, lists, tables) |
 | `@lexical/markdown` / `@lexical/history` | Markdown shortcuts, undo/redo history |
 | TanStack Table | Script table with sorting, filtering, reordering |
-| Monaco Editor / CodeMirror | Inline code editor for ManimCE code and raw JSON action editing |
+| Monaco Editor / CodeMirror | Inline code editor for Elucim DSL JSON and raw action editing |
 | Zustand or Jotai | Lightweight state management |
 | Tailwind CSS | Styling |
 
@@ -142,7 +142,7 @@ src-tauri/
 │   │   ├── recording.rs           # FFmpeg recording (placeholder)
 │   │   ├── automation.rs          # Playwright automation (placeholder)
 │   │   ├── interaction.rs         # Interaction recording (placeholder)
-│   │   ├── animation.rs           # ManimCE animation (placeholder)
+│   │   ├── animation.rs           # Elucim animation export (placeholder)
 │   │   └── export.rs              # FCPXML export (placeholder)
 │   ├── engine/
 │   │   ├── recording.rs           # FFmpeg process management
@@ -157,7 +157,7 @@ src-tauri/
 │   │   │   └── web.rs             # Web page fetching for agent tools
 │   │   ├── memory.rs              # Agent memory (core, procedural, archival)
 │   │   ├── import.rs              # .docx/.pdf/.pptx import
-│   │   ├── animation.rs           # ManimCE subprocess management
+│   │   ├── animation.rs           # Elucim animation rendering / video export
 │   │   ├── project.rs             # Folder-based project I/O, safe_resolve()
 │   │   ├── versioning.rs          # Git operations via gix (init, commit, log, diff, restore)
 │   │   ├── versioning_merge.rs    # Three-way merge for .sk/.sb/.md
@@ -386,7 +386,7 @@ struct Animation {
     id: Uuid,
     name: String,
     description: String,      // Natural language description
-    source_code: String,      // ManimCE Python code
+    source_code: String,      // Elucim DSL JSON
     rendered_path: Option<PathBuf>,
     duration: Option<Duration>,
 }
@@ -679,46 +679,28 @@ pub use agentive::discovery::ModelInfo;
 
 ### 5. Animation Engine
 
-Manages ManimCE Python subprocess for rendering animations.
+Animations are powered by **Elucim** (`@elucim/core` + `@elucim/dsl`), a TypeScript/React library for 3Blue1Brown-style concept visualizations rendered natively as SVG in the browser.
 
-```rust
-async fn render_animation(
-    source_code: &str,
-    scene_name: &str,
-    output_dir: &Path,
-    quality: Quality,
-    channel: &tauri::ipc::Channel<RenderProgress>,
-) -> Result<PathBuf> {
-    // 1. Write source to temp file
-    let script_path = output_dir.join("scene.py");
-    tokio::fs::write(&script_path, source_code).await?;
+**How it works**:
 
-    // 2. Spawn manim
-    let quality_flag = match quality {
-        Quality::Low => "-ql",
-        Quality::Medium => "-qm",
-        Quality::High => "-qh",
-        Quality::UltraHigh => "-qk",
-    };
+1. AI agent generates **Elucim DSL JSON** (via the `create_visual` tool) describing the animation scene — primitives, animations, timing.
+2. The DSL JSON is stored in `.cutready/visuals/` and rendered by `DslRenderer` in the frontend.
+3. For video export, Elucim's built-in export system renders frames and encodes to MP4 — no Python subprocess needed.
 
-    let mut child = tokio::process::Command::new("manim")
-        .args(&["render", quality_flag, "--format", "mp4",
-                "-o", "output.mp4",
-                script_path.to_str().unwrap(), scene_name])
-        .stderr(Stdio::piped())
-        .spawn()?;
+**Elucim packages used**:
 
-    // 3. Stream progress from stderr
-    // 4. Return path to rendered video
-    Ok(output_dir.join("output.mp4"))
-}
-```
+| Package | Purpose |
+| --- | --- |
+| `@elucim/dsl` | JSON DSL schema, validator, `DslRenderer` component, safe math evaluator |
+| `@elucim/core` | React primitives (Axes, FunctionPlot, Vector, Matrix, LaTeX), animations (FadeIn, Draw, Transform, Morph), video export |
 
-**Sandboxing**: Before writing the script file, validate the Python AST:
+**Advantages over the original ManimCE plan**:
 
-- Only allow `from manim import *` and standard library imports.
-- Block `os`, `subprocess`, `sys`, `shutil`, `pathlib` (write operations), network libraries.
-- Enforce a render timeout (default: 5 minutes).
+- **No Python dependency** — pure TypeScript, runs in the Tauri webview.
+- **No sandboxing needed** — DSL is declarative JSON data, not executable code.
+- **AI-native** — JSON DSL is easier for LLMs to generate reliably than Python code.
+- **Live preview** — animations render interactively in the editor, not as a batch render.
+- **Semantic color tokens** — visuals inherit the app's light/dark theme automatically.
 
 ### 6. Export Engine
 
@@ -869,7 +851,7 @@ blocks using `CommandExt::creation_flags()` (std) or the inherent
 | Screen recording | FFmpeg (FFV1 / MKV) | 7.x | Lossless, industry standard, multi-track |
 | Browser automation | Playwright (Node.js sidecar) | Latest | Cross-browser, headful mode, mature API, CDP access |
 | Native automation | windows-rs + UIAutomation | 0.62 | Zero external deps, direct OS integration |
-| Motion graphics | ManimCE (Python) | Latest | Programmatic animation, headless Cairo renderer, active community |
+| Motion graphics | Elucim (`@elucim/core` + `@elucim/dsl`) | Latest | TypeScript/SVG, JSON DSL for AI agents, browser-native rendering, video export |
 | LLM | agentive crate (multi-provider) | Latest | 4 providers (Foundry, Azure OpenAI, OpenAI, Anthropic), streaming, agentic loops, ARM discovery |
 | Visuals | Elucim DSL (`@elucim/dsl`) | Latest | SVG-based framing visuals with semantic color tokens |
 | Document versioning | gix (gitoxide) | 0.70 | Pure-Rust git implementation, no C/cmake deps, commit/log/diff/restore |
@@ -897,7 +879,7 @@ blocks using `CommandExt::creation_flags()` (std) or the inherent
 
 | Plugin | Purpose |
 | -------- | --------- |
-| `tauri-plugin-shell` | Spawn FFmpeg, Playwright sidecar, Python/manim |
+| `tauri-plugin-shell` | Spawn FFmpeg, Playwright sidecar |
 | `tauri-plugin-fs` | Read/write project files, temp files, output media |
 | `tauri-plugin-dialog` | Open/save file dialogs for projects and exports |
 | `tauri-plugin-store` | Persist user preferences (output paths, quality, API keys) |
@@ -923,10 +905,7 @@ blocks using `CommandExt::creation_flags()` (std) or the inherent
 ### Optional Dependencies (User-Installed)
 
 | Dependency | Required For | Install Method |
-| ----------- | ------------- | --------------- |
-| Python 3.9+ | Motion animations | System install or embedded Python |
-| ManimCE | Motion animations | `pip install manim` |
-| LaTeX (MiKTeX) | Math text in animations | MiKTeX installer |
+| --- | --- | --- |
 | Virtual audio device | System audio capture | VB-CABLE / VoiceMeeter |
 
 ### Installer
@@ -935,7 +914,6 @@ Tauri bundler produces a Windows NSIS installer (`.exe`) or MSI:
 
 - Installs the app + sidecar binaries.
 - Registers file associations for `.cutready` project files.
-- Optional: bundled Python + ManimCE for zero-config animation support.
 
 ---
 
@@ -943,7 +921,7 @@ Tauri bundler produces a Windows NSIS installer (`.exe`) or MSI:
 
 | Concern | Mitigation |
 | --------- | ----------- |
-| LLM-generated Python code execution | AST validation, restricted imports, render timeout, user confirmation before execution |
+| LLM-generated Elucim DSL | JSON schema validation, safe math evaluator (no arbitrary code execution) |
 | API key storage | Tauri plugin-stronghold with IOTA encrypted vault (Windows Credential Manager fallback) |
 | FFmpeg process management | Graceful shutdown via stdin `q`; kill on app exit; no user-controlled command injection |
 | Playwright browser automation | Isolated browser profile; no access to user's default browser data |
