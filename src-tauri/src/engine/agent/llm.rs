@@ -122,16 +122,22 @@ fn resolve_auth(config: &LlmConfig) -> agentive::AuthStrategy {
 /// Known Anthropic models (no discovery API available).
 fn anthropic_models() -> Vec<ModelInfo> {
     [
-        ("claude-sonnet-4-20250514", "Anthropic"),
-        ("claude-opus-4-20250514", "Anthropic"),
-        ("claude-haiku-3-5-20241022", "Anthropic"),
+        ("claude-sonnet-4-20250514", 200_000, true),
+        ("claude-opus-4-20250514", 200_000, true),
+        ("claude-haiku-3-5-20241022", 200_000, true),
     ]
     .into_iter()
-    .map(|(id, owner)| ModelInfo {
-        id: id.into(),
-        owned_by: Some(owner.into()),
-        capabilities: None,
-        context_length: None,
+    .map(|(id, ctx, vision)| {
+        let mut caps = std::collections::HashMap::new();
+        if vision {
+            caps.insert("vision".into(), "true".into());
+        }
+        ModelInfo {
+            id: id.into(),
+            owned_by: Some("Anthropic".into()),
+            capabilities: Some(caps),
+            context_length: Some(ctx),
+        }
     })
     .collect()
 }

@@ -130,43 +130,48 @@ src-tauri/
 ├── src/
 │   ├── main.rs                    # Tauri app setup, plugin registration
 │   ├── commands/                  # Tauri command handlers (thin layer)
-│   │   ├── recording.rs
-│   │   ├── automation.rs
-│   │   ├── interaction.rs
-│   │   ├── agent.rs
-│   │   ├── animation.rs
-│   │   ├── export.rs
-│   │   ├── document.rs              # CRUD for sketch documents
-│   │   └── versioning.rs            # Git commit, log, diff, restore
+│   │   ├── agent.rs               # AI chat, model listing, OAuth, ARM discovery
+│   │   ├── sketch.rs              # Sketch CRUD
+│   │   ├── storyboard.rs          # Storyboard CRUD
+│   │   ├── note.rs                # Notes + image management
+│   │   ├── project.rs             # Project open/close, file scanning
+│   │   ├── screenshot.rs          # Screen capture
+│   │   ├── versioning.rs          # Git commit, log, diff, restore, merge, remote
+│   │   ├── feedback.rs            # User feedback submission
+│   │   ├── import.rs              # Document import (.docx/.pdf/.pptx)
+│   │   ├── recording.rs           # FFmpeg recording (placeholder)
+│   │   ├── automation.rs          # Playwright automation (placeholder)
+│   │   ├── interaction.rs         # Interaction recording (placeholder)
+│   │   ├── animation.rs           # ManimCE animation (placeholder)
+│   │   └── export.rs              # FCPXML export (placeholder)
 │   ├── engine/
 │   │   ├── recording.rs           # FFmpeg process management
 │   │   ├── automation.rs          # Action execution (browser + native)
 │   │   ├── interaction.rs         # Interaction recording / capture
-│   │   ├── agent/                 # LLM-powered refinement pipeline
-│   │   │   ├── mod.rs
-│   │   │   ├── cleanup.rs         # Action deduplication, path optimization
-│   │   │   ├── narrative.rs       # Voiceover generation
-│   │   │   ├── selectors.rs       # Selector stabilization
-│   │   │   ├── animations.rs      # Animation suggestion + code gen
-│   │   │   └── healing.rs         # Runtime self-heal during replay
+│   │   ├── agent/                 # LLM agent system (via agentive crate)
+│   │   │   ├── mod.rs             # Agent presets (Planner, Writer, Editor, Designer)
+│   │   │   ├── llm.rs             # Thin bridge: LlmConfig → agentive providers
+│   │   │   ├── runner.rs          # Agentic loop (delegates to agentive::run)
+│   │   │   ├── azure_auth.rs      # Re-export of agentive::azure_oauth
+│   │   │   ├── tools.rs           # Domain tools (sketch/storyboard/visual/web)
+│   │   │   └── web.rs             # Web page fetching for agent tools
+│   │   ├── memory.rs              # Agent memory (core, procedural, archival)
+│   │   ├── import.rs              # .docx/.pdf/.pptx import
 │   │   ├── animation.rs           # ManimCE subprocess management
+│   │   ├── project.rs             # Folder-based project I/O, safe_resolve()
 │   │   ├── versioning.rs          # Git operations via gix (init, commit, log, diff, restore)
+│   │   ├── versioning_merge.rs    # Three-way merge for .sk/.sb/.md
+│   │   ├── versioning_remote.rs   # Git remote sync (push/pull/fetch via gh)
 │   │   └── export.rs              # FCPXML generation, folder assembly
 │   ├── models/                    # Core data types
 │   │   ├── action.rs              # Action enum, SelectorStrategy
 │   │   ├── script.rs              # Project, Script, ScriptRow
-│   │   ├── document.rs            # Document, DocumentSection, DocumentState
-│   │   ├── recording.rs           # Recording metadata
-│   │   ├── animation.rs           # Animation spec + render state
-│   │   └── session.rs             # RecordedSession, CapturedAction
-│   ├── llm/                       # LLM provider abstraction
-│   │   ├── mod.rs                 # LlmProvider trait
-│   │   ├── azure_openai.rs        # Azure OpenAI implementation
-│   │   └── types.rs               # Shared LLM request/response types
+│   │   ├── sketch.rs              # Sketch, SketchRow, Section
+│   │   ├── session.rs             # RecordedSession, CapturedAction
+│   │   └── mod.rs
 │   └── util/
-│       ├── ffmpeg.rs              # FFmpeg command builder + progress parser
 │       ├── screenshot.rs          # Screen capture utilities
-│       └── audio.rs               # Audio device enumeration
+│       └── trace.rs               # Tracing/logging setup
 ├── Cargo.toml
 ├── tauri.conf.json
 └── binaries/                      # Sidecar binaries
@@ -586,52 +591,89 @@ fn native_click(selectors: &[SelectorStrategy]) -> Result<()> {
 
 ### 4. Agent Engine
 
-LLM-powered refinement pipeline. Operates on a `RecordedSession` and produces a `RefinedScript`.
+Multi-agent AI system powered by the **agentive** crate ([github.com/sethjuarez/agentive](https://github.com/sethjuarez/agentive)). CutReady's `engine/agent/` is a thin bridge — all LLM communication, streaming, SSE parsing, context compaction, and agentic loops live in agentive.
+
+**Provider support** (4 providers):
+
+| Provider | Auth | Discovery |
+| --- | --- | --- |
+| Microsoft Foundry | API Key or Entra OAuth (PKCE) | ARM: subscriptions → AI resources → Foundry projects → models |
+| Azure OpenAI | API Key or Entra OAuth | Model listing via `/models` endpoint |
+| OpenAI | API Key | Model listing via `/v1/models` |
+| Anthropic | API Key | Hardcoded model list (no discovery API) |
 
 **Architecture**:
 
-```rust
-/// Pluggable LLM provider.
-#[async_trait]
-trait LlmProvider: Send + Sync {
-    async fn complete(&self, messages: &[Message]) -> Result<String>;
-    async fn complete_structured<T: DeserializeOwned>(
-        &self, messages: &[Message], schema: &JsonSchema
-    ) -> Result<T>;
-}
-
-/// Azure OpenAI implementation.
-struct AzureOpenAiProvider {
-    endpoint: String,
-    api_key: String,
-    deployment: String,
-    client: reqwest::Client,
-}
-
-#[async_trait]
-impl LlmProvider for AzureOpenAiProvider {
-    async fn complete(&self, messages: &[Message]) -> Result<String> {
-        // POST to /openai/deployments/{deployment}/chat/completions
-        // with api-version=2024-10-21
-    }
-
-    async fn complete_structured<T: DeserializeOwned>(
-        &self, messages: &[Message], schema: &JsonSchema
-    ) -> Result<T> {
-        // Same endpoint with response_format: { type: "json_schema", ... }
-    }
-}
+```text
+┌─────────────────────────────────────┐
+│  CutReady (app-specific)            │
+│  ┌──────────┐  ┌──────────────────┐ │
+│  │ tools.rs │  │ runner.rs        │ │
+│  │ (sketch, │  │ (agent presets,  │ │
+│  │  visual,  │  │  tool routing,   │ │
+│  │  web)     │  │  event mapping)  │ │
+│  └──────────┘  └────────┬─────────┘ │
+│                         │            │
+│  ┌──────────────────────┴──────────┐ │
+│  │ llm.rs (84 lines)              │ │
+│  │ LlmConfig → agentive provider  │ │
+│  └──────────────────────┬──────────┘ │
+└─────────────────────────┼────────────┘
+                          │
+┌─────────────────────────┴────────────┐
+│  agentive crate                      │
+│  ┌──────────────────────────────────┐│
+│  │ Provider trait                   ││
+│  │ OpenAiProvider                   ││
+│  │ ResponsesProvider (codex/o-series)│
+│  │ AnthropicProvider                ││
+│  ├──────────────────────────────────┤│
+│  │ run() — agentic loop w/ tools   ││
+│  │ SSE streaming + context compact ││
+│  │ AuthStrategy (ApiKey/Bearer/Dyn)││
+│  ├──────────────────────────────────┤│
+│  │ discovery::list_models()        ││
+│  │ arm_discovery (subs/resources)  ││
+│  │ azure_oauth (PKCE, device code) ││
+│  │ factory (model heuristics)      ││
+│  └──────────────────────────────────┘│
+└──────────────────────────────────────┘
 ```
 
-**Refinement pipeline modules**:
+**Key types** (re-exported from agentive):
 
-| Module | Input | Output | LLM Usage |
-| -------- | ------- | -------- | ----------- |
-| `cleanup` | `Vec<CapturedAction>` | `Vec<Action>` (cleaned) | Classifies actions as intentional/accidental/redundant |
-| `selectors` | `Vec<Action>` + context snapshots | `Vec<Action>` (upgraded selectors) | Analyzes DOM/UIA context to suggest stable selectors |
-| `narrative` | `Vec<Action>` + screenshots | `Vec<NarrativeSegment>` | Generates voiceover text per segment |
-| `animations` | `Vec<Action>` + screenshots | `Vec<AnimationSuggestion>` | Identifies concepts, generates ManimCE code |
-| `healing` | Failed `Action` + current page state | `Option<Action>` (fixed) | Finds alternative targets in current state |
+```rust
+// engine/agent/llm.rs — CutReady's config
+pub enum LlmProvider { MicrosoftFoundry, AzureOpenai, Openai, Anthropic }
+pub struct LlmConfig { provider, endpoint, api_key, model, bearer_token }
+
+// Re-exports from agentive
+pub use agentive::{ChatMessage, Tool, ToolCall, ToolFunction, Provider};
+pub use agentive::discovery::ModelInfo;
+```
+
+**Agent presets** (defined in `mod.rs`):
+
+| Agent | Purpose | Model Override |
+| --- | --- | --- |
+| Planner | Structure scenes, plan demos | — |
+| Writer | Draft narration, refine scripts | — |
+| Editor | Polish prose, fix grammar | — |
+| Designer | Generate Elucim DSL visuals | — |
+
+**Domain tools** (defined in `tools.rs`):
+
+| Tool | Description |
+| --- | --- |
+| `read_sketch` | Read a sketch file's content |
+| `write_sketch` | Create or update a sketch file |
+| `read_note` | Read a markdown note |
+| `write_note` | Create or update a markdown note |
+| `list_project_files` | List all sketches, storyboards, notes |
+| `read_storyboard` | Read storyboard structure |
+| `write_storyboard` | Create or update storyboard |
+| `create_visual` | Generate Elucim DSL visual JSON |
+| `fetch_web_page` | Fetch and extract web page content |
 
 **Structured output**: All LLM calls use JSON structured output (response_format) so results parse reliably into Rust types.
 
@@ -820,7 +862,7 @@ blocks using `CommandExt::creation_flags()` (std) or the inherent
 ## Technology Stack
 
 | Layer | Technology | Version | Rationale |
-| ------- | ----------- | --------- | ----------- |
+| --- | --- | --- | --- |
 | Desktop framework | Tauri | v2 | Small binary, Rust backend, web UI, native OS access |
 | Frontend | React + TypeScript | React 19 | Largest ecosystem, rich component libraries |
 | Backend | Rust | 2021 edition | Memory safety, async, native Windows API access |
@@ -828,25 +870,26 @@ blocks using `CommandExt::creation_flags()` (std) or the inherent
 | Browser automation | Playwright (Node.js sidecar) | Latest | Cross-browser, headful mode, mature API, CDP access |
 | Native automation | windows-rs + UIAutomation | 0.62 | Zero external deps, direct OS integration |
 | Motion graphics | ManimCE (Python) | Latest | Programmatic animation, headless Cairo renderer, active community |
-| LLM | Azure OpenAI API (pluggable) | 2024-10-21 | Fast to start, enterprise-grade, structured output, swappable |
-| Rich text editor | Lexical (Meta) | 0.40+ | Immutable state model, extensible node system, React 19 compatible, MIT license |
-| Document versioning | gix (gitoxide) | Latest | Pure-Rust git implementation, no C/cmake deps, commit/log/diff/restore |
+| LLM | agentive crate (multi-provider) | Latest | 4 providers (Foundry, Azure OpenAI, OpenAI, Anthropic), streaming, agentic loops, ARM discovery |
+| Visuals | Elucim DSL (`@elucim/dsl`) | Latest | SVG-based framing visuals with semantic color tokens |
+| Document versioning | gix (gitoxide) | 0.70 | Pure-Rust git implementation, no C/cmake deps, commit/log/diff/restore |
 | Timeline export | FCPXML 1.9 | — | Multi-track, markers, native DaVinci Resolve 17+ import |
 | Project storage | Git-backed directories (gix) | — | Version-controlled, browsable history, diffable, no DB dependency |
 
 ### Key Rust Crates
 
 | Crate | Purpose |
-| ------- | --------- |
+| --- | --- |
 | `tauri` | App framework |
 | `tokio` | Async runtime (process management, I/O) |
+| `agentive` | LLM providers, agentic loops, streaming, ARM discovery, Azure OAuth |
 | `serde` / `serde_json` | Serialization for IPC, project files, LLM communication |
-| `reqwest` | HTTP client for Azure OpenAI API |
 | `quick-xml` | FCPXML generation |
 | `uuid` | Unique IDs for projects, rows, recordings |
 | `chrono` | Timestamps |
 | `windows` | Native Windows API access (UI Automation, input hooks, GDI) |
 | `gix` | Git operations (versioning, commit history, diff, restore) |
+| `git2` | Change detection (has_unsaved_changes status check) |
 | `anyhow` / `thiserror` | Error handling |
 | `tracing` | Structured logging |
 

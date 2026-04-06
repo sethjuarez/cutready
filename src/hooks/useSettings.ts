@@ -214,9 +214,8 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
     set({ settings: { ...get().settings, ...result }, loaded: true });
 
     // Auto-refresh OAuth token on startup if we have a refresh token
-    const needsOAuth =
-      (result.aiProvider === "azure_openai" && result.aiAuthMode === "azure_oauth") ||
-      result.aiProvider === "microsoft_foundry";
+    const needsOAuth = result.aiAuthMode === "azure_oauth" &&
+      (result.aiProvider === "azure_openai" || result.aiProvider === "microsoft_foundry");
     if (needsOAuth && result.aiRefreshToken) {
       try {
         const tokenResult = await invoke<{ access_token: string; refresh_token?: string }>(

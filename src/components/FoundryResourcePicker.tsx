@@ -87,6 +87,14 @@ export function FoundryResourcePicker({ settings, updateSetting }: Props) {
         managementToken: token,
       });
       setSubscriptions(subs);
+
+      // Auto-select if only one, or re-select previously saved
+      if (subs.length === 1) {
+        await selectSubscription(subs[0]);
+      } else if (settings.aiSubscriptionId) {
+        const saved = subs.find((s) => s.subscription_id === settings.aiSubscriptionId);
+        if (saved) loadResources(saved.subscription_id);
+      }
     } catch (e) {
       setError(`Failed to list subscriptions: ${e}`);
     } finally {
@@ -107,6 +115,14 @@ export function FoundryResourcePicker({ settings, updateSetting }: Props) {
         subscriptionId,
       });
       setResources(res);
+
+      // Auto-select if only one, or re-select previously saved
+      if (res.length === 1) {
+        await selectResource(res[0]);
+      } else if (settings.aiResourceName) {
+        const saved = res.find((r) => r.name === settings.aiResourceName);
+        if (saved) loadProjects(saved);
+      }
     } catch (e) {
       setError(`Failed to list AI resources: ${e}`);
     } finally {
@@ -128,6 +144,11 @@ export function FoundryResourcePicker({ settings, updateSetting }: Props) {
         resourceName: resource.name,
       });
       setProjects(proj);
+
+      // Auto-select if only one
+      if (proj.length === 1) {
+        await selectProject(proj[0]);
+      }
     } catch (e) {
       setError(`Failed to list projects: ${e}`);
     } finally {
@@ -147,14 +168,12 @@ export function FoundryResourcePicker({ settings, updateSetting }: Props) {
   const selectResource = async (res: AiResource) => {
     await updateSetting("aiResourceGroup", res.resource_group);
     await updateSetting("aiResourceName", res.name);
-    // Use resource endpoint directly; user can pick a project endpoint later
     await updateSetting("aiEndpoint", res.endpoint);
     await updateSetting("aiModel", "");
     loadProjects(res);
   };
 
   const selectProject = async (proj: FoundryProject) => {
-    // Project endpoint overrides the resource-level endpoint
     await updateSetting("aiEndpoint", proj.endpoint);
     await updateSetting("aiModel", "");
   };
