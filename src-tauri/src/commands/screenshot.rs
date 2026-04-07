@@ -95,6 +95,7 @@ pub async fn get_capture_params(
 }
 
 /// Open a borderless, always-on-top capture window covering the target monitor.
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub async fn open_capture_window(
     app: tauri::AppHandle,

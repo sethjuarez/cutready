@@ -48,7 +48,7 @@ pub fn docx_to_markdown(data: &[u8], project_root: &Path) -> Result<String, Stri
 
     // Check for DRM / Microsoft Information Protection
     let has_drm = (0..archive.len()).any(|i| {
-        archive.by_index(i).ok().map_or(false, |f| {
+        archive.by_index(i).ok().is_some_and(|f| {
             let n = f.name().to_lowercase();
             n.contains("labelinfo") || n.contains("rights") || n.contains("miplabel") || n.contains("encryptedpackage")
         })

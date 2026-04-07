@@ -86,6 +86,7 @@ pub async fn run(
 }
 
 /// Internal runner with depth tracking for sub-agent delegation.
+#[allow(clippy::too_many_arguments)]
 fn run_inner<'a>(
     provider: Arc<dyn agentive::Provider>,
     messages: Vec<ChatMessage>,
@@ -333,6 +334,7 @@ fn format_sketch_for_ref(sketch: &crate::models::sketch::Sketch) -> String {
 
 /// Execute a delegate_to_agent tool call by spawning a sub-agent loop.
 /// Returns a boxed future to allow recursive async through agentive::run().
+#[allow(clippy::too_many_arguments)]
 fn exec_delegation(
     provider: Arc<dyn agentive::Provider>,
     call: &agentive::ToolCall,

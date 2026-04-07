@@ -1102,7 +1102,7 @@ mod tests {
         let theirs = "line1\ntheirs\nline3\n";
 
         let conflicts = text_line_diff(ancestor, ours, theirs);
-        assert!(conflicts.len() >= 1, "Should detect conflict on line 2");
+        assert!(!conflicts.is_empty(), "Should detect conflict on line 2");
     }
 
     #[test]

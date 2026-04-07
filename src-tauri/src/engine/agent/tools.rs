@@ -727,7 +727,7 @@ fn exec_set_planning_rows(root: &Path, args: &Value) -> String {
                 .map(|s| s.to_string())
                 .unwrap_or_else(|| {
                     path.file_stem()
-                        .map(|s| s.to_string_lossy().replace('-', " ").replace('_', " "))
+                        .map(|s| s.to_string_lossy().replace(['-', '_'], " "))
                         .unwrap_or_else(|| "Untitled".into())
                 });
             crate::models::sketch::Sketch {
@@ -892,7 +892,7 @@ fn exec_set_row_visual(root: &Path, args: &Value) -> String {
                 }
             }
             // Write visual to external file, store path reference on the row
-            match project::write_visual(root, &visual.into_owned()) {
+            match project::write_visual(root, &visual) {
                 Ok(rel_path) => {
                     row.visual = Some(serde_json::Value::String(rel_path));
                 }
@@ -991,10 +991,10 @@ fn validate_dsl_node(node: &Value, path: &str, errors: &mut Vec<String>) {
             errors.push(format!("{path}.type: unknown node type \"{t}\". Valid types: {}", VALID_NODE_TYPES.join(", ")));
         }
         // scene/player require width, height
-        if (t == "scene" || t == "player") && path == "root" {
-            if !obj.contains_key("width") || !obj.contains_key("height") {
-                errors.push(format!("{path}: {t} requires width and height"));
-            }
+        if (t == "scene" || t == "player") && path == "root"
+            && (!obj.contains_key("width") || !obj.contains_key("height"))
+        {
+            errors.push(format!("{path}: {t} requires width and height"));
         }
         // player requires fps and durationInFrames
         if t == "player" && path == "root" {
@@ -1006,13 +1006,11 @@ fn validate_dsl_node(node: &Value, path: &str, errors: &mut Vec<String>) {
             }
         }
         // text nodes require the "content" property (NOT "text")
-        if t == "text" {
-            if !obj.contains_key("content") {
-                if obj.contains_key("text") {
-                    errors.push(format!("{path}: text node uses \"content\" not \"text\" for the string value"));
-                } else {
-                    errors.push(format!("{path}: text node requires a \"content\" string"));
-                }
+        if t == "text" && !obj.contains_key("content") {
+            if obj.contains_key("text") {
+                errors.push(format!("{path}: text node uses \"content\" not \"text\" for the string value"));
+            } else {
+                errors.push(format!("{path}: text node requires a \"content\" string"));
             }
         }
         // polygon requires points array with ≥ 3 entries, each [number, number]
@@ -1490,7 +1488,7 @@ fn critique_visual_doc(visual: &Value) -> Result<(Vec<String>, Vec<String>), Str
     }
 
     // 3. Token usage — mandatory tokens
-    if !bg.starts_with('$') && bg != "" {
+    if !bg.starts_with('$') && !bg.is_empty() {
         issues.push(format!(
             "MISSING_BG_TOKEN: root background is '{}' — MUST use '$background' so the visual adapts to dark/light themes.",
             truncate(bg, 20)
@@ -1535,16 +1533,15 @@ fn critique_visual_doc(visual: &Value) -> Result<(Vec<String>, Vec<String>), Str
     // 5. Margin violations (text only — non-blocking suggestion)
     let margin = 30.0;
     for bbox in &bboxes {
-        if bbox.label.starts_with("text") {
-            if bbox.x < margin || bbox.y < margin
+        if bbox.label.starts_with("text")
+            && (bbox.x < margin || bbox.y < margin
                 || bbox.x + bbox.w > canvas_w - margin
-                || bbox.y + bbox.h > canvas_h - margin
-            {
-                suggestions.push(format!(
-                    "MARGIN_VIOLATION: {} extends beyond {}px margin (at {:.0},{:.0} size {:.0}x{:.0}). Keep content inside the safe area.",
-                    bbox.label, margin, bbox.x, bbox.y, bbox.w, bbox.h
-                ));
-            }
+                || bbox.y + bbox.h > canvas_h - margin)
+        {
+            suggestions.push(format!(
+                "MARGIN_VIOLATION: {} extends beyond {}px margin (at {:.0},{:.0} size {:.0}x{:.0}). Keep content inside the safe area.",
+                bbox.label, margin, bbox.x, bbox.y, bbox.w, bbox.h
+            ));
         }
     }
 

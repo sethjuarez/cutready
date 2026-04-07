@@ -495,29 +495,27 @@ pub fn list_timelines(project_dir: &Path) -> Result<Vec<TimelineInfo>, Versionin
     // List timeline/* branches
     if let Ok(refs) = repo.references() {
         if let Ok(prefixed) = refs.prefixed(TIMELINE_PREFIX) {
-            for reference in prefixed {
-                if let Ok(r) = reference {
-                    let full_name = r.name().as_bstr().to_string();
-                    let slug = full_name
-                        .strip_prefix(TIMELINE_PREFIX)
-                        .unwrap_or(&full_name)
-                        .to_string();
-                    let label = labels
-                        .get(&slug)
-                        .cloned()
-                        .unwrap_or_else(|| slug.clone());
-                    let is_active = active_branch.as_deref() == Some(&full_name)
-                        || active_branch.as_deref() == Some(&format!("timeline/{}", slug));
-                    let count = count_commits_on_ref(&repo, &full_name)?;
-                    timelines.push(TimelineInfo {
-                        name: slug,
-                        label,
-                        is_active,
-                        snapshot_count: count,
-                        color_index: color_idx,
-                    });
-                    color_idx += 1;
-                }
+            for r in prefixed.flatten() {
+                let full_name = r.name().as_bstr().to_string();
+                let slug = full_name
+                    .strip_prefix(TIMELINE_PREFIX)
+                    .unwrap_or(&full_name)
+                    .to_string();
+                let label = labels
+                    .get(&slug)
+                    .cloned()
+                    .unwrap_or_else(|| slug.clone());
+                let is_active = active_branch.as_deref() == Some(&full_name)
+                    || active_branch.as_deref() == Some(&format!("timeline/{}", slug));
+                let count = count_commits_on_ref(&repo, &full_name)?;
+                timelines.push(TimelineInfo {
+                    name: slug,
+                    label,
+                    is_active,
+                    snapshot_count: count,
+                    color_index: color_idx,
+                });
+                color_idx += 1;
             }
         }
     }
@@ -777,7 +775,7 @@ pub fn get_timeline_graph(project_dir: &Path) -> Result<Vec<GraphNode>, Versioni
                 timeline: timeline.name.clone(),
                 parents,
                 lane: timeline.color_index,
-                is_head: head_oid.map_or(false, |h| h == oid),
+                is_head: head_oid == Some(oid),
                 is_branch_tip: is_tip,
                 is_remote_tip: false,
                 author,
@@ -967,6 +965,7 @@ pub fn diff_snapshots(
             .to_string_lossy()
             .to_string();
         // Update current_file index
+        #[allow(clippy::needless_range_loop)]
         for j in current_file..entry_count {
             if entries[j].path == dpath {
                 current_file = j;
@@ -1039,6 +1038,7 @@ pub fn diff_working_tree(project_dir: &Path) -> Result<Vec<DiffEntry>, Versionin
             .unwrap_or(Path::new(""))
             .to_string_lossy()
             .to_string();
+        #[allow(clippy::needless_range_loop)]
         for j in current_file..entry_count {
             if entries[j].path == dpath {
                 current_file = j;
@@ -1483,7 +1483,7 @@ fn reset_branch_ref(
 /// Skips hidden files/dirs (starting with '.').
 fn build_tree_from_dir(
     repo: &gix::Repository,
-    root: &Path,
+    _root: &Path,
     dir: &Path,
 ) -> Result<gix::ObjectId, VersioningError> {
     let mut entries: Vec<gix::objs::tree::Entry> = Vec::new();
@@ -1503,7 +1503,7 @@ fn build_tree_from_dir(
         }
 
         if path.is_dir() {
-            let sub_tree_id = build_tree_from_dir(repo, root, &path)?;
+            let sub_tree_id = build_tree_from_dir(repo, _root, &path)?;
             entries.push(gix::objs::tree::Entry {
                 mode: gix::objs::tree::EntryKind::Tree.into(),
                 filename: name.into(),
