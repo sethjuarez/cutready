@@ -392,30 +392,8 @@ pub fn all_tools() -> Vec<Tool> {
                 "required": ["path"]
             }),
         ),
-        Tool::function(
-            "recall_memory",
-            "Search your memory for information from past conversations, saved facts, or session summaries. Use this when the user references something from a previous discussion, or when you need context about prior decisions. The search uses keyword matching — be specific.",
-            json!({
-                "type": "object",
-                "properties": {
-                    "query": { "type": "string", "description": "Keywords to search for in memories (e.g. 'user preference narration style', 'login flow demo')" }
-                },
-                "required": ["query"]
-            }),
-        ),
-        Tool::function(
-            "save_memory",
-            "Save an important fact, decision, or preference to memory so you can recall it in future conversations. Use 'core' for persistent facts about the user or project (e.g. preferences, tech stack, team info). Use 'insight' for decisions or conclusions from the current conversation.",
-            json!({
-                "type": "object",
-                "properties": {
-                    "category": { "type": "string", "enum": ["core", "insight"], "description": "Memory category: 'core' for persistent facts, 'insight' for session-specific conclusions" },
-                    "content": { "type": "string", "description": "The fact, preference, or insight to remember" },
-                    "tags": { "type": "array", "items": { "type": "string" }, "description": "Optional tags for easier recall (e.g. ['preference', 'narration'] or ['demo', 'login'])" }
-                },
-                "required": ["category", "content"]
-            }),
-        ),
+        agentive::memory::recall_memory_tool(),
+        agentive::memory::save_memory_tool(),
         // ── Snapshot / versioning tools ──────────────────────────────
         Tool::function(
             "list_snapshots",

@@ -1,189 +1,90 @@
-//! Memory system for the AI assistant.
+//! Memory system for the AI assistant — thin wrapper around `agentive::memory`.
 //!
-//! Five-category memory modeled after human cognition:
-//!
-//! - **Working memory** — active conversation context (managed by runner.rs)
-//! - **Core memory** — persistent project-level facts injected into system prompt
-//! - **Procedural memory** — tool definitions and system prompts (existing infra)
-//! - **Archival memory** — session summaries saved when a chat session ends
-//! - **Recall memory** — agent searches past memories on demand via tool call
-//!
-//! Storage: `.cutready/memory.json` inside the project directory.
+//! Delegates all data model, scoring, and formatting to agentive.
+//! This module adds CutReady-specific persistence via `.cutready/memory.json`.
 
-use serde::{Deserialize, Serialize};
 use std::path::Path;
 
-// ---------------------------------------------------------------------------
-// Data model
-// ---------------------------------------------------------------------------
-
-/// A single memory entry.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MemoryEntry {
-    /// What category this memory belongs to.
-    pub category: MemoryCategory,
-    /// The content of the memory.
-    pub content: String,
-    /// When this memory was created.
-    pub created_at: String,
-    /// Optional tags for search.
-    #[serde(default)]
-    pub tags: Vec<String>,
-}
-
-/// Memory categories.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "snake_case")]
-pub enum MemoryCategory {
-    /// Persistent facts about the user or project (e.g., "user prefers concise narration").
-    Core,
-    /// Compacted session summaries.
-    Archival,
-    /// Explicitly saved insights from conversations.
-    Insight,
-}
-
-/// The full memory store for a project.
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct MemoryStore {
-    pub memories: Vec<MemoryEntry>,
-}
+// Re-export agentive types so callers don't need to import from two places.
+pub use agentive::memory::{MemoryBackend, MemoryCategory, MemoryEntry, MemoryStore};
 
 // ---------------------------------------------------------------------------
-// Persistence
+// File-based persistence backend
 // ---------------------------------------------------------------------------
 
-fn memory_path(project_root: &Path) -> std::path::PathBuf {
-    project_root.join(".cutready").join("memory.json")
+/// Persists the memory store as `.cutready/memory.json` inside the project.
+struct FileBackend {
+    path: std::path::PathBuf,
 }
 
-/// Load the memory store from disk. Returns empty store if file doesn't exist.
+impl FileBackend {
+    fn new(project_root: &Path) -> Self {
+        Self {
+            path: project_root.join(".cutready").join("memory.json"),
+        }
+    }
+}
+
+impl MemoryBackend for FileBackend {
+    fn load(&self) -> MemoryStore {
+        if !self.path.exists() {
+            return MemoryStore::default();
+        }
+        std::fs::read_to_string(&self.path)
+            .ok()
+            .and_then(|data| serde_json::from_str(&data).ok())
+            .unwrap_or_default()
+    }
+
+    fn save(&self, store: &MemoryStore) -> Result<(), String> {
+        if let Some(parent) = self.path.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        }
+        let json = serde_json::to_string_pretty(store).map_err(|e| e.to_string())?;
+        std::fs::write(&self.path, json).map_err(|e| e.to_string())
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Convenience functions (same signatures as before for call-site compatibility)
+// ---------------------------------------------------------------------------
+
+/// Load the memory store from disk.
 pub fn load(project_root: &Path) -> MemoryStore {
-    let path = memory_path(project_root);
-    if !path.exists() {
-        return MemoryStore::default();
-    }
-    std::fs::read_to_string(&path)
-        .ok()
-        .and_then(|data| serde_json::from_str(&data).ok())
-        .unwrap_or_default()
+    FileBackend::new(project_root).load()
 }
 
-/// Save the memory store to disk.
-pub fn save(project_root: &Path, store: &MemoryStore) -> Result<(), String> {
-    let path = memory_path(project_root);
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-    }
-    let json = serde_json::to_string_pretty(store).map_err(|e| e.to_string())?;
-    std::fs::write(&path, json).map_err(|e| e.to_string())
-}
-
-// ---------------------------------------------------------------------------
-// Operations (called by agent tools)
-// ---------------------------------------------------------------------------
-
-/// Save a memory entry.
+/// Save a memory entry with dedup + capacity management, then persist.
 pub fn save_memory(
     project_root: &Path,
     category: MemoryCategory,
     content: &str,
     tags: Vec<String>,
 ) -> Result<(), String> {
-    let mut store = load(project_root);
-    let now = chrono::Utc::now().to_rfc3339();
-
-    // For core memories, replace if same tags exist (dedup)
-    if category == MemoryCategory::Core {
-        store.memories.retain(|m| {
-            !(m.category == MemoryCategory::Core && m.tags == tags && !tags.is_empty())
-        });
-    }
-
-    store.memories.push(MemoryEntry {
-        category,
-        content: content.to_string(),
-        created_at: now,
-        tags,
-    });
-
-    // Cap total memories to prevent unbounded growth
-    const MAX_MEMORIES: usize = 200;
-    if store.memories.len() > MAX_MEMORIES {
-        // Drop oldest archival memories first
-        let mut archival_indices: Vec<usize> = store
-            .memories
-            .iter()
-            .enumerate()
-            .filter(|(_, m)| m.category == MemoryCategory::Archival)
-            .map(|(i, _)| i)
-            .collect();
-        while store.memories.len() > MAX_MEMORIES && !archival_indices.is_empty() {
-            let idx = archival_indices.remove(0);
-            store.memories.remove(idx);
-            // Adjust remaining indices
-            for i in archival_indices.iter_mut() {
-                if *i > idx {
-                    *i -= 1;
-                }
-            }
-        }
-    }
-
-    save(project_root, &store)
+    let backend = FileBackend::new(project_root);
+    let mut store = backend.load();
+    store.save(category, content, tags);
+    backend.save(&store)
 }
 
-/// Search memories by keyword. Returns matching entries sorted by relevance.
+/// Search memories by keyword.
 pub fn recall(project_root: &Path, query: &str) -> Vec<MemoryEntry> {
     let store = load(project_root);
     log::debug!("[memory] recall query='{}' across {} memories", query, store.memories.len());
-    let query_lower = query.to_lowercase();
-    let keywords: Vec<&str> = query_lower.split_whitespace().collect();
-
-    let mut scored: Vec<(usize, &MemoryEntry)> = store
-        .memories
-        .iter()
-        .filter_map(|m| {
-            let content_lower = m.content.to_lowercase();
-            let tag_text: String = m.tags.join(" ").to_lowercase();
-
-            let mut score = 0usize;
-            for kw in &keywords {
-                if content_lower.contains(kw) {
-                    score += 2;
-                }
-                if tag_text.contains(kw) {
-                    score += 3; // Tag matches are more precise
-                }
-            }
-
-            // Boost core memories (only when already matched)
-            if score > 0 && m.category == MemoryCategory::Core {
-                score += 1;
-            }
-
-            if score > 0 {
-                Some((score, m))
-            } else {
-                None
-            }
-        })
-        .collect();
-
-    scored.sort_by(|a, b| b.0.cmp(&a.0));
-    let results: Vec<MemoryEntry> = scored.into_iter().map(|(_, m)| m.clone()).take(10).collect();
+    let results: Vec<MemoryEntry> = store.recall(query).into_iter().cloned().collect();
     log::debug!("[memory] recall returned {} results", results.len());
     results
 }
 
-/// Get all core memories (for system prompt injection).
-pub fn core_memories(project_root: &Path) -> Vec<MemoryEntry> {
-    let store = load(project_root);
-    store
-        .memories
-        .into_iter()
-        .filter(|m| m.category == MemoryCategory::Core)
-        .collect()
+/// Format core memories for injection into the system prompt.
+pub fn format_for_system_prompt(project_root: &Path) -> String {
+    load(project_root).format_for_system_prompt()
+}
+
+/// Format recall results for the agent.
+pub fn format_recall_results(results: &[MemoryEntry]) -> String {
+    let refs: Vec<&MemoryEntry> = results.iter().collect();
+    MemoryStore::format_recall_results(&refs)
 }
 
 /// Save an archival session summary.
@@ -192,88 +93,37 @@ pub fn archive_session(
     summary: &str,
     session_id: &str,
 ) -> Result<(), String> {
-    save_memory(
-        project_root,
-        MemoryCategory::Archival,
-        summary,
-        vec![format!("session:{session_id}")],
-    )
+    let backend = FileBackend::new(project_root);
+    let mut store = backend.load();
+    store.archive_session(summary, session_id);
+    backend.save(&store)
 }
 
-// ---------------------------------------------------------------------------
-// Format for system prompt
-// ---------------------------------------------------------------------------
-
-/// Format core memories for injection into the system prompt.
-pub fn format_for_system_prompt(project_root: &Path) -> String {
-    let cores = core_memories(project_root);
-    if cores.is_empty() {
-        return String::new();
-    }
-
-    let mut out = String::from("\n[Memories about this project and user]\n");
-    for m in &cores {
-        out.push_str(&format!("• {}\n", m.content));
-    }
-    out
-}
-
-/// Format recall results for the agent.
-pub fn format_recall_results(results: &[MemoryEntry]) -> String {
-    if results.is_empty() {
-        return "No memories found matching that query.".to_string();
-    }
-
-    let mut out = String::new();
-    for (i, m) in results.iter().enumerate() {
-        let cat = match m.category {
-            MemoryCategory::Core => "core",
-            MemoryCategory::Archival => "archival",
-            MemoryCategory::Insight => "insight",
-        };
-        out.push_str(&format!(
-            "{}. [{}] {}\n",
-            i + 1,
-            cat,
-            m.content
-        ));
-        if !m.tags.is_empty() {
-            out.push_str(&format!("   tags: {}\n", m.tags.join(", ")));
-        }
-    }
-    out
-}
-
-/// Delete a memory by index. Returns an error if the index is out of bounds.
+/// Delete a memory by index.
 pub fn delete_memory(project_root: &Path, index: usize) -> Result<(), String> {
-    let mut store = load(project_root);
-    if index >= store.memories.len() {
-        return Err(format!("Memory index {} out of bounds ({})", index, store.memories.len()));
-    }
-    store.memories.remove(index);
-    save(project_root, &store)
+    let backend = FileBackend::new(project_root);
+    let mut store = backend.load();
+    store.delete(index)
+        .ok_or_else(|| format!("Memory index {} out of bounds ({})", index, store.memories.len()))?;
+    backend.save(&store)
 }
 
 /// Update a memory's content by index.
 pub fn update_memory(project_root: &Path, index: usize, content: &str) -> Result<(), String> {
-    let mut store = load(project_root);
-    if index >= store.memories.len() {
+    let backend = FileBackend::new(project_root);
+    let mut store = backend.load();
+    if !store.update(index, content) {
         return Err(format!("Memory index {} out of bounds ({})", index, store.memories.len()));
     }
-    store.memories[index].content = content.to_string();
-    save(project_root, &store)
+    backend.save(&store)
 }
 
-/// Delete all memories of a given category, or all memories if None.
+/// Delete all memories of a given category, or all if None.
 pub fn clear_memories(project_root: &Path, category: Option<MemoryCategory>) -> Result<usize, String> {
-    let mut store = load(project_root);
-    let before = store.memories.len();
-    match category {
-        Some(cat) => store.memories.retain(|m| m.category != cat),
-        None => store.memories.clear(),
-    }
-    let removed = before - store.memories.len();
-    save(project_root, &store)?;
+    let backend = FileBackend::new(project_root);
+    let mut store = backend.load();
+    let removed = store.clear(category);
+    backend.save(&store)?;
     Ok(removed)
 }
 
@@ -328,7 +178,8 @@ mod tests {
         save_memory(root, MemoryCategory::Core, "User likes blue", vec!["color-pref".into()]).unwrap();
         save_memory(root, MemoryCategory::Core, "User likes purple", vec!["color-pref".into()]).unwrap();
 
-        let cores = core_memories(root);
+        let store = load(root);
+        let cores: Vec<_> = store.memories.iter().filter(|m| m.category == MemoryCategory::Core).collect();
         assert_eq!(cores.len(), 1, "Should dedup core memories with same tags");
         assert!(cores[0].content.contains("purple"), "Should keep the latest value");
     }
