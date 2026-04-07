@@ -131,7 +131,7 @@ pub async fn agent_chat_with_tools(
 /// Fetch a URL and return clean text content. Used by @web: references.
 #[tauri::command]
 pub async fn fetch_url_content(url: String) -> Result<String, String> {
-    crate::engine::agent::web::fetch_and_clean(&url).await
+    agentive::web::fetch_and_clean(&url).await
 }
 
 /// Serializable result from the agentic chat.

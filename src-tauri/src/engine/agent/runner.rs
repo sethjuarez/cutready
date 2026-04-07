@@ -10,7 +10,7 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 use crate::engine::agent::llm::ChatMessage;
-use crate::engine::agent::{tools, web};
+use crate::engine::agent::{tools};
 
 /// Maximum tool-call rounds to prevent infinite loops.
 const MAX_TOOL_ROUNDS: usize = 10;
@@ -265,7 +265,10 @@ fn run_inner<'a>(
             } else if tool_call.function.name == "fetch_url" {
                 let tc = tool_call;
                 Box::pin(async move {
-                    exec_fetch_url(&tc).await.map(agentive::ToolOutput::from)
+                    let args: serde_json::Value = serde_json::from_str(&tc.function.arguments).unwrap_or(serde_json::json!({}));
+                    let url = args.get("url").and_then(|v| v.as_str()).unwrap_or("");
+                    agentive::web::fetch_and_clean(url).await
+                        .map(agentive::ToolOutput::from)
                 })
             } else {
                 let result = tools::execute_tool(
@@ -398,7 +401,10 @@ fn exec_delegation(
             } else if tool_call.function.name == "fetch_url" {
                 let tc = tool_call;
                 Box::pin(async move {
-                    exec_fetch_url(&tc).await.map(agentive::ToolOutput::from)
+                    let args: serde_json::Value = serde_json::from_str(&tc.function.arguments).unwrap_or(serde_json::json!({}));
+                    let url = args.get("url").and_then(|v| v.as_str()).unwrap_or("");
+                    agentive::web::fetch_and_clean(url).await
+                        .map(agentive::ToolOutput::from)
                 })
             } else {
                 let result = tools::execute_tool(
@@ -450,22 +456,6 @@ fn exec_delegation(
 
         Ok(agentive::ToolOutput::from(result_text))
     })
-}
-
-/// Execute a fetch_url tool call.
-async fn exec_fetch_url(call: &agentive::ToolCall) -> Result<String, String> {
-    let args: serde_json::Value =
-        serde_json::from_str(&call.function.arguments).unwrap_or(serde_json::json!({}));
-
-    let url = match args.get("url").and_then(|v| v.as_str()) {
-        Some(u) => u,
-        None => return Ok("Error: missing 'url' argument".into()),
-    };
-
-    match web::fetch_and_clean(url).await {
-        Ok(content) => Ok(content),
-        Err(e) => Ok(format!("Error fetching URL: {e}")),
-    }
 }
 
 // ---------------------------------------------------------------------------
