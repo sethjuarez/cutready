@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 
 use serde_json::{json, Value};
 
-use crate::engine::agent::llm::{ContentPart, ImageUrl, Tool, ToolCall, ToolFunction};
+use crate::engine::agent::llm::{ContentPart, ImageUrl, Tool, ToolCall};
 use crate::engine::project;
 use crate::engine::versioning;
 use crate::models::sketch::PlanningRow;
@@ -207,12 +207,12 @@ pub fn encode_image_at_path(root: &Path, rel_path: &str) -> Option<ContentPart> 
 /// All tools available to the AI assistant.
 pub fn all_tools() -> Vec<Tool> {
     vec![
-        tool_def(
+        Tool::function(
             "list_project_files",
             "List all sketches and notes in the project",
             json!({ "type": "object", "properties": {}, "required": [] }),
         ),
-        tool_def(
+        Tool::function(
             "read_note",
             "Read the full markdown content of a note",
             json!({
@@ -223,7 +223,7 @@ pub fn all_tools() -> Vec<Tool> {
                 "required": ["path"]
             }),
         ),
-        tool_def(
+        Tool::function(
             "read_sketch",
             "Read a sketch's planning rows (time, narrative, demo_actions, screenshot). IMPORTANT: You must provide the 'path' argument — call list_project_files first if you don't know it.",
             json!({
@@ -234,7 +234,7 @@ pub fn all_tools() -> Vec<Tool> {
                 "required": ["path"]
             }),
         ),
-        tool_def(
+        Tool::function(
             "set_planning_rows",
             "Replace ALL planning rows in a sketch, or create a new sketch if it doesn't exist yet. Use this to generate a full plan from scratch.",
             json!({
@@ -260,7 +260,7 @@ pub fn all_tools() -> Vec<Tool> {
                 "required": ["path", "rows"]
             }),
         ),
-        tool_def(
+        Tool::function(
             "list_project_images",
             "List all images/screenshots in the project's .cutready/screenshots directory. Returns paths that can be used as screenshot values in planning rows.",
             json!({
@@ -269,7 +269,7 @@ pub fn all_tools() -> Vec<Tool> {
                 "required": []
             }),
         ),
-        tool_def(
+        Tool::function(
             "update_planning_row",
             "Update a single planning row by index. Only fields provided are changed.",
             json!({
@@ -285,7 +285,7 @@ pub fn all_tools() -> Vec<Tool> {
                 "required": ["path", "index"]
             }),
         ),
-        tool_def(
+        Tool::function(
             "set_row_visual",
             "Set an animated framing visual on a planning row using the elucim DSL. Auto-validates structure and auto-critiques layout/readability before saving. Returns validation or critique errors if the visual has issues — fix them and call again. On success, saves the visual and returns any optional suggestions. Pass null to remove a visual.",
             json!({
@@ -314,7 +314,7 @@ pub fn all_tools() -> Vec<Tool> {
                 "required": ["path", "index", "visual"]
             }),
         ),
-        tool_def(
+        Tool::function(
             "design_plan",
             "Save an English-language design brief for a planning row's visual. Call this before generating DSL JSON to think through the design. Describes layout, elements, spatial arrangement, color palette, and animation sequence in plain English. IMPORTANT: You must provide 'path', 'index', and 'plan' — all three are required.",
             json!({
@@ -330,7 +330,7 @@ pub fn all_tools() -> Vec<Tool> {
                 "required": ["path", "index", "plan"]
             }),
         ),
-        tool_def(
+        Tool::function(
             "delegate_to_agent",
             "Delegate a task to another AI agent with a different specialization. The agent runs independently and returns its result. Available agents: planner, writer, editor, plus any custom agents.",
             json!({
@@ -343,7 +343,7 @@ pub fn all_tools() -> Vec<Tool> {
             }),
         ),
         agentive::web::fetch_url_tool(),
-        tool_def(
+        Tool::function(
             "save_feedback",
             "Save user feedback about CutReady. Use this when the user wants to submit feedback, report a bug, request a feature, or share thoughts about the app or an interaction.",
             json!({
@@ -355,7 +355,7 @@ pub fn all_tools() -> Vec<Tool> {
                 "required": ["category", "feedback"]
             }),
         ),
-        tool_def(
+        Tool::function(
             "update_note",
             "Update the full content of an existing note. Use this to clean up, restructure, or rewrite note content.",
             json!({
@@ -367,7 +367,7 @@ pub fn all_tools() -> Vec<Tool> {
                 "required": ["path", "content"]
             }),
         ),
-        tool_def(
+        Tool::function(
             "create_note",
             "Create a brand new note in the project. Use this when the user asks you to write something down, take notes, create a document, or save information from the conversation as a note.",
             json!({
@@ -379,7 +379,7 @@ pub fn all_tools() -> Vec<Tool> {
                 "required": ["filename", "content"]
             }),
         ),
-        tool_def(
+        Tool::function(
             "update_storyboard",
             "Update the title and/or description of an existing storyboard.",
             json!({
@@ -392,7 +392,7 @@ pub fn all_tools() -> Vec<Tool> {
                 "required": ["path"]
             }),
         ),
-        tool_def(
+        Tool::function(
             "recall_memory",
             "Search your memory for information from past conversations, saved facts, or session summaries. Use this when the user references something from a previous discussion, or when you need context about prior decisions. The search uses keyword matching — be specific.",
             json!({
@@ -403,7 +403,7 @@ pub fn all_tools() -> Vec<Tool> {
                 "required": ["query"]
             }),
         ),
-        tool_def(
+        Tool::function(
             "save_memory",
             "Save an important fact, decision, or preference to memory so you can recall it in future conversations. Use 'core' for persistent facts about the user or project (e.g. preferences, tech stack, team info). Use 'insight' for decisions or conclusions from the current conversation.",
             json!({
@@ -417,7 +417,7 @@ pub fn all_tools() -> Vec<Tool> {
             }),
         ),
         // ── Snapshot / versioning tools ──────────────────────────────
-        tool_def(
+        Tool::function(
             "list_snapshots",
             "List the project's version history (git snapshots) in reverse chronological order. Returns commit IDs, messages, and timestamps. Use this to find snapshot IDs for read_file_at_snapshot or compare_snapshots.",
             json!({
@@ -428,7 +428,7 @@ pub fn all_tools() -> Vec<Tool> {
                 "required": []
             }),
         ),
-        tool_def(
+        Tool::function(
             "read_file_at_snapshot",
             "Read the content of a specific file at a historical snapshot. Use this to see what a sketch, note, or storyboard looked like at a previous point in time. Get snapshot IDs from list_snapshots.",
             json!({
@@ -440,7 +440,7 @@ pub fn all_tools() -> Vec<Tool> {
                 "required": ["snapshot_id", "path"]
             }),
         ),
-        tool_def(
+        Tool::function(
             "compare_snapshots",
             "Compare two snapshots and see which files changed between them, including line-level addition/deletion counts. Use this to understand what evolved between versions.",
             json!({
@@ -452,7 +452,7 @@ pub fn all_tools() -> Vec<Tool> {
                 "required": ["from_snapshot", "to_snapshot"]
             }),
         ),
-        tool_def(
+        Tool::function(
             "list_timelines",
             "List all timelines (branches) in the project. Shows which timeline is currently active, snapshot counts, and display labels.",
             json!({
@@ -461,7 +461,7 @@ pub fn all_tools() -> Vec<Tool> {
                 "required": []
             }),
         ),
-        tool_def(
+        Tool::function(
             "get_current_snapshot",
             "Get information about the current snapshot (HEAD commit) and active timeline. Use this to orient yourself in the project's version history.",
             json!({
@@ -473,24 +473,13 @@ pub fn all_tools() -> Vec<Tool> {
     ]
 }
 
-fn tool_def(name: &str, description: &str, parameters: Value) -> Tool {
-    Tool {
-        tool_type: "function".into(),
-        function: ToolFunction {
-            name: name.into(),
-            description: description.into(),
-            parameters,
-        },
-    }
-}
-
 // ---------------------------------------------------------------------------
 // Tool execution
 // ---------------------------------------------------------------------------
 
 /// Execute a single tool call and return the result as a string.
 pub fn execute_tool(call: &ToolCall, project_root: &Path, vision_enabled: bool) -> String {
-    let args: Value = serde_json::from_str(&call.function.arguments).unwrap_or(json!({}));
+    let args: Value = agentive::parse_tool_args(&call.function.arguments).unwrap_or(json!({}));
     let start = std::time::Instant::now();
 
     // Entry trace — if tool_exec is missing but this appears, the tool panicked

@@ -18,56 +18,13 @@ const MAX_TOOL_ROUNDS: usize = 10;
 /// Maximum delegation depth for sub-agents.
 const MAX_DELEGATION_DEPTH: usize = 2;
 
-/// Strip control characters (except \n, \r, \t) and null bytes from tool
-/// results before sending them to the API. Invalid characters can cause
-/// JSON parse errors on the server side.
-fn sanitize_for_api(s: &str) -> String {
-    // First strip inline base64 data URIs that bloat the body without adding
-    // LLM-readable value (the LLM can't interpret raw base64 image data).
-    let stripped = strip_inline_base64(s);
-    stripped.chars()
-        .filter(|c| !c.is_control() || matches!(c, '\n' | '\r' | '\t'))
-        .collect()
-}
-
-/// Replace inline `data:image/...;base64,...` URIs with a short placeholder.
-/// These can appear in markdown notes (pasted screenshots) and bloat the body
-/// by hundreds of KB without providing any value to the LLM (it can't decode
-/// raw base64 — images must be sent as separate content parts).
-fn strip_inline_base64(s: &str) -> String {
-    let mut result = String::with_capacity(s.len());
-    let mut remaining = s;
-    while let Some(start) = remaining.find("data:image/") {
-        result.push_str(&remaining[..start]);
-        let after = &remaining[start..];
-        if let Some(b64_start) = after.find(";base64,") {
-            let data_start = b64_start + 8;
-            let data_end = after[data_start..].find(|c: char| {
-                !c.is_ascii_alphanumeric() && c != '+' && c != '/' && c != '='
-            }).unwrap_or(after.len() - data_start);
-            let total_b64_len = data_end;
-            if total_b64_len > 100 {
-                result.push_str("[base64 image removed]");
-            } else {
-                result.push_str(&after[..data_start + data_end]);
-            }
-            remaining = &after[data_start + data_end..];
-        } else {
-            result.push_str("data:image/");
-            remaining = &after[11..];
-        }
-    }
-    result.push_str(remaining);
-    result
-}
-
 /// Parse a raw tool result into a `ToolOutput`, extracting any `[VISION_IMAGES]`
 /// section into image content parts.  The text portion is sanitized for the API.
 fn parse_tool_output(raw: &str) -> agentive::ToolOutput {
     use crate::engine::agent::llm::ContentPart;
 
     if let Some(marker_pos) = raw.find("\n[VISION_IMAGES]") {
-        let text = sanitize_for_api(&raw[..marker_pos]);
+        let text = agentive::sanitize_for_api(&raw[..marker_pos]);
         let images_section = &raw[marker_pos + "\n[VISION_IMAGES]".len()..];
         let images: Vec<ContentPart> = images_section
             .lines()
@@ -79,7 +36,7 @@ fn parse_tool_output(raw: &str) -> agentive::ToolOutput {
             agentive::ToolOutput::with_images(text, images)
         }
     } else {
-        agentive::ToolOutput::Text(sanitize_for_api(raw))
+        agentive::ToolOutput::Text(agentive::sanitize_for_api(raw))
     }
 }
 
@@ -265,7 +222,7 @@ fn run_inner<'a>(
             } else if tool_call.function.name == "fetch_url" {
                 let tc = tool_call;
                 Box::pin(async move {
-                    let args: serde_json::Value = serde_json::from_str(&tc.function.arguments).unwrap_or(serde_json::json!({}));
+                    let args = agentive::parse_tool_args(&tc.function.arguments).unwrap_or(serde_json::json!({}));
                     let url = args.get("url").and_then(|v| v.as_str()).unwrap_or("");
                     agentive::web::fetch_and_clean(url).await
                         .map(agentive::ToolOutput::from)
@@ -335,7 +292,7 @@ fn exec_delegation(
     }
 
     let args: serde_json::Value =
-        serde_json::from_str(&call.function.arguments).unwrap_or(serde_json::json!({}));
+        agentive::parse_tool_args(&call.function.arguments).unwrap_or(serde_json::json!({}));
 
     let agent_id = match args.get("agent_id").and_then(|v| v.as_str()) {
         Some(id) => id.to_string(),
@@ -401,7 +358,7 @@ fn exec_delegation(
             } else if tool_call.function.name == "fetch_url" {
                 let tc = tool_call;
                 Box::pin(async move {
-                    let args: serde_json::Value = serde_json::from_str(&tc.function.arguments).unwrap_or(serde_json::json!({}));
+                    let args = agentive::parse_tool_args(&tc.function.arguments).unwrap_or(serde_json::json!({}));
                     let url = args.get("url").and_then(|v| v.as_str()).unwrap_or("");
                     agentive::web::fetch_and_clean(url).await
                         .map(agentive::ToolOutput::from)
@@ -465,45 +422,6 @@ fn exec_delegation(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn strip_inline_base64_replaces_large_data_uris() {
-        let input = r#"Some text before data:image/png;base64,AAAA/BBBB+CCCC== and after"#;
-        let result = strip_inline_base64(input);
-        assert!(result.contains("data:image/png;base64,"));
-
-        let big_b64 = "A".repeat(200);
-        let input = format!(r#"before data:image/png;base64,{big_b64}" after"#);
-        let result = strip_inline_base64(&input);
-        assert!(result.contains("[base64 image removed]"));
-        assert!(!result.contains(&big_b64));
-    }
-
-    #[test]
-    fn strip_inline_base64_preserves_non_image_data() {
-        let input = "No images here, just plain text";
-        assert_eq!(strip_inline_base64(input), input);
-    }
-
-    #[test]
-    fn strip_inline_base64_handles_multiple_images() {
-        let big = "B".repeat(200);
-        let input = format!(
-            r#"![](data:image/png;base64,{big}) text ![](data:image/jpeg;base64,{big})"#
-        );
-        let result = strip_inline_base64(&input);
-        let count = result.matches("[base64 image removed]").count();
-        assert_eq!(count, 2, "should replace both large images");
-    }
-
-    #[test]
-    fn sanitize_for_api_strips_base64_and_control_chars() {
-        let big = "C".repeat(300);
-        let input = format!("Note: data:image/png;base64,{big}) \x01hidden");
-        let result = sanitize_for_api(&input);
-        assert!(result.contains("[base64 image removed]"));
-        assert!(!result.contains(&big));
-    }
 
     #[test]
     fn parse_tool_output_text_only() {
