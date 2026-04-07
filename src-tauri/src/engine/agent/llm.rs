@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 
 pub use agentive::{
     ChatMessage, ContentPart, ImageUrl,
-    Provider, Tool, ToolCall, ToolFunction,
+    Provider, Tool, ToolCall,
     context_budget, needs_responses_api, simple_chat, supports_vision,
 };
 pub use agentive::discovery::ModelInfo;
