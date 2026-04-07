@@ -787,7 +787,7 @@ function ChatTab() {
 
     setChatError(null);
 
-    // Build user message with #references context
+    // Build user message with @references context (agentive protocol)
     let userContent = text;
     let llmContent: string | null = null;
     if (references.length > 0) {
@@ -796,7 +796,7 @@ function ChatTab() {
       const parts: string[] = [];
 
       if (fileRefs.length > 0) {
-        parts.push(`[References: ${fileRefs.map((r) => `#${r.type}:${r.path}`).join(", ")}]`);
+        parts.push(`[References: ${fileRefs.map((r) => `@${r.type}:${r.path}`).join(", ")}]`);
       }
 
       // Web refs shown as compact footnotes after the message text
@@ -1007,23 +1007,23 @@ function ChatTab() {
       const val = e.target.value;
       setInput(val);
 
-      // Detect # trigger for references
+      // Detect @ trigger for references (agentive protocol)
       const cursorPos = e.target.selectionStart;
       const textBefore = val.slice(0, cursorPos);
-      const hashIndex = textBefore.lastIndexOf("#");
+      const atIndex = textBefore.lastIndexOf("@");
 
-      if (hashIndex >= 0 && (hashIndex === 0 || textBefore[hashIndex - 1] === " ")) {
-        const query = textBefore.slice(hashIndex + 1);
+      if (atIndex >= 0 && (atIndex === 0 || textBefore[atIndex - 1] === " ")) {
+        const query = textBefore.slice(atIndex + 1);
 
-        // Detect completed #URL pattern — triggers when space follows the URL
-        const webMatch = val.slice(hashIndex + 1).match(/^(?:web:)?(https?:\/\/\S+)\s/);
+        // Detect completed @URL pattern — triggers when space follows the URL
+        const webMatch = val.slice(atIndex + 1).match(/^(?:web:)?(https?:\/\/\S+)\s/);
         if (webMatch) {
           const url = webMatch[1];
           setReferences((prev) => {
             if (prev.some((r) => r.path === url)) return prev;
             return [...prev, { type: "web", path: url, title: url, webStatus: "loading" }];
           });
-          // Keep #URL text in the input — just close autocomplete
+          // Keep @URL text in the input — just close autocomplete
           setShowAutocomplete(false);
           // Fetch content in background
           invoke<string>("fetch_url_content", { url }).then((content) => {
@@ -1053,17 +1053,18 @@ function ChatTab() {
   const insertReference = useCallback(
     (file: FileReference) => {
       setReferences((prev) => [...prev, file]);
-      // Replace the #query with a clean #title mention
+      // Replace the @query with a clean @mention (quoted if title has spaces)
       const cursorPos = inputRef.current?.selectionStart ?? input.length;
       const textBefore = input.slice(0, cursorPos);
-      const hashIndex = textBefore.lastIndexOf("#");
-      const mention = `#${file.title} `;
-      const newInput = input.slice(0, hashIndex) + mention + input.slice(cursorPos);
+      const atIndex = textBefore.lastIndexOf("@");
+      const needsQuotes = /\s/.test(file.title);
+      const mention = needsQuotes ? `@"${file.title}" ` : `@${file.title} `;
+      const newInput = input.slice(0, atIndex) + mention + input.slice(cursorPos);
       setInput(newInput);
       setShowAutocomplete(false);
       // Move cursor after the inserted mention
       setTimeout(() => {
-        const pos = hashIndex + mention.length;
+        const pos = atIndex + mention.length;
         inputRef.current?.setSelectionRange(pos, pos);
         inputRef.current?.focus();
       }, 0);
@@ -1355,7 +1356,7 @@ function ChatTab() {
                   : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface))]"
               }`}
               onClick={() => { setShowContextPicker(!showContextPicker); setContextFilter(""); }}
-              title="Add Context (#)"
+              title="Add Context (@)"
             >
               <IconPaperclip size={12} />
             </button>
@@ -1556,10 +1557,10 @@ function ChatTab() {
 // ── User Content — renders [Web: URL] as styled reference chips ──
 
 function UserContent({ content }: { content: string }) {
-  // Split on [Web: ...], [References: ...], and inline #URL patterns
+  // Split on [Web: ...], [References: ...], and inline @URL patterns
   const parts: React.ReactNode[] = [];
   let lastIndex = 0;
-  const combined = /\[(Web|References):\s*([^\]]+)\]|#(?:web:)?(https?:\/\/\S+)/g;
+  const combined = /\[(Web|References):\s*([^\]]+)\]|@(?:web:)?(https?:\/\/\S+)/g;
   let match;
   while ((match = combined.exec(content)) !== null) {
     if (match.index > lastIndex) {
@@ -1568,11 +1569,11 @@ function UserContent({ content }: { content: string }) {
     if (match[1] === "Web") {
       parts.push(<WebRefChip key={match.index} url={match[2].trim()} />);
     } else if (match[1] === "References") {
-      // Parse individual references: #note:path, #sketch:path, #storyboard:path
+      // Parse individual references: @note:path, @sketch:path, @storyboard:path
       const refStr = match[2].trim();
       const refs = refStr.split(/,\s*/);
       refs.forEach((ref, i) => {
-        const refMatch = ref.match(/^#(note|sketch|storyboard):(.+)$/);
+        const refMatch = ref.match(/^@(note|sketch|storyboard):(.+)$/);
         if (refMatch) {
           const [, type, path] = refMatch;
           const c = typeColors(type);
@@ -1599,10 +1600,10 @@ function UserContent({ content }: { content: string }) {
         }
       });
     } else if (match[3]) {
-      // Inline #URL — styled as accent link
+      // Inline @URL — styled as accent link
       parts.push(
         <span key={match.index} className="text-[rgb(var(--color-accent))] font-mono text-[12px]">
-          #<span className="underline decoration-[rgb(var(--color-accent))]/40">{match[3]}</span>
+          @<span className="underline decoration-[rgb(var(--color-accent))]/40">{match[3]}</span>
         </span>
       );
     }

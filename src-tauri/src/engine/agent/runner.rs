@@ -11,6 +11,7 @@ use std::sync::{Arc, Mutex};
 
 use crate::engine::agent::llm::ChatMessage;
 use crate::engine::agent::{tools};
+use crate::engine::project;
 
 /// Maximum tool-call rounds to prevent infinite loops.
 const MAX_TOOL_ROUNDS: usize = 10;
@@ -143,6 +144,7 @@ fn run_inner<'a>(
             max_iterations: MAX_TOOL_ROUNDS,
             auto_trim_context: true,
             sanitize_tool_results: true,
+            reference_resolver: Some(build_reference_resolver(project_root)),
             ..Default::default()
         };
 
@@ -267,6 +269,116 @@ fn run_inner<'a>(
             response: result.response,
         })
     })
+}
+
+// ---------------------------------------------------------------------------
+// @reference resolver
+// ---------------------------------------------------------------------------
+
+/// Build a `ReferenceResolver` that resolves `@name` patterns against the
+/// project's sketches, notes, and storyboards.  The resolver matches by:
+///   1. Exact path (e.g., `@intro.sk`, `@docs/plan.md`)
+///   2. Title (case-insensitive, e.g., `@Introduction`)
+///   3. File stem (e.g., `@intro` matches `intro.sk`)
+fn build_reference_resolver(project_root: &Path) -> agentive::ReferenceResolver {
+    let root = project_root.to_path_buf();
+    Arc::new(move |name: String| {
+        let root = root.clone();
+        Box::pin(async move {
+            resolve_project_reference(&root, &name)
+        }) as std::pin::Pin<Box<dyn std::future::Future<Output = Option<agentive::ResolvedReference>> + Send>>
+    })
+}
+
+/// Try to resolve a reference name against project files.
+fn resolve_project_reference(root: &std::path::Path, name: &str) -> Option<agentive::ResolvedReference> {
+    // Try sketches
+    if let Ok(sketches) = project::scan_sketches(root) {
+        for s in &sketches {
+            if matches_ref(name, &s.path, &s.title) {
+                let abs = root.join(&s.path);
+                if let Ok(sketch) = project::read_sketch(&abs) {
+                    let content = format_sketch_for_ref(&sketch);
+                    return Some(agentive::ResolvedReference {
+                        name: s.title.clone(),
+                        content,
+                        content_type: "application/json".to_string(),
+                    });
+                }
+            }
+        }
+    }
+
+    // Try notes
+    if let Ok(notes) = project::scan_notes(root) {
+        for n in &notes {
+            if matches_ref(name, &n.path, &n.title) {
+                let abs = root.join(&n.path);
+                if let Ok(content) = project::read_note(&abs) {
+                    return Some(agentive::ResolvedReference {
+                        name: n.title.clone(),
+                        content,
+                        content_type: "text/markdown".to_string(),
+                    });
+                }
+            }
+        }
+    }
+
+    // Try storyboards
+    if let Ok(storyboards) = project::scan_storyboards(root) {
+        for sb in &storyboards {
+            if matches_ref(name, &sb.path, &sb.title) {
+                let abs = root.join(&sb.path);
+                if let Ok(data) = std::fs::read_to_string(&abs) {
+                    return Some(agentive::ResolvedReference {
+                        name: sb.title.clone(),
+                        content: data,
+                        content_type: "application/json".to_string(),
+                    });
+                }
+            }
+        }
+    }
+
+    None
+}
+
+/// Check if a user-typed reference name matches a project file by path, title, or stem.
+fn matches_ref(name: &str, path: &str, title: &str) -> bool {
+    let name_lower = name.to_lowercase();
+    // Exact path match
+    if path.to_lowercase() == name_lower {
+        return true;
+    }
+    // Title match (case-insensitive)
+    if title.to_lowercase() == name_lower {
+        return true;
+    }
+    // File stem match (e.g., "intro" matches "intro.sk")
+    if let Some(stem) = std::path::Path::new(path).file_stem() {
+        if stem.to_string_lossy().to_lowercase() == name_lower {
+            return true;
+        }
+    }
+    false
+}
+
+/// Format a sketch as readable text for reference injection.
+fn format_sketch_for_ref(sketch: &crate::models::sketch::Sketch) -> String {
+    let mut out = format!("# {}\n\n", sketch.title);
+    if let Some(desc) = sketch.description.as_str() {
+        if !desc.is_empty() {
+            out.push_str(&format!("{desc}\n\n"));
+        }
+    }
+    for (i, row) in sketch.rows.iter().enumerate() {
+        out.push_str(&format!(
+            "## Row {} [{}]\n**Narrative:** {}\n**Actions:** {}\n\n",
+            i, row.time, row.narrative, row.demo_actions
+        ));
+    }
+    out
 }
 
 // ---------------------------------------------------------------------------

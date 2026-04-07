@@ -236,7 +236,7 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
       // Simulate streaming with agent events
       const userMsgs = (args?.messages as Array<{ role: string; content: string }>) || [];
       const lastUser = userMsgs.filter(m => m.role === "user").pop();
-      const response = `This is a mock response to: "${lastUser?.content?.substring(0, 50) || "your message"}"\n\nIn production, this would come from your configured AI provider. The chat UI is fully functional — try the #reference autocomplete, context picker, and model selector!`;
+      const response = `This is a mock response to: "${lastUser?.content?.substring(0, 50) || "your message"}"\n\nIn production, this would come from your configured AI provider. The chat UI is fully functional — try the @reference autocomplete, context picker, and model selector!`;
       const w = window as any;
 
       // Emit streaming events asynchronously
