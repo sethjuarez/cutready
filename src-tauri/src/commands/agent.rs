@@ -2,7 +2,7 @@
 
 use serde::Deserialize;
 
-use crate::engine::agent::azure_auth::{self, AuthCodeFlowInit, DeviceCodeResponse, TokenResponse};
+use agentive::azure_oauth::{self, AuthCodeFlowInit, DeviceCodeResponse, TokenResponse};
 use crate::engine::agent::llm::{
     self, ChatMessage, LlmConfig, LlmProvider, ModelInfo,
 };
@@ -67,7 +67,7 @@ pub async fn push_pending_chat_message(
     state: tauri::State<'_, AppState>,
     message: String,
 ) -> Result<(), String> {
-    state.pending_chat_messages.lock().unwrap().push(message);
+    state.steering.send(&message);
     Ok(())
 }
 
@@ -93,9 +93,7 @@ pub async fn agent_chat_with_tools(
             .clone()
     };
 
-    let pending = state.pending_chat_messages.clone();
-    // Clear any stale pending messages before starting
-    pending.lock().unwrap().clear();
+    let steering = state.steering.clone();
 
     let prompts = agent_prompts.unwrap_or_default();
     let reported_context = config.context_length;
@@ -114,7 +112,7 @@ pub async fn agent_chat_with_tools(
         messages,
         &project_root,
         &prompts,
-        &pending,
+        &steering,
         &vision,
         move |event: AgentEvent| {
             let _ = emit_handle.emit("agent-event", &event);
@@ -315,7 +313,7 @@ pub async fn azure_device_code_start(
     client_id: Option<String>,
 ) -> Result<DeviceCodeResponse, String> {
     let tid = if tenant_id.is_empty() { "organizations" } else { &tenant_id };
-    azure_auth::request_device_code(tid, client_id.as_deref(), None).await
+    azure_oauth::request_device_code(tid, client_id.as_deref(), None).await
 }
 
 /// Poll for the token after the user has completed sign-in.
@@ -329,7 +327,7 @@ pub async fn azure_device_code_poll(
     client_id: Option<String>,
 ) -> Result<TokenResponse, String> {
     let tid = if tenant_id.is_empty() { "organizations" } else { &tenant_id };
-    azure_auth::poll_for_token(tid, &device_code, interval, timeout, client_id.as_deref()).await
+    azure_oauth::poll_for_token(tid, &device_code, interval, timeout, client_id.as_deref()).await
 }
 
 /// Refresh an Azure OAuth token using a refresh token.
@@ -341,7 +339,7 @@ pub async fn azure_token_refresh(
     scope: Option<String>,
 ) -> Result<TokenResponse, String> {
     let tid = if tenant_id.is_empty() { "organizations" } else { &tenant_id };
-    azure_auth::refresh_token(tid, &refresh_token, client_id.as_deref(), scope.as_deref()).await
+    azure_oauth::refresh_token(tid, &refresh_token, client_id.as_deref(), scope.as_deref()).await
 }
 
 // ---------------------------------------------------------------------------
@@ -369,7 +367,7 @@ pub async fn azure_browser_auth_start(
 ) -> Result<AuthCodeFlowInit, String> {
     let tid = if tenant_id.is_empty() { "organizations" } else { &tenant_id };
     let (init, verifier) =
-        azure_auth::start_auth_code_flow(tid, client_id.as_deref(), None).await?;
+        azure_oauth::start_auth_code_flow(tid, client_id.as_deref(), None).await?;
 
     // Store verifier + port for the exchange step
     let mut guard = pending_auth().lock().await;
@@ -398,10 +396,10 @@ pub async fn azure_browser_auth_complete(
         (p.code_verifier.clone(), p.port)
     };
 
-    let code = azure_auth::wait_for_auth_code(port, timeout.unwrap_or(300), "CutReady").await?;
+    let code = azure_oauth::wait_for_auth_code(port, timeout.unwrap_or(300), "CutReady").await?;
 
     let redirect_uri = format!("http://localhost:{port}");
-    let token = azure_auth::exchange_code_for_token(
+    let token = azure_oauth::exchange_code_for_token(
         tid,
         &code,
         &redirect_uri,

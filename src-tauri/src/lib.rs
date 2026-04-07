@@ -55,8 +55,8 @@ pub struct AppState {
     /// The prepared browser connection (if any).
     /// Uses `tokio::sync::Mutex` because it's held across await points.
     pub browser: Arc<tokio::sync::Mutex<Option<BrowserConnection>>>,
-    /// Pending chat messages queued by the user while the agent loop is running.
-    pub pending_chat_messages: Arc<Mutex<Vec<String>>>,
+    /// Steering handle for injecting messages into a running agent loop.
+    pub steering: agentive::Steering,
     /// Last chat session summary (updated by frontend, archived on window close).
     pub last_chat_summary: Mutex<Option<(String, String)>>, // (session_id, summary)
 }
@@ -67,7 +67,7 @@ pub fn run() {
         current_repo: Mutex::new(None),
         current_project: Mutex::new(None),
         browser: Arc::new(tokio::sync::Mutex::new(None)),
-        pending_chat_messages: Arc::new(Mutex::new(Vec::new())),
+        steering: agentive::Steering::new(),
         last_chat_summary: Mutex::new(None),
     };
 

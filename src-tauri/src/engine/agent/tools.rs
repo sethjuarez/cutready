@@ -477,8 +477,8 @@ pub fn all_tools() -> Vec<Tool> {
 // Tool execution
 // ---------------------------------------------------------------------------
 
-/// Execute a single tool call and return the result as a string.
-pub fn execute_tool(call: &ToolCall, project_root: &Path, vision_enabled: bool) -> String {
+/// Execute a single tool call and return the result as a ToolOutput.
+pub fn execute_tool(call: &ToolCall, project_root: &Path, vision_enabled: bool) -> agentive::ToolOutput {
     let args: Value = agentive::parse_tool_args(&call.function.arguments).unwrap_or(json!({}));
     let start = std::time::Instant::now();
 
@@ -487,41 +487,41 @@ pub fn execute_tool(call: &ToolCall, project_root: &Path, vision_enabled: bool) 
 
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         match call.function.name.as_str() {
-            "list_project_files" => exec_list_project_files(project_root),
+            "list_project_files" => agentive::ToolOutput::from(exec_list_project_files(project_root)),
             "read_note" => exec_read_note(project_root, &args, vision_enabled),
             "read_sketch" => exec_read_sketch(project_root, &args, vision_enabled),
-            "set_planning_rows" => exec_set_planning_rows(project_root, &args),
-            "update_planning_row" => exec_update_planning_row(project_root, &args),
-            "set_row_visual" => exec_set_row_visual(project_root, &args),
-            "design_plan" => exec_design_plan(project_root, &args),
-            "list_project_images" => exec_list_project_images(project_root),
-            "save_feedback" => exec_save_feedback(&args),
-            "update_note" => exec_update_note(project_root, &args),
-            "create_note" => exec_create_note(project_root, &args),
-            "update_storyboard" => exec_update_storyboard(project_root, &args),
-            "recall_memory" => exec_recall_memory(project_root, &args),
-            "save_memory" => exec_save_memory(project_root, &args),
-            "list_snapshots" => exec_list_snapshots(project_root, &args),
-            "read_file_at_snapshot" => exec_read_file_at_snapshot(project_root, &args),
-            "compare_snapshots" => exec_compare_snapshots(project_root, &args),
-            "list_timelines" => exec_list_timelines(project_root),
-            "get_current_snapshot" => exec_get_current_snapshot(project_root),
+            "set_planning_rows" => agentive::ToolOutput::from(exec_set_planning_rows(project_root, &args)),
+            "update_planning_row" => agentive::ToolOutput::from(exec_update_planning_row(project_root, &args)),
+            "set_row_visual" => agentive::ToolOutput::from(exec_set_row_visual(project_root, &args)),
+            "design_plan" => agentive::ToolOutput::from(exec_design_plan(project_root, &args)),
+            "list_project_images" => agentive::ToolOutput::from(exec_list_project_images(project_root)),
+            "save_feedback" => agentive::ToolOutput::from(exec_save_feedback(&args)),
+            "update_note" => agentive::ToolOutput::from(exec_update_note(project_root, &args)),
+            "create_note" => agentive::ToolOutput::from(exec_create_note(project_root, &args)),
+            "update_storyboard" => agentive::ToolOutput::from(exec_update_storyboard(project_root, &args)),
+            "recall_memory" => agentive::ToolOutput::from(exec_recall_memory(project_root, &args)),
+            "save_memory" => agentive::ToolOutput::from(exec_save_memory(project_root, &args)),
+            "list_snapshots" => agentive::ToolOutput::from(exec_list_snapshots(project_root, &args)),
+            "read_file_at_snapshot" => agentive::ToolOutput::from(exec_read_file_at_snapshot(project_root, &args)),
+            "compare_snapshots" => agentive::ToolOutput::from(exec_compare_snapshots(project_root, &args)),
+            "list_timelines" => agentive::ToolOutput::from(exec_list_timelines(project_root)),
+            "get_current_snapshot" => agentive::ToolOutput::from(exec_get_current_snapshot(project_root)),
             "fetch_url" => {
                 let url = args.get("url").and_then(|v| v.as_str()).unwrap_or("").to_string();
-                tokio::task::block_in_place(|| {
+                agentive::ToolOutput::from(tokio::task::block_in_place(|| {
                     tokio::runtime::Handle::current().block_on(async {
                         match agentive::web::fetch_and_clean(&url).await {
                             Ok(content) => content,
                             Err(e) => format!("Error fetching URL: {e}"),
                         }
                     })
-                })
+                }))
             },
-            other => format!("Unknown tool: {other}"),
+            other => agentive::ToolOutput::from(format!("Unknown tool: {other}")),
         }
     }));
 
-    let result = match result {
+    let output = match result {
         Ok(r) => r,
         Err(panic_info) => {
             let msg = if let Some(s) = panic_info.downcast_ref::<&str>() {
@@ -536,27 +536,28 @@ pub fn execute_tool(call: &ToolCall, project_root: &Path, vision_enabled: bool) 
                 "name": call.function.name,
                 "panic": msg,
             }));
-            format!("Error: internal tool panic: {msg}")
+            agentive::ToolOutput::from(format!("Error: internal tool panic: {msg}"))
         }
     };
 
     let elapsed = start.elapsed();
-    log::debug!("[tool] {} → {}chars in {:?}", call.function.name, result.len(), elapsed);
+    let result_text = output.text();
+    log::debug!("[tool] {} → {}chars in {:?}", call.function.name, result_text.len(), elapsed);
 
-    let is_error = result.starts_with("Error:") || result.starts_with("Validation failed");
+    let is_error = result_text.starts_with("Error:") || result_text.starts_with("Validation failed");
     crate::util::trace::emit("tool_exec", "tools", serde_json::json!({
         "name": call.function.name,
         "duration_ms": elapsed.as_millis(),
-        "result_len": result.len(),
+        "result_len": result_text.len(),
         "is_error": is_error,
         "result_preview": if is_error {
-            crate::util::trace::truncate(&result, 500)
+            crate::util::trace::truncate(result_text, 500)
         } else {
-            crate::util::trace::truncate(&result, 200)
+            crate::util::trace::truncate(result_text, 200)
         },
     }));
 
-    result
+    output
 }
 
 /// Extract a JSON object from a tool argument field. Handles three LLM behaviors:
@@ -631,44 +632,37 @@ fn exec_list_project_files(root: &Path) -> String {
     }
 }
 
-fn exec_read_note(root: &Path, args: &Value, vision_enabled: bool) -> String {
+fn exec_read_note(root: &Path, args: &Value, vision_enabled: bool) -> agentive::ToolOutput {
     let path = match args.get("path").and_then(|v| v.as_str()) {
         Some(p) => resolve_path(root, p),
-        None => return "Error: missing 'path' argument".into(),
+        None => return agentive::ToolOutput::from("Error: missing 'path' argument"),
     };
     match project::read_note(&path) {
         Ok(content) => {
             if vision_enabled {
                 let (text, image_parts) = extract_and_encode_images(&content, root);
                 if !image_parts.is_empty() {
-                    // Embed base64 image data as JSON in the tool result so the runner
-                    // can reconstruct multimodal content for the next LLM call.
-                    let images_json: Vec<String> = image_parts.iter().filter_map(|p| {
-                        serde_json::to_string(p).ok()
-                    }).collect();
-                    log::info!("[vision] read_note: {} images extracted", images_json.len());
-                    format!("{text}\n\n[VISION_IMAGES]{}", images_json.join("\n"))
+                    log::info!("[vision] read_note: {} images extracted", image_parts.len());
+                    agentive::ToolOutput::with_images(text, image_parts)
                 } else {
-                    content
+                    agentive::ToolOutput::from(content)
                 }
             } else {
-                content
+                agentive::ToolOutput::from(content)
             }
         }
-        Err(e) => format!("Error reading note: {e}"),
+        Err(e) => agentive::ToolOutput::from(format!("Error reading note: {e}")),
     }
 }
 
-fn exec_read_sketch(root: &Path, args: &Value, vision_enabled: bool) -> String {
+fn exec_read_sketch(root: &Path, args: &Value, vision_enabled: bool) -> agentive::ToolOutput {
     let path = match args.get("path").and_then(|v| v.as_str()) {
         Some(p) => resolve_path(root, p),
         None => {
-            // Graceful fallback: return file listing so the model can self-correct
-            // without burning an extra round-trip to list_project_files.
             let listing = exec_list_project_files(root);
-            return format!(
+            return agentive::ToolOutput::from(format!(
                 "Error: missing 'path' argument. Call read_sketch with a path from the list below.\n\n{listing}"
-            );
+            ));
         }
     };
     match project::read_sketch(&path) {
@@ -701,16 +695,13 @@ fn exec_read_sketch(root: &Path, args: &Value, vision_enabled: bool) -> String {
                 ));
             }
             if vision_enabled && !image_parts.is_empty() {
-                let images_json: Vec<String> = image_parts.iter().filter_map(|p| {
-                    serde_json::to_string(p).ok()
-                }).collect();
-                log::info!("[vision] read_sketch: {} screenshots extracted", images_json.len());
-                format!("{out}\n[VISION_IMAGES]{}", images_json.join("\n"))
+                log::info!("[vision] read_sketch: {} screenshots extracted", image_parts.len());
+                agentive::ToolOutput::with_images(out, image_parts)
             } else {
-                out
+                agentive::ToolOutput::from(out)
             }
         }
-        Err(e) => format!("Error reading sketch: {e}"),
+        Err(e) => agentive::ToolOutput::from(format!("Error reading sketch: {e}")),
     }
 }
 

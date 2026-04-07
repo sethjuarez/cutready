@@ -7,7 +7,7 @@
 
 use std::collections::HashMap;
 use std::path::Path;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use crate::engine::agent::llm::ChatMessage;
 use crate::engine::agent::{tools};
@@ -18,28 +18,6 @@ const MAX_TOOL_ROUNDS: usize = 10;
 
 /// Maximum delegation depth for sub-agents.
 const MAX_DELEGATION_DEPTH: usize = 2;
-
-/// Parse a raw tool result into a `ToolOutput`, extracting any `[VISION_IMAGES]`
-/// section into image content parts.  The text portion is sanitized for the API.
-fn parse_tool_output(raw: &str) -> agentive::ToolOutput {
-    use crate::engine::agent::llm::ContentPart;
-
-    if let Some(marker_pos) = raw.find("\n[VISION_IMAGES]") {
-        let text = agentive::sanitize_for_api(&raw[..marker_pos]);
-        let images_section = &raw[marker_pos + "\n[VISION_IMAGES]".len()..];
-        let images: Vec<ContentPart> = images_section
-            .lines()
-            .filter_map(|line| serde_json::from_str::<ContentPart>(line).ok())
-            .collect();
-        if images.is_empty() {
-            agentive::ToolOutput::Text(text)
-        } else {
-            agentive::ToolOutput::with_images(text, images)
-        }
-    } else {
-        agentive::ToolOutput::Text(agentive::sanitize_for_api(raw))
-    }
-}
 
 
 // ---------------------------------------------------------------------------
@@ -82,14 +60,6 @@ pub enum AgentEvent {
     Error { message: String },
 }
 
-/// Result of running the agentic loop.
-pub struct AgentResult {
-    /// The full conversation including tool calls and results.
-    pub messages: Vec<ChatMessage>,
-    /// The final assistant text response.
-    pub response: String,
-}
-
 /// Configuration for vision/image support in tool execution.
 #[derive(Debug, Clone)]
 pub struct VisionConfig {
@@ -107,12 +77,12 @@ pub async fn run(
     messages: Vec<ChatMessage>,
     project_root: &Path,
     agent_prompts: &HashMap<String, String>,
-    pending: &Arc<Mutex<Vec<String>>>,
+    steering: &agentive::Steering,
     vision: &VisionConfig,
     emit: impl Fn(AgentEvent) + Send + Sync + 'static,
-) -> Result<AgentResult, String> {
+) -> Result<agentive::RunnerResult, String> {
     let emit = Arc::new(emit);
-    run_inner(provider, messages, project_root, agent_prompts, pending, 0, vision, emit).await
+    run_inner(provider, messages, project_root, agent_prompts, steering, 0, vision, emit).await
 }
 
 /// Internal runner with depth tracking for sub-agent delegation.
@@ -121,11 +91,11 @@ fn run_inner<'a>(
     messages: Vec<ChatMessage>,
     project_root: &'a Path,
     agent_prompts: &'a HashMap<String, String>,
-    pending: &'a Arc<Mutex<Vec<String>>>,
+    steering: &'a agentive::Steering,
     depth: usize,
     vision: &'a VisionConfig,
     emit: Arc<dyn Fn(AgentEvent) + Send + Sync + 'static>,
-) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<AgentResult, String>> + Send + 'a>> {
+) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<agentive::RunnerResult, String>> + Send + 'a>> {
     Box::pin(async move {
         let tool_defs = tools::all_tools();
 
@@ -147,23 +117,6 @@ fn run_inner<'a>(
             reference_resolver: Some(build_reference_resolver(project_root)),
             ..Default::default()
         };
-
-        // Bridge CutReady's pending messages queue to agentive's Steering
-        let steering = agentive::Steering::new();
-        let steering_fwd = steering.clone();
-        let pending_fwd = pending.clone();
-        let forward_task = tokio::spawn(async move {
-            loop {
-                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-                let mut queue = match pending_fwd.lock() {
-                    Ok(q) => q,
-                    Err(_) => break,
-                };
-                for msg in queue.drain(..) {
-                    steering_fwd.send(&msg);
-                }
-            }
-        });
 
         // Build on_event callback: map RunnerEvent → AgentEvent
         let last_iteration = Arc::new(std::sync::atomic::AtomicUsize::new(usize::MAX));
@@ -230,10 +183,9 @@ fn run_inner<'a>(
                         .map(agentive::ToolOutput::from)
                 })
             } else {
-                let result = tools::execute_tool(
+                let output = tools::execute_tool(
                     &tool_call, Path::new(&project_root), vision_enabled,
                 );
-                let output = parse_tool_output(&result);
                 Box::pin(std::future::ready(Ok(output)))
             }
         };
@@ -247,14 +199,11 @@ fn run_inner<'a>(
             tool_executor,
             config,
             cancel,
-            steering,
+            steering.clone(),
             agentive::Guardrails::default(),
             on_event,
         )
         .await;
-
-        // Always clean up the forwarding task
-        forward_task.abort();
 
         let result = result.map_err(|e| format!("Agent error: {e}"))?;
 
@@ -264,10 +213,7 @@ fn run_inner<'a>(
             "total_messages": result.messages.len(),
         }));
 
-        Ok(AgentResult {
-            messages: result.messages,
-            response: result.response,
-        })
+        Ok(result)
     })
 }
 
@@ -476,10 +422,9 @@ fn exec_delegation(
                         .map(agentive::ToolOutput::from)
                 })
             } else {
-                let result = tools::execute_tool(
+                let output = tools::execute_tool(
                     &tool_call, Path::new(&project_root), vision_enabled,
                 );
-                let output = parse_tool_output(&result);
                 Box::pin(std::future::ready(Ok(output)))
             }
         };
@@ -536,28 +481,22 @@ mod tests {
     use super::*;
 
     #[test]
-    fn parse_tool_output_text_only() {
-        let output = parse_tool_output("Hello world");
-        assert!(matches!(output, agentive::ToolOutput::Text(_)));
-        assert_eq!(output.text(), "Hello world");
+    fn matches_ref_exact_path() {
+        assert!(matches_ref("intro.sk", "intro.sk", "Introduction"));
     }
 
     #[test]
-    fn parse_tool_output_with_images() {
-        let image_json = r#"{"type":"image_url","image_url":{"url":"data:image/png;base64,abc"}}"#;
-        let raw = format!("Sketch: Login Page\n[VISION_IMAGES]{image_json}");
-        let output = parse_tool_output(&raw);
-        assert_eq!(output.text(), "Sketch: Login Page");
-        assert!(output.images().is_some());
-        assert_eq!(output.images().unwrap().len(), 1);
+    fn matches_ref_title_case_insensitive() {
+        assert!(matches_ref("introduction", "intro.sk", "Introduction"));
     }
 
     #[test]
-    fn parse_tool_output_bad_image_json_falls_back() {
-        let raw = "Some text\n[VISION_IMAGES]not-valid-json";
-        let output = parse_tool_output(raw);
-        // Bad JSON lines are skipped, resulting in no images → text-only
-        assert!(matches!(output, agentive::ToolOutput::Text(_)));
-        assert_eq!(output.text(), "Some text");
+    fn matches_ref_file_stem() {
+        assert!(matches_ref("intro", "intro.sk", "Introduction"));
+    }
+
+    #[test]
+    fn matches_ref_no_match() {
+        assert!(!matches_ref("setup", "intro.sk", "Introduction"));
     }
 }
