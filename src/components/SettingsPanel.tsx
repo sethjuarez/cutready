@@ -40,6 +40,47 @@ type SettingsTab = "ai" | "agents" | "memory" | "display" | "feedback" | "reposi
 import { inputClass, tabBtnClass } from "../styles";
 import { FoundryResourcePicker } from "./FoundryResourcePicker";
 
+/** Build the provider config payload for IPC calls like list_models / agent_chat_with_tools. */
+export function buildProviderConfig(settings: {
+  aiProvider: string;
+  aiEndpoint: string;
+  aiApiKey: string;
+  aiModel: string;
+  aiAuthMode: string;
+  aiAccessToken: string;
+}) {
+  return {
+    provider: settings.aiProvider,
+    endpoint: settings.aiEndpoint,
+    api_key: settings.aiApiKey,
+    model: settings.aiModel || "unused",
+    bearer_token:
+      settings.aiAuthMode === "azure_oauth"
+        ? settings.aiAccessToken
+        : null,
+  };
+}
+
+/** Determine whether the "Fetch Models" button should be enabled. */
+export function canFetchModelsFor(settings: {
+  aiProvider: string;
+  aiAuthMode: string;
+  aiApiKey: string;
+  aiAccessToken: string;
+  aiEndpoint: string;
+}) {
+  const isAzure = settings.aiProvider === "azure_openai";
+  const isFoundry = settings.aiProvider === "microsoft_foundry";
+  const isAnthropic = settings.aiProvider === "anthropic";
+  const isOAuth = (isAzure || isFoundry) && settings.aiAuthMode === "azure_oauth";
+  const hasToken = !!settings.aiAccessToken;
+  return isAnthropic
+    ? true
+    : isOAuth
+      ? hasToken
+      : !!settings.aiApiKey || (isFoundry && !!settings.aiEndpoint);
+}
+
 export function SettingsPanel({ mode = "global" }: { mode?: "global" | "workspace" }) {
   const { settings, updateSetting, loaded } = useSettings();
   const [activeTab, setActiveTab] = useState<SettingsTab>(mode === "workspace" ? "repository" : "display");
@@ -52,16 +93,7 @@ export function SettingsPanel({ mode = "global" }: { mode?: "global" | "workspac
   const [oauthStatus, setOauthStatus] = useState<"idle" | "waiting" | "polling" | "success" | "error">("idle");
   const [oauthError, setOauthError] = useState("");
 
-  const buildConfig = () => ({
-    provider: settings.aiProvider,
-    endpoint: settings.aiEndpoint,
-    api_key: settings.aiApiKey,
-    model: settings.aiModel || "unused",
-    bearer_token:
-      settings.aiAuthMode === "azure_oauth"
-        ? settings.aiAccessToken
-        : null,
-  });
+  const buildConfig = () => buildProviderConfig(settings);
 
   const fetchModels = async () => {
     setLoadingModels(true);
@@ -132,11 +164,7 @@ export function SettingsPanel({ mode = "global" }: { mode?: "global" | "workspac
   const isOAuth =
     (isAzure || isFoundry) && settings.aiAuthMode === "azure_oauth";
   const hasToken = !!settings.aiAccessToken;
-  const canFetchModels = isAnthropic
-    ? true
-    : isOAuth
-      ? hasToken
-      : !!settings.aiApiKey || (isFoundry && !!settings.aiEndpoint);
+  const canFetchModels = canFetchModelsFor(settings);
 
   // Tabs depend on mode
   const globalTabs = ["display", "ai", "agents", "feedback"] as const;
