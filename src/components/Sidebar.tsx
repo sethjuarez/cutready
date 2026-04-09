@@ -1,5 +1,5 @@
 import { type ReactNode, useCallback } from "react";
-import { HomeIcon, RectangleStackIcon, FilmIcon, FolderOpenIcon, ComputerDesktopIcon, Cog6ToothIcon } from "@heroicons/react/24/outline";
+import { HomeIcon, RectangleStackIcon, FilmIcon, FolderOpenIcon, ComputerDesktopIcon, Cog6ToothIcon, ChatBubbleLeftRightIcon } from "@heroicons/react/24/outline";
 import type { AppView } from "../stores/appStore";
 import { useAppStore } from "../stores/appStore";
 import { usePopover } from "../hooks/usePopover";
@@ -93,8 +93,38 @@ export function Sidebar() {
           );
         })}
 
-        {/* Spacer pushes settings gear to bottom */}
+        {/* Spacer pushes chat + settings gear to bottom */}
         <div className="flex-1" />
+
+        {/* Zen Chat Mode — pinned above settings */}
+        {(() => {
+          const isActive = view === "chat";
+          const isDisabled = !currentProject;
+          return (
+            <button
+              onClick={() => !isDisabled && setView("chat")}
+              disabled={isDisabled}
+              className={`
+                flex items-center justify-center w-10 h-10 rounded-lg transition-colors relative
+                ${
+                  isActive
+                    ? "bg-[rgb(var(--color-accent))]/15 text-[rgb(var(--color-accent))]"
+                    : isDisabled
+                      ? "text-[rgb(var(--color-text-secondary))]/40 cursor-not-allowed"
+                      : "text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
+                }
+              `}
+              title="Chat"
+            >
+              <ChatBubbleLeftRightIcon className="w-4 h-4" />
+              {isActive && (
+                <span className={`absolute top-1/4 h-1/2 w-[2px] rounded-full bg-[rgb(var(--color-accent))] ${
+                  isRight ? "right-[-6px]" : "left-[-6px]"
+                }`} />
+              )}
+            </button>
+          );
+        })()}
 
         {/* Global settings gear — pinned to bottom */}
         {(() => {

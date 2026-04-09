@@ -29,7 +29,7 @@ import type {
 } from "../types/sketch";
 
 /** The panels / views available in the app. */
-export type AppView = "home" | "sketch" | "assets" | "explorer" | "editor" | "recording" | "settings" | "workspace";
+export type AppView = "home" | "sketch" | "assets" | "explorer" | "editor" | "recording" | "settings" | "workspace" | "chat";
 
 /** Sidebar position. */
 export type SidebarPosition = "left" | "right";

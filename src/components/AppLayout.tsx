@@ -19,6 +19,7 @@ import { SnapshotDialog } from "./SnapshotDialog";
 import { IdentityDialog } from "./IdentityDialog";
 import { KeyboardShortcutsDialog } from "./KeyboardShortcutsDialog";
 import { MergeConflictPanel } from "./MergeConflictPanel";
+import { ChatPanel } from "./ChatPanel";
 import { FeedbackDialog } from "./FeedbackDialog";
 import { commandRegistry, useCommands } from "../services/commandRegistry";
 import { useTheme } from "../hooks/useTheme";
@@ -32,6 +33,7 @@ import {
   ViewColumnsIcon,
   Squares2X2Icon,
   ChatBubbleLeftIcon,
+  ChatBubbleLeftRightIcon,
   SunIcon,
   ArrowDownTrayIcon,
   CommandLineIcon,
@@ -104,6 +106,14 @@ export function AppLayout() {
         keybinding: "Ctrl+Shift+B",
         icon: <ViewColumnsIcon className="w-4 h-4" />,
         handler: () => toggleVersionHistory(),
+      },
+      {
+        id: "nav.chat",
+        title: "Open Chat",
+        category: "Navigate",
+        keybinding: "Ctrl+Shift+C",
+        icon: <ChatBubbleLeftRightIcon className="w-4 h-4" />,
+        handler: () => setView("chat"),
       },
       {
         id: "view.sendFeedback",
@@ -263,6 +273,11 @@ export function AppLayout() {
         toggleVersionHistory();
         return;
       }
+      if (e.ctrlKey && e.shiftKey && (e.key === "C" || e.key === "c")) {
+        e.preventDefault();
+        setView("chat");
+        return;
+      }
       if ((e.ctrlKey || e.metaKey) && e.key === "b") {
         e.preventDefault();
         toggleSidebar();
@@ -344,8 +359,8 @@ export function AppLayout() {
           {/* Activity bar on left (hidden on home) */}
           {view !== "home" && sidebarPosition === "left" && <Sidebar />}
 
-          {/* Primary sidebar (hidden on home, global settings, workspace settings) */}
-          {view !== "home" && view !== "settings" && view !== "workspace" && sidebarVisible && sidebarPosition === "left" && <PrimarySidebar />}
+          {/* Primary sidebar (hidden on home, global settings, workspace settings, chat) */}
+          {view !== "home" && view !== "settings" && view !== "workspace" && view !== "chat" && sidebarVisible && sidebarPosition === "left" && <PrimarySidebar />}
 
           {/* Center column: content + output panel */}
           <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
@@ -357,10 +372,11 @@ export function AppLayout() {
               {view === "recording" && <div className="h-full overflow-y-auto"><RecordingPanel /></div>}
               {view === "settings" && <div className="h-full overflow-y-auto"><SettingsPanel mode="global" /></div>}
               {view === "workspace" && <div className="h-full overflow-y-auto"><SettingsPanel mode="workspace" /></div>}
+              {view === "chat" && <div className="h-full overflow-hidden"><ChatPanel /></div>}
             </div>
 
-            {/* Lower: output panel (hidden on home and settings views) */}
-            {view !== "home" && view !== "settings" && view !== "workspace" && outputVisible && (
+            {/* Lower: output panel (hidden on home, settings, and chat views) */}
+            {view !== "home" && view !== "settings" && view !== "workspace" && view !== "chat" && outputVisible && (
               <>
                 <ResizeHandle direction="vertical" onResize={handleOutputResize} />
                 <div className="shrink-0 overflow-hidden" style={{ height: outputHeight }}>
@@ -372,8 +388,8 @@ export function AppLayout() {
             )}
           </div>
 
-          {/* Primary sidebar on right (hidden on home and settings views) */}
-          {view !== "home" && view !== "settings" && view !== "workspace" && sidebarVisible && sidebarPosition === "right" && <PrimarySidebar />}
+          {/* Primary sidebar on right (hidden on home, settings, and chat views) */}
+          {view !== "home" && view !== "settings" && view !== "workspace" && view !== "chat" && sidebarVisible && sidebarPosition === "right" && <PrimarySidebar />}
 
           {/* Activity bar on right (hidden on home) */}
           {view !== "home" && sidebarPosition === "right" && <Sidebar />}
