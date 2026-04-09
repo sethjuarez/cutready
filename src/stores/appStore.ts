@@ -742,9 +742,23 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     set({ loading: true });
     try {
       const project = await invoke<ProjectView>("create_project_folder", { path });
-      set({ currentProject: project, view: "sketch" });
+      set({
+        currentProject: project,
+        view: "sketch",
+        openTabs: [],
+        activeTabId: null,
+        activeSketchPath: null,
+        activeSketch: null,
+        activeStoryboardPath: null,
+        activeStoryboard: null,
+        activeNotePath: null,
+        activeNoteContent: null,
+        chatMessages: [],
+        chatSessionPath: null,
+      });
       localStorage.setItem("cutready:lastProject", path);
       await get().loadRecentProjects();
+      await get().loadProjects();
       await get().loadSketches();
       await get().loadStoryboards();
       await get().loadNotes();
