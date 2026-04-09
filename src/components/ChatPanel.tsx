@@ -1556,6 +1556,64 @@ function ChatTab() {
 
 // ── User Content — renders [Web: URL] as styled reference chips ──
 
+function UserMarkdownSegment({ text }: { text: string }) {
+  return (
+    <SafeMarkdown
+      components={{
+        // Keep user messages compact — render paragraphs inline-ish
+        p: ({ children }) => <div className="my-0.5">{children}</div>,
+        strong: ({ children }) => <strong className="font-bold text-[rgb(var(--color-text))]">{children}</strong>,
+        em: ({ children }) => <em className="italic">{children}</em>,
+        code: ({ className, children }) => {
+          const isBlock = className?.includes("language-");
+          if (isBlock) {
+            return (
+              <pre className="my-1.5 p-2 rounded bg-[rgb(var(--color-surface-alt))] border border-[rgb(var(--color-border))] overflow-x-auto text-[10px] leading-relaxed">
+                <code>{children}</code>
+              </pre>
+            );
+          }
+          return (
+            <code className="px-1 py-0.5 bg-[rgb(var(--color-surface-alt))] rounded text-[10px] border border-[rgb(var(--color-border))]">
+              {children}
+            </code>
+          );
+        },
+        pre: ({ children }) => <>{children}</>,
+        ul: ({ children }) => <ul className="ml-3 my-0.5 list-disc list-outside">{children}</ul>,
+        ol: ({ children }) => <ol className="ml-3 my-0.5 list-decimal list-outside">{children}</ol>,
+        li: ({ children }) => <li className="my-0.5 pl-0.5">{children}</li>,
+        a: ({ href, children }) => (
+          <a href={href} className="text-[rgb(var(--color-accent))] hover:underline" target="_blank" rel="noopener noreferrer">{children}</a>
+        ),
+        blockquote: ({ children }) => (
+          <div className="border-l-2 border-[rgb(var(--color-accent))] pl-2 my-1 text-[rgb(var(--color-text-secondary))]">{children}</div>
+        ),
+        h1: ({ children }) => <div className="font-bold text-[12px] mt-2 mb-1">{children}</div>,
+        h2: ({ children }) => <div className="font-semibold text-[11px] mt-2 mb-0.5">{children}</div>,
+        h3: ({ children }) => <div className="font-semibold text-[11px] mt-2 mb-0.5">{children}</div>,
+        hr: () => <div className="border-t border-[rgb(var(--color-border))] my-2" />,
+        table: ({ children }) => (
+          <div className="my-1.5 overflow-x-auto rounded border border-[rgb(var(--color-border))]">
+            <table className="w-full text-[10px] border-collapse">{children}</table>
+          </div>
+        ),
+        thead: ({ children }) => (
+          <thead className="bg-[rgb(var(--color-surface-alt))] text-[rgb(var(--color-text-secondary))]">{children}</thead>
+        ),
+        th: ({ children }) => (
+          <th className="px-2 py-1 text-left font-medium border-b border-[rgb(var(--color-border))]">{children}</th>
+        ),
+        td: ({ children }) => (
+          <td className="px-2 py-1 border-b border-[rgb(var(--color-border))]">{children}</td>
+        ),
+      }}
+    >
+      {text}
+    </SafeMarkdown>
+  );
+}
+
 function UserContent({ content }: { content: string }) {
   // Split on [Web: ...], [References: ...], and inline @URL patterns
   const parts: React.ReactNode[] = [];
@@ -1564,12 +1622,11 @@ function UserContent({ content }: { content: string }) {
   let match;
   while ((match = combined.exec(content)) !== null) {
     if (match.index > lastIndex) {
-      parts.push(content.slice(lastIndex, match.index));
+      parts.push(<UserMarkdownSegment key={`md-${lastIndex}`} text={content.slice(lastIndex, match.index)} />);
     }
     if (match[1] === "Web") {
       parts.push(<WebRefChip key={match.index} url={match[2].trim()} />);
     } else if (match[1] === "References") {
-      // Parse individual references: @note:path, @sketch:path, @storyboard:path
       const refStr = match[2].trim();
       const refs = refStr.split(/,\s*/);
       refs.forEach((ref, i) => {
@@ -1600,7 +1657,6 @@ function UserContent({ content }: { content: string }) {
         }
       });
     } else if (match[3]) {
-      // Inline @URL — styled as accent link
       parts.push(
         <span key={match.index} className="text-[rgb(var(--color-accent))] font-mono text-[12px]">
           @<span className="underline decoration-[rgb(var(--color-accent))]/40">{match[3]}</span>
@@ -1610,7 +1666,7 @@ function UserContent({ content }: { content: string }) {
     lastIndex = match.index + match[0].length;
   }
   if (lastIndex < content.length) {
-    parts.push(content.slice(lastIndex));
+    parts.push(<UserMarkdownSegment key={`md-${lastIndex}`} text={content.slice(lastIndex)} />);
   }
   return <>{parts}</>;
 }
@@ -1678,7 +1734,7 @@ function MessageRow({ message, projectRoot, onDelete }: { message: ChatMessage; 
             <XMarkIcon className="w-3 h-3" />
           </button>
         )}
-        <div className={`rounded-xl rounded-br-sm px-3 py-2 text-[13px] text-[rgb(var(--color-text))] whitespace-pre-wrap break-words leading-[1.6] max-w-[85%] ${
+        <div className={`rounded-xl rounded-br-sm px-3 py-2 text-[13px] text-[rgb(var(--color-text))] break-words leading-[1.6] max-w-[85%] ${
           message.pending
             ? "bg-[rgb(var(--color-surface-alt))] border border-dashed border-[rgb(var(--color-border))] opacity-70"
             : "bg-[#6b5ce7]/[0.05] border border-[#6b5ce7]/40 dark:bg-[#a49afa]/10 dark:border-[#a49afa]/40"
