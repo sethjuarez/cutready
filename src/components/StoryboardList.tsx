@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   DndContext,
   closestCenter,
@@ -110,6 +110,70 @@ export function StoryboardList() {
   const [drmConfirm, setDrmConfirm] = useState<{ resolve: (ok: boolean) => void } | null>(null);
   const [importing, setImporting] = useState(false);
   const showToast = useToastStore((s) => s.show);
+
+  // ── Inline rename state ──────────────────────────────────────────
+  const [renamingItem, setRenamingItem] = useState<{ type: "storyboard" | "sketch" | "note"; path: string } | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const renameInputRef = useRef<HTMLInputElement>(null);
+
+  /** Derive a safe filename from user-entered text. */
+  const slugify = (text: string) => text.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+
+  /** Enter rename mode for a sidebar item. */
+  const startRename = useCallback((type: "storyboard" | "sketch" | "note", path: string) => {
+    // Extract current stem from the path for the initial value
+    const filename = path.split("/").pop() ?? path;
+    const stem = filename.replace(/\.(sk|sb|md)$/, "");
+    setRenamingItem({ type, path });
+    setRenameValue(stem);
+  }, []);
+
+  /** Commit the rename — call backend, update tabs, reload lists. */
+  const commitRename = useCallback(async () => {
+    if (!renamingItem) return;
+    const newStem = renameValue.trim();
+    if (!newStem) { setRenamingItem(null); return; }
+
+    const slug = slugify(newStem);
+    if (!slug) { setRenamingItem(null); return; }
+
+    const { type, path: oldPath } = renamingItem;
+    const ext = type === "sketch" ? ".sk" : type === "storyboard" ? ".sb" : ".md";
+    const dir = oldPath.includes("/") ? oldPath.substring(0, oldPath.lastIndexOf("/") + 1) : "";
+    const newPath = `${dir}${slug}${ext}`;
+
+    if (newPath === oldPath) { setRenamingItem(null); return; }
+
+    try {
+      const cmd = type === "sketch" ? "rename_sketch" : type === "storyboard" ? "rename_storyboard" : "rename_note";
+      await invoke(cmd, { oldPath, newPath });
+
+      // Update any open tab that references the old path
+      const store = useAppStore.getState();
+      const updatedTabs = store.openTabs.map((t) =>
+        t.path === oldPath ? { ...t, path: newPath, id: `${t.type}:${newPath}` } : t,
+      );
+      const updatedActive = store.activeTabId === `${type}:${oldPath}` ? `${type}:${newPath}` : store.activeTabId;
+      useAppStore.setState({ openTabs: updatedTabs, activeTabId: updatedActive });
+
+      // Reload file lists
+      if (type === "storyboard") await loadStoryboards();
+      else if (type === "sketch") await loadSketches();
+      else await loadNotes();
+    } catch (err) {
+      showToast(`Rename failed: ${err}`, 4000, "error");
+    }
+    setRenamingItem(null);
+  }, [renamingItem, renameValue, loadStoryboards, loadSketches, loadNotes, showToast]);
+
+  const cancelRename = useCallback(() => setRenamingItem(null), []);
+
+  // Auto-focus rename input when entering rename mode
+  useEffect(() => {
+    if (renamingItem) {
+      requestAnimationFrame(() => renameInputRef.current?.select());
+    }
+  }, [renamingItem]);
 
   const showDrmConfirm = useCallback(() => {
     return new Promise<boolean>((resolve) => {
@@ -399,8 +463,12 @@ export function StoryboardList() {
                   <div
                     role="button"
                     tabIndex={0}
-                    onClick={() => openStoryboard(sb.path)}
-                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") openStoryboard(sb.path); }}
+                    onClick={() => { if (!renamingItem) openStoryboard(sb.path); }}
+                    onDoubleClick={(e) => { e.stopPropagation(); startRename("storyboard", sb.path); }}
+                    onKeyDown={(e) => {
+                      if (e.key === "F2") { e.preventDefault(); startRename("storyboard", sb.path); }
+                      else if (e.key === "Enter" || e.key === " ") { if (!renamingItem) openStoryboard(sb.path); }
+                    }}
                     className={`group/item w-full flex items-center gap-2 px-3 py-2.5 text-left transition-colors cursor-pointer ${
                       sb.path === activeStoryboardPath
                         ? "bg-success/10 text-success"
@@ -409,21 +477,41 @@ export function StoryboardList() {
                   >
                     <StoryboardIcon className="shrink-0" />
                     <div className="flex-1 min-w-0">
-                      <div className="text-xs font-medium truncate">{sb.title}</div>
-                      <div className="text-[10px] text-[rgb(var(--color-text-secondary))]">
-                        {sb.sketch_count} {sb.sketch_count === 1 ? "sketch" : "sketches"}
-                      </div>
+                      {renamingItem?.path === sb.path ? (
+                        <input
+                          ref={renameInputRef}
+                          value={renameValue}
+                          onChange={(e) => setRenameValue(e.target.value)}
+                          onKeyDown={(e) => {
+                            e.stopPropagation();
+                            if (e.key === "Enter") commitRename();
+                            if (e.key === "Escape") cancelRename();
+                          }}
+                          onBlur={commitRename}
+                          onClick={(e) => e.stopPropagation()}
+                          className="w-full px-1 py-0.5 text-xs font-medium bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-accent))]/40 rounded focus:outline-none focus:ring-1 focus:ring-[rgb(var(--color-accent))]/40 text-[rgb(var(--color-text))]"
+                        />
+                      ) : (
+                        <>
+                          <div className="text-xs font-medium truncate">{sb.title}</div>
+                          <div className="text-[10px] text-[rgb(var(--color-text-secondary))]">
+                            {sb.sketch_count} {sb.sketch_count === 1 ? "sketch" : "sketches"}
+                          </div>
+                        </>
+                      )}
                     </div>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        requestDelete("storyboard", sb.path, sb.title);
-                      }}
-                      className="opacity-0 group-hover/item:opacity-100 p-0.5 rounded text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] transition-all"
-                      title="Delete storyboard"
-                    >
-                      <TrashIcon className="w-3 h-3" />
-                    </button>
+                    {renamingItem?.path !== sb.path && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          requestDelete("storyboard", sb.path, sb.title);
+                        }}
+                        className="opacity-0 group-hover/item:opacity-100 p-0.5 rounded text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] transition-all"
+                        title="Delete storyboard"
+                      >
+                        <TrashIcon className="w-3 h-3" />
+                      </button>
+                    )}
                   </div>
                 </SortableSidebarItem>
               ))}
@@ -479,8 +567,12 @@ export function StoryboardList() {
                   <div
                     role="button"
                     tabIndex={0}
-                    onClick={() => handleOpenSketchStandalone(sk.path)}
-                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") handleOpenSketchStandalone(sk.path); }}
+                    onClick={() => { if (!renamingItem) handleOpenSketchStandalone(sk.path); }}
+                    onDoubleClick={(e) => { e.stopPropagation(); startRename("sketch", sk.path); }}
+                    onKeyDown={(e) => {
+                      if (e.key === "F2") { e.preventDefault(); startRename("sketch", sk.path); }
+                      else if (e.key === "Enter" || e.key === " ") { if (!renamingItem) handleOpenSketchStandalone(sk.path); }
+                    }}
                     className={`group/item w-full flex items-center gap-2 px-3 py-2.5 text-left transition-colors cursor-pointer ${
                       sk.path === activeSketchPath
                         ? "bg-violet-500/10 text-[rgb(var(--color-accent))]"
@@ -489,21 +581,41 @@ export function StoryboardList() {
                   >
                     <SketchIcon className="shrink-0" />
                     <div className="flex-1 min-w-0">
-                      <div className="text-xs font-medium truncate">{sk.title}</div>
-                      <div className="text-[10px] text-[rgb(var(--color-text-secondary))]">
-                        {sk.row_count} {sk.row_count === 1 ? "row" : "rows"}
-                      </div>
+                      {renamingItem?.path === sk.path ? (
+                        <input
+                          ref={renameInputRef}
+                          value={renameValue}
+                          onChange={(e) => setRenameValue(e.target.value)}
+                          onKeyDown={(e) => {
+                            e.stopPropagation();
+                            if (e.key === "Enter") commitRename();
+                            if (e.key === "Escape") cancelRename();
+                          }}
+                          onBlur={commitRename}
+                          onClick={(e) => e.stopPropagation()}
+                          className="w-full px-1 py-0.5 text-xs font-medium bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-accent))]/40 rounded focus:outline-none focus:ring-1 focus:ring-[rgb(var(--color-accent))]/40 text-[rgb(var(--color-text))]"
+                        />
+                      ) : (
+                        <>
+                          <div className="text-xs font-medium truncate">{sk.title}</div>
+                          <div className="text-[10px] text-[rgb(var(--color-text-secondary))]">
+                            {sk.row_count} {sk.row_count === 1 ? "row" : "rows"}
+                          </div>
+                        </>
+                      )}
                     </div>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        requestDelete("sketch", sk.path, sk.title);
-                      }}
-                      className="opacity-0 group-hover/item:opacity-100 p-0.5 rounded text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] transition-all"
-                      title="Delete sketch"
-                    >
-                      <TrashIcon className="w-3 h-3" />
-                    </button>
+                    {renamingItem?.path !== sk.path && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          requestDelete("sketch", sk.path, sk.title);
+                        }}
+                        className="opacity-0 group-hover/item:opacity-100 p-0.5 rounded text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] transition-all"
+                        title="Delete sketch"
+                      >
+                        <TrashIcon className="w-3 h-3" />
+                      </button>
+                    )}
                   </div>
                 </SortableSidebarItem>
               ))}
@@ -572,8 +684,12 @@ export function StoryboardList() {
                   <div
                     role="button"
                     tabIndex={0}
-                    onClick={() => openNote(note.path)}
-                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") openNote(note.path); }}
+                    onClick={() => { if (!renamingItem) openNote(note.path); }}
+                    onDoubleClick={(e) => { e.stopPropagation(); startRename("note", note.path); }}
+                    onKeyDown={(e) => {
+                      if (e.key === "F2") { e.preventDefault(); startRename("note", note.path); }
+                      else if (e.key === "Enter" || e.key === " ") { if (!renamingItem) openNote(note.path); }
+                    }}
                     className={`group/item w-full flex items-center gap-2 px-3 py-2.5 text-left transition-colors cursor-pointer ${
                       note.path === activeNotePath
                         ? "bg-rose-500/10 text-rose-500"
@@ -582,18 +698,36 @@ export function StoryboardList() {
                   >
                     <NoteIcon className="shrink-0" />
                     <div className="flex-1 min-w-0">
-                      <div className="text-xs font-medium truncate">{note.title}</div>
+                      {renamingItem?.path === note.path ? (
+                        <input
+                          ref={renameInputRef}
+                          value={renameValue}
+                          onChange={(e) => setRenameValue(e.target.value)}
+                          onKeyDown={(e) => {
+                            e.stopPropagation();
+                            if (e.key === "Enter") commitRename();
+                            if (e.key === "Escape") cancelRename();
+                          }}
+                          onBlur={commitRename}
+                          onClick={(e) => e.stopPropagation()}
+                          className="w-full px-1 py-0.5 text-xs font-medium bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-accent))]/40 rounded focus:outline-none focus:ring-1 focus:ring-[rgb(var(--color-accent))]/40 text-[rgb(var(--color-text))]"
+                        />
+                      ) : (
+                        <div className="text-xs font-medium truncate">{note.title}</div>
+                      )}
                     </div>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        requestDelete("note", note.path, note.title);
-                      }}
-                      className="opacity-0 group-hover/item:opacity-100 p-0.5 rounded text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] transition-all"
-                      title="Delete note"
-                    >
-                      <TrashIcon className="w-3 h-3" />
-                    </button>
+                    {renamingItem?.path !== note.path && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          requestDelete("note", note.path, note.title);
+                        }}
+                        className="opacity-0 group-hover/item:opacity-100 p-0.5 rounded text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] transition-all"
+                        title="Delete note"
+                      >
+                        <TrashIcon className="w-3 h-3" />
+                      </button>
+                    )}
                   </div>
                 </SortableSidebarItem>
               ))}

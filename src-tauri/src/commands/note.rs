@@ -68,6 +68,20 @@ pub async fn delete_note(
 }
 
 #[tauri::command]
+pub async fn rename_note(
+    old_path: String,
+    new_path: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let root = project_root(&state)?;
+    let old_abs = project::safe_resolve(&root, &old_path).map_err(|e| e.to_string())?;
+    let new_abs = project::safe_resolve(&root, &new_path).map_err(|e| e.to_string())?;
+
+    project::rename_file(&old_abs, &new_abs, &root, "note").map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn list_notes(state: State<'_, AppState>) -> Result<Vec<NoteSummary>, String> {
     let root = project_root(&state)?;
     project::scan_notes(&root).map_err(|e| e.to_string())

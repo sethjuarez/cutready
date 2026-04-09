@@ -122,6 +122,7 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
     case "create_sketch":
       return "sketches/new-sketch.sk";
     case "delete_sketch":
+    case "rename_sketch":
       return null;
     case "list_notes":
       return MOCK_NOTES;
@@ -133,6 +134,7 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
     case "create_note":
       return "notes/new-note.md";
     case "delete_note":
+    case "rename_note":
       return null;
     case "list_storyboards":
       return MOCK_STORYBOARDS;
@@ -151,6 +153,7 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
     case "create_storyboard":
       return "storyboards/new.sb";
     case "delete_storyboard":
+    case "rename_storyboard":
       return null;
     case "list_versions":
       return [

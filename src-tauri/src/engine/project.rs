@@ -447,16 +447,23 @@ pub fn delete_sketch(path: &Path, _project_root: &Path) -> Result<(), ProjectErr
     Ok(())
 }
 
-/// Rename/move a sketch file and auto-commit.
-pub fn rename_sketch(
+/// Rename/move a project file and auto-commit.
+pub fn rename_file(
     old_path: &Path,
     new_path: &Path,
     project_root: &Path,
+    label: &str,
 ) -> Result<(), ProjectError> {
     if !old_path.exists() {
         return Err(ProjectError::NotFound(
             old_path.to_string_lossy().into_owned(),
         ));
+    }
+    if new_path.exists() {
+        return Err(ProjectError::Io(format!(
+            "Destination already exists: {}",
+            new_path.to_string_lossy()
+        )));
     }
     if let Some(parent) = new_path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| ProjectError::Io(e.to_string()))?;
@@ -464,9 +471,19 @@ pub fn rename_sketch(
     std::fs::rename(old_path, new_path).map_err(|e| ProjectError::Io(e.to_string()))?;
 
     if project_root.join(".git").exists() {
-        let _ = versioning::commit_snapshot(project_root, "Rename sketch", None);
+        let msg = format!("Rename {label}");
+        let _ = versioning::commit_snapshot(project_root, &msg, None);
     }
     Ok(())
+}
+
+/// Rename/move a sketch file and auto-commit.
+pub fn rename_sketch(
+    old_path: &Path,
+    new_path: &Path,
+    project_root: &Path,
+) -> Result<(), ProjectError> {
+    rename_file(old_path, new_path, project_root, "sketch")
 }
 
 // ── Storyboard file I/O (.sb) ─────────────────────────────────────
