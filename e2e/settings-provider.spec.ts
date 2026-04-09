@@ -137,4 +137,53 @@ test.describe("Settings → AI Provider tab", () => {
     const fetchBtn = page.getByRole("button", { name: "Fetch available models" });
     await expect(fetchBtn).toBeVisible();
   });
+
+  test("Fetch Models returns mock models and selecting one updates the model field", async ({
+    page,
+  }) => {
+    await openAIProvider(page);
+    await page.locator("select").first().selectOption("openai");
+    await page.getByPlaceholder("Enter your API key").fill("sk-test-key");
+
+    // Click Fetch available models
+    await page.getByRole("button", { name: "Fetch available models" }).click();
+
+    // Wait for model list to populate — devMock returns 4 mock models
+    await expect(page.getByText("gpt-4o-mini")).toBeVisible({ timeout: 3000 });
+    await expect(page.getByText("gpt-4-turbo")).toBeVisible();
+    await expect(page.getByText("o1-preview")).toBeVisible();
+
+    // Click a model to select it
+    await page.getByText("gpt-4o-mini").click();
+
+    // Model list should close and "Selected: gpt-4o-mini" should appear
+    await expect(page.getByText("Selected: gpt-4o-mini")).toBeVisible();
+  });
+
+  test("Anthropic canFetchModels is true even without API key", async ({
+    page,
+  }) => {
+    await openAIProvider(page);
+    await page.locator("select").first().selectOption("anthropic");
+
+    // Fetch button should be enabled (Anthropic uses hardcoded models)
+    const fetchBtn = page.getByRole("button", { name: "Fetch available models" });
+    await expect(fetchBtn).toBeVisible();
+    await expect(fetchBtn).toBeEnabled();
+  });
+
+  test("Foundry API Key mode shows endpoint + API key fields", async ({
+    page,
+  }) => {
+    await openAIProvider(page);
+    await page.locator("select").first().selectOption("microsoft_foundry");
+
+    // Default should be API Key mode
+    await expect(
+      page.getByPlaceholder("https://your-resource.services.ai.azure.com")
+    ).toBeVisible();
+    await expect(page.getByPlaceholder("Enter your API key")).toBeVisible();
+    // Resource picker should NOT be visible (no OAuth token)
+    await expect(page.getByText("Subscription")).not.toBeVisible();
+  });
 });
