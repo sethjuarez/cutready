@@ -12,10 +12,19 @@ test.describe("Phase 1 — Solo Timeline Switcher", () => {
     await page.waitForSelector('[title="Settings"]', { timeout: 5_000 });
     await page.getByText("Demo Introduction").first().click();
     await page.waitForTimeout(500);
-    await page.locator('[title="Toggle Secondary Panel"]').click();
+    await page.keyboard.press("Control+Shift+B");
     await page.waitForTimeout(300);
-    await page.getByRole("button", { name: "Snapshots" }).click();
+    await page.locator('button[title="More options"]').click();
+    await page.getByText("Snapshots").click();
     await page.waitForTimeout(500);
+  });
+
+  test.afterEach(async ({ page }) => {
+    // Clear mock overrides to prevent test pollution
+    await page.evaluate(() => {
+      const o = (window as any).__MOCK_OVERRIDES__;
+      if (o) for (const k of Object.keys(o)) delete o[k];
+    });
   });
 
   test("timeline selector hidden with single timeline", async ({ page }) => {
@@ -36,10 +45,13 @@ test.describe("Phase 1 — Solo Timeline Switcher", () => {
         { name: "timeline/fork-143022", label: "New direction", is_active: false, snapshot_count: 1, color_index: 1 },
       ];
     });
-    // Re-trigger timeline load by switching to Snapshots tab again
-    await page.getByRole("button", { name: "Chat" }).click();
+    // Re-trigger timeline load by toggling secondary panel
+    await page.keyboard.press("Control+Shift+B");
     await page.waitForTimeout(200);
-    await page.getByRole("button", { name: "Snapshots" }).click();
+    await page.keyboard.press("Control+Shift+B");
+    await page.waitForTimeout(200);
+    await page.locator('button[title="More options"]').click();
+    await page.getByText("Snapshots").click();
     await page.waitForTimeout(500);
 
     const branchBtn = page.locator('button[title^="Branch:"]');
@@ -61,9 +73,12 @@ test.describe("Phase 1 — Solo Timeline Switcher", () => {
       (window as any).__MOCK_OVERRIDES__["has_unsaved_changes"] = true;
     });
     // Re-enter Snapshots to pick up the rewound state
-    await page.getByRole("button", { name: "Chat" }).click();
+    await page.keyboard.press("Control+Shift+B");
     await page.waitForTimeout(200);
-    await page.getByRole("button", { name: "Snapshots" }).click();
+    await page.keyboard.press("Control+Shift+B");
+    await page.waitForTimeout(200);
+    await page.locator('button[title="More options"]').click();
+    await page.getByText("Snapshots").click();
     await page.waitForTimeout(500);
 
     // Ctrl+S opens the snapshot dialog

@@ -22,11 +22,12 @@ async function setupApp(page: Page) {
   // Click the sketch to open it in the editor
   await page.getByText("Demo Introduction").first().click();
   await page.waitForTimeout(400);
-  // Show secondary panel (hidden by default in fresh session)
-  await page.getByRole("button", { name: "Toggle Secondary Panel" }).click();
+  // Show secondary panel via keyboard shortcut
+  await page.keyboard.press("Control+Shift+B");
   await page.waitForTimeout(300);
-  // Switch to Snapshots tab
-  await page.getByRole("button", { name: "Snapshots" }).click();
+  // Open overflow menu and switch to Snapshots tab
+  await page.locator('button[title="More options"]').click();
+  await page.getByText("Snapshots").click();
   await page.waitForTimeout(500);
 }
 
@@ -38,11 +39,23 @@ async function setOverrides(page: Page, overrides: Record<string, unknown>) {
       w.__MOCK_OVERRIDES__[k] = v;
     }
   }, overrides);
-  // Toggle tab to force re-fetch
-  await page.getByRole("button", { name: "Chat" }).click();
+  // Toggle secondary panel off then on to force a fresh re-render
+  await page.keyboard.press("Control+Shift+B");
   await page.waitForTimeout(200);
-  await page.getByRole("button", { name: "Snapshots" }).click();
+  await page.keyboard.press("Control+Shift+B");
+  await page.waitForTimeout(200);
+  // Re-open Snapshots via overflow menu
+  await page.locator('button[title="More options"]').click();
+  await page.getByText("Snapshots").click();
   await page.waitForTimeout(500);
+}
+
+/** Clear mock overrides to prevent test pollution */
+async function clearOverrides(page: Page) {
+  await page.evaluate(() => {
+    const o = (window as any).__MOCK_OVERRIDES__;
+    if (o) for (const k of Object.keys(o)) delete o[k];
+  });
 }
 
 /** Take a labeled screenshot */
@@ -111,6 +124,8 @@ test.describe("Timeline Branching", () => {
     nodeCounter = 0;
     await setupApp(page);
   });
+
+  test.afterEach(async ({ page }) => { await clearOverrides(page); });
 
   test("1a — single timeline: selector hidden", async ({ page }) => {
     // Default mock has 1 timeline
@@ -220,6 +235,8 @@ test.describe("Merge — Clean", () => {
     await setupApp(page);
   });
 
+  test.afterEach(async ({ page }) => { await clearOverrides(page); });
+
   test("2a — clean merge: success toast, no conflict panel", async ({ page }) => {
     await setOverrides(page, {
       list_timelines: [
@@ -312,6 +329,8 @@ test.describe("Merge — Conflicts", () => {
     nodeCounter = 0;
     await setupApp(page);
   });
+
+  test.afterEach(async ({ page }) => { await clearOverrides(page); });
 
   test("3a — sketch field conflict: MergeConflictPanel shows field resolvers", async ({ page }) => {
     const sketchConflict = makeConflictFile({
@@ -535,10 +554,9 @@ test.describe("Merge — Conflicts", () => {
     await page.waitForTimeout(300);
     const tempRow = page.getByText("Temp").first();
     await tempRow.hover();
-    await page.waitForTimeout(500);
-    // Click the Merge button inside the dropdown (scoped)
-    const dropdown = page.locator(".absolute.z-50");
-    await dropdown.getByText("Merge").click();
+    await page.waitForTimeout(300);
+    // Click the Merge button (same pattern as other merge tests)
+    await page.getByText("Merge").first().click();
     await page.waitForTimeout(1000);
 
     await expect(page.locator("text=Combining")).toBeVisible({ timeout: 5_000 });
@@ -562,6 +580,8 @@ test.describe("Remote — Sync", () => {
     nodeCounter = 0;
     await setupApp(page);
   });
+
+  test.afterEach(async ({ page }) => { await clearOverrides(page); });
 
   test("4a — no remote: sync bar hidden", async ({ page }) => {
     await setOverrides(page, {
@@ -649,6 +669,8 @@ test.describe("History Graph — DAG", () => {
     nodeCounter = 0;
     await setupApp(page);
   });
+
+  test.afterEach(async ({ page }) => { await clearOverrides(page); });
 
   test("5a — linear history: simple vertical chain", async ({ page }) => {
     nodeCounter = 0;
@@ -798,6 +820,8 @@ test.describe("Edge Cases", () => {
     nodeCounter = 0;
     await setupApp(page);
   });
+
+  test.afterEach(async ({ page }) => { await clearOverrides(page); });
 
   test("6a — empty project: no snapshots, graph empty", async ({ page }) => {
     await setOverrides(page, {
@@ -971,6 +995,8 @@ test.describe("Snapshot Sidebar — Branch Ancestry", () => {
     nodeCounter = 0;
     await setupApp(page);
   });
+
+  test.afterEach(async ({ page }) => { await clearOverrides(page); });
 
   test("7a — sidebar shows ancestor commits in different color", async ({ page }) => {
     nodeCounter = 0;

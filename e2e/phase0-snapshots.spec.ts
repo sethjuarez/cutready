@@ -10,13 +10,12 @@ test.describe("Phase 0 — Snapshot UX", () => {
     // Open a sketch so the editor area loads
     await page.getByText("Demo Introduction").first().click();
     await page.waitForTimeout(500);
-    // Toggle secondary panel to make it visible
-    const toggleBtn = page.locator('[title="Toggle Secondary Panel"]');
-    await toggleBtn.click();
+    // Toggle secondary panel via keyboard shortcut
+    await page.keyboard.press("Control+Shift+B");
     await page.waitForTimeout(300);
-    // Click the Snapshots button in the secondary panel tabs
-    const snapshotsBtn = page.getByRole("button", { name: "Snapshots" });
-    await snapshotsBtn.click();
+    // Open the overflow menu and switch to Snapshots tab
+    await page.locator('button[title="More options"]').click();
+    await page.getByText("Snapshots").click();
     await page.waitForTimeout(500);
   });
 
