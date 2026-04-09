@@ -162,6 +162,7 @@ fn run_inner<'a>(
         let emit_for_tools = emit.clone();
         let vision_enabled = vision.enabled;
         let tool_depth = depth;
+        let steering_for_tools = steering.clone();
 
         let tool_executor = move |tool_call: agentive::ToolCall| -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<agentive::ToolOutput, String>> + Send>> {
             let project_root = project_root_str.clone();
@@ -169,11 +170,12 @@ fn run_inner<'a>(
             let provider = provider_for_tools.clone();
             let tools = tools_for_exec.clone();
             let emit = emit_for_tools.clone();
+            let steering = steering_for_tools.clone();
 
             if tool_call.function.name == "delegate_to_agent" {
                 exec_delegation(
                     provider, &tool_call, &project_root, &agent_prompts,
-                    &tools, tool_depth, vision_enabled, emit,
+                    &tools, tool_depth, vision_enabled, steering, emit,
                 )
             } else if tool_call.function.name == "fetch_url" {
                 let tc = tool_call;
@@ -343,6 +345,7 @@ fn exec_delegation(
     tools: &[agentive::Tool],
     depth: usize,
     vision_enabled: bool,
+    steering: agentive::Steering,
     emit: Arc<dyn Fn(AgentEvent) + Send + Sync + 'static>,
 ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<agentive::ToolOutput, String>> + Send>> {
     if depth >= MAX_DELEGATION_DEPTH {
@@ -394,6 +397,7 @@ fn exec_delegation(
             max_iterations: MAX_TOOL_ROUNDS,
             auto_trim_context: true,
             sanitize_tool_results: true,
+            reference_resolver: Some(build_reference_resolver(Path::new(&project_root))),
             ..Default::default()
         };
 
@@ -402,6 +406,7 @@ fn exec_delegation(
         let provider_for_tools = provider.clone();
         let tools_for_tools = tools.clone();
         let emit_for_tools = emit.clone();
+        let steering_for_tools = steering.clone();
 
         let sub_tool_executor = move |tool_call: agentive::ToolCall| -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<agentive::ToolOutput, String>> + Send>> {
             let project_root = project_root_for_tools.clone();
@@ -409,11 +414,12 @@ fn exec_delegation(
             let provider = provider_for_tools.clone();
             let tools = tools_for_tools.clone();
             let emit = emit_for_tools.clone();
+            let steering = steering_for_tools.clone();
 
             if tool_call.function.name == "delegate_to_agent" {
                 exec_delegation(
                     provider, &tool_call, &project_root, &agent_prompts,
-                    &tools, sub_depth, vision_enabled, emit,
+                    &tools, sub_depth, vision_enabled, steering, emit,
                 )
             } else if tool_call.function.name == "fetch_url" {
                 let tc = tool_call;
@@ -458,7 +464,7 @@ fn exec_delegation(
             sub_tool_executor,
             config,
             cancel,
-            agentive::Steering::default(),
+            steering,
             agentive::Guardrails::default(),
             sub_on_event,
         ).await {
