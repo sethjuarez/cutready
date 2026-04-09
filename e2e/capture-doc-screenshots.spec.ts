@@ -35,8 +35,8 @@ async function setupAppWithPanels(page: Page) {
   await page.getByText("mock-project", { exact: true }).click();
   await page.waitForTimeout(600);
   await applyZoom(page);
-  // Show secondary panel (hidden by default in fresh session)
-  await page.getByRole("button", { name: "Toggle Secondary Panel" }).click();
+  // Show secondary panel via keyboard shortcut
+  await page.keyboard.press("Control+Shift+B");
   await page.waitForTimeout(300);
 }
 
@@ -103,9 +103,10 @@ async function openSketch(page: Page, name: string) {
 
 /** Toggle the secondary (right) panel open if it's not visible */
 async function ensureSecondaryPanel(page: Page) {
-  const chatBtn = page.getByRole("button", { name: "Chat" });
-  if (!(await chatBtn.isVisible({ timeout: 1000 }).catch(() => false))) {
-    await page.getByRole("button", { name: "Toggle Secondary Panel" }).click();
+  // Check if the Chat header text is visible (indicates panel is open)
+  const chatHeader = page.locator('text=Chat').first();
+  if (!(await chatHeader.isVisible({ timeout: 1000 }).catch(() => false))) {
+    await page.keyboard.press("Control+Shift+B");
     await page.waitForTimeout(500);
   }
 }
@@ -121,7 +122,17 @@ async function ensureBottomPanel(page: Page) {
 
 /** Switch the secondary panel to a given tab */
 async function switchSecondaryTab(page: Page, tab: "Chat" | "Sessions" | "Snapshots") {
-  await page.getByRole("button", { name: tab }).first().click();
+  if (tab === "Chat") {
+    // If we're on a non-Chat tab, the back button is visible — click it
+    const backBtn = page.locator('button').filter({ hasText: /^(Snapshots|Sessions)$/ }).first();
+    if (await backBtn.isVisible({ timeout: 500 }).catch(() => false)) {
+      await backBtn.click();
+    }
+  } else {
+    // Open the overflow menu and click the desired tab
+    await page.locator('button[title="More options"]').click();
+    await page.getByText(tab).click();
+  }
   await page.waitForTimeout(300);
 }
 
@@ -365,7 +376,12 @@ test.describe("Documentation Screenshots (1920×1080)", () => {
 
   test("18 — Feedback popover", async ({ page }) => {
     await setupApp(page);
-    await page.getByRole("button", { name: "Send Feedback" }).click();
+    // Open command palette and trigger Send Feedback
+    await page.keyboard.press("Control+Shift+P");
+    await page.waitForTimeout(300);
+    await page.getByPlaceholder("Type a command").fill("Send Feedback");
+    await page.waitForTimeout(200);
+    await page.getByText("Send Feedback").click();
     await page.waitForTimeout(400);
     await snap(page, "feedback-popover");
     // Close by pressing Escape
@@ -376,8 +392,8 @@ test.describe("Documentation Screenshots (1920×1080)", () => {
   test("19 — Debug panel", async ({ page }) => {
     await setupApp(page);
     await openSketch(page, "Demo Introduction");
-    // Toggle bottom panel open
-    await page.getByRole("button", { name: /Toggle Panel/ }).click();
+    // Toggle bottom panel open via Ctrl+`
+    await page.keyboard.press("Control+`");
     await page.waitForTimeout(300);
     await page.getByRole("button", { name: "Debug" }).click();
     await page.waitForTimeout(300);

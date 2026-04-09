@@ -8,9 +8,12 @@ test.describe("Sync Bar — remote collaboration", () => {
   });
 
   test("sync bar is hidden for solo users (no remote)", async ({ page }) => {
-    // Toggle secondary panel to show snapshots
-    const toggleBtn = page.locator('[title="Toggle Secondary Panel"]');
-    await toggleBtn.click();
+    // Toggle secondary panel via keyboard shortcut
+    await page.keyboard.press("Control+Shift+B");
+    await page.waitForTimeout(300);
+    // Open Snapshots via overflow menu
+    await page.locator('button[title="More options"]').click();
+    await page.getByText("Snapshots").click();
 
     // SyncBar should NOT be visible since devMock returns no remote
     // and no repoRemoteUrl is set in settings
@@ -20,10 +23,14 @@ test.describe("Sync Bar — remote collaboration", () => {
   });
 
   test("timeline selector shows active timeline", async ({ page }) => {
-    const toggleBtn = page.locator('[title="Toggle Secondary Panel"]');
-    await toggleBtn.click();
+    await page.keyboard.press("Control+Shift+B");
+    await page.waitForTimeout(300);
+    // Open Snapshots via overflow menu
+    await page.locator('button[title="More options"]').click();
+    await page.getByText("Snapshots").click();
+    await page.waitForTimeout(300);
 
-    // Look for the Snapshots header which should contain timeline info
-    await expect(page.getByText("Snapshots")).toBeVisible();
+    // The Snapshots header/back button should be visible
+    await expect(page.getByRole("button", { name: "Snapshots", exact: true })).toBeVisible();
   });
 });

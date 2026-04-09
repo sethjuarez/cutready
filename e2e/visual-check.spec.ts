@@ -24,13 +24,12 @@ test.describe("Visual verification — new UI components", () => {
   });
 
   test("screenshot: Snapshots panel with timeline selector", async ({ page }) => {
-    // The secondary panel with Chat/Sessions/Snapshots tabs is on the right
-    // It might already be visible, or we toggle it
-    await page.locator('[title="Toggle Secondary Panel"]').click();
+    // Toggle secondary panel via keyboard shortcut
+    await page.keyboard.press("Control+Shift+B");
     await page.waitForTimeout(300);
-    // Click the Snapshots tab within the secondary panel
-    const snapshotsTab = page.locator("button, [role='tab']").filter({ hasText: "Snapshots" });
-    await snapshotsTab.first().click();
+    // Open Snapshots via overflow menu
+    await page.locator('button[title="More options"]').click();
+    await page.getByText("Snapshots").click();
     await page.waitForTimeout(500);
     await page.screenshot({ path: "e2e/screenshots/snapshots-panel.png" });
   });
