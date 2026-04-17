@@ -1,5 +1,5 @@
 import { type ReactNode, useCallback } from "react";
-import { HomeIcon, FilmIcon, FolderOpenIcon, ComputerDesktopIcon, Cog6ToothIcon, ChatBubbleLeftRightIcon, SwatchIcon, DocumentIcon, PhotoIcon } from "@heroicons/react/24/outline";
+import { HomeIcon, FilmIcon, FolderOpenIcon, ComputerDesktopIcon, Cog6ToothIcon, ChatBubbleLeftRightIcon, SwatchIcon, PencilSquareIcon, PhotoIcon } from "@heroicons/react/24/outline";
 import type { AppView } from "../stores/appStore";
 import { useAppStore } from "../stores/appStore";
 import { usePopover } from "../hooks/usePopover";
@@ -24,7 +24,7 @@ const navItems: { id: AppView; label: string; icon: ReactNode }[] = [
   {
     id: "notes",
     label: "Notes",
-    icon: <DocumentIcon className="w-4 h-4" />,
+    icon: <PencilSquareIcon className="w-4 h-4" />,
   },
   {
     id: "assets",
