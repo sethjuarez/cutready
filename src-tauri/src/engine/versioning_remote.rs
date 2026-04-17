@@ -102,17 +102,50 @@ fn make_callbacks(token: Option<&str>) -> RemoteCallbacks<'_> {
 
 // ─── Fetch ──────────────────────────────────────────────────────
 
+/// Try to get a GitHub token via `gh auth token`.
+fn gh_token() -> Option<String> {
+    let mut cmd = std::process::Command::new("gh");
+    cmd.args(["auth", "token"]);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000);
+    }
+    cmd.output().ok().and_then(|o| {
+        if o.status.success() {
+            let s = String::from_utf8_lossy(&o.stdout).trim().to_string();
+            if s.is_empty() { None } else { Some(s) }
+        } else {
+            None
+        }
+    })
+}
+
+/// Inject auth env vars onto a git subprocess so GCM doesn't need to prompt.
+/// Sets GH_TOKEN + GITHUB_TOKEN (picked up by gh credential helper and GCM)
+/// and GIT_TERMINAL_PROMPT=0 to disable any interactive prompts.
+fn inject_git_auth(cmd: &mut std::process::Command, token: Option<&str>) {
+    cmd.env("GIT_TERMINAL_PROMPT", "0");
+    let tok = token.map(|t| t.to_string()).or_else(gh_token);
+    if let Some(t) = tok {
+        log::debug!("[remote] auth: got token ({} chars)", t.len());
+        cmd.env("GH_TOKEN", &t);
+        cmd.env("GITHUB_TOKEN", &t);
+    } else {
+        log::debug!("[remote] auth: no token found (gh not in PATH or not logged in)");
+    }
+}
+
 /// Fetch from a named remote using `git fetch` subprocess.
-/// This uses git's full credential helper chain (including gh, Windows Credential Manager, etc.)
-/// which is more reliable than libgit2's built-in auth on Windows.
 pub fn fetch_remote(
     project_dir: &Path,
     remote_name: &str,
-    _token: Option<&str>,
+    token: Option<&str>,
 ) -> Result<(), RemoteError> {
     let mut cmd = std::process::Command::new("git");
     cmd.args(["fetch", remote_name, "--prune"])
         .current_dir(project_dir);
+    inject_git_auth(&mut cmd, token);
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
@@ -179,11 +212,12 @@ pub fn push_remote(
     project_dir: &Path,
     remote_name: &str,
     local_branch: &str,
-    _token: Option<&str>,
+    token: Option<&str>,
 ) -> Result<(), RemoteError> {
     let mut cmd = std::process::Command::new("git");
     cmd.args(["push", remote_name, &format!("{}:{}", local_branch, local_branch)])
         .current_dir(project_dir);
+    inject_git_auth(&mut cmd, token);
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
