@@ -266,6 +266,7 @@ pub async fn fetch_git_remote(
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let root = versioning_root(&state)?;
+    let token = resolve_token(token);
     versioning_remote::fetch_remote(&root, &remote_name, token.as_deref())
         .map_err(|e| e.to_string())
 }
@@ -278,6 +279,7 @@ pub async fn push_git_remote(
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let root = versioning_root(&state)?;
+    let token = resolve_token(token);
     versioning_remote::push_remote(&root, &remote_name, &branch, token.as_deref())
         .map_err(|e| e.to_string())
 }
@@ -293,28 +295,33 @@ pub async fn get_sync_status(
         .map_err(|e| e.to_string())
 }
 
-/// Try to get a GitHub token from the `gh` CLI.
-#[tauri::command]
-pub async fn get_github_token() -> Result<Option<String>, String> {
+/// Try to get a GitHub token from the `gh` CLI (internal helper).
+fn try_gh_token() -> Option<String> {
     let mut cmd = std::process::Command::new("gh");
     cmd.args(["auth", "token"]);
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
-        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+        cmd.creation_flags(0x08000000);
     }
-    match cmd.output()
-    {
+    match cmd.output() {
         Ok(output) if output.status.success() => {
             let token = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            if token.is_empty() {
-                Ok(None)
-            } else {
-                Ok(Some(token))
-            }
+            if token.is_empty() { None } else { Some(token) }
         }
-        _ => Ok(None),
+        _ => None,
     }
+}
+
+/// Resolve token: use provided token, or fall back to `gh auth token`.
+fn resolve_token(token: Option<String>) -> Option<String> {
+    token.or_else(try_gh_token)
+}
+
+/// Try to get a GitHub token from the `gh` CLI.
+#[tauri::command]
+pub async fn get_github_token() -> Result<Option<String>, String> {
+    Ok(try_gh_token())
 }
 
 #[tauri::command]
@@ -325,6 +332,7 @@ pub async fn pull_git_remote(
     state: State<'_, AppState>,
 ) -> Result<versioning_remote::PullResult, String> {
     let root = versioning_root(&state)?;
+    let token = resolve_token(token);
     versioning_remote::pull_remote(&root, &remote_name, &branch, token.as_deref())
         .map_err(|e| e.to_string())
 }
