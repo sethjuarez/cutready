@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { ArrowPathIcon } from "@heroicons/react/24/outline";
+import { RefreshCw } from "lucide-react";
 import type { AppSettings } from "../hooks/useSettings";
 import { inputClass } from "../styles";
 
@@ -192,7 +192,7 @@ export function FoundryResourcePicker({ settings, updateSetting }: Props) {
           className="p-1 rounded hover:bg-[rgb(var(--color-surface-alt))] transition-colors"
           title="Refresh subscriptions"
         >
-          <ArrowPathIcon className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
+          <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
         </button>
       </div>
 

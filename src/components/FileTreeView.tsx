@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useAppStore } from "../stores/appStore";
 import { NoteIcon, SketchIcon, StoryboardIcon } from "./Icons";
-import { ChevronRightIcon, FolderIcon, DocumentIcon } from "@heroicons/react/24/outline";
+import { ChevronRight, Folder, FileText } from "lucide-react";
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -88,7 +88,7 @@ function fileIcon(ext: string) {
       return <NoteIcon className="shrink-0" />;
     default:
       return (
-        <DocumentIcon className="w-3.5 h-3.5 shrink-0 opacity-50" />
+        <FileText className="w-3.5 h-3.5 shrink-0 opacity-50" />
       );
   }
 }
@@ -213,8 +213,8 @@ function TreeNodeRow({
           className="w-full flex items-center gap-1.5 px-3 py-1 text-left text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors"
           style={{ paddingLeft: `${12 + depth * 16}px` }}
         >
-          <ChevronRightIcon className={`w-3 h-3 shrink-0 transition-transform ${expanded ? "rotate-90" : ""}`} />
-          <FolderIcon className="w-3.5 h-3.5 shrink-0" />
+          <ChevronRight className={`w-3 h-3 shrink-0 transition-transform ${expanded ? "rotate-90" : ""}`} />
+          <Folder className="w-3.5 h-3.5 shrink-0" />
           <span className="text-xs font-medium truncate">{node.name}</span>
           <span className="text-[10px] text-[rgb(var(--color-text-secondary))]/50 ml-auto shrink-0">
             {node.children.length}

@@ -5,15 +5,15 @@ import { open as shellOpen } from "@tauri-apps/plugin-shell";
 import { BUILT_IN_AGENTS } from "./ChatPanel";
 import { useToastStore } from "../stores/toastStore";
 import {
-  XMarkIcon,
-  ArrowPathIcon,
-  ChatBubbleLeftIcon,
-  CheckIcon,
-  ClipboardDocumentIcon,
-  TrashIcon,
-  Squares2X2Icon,
-  InformationCircleIcon,
-} from "@heroicons/react/24/outline";
+  X,
+  RefreshCw,
+  MessageSquare,
+  Check,
+  ClipboardList,
+  Trash2,
+  LayoutGrid,
+  Info,
+} from "lucide-react";
 
 interface ModelInfo {
   id: string;
@@ -639,9 +639,9 @@ function AIProviderTab({ settings, updateSetting, isAzure, isFoundry, isAnthropi
                 <path d="M12 2v4m0 12v4m-7.07-3.93l2.83-2.83m8.48-8.48l2.83-2.83M2 12h4m12 0h4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83" />
               </svg>
             ) : models.length > 0 ? (
-              <XMarkIcon className="w-4 h-4" />
+              <X className="w-4 h-4" />
             ) : (
-              <ArrowPathIcon className="w-4 h-4" />
+              <RefreshCw className="w-4 h-4" />
             )}
           </button>
         </div>
@@ -1070,7 +1070,7 @@ function FeedbackListTab() {
       <div className="flex items-center justify-between">
         <p className="text-xs text-[rgb(var(--color-text-secondary))]">
           {entries.length === 0
-            ? <>No feedback submitted yet. Use the <ChatBubbleLeftIcon className="w-3 h-3 inline -mt-0.5" /> button in the title bar.</>
+            ? <>No feedback submitted yet. Use the <MessageSquare className="w-3 h-3 inline -mt-0.5" /> button in the title bar.</>
             : `${entries.length} feedback item${entries.length === 1 ? "" : "s"}`}
         </p>
         {entries.length > 0 && (
@@ -1085,12 +1085,12 @@ function FeedbackListTab() {
             >
               {copied ? (
                 <>
-                  <CheckIcon className="w-3 h-3" />
+                  <Check className="w-3 h-3" />
                   Copied All!
                 </>
               ) : (
                 <>
-                  <ClipboardDocumentIcon className="w-3 h-3" />
+                  <ClipboardList className="w-3 h-3" />
                   Copy All
                 </>
               )}
@@ -1099,7 +1099,7 @@ function FeedbackListTab() {
               onClick={clearAll}
               className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] rounded-lg font-medium transition-colors border bg-[rgb(var(--color-surface-alt))] text-[rgb(var(--color-text-secondary))] border-[rgb(var(--color-border))] hover:text-error hover:border-error/40"
             >
-              <TrashIcon className="w-3 h-3" />
+              <Trash2 className="w-3 h-3" />
               Clear All
             </button>
           </div>
@@ -1127,7 +1127,7 @@ function FeedbackListTab() {
               <p className="text-xs text-[rgb(var(--color-text))] whitespace-pre-wrap">{entry.feedback}</p>
               {entry.debug_log && (
                 <div className="mt-1.5 flex items-center gap-1 text-[10px] text-[rgb(var(--color-text-secondary))]">
-                  <Squares2X2Icon className="w-2.5 h-2.5" />
+                  <LayoutGrid className="w-2.5 h-2.5" />
                   Debug log attached ({entry.debug_log.split("\n").length} lines)
                 </div>
               )}
@@ -1155,14 +1155,14 @@ function FeedbackListTab() {
                 className="absolute top-2 right-16 opacity-0 group-hover:opacity-100 p-1 rounded text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface))] transition-all"
                 title="Copy this item"
               >
-                <ClipboardDocumentIcon className="w-3 h-3" />
+                <ClipboardList className="w-3 h-3" />
               </button>
               <button
                 onClick={() => setConfirmDelete(isConfirming ? null : realIndex)}
                 className="absolute top-2 right-9 opacity-0 group-hover:opacity-100 p-1 rounded text-[rgb(var(--color-text-secondary))] hover:text-error hover:bg-[rgb(var(--color-surface))] transition-all"
                 title="Delete this item"
               >
-                <TrashIcon className="w-3 h-3" />
+                <Trash2 className="w-3 h-3" />
               </button>
               <button
                 onClick={() => formatAndOpenIssue(entry, i)}
@@ -1254,7 +1254,7 @@ function RepositoryTab({ settings, updateSetting }: {
 
       {detectedRemote && !settings.repoRemoteUrl && (
         <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[rgb(var(--color-accent))]/10 border border-[rgb(var(--color-accent))]/20 text-xs text-[rgb(var(--color-accent))]">
-          <InformationCircleIcon className="w-3.5 h-3.5" />
+          <Info className="w-3.5 h-3.5" />
           Detected remote: <strong>{detectedRemote.url}</strong>
           <button
             onClick={() => updateSetting("repoRemoteUrl", detectedRemote.url)}

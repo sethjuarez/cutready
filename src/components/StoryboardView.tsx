@@ -16,15 +16,15 @@ import { CSS } from "@dnd-kit/utilities";
 import { invoke } from "@tauri-apps/api/core";
 import { SafeMarkdown } from "./SafeMarkdown";
 import {
-  PlayIcon,
-  ComputerDesktopIcon,
-  SparklesIcon,
-  ChevronRightIcon,
-  PencilIcon,
-  XMarkIcon,
-  PlusIcon,
-  DocumentIcon,
-} from "@heroicons/react/24/outline";
+  Play,
+  Monitor,
+  Sparkles,
+  ChevronRight,
+  Pencil,
+  X,
+  Plus,
+  FileText,
+} from "lucide-react";
 import { useAppStore } from "../stores/appStore";
 import { useToastStore } from "../stores/toastStore";
 import { SketchPickerItem } from "./SketchCard";
@@ -266,7 +266,7 @@ export function StoryboardView() {
                 className="flex items-center gap-1.5 shrink-0 text-xs text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] px-3 py-1.5 rounded-lg border border-[rgb(var(--color-border))] hover:border-[rgb(var(--color-accent))]/40 hover:bg-[rgb(var(--color-accent))]/5 transition-colors"
                 title="Preview storyboard (presentation mode)"
               >
-                <PlayIcon className="w-3.5 h-3.5" />
+                <Play className="w-3.5 h-3.5" />
                 Preview
               </button>
 
@@ -284,7 +284,7 @@ export function StoryboardView() {
                         onClick={() => launchPreviewOnMonitor(m)}
                         className="w-full px-3 py-2 text-left text-sm text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors flex items-center gap-2"
                       >
-                        <ComputerDesktopIcon className="w-3.5 h-3.5" />
+                        <Monitor className="w-3.5 h-3.5" />
                         <span>{m.name || `Monitor ${m.id}`}</span>
                         {m.is_primary && (
                           <span className="text-[10px] text-[rgb(var(--color-accent))] font-medium ml-auto">Primary</span>
@@ -342,7 +342,7 @@ export function StoryboardView() {
             className="absolute right-1 top-1 opacity-60 hover:opacity-100 p-1 rounded text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10 transition-all"
             title={localDesc ? "Improve description with AI" : "Generate description with AI"}
           >
-            <SparklesIcon className="w-3 h-3" />
+            <Sparkles className="w-3 h-3" />
           </button>
         </div>
 
@@ -356,7 +356,7 @@ export function StoryboardView() {
             className="flex items-center gap-1 text-xs text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] px-2 py-1 rounded-md hover:bg-[rgb(var(--color-accent))]/10 transition-colors"
             title="Review storyboard with AI"
           >
-            <SparklesIcon className="w-3 h-3" />
+            <Sparkles className="w-3 h-3" />
             Review flow
           </button>
           <button
@@ -367,7 +367,7 @@ export function StoryboardView() {
             className="flex items-center gap-1 text-xs text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] px-2 py-1 rounded-md hover:bg-[rgb(var(--color-accent))]/10 transition-colors"
             title="Generate a new sketch with AI"
           >
-            <SparklesIcon className="w-3 h-3" />
+            <Sparkles className="w-3 h-3" />
             Generate sketch
           </button>
         </div>
@@ -530,7 +530,7 @@ function ExpandableSketchCard({
           className="shrink-0 text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] transition-colors"
           title={collapsed ? "Show table" : "Hide table"}
         >
-          <ChevronRightIcon className={`w-3.5 h-3.5 transition-transform ${collapsed ? "" : "rotate-90"}`} />
+          <ChevronRight className={`w-3.5 h-3.5 transition-transform ${collapsed ? "" : "rotate-90"}`} />
         </button>
 
         <h3 className="text-base font-semibold text-[rgb(var(--color-text))] truncate">
@@ -551,7 +551,7 @@ function ExpandableSketchCard({
           className="shrink-0 p-1 rounded text-[rgb(var(--color-text-secondary))] opacity-0 group-hover/sketch:opacity-100 hover:text-[rgb(var(--color-accent))] transition-all"
           title="Open in editor"
         >
-          <PencilIcon className="w-3.5 h-3.5" />
+          <Pencil className="w-3.5 h-3.5" />
         </button>
 
         {/* Remove */}
@@ -560,7 +560,7 @@ function ExpandableSketchCard({
           className="shrink-0 p-1 rounded text-[rgb(var(--color-text-secondary))] opacity-0 group-hover/sketch:opacity-100 hover:text-error transition-all"
           title="Remove from storyboard"
         >
-          <XMarkIcon className="w-3 h-3" />
+          <X className="w-3 h-3" />
         </button>
       </div>
 
@@ -603,7 +603,7 @@ function EmptyState({
   return (
     <div className="flex flex-col items-center justify-center py-16 text-center">
       <div className="w-12 h-12 rounded-full bg-[rgb(var(--color-accent))]/10 flex items-center justify-center mb-4">
-        <PlayIcon className="w-6 h-6 text-[rgb(var(--color-accent))]" />
+        <Play className="w-6 h-6 text-[rgb(var(--color-accent))]" />
       </div>
       <p className="text-sm font-medium text-[rgb(var(--color-text))] mb-1">No sketches yet</p>
       <p className="text-xs text-[rgb(var(--color-text-secondary))] max-w-[280px] leading-relaxed mb-6">
@@ -614,7 +614,7 @@ function EmptyState({
           onClick={onAddNew}
           className="flex items-center gap-2 px-4 py-2.5 text-xs font-medium rounded-xl bg-[rgb(var(--color-accent))] text-white hover:bg-[rgb(var(--color-accent-hover))] transition-colors"
         >
-          <PlusIcon className="w-3.5 h-3.5" />
+          <Plus className="w-3.5 h-3.5" />
           New Sketch
         </button>
         <button
@@ -737,14 +737,14 @@ function AddBar({
           onClick={onAddNew}
           className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-[rgb(var(--color-accent))] text-white hover:bg-[rgb(var(--color-accent-hover))] transition-colors"
         >
-          <PlusIcon className="w-3 h-3" />
+          <Plus className="w-3 h-3" />
           New Sketch
         </button>
         <button
           onClick={onPickExisting}
           className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-[rgb(var(--color-border))] text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:border-[rgb(var(--color-accent))]/40 transition-colors"
         >
-          <DocumentIcon className="w-3 h-3" />
+          <FileText className="w-3 h-3" />
           Add Existing
         </button>
       </div>

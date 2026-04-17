@@ -1,6 +1,6 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useCallback, useEffect, useState } from "react";
-import { MagnifyingGlassIcon, XMarkIcon, ArrowDownTrayIcon } from "@heroicons/react/24/outline";
+import { Search, X, Download } from "lucide-react";
 import { useUpdateStore } from "../stores/updateStore";
 import { useAppStore } from "../stores/appStore";
 import { usePopover } from "../hooks/usePopover";
@@ -120,7 +120,7 @@ export function TitleBar({
           style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
           title="Command Palette (Ctrl+Shift+P)"
         >
-          <MagnifyingGlassIcon className="w-3.5 h-3.5" />
+          <Search className="w-3.5 h-3.5" />
           <span className="flex-1 text-left truncate">Search commands…</span>
           <kbd className="text-[10px] px-1 py-px rounded bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] text-[rgb(var(--color-text-secondary))] font-[inherit]">
             Ctrl+Shift+P
@@ -225,7 +225,7 @@ export function TitleBar({
           className="inline-flex items-center justify-center w-11 h-full hover:bg-error hover:text-white transition-colors"
           aria-label="Close"
         >
-          <XMarkIcon className="w-2.5 h-2.5" />
+          <X className="w-2.5 h-2.5" />
         </button>
       </div>
     </div>
@@ -276,7 +276,7 @@ function UpdateIndicator() {
         onClick={() => toggle()}
         title={`Update available: v${update.version}${update.body ? `\n${update.body.slice(0, 200)}` : ""}`}
       >
-        <ArrowDownTrayIcon className="w-3.5 h-3.5" />
+        <Download className="w-3.5 h-3.5" />
         {/* Notification dot */}
         <span className="absolute top-0.5 right-0.5 w-2 h-2 rounded-full bg-accent animate-pulse" />
       </button>

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { SafeMarkdown } from "./SafeMarkdown";
-import { ChevronLeftIcon, SparklesIcon, ComputerDesktopIcon, PlusIcon, XMarkIcon, FolderIcon, EllipsisHorizontalIcon } from "@heroicons/react/24/outline";
+import { ChevronLeft, Sparkles, Monitor, Plus, X, Folder, MoreHorizontal } from "lucide-react";
 import { useAppStore } from "../stores/appStore";
 import { useToastStore } from "../stores/toastStore";
 import { ScriptTable } from "./ScriptTable";
@@ -378,7 +378,7 @@ The Actions describe what happens on screen — use them as visual design hints.
             onClick={closeSketch}
             className="flex items-center gap-1.5 text-xs text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] transition-colors mb-6"
           >
-            <ChevronLeftIcon className="w-3.5 h-3.5" />
+            <ChevronLeft className="w-3.5 h-3.5" />
             Back to storyboard
           </button>
         )}
@@ -386,7 +386,7 @@ The Actions describe what happens on screen — use them as visual design hints.
         {/* AI updated indicator */}
         {aiUpdatedFlash && (
           <div className="mb-4 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[rgb(var(--color-accent))]/10 border border-[rgb(var(--color-accent))]/20 text-xs text-[rgb(var(--color-accent))] animate-pulse">
-            <SparklesIcon className="w-3 h-3" />
+            <Sparkles className="w-3 h-3" />
             Updated by AI
           </div>
         )}
@@ -410,7 +410,7 @@ The Actions describe what happens on screen — use them as visual design hints.
                 className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover/title:opacity-100 p-1 rounded text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10 transition-all"
                 title="Improve title with AI"
               >
-                <SparklesIcon className="w-3.5 h-3.5" />
+                <Sparkles className="w-3.5 h-3.5" />
                 <span className="text-[10px]">Improve</span>
               </button>
             )}
@@ -422,7 +422,7 @@ The Actions describe what happens on screen — use them as visual design hints.
                 className="p-1.5 rounded-md text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors"
                 title="More actions"
               >
-                <EllipsisHorizontalIcon className="w-4 h-4" />
+                <MoreHorizontal className="w-4 h-4" />
               </button>
               {showOverflow && (
                 <div className="absolute right-0 top-full mt-1 z-dropdown w-[180px] py-1 bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-lg shadow-lg">
@@ -462,7 +462,7 @@ The Actions describe what happens on screen — use them as visual design hints.
                         onClick={() => launchPreviewOnMonitor(m)}
                         className="w-full px-3 py-2 text-left text-sm text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors flex items-center gap-2"
                       >
-                        <ComputerDesktopIcon className="w-3.5 h-3.5" />
+                        <Monitor className="w-3.5 h-3.5" />
                         <span>{m.name || `Monitor ${m.id}`}</span>
                         {m.is_primary && (
                           <span className="text-[10px] text-[rgb(var(--color-accent))] font-medium ml-auto">Primary</span>
@@ -529,7 +529,7 @@ The Actions describe what happens on screen — use them as visual design hints.
               className="absolute right-2 top-2 flex items-center gap-1 opacity-0 group-hover/desc:opacity-100 p-1 rounded text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10 transition-all"
               title={localDesc ? "Improve description with AI" : "Generate description with AI"}
             >
-              <SparklesIcon className="w-3 h-3" />
+              <Sparkles className="w-3 h-3" />
               <span className="text-[10px]">{localDesc ? "Improve" : "Generate"}</span>
             </button>
           )}
@@ -548,7 +548,7 @@ The Actions describe what happens on screen — use them as visual design hints.
               className="flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10 transition-colors"
               title={localRows.length === 0 ? "Generate plan with AI" : "Improve entire sketch with AI"}
             >
-              <SparklesIcon className="w-3 h-3" />
+              <Sparkles className="w-3 h-3" />
               {localRows.length === 0 ? "Generate" : "Improve"}
             </button>
           </div>
@@ -607,7 +607,7 @@ The row already has a visual and design_plan. Read the sketch with read_sketch f
             }}
             className="flex items-center gap-1.5 mt-3 px-3 py-2 text-xs text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] border border-dashed border-[rgb(var(--color-border))] hover:border-[rgb(var(--color-accent))]/40 rounded-lg transition-colors w-full justify-center"
           >
-            <PlusIcon className="w-3.5 h-3.5" />
+            <Plus className="w-3.5 h-3.5" />
             Add Row
           </button>
         </div>
@@ -628,7 +628,7 @@ The row already has a visual and design_plan. Read the sketch with read_sketch f
             <div className="flex items-center justify-between px-4 py-3 border-b border-[rgb(var(--color-border))]">
               <span className="text-sm font-medium text-[rgb(var(--color-text))]">Pick an image or visual</span>
               <button onClick={() => setImagePickerRowIdx(null)} className="text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))]">
-                <XMarkIcon className="w-3.5 h-3.5" />
+                <X className="w-3.5 h-3.5" />
               </button>
             </div>
             <div className="flex-1 overflow-y-auto p-3">
@@ -671,7 +671,7 @@ The row already has a visual and design_plan. Read the sketch with read_sketch f
                 }}
                 className="w-full flex items-center justify-center gap-1.5 text-xs text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] px-3 py-2 rounded-lg border border-dashed border-[rgb(var(--color-border))] hover:border-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/5 transition-colors"
               >
-                <FolderIcon className="w-3 h-3" />
+                <Folder className="w-3 h-3" />
                 Browse files...
               </button>
             </div>
@@ -688,7 +688,7 @@ The row already has a visual and design_plan. Read the sketch with read_sketch f
                 Generate Visual — Row {visualPromptRow + 1}
               </span>
               <button onClick={() => setVisualPromptRow(null)} className="text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))]">
-                <XMarkIcon className="w-3.5 h-3.5" />
+                <X className="w-3.5 h-3.5" />
               </button>
             </div>
             <div className="px-4 py-3 flex flex-col gap-3">
@@ -722,7 +722,7 @@ The row already has a visual and design_plan. Read the sketch with read_sketch f
                 onClick={handleGenerateVisual}
                 className="px-4 py-1.5 text-xs font-medium text-white bg-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent-hover))] rounded-md transition-colors flex items-center gap-1.5"
               >
-                <SparklesIcon className="w-3 h-3" />
+                <Sparkles className="w-3 h-3" />
                 Generate
                 <span className="text-[10px] opacity-60 ml-1">⌘↵</span>
               </button>

@@ -1,5 +1,5 @@
 import type { SketchSummary } from "../types/sketch";
-import { DocumentIcon, XMarkIcon } from "@heroicons/react/24/outline";
+import { FileText, X } from "lucide-react";
 
 interface SketchCardProps {
   sketch: SketchSummary;
@@ -22,7 +22,7 @@ export function SketchCard({ sketch, onOpen, onRemove }: SketchCardProps) {
     >
       {/* Icon */}
       <div className="mt-0.5 text-[rgb(var(--color-text-secondary))]">
-        <DocumentIcon className="w-4 h-4" />
+        <FileText className="w-4 h-4" />
       </div>
 
       {/* Content */}
@@ -45,7 +45,7 @@ export function SketchCard({ sketch, onOpen, onRemove }: SketchCardProps) {
           className="opacity-0 group-hover:opacity-100 p-1 rounded text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] transition-all"
           title="Remove from storyboard"
         >
-          <XMarkIcon className="w-3 h-3" />
+          <X className="w-3 h-3" />
         </button>
       )}
     </div>
@@ -65,7 +65,7 @@ export function SketchPickerItem({
       onClick={onSelect}
       className="w-full flex items-center gap-2 px-3 py-2 text-left rounded-lg hover:bg-[rgb(var(--color-surface-alt))] transition-colors"
     >
-      <DocumentIcon className="w-3.5 h-3.5 text-[rgb(var(--color-text-secondary))] shrink-0" />
+      <FileText className="w-3.5 h-3.5 text-[rgb(var(--color-text-secondary))] shrink-0" />
       <span className="text-xs truncate">{sketch.title}</span>
       <span className="text-[10px] text-[rgb(var(--color-text-secondary))] ml-auto shrink-0">
         {sketch.row_count} rows

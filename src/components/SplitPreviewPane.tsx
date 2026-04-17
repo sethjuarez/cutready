@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { XMarkIcon, ExclamationTriangleIcon } from "@heroicons/react/24/outline";
+import { X, AlertTriangle } from "lucide-react";
 import { useAppStore } from "../stores/appStore";
 import type { Sketch, Storyboard } from "../types/sketch";
 import type { PlanningRow } from "../types/sketch";
@@ -36,14 +36,14 @@ export function SplitPreviewPane() {
           onClick={closeSplit}
           title="Close split"
         >
-          <XMarkIcon className="w-2.5 h-2.5" />
+          <X className="w-2.5 h-2.5" />
         </button>
       </div>
 
       {/* Same-file warning */}
       {sameFile && (
         <div className="flex items-center gap-2 px-3 py-1.5 bg-warning/10 border-b border-warning/30 text-[11px] text-warning shrink-0">
-          <ExclamationTriangleIcon className="w-3.5 h-3.5 shrink-0" />
+          <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
           Same file open in both panes — last save wins
         </div>
       )}

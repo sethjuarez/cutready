@@ -18,17 +18,17 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import {
-  EyeIcon,
-  XMarkIcon,
-  SparklesIcon,
-  ArrowsPointingOutIcon,
-  MagnifyingGlassIcon,
-  PhotoIcon,
-  FolderIcon,
-  PlusIcon,
-  CameraIcon,
-  CheckIcon,
-} from "@heroicons/react/24/outline";
+  Eye,
+  X,
+  Sparkles,
+  Maximize2,
+  Search,
+  Image as ImageIcon,
+  Folder,
+  Plus,
+  Camera,
+  Check,
+} from "lucide-react";
 import type { PlanningRow } from "../types/sketch";
 import type { ElucimDocument } from "@elucim/dsl";
 
@@ -310,7 +310,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
               bg-[rgb(var(--color-accent))]/8 text-[rgb(var(--color-accent))] border-[rgb(var(--color-accent))]/20
               hover:bg-[rgb(var(--color-accent))]/15 hover:border-[rgb(var(--color-accent))]/30"
           >
-            <EyeIcon className="w-3 h-3" />
+            <Eye className="w-3 h-3" />
             Show AI Changes
           </button>
         </div>
@@ -421,7 +421,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
             onClick={() => setLightboxSrc(null)}
             className="absolute top-4 right-4 p-2 rounded-full bg-black/50 text-white/80 hover:text-white transition-colors"
           >
-            <XMarkIcon className="w-5 h-5" />
+            <X className="w-5 h-5" />
           </button>
         </div>
       )}
@@ -483,7 +483,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
                     title="Save changes"
                     className="p-1.5 rounded-lg text-[rgb(var(--color-accent))] hover:text-[rgb(var(--color-accent-hover))] hover:bg-[rgb(var(--color-surface))] transition-colors"
                   >
-                    <CheckIcon className="w-4 h-4" />
+                    <Check className="w-4 h-4" />
                   </button>
                 )}
                 {/* Close button */}
@@ -491,7 +491,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
                   onClick={closeLightbox}
                   className="p-1.5 rounded-lg text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface))] transition-colors"
                 >
-                  <XMarkIcon className="w-5 h-5" />
+                  <X className="w-5 h-5" />
                 </button>
               </div>
             </div>
@@ -552,7 +552,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
                   disabled={!nudgeInput.trim()}
                   className="p-1.5 rounded-lg text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] disabled:opacity-30 transition-colors"
                 >
-                  <SparklesIcon className="w-4 h-4" />
+                  <Sparkles className="w-4 h-4" />
                 </button>
               </div>
             )}
@@ -574,7 +574,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
             onClick={() => setUndoToast(null)}
             className="p-0.5 text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] transition-colors"
           >
-            <XMarkIcon className="w-2.5 h-2.5" />
+            <X className="w-2.5 h-2.5" />
           </button>
         </div>
       )}
@@ -765,7 +765,7 @@ function SortableRow({
                 className="p-1 rounded-full bg-black/20 text-white hover:bg-black/40"
                 title="Preview visual (click to edit)"
               >
-                <ArrowsPointingOutIcon className="w-3.5 h-3.5" />
+                <Maximize2 className="w-3.5 h-3.5" />
               </button>
               {/* Regenerate visual */}
               {!readOnly && onGenerateVisual && (
@@ -774,7 +774,7 @@ function SortableRow({
                   className="p-1 rounded-full bg-black/20 text-white hover:bg-[rgb(var(--color-accent))]/80"
                   title="Regenerate visual with AI"
                 >
-                  <SparklesIcon className="w-3.5 h-3.5" />
+                  <Sparkles className="w-3.5 h-3.5" />
                 </button>
               )}
               {/* Remove visual */}
@@ -784,7 +784,7 @@ function SortableRow({
                   className="p-1 rounded-full bg-black/20 text-white hover:bg-error/80"
                   title="Remove visual"
                 >
-                  <XMarkIcon className="w-3.5 h-3.5" />
+                  <X className="w-3.5 h-3.5" />
                 </button>
               )}
             </div>
@@ -812,7 +812,7 @@ function SortableRow({
                   className="p-1 rounded-full bg-black/20 text-white hover:bg-black/30"
                   title="View image"
                 >
-                  <MagnifyingGlassIcon className="w-3.5 h-3.5" />
+                  <Search className="w-3.5 h-3.5" />
                 </button>
                 {/* Re-capture */}
                 <button
@@ -820,7 +820,7 @@ function SortableRow({
                   className="p-1 rounded-full bg-black/20 text-white hover:bg-black/30"
                   title="Re-capture screenshot"
                 >
-                  <CameraIcon className="w-3.5 h-3.5" />
+                  <Camera className="w-3.5 h-3.5" />
                 </button>
                 {/* Pick from project */}
                 {onPickImage && (
@@ -829,7 +829,7 @@ function SortableRow({
                     className="p-1 rounded-full bg-black/20 text-white hover:bg-black/30"
                     title="Pick from workspace images"
                   >
-                    <PhotoIcon className="w-3.5 h-3.5" />
+                    <ImageIcon className="w-3.5 h-3.5" />
                   </button>
                 )}
                 {/* Browse filesystem */}
@@ -839,7 +839,7 @@ function SortableRow({
                     className="p-1 rounded-full bg-black/20 text-white hover:bg-black/30"
                     title="Browse for image file"
                   >
-                    <FolderIcon className="w-3.5 h-3.5" />
+                    <Folder className="w-3.5 h-3.5" />
                   </button>
                 )}
                 {/* Remove */}
@@ -848,7 +848,7 @@ function SortableRow({
                   className="p-1 rounded-full bg-black/20 text-white hover:bg-error/80"
                   title="Remove screenshot"
                 >
-                  <XMarkIcon className="w-3.5 h-3.5" />
+                  <X className="w-3.5 h-3.5" />
                 </button>
               </div>
             )}
@@ -873,14 +873,14 @@ function SortableRow({
               className="p-0.5 rounded text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] transition-colors"
               title="Add row below"
             >
-              <PlusIcon className="w-3 h-3" />
+              <Plus className="w-3 h-3" />
             </button>
             <button
               onClick={() => deleteRow(idx)}
               className="p-0.5 rounded text-[rgb(var(--color-text-secondary))] hover:text-error transition-colors"
               title="Delete row"
             >
-              <XMarkIcon className="w-3 h-3" />
+              <X className="w-3 h-3" />
             </button>
           </div>
         </td>
@@ -893,14 +893,14 @@ function SortableRow({
           <div className="ai-diff-strip mx-2 mb-1 px-3 py-2 rounded-b-lg text-xs">
             <div className="flex items-center justify-between mb-1">
               <span className="font-medium text-[rgb(var(--color-accent))] flex items-center gap-1.5">
-                <SparklesIcon className="w-3 h-3" />
+                <Sparkles className="w-3 h-3" />
                 Row {idx + 1} changed
               </span>
               <button
                 onClick={() => { setDiffExpanded(false); onDismissHighlight?.(); }}
                 className="p-0.5 rounded hover:bg-[rgb(var(--color-border))]/30 text-[rgb(var(--color-text-secondary))]"
               >
-                <XMarkIcon className="w-2.5 h-2.5" />
+                <X className="w-2.5 h-2.5" />
               </button>
             </div>
             {rowDiff.fields.map((f) => (
@@ -1316,7 +1316,7 @@ function SparkleButton({ onClick }: { onClick: () => void }) {
       className="absolute top-0.5 right-0.5 p-0.5 rounded opacity-0 group-hover/cell:opacity-100 transition-opacity text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10"
       title="Improve with AI"
     >
-      <SparklesIcon className="w-3 h-3" />
+      <Sparkles className="w-3 h-3" />
     </button>
   );
 }
@@ -1342,12 +1342,12 @@ function MediaAddPopover({ idx, onCaptureScreenshot, onPickImage, onBrowseImage,
   useEffect(() => { addRef(portalRef); }, [addRef]);
 
   const items = useMemo(() => {
-    const list: { icon: typeof CameraIcon; label: string; action: () => void }[] = [
-      { icon: CameraIcon, label: "Capture screenshot", action: () => onCaptureScreenshot?.(idx) },
+    const list: { icon: typeof Camera; label: string; action: () => void }[] = [
+      { icon: Camera, label: "Capture screenshot", action: () => onCaptureScreenshot?.(idx) },
     ];
-    if (onPickImage) list.push({ icon: PhotoIcon, label: "Pick from workspace", action: () => onPickImage(idx) });
-    if (onBrowseImage) list.push({ icon: FolderIcon, label: "Browse for file", action: () => onBrowseImage(idx) });
-    if (onGenerateVisual) list.push({ icon: SparklesIcon, label: "Generate visual", action: () => onGenerateVisual(idx) });
+    if (onPickImage) list.push({ icon: ImageIcon, label: "Pick from workspace", action: () => onPickImage(idx) });
+    if (onBrowseImage) list.push({ icon: Folder, label: "Browse for file", action: () => onBrowseImage(idx) });
+    if (onGenerateVisual) list.push({ icon: Sparkles, label: "Generate visual", action: () => onGenerateVisual(idx) });
     return list;
   }, [idx, onCaptureScreenshot, onPickImage, onBrowseImage, onGenerateVisual]);
 
@@ -1403,7 +1403,7 @@ function MediaAddPopover({ idx, onCaptureScreenshot, onPickImage, onBrowseImage,
         aria-expanded={state !== null}
         aria-haspopup="true"
       >
-        <PlusIcon className="w-4 h-4 text-[rgb(var(--color-text-secondary))]" />
+        <Plus className="w-4 h-4 text-[rgb(var(--color-text-secondary))]" />
       </button>
       {state !== null && pos && createPortal(
         <div

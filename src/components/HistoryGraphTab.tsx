@@ -1,6 +1,6 @@
 import * as d3 from "d3";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowsRightLeftIcon, ArrowDownIcon, ArrowRightIcon, ArrowsPointingOutIcon, MinusIcon, PlusIcon } from "@heroicons/react/24/outline";
+import { ArrowLeftRight, ArrowDown, ArrowRight, Maximize2, Minus, Plus } from "lucide-react";
 import { useAppStore } from "../stores/appStore";
 import type { GraphNode, TimelineInfo } from "../types/sketch";
 
@@ -341,7 +341,7 @@ export function HistoryGraphTab() {
   if (graphNodes.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-[rgb(var(--color-text-secondary))]">
-        <ArrowsRightLeftIcon className="w-12 h-12 opacity-30 mb-3" />
+        <ArrowLeftRight className="w-12 h-12 opacity-30 mb-3" />
         <p className="text-xs">No snapshots yet</p>
         <p className="text-[10px] opacity-60 mt-1">Save your first snapshot to see the history graph</p>
       </div>
@@ -366,9 +366,9 @@ export function HistoryGraphTab() {
           title={`Switch to ${dir === "vertical" ? "horizontal" : "vertical"} layout`}
         >
           {dir === "vertical" ? (
-            <ArrowDownIcon className="w-3 h-3" />
+            <ArrowDown className="w-3 h-3" />
           ) : (
-            <ArrowRightIcon className="w-3 h-3" />
+            <ArrowRight className="w-3 h-3" />
           )}
           {dir === "vertical" ? "Vertical" : "Horizontal"}
         </button>
@@ -379,7 +379,7 @@ export function HistoryGraphTab() {
           className="flex items-center gap-1 px-2 py-1 rounded text-[10px] text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-border))] transition-colors"
           title="Fit graph to view"
         >
-          <ArrowsPointingOutIcon className="w-3 h-3" />
+          <Maximize2 className="w-3 h-3" />
           Fit
         </button>
 
@@ -390,14 +390,14 @@ export function HistoryGraphTab() {
             className="px-1.5 py-1 text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-border))] transition-colors"
             title="Zoom out"
           >
-            <MinusIcon className="w-3 h-3" />
+            <Minus className="w-3 h-3" />
           </button>
           <button
             onClick={handleZoomIn}
             className="px-1.5 py-1 text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-border))] transition-colors border-l border-[rgb(var(--color-border))]"
             title="Zoom in"
           >
-            <PlusIcon className="w-3 h-3" />
+            <Plus className="w-3 h-3" />
           </button>
         </div>
 

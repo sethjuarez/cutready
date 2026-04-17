@@ -1,6 +1,6 @@
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
-import { ArrowPathIcon, PencilIcon, CheckIcon, XMarkIcon } from "@heroicons/react/24/outline";
+import { RefreshCw, Pencil, Check, X } from "lucide-react";
 import type { ElucimDocument } from "@elucim/dsl";
 import VisualCell, { type VisualControlHandle } from "./VisualCell";
 import type { AssetInfo } from "../stores/appStore";
@@ -122,14 +122,14 @@ function VisualAssetViewer({
             className="p-1.5 rounded-lg text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface))] transition-colors disabled:opacity-40"
             title="Replay animation"
           >
-            <ArrowPathIcon className="w-4 h-4" />
+            <RefreshCw className="w-4 h-4" />
           </button>
           <button
             onClick={() => setEditorOpen(true)}
             className="p-1.5 rounded-lg text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface))] transition-colors"
             title="Edit visual"
           >
-            <PencilIcon className="w-4 h-4" />
+            <Pencil className="w-4 h-4" />
           </button>
         </div>
       </div>
@@ -175,7 +175,7 @@ function VisualAssetViewer({
                     title="Save changes"
                     className="p-1.5 rounded-lg text-[rgb(var(--color-accent))] hover:text-[rgb(var(--color-accent-hover))] hover:bg-[rgb(var(--color-surface))] transition-colors disabled:opacity-40"
                   >
-                    <CheckIcon className="w-4 h-4" />
+                    <Check className="w-4 h-4" />
                   </button>
                 )}
                 <button
@@ -183,7 +183,7 @@ function VisualAssetViewer({
                   disabled={saving}
                   className="p-1.5 rounded-lg text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface))] transition-colors disabled:opacity-40"
                 >
-                  <XMarkIcon className="w-5 h-5" />
+                  <X className="w-5 h-5" />
                 </button>
               </div>
             </div>

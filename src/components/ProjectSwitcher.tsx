@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAppStore } from "../stores/appStore";
 import type { ProjectEntry } from "../types/project";
-import { FolderIcon, ChevronDownIcon, PencilIcon, CheckIcon, PlusIcon } from "@heroicons/react/24/outline";
+import { Folder, ChevronDown, Pencil, Check, Plus } from "lucide-react";
 
 /**
  * Compact project switcher dropdown. Only visible when the workspace has multiple
@@ -143,12 +143,12 @@ export function ProjectSwitcher() {
         className="flex items-center gap-2 w-full px-3 py-1.5 text-left hover:bg-[rgb(var(--color-surface))] transition-colors"
       >
         {/* Project icon */}
-        <FolderIcon className="text-[rgb(var(--color-accent))] shrink-0 w-3.5 h-3.5" />
+        <Folder className="text-[rgb(var(--color-accent))] shrink-0 w-3.5 h-3.5" />
         <span className="text-[12px] font-medium text-[rgb(var(--color-text))] truncate flex-1">
           {activeEntry?.name ?? currentProject?.name ?? "Select project"}
         </span>
         {/* Chevron */}
-        <ChevronDownIcon
+        <ChevronDown
           className={`text-[rgb(var(--color-text-secondary))] shrink-0 transition-transform w-2.5 h-2.5 ${isOpen ? "rotate-180" : ""}`}
         />
       </button>
@@ -208,10 +208,10 @@ export function ProjectSwitcher() {
                   className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-[rgb(var(--color-surface))] transition-opacity"
                   title="Rename project"
                 >
-                  <PencilIcon className="w-2.5 h-2.5" />
+                  <Pencil className="w-2.5 h-2.5" />
                 </button>
                 {isActive && (
-                  <CheckIcon className="shrink-0 w-3 h-3" />
+                  <Check className="shrink-0 w-3 h-3" />
                 )}
               </div>
             );
@@ -279,7 +279,7 @@ export function ProjectSwitcher() {
                 onClick={handleNewProjectClick}
                 className="flex items-center gap-2 w-full px-3 py-1.5 text-left text-[12px] text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors"
               >
-                <PlusIcon className="w-3 h-3" />
+                <Plus className="w-3 h-3" />
                 New Project
               </button>
             )}

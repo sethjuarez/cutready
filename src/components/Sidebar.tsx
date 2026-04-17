@@ -1,45 +1,44 @@
 import { type ReactNode, useCallback } from "react";
-import { HomeIcon, FilmIcon, FolderOpenIcon, ComputerDesktopIcon, Cog6ToothIcon, ChatBubbleLeftRightIcon, SwatchIcon, PencilSquareIcon, PhotoIcon } from "@heroicons/react/24/outline";
+import { House, Clapperboard, FolderOpen, Monitor, SlidersHorizontal, Bot, SquarePen, NotebookPen, Images } from "lucide-react";
 import type { AppView } from "../stores/appStore";
 import { useAppStore } from "../stores/appStore";
 import { usePopover } from "../hooks/usePopover";
 
-// Planned: "recording" and "editor" nav items will be added when those features are implemented
 const navItems: { id: AppView; label: string; icon: ReactNode }[] = [
   {
     id: "home",
     label: "Home",
-    icon: <HomeIcon className="w-4 h-4" />,
+    icon: <House className="w-4 h-4" />,
   },
   {
     id: "storyboards",
     label: "Storyboards",
-    icon: <FilmIcon className="w-4 h-4" />,
+    icon: <Clapperboard className="w-4 h-4" />,
   },
   {
     id: "sketches",
     label: "Sketches",
-    icon: <SwatchIcon className="w-4 h-4" />,
+    icon: <SquarePen className="w-4 h-4" />,
   },
   {
     id: "notes",
     label: "Notes",
-    icon: <PencilSquareIcon className="w-4 h-4" />,
+    icon: <NotebookPen className="w-4 h-4" />,
   },
   {
     id: "assets",
     label: "Assets",
-    icon: <PhotoIcon className="w-4 h-4" />,
+    icon: <Images className="w-4 h-4" />,
   },
   {
     id: "explorer",
     label: "Explorer",
-    icon: <FolderOpenIcon className="w-4 h-4" />,
+    icon: <FolderOpen className="w-4 h-4" />,
   },
   {
     id: "workspace",
     label: "Workspace",
-    icon: <ComputerDesktopIcon className="w-4 h-4" />,
+    icon: <Monitor className="w-4 h-4" />,
   },
 ];
 
@@ -126,7 +125,7 @@ export function Sidebar() {
               `}
               title="Chat"
             >
-              <ChatBubbleLeftRightIcon className="w-4 h-4" />
+              <Bot className="w-4 h-4" />
               {isActive && (
                 <span className={`absolute top-1/4 h-1/2 w-[2px] rounded-full bg-[rgb(var(--color-accent))] ${
                   isRight ? "right-[-6px]" : "left-[-6px]"
@@ -152,7 +151,7 @@ export function Sidebar() {
               `}
               title="Settings"
             >
-              <Cog6ToothIcon className="w-4 h-4" />
+              <SlidersHorizontal className="w-4 h-4" />
               {isActive && (
                 <span className={`absolute top-1/4 h-1/2 w-[2px] rounded-full bg-[rgb(var(--color-accent))] ${
                   isRight ? "right-[-6px]" : "left-[-6px]"

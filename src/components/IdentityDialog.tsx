@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { UserIcon } from "@heroicons/react/24/outline";
+import { User } from "lucide-react";
 import { useAppStore } from "../stores/appStore";
 import { Dialog } from "./Dialog";
 
@@ -96,7 +96,7 @@ export function IdentityDialog() {
         {/* Header */}
         <div className="flex items-center gap-2.5 px-5 pt-5 pb-3">
           <div className="p-2 rounded-lg bg-[rgb(var(--color-accent))]/10">
-            <UserIcon className="w-5 h-5" style={{ stroke: "rgb(var(--color-accent))" }} />
+            <User className="w-5 h-5" style={{ stroke: "rgb(var(--color-accent))" }} />
           </div>
           <div>
             <h2 className="text-sm font-semibold text-[rgb(var(--color-text))]">

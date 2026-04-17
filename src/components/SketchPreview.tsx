@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, useRef, lazy, Suspense } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { SafeMarkdown } from "./SafeMarkdown";
-import { ClockIcon, ArrowPathIcon, Squares2X2Icon, XMarkIcon, ArrowLeftIcon, ArrowRightIcon, PhotoIcon, ChevronLeftIcon, ChevronRightIcon } from "@heroicons/react/24/outline";
+import { Clock, RefreshCw, LayoutGrid, X, ArrowLeft, ArrowRight, Image as ImageIcon, ChevronLeft, ChevronRight } from "lucide-react";
 import { ResizeHandle } from "./ResizeHandle";
 import type { PlanningRow } from "../types/sketch";
 import type { VisualControlHandle } from "./VisualCell";
@@ -145,7 +145,7 @@ export function SketchPreview({ rows, projectRoot, title, onClose, slides: slide
             <>
               <div className="w-px h-4 bg-[rgb(var(--color-border))]" />
               <span className="text-xs text-[rgb(var(--color-text-secondary))]">
-                <ClockIcon className="w-3 h-3 inline -mt-px mr-1" />
+                <Clock className="w-3 h-3 inline -mt-px mr-1" />
                 {row.time}
               </span>
             </>
@@ -159,7 +159,7 @@ export function SketchPreview({ rows, projectRoot, title, onClose, slides: slide
               className="flex items-center gap-1.5 text-xs text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] transition-colors px-2 py-1 rounded-md hover:bg-[rgb(var(--color-surface-alt))]"
               title="Replay animation"
             >
-              <ArrowPathIcon className="w-3.5 h-3.5" />
+              <RefreshCw className="w-3.5 h-3.5" />
               Replay
             </button>
           )}
@@ -172,14 +172,14 @@ export function SketchPreview({ rows, projectRoot, title, onClose, slides: slide
             className="flex items-center gap-1.5 text-xs text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] transition-colors px-2 py-1 rounded-md hover:bg-[rgb(var(--color-surface-alt))]"
             title={`Move panel to ${panelSide === "left" ? "right" : "left"}`}
           >
-            <Squares2X2Icon className="w-3.5 h-3.5" />
+            <LayoutGrid className="w-3.5 h-3.5" />
           </button>
           {/* Close */}
           <button
             onClick={onClose}
             className="flex items-center gap-1.5 text-xs text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] transition-colors px-2 py-1 rounded-md hover:bg-[rgb(var(--color-surface-alt))]"
           >
-            <XMarkIcon className="w-3.5 h-3.5" />
+            <X className="w-3.5 h-3.5" />
             Close
           </button>
         </div>
@@ -219,9 +219,9 @@ export function SketchPreview({ rows, projectRoot, title, onClose, slides: slide
                   title="Hide panel"
                 >
                   {panelSide === "left" ? (
-                    <ArrowLeftIcon className="w-3.5 h-3.5" />
+                    <ArrowLeft className="w-3.5 h-3.5" />
                   ) : (
-                    <ArrowRightIcon className="w-3.5 h-3.5" />
+                    <ArrowRight className="w-3.5 h-3.5" />
                   )}
                 </button>
               </div>
@@ -263,9 +263,9 @@ export function SketchPreview({ rows, projectRoot, title, onClose, slides: slide
               title="Show panel"
             >
               {panelSide === "left" ? (
-                <ArrowRightIcon className="w-3.5 h-3.5" />
+                <ArrowRight className="w-3.5 h-3.5" />
               ) : (
-                <ArrowLeftIcon className="w-3.5 h-3.5" />
+                <ArrowLeft className="w-3.5 h-3.5" />
               )}
             </button>
           )}
@@ -290,7 +290,7 @@ export function SketchPreview({ rows, projectRoot, title, onClose, slides: slide
           ) : (
             <div className="w-full max-w-2xl aspect-video rounded-lg border-2 border-dashed border-[rgb(var(--color-border))] flex items-center justify-center">
               <div className="flex flex-col items-center gap-2 text-[rgb(var(--color-text-secondary))]">
-                <PhotoIcon className="w-12 h-12 opacity-30" />
+                <ImageIcon className="w-12 h-12 opacity-30" />
                 <span className="text-xs">No screenshot</span>
               </div>
             </div>
@@ -306,7 +306,7 @@ export function SketchPreview({ rows, projectRoot, title, onClose, slides: slide
           className="p-2 rounded-lg text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
           title="Previous (←)"
         >
-          <ChevronLeftIcon className="w-5 h-5" />
+          <ChevronLeft className="w-5 h-5" />
         </button>
 
         {/* Slide dots */}
@@ -333,7 +333,7 @@ export function SketchPreview({ rows, projectRoot, title, onClose, slides: slide
           className="p-2 rounded-lg text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
           title="Next (→)"
         >
-          <ChevronRightIcon className="w-5 h-5" />
+          <ChevronRight className="w-5 h-5" />
         </button>
       </div>
     </div>

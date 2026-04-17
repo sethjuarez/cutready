@@ -6,7 +6,7 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { XMarkIcon, PhotoIcon, MagnifyingGlassIcon } from "@heroicons/react/24/outline";
+import { X, Image as ImageIcon, Search } from "lucide-react";
 import { useAppStore, type AssetInfo } from "../stores/appStore";
 
 interface ProjectImagePickerProps {
@@ -60,21 +60,21 @@ export function ProjectImagePicker({ onSelect, onCancel }: ProjectImagePickerPro
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] shrink-0">
           <div className="flex items-center gap-2">
-            <PhotoIcon className="w-4 h-4 text-[rgb(var(--color-accent))]" />
+            <ImageIcon className="w-4 h-4 text-[rgb(var(--color-accent))]" />
             <span className="text-[13px] font-medium text-[rgb(var(--color-text))]">Choose project image</span>
           </div>
           <button
             onClick={onCancel}
             className="p-1 rounded-lg text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface))] transition-colors"
           >
-            <XMarkIcon className="w-4 h-4" />
+            <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Search */}
         <div className="px-4 py-2 border-b border-[rgb(var(--color-border))] shrink-0">
           <div className="relative">
-            <MagnifyingGlassIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[rgb(var(--color-text-secondary))]" />
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[rgb(var(--color-text-secondary))]" />
             <input
               type="text"
               value={search}
@@ -90,7 +90,7 @@ export function ProjectImagePicker({ onSelect, onCancel }: ProjectImagePickerPro
         <div className="flex-1 overflow-y-auto p-3 min-h-0">
           {images.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-[rgb(var(--color-text-secondary))] gap-2">
-              <PhotoIcon className="w-8 h-8 opacity-30" />
+              <ImageIcon className="w-8 h-8 opacity-30" />
               <span className="text-xs">
                 {assets.some((a) => a.assetType === "screenshot")
                   ? "No images match your search"

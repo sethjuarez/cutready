@@ -1,12 +1,12 @@
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import {
-  ArrowDownTrayIcon,
-  TrashIcon,
-  ChevronRightIcon,
-  BarsArrowDownIcon,
-  BarsArrowUpIcon,
-} from "@heroicons/react/24/outline";
+  Download,
+  Trash2,
+  ChevronRight,
+  ArrowDownAZ,
+  ArrowUpAZ,
+} from "lucide-react";
 import { useAppStore, type AssetInfo } from "../stores/appStore";
 import VisualCell from "./VisualCell";
 
@@ -105,7 +105,7 @@ export function AssetList() {
 
   const toggleDir = useCallback(() => setSortDir((d) => (d === "asc" ? "desc" : "asc")), []);
 
-  const SortDirIcon = sortDir === "asc" ? BarsArrowUpIcon : BarsArrowDownIcon;
+  const SortDirIcon = sortDir === "asc" ? ArrowUpAZ : ArrowDownAZ;
 
   return (
     <div className="flex flex-col h-full bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text))]">
@@ -119,7 +119,7 @@ export function AssetList() {
           className="p-1 rounded-md text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10 transition-colors"
           title="Import image"
         >
-          <ArrowDownTrayIcon className="w-3.5 h-3.5" />
+          <Download className="w-3.5 h-3.5" />
         </button>
         {assets.length > 0 && (
           <>
@@ -202,7 +202,7 @@ function AssetGroupSection({
               : "text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-alt))]"
           }`}
         >
-          <ChevronRightIcon
+          <ChevronRight
             className={`w-2.5 h-2.5 shrink-0 transition-transform ${collapsed ? "" : "rotate-90"}`}
           />
           <span className="truncate font-medium">{group.label}</span>
@@ -287,7 +287,7 @@ function AssetItem({
         className="p-1 rounded opacity-0 group-hover:opacity-100 text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-error))] transition-all"
         title="Delete asset"
       >
-        <TrashIcon className="w-3 h-3" />
+        <Trash2 className="w-3 h-3" />
       </button>
     </div>
   );

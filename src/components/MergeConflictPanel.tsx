@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { ArrowsRightLeftIcon } from "@heroicons/react/24/outline";
+import { ArrowLeftRight } from "lucide-react";
 import { useAppStore } from "../stores/appStore";
 import type { ConflictFile, FieldConflict, TextConflictRegion, FileResolution } from "../types/sketch";
 
@@ -49,7 +49,7 @@ export function MergeConflictPanel() {
       <div className="flex items-center gap-3 px-4 py-3 border-b border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))]">
         <div className="flex items-center gap-2">
           <div className="p-1.5 rounded-md bg-warning/10">
-            <ArrowsRightLeftIcon className="w-4 h-4 text-warning" />
+            <ArrowLeftRight className="w-4 h-4 text-warning" />
           </div>
           <div>
             <h2 className="text-sm font-semibold text-[rgb(var(--color-text))]">

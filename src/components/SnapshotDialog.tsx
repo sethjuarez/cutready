@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowDownTrayIcon, ExclamationCircleIcon } from "@heroicons/react/24/outline";
+import { Download, AlertCircle } from "lucide-react";
 import { useAppStore } from "../stores/appStore";
 import { Dialog } from "./Dialog";
 import { generateSnapshotName } from "../utils/snapshotName";
@@ -85,7 +85,7 @@ export function SnapshotDialog() {
         {/* Header */}
         <div className="flex items-center gap-2.5 px-5 pt-5 pb-3">
           <div className="p-2 rounded-lg bg-[rgb(var(--color-accent))]/10">
-            <ArrowDownTrayIcon className="w-5 h-5" style={{ stroke: "rgb(var(--color-accent))" }} />
+            <Download className="w-5 h-5" style={{ stroke: "rgb(var(--color-accent))" }} />
           </div>
           <div>
             <h2 className="text-sm font-semibold text-[rgb(var(--color-text))]">Save Snapshot</h2>
@@ -100,7 +100,7 @@ export function SnapshotDialog() {
           {/* Fork warning */}
           {willFork && (
             <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg bg-[rgb(var(--color-accent))]/10 border border-[rgb(var(--color-accent))]/20">
-              <ExclamationCircleIcon className="w-3.5 h-3.5 text-[rgb(var(--color-accent))] shrink-0 mt-0.5" />
+              <AlertCircle className="w-3.5 h-3.5 text-[rgb(var(--color-accent))] shrink-0 mt-0.5" />
               <div className="flex-1">
                 <div className="text-[11px] font-medium text-[rgb(var(--color-accent))] mb-0.5">
                   Creating a new branch

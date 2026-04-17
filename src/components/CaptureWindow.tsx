@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ComputerDesktopIcon, Squares2X2Icon, ArrowLeftIcon } from "@heroicons/react/24/outline";
+import { Monitor, LayoutGrid, ArrowLeft } from "lucide-react";
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import { emit } from "@tauri-apps/api/event";
 
@@ -165,7 +165,7 @@ export function CaptureWindow() {
             disabled={capturing}
             className="flex items-center gap-2 text-sm text-white bg-white/10 hover:bg-white/20 px-4 py-2 rounded-lg transition-colors disabled:opacity-50"
           >
-            <ComputerDesktopIcon className="w-4 h-4" />
+            <Monitor className="w-4 h-4" />
             Full Screen
           </button>
           <div className="w-px h-6 bg-white/20" />
@@ -173,7 +173,7 @@ export function CaptureWindow() {
             onClick={() => setPhase("select-region")}
             className="flex items-center gap-2 text-sm text-white bg-white/10 hover:bg-white/20 px-4 py-2 rounded-lg transition-colors"
           >
-            <Squares2X2Icon className="w-4 h-4" />
+            <LayoutGrid className="w-4 h-4" />
             Select Region
           </button>
           <div className="w-px h-6 bg-white/20" />
@@ -242,7 +242,7 @@ export function CaptureWindow() {
           }}
           className="flex items-center gap-1 text-xs text-white/60 hover:text-white px-2 py-1 transition-colors"
         >
-          <ArrowLeftIcon className="w-3 h-3" />
+          <ArrowLeft className="w-3 h-3" />
           Back (Esc)
         </button>
       </div>

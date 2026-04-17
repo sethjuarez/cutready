@@ -1,14 +1,14 @@
 import { useState, useRef, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
-  ChatBubbleLeftIcon,
-  BugAntIcon,
-  StarIcon,
-  PencilIcon,
-  PaperAirplaneIcon,
-  CheckIcon,
-  XMarkIcon,
-} from "@heroicons/react/24/outline";
+  MessageSquare,
+  Bug,
+  Star,
+  Pencil,
+  Send,
+  Check,
+  X,
+} from "lucide-react";
 import { useAppStore } from "../stores/appStore";
 import { Dialog } from "./Dialog";
 
@@ -18,10 +18,10 @@ interface FeedbackDialogProps {
 }
 
 const categories = {
-  general: { label: "General", Icon: ChatBubbleLeftIcon },
-  bug: { label: "Bug", Icon: BugAntIcon },
-  feature: { label: "Feature", Icon: StarIcon },
-  ux: { label: "Design", Icon: PencilIcon },
+  general: { label: "General", Icon: MessageSquare },
+  bug: { label: "Bug", Icon: Bug },
+  feature: { label: "Feature", Icon: Star },
+  ux: { label: "Design", Icon: Pencil },
 } as const;
 
 type Category = keyof typeof categories;
@@ -100,7 +100,7 @@ export function FeedbackDialog({ isOpen, onClose }: FeedbackDialogProps) {
             className="flex items-center justify-center w-6 h-6 rounded text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors"
             onClick={onClose}
           >
-            <XMarkIcon className="w-3.5 h-3.5" />
+            <X className="w-3.5 h-3.5" />
           </button>
         </div>
 
@@ -173,12 +173,12 @@ export function FeedbackDialog({ isOpen, onClose }: FeedbackDialogProps) {
           >
             {copied ? (
               <>
-                <CheckIcon className="w-3.5 h-3.5" />
+                <Check className="w-3.5 h-3.5" />
                 Copied!
               </>
             ) : (
               <>
-                <PaperAirplaneIcon className="w-3.5 h-3.5" />
+                <Send className="w-3.5 h-3.5" />
                 Submit
               </>
             )}

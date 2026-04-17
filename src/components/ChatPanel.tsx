@@ -9,26 +9,26 @@ import { VersionHistory } from "./VersionHistory";
 import { SketchIcon, StoryboardIcon, NoteIcon } from "./Icons";
 import type { ChatMessage, ChatSessionSummary, ToolCall } from "../types/sketch";
 import {
-  SparklesIcon,
-  ClockIcon,
-  PaperAirplaneIcon,
-  DocumentIcon,
-  GlobeAltIcon,
-  WrenchIcon,
-  TrashIcon,
-  PlusIcon,
-  ArrowDownTrayIcon,
-  PaperClipIcon,
-  ChevronDownIcon,
-  ChevronRightIcon,
-  CheckIcon,
-  UserIcon,
-  XMarkIcon,
-  Bars3Icon,
-  StopIcon,
-  ChevronLeftIcon,
-  EllipsisVerticalIcon,
-} from "@heroicons/react/24/outline";
+  Sparkles,
+  Clock,
+  Send,
+  FileText,
+  Globe,
+  Wrench,
+  Trash2,
+  Plus,
+  Download,
+  Paperclip,
+  ChevronDown,
+  ChevronRight,
+  Check,
+  User,
+  X,
+  Menu,
+  Square,
+  ChevronLeft,
+  MoreVertical,
+} from "lucide-react";
 
 // ── Helpers ──────────────────────────────────────────────────────
 
@@ -285,52 +285,52 @@ export function resolveAgentPrompt(agentId: string, customAgents: AgentPreset[])
 // ── SVG Icons (using Heroicons) ──────────────────────────────────
 
 function IconSparkles({ size = 14 }: { size?: number }) {
-  return <SparklesIcon width={size} height={size} />;
+  return <Sparkles width={size} height={size} />;
 }
 
 function IconHistory({ size = 14 }: { size?: number }) {
-  return <ClockIcon width={size} height={size} />;
+  return <Clock width={size} height={size} />;
 }
 
 function IconSend({ size = 14 }: { size?: number }) {
-  return <PaperAirplaneIcon width={size} height={size} />;
+  return <Send width={size} height={size} />;
 }
 
 function IconFile({ size = 12 }: { size?: number }) {
-  return <DocumentIcon width={size} height={size} />;
+  return <FileText width={size} height={size} />;
 }
 
 function IconGlobe({ size = 12 }: { size?: number }) {
-  return <GlobeAltIcon width={size} height={size} />;
+  return <Globe width={size} height={size} />;
 }
 
 function IconWrench({ size = 12 }: { size?: number }) {
-  return <WrenchIcon width={size} height={size} />;
+  return <Wrench width={size} height={size} />;
 }
 
 function IconTrash({ size = 12 }: { size?: number }) {
-  return <TrashIcon width={size} height={size} />;
+  return <Trash2 width={size} height={size} />;
 }
 
 function IconPlus({ size = 14 }: { size?: number }) {
-  return <PlusIcon width={size} height={size} />;
+  return <Plus width={size} height={size} />;
 }
 
 function IconSave({ size = 14 }: { size?: number }) {
-  return <ArrowDownTrayIcon width={size} height={size} />;
+  return <Download width={size} height={size} />;
 }
 
 function IconPaperclip({ size = 14 }: { size?: number }) {
-  return <PaperClipIcon width={size} height={size} />;
+  return <Paperclip width={size} height={size} />;
 }
 
 function IconChevronDown({ size = 10 }: { size?: number }) {
-  return <ChevronDownIcon width={size} height={size} />;
+  return <ChevronDown width={size} height={size} />;
 }
 
 function IconChevron({ size = 10, expanded = false }: { size?: number; expanded?: boolean }) {
   return (
-    <ChevronRightIcon
+    <ChevronRight
       width={size}
       height={size}
       style={{ transform: expanded ? "rotate(90deg)" : "rotate(0deg)", transition: "transform 0.15s" }}
@@ -339,11 +339,11 @@ function IconChevron({ size = 10, expanded = false }: { size?: number; expanded?
 }
 
 function IconCheck({ size = 12 }: { size?: number }) {
-  return <CheckIcon width={size} height={size} className="ml-auto shrink-0" />;
+  return <Check width={size} height={size} className="ml-auto shrink-0" />;
 }
 
 function IconUser({ size = 12 }: { size?: number }) {
-  return <UserIcon width={size} height={size} />;
+  return <User width={size} height={size} />;
 }
 
 // ── Dropdown height constraint hook ──────────────────────────────
@@ -394,7 +394,7 @@ export function ChatPanel() {
             onClick={() => setActiveTab("chat")}
             className="flex items-center gap-1.5 text-[13px] font-medium text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] transition-colors"
           >
-            <ChevronLeftIcon className="w-3.5 h-3.5" />
+            <ChevronLeft className="w-3.5 h-3.5" />
             {activeTab === "sessions" ? "Sessions" : "Snapshots"}
           </button>
         )}
@@ -405,7 +405,7 @@ export function ChatPanel() {
               className="p-1 rounded-md text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors"
               title="More options"
             >
-              <EllipsisVerticalIcon className="w-4 h-4" />
+              <MoreVertical className="w-4 h-4" />
             </button>
             {showMenu && (
               <div className="absolute right-0 top-full mt-1 z-20 w-[180px] py-1 bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-lg shadow-lg">
@@ -1286,7 +1286,7 @@ function ChatTab() {
                     onClick={() => { removeReference(ref.path); if (expandedWebRef === ref.path) setExpandedWebRef(null); }}
                     title="Remove"
                   >
-                    <XMarkIcon className="w-2.5 h-2.5" />
+                    <X className="w-2.5 h-2.5" />
                   </button>
                 </span>
                 );
@@ -1408,7 +1408,7 @@ function ChatTab() {
             onClick={toggleToolbar}
             title={toolbarExpanded ? "Hide options" : "Show agent, model & tools"}
           >
-            <ChevronRightIcon
+            <ChevronRight
               width={12}
               height={12}
               className={`transition-transform ${toolbarExpanded ? "rotate-180" : ""}`}
@@ -1538,7 +1538,7 @@ function ChatTab() {
               onClick={handleStop}
               title="Stop generation"
             >
-              <StopIcon width={14} height={14} />
+              <Square width={14} height={14} />
             </button>
           ) : (
             <button
@@ -1700,9 +1700,9 @@ function WebRefChip({ url }: { url: string }) {
         onClick={handleExpand}
         className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] text-[11px] text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-surface-toolbar))] transition-colors font-mono align-baseline"
       >
-        <GlobeAltIcon className="w-2.5 h-2.5 shrink-0" />
+        <Globe className="w-2.5 h-2.5 shrink-0" />
         <span className="max-w-[200px] truncate">{shortUrl}</span>
-        <ChevronDownIcon className={`w-2 h-2 shrink-0 transition-transform ${expanded ? "rotate-180" : ""}`} />
+        <ChevronDown className={`w-2 h-2 shrink-0 transition-transform ${expanded ? "rotate-180" : ""}`} />
       </button>
       {expanded && (
         <span className="block mt-1">
@@ -1733,7 +1733,7 @@ function MessageRow({ message, projectRoot, onDelete }: { message: ChatMessage; 
             className="shrink-0 mt-2 p-1 rounded opacity-0 group-hover:opacity-100 text-[rgb(var(--color-text-secondary))] hover:text-error hover:bg-error/10 transition-all"
             title="Remove message"
           >
-            <XMarkIcon className="w-3 h-3" />
+            <X className="w-3 h-3" />
           </button>
         )}
         <div className={`rounded-xl rounded-br-sm px-3 py-2 text-[13px] text-[rgb(var(--color-text))] break-words leading-[1.6] max-w-[85%] ${
@@ -1743,7 +1743,7 @@ function MessageRow({ message, projectRoot, onDelete }: { message: ChatMessage; 
         }`}>
           {message.pending && (
             <span className="inline-flex items-center gap-1 text-[10px] text-[rgb(var(--color-text-secondary))] mb-1">
-              <ClockIcon className="w-2.5 h-2.5" />
+              <Clock className="w-2.5 h-2.5" />
               Queued
             </span>
           )}
@@ -1770,7 +1770,7 @@ function MessageRow({ message, projectRoot, onDelete }: { message: ChatMessage; 
     return (
       <div className="px-3.5 py-1">
         <div className="inline-flex items-center gap-1.5 px-2 py-0.5 text-[11px] rounded border transition-colors bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-text-secondary))] border-[rgb(var(--color-border))]">
-          <Bars3Icon className="w-3 h-3 opacity-70 shrink-0" />
+          <Menu className="w-3 h-3 opacity-70 shrink-0" />
           <span className="font-medium truncate">{textContent(message.content)}</span>
         </div>
       </div>
@@ -2018,7 +2018,7 @@ function ModelPickerDropdown({
               }}
             >
               {model === currentModel && (
-                <CheckIcon className="w-2.5 h-2.5" />
+                <Check className="w-2.5 h-2.5" />
               )}
               <span className={model === currentModel ? "" : "ml-[18px]"}>{model}</span>
             </button>

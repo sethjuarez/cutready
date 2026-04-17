@@ -14,7 +14,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { invoke } from "@tauri-apps/api/core";
-import { ArrowDownTrayIcon, PlusIcon, TrashIcon } from "@heroicons/react/24/outline";
+import { Download, Plus, Trash2 } from "lucide-react";
 import { useAppStore, type SidebarOrder } from "../stores/appStore";
 import { SketchIcon, StoryboardIcon, NoteIcon } from "./Icons";
 import { ProjectSwitcher } from "./ProjectSwitcher";
@@ -413,7 +413,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                 </svg>
               ) : (
-                <ArrowDownTrayIcon className="w-3 h-3" />
+                <Download className="w-3 h-3" />
               )}
             </button>
           </div>
@@ -441,7 +441,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                     </svg>
                   ) : (
-                    <ArrowDownTrayIcon className="w-3 h-3" />
+                    <Download className="w-3 h-3" />
                   )}
                 </button>
               )}
@@ -450,7 +450,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                 className="p-1 rounded-md text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10 transition-colors"
                 title="New storyboard"
               >
-                <PlusIcon className="w-3.5 h-3.5" />
+                <Plus className="w-3.5 h-3.5" />
               </button>
             </div>
           </div>
@@ -534,7 +534,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                             className="opacity-0 group-hover/item:opacity-100 p-0.5 rounded text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] transition-all"
                             title="Delete storyboard"
                           >
-                            <TrashIcon className="w-3 h-3" />
+                            <Trash2 className="w-3 h-3" />
                           </button>
                         )}
                       </div>
@@ -568,7 +568,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                     </svg>
                   ) : (
-                    <ArrowDownTrayIcon className="w-3 h-3" />
+                    <Download className="w-3 h-3" />
                   )}
                 </button>
               )}
@@ -577,7 +577,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                 className="p-1 rounded-md text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10 transition-colors"
                 title="New sketch"
               >
-                <PlusIcon className="w-3.5 h-3.5" />
+                <Plus className="w-3.5 h-3.5" />
               </button>
             </div>
           </div>
@@ -661,7 +661,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                             className="opacity-0 group-hover/item:opacity-100 p-0.5 rounded text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] transition-all"
                             title="Delete sketch"
                           >
-                            <TrashIcon className="w-3 h-3" />
+                            <Trash2 className="w-3 h-3" />
                           </button>
                         )}
                       </div>
@@ -695,7 +695,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                     </svg>
                   ) : (
-                    <ArrowDownTrayIcon className="w-3 h-3" />
+                    <Download className="w-3 h-3" />
                   )}
                 </button>
               )}
@@ -704,7 +704,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                 className="p-1 rounded-md text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10 transition-colors"
                 title="New note"
               >
-                <PlusIcon className="w-3.5 h-3.5" />
+                <Plus className="w-3.5 h-3.5" />
               </button>
             </div>
           </div>
@@ -796,7 +796,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                             className="opacity-0 group-hover/item:opacity-100 p-0.5 rounded text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] transition-all"
                             title="Delete note"
                           >
-                            <TrashIcon className="w-3 h-3" />
+                            <Trash2 className="w-3 h-3" />
                           </button>
                         )}
                       </div>

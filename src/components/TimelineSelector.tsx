@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAppStore } from "../stores/appStore";
-import { ArrowsRightLeftIcon, ChevronDownIcon, CheckIcon, PlusIcon } from "@heroicons/react/24/outline";
+import { ArrowLeftRight, ChevronDown, Check, Plus } from "lucide-react";
 
 /**
  * TimelineSelector — dropdown for switching timelines (branches).
@@ -115,9 +115,9 @@ export function TimelineSelector() {
         className="flex items-center gap-1.5 px-2 py-1 rounded text-[10px] text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-border))]/50 transition-colors max-w-[140px]"
         title={`Branch: ${active?.label ?? "main"}`}
       >
-        <ArrowsRightLeftIcon className="shrink-0 w-3 h-3" />
+        <ArrowLeftRight className="shrink-0 w-3 h-3" />
         <span className="truncate">{active?.label ?? "main"}</span>
-        <ChevronDownIcon className="shrink-0 opacity-50 w-2 h-2" />
+        <ChevronDown className="shrink-0 opacity-50 w-2 h-2" />
       </button>
 
       {/* Dropdown */}
@@ -151,7 +151,7 @@ export function TimelineSelector() {
                 {/* Consistent icon area */}
                 <span className="w-[10px] shrink-0 flex items-center justify-center">
                   {t.is_active ? (
-                    <CheckIcon className="w-2.5 h-2.5" />
+                    <Check className="w-2.5 h-2.5" />
                   ) : (
                     <span className="w-1.5 h-1.5 rounded-full bg-[rgb(var(--color-text-secondary))]/30" />
                   )}
@@ -215,7 +215,7 @@ export function TimelineSelector() {
                 onClick={() => setShowNew(true)}
                 className="w-full flex items-center gap-2 px-3 py-2 text-[11px] text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/5 transition-colors"
               >
-                <PlusIcon className="w-2.5 h-2.5" />
+                <Plus className="w-2.5 h-2.5" />
                 New Branch
               </button>
             )}

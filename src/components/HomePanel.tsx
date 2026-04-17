@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useAppStore } from "../stores/appStore";
 import { open } from "@tauri-apps/plugin-dialog";
 import { invoke } from "@tauri-apps/api/core";
-import { PlusIcon, ArrowDownTrayIcon, FolderIcon, XMarkIcon, XCircleIcon } from "@heroicons/react/24/outline";
+import { Plus, Download, Folder, X, XCircle } from "lucide-react";
 
 /* ── Decorative icon components ───────────────────────────── */
 
@@ -27,16 +27,16 @@ function LogoMark() {
 function ActionIcon({ type }: { type: "new" | "open" | "clone" }) {
   if (type === "new") {
     return (
-      <PlusIcon className="w-5 h-5" />
+      <Plus className="w-5 h-5" />
     );
   }
   if (type === "clone") {
     return (
-      <ArrowDownTrayIcon className="w-5 h-5" />
+      <Download className="w-5 h-5" />
     );
   }
   return (
-    <FolderIcon className="w-5 h-5" />
+    <Folder className="w-5 h-5" />
   );
 }
 
@@ -345,7 +345,7 @@ export function HomePanel() {
               {cloneError?.type === "auth" && (
                 <div className="mt-3 rounded-lg border border-[rgb(var(--color-error))]/30 bg-[rgb(var(--color-error))]/5 p-3">
                   <div className="flex items-start gap-2">
-                    <XCircleIcon className="w-4 h-4 text-[rgb(var(--color-error))] shrink-0 mt-0.5" />
+                    <XCircle className="w-4 h-4 text-[rgb(var(--color-error))] shrink-0 mt-0.5" />
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-medium text-[rgb(var(--color-error))] mb-2">Authentication required</p>
                       <ol className="text-[11px] text-[rgb(var(--color-text-secondary))] space-y-1 list-decimal list-inside">
@@ -362,7 +362,7 @@ export function HomePanel() {
               )}
               {cloneError?.type === "generic" && (
                 <div className="mt-3 flex items-start gap-2 text-xs text-[rgb(var(--color-error))]">
-                  <XCircleIcon className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                  <XCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
                   <span className="break-all">{cloneError.message}</span>
                 </div>
               )}
@@ -428,7 +428,7 @@ export function HomePanel() {
                           className="p-1 rounded opacity-0 group-hover:opacity-100 text-[rgb(var(--color-text-secondary))] hover:text-error transition-all"
                           title="Remove from recent"
                         >
-                          <XMarkIcon className="w-3 h-3" />
+                          <X className="w-3 h-3" />
                         </button>
                       </div>
                     </div>

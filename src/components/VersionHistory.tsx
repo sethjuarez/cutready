@@ -4,7 +4,7 @@ import { SnapshotGraph } from "./SnapshotGraph";
 import { SnapshotDiffPanel } from "./SnapshotDiffPanel";
 import { SyncBar } from "./SyncBar";
 import { TimelineSelector } from "./TimelineSelector";
-import { ArrowPathIcon, MagnifyingGlassIcon, ClockIcon, ArrowDownTrayIcon } from "@heroicons/react/24/outline";
+import { RefreshCw, Search, Clock, Download } from "lucide-react";
 
 export function VersionHistory() {
   const graphNodes = useAppStore((s) => s.graphNodes);
@@ -130,7 +130,7 @@ export function VersionHistory() {
               className="group/btn flex items-center gap-1 p-1 rounded text-[rgb(var(--color-text-secondary))] hover:text-error transition-colors"
               title="Discard changes"
             >
-              <ArrowPathIcon className="shrink-0 w-3.5 h-3.5" />
+              <RefreshCw className="shrink-0 w-3.5 h-3.5" />
               <span className="max-w-0 overflow-hidden group-hover/btn:max-w-[10rem] transition-all duration-200 whitespace-nowrap text-[10px]">
                 Discard
               </span>
@@ -141,14 +141,14 @@ export function VersionHistory() {
             className={`p-1 rounded transition-colors ${showSearch ? "text-[rgb(var(--color-accent))]" : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))]"}`}
             title="Search snapshots"
           >
-            <MagnifyingGlassIcon className="w-3.5 h-3.5" />
+            <Search className="w-3.5 h-3.5" />
           </button>
           <button
             onClick={() => openTab({ type: "history", path: "__history__", title: "History" })}
             className="group/btn flex items-center gap-1 p-1 rounded text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] transition-colors"
             title="Open full history graph"
           >
-            <ClockIcon className="shrink-0 w-3.5 h-3.5" />
+            <Clock className="shrink-0 w-3.5 h-3.5" />
             <span className="max-w-0 overflow-hidden group-hover/btn:max-w-[10rem] transition-all duration-200 whitespace-nowrap text-[10px]">
               History
             </span>
@@ -165,7 +165,7 @@ export function VersionHistory() {
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
               </svg>
             ) : (
-              <ArrowDownTrayIcon className="shrink-0 w-3.5 h-3.5" />
+              <Download className="shrink-0 w-3.5 h-3.5" />
             )}
             <span className="max-w-0 overflow-hidden group-hover/btn:max-w-[10rem] transition-all duration-200 whitespace-nowrap text-[10px]">
               Save
@@ -249,7 +249,7 @@ export function VersionHistory() {
         {activeNodes.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 text-center px-4">
             <div className="w-10 h-10 rounded-full bg-[rgb(var(--color-accent))]/10 flex items-center justify-center mb-3">
-              <ClockIcon className="w-5 h-5 text-[rgb(var(--color-accent))]" />
+              <Clock className="w-5 h-5 text-[rgb(var(--color-accent))]" />
             </div>
             <p className="text-sm font-medium text-[rgb(var(--color-text))] mb-1">No snapshots yet</p>
             <p className="text-xs text-[rgb(var(--color-text-secondary))] max-w-[240px] leading-relaxed">

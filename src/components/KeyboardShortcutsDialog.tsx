@@ -1,4 +1,4 @@
-import { CommandLineIcon, XMarkIcon } from "@heroicons/react/20/solid";
+import { Terminal, X } from "lucide-react";
 import { useCommands } from "../services/commandRegistry";
 import { Dialog } from "./Dialog";
 
@@ -53,14 +53,14 @@ export function KeyboardShortcutsDialog({ open, onClose }: KeyboardShortcutsDial
         {/* Header */}
         <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-[rgb(var(--color-border))]">
           <div className="flex items-center gap-2">
-            <CommandLineIcon className="w-4 h-4 text-[rgb(var(--color-text-secondary))]" />
+            <Terminal className="w-4 h-4 text-[rgb(var(--color-text-secondary))]" />
             <h2 className="text-sm font-semibold text-[rgb(var(--color-text))]">Keyboard Shortcuts</h2>
           </div>
           <button
             onClick={onClose}
             className="p-1 rounded-md text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors"
           >
-            <XMarkIcon className="w-4 h-4" />
+            <X className="w-4 h-4" />
           </button>
         </div>
 

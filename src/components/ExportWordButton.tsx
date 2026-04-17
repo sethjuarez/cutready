@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { WordOrientation } from "../utils/exportToWord";
-import { ArrowDownTrayIcon, DocumentIcon } from "@heroicons/react/24/outline";
+import { Download, FileText } from "lucide-react";
 
 interface ExportWordButtonProps {
   onExport: (orientation: WordOrientation) => void | Promise<void>;
@@ -59,7 +59,7 @@ export function ExportWordButton({
             <path d="M21 12a9 9 0 1 1-6.219-8.56" />
           </svg>
         ) : (
-          <ArrowDownTrayIcon className="w-3.5 h-3.5" />
+          <Download className="w-3.5 h-3.5" />
         )}
         {showLabel && "Word"}
       </button>
@@ -70,14 +70,14 @@ export function ExportWordButton({
             onClick={() => handlePick("portrait")}
             className={`w-full flex items-center gap-2 px-3 py-2 text-xs transition-colors hover:bg-[rgb(var(--color-accent))]/10 ${defaultOrientation === "portrait" ? "text-[rgb(var(--color-accent))] font-medium" : "text-[rgb(var(--color-text))]"}`}
           >
-            <DocumentIcon className="shrink-0 w-3.5 h-3.5" />
+            <FileText className="shrink-0 w-3.5 h-3.5" />
             Portrait
           </button>
           <button
             onClick={() => handlePick("landscape")}
             className={`w-full flex items-center gap-2 px-3 py-2 text-xs transition-colors hover:bg-[rgb(var(--color-accent))]/10 ${defaultOrientation === "landscape" ? "text-[rgb(var(--color-accent))] font-medium" : "text-[rgb(var(--color-text))]"}`}
           >
-            <DocumentIcon className="shrink-0 w-3.5 h-3.5" />
+            <FileText className="shrink-0 w-3.5 h-3.5" />
             Landscape
           </button>
         </div>

@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { useAppStore } from "../stores/appStore";
 import { useSettings } from "../hooks/useSettings";
-import { CheckIcon, ArrowUpIcon, ArrowDownIcon, ExclamationTriangleIcon, GlobeAltIcon } from "@heroicons/react/24/outline";
+import { Check, ArrowUp, ArrowDown, AlertTriangle, Globe } from "lucide-react";
 
 /**
  * SyncBar — shown at the top of the Snapshots panel when a remote is configured.
@@ -118,20 +118,20 @@ export function SyncBar() {
           <div className="flex items-center gap-1.5 text-[10px]">
             {isUpToDate ? (
               <span className="text-success flex items-center gap-1">
-                <CheckIcon className="w-2.5 h-2.5" />
+                <Check className="w-2.5 h-2.5" />
                 Up to date
               </span>
             ) : (
               <>
                 {ahead > 0 && (
                   <span className="text-[rgb(var(--color-accent))] flex items-center gap-0.5" title={`${ahead} unpublished snapshot${ahead !== 1 ? "s" : ""}`}>
-                    <ArrowUpIcon className="w-2.5 h-2.5" />
+                    <ArrowUp className="w-2.5 h-2.5" />
                     {ahead}
                   </span>
                 )}
                 {behind > 0 && (
                   <span className="text-warning flex items-center gap-0.5" title={`${behind} incoming snapshot${behind !== 1 ? "s" : ""}`}>
-                    <ArrowDownIcon className="w-2.5 h-2.5" />
+                    <ArrowDown className="w-2.5 h-2.5" />
                     {behind}
                   </span>
                 )}
@@ -178,7 +178,7 @@ export function SyncBar() {
       {/* Conflict / diverge banner */}
       {syncError && syncError.includes("diverged") && (
         <div className="mt-1.5 flex items-center gap-1.5 px-2 py-1.5 rounded bg-warning/10 border border-warning/20">
-          <ExclamationTriangleIcon className="text-warning shrink-0 w-3 h-3" />
+          <AlertTriangle className="text-warning shrink-0 w-3 h-3" />
           <span className="text-[10px] text-warning flex-1">
             Timelines have diverged. Manual merge may be required.
           </span>
@@ -190,7 +190,7 @@ export function SyncBar() {
         <div className="mt-1.5 flex items-center gap-1.5 text-[10px] text-error" title={syncError}>
           {(syncError.includes("network") || syncError.includes("resolve host") || syncError.includes("Could not resolve") || syncError.includes("timed out")) ? (
             <>
-              <GlobeAltIcon className="shrink-0 w-2.5 h-2.5" />
+              <Globe className="shrink-0 w-2.5 h-2.5" />
               <span className="truncate">Offline — changes saved locally</span>
             </>
           ) : (

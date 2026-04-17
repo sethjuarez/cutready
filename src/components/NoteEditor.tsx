@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { DocumentIcon, SparklesIcon, PencilIcon, EyeIcon } from "@heroicons/react/24/outline";
+import { FileText, Sparkles, Pencil, Eye } from "lucide-react";
 import { SafeMarkdown } from "./SafeMarkdown";
 import { useAppStore } from "../stores/appStore";
 import { useSettings } from "../hooks/useSettings";
@@ -194,7 +194,7 @@ export function NoteEditor() {
     <div className="flex flex-col flex-1 overflow-hidden">
       {/* Title bar */}
       <div className="flex items-center gap-2 px-6 py-3 border-b border-[rgb(var(--color-border))] shrink-0">
-        <DocumentIcon className="w-5 h-5 text-[rgb(var(--color-text-secondary))] shrink-0" />
+        <FileText className="w-5 h-5 text-[rgb(var(--color-text-secondary))] shrink-0" />
         <h1 className="text-lg font-semibold text-[rgb(var(--color-text))]">{displayTitle}</h1>
         <span className="text-[10px] text-[rgb(var(--color-text-secondary))] px-1.5 py-0.5 rounded bg-[rgb(var(--color-surface-alt))]">.md</span>
 
@@ -219,7 +219,7 @@ export function NoteEditor() {
                 <path d="M21 12a9 9 0 1 1-6.219-8.56" />
               </svg>
             ) : (
-              <SparklesIcon className="w-3.5 h-3.5" />
+              <Sparkles className="w-3.5 h-3.5" />
             )}
           </button>
 
@@ -237,7 +237,7 @@ export function NoteEditor() {
               title="Edit"
             >
               {/* Pencil icon */}
-              <PencilIcon className="w-3.5 h-3.5" />
+              <Pencil className="w-3.5 h-3.5" />
             </button>
             <button
               onClick={() => setMode("preview")}
@@ -249,7 +249,7 @@ export function NoteEditor() {
               title="Preview"
             >
               {/* Eye icon */}
-              <EyeIcon className="w-3.5 h-3.5" />
+              <Eye className="w-3.5 h-3.5" />
             </button>
           </div>
         </div>
@@ -258,7 +258,7 @@ export function NoteEditor() {
       {/* AI updated indicator */}
       {aiUpdatedFlash && (
         <div className="mx-6 mb-2 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[rgb(var(--color-accent))]/10 border border-[rgb(var(--color-accent))]/20 text-xs text-[rgb(var(--color-accent))] animate-pulse">
-          <SparklesIcon className="w-3 h-3" />
+          <Sparkles className="w-3 h-3" />
           Updated by AI
         </div>
       )}

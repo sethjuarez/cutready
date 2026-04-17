@@ -1,19 +1,19 @@
 import { useRef, useState } from "react";
 import { useAppStore, type ActivityEntry } from "../stores/appStore";
 import {
-  ChartBarIcon,
-  BugAntIcon,
-  ArrowDownTrayIcon,
-  TrashIcon,
-  ChevronDownIcon,
-  XCircleIcon,
-  ChatBubbleLeftIcon,
-  CheckIcon,
-  ClockIcon,
-  DocumentIcon,
-  UserGroupIcon,
-  WrenchIcon,
-} from "@heroicons/react/24/outline";
+  BarChart2,
+  Bug,
+  Download,
+  Trash2,
+  ChevronDown,
+  XCircle,
+  MessageSquare,
+  Check,
+  Clock,
+  FileText,
+  Users,
+  Wrench,
+} from "lucide-react";
 
 /** Format activity log as plain text and copy to clipboard / save to file. */
 async function exportActivity(entries: ActivityEntry[]) {
@@ -71,14 +71,14 @@ export function OutputPanel({ onCollapse }: OutputPanelProps) {
             active={activeTab === "activity"}
             onClick={() => setActiveTab("activity")}
           >
-            <ChartBarIcon className="w-3 h-3" />
+            <BarChart2 className="w-3 h-3" />
             Activity
           </TabButton>
           <TabButton
             active={activeTab === "debug"}
             onClick={() => setActiveTab("debug")}
           >
-            <BugAntIcon className="w-3 h-3" />
+            <Bug className="w-3 h-3" />
             Debug
           </TabButton>
         </div>
@@ -88,21 +88,21 @@ export function OutputPanel({ onCollapse }: OutputPanelProps) {
             className="p-1 rounded text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors"
             title={activeTab === "activity" ? "Export activity log" : "Export debug log"}
           >
-            <ArrowDownTrayIcon className="w-3 h-3" />
+            <Download className="w-3 h-3" />
           </button>
           <button
             onClick={() => activeTab === "activity" ? clearActivityLog() : clearDebugLog()}
             className="p-1 rounded text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors"
             title="Clear"
           >
-            <TrashIcon className="w-3 h-3" />
+            <Trash2 className="w-3 h-3" />
           </button>
           <button
             onClick={onCollapse}
             className="p-1 rounded text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors"
             title="Collapse panel"
           >
-            <ChevronDownIcon className="w-3 h-3" />
+            <ChevronDown className="w-3 h-3" />
           </button>
         </div>
       </div>
@@ -199,12 +199,12 @@ function TabButton({
 
 function ActivityIcon({ source, level }: { source: string; level: string }) {
   const cls = "shrink-0 mt-px w-3 h-3";
-  if (level === "error") return <XCircleIcon className={cls} />;
-  if (source === "chat") return <ChatBubbleLeftIcon className={cls} />;
-  if (source === "response") return <CheckIcon className={cls} />;
-  if (source === "status") return <ClockIcon className={cls} />;
-  if (source.startsWith("result")) return <DocumentIcon className={cls} />;
-  if (source.startsWith("delegate")) return <UserGroupIcon className={cls} />;
+  if (level === "error") return <XCircle className={cls} />;
+  if (source === "chat") return <MessageSquare className={cls} />;
+  if (source === "response") return <Check className={cls} />;
+  if (source === "status") return <Clock className={cls} />;
+  if (source.startsWith("result")) return <FileText className={cls} />;
+  if (source.startsWith("delegate")) return <Users className={cls} />;
   // Default: wrench for tool calls
-  return <WrenchIcon className={cls} />;
+  return <Wrench className={cls} />;
 }

@@ -1,20 +1,21 @@
 import {
-  CheckIcon,
-  XMarkIcon,
-  XCircleIcon,
-  ExclamationTriangleIcon,
-  InformationCircleIcon,
-} from "@heroicons/react/24/outline";
+  Check,
+  X,
+  XCircle,
+  AlertTriangle,
+  Info,
+  type LucideIcon,
+} from "lucide-react";
 import { useToastStore, type ToastType } from "../stores/toastStore";
 
 const toastIconMap: Record<
   ToastType,
-  { icon: React.ComponentType<React.SVGProps<SVGSVGElement>>; color: string }
+  { icon: LucideIcon; color: string }
 > = {
-  success: { icon: CheckIcon, color: "rgb(var(--color-success))" },
-  error: { icon: XCircleIcon, color: "rgb(var(--color-error))" },
-  warning: { icon: ExclamationTriangleIcon, color: "rgb(var(--color-warning))" },
-  info: { icon: InformationCircleIcon, color: "rgb(var(--color-accent))" },
+  success: { icon: Check, color: "rgb(var(--color-success))" },
+  error: { icon: XCircle, color: "rgb(var(--color-error))" },
+  warning: { icon: AlertTriangle, color: "rgb(var(--color-warning))" },
+  info: { icon: Info, color: "rgb(var(--color-accent))" },
 };
 
 export function ToastContainer() {
@@ -43,7 +44,7 @@ export function ToastContainer() {
               onClick={() => dismiss(t.id)}
               className="p-0.5 ml-1 text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] transition-colors"
             >
-              <XMarkIcon className="w-2.5 h-2.5" />
+              <X className="w-2.5 h-2.5" />
             </button>
           </div>
         );
