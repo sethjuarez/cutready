@@ -96,7 +96,7 @@ export function TabBar() {
       {/* Close All Tabs button */}
       {openTabs.length > 0 && (
         <button
-          className="flex items-center justify-center w-8 h-full border-b border-l border-[rgb(var(--color-border))] text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors shrink-0"
+          className="flex items-center justify-center w-8 h-full border-b border-[rgb(var(--color-border))] text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors shrink-0"
           title="Close All Tabs"
           onClick={() => closeAllTabs()}
         >
