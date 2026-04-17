@@ -54,6 +54,7 @@ export function AppLayout() {
   const setOutputHeight = useAppStore((s) => s.setOutputHeight);
   const toggleOutput = useAppStore((s) => s.toggleOutput);
   const toggleVersionHistory = useAppStore((s) => s.toggleVersionHistory);
+  const showVersionHistory = useAppStore((s) => s.showVersionHistory);
   const isMerging = useAppStore((s) => s.isMerging);
 
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
@@ -346,6 +347,13 @@ export function AppLayout() {
     <>
       <TitleBar
         onCommandPaletteOpen={() => setCommandPaletteOpen(true)}
+        sidebarVisible={sidebarVisible}
+        sidebarPosition={sidebarPosition}
+        outputVisible={outputVisible}
+        secondaryVisible={showVersionHistory}
+        onToggleSidebar={toggleSidebar}
+        onToggleOutput={toggleOutput}
+        onToggleSecondary={toggleVersionHistory}
       />
       <div
         className="flex flex-col w-full"

@@ -8,10 +8,24 @@ import { relaunch } from "@tauri-apps/plugin-process";
 
 interface TitleBarProps {
   onCommandPaletteOpen?: () => void;
+  sidebarVisible?: boolean;
+  sidebarPosition?: "left" | "right";
+  outputVisible?: boolean;
+  secondaryVisible?: boolean;
+  onToggleSidebar?: () => void;
+  onToggleOutput?: () => void;
+  onToggleSecondary?: () => void;
 }
 
 export function TitleBar({
   onCommandPaletteOpen,
+  sidebarVisible = true,
+  sidebarPosition = "left",
+  outputVisible = false,
+  secondaryVisible = false,
+  onToggleSidebar,
+  onToggleOutput,
+  onToggleSecondary,
 }: TitleBarProps) {
   const appWindow = (() => {
     try { return getCurrentWindow(); } catch { return null; }
@@ -112,8 +126,58 @@ export function TitleBar({
         </button>
       </div>
 
-      {/* Right: Update indicator + window controls */}
+      {/* Right: Panel toggles + update indicator + window controls */}
       <div className="flex items-center h-full shrink-0">
+        {/* Panel layout toggles */}
+        <div className="flex items-center gap-0.5 px-2" style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}>
+          {/* Left panel (sidebar) */}
+          <button
+            className={`flex items-center justify-center w-6 h-5 rounded transition-colors ${
+              (sidebarPosition === "left" ? sidebarVisible : secondaryVisible)
+                ? "text-[rgb(var(--color-accent))]"
+                : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))]"
+            } hover:bg-[rgb(var(--color-surface-alt))]`}
+            onClick={sidebarPosition === "left" ? onToggleSidebar : onToggleSecondary}
+            title={sidebarPosition === "left" ? "Toggle Sidebar (Ctrl+B)" : "Toggle Secondary Panel (Ctrl+Shift+B)"}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="2" />
+              <line x1="9" y1="3" x2="9" y2="21" />
+            </svg>
+          </button>
+          {/* Bottom panel (output/activity) */}
+          <button
+            className={`flex items-center justify-center w-6 h-5 rounded transition-colors ${
+              outputVisible
+                ? "text-[rgb(var(--color-accent))]"
+                : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))]"
+            } hover:bg-[rgb(var(--color-surface-alt))]`}
+            onClick={onToggleOutput}
+            title="Toggle Activity Panel (Ctrl+`)"
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="2" />
+              <line x1="3" y1="15" x2="21" y2="15" />
+            </svg>
+          </button>
+          {/* Right panel (secondary/version history) */}
+          <button
+            className={`flex items-center justify-center w-6 h-5 rounded transition-colors ${
+              (sidebarPosition === "right" ? sidebarVisible : secondaryVisible)
+                ? "text-[rgb(var(--color-accent))]"
+                : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))]"
+            } hover:bg-[rgb(var(--color-surface-alt))]`}
+            onClick={sidebarPosition === "right" ? onToggleSidebar : onToggleSecondary}
+            title={sidebarPosition === "right" ? "Toggle Sidebar (Ctrl+B)" : "Toggle Secondary Panel (Ctrl+Shift+B)"}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="2" />
+              <line x1="15" y1="3" x2="15" y2="21" />
+            </svg>
+          </button>
+          <div className="w-px h-3 bg-[rgb(var(--color-border))] mx-0.5 shrink-0" />
+        </div>
+
         {/* Update indicator */}
         <UpdateIndicator />
 
