@@ -136,22 +136,48 @@ fn inject_git_auth(cmd: &mut std::process::Command, token: Option<&str>) {
     }
 }
 
+/// For HTTPS GitHub remotes, inject the token into the URL as
+/// `https://x-access-token:TOKEN@github.com/...` so git doesn't need
+/// to invoke a credential helper at all.
+fn build_authed_url(project_dir: &Path, remote_name: &str, token: Option<&str>) -> Option<String> {
+    let token = token?;
+    // Read the configured remote URL from git
+    let mut cmd = std::process::Command::new("git");
+    cmd.args(["remote", "get-url", remote_name]).current_dir(project_dir);
+    #[cfg(windows)]
+    { use std::os::windows::process::CommandExt; cmd.creation_flags(0x08000000); }
+    let out = cmd.output().ok()?;
+    let url = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    // Only rewrite HTTPS GitHub URLs
+    if url.starts_with("https://github.com/") {
+        let path = url.strip_prefix("https://github.com/")?;
+        Some(format!("https://x-access-token:{}@github.com/{}", token, path))
+    } else {
+        None
+    }
+}
+
 /// Fetch from a named remote using `git fetch` subprocess.
 pub fn fetch_remote(
     project_dir: &Path,
     remote_name: &str,
     token: Option<&str>,
 ) -> Result<(), RemoteError> {
+    let token_owned = token.map(|t| t.to_string()).or_else(gh_token);
+    // Build fetch URL: inject token into HTTPS GitHub URLs to bypass credential helpers
+    let fetch_target = build_authed_url(project_dir, remote_name, token_owned.as_deref())
+        .unwrap_or_else(|| remote_name.to_string());
+
     let mut cmd = std::process::Command::new("git");
-    cmd.args(["fetch", remote_name, "--prune"])
-        .current_dir(project_dir);
-    inject_git_auth(&mut cmd, token);
+    cmd.args(["fetch", &fetch_target, "--prune"])
+        .current_dir(project_dir)
+        .env("GIT_TERMINAL_PROMPT", "0");
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
         cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
     }
-    log::debug!("[remote] git fetch {} --prune in {:?}", remote_name, project_dir);
+    log::debug!("[remote] git fetch <url> --prune in {:?} (token: {})", project_dir, token_owned.is_some());
     let output = cmd.output().map_err(|e| RemoteError::Other(format!("Failed to run git fetch: {}", e)))?;
     let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
     let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
@@ -214,16 +240,20 @@ pub fn push_remote(
     local_branch: &str,
     token: Option<&str>,
 ) -> Result<(), RemoteError> {
+    let token_owned = token.map(|t| t.to_string()).or_else(gh_token);
+    let push_target = build_authed_url(project_dir, remote_name, token_owned.as_deref())
+        .unwrap_or_else(|| remote_name.to_string());
+
     let mut cmd = std::process::Command::new("git");
-    cmd.args(["push", remote_name, &format!("{}:{}", local_branch, local_branch)])
-        .current_dir(project_dir);
-    inject_git_auth(&mut cmd, token);
+    cmd.args(["push", &push_target, &format!("{}:{}", local_branch, local_branch)])
+        .current_dir(project_dir)
+        .env("GIT_TERMINAL_PROMPT", "0");
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
         cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
     }
-    log::debug!("[remote] git push {} {}:{} in {:?}", remote_name, local_branch, local_branch, project_dir);
+    log::debug!("[remote] git push <url> {}:{} in {:?} (token: {})", local_branch, local_branch, project_dir, token_owned.is_some());
     let output = cmd.output().map_err(|e| RemoteError::Other(format!("Failed to run git push: {}", e)))?;
     let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
     let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
