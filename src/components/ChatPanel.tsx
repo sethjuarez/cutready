@@ -913,19 +913,21 @@ function ChatTab() {
       // Activity logging now handled by real-time agent-event listener
 
       // Use the backend's full conversation (with correct tool_call/tool_result ordering)
-      // but strip the system prompt and restore display-friendly user message content
-      // (backend has llmContent with full web scrapes; display should use compact userContent)
-      const backendMessages = result.messages
-        .filter((m) => m.role !== "system")
-        .map((m) => {
-          // Restore display version of user messages that had web content injected for the LLM
-          if (m.role === "user" && llmContent && m.content === llmContent) {
+      // but strip the system prompt and restore display-friendly user message content.
+      // The backend may inject <referenced_document> XML or web scrape content into the
+      // last user message for the LLM — we always restore the compact display version.
+      const nonSystemMessages = result.messages.filter((m) => m.role !== "system");
+      const lastUserMsgIdx = nonSystemMessages.reduce((idx, m, i) => m.role === "user" ? i : idx, -1);
+      const backendMessages = nonSystemMessages
+        .map((m, i) => {
+          // Always replace the last user message with the display-friendly version
+          if (i === lastUserMsgIdx && m.role === "user") {
             return { ...m, content: userContent };
           }
           return m;
         })
         // For silent sends, remove the triggering user message from display
-        .filter((m) => !(silent && m.role === "user" && (m.content === userContent || m.content === llmContent)));
+        .filter((m, i) => !(silent && i === lastUserMsgIdx && m.role === "user"));
 
       // Log response to activity
       const toolCallCount = backendMessages.filter(
