@@ -159,7 +159,7 @@ function SplitTab({
       className={`group relative flex items-center gap-1.5 px-2.5 h-[32px] text-[11px] cursor-pointer shrink-0 select-none transition-colors ${
         isActive
           ? "bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text))]"
-          : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] border-b border-[rgb(var(--color-border))]"
+          : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))]"
       }`}
       onClick={onSelect}
       title={`${tab.type}: ${tab.path}`}
@@ -174,7 +174,7 @@ function SplitTab({
         {tab.title}
       </span>
       <button
-        className={`flex items-center justify-center w-[16px] h-[16px] rounded transition-all shrink-0 ${
+        className={`flex items-center justify-center w-[16px] h-full rounded transition-all shrink-0 ${
           isActive
             ? "opacity-60 hover:opacity-100 hover:bg-[rgb(var(--color-surface-alt))]"
             : "opacity-0 group-hover:opacity-60 hover:!opacity-100 hover:bg-[rgb(var(--color-surface))]"

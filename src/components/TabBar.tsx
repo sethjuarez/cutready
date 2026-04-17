@@ -223,7 +223,7 @@ function Tab({
           ? "bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text))]"
           : isSplit
             ? "bg-[rgb(var(--color-surface-inset))] text-[rgb(var(--color-text))]"
-            : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] border-b border-[rgb(var(--color-border))]"
+            : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))]"
       }`}
       onClick={onSelect}
       onContextMenu={onContextMenu}
@@ -264,7 +264,7 @@ function Tab({
 
       {/* Close button */}
       <button
-        className={`flex items-center justify-center w-[18px] h-[18px] rounded transition-all shrink-0 ${
+        className={`flex items-center justify-center w-[18px] h-full rounded transition-all shrink-0 ${
           isActive
             ? "opacity-60 hover:opacity-100 hover:bg-[rgb(var(--color-surface-alt))]"
             : "opacity-0 group-hover:opacity-60 hover:!opacity-100 hover:bg-[rgb(var(--color-surface))]"
