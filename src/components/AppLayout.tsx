@@ -352,6 +352,7 @@ export function AppLayout() {
         outputVisible={outputVisible}
         secondaryVisible={showVersionHistory}
         onToggleSidebar={toggleSidebar}
+        onToggleSidebarPosition={toggleSidebarPosition}
         onToggleOutput={toggleOutput}
         onToggleSecondary={toggleVersionHistory}
       />
