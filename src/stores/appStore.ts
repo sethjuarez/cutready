@@ -1823,13 +1823,19 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await get().loadTimelines();
       await get().loadVersions();
     } catch (err) {
-      set({ syncError: String(err) });
+      const msg = String(err);
+      // 404 means the remote repo doesn't exist or isn't accessible — stop polling
+      if (msg.includes("404")) {
+        set({ syncError: msg, currentRemote: null });
+      } else {
+        set({ syncError: msg });
+      }
     } finally {
       set({ isSyncing: false });
     }
   },
 
-  pushToRemote: async () => {
+  pushToRemote:async () => {
     const { currentRemote, timelines } = get();
     if (!currentRemote) return;
     const active = timelines.find((t) => t.is_active);

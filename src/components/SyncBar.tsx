@@ -193,6 +193,11 @@ export function SyncBar() {
               <Globe className="shrink-0 w-2.5 h-2.5" />
               <span className="truncate">Offline — changes saved locally</span>
             </>
+          ) : syncError && syncError.includes("404") ? (
+            <>
+              <AlertTriangle className="shrink-0 w-2.5 h-2.5" />
+              <span className="truncate">Remote not found — check remote URL in settings</span>
+            </>
           ) : (
             <span className="truncate">{syncError}</span>
           )}
