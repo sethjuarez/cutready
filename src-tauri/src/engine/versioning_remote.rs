@@ -5,7 +5,7 @@
 
 use std::path::Path;
 
-use git2::{Cred, FetchOptions, PushOptions, RemoteCallbacks, Repository};
+use git2::{Cred, FetchOptions, RemoteCallbacks, Repository};
 
 /// Info about a configured remote.
 #[derive(Debug, Clone, serde::Serialize)]
@@ -102,20 +102,33 @@ fn make_callbacks(token: Option<&str>) -> RemoteCallbacks<'_> {
 
 // ─── Fetch ──────────────────────────────────────────────────────
 
-/// Fetch from a named remote.
+/// Fetch from a named remote using `git fetch` subprocess.
+/// This uses git's full credential helper chain (including gh, Windows Credential Manager, etc.)
+/// which is more reliable than libgit2's built-in auth on Windows.
 pub fn fetch_remote(
     project_dir: &Path,
     remote_name: &str,
-    token: Option<&str>,
+    _token: Option<&str>,
 ) -> Result<(), RemoteError> {
-    let repo = Repository::open(project_dir)?;
-    let mut remote = repo.find_remote(remote_name)?;
-    let callbacks = make_callbacks(token);
-    let mut opts = FetchOptions::new();
-    opts.remote_callbacks(callbacks);
-    // Fetch all branches
-    remote.fetch(&[] as &[&str], Some(&mut opts), None)?;
-    Ok(())
+    let mut cmd = std::process::Command::new("git");
+    cmd.args(["fetch", remote_name, "--prune"])
+        .current_dir(project_dir);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
+    let output = cmd.output().map_err(|e| RemoteError::Other(format!("Failed to run git fetch: {}", e)))?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        Err(RemoteError::Other(if stderr.is_empty() {
+            format!("git fetch exited with status {}", output.status)
+        } else {
+            stderr
+        }))
+    }
 }
 
 // ─── Ahead / Behind ─────────────────────────────────────────────
@@ -158,21 +171,32 @@ pub fn get_ahead_behind(
 
 // ─── Push ───────────────────────────────────────────────────────
 
-/// Push a local branch to a remote.
+/// Push a local branch to a remote using `git push` subprocess.
 pub fn push_remote(
     project_dir: &Path,
     remote_name: &str,
     local_branch: &str,
-    token: Option<&str>,
+    _token: Option<&str>,
 ) -> Result<(), RemoteError> {
-    let repo = Repository::open(project_dir)?;
-    let mut remote = repo.find_remote(remote_name)?;
-    let callbacks = make_callbacks(token);
-    let mut opts = PushOptions::new();
-    opts.remote_callbacks(callbacks);
-    let refspec = format!("refs/heads/{}:refs/heads/{}", local_branch, local_branch);
-    remote.push(&[&refspec], Some(&mut opts))?;
-    Ok(())
+    let mut cmd = std::process::Command::new("git");
+    cmd.args(["push", remote_name, &format!("{}:{}", local_branch, local_branch)])
+        .current_dir(project_dir);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
+    let output = cmd.output().map_err(|e| RemoteError::Other(format!("Failed to run git push: {}", e)))?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        Err(RemoteError::Other(if stderr.is_empty() {
+            format!("git push exited with status {}", output.status)
+        } else {
+            stderr
+        }))
+    }
 }
 
 // ─── Pull (fast-forward merge) ──────────────────────────────────
