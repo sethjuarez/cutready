@@ -1823,13 +1823,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await get().loadTimelines();
       await get().loadVersions();
     } catch (err) {
-      const msg = String(err);
-      // 404 means the remote repo doesn't exist or isn't accessible — stop polling
-      if (msg.includes("404")) {
-        set({ syncError: msg, currentRemote: null });
-      } else {
-        set({ syncError: msg });
-      }
+      set({ syncError: String(err) });
     } finally {
       set({ isSyncing: false });
     }
