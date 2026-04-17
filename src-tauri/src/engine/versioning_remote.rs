@@ -118,11 +118,14 @@ pub fn fetch_remote(
         use std::os::windows::process::CommandExt;
         cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
     }
+    log::debug!("[remote] git fetch {} --prune in {:?}", remote_name, project_dir);
     let output = cmd.output().map_err(|e| RemoteError::Other(format!("Failed to run git fetch: {}", e)))?;
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    log::debug!("[remote] fetch exit={} stdout={:?} stderr={:?}", output.status, stdout, stderr);
     if output.status.success() {
         Ok(())
     } else {
-        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
         Err(RemoteError::Other(if stderr.is_empty() {
             format!("git fetch exited with status {}", output.status)
         } else {
@@ -186,11 +189,14 @@ pub fn push_remote(
         use std::os::windows::process::CommandExt;
         cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
     }
+    log::debug!("[remote] git push {} {}:{} in {:?}", remote_name, local_branch, local_branch, project_dir);
     let output = cmd.output().map_err(|e| RemoteError::Other(format!("Failed to run git push: {}", e)))?;
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    log::debug!("[remote] push exit={} stdout={:?} stderr={:?}", output.status, stdout, stderr);
     if output.status.success() {
         Ok(())
     } else {
-        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
         Err(RemoteError::Other(if stderr.is_empty() {
             format!("git push exited with status {}", output.status)
         } else {
