@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { X, AlertTriangle } from "lucide-react";
+import { X, AlertTriangle, Sparkles, Pencil } from "lucide-react";
 import { useAppStore } from "../stores/appStore";
 import type { EditorTab } from "../stores/appStore";
 import type { Sketch, Storyboard } from "../types/sketch";
@@ -18,19 +18,18 @@ export function SplitTabBar() {
   const splitActiveTabId = useAppStore((s) => s.splitActiveTabId);
   const setActiveSplitTab = useAppStore((s) => s.setActiveSplitTab);
   const closeTabInSplit = useAppStore((s) => s.closeTabInSplit);
-  const activeEditorGroup = useAppStore((s) => s.activeEditorGroup);
   const setActiveEditorGroup = useAppStore((s) => s.setActiveEditorGroup);
   const moveTabToSplit = useAppStore((s) => s.moveTabToSplit);
-  const isActiveGroup = activeEditorGroup === "split";
+  const closeSplit = useAppStore((s) => s.closeSplit);
   const [isDragOver, setIsDragOver] = useState(false);
 
   if (splitTabs.length === 0) return null;
 
   return (
     <div
-      className={`no-select flex items-stretch bg-[rgb(var(--color-surface-alt))] border-b border-[rgb(var(--color-border))] border-l shrink-0 overflow-x-auto border-t-[2px] transition-colors ${
-        isActiveGroup ? "border-t-[rgb(var(--color-accent))]" : "border-t-transparent"
-      } ${isDragOver ? "border-b-[2px] border-b-[rgb(var(--color-accent))]" : ""}`}
+      className={`no-select flex items-stretch bg-[rgb(var(--color-surface-alt))] border-b border-[rgb(var(--color-border))] border-l shrink-0 overflow-x-auto ${
+        isDragOver ? "border-b-[2px] border-b-[rgb(var(--color-accent))]" : ""
+      }`}
       style={{ scrollbarWidth: "none" }}
       onMouseDown={() => setActiveEditorGroup("split")}
       onDragOver={(e) => {
@@ -65,6 +64,13 @@ export function SplitTabBar() {
         />
       ))}
       <div className="flex-1 border-b border-[rgb(var(--color-border))]" />
+      <button
+        className="flex items-center justify-center w-8 h-full border-b border-l border-[rgb(var(--color-border))] text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors shrink-0"
+        title="Close Split Pane"
+        onClick={closeSplit}
+      >
+        <X className="w-3 h-3" />
+      </button>
     </div>
   );
 }
@@ -192,10 +198,26 @@ function SplitTab({
 function SketchSplitEditor({ path }: { path: string }) {
   const [sketch, setSketch] = useState<Sketch | null>(null);
   const [localRows, setLocalRows] = useState<PlanningRow[]>([]);
+  const [localTitle, setLocalTitle] = useState("");
+  const [localDesc, setLocalDesc] = useState("");
+  const [editingDesc, setEditingDesc] = useState(false);
   const [error, setError] = useState(false);
   const projectRoot = useAppStore((s) => s.currentProject?.root ?? "");
+  const sendChatPrompt = useAppStore((s) => s.sendChatPrompt);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const titleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const descTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingRowsRef = useRef<PlanningRow[] | null>(null);
+  const pendingTitleRef = useRef<string | null>(null);
+  const pendingDescRef = useRef<string | null>(null);
+  const descRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (editingDesc && descRef.current) {
+      descRef.current.focus();
+      descRef.current.selectionStart = descRef.current.value.length;
+    }
+  }, [editingDesc]);
 
   useEffect(() => {
     let cancelled = false;
@@ -204,12 +226,21 @@ function SketchSplitEditor({ path }: { path: string }) {
         if (!cancelled) {
           setSketch(s);
           setLocalRows(s.rows ?? []);
+          setLocalTitle(s.title ?? "");
+          setLocalDesc(typeof s.description === "string" ? s.description : "");
         }
       })
       .catch(() => { if (!cancelled) setError(true); });
     return () => {
       cancelled = true;
-      // Flush any pending save on unmount
+      if (titleTimerRef.current && pendingTitleRef.current !== null) {
+        clearTimeout(titleTimerRef.current);
+        invoke("update_sketch_title", { relativePath: path, title: pendingTitleRef.current }).catch(() => {});
+      }
+      if (descTimerRef.current && pendingDescRef.current !== null) {
+        clearTimeout(descTimerRef.current);
+        invoke("update_sketch", { relativePath: path, description: pendingDescRef.current }).catch(() => {});
+      }
       if (saveTimerRef.current && pendingRowsRef.current) {
         clearTimeout(saveTimerRef.current);
         invoke("update_sketch", { relativePath: path, rows: pendingRowsRef.current }).catch(() => {});
@@ -221,7 +252,12 @@ function SketchSplitEditor({ path }: { path: string }) {
   useEffect(() => {
     const handler = () => {
       invoke<Sketch>("get_sketch", { relativePath: path })
-        .then((s) => { setSketch(s); setLocalRows(s.rows ?? []); })
+        .then((s) => {
+          setSketch(s);
+          setLocalRows(s.rows ?? []);
+          setLocalTitle(s.title ?? "");
+          setLocalDesc(typeof s.description === "string" ? s.description : "");
+        })
         .catch(() => {});
     };
     window.addEventListener("cutready:sketch-saved", handler);
@@ -231,6 +267,27 @@ function SketchSplitEditor({ path }: { path: string }) {
       window.removeEventListener("cutready:ai-sketch-updated", handler);
     };
   }, [path]);
+
+  const handleTitleChange = (title: string) => {
+    setLocalTitle(title);
+    pendingTitleRef.current = title;
+    if (titleTimerRef.current) clearTimeout(titleTimerRef.current);
+    titleTimerRef.current = setTimeout(() => {
+      invoke("update_sketch_title", { relativePath: path, title }).catch(() => {});
+      window.dispatchEvent(new CustomEvent("cutready:sketch-saved"));
+      pendingTitleRef.current = null;
+    }, 500);
+  };
+
+  const handleDescChange = (desc: string) => {
+    setLocalDesc(desc);
+    pendingDescRef.current = desc;
+    if (descTimerRef.current) clearTimeout(descTimerRef.current);
+    descTimerRef.current = setTimeout(() => {
+      invoke("update_sketch", { relativePath: path, description: desc }).catch(() => {});
+      pendingDescRef.current = null;
+    }, 500);
+  };
 
   const handleRowsChange = (rows: PlanningRow[]) => {
     setLocalRows(rows);
@@ -247,14 +304,65 @@ function SketchSplitEditor({ path }: { path: string }) {
   if (!sketch) return <LoadingSpinner />;
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="px-4 pt-4 pb-2 shrink-0">
-        <h2 className="text-base font-semibold text-[rgb(var(--color-text))] truncate">{sketch.title || "Untitled"}</h2>
-        {sketch.description ? (
-          <p className="text-xs text-[rgb(var(--color-text-secondary))] mt-1 line-clamp-2">{String(sketch.description)}</p>
-        ) : null}
-      </div>
-      <div className="flex-1 overflow-auto px-2 pb-4">
+    <div className="flex-1 overflow-y-auto">
+      <div className="mx-auto px-6 py-8" style={{ maxWidth: "var(--editor-max-width, 56rem)" }}>
+        {/* Title */}
+        <div className="flex items-center gap-3 mb-4">
+          <div className="relative flex-1 group/title">
+            <input
+              type="text"
+              value={localTitle}
+              onChange={(e) => handleTitleChange(e.target.value)}
+              placeholder="Sketch title..."
+              className="w-full text-2xl font-semibold bg-transparent text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/40 outline-none border-none"
+            />
+            {localTitle && (
+              <button
+                onClick={() => sendChatPrompt(
+                  `Improve the title of sketch "${path}". Current title: "${localTitle}". Suggest a more compelling, concise title. IMPORTANT: Only update the title — do NOT change the description or any rows.`,
+                  { silent: true }
+                )}
+                className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover/title:opacity-100 p-1 rounded text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10 transition-all"
+                title="Improve title with AI"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span className="text-[10px]">Improve</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Description — click to edit */}
+        <div className="relative group/desc mb-8">
+          {editingDesc ? (
+            <textarea
+              ref={descRef}
+              value={localDesc}
+              onChange={(e) => handleDescChange(e.target.value)}
+              onBlur={() => setEditingDesc(false)}
+              placeholder="Describe what this sketch covers..."
+              rows={4}
+              className="w-full text-sm bg-transparent text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/40 outline-none border border-[rgb(var(--color-border))] rounded-lg px-3 py-2 resize-none focus:ring-1 focus:ring-[rgb(var(--color-accent))]/40 transition-colors"
+            />
+          ) : (
+            <div
+              className="text-sm text-[rgb(var(--color-text-secondary))] cursor-text min-h-[1.5rem]"
+              onClick={() => setEditingDesc(true)}
+            >
+              {localDesc || <span className="text-[rgb(var(--color-text-secondary))]/40">Describe what this sketch covers...</span>}
+            </div>
+          )}
+          {!editingDesc && (
+            <button
+              className="absolute right-0 top-0 opacity-0 group-hover/desc:opacity-100 p-1 rounded text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] transition-all"
+              onClick={() => setEditingDesc(true)}
+              title="Edit description"
+            >
+              <Pencil className="w-3 h-3" />
+            </button>
+          )}
+        </div>
+
         <ScriptTable
           rows={localRows}
           onChange={handleRowsChange}

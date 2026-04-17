@@ -22,11 +22,9 @@ export function TabBar() {
   const closeAllTabs = useAppStore((s) => s.closeAllTabs);
   const openTabInSplit = useAppStore((s) => s.openTabInSplit);
 
-  const activeEditorGroup = useAppStore((s) => s.activeEditorGroup);
   const setActiveEditorGroup = useAppStore((s) => s.setActiveEditorGroup);
   const moveTabFromSplit = useAppStore((s) => s.moveTabFromSplit);
   const reorderTabs = useAppStore((s) => s.reorderTabs);
-  const isActiveGroup = activeEditorGroup === "main";
   const [isDragOver, setIsDragOver] = useState(false);
 
   const { state: contextMenu, ref: menuRef, openAt: openContextMenu, close: closeContextMenu, position: menuPos } = usePopover();
@@ -48,9 +46,9 @@ export function TabBar() {
 
   return (
     <div
-      className={`no-select flex items-stretch bg-[rgb(var(--color-surface-alt))] shrink-0 overflow-x-auto border-t-[2px] transition-colors ${
-        isActiveGroup ? "border-[rgb(var(--color-accent))]" : "border-transparent"
-      } ${isDragOver ? "border-b-[2px] border-b-[rgb(var(--color-accent))]" : ""}`}
+      className={`no-select flex items-stretch bg-[rgb(var(--color-surface-alt))] shrink-0 overflow-x-auto ${
+        isDragOver ? "border-b-[2px] border-b-[rgb(var(--color-accent))]" : ""
+      }`}
       style={{ scrollbarWidth: "none" }}
       onMouseDown={() => setActiveEditorGroup("main")}
       onDragOver={(e) => {
