@@ -8,7 +8,7 @@ import { ChatPanel } from "./ChatPanel";
 import { ResizeHandle } from "./ResizeHandle";
 import { TabBar } from "./TabBar";
 import { HistoryGraphTab } from "./HistoryGraphTab";
-import { SplitPreviewPane } from "./SplitPreviewPane";
+import { SplitTabBar, SplitPaneContent } from "./SplitPreviewPane";
 import { ErrorBoundary } from "./ErrorBoundary";
 
 /**
@@ -26,6 +26,7 @@ export function StoryboardPanel() {
   const openTabs = useAppStore((s) => s.openTabs);
   const activeTabId = useAppStore((s) => s.activeTabId);
   const splitTabs = useAppStore((s) => s.splitTabs);
+  const setActiveEditorGroup = useAppStore((s) => s.setActiveEditorGroup);
   const hasSplit = splitTabs.length > 0;
 
   const activeTab = openTabs.find((t) => t.id === activeTabId);
@@ -68,13 +69,22 @@ export function StoryboardPanel() {
 
       {/* Editor area */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Tab bar */}
-        <TabBar />
+        {/* Tab bar row — main + split side by side */}
+        <div className="flex shrink-0 min-w-0">
+          <div className="flex-1 min-w-0 overflow-hidden">
+            <TabBar />
+          </div>
+          {hasSplit && (
+            <div className="shrink-0" style={{ width: splitWidth ?? "50%" }}>
+              <SplitTabBar />
+            </div>
+          )}
+        </div>
 
-        {/* Content — primary + optional split */}
+        {/* Content row — primary + optional split */}
         <div className="flex-1 flex min-h-0">
           {/* Primary pane */}
-          <div className="flex-1 flex flex-col min-w-0">
+          <div className="flex-1 flex flex-col min-w-0" onMouseDown={() => setActiveEditorGroup("main")}>
             {isHistoryTab ? (
               <ErrorBoundary
                 fallback={
@@ -120,8 +130,8 @@ export function StoryboardPanel() {
           {hasSplit && (
             <>
               <ResizeHandle direction="horizontal" onResize={handleSplitResize} />
-              <div className="shrink-0 h-full border-l border-[rgb(var(--color-border))]" style={{ width: splitWidth ?? "40%" }}>
-                <SplitPreviewPane />
+              <div className="shrink-0 h-full border-l border-[rgb(var(--color-border))]" style={{ width: splitWidth ?? "50%" }}>
+                <SplitPaneContent />
               </div>
             </>
           )}

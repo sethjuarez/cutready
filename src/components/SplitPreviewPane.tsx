@@ -10,18 +10,75 @@ import { MarkdownEditor } from "./MarkdownEditor";
 import { SketchIcon, StoryboardIcon, NoteIcon } from "./Icons";
 
 /**
- * SplitPreviewPane — independent right-side editor pane with its own tab bar.
- * Each split tab loads and saves independently from the primary pane.
- * Inactive tabs stay mounted (hidden) to prevent loss of pending debounced saves.
+ * SplitTabBar — compact tab bar for the split pane, rendered beside the main TabBar.
+ * Exported so StoryboardPanel can place it in the same horizontal row as TabBar.
  */
-export function SplitPreviewPane() {
+export function SplitTabBar() {
   const splitTabs = useAppStore((s) => s.splitTabs);
   const splitActiveTabId = useAppStore((s) => s.splitActiveTabId);
   const setActiveSplitTab = useAppStore((s) => s.setActiveSplitTab);
   const closeTabInSplit = useAppStore((s) => s.closeTabInSplit);
-  const closeSplit = useAppStore((s) => s.closeSplit);
+  const activeEditorGroup = useAppStore((s) => s.activeEditorGroup);
+  const setActiveEditorGroup = useAppStore((s) => s.setActiveEditorGroup);
+  const moveTabToSplit = useAppStore((s) => s.moveTabToSplit);
+  const isActiveGroup = activeEditorGroup === "split";
+  const [isDragOver, setIsDragOver] = useState(false);
+
+  if (splitTabs.length === 0) return null;
+
+  return (
+    <div
+      className={`no-select flex items-stretch bg-[rgb(var(--color-surface-alt))] border-b border-[rgb(var(--color-border))] border-l shrink-0 overflow-x-auto border-t-[2px] transition-colors ${
+        isActiveGroup ? "border-t-[rgb(var(--color-accent))]" : "border-t-transparent"
+      } ${isDragOver ? "border-b-[2px] border-b-[rgb(var(--color-accent))]" : ""}`}
+      style={{ scrollbarWidth: "none" }}
+      onMouseDown={() => setActiveEditorGroup("split")}
+      onDragOver={(e) => {
+        if (e.dataTransfer.types.includes("application/x-cutready-tab")) {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = "move";
+          setIsDragOver(true);
+        }
+      }}
+      onDragLeave={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node)) setIsDragOver(false);
+      }}
+      onDrop={(e) => {
+        e.preventDefault();
+        setIsDragOver(false);
+        try {
+          const data = JSON.parse(e.dataTransfer.getData("application/x-cutready-tab")) as { tabId: string; source: "main" | "split" };
+          if (data.source === "main") {
+            moveTabToSplit(data.tabId);
+          }
+          // within-split reorder: drop at end (no-op for now, already in split)
+        } catch { /* ignore */ }
+      }}
+    >
+      {splitTabs.map((tab) => (
+        <SplitTab
+          key={tab.id}
+          tab={tab}
+          isActive={tab.id === splitActiveTabId}
+          onSelect={() => { setActiveSplitTab(tab.id); setActiveEditorGroup("split"); }}
+          onClose={() => closeTabInSplit(tab.id)}
+        />
+      ))}
+      <div className="flex-1 border-b border-[rgb(var(--color-border))]" />
+    </div>
+  );
+}
+
+/**
+ * SplitPaneContent — the editor content area of the split pane (no tab bar).
+ * Exported so StoryboardPanel can compose it below the shared tab bar row.
+ */
+export function SplitPaneContent() {
+  const splitTabs = useAppStore((s) => s.splitTabs);
+  const splitActiveTabId = useAppStore((s) => s.splitActiveTabId);
   const activeTabId = useAppStore((s) => s.activeTabId);
   const openTabs = useAppStore((s) => s.openTabs);
+  const setActiveEditorGroup = useAppStore((s) => s.setActiveEditorGroup);
 
   const activeMainTab = openTabs.find((t) => t.id === activeTabId);
   const activeSplitTab = splitTabs.find((t) => t.id === splitActiveTabId);
@@ -34,31 +91,7 @@ export function SplitPreviewPane() {
   if (splitTabs.length === 0) return null;
 
   return (
-    <div className="flex flex-col h-full min-w-0">
-      {/* Split pane tab bar */}
-      <div
-        className="no-select flex items-stretch bg-[rgb(var(--color-surface-alt))] border-b border-[rgb(var(--color-border))] shrink-0 overflow-x-auto"
-        style={{ scrollbarWidth: "none" }}
-      >
-        {splitTabs.map((tab) => (
-          <SplitTab
-            key={tab.id}
-            tab={tab}
-            isActive={tab.id === splitActiveTabId}
-            onSelect={() => setActiveSplitTab(tab.id)}
-            onClose={() => closeTabInSplit(tab.id)}
-          />
-        ))}
-        <div className="flex-1 border-b border-[rgb(var(--color-border))]" />
-        <button
-          className="flex items-center justify-center w-7 h-full border-b border-l border-[rgb(var(--color-border))] text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors shrink-0"
-          title="Close split pane"
-          onClick={closeSplit}
-        >
-          <X className="w-3 h-3" />
-        </button>
-      </div>
-
+    <div className="flex flex-col h-full min-w-0" onMouseDown={() => setActiveEditorGroup("split")}>
       {/* Same-file warning */}
       {sameFile && (
         <div className="flex items-center gap-2 px-3 py-1.5 bg-warning/10 border-b border-warning/30 text-[11px] text-warning shrink-0">
@@ -82,6 +115,11 @@ export function SplitPreviewPane() {
       </div>
     </div>
   );
+}
+
+/** @deprecated Use SplitTabBar + SplitPaneContent separately via StoryboardPanel. */
+export function SplitPreviewPane() {
+  return null;
 }
 
 /** Compact tab for the split pane tab bar. */
@@ -110,6 +148,11 @@ function SplitTab({
 
   return (
     <div
+      draggable={true}
+      onDragStart={(e) => {
+        e.dataTransfer.setData("application/x-cutready-tab", JSON.stringify({ tabId: tab.id, source: "split" }));
+        e.dataTransfer.effectAllowed = "move";
+      }}
       className={`group relative flex items-center gap-1.5 px-2.5 h-[32px] text-[11px] cursor-pointer shrink-0 select-none transition-colors ${
         isActive
           ? "bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text))]"

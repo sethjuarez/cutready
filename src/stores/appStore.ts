@@ -58,6 +58,16 @@ export interface EditorTab {
   title: string;
 }
 
+/** Generate a deterministic main-pane tab ID from type + path. */
+export function makeMainTabId(type: EditorTab["type"], path: string): string {
+  return `${type}-${path}`;
+}
+
+/** Generate a deterministic split-pane tab ID from type + path. */
+export function makeSplitTabId(type: EditorTab["type"], path: string): string {
+  return `split-${type}-${path}`;
+}
+
 /** A project asset (screenshot or visual) with reference info. */
 export interface AssetInfo {
   path: string;
@@ -103,6 +113,8 @@ interface AppStoreState {
   splitTabs: EditorTab[];
   /** Currently active tab in the split pane. */
   splitActiveTabId: string | null;
+  /** Which editor group currently has focus ("main" or "split"). */
+  activeEditorGroup: "main" | "split";
 
   // ── Sketch state ───────────────────────────────────────
 
@@ -278,6 +290,16 @@ interface AppStoreState {
   closeSplit: () => void;
   /** Reorder tabs. */
   reorderTabs: (tabIds: string[]) => void;
+  /** Set the active editor group ("main" or "split"). */
+  setActiveEditorGroup: (group: "main" | "split") => void;
+  /** Move a main tab to the split pane (removes from main, adds to split). */
+  moveTabToSplit: (tabId: string) => void;
+  /** Move a split tab back to the main pane (removes from split, adds/focuses in main). */
+  moveTabFromSplit: (splitTabId: string) => void;
+  /** Reorder tabs in the split pane. */
+  reorderSplitTabs: (tabIds: string[]) => void;
+  /** @internal Remove a split tab matching type+path (used by delete actions). */
+  _removeSplitTabByPath: (type: EditorTab["type"], path: string) => void;
   /** @internal Persist open tabs to localStorage. */
   _persistTabs: () => void;
 
@@ -551,6 +573,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   activeTabId: null,
   splitTabs: [],
   splitActiveTabId: null,
+  activeEditorGroup: "main",
 
   sketches: [],
   activeSketchPath: null,
@@ -652,7 +675,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     if (existing) {
       set({ activeTabId: existing.id });
     } else {
-      const id = `${tab.type}-${tab.path}`;
+      const id = makeMainTabId(tab.type, tab.path);
       const newTab: EditorTab = { ...tab, id };
       set({ openTabs: [...openTabs, newTab], activeTabId: id });
     }
@@ -727,7 +750,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   },
   closeAllTabs: () => {
     set({
-      openTabs: [], activeTabId: null, splitTabs: [], splitActiveTabId: null,
+      openTabs: [], activeTabId: null, splitTabs: [], splitActiveTabId: null, activeEditorGroup: "main",
       activeSketchPath: null, activeSketch: null,
       activeStoryboardPath: null, activeStoryboard: null,
       activeNotePath: null, activeNoteContent: null,
@@ -762,7 +785,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     if (existing) {
       set({ splitActiveTabId: existing.id });
     } else {
-      const splitId = `split-${tab.type}-${tab.path}`;
+      const splitId = makeSplitTabId(tab.type, tab.path);
       const newSplitTab: EditorTab = { ...tab, id: splitId };
       set({ splitTabs: [...splitTabs, newSplitTab], splitActiveTabId: splitId });
     }
@@ -773,7 +796,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     if (idx === -1) return;
     const next = splitTabs.filter((t) => t.id !== tabId);
     if (next.length === 0) {
-      set({ splitTabs: [], splitActiveTabId: null });
+      set({ splitTabs: [], splitActiveTabId: null, activeEditorGroup: "main" });
     } else {
       let nextActive = splitActiveTabId;
       if (splitActiveTabId === tabId) {
@@ -786,7 +809,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     set({ splitActiveTabId: tabId });
   },
   closeSplit: () => {
-    set({ splitTabs: [], splitActiveTabId: null });
+    set({ splitTabs: [], splitActiveTabId: null, activeEditorGroup: "main" });
   },
   reorderTabs: (tabIds) => {
     const { openTabs } = get();
@@ -795,6 +818,93 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       .filter(Boolean) as EditorTab[];
     set({ openTabs: reordered });
     get()._persistTabs();
+  },
+
+  setActiveEditorGroup: (group) => {
+    set({ activeEditorGroup: group });
+  },
+
+  moveTabToSplit: (tabId) => {
+    const { openTabs, activeTabId, splitTabs } = get();
+    const tab = openTabs.find((t) => t.id === tabId);
+    if (!tab) return;
+    // Guard: only splittable types
+    if (tab.type === "history" || tab.type === "asset") return;
+
+    // Remove from main
+    const newOpenTabs = openTabs.filter((t) => t.id !== tabId);
+    let newActiveTabId = activeTabId;
+    if (activeTabId === tabId) {
+      const idx = openTabs.findIndex((t) => t.id === tabId);
+      newActiveTabId = newOpenTabs.length > 0
+        ? (idx < newOpenTabs.length ? newOpenTabs[idx].id : newOpenTabs[newOpenTabs.length - 1].id)
+        : null;
+    }
+
+    // Add to split (focus existing if same doc already there)
+    const existing = splitTabs.find((t) => t.path === tab.path && t.type === tab.type);
+    if (existing) {
+      set({ openTabs: newOpenTabs, activeTabId: newActiveTabId, splitActiveTabId: existing.id, activeEditorGroup: "split" });
+    } else {
+      const splitId = makeSplitTabId(tab.type, tab.path);
+      const newSplitTab: EditorTab = { ...tab, id: splitId };
+      set({ openTabs: newOpenTabs, activeTabId: newActiveTabId, splitTabs: [...splitTabs, newSplitTab], splitActiveTabId: splitId, activeEditorGroup: "split" });
+    }
+
+    // Load content for the new active main tab (or clear)
+    if (newActiveTabId) get().setActiveTab(newActiveTabId);
+    else set({ activeSketchPath: null, activeSketch: null, activeStoryboardPath: null, activeStoryboard: null, activeNotePath: null, activeNoteContent: null });
+
+    get()._persistTabs();
+  },
+
+  moveTabFromSplit: (splitTabId) => {
+    const { splitTabs, splitActiveTabId, openTabs } = get();
+    const splitTab = splitTabs.find((t) => t.id === splitTabId);
+    if (!splitTab) return;
+
+    // Remove from split
+    const newSplitTabs = splitTabs.filter((t) => t.id !== splitTabId);
+    let newSplitActiveTabId = splitActiveTabId;
+    if (splitActiveTabId === splitTabId) {
+      const idx = splitTabs.findIndex((t) => t.id === splitTabId);
+      newSplitActiveTabId = newSplitTabs.length > 0
+        ? (idx < newSplitTabs.length ? newSplitTabs[idx].id : newSplitTabs[newSplitTabs.length - 1].id)
+        : null;
+    }
+    const nextActiveEditorGroup = newSplitTabs.length === 0 ? "main" : "main";
+
+    // Add/focus in main
+    const existing = openTabs.find((t) => t.path === splitTab.path && t.type === splitTab.type);
+    if (existing) {
+      set({ splitTabs: newSplitTabs, splitActiveTabId: newSplitActiveTabId, activeEditorGroup: nextActiveEditorGroup });
+      get().setActiveTab(existing.id);
+    } else {
+      const mainId = makeMainTabId(splitTab.type, splitTab.path);
+      const mainTab: EditorTab = { ...splitTab, id: mainId };
+      set({ splitTabs: newSplitTabs, splitActiveTabId: newSplitActiveTabId, openTabs: [...openTabs, mainTab], activeEditorGroup: nextActiveEditorGroup });
+      get().setActiveTab(mainId);
+    }
+
+    get()._persistTabs();
+  },
+
+  reorderSplitTabs: (tabIds) => {
+    const { splitTabs } = get();
+    const reordered = tabIds.map((id) => splitTabs.find((t) => t.id === id)).filter(Boolean) as EditorTab[];
+    set({ splitTabs: reordered });
+  },
+
+  _removeSplitTabByPath: (type, path) => {
+    const { splitTabs, splitActiveTabId } = get();
+    const next = splitTabs.filter((t) => !(t.type === type && t.path === path));
+    if (next.length === splitTabs.length) return; // nothing to remove
+    if (next.length === 0) {
+      set({ splitTabs: [], splitActiveTabId: null, activeEditorGroup: "main" });
+    } else {
+      const stillActive = next.find((t) => t.id === splitActiveTabId);
+      set({ splitTabs: next, splitActiveTabId: stillActive ? splitActiveTabId : next[0].id });
+    }
   },
 
   // ── Project actions ───────────────────────────────────────
@@ -828,6 +938,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         activeTabId: null,
         splitTabs: [],
         splitActiveTabId: null,
+        activeEditorGroup: "main",
         activeSketchPath: null,
         activeSketch: null,
         activeStoryboardPath: null,
@@ -863,6 +974,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         activeTabId: null,
         splitTabs: [],
         splitActiveTabId: null,
+        activeEditorGroup: "main",
         activeSketchPath: null,
         activeSketch: null,
         activeStoryboardPath: null,
@@ -972,6 +1084,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       activeTabId: null,
       splitTabs: [],
       splitActiveTabId: null,
+      activeEditorGroup: "main",
     });
   },
 
@@ -1014,6 +1127,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         activeTabId: null,
         splitTabs: [],
         splitActiveTabId: null,
+        activeEditorGroup: "main",
         activeSketchPath: null,
         activeSketch: null,
         activeStoryboardPath: null,
@@ -1129,9 +1243,10 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       if (activeSketchPath === sketchPath) {
         set({ activeSketchPath: null, activeSketch: null });
       }
-      // Close any tab for this sketch
+      // Close any tab for this sketch in both panes
       const tab = openTabs.find((t) => t.path === sketchPath && t.type === "sketch");
       if (tab) get().closeTab(tab.id);
+      get()._removeSplitTabByPath("sketch", sketchPath);
       await get().loadSketches();
     } catch (err) {
       console.error("Failed to delete sketch:", err);
@@ -1207,6 +1322,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       }
       const tab = openTabs.find((t) => t.path === storyboardPath && t.type === "storyboard");
       if (tab) get().closeTab(tab.id);
+      get()._removeSplitTabByPath("storyboard", storyboardPath);
       await get().loadStoryboards();
     } catch (err) {
       console.error("Failed to delete storyboard:", err);
@@ -1351,6 +1467,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       }
       const tab = openTabs.find((t) => t.path === notePath && t.type === "note");
       if (tab) get().closeTab(tab.id);
+      get()._removeSplitTabByPath("note", notePath);
       get().setNotePreview(notePath, false);
       await get().loadNotes();
     } catch (err) {

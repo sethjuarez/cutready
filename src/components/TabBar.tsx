@@ -2,7 +2,7 @@ import { useAppStore } from "../stores/appStore";
 import type { EditorTab } from "../stores/appStore";
 import { SketchIcon, StoryboardIcon, NoteIcon, HistoryIcon, ImageIcon, VisualIcon } from "./Icons";
 import { usePopover } from "../hooks/usePopover";
-import React, { useCallback, useRef } from "react";
+import React, { useCallback, useRef, useState } from "react";
 import { LayoutGrid, X } from "lucide-react";
 
 /**
@@ -21,6 +21,13 @@ export function TabBar() {
   const closeTabsToLeft = useAppStore((s) => s.closeTabsToLeft);
   const closeAllTabs = useAppStore((s) => s.closeAllTabs);
   const openTabInSplit = useAppStore((s) => s.openTabInSplit);
+
+  const activeEditorGroup = useAppStore((s) => s.activeEditorGroup);
+  const setActiveEditorGroup = useAppStore((s) => s.setActiveEditorGroup);
+  const moveTabFromSplit = useAppStore((s) => s.moveTabFromSplit);
+  const reorderTabs = useAppStore((s) => s.reorderTabs);
+  const isActiveGroup = activeEditorGroup === "main";
+  const [isDragOver, setIsDragOver] = useState(false);
 
   const { state: contextMenu, ref: menuRef, openAt: openContextMenu, close: closeContextMenu, position: menuPos } = usePopover();
   const contextTabIdRef = useRef<string>("");
@@ -41,8 +48,38 @@ export function TabBar() {
 
   return (
     <div
-      className="no-select flex items-stretch bg-[rgb(var(--color-surface-alt))] shrink-0 overflow-x-auto"
+      className={`no-select flex items-stretch bg-[rgb(var(--color-surface-alt))] shrink-0 overflow-x-auto border-t-[2px] transition-colors ${
+        isActiveGroup ? "border-[rgb(var(--color-accent))]" : "border-transparent"
+      } ${isDragOver ? "border-b-[2px] border-b-[rgb(var(--color-accent))]" : ""}`}
       style={{ scrollbarWidth: "none" }}
+      onMouseDown={() => setActiveEditorGroup("main")}
+      onDragOver={(e) => {
+        if (e.dataTransfer.types.includes("application/x-cutready-tab")) {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = "move";
+          setIsDragOver(true);
+        }
+      }}
+      onDragLeave={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node)) setIsDragOver(false);
+      }}
+      onDrop={(e) => {
+        e.preventDefault();
+        setIsDragOver(false);
+        try {
+          const data = JSON.parse(e.dataTransfer.getData("application/x-cutready-tab")) as { tabId: string; source: "main" | "split" };
+          if (data.source === "split") {
+            moveTabFromSplit(data.tabId);
+          } else {
+            // Within-group reorder: drop at end
+            const draggedIdx = openTabs.findIndex((t) => t.id === data.tabId);
+            if (draggedIdx !== -1) {
+              const newOrder = [...openTabs.map((t) => t.id).filter((id) => id !== data.tabId), data.tabId];
+              reorderTabs(newOrder);
+            }
+          }
+        } catch { /* ignore malformed data */ }
+      }}
     >
       {openTabs.map((tab) => (
         <Tab
@@ -178,6 +215,11 @@ function Tab({
 
   return (
     <div
+      draggable={true}
+      onDragStart={(e) => {
+        e.dataTransfer.setData("application/x-cutready-tab", JSON.stringify({ tabId: tab.id, source: "main" }));
+        e.dataTransfer.effectAllowed = "move";
+      }}
       className={`group relative flex items-center gap-1.5 px-3 h-[36px] text-[12px] cursor-pointer shrink-0 select-none transition-colors ${
         isActive
           ? "bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text))]"
