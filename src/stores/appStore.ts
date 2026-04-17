@@ -99,8 +99,10 @@ interface AppStoreState {
   openTabs: EditorTab[];
   /** Currently active tab id. */
   activeTabId: string | null;
-  /** Tab shown in the split (right) pane, or null when not split. */
-  splitTabId: string | null;
+  /** Tabs open in the split (right) pane. Empty = split hidden. */
+  splitTabs: EditorTab[];
+  /** Currently active tab in the split pane. */
+  splitActiveTabId: string | null;
 
   // ── Sketch state ───────────────────────────────────────
 
@@ -262,13 +264,17 @@ interface AppStoreState {
   closeTabsToRight: (tabId: string) => void;
   /** Close all tabs to the left of the given tab. */
   closeTabsToLeft: (tabId: string) => void;
-  /** Close all open tabs. */
+  /** Close all open tabs (main and split). */
   closeAllTabs: () => void;
   /** Set the active tab. */
   setActiveTab: (tabId: string) => void;
   /** Open a tab in the split (right) pane. */
   openTabInSplit: (tabId: string) => void;
-  /** Close the split pane. */
+  /** Close a specific tab in the split pane. */
+  closeTabInSplit: (tabId: string) => void;
+  /** Switch the active tab within the split pane. */
+  setActiveSplitTab: (tabId: string) => void;
+  /** Close the split pane (clears all split tabs). */
   closeSplit: () => void;
   /** Reorder tabs. */
   reorderTabs: (tabIds: string[]) => void;
@@ -543,7 +549,8 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
 
   openTabs: [],
   activeTabId: null,
-  splitTabId: null,
+  splitTabs: [],
+  splitActiveTabId: null,
 
   sketches: [],
   activeSketchPath: null,
@@ -672,8 +679,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       }
     }
     set({ openTabs: next, activeTabId: nextActive });
-    // Clear split if the closed tab was in the split pane
-    if (get().splitTabId === tabId) set({ splitTabId: null });
+    // Split tabs are independent — closing a main tab does not close its split counterpart
     // Load the new active tab's content
     if (nextActive) {
       const nextTab = next.find((t) => t.id === nextActive);
@@ -690,41 +696,38 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     get()._persistTabs();
   },
   closeOtherTabs: (tabId) => {
-    const { openTabs, splitTabId } = get();
+    const { openTabs } = get();
     const keep = openTabs.find((t) => t.id === tabId);
     if (!keep) return;
-    const nextSplit = splitTabId === tabId ? splitTabId : null;
-    set({ openTabs: [keep], activeTabId: tabId, splitTabId: nextSplit });
+    set({ openTabs: [keep], activeTabId: tabId });
     if (keep.type === "sketch") get().openSketch(keep.path);
     else if (keep.type === "storyboard") get().openStoryboard(keep.path);
     else if (keep.type === "note") get().openNote(keep.path);
     get()._persistTabs();
   },
   closeTabsToRight: (tabId) => {
-    const { openTabs, activeTabId, splitTabId } = get();
+    const { openTabs, activeTabId } = get();
     const idx = openTabs.findIndex((t) => t.id === tabId);
     if (idx === -1) return;
     const next = openTabs.slice(0, idx + 1);
     const nextActive = next.find((t) => t.id === activeTabId) ? activeTabId : next[next.length - 1]?.id ?? null;
-    const nextSplit = next.find((t) => t.id === splitTabId) ? splitTabId : null;
-    set({ openTabs: next, activeTabId: nextActive, splitTabId: nextSplit });
+    set({ openTabs: next, activeTabId: nextActive });
     if (nextActive && nextActive !== activeTabId) get().setActiveTab(nextActive);
     get()._persistTabs();
   },
   closeTabsToLeft: (tabId) => {
-    const { openTabs, activeTabId, splitTabId } = get();
+    const { openTabs, activeTabId } = get();
     const idx = openTabs.findIndex((t) => t.id === tabId);
     if (idx === -1) return;
     const next = openTabs.slice(idx);
     const nextActive = next.find((t) => t.id === activeTabId) ? activeTabId : next[0]?.id ?? null;
-    const nextSplit = next.find((t) => t.id === splitTabId) ? splitTabId : null;
-    set({ openTabs: next, activeTabId: nextActive, splitTabId: nextSplit });
+    set({ openTabs: next, activeTabId: nextActive });
     if (nextActive && nextActive !== activeTabId) get().setActiveTab(nextActive);
     get()._persistTabs();
   },
   closeAllTabs: () => {
     set({
-      openTabs: [], activeTabId: null, splitTabId: null,
+      openTabs: [], activeTabId: null, splitTabs: [], splitActiveTabId: null,
       activeSketchPath: null, activeSketch: null,
       activeStoryboardPath: null, activeStoryboard: null,
       activeNotePath: null, activeNoteContent: null,
@@ -751,13 +754,39 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     get()._persistTabs();
   },
   openTabInSplit: (tabId) => {
-    const { openTabs } = get();
+    const { openTabs, splitTabs } = get();
     const tab = openTabs.find((t) => t.id === tabId);
     if (!tab) return;
-    set({ splitTabId: tabId });
+    // Focus existing split tab if same document is already there
+    const existing = splitTabs.find((t) => t.path === tab.path && t.type === tab.type);
+    if (existing) {
+      set({ splitActiveTabId: existing.id });
+    } else {
+      const splitId = `split-${tab.type}-${tab.path}`;
+      const newSplitTab: EditorTab = { ...tab, id: splitId };
+      set({ splitTabs: [...splitTabs, newSplitTab], splitActiveTabId: splitId });
+    }
+  },
+  closeTabInSplit: (tabId) => {
+    const { splitTabs, splitActiveTabId } = get();
+    const idx = splitTabs.findIndex((t) => t.id === tabId);
+    if (idx === -1) return;
+    const next = splitTabs.filter((t) => t.id !== tabId);
+    if (next.length === 0) {
+      set({ splitTabs: [], splitActiveTabId: null });
+    } else {
+      let nextActive = splitActiveTabId;
+      if (splitActiveTabId === tabId) {
+        nextActive = idx < next.length ? next[idx].id : next[next.length - 1].id;
+      }
+      set({ splitTabs: next, splitActiveTabId: nextActive });
+    }
+  },
+  setActiveSplitTab: (tabId) => {
+    set({ splitActiveTabId: tabId });
   },
   closeSplit: () => {
-    set({ splitTabId: null });
+    set({ splitTabs: [], splitActiveTabId: null });
   },
   reorderTabs: (tabIds) => {
     const { openTabs } = get();
@@ -797,6 +826,8 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         view: "sketch",
         openTabs: [],
         activeTabId: null,
+        splitTabs: [],
+        splitActiveTabId: null,
         activeSketchPath: null,
         activeSketch: null,
         activeStoryboardPath: null,
@@ -830,6 +861,8 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         view: "sketch",
         openTabs: [],
         activeTabId: null,
+        splitTabs: [],
+        splitActiveTabId: null,
         activeSketchPath: null,
         activeSketch: null,
         activeStoryboardPath: null,
@@ -937,6 +970,8 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       sidebarOrder: null,
       openTabs: [],
       activeTabId: null,
+      splitTabs: [],
+      splitActiveTabId: null,
     });
   },
 
@@ -977,6 +1012,8 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         currentProject: project,
         openTabs: [],
         activeTabId: null,
+        splitTabs: [],
+        splitActiveTabId: null,
         activeSketchPath: null,
         activeSketch: null,
         activeStoryboardPath: null,

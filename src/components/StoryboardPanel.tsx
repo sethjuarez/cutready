@@ -25,7 +25,8 @@ export function StoryboardPanel() {
   const sidebarPosition = useAppStore((s) => s.sidebarPosition);
   const openTabs = useAppStore((s) => s.openTabs);
   const activeTabId = useAppStore((s) => s.activeTabId);
-  const splitTabId = useAppStore((s) => s.splitTabId);
+  const splitTabs = useAppStore((s) => s.splitTabs);
+  const hasSplit = splitTabs.length > 0;
 
   const activeTab = openTabs.find((t) => t.id === activeTabId);
   const isHistoryTab = activeTab?.type === "history";
@@ -116,7 +117,7 @@ export function StoryboardPanel() {
           </div>
 
           {/* Split pane */}
-          {splitTabId && (
+          {hasSplit && (
             <>
               <ResizeHandle direction="horizontal" onResize={handleSplitResize} />
               <div className="shrink-0 h-full border-l border-[rgb(var(--color-border))]" style={{ width: splitWidth ?? "40%" }}>

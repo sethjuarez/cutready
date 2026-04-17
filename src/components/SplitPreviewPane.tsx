@@ -2,41 +2,60 @@ import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { X, AlertTriangle } from "lucide-react";
 import { useAppStore } from "../stores/appStore";
+import type { EditorTab } from "../stores/appStore";
 import type { Sketch, Storyboard } from "../types/sketch";
 import type { PlanningRow } from "../types/sketch";
 import { ScriptTable } from "./ScriptTable";
 import { MarkdownEditor } from "./MarkdownEditor";
+import { SketchIcon, StoryboardIcon, NoteIcon } from "./Icons";
 
 /**
- * SplitPreviewPane — renders an independently editable pane for a tab's content.
- * Sketch and note tabs are fully editable; storyboard tabs are read-only.
- * Each editor loads and saves independently from the primary pane.
+ * SplitPreviewPane — independent right-side editor pane with its own tab bar.
+ * Each split tab loads and saves independently from the primary pane.
+ * Inactive tabs stay mounted (hidden) to prevent loss of pending debounced saves.
  */
 export function SplitPreviewPane() {
-  const splitTabId = useAppStore((s) => s.splitTabId);
-  const openTabs = useAppStore((s) => s.openTabs);
-  const activeTabId = useAppStore((s) => s.activeTabId);
+  const splitTabs = useAppStore((s) => s.splitTabs);
+  const splitActiveTabId = useAppStore((s) => s.splitActiveTabId);
+  const setActiveSplitTab = useAppStore((s) => s.setActiveSplitTab);
+  const closeTabInSplit = useAppStore((s) => s.closeTabInSplit);
   const closeSplit = useAppStore((s) => s.closeSplit);
+  const activeTabId = useAppStore((s) => s.activeTabId);
+  const openTabs = useAppStore((s) => s.openTabs);
 
-  const tab = openTabs.find((t) => t.id === splitTabId);
-  const activeTab = openTabs.find((t) => t.id === activeTabId);
-  const sameFile = tab && activeTab && tab.path === activeTab.path && tab.id !== activeTab.id;
+  const activeMainTab = openTabs.find((t) => t.id === activeTabId);
+  const activeSplitTab = splitTabs.find((t) => t.id === splitActiveTabId);
+  const sameFile =
+    activeMainTab &&
+    activeSplitTab &&
+    activeMainTab.path === activeSplitTab.path &&
+    activeMainTab.type === activeSplitTab.type;
 
-  if (!tab) return null;
+  if (splitTabs.length === 0) return null;
 
   return (
     <div className="flex flex-col h-full min-w-0">
-      {/* Split pane header */}
-      <div className="flex items-center justify-between px-3 h-[36px] bg-[rgb(var(--color-surface-alt))] border-b border-[rgb(var(--color-border))] shrink-0">
-        <span className="text-[12px] text-[rgb(var(--color-text-secondary))] truncate">
-          {tab.title}
-        </span>
+      {/* Split pane tab bar */}
+      <div
+        className="no-select flex items-stretch bg-[rgb(var(--color-surface-alt))] border-b border-[rgb(var(--color-border))] shrink-0 overflow-x-auto"
+        style={{ scrollbarWidth: "none" }}
+      >
+        {splitTabs.map((tab) => (
+          <SplitTab
+            key={tab.id}
+            tab={tab}
+            isActive={tab.id === splitActiveTabId}
+            onSelect={() => setActiveSplitTab(tab.id)}
+            onClose={() => closeTabInSplit(tab.id)}
+          />
+        ))}
+        <div className="flex-1 border-b border-[rgb(var(--color-border))]" />
         <button
-          className="flex items-center justify-center w-5 h-5 rounded text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface))] transition-colors"
+          className="flex items-center justify-center w-7 h-full border-b border-l border-[rgb(var(--color-border))] text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors shrink-0"
+          title="Close split pane"
           onClick={closeSplit}
-          title="Close split"
         >
-          <X className="w-2.5 h-2.5" />
+          <X className="w-3 h-3" />
         </button>
       </div>
 
@@ -48,17 +67,80 @@ export function SplitPreviewPane() {
         </div>
       )}
 
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto min-h-0">
-        {tab.type === "sketch" && <SketchSplitEditor path={tab.path} />}
-        {tab.type === "note" && <NoteSplitEditor path={tab.path} />}
-        {tab.type === "storyboard" && <StoryboardPreviewContent path={tab.path} />}
-        {tab.type === "history" && (
-          <div className="flex items-center justify-center h-full text-[rgb(var(--color-text-secondary))] text-sm">
-            History cannot be split
+      {/* Content — all tabs mounted, inactive hidden to preserve pending saves */}
+      <div className="flex-1 min-h-0 relative">
+        {splitTabs.map((tab) => (
+          <div
+            key={tab.id}
+            className={`absolute inset-0 overflow-y-auto ${tab.id !== splitActiveTabId ? "hidden" : ""}`}
+          >
+            {tab.type === "sketch" && <SketchSplitEditor path={tab.path} />}
+            {tab.type === "note" && <NoteSplitEditor path={tab.path} />}
+            {tab.type === "storyboard" && <StoryboardPreviewContent path={tab.path} />}
           </div>
-        )}
+        ))}
       </div>
+    </div>
+  );
+}
+
+/** Compact tab for the split pane tab bar. */
+function SplitTab({
+  tab,
+  isActive,
+  onSelect,
+  onClose,
+}: {
+  tab: EditorTab;
+  isActive: boolean;
+  onSelect: () => void;
+  onClose: () => void;
+}) {
+  const typeClasses =
+    tab.type === "sketch"
+      ? { bar: "bg-[rgb(var(--color-accent))]", icon: "text-[rgb(var(--color-accent))]" }
+      : tab.type === "storyboard"
+        ? { bar: "bg-success", icon: "text-success" }
+        : { bar: "bg-rose-500", icon: "text-rose-500" };
+
+  const TabIcon =
+    tab.type === "sketch" ? SketchIcon
+    : tab.type === "storyboard" ? StoryboardIcon
+    : NoteIcon;
+
+  return (
+    <div
+      className={`group relative flex items-center gap-1.5 px-2.5 h-[32px] text-[11px] cursor-pointer shrink-0 select-none transition-colors ${
+        isActive
+          ? "bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text))]"
+          : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] border-b border-[rgb(var(--color-border))]"
+      }`}
+      onClick={onSelect}
+      title={`${tab.type}: ${tab.path}`}
+    >
+      {isActive && (
+        <span className={`absolute top-0 left-0 right-0 h-[2px] ${typeClasses.bar}`} />
+      )}
+      <span className={`shrink-0 ${isActive ? typeClasses.icon : "opacity-60"}`}>
+        <TabIcon size={11} />
+      </span>
+      <span className={`truncate max-w-[120px] ${isActive ? "font-medium" : ""}`}>
+        {tab.title}
+      </span>
+      <button
+        className={`flex items-center justify-center w-[16px] h-[16px] rounded transition-all shrink-0 ${
+          isActive
+            ? "opacity-60 hover:opacity-100 hover:bg-[rgb(var(--color-surface-alt))]"
+            : "opacity-0 group-hover:opacity-60 hover:!opacity-100 hover:bg-[rgb(var(--color-surface))]"
+        }`}
+        title="Close tab"
+        onClick={(e) => {
+          e.stopPropagation();
+          onClose();
+        }}
+      >
+        <X className="w-2 h-2" />
+      </button>
     </div>
   );
 }
@@ -70,6 +152,7 @@ function SketchSplitEditor({ path }: { path: string }) {
   const [error, setError] = useState(false);
   const projectRoot = useAppStore((s) => s.currentProject?.root ?? "");
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingRowsRef = useRef<PlanningRow[] | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -81,7 +164,14 @@ function SketchSplitEditor({ path }: { path: string }) {
         }
       })
       .catch(() => { if (!cancelled) setError(true); });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      // Flush any pending save on unmount
+      if (saveTimerRef.current && pendingRowsRef.current) {
+        clearTimeout(saveTimerRef.current);
+        invoke("update_sketch", { relativePath: path, rows: pendingRowsRef.current }).catch(() => {});
+      }
+    };
   }, [path]);
 
   // Re-load when primary pane saves (so split stays in sync if primary edits)
@@ -101,10 +191,12 @@ function SketchSplitEditor({ path }: { path: string }) {
 
   const handleRowsChange = (rows: PlanningRow[]) => {
     setLocalRows(rows);
+    pendingRowsRef.current = rows;
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
       invoke("update_sketch", { relativePath: path, rows }).catch(() => {});
       window.dispatchEvent(new CustomEvent("cutready:sketch-saved"));
+      pendingRowsRef.current = null;
     }, 800);
   };
 
@@ -137,13 +229,21 @@ function NoteSplitEditor({ path }: { path: string }) {
   const [error, setError] = useState(false);
   const projectRoot = useAppStore((s) => s.currentProject?.root ?? "");
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingContentRef = useRef<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     invoke<string>("get_note", { relativePath: path })
       .then((c) => { if (!cancelled) setContent(c); })
       .catch(() => { if (!cancelled) setError(true); });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      // Flush any pending save on unmount
+      if (saveTimerRef.current && pendingContentRef.current !== null) {
+        clearTimeout(saveTimerRef.current);
+        invoke("update_note", { relativePath: path, content: pendingContentRef.current }).catch(() => {});
+      }
+    };
   }, [path]);
 
   // Re-load when AI updates
@@ -159,9 +259,11 @@ function NoteSplitEditor({ path }: { path: string }) {
 
   const handleChange = (value: string) => {
     setContent(value);
+    pendingContentRef.current = value;
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
       invoke("update_note", { relativePath: path, content: value }).catch(() => {});
+      pendingContentRef.current = null;
     }, 800);
   };
 

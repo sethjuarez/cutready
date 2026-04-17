@@ -3,7 +3,7 @@ import type { EditorTab } from "../stores/appStore";
 import { SketchIcon, StoryboardIcon, NoteIcon, HistoryIcon, ImageIcon, VisualIcon } from "./Icons";
 import { usePopover } from "../hooks/usePopover";
 import React, { useCallback, useRef } from "react";
-import { LayoutGrid, Square, X } from "lucide-react";
+import { LayoutGrid, X } from "lucide-react";
 
 /**
  * TabBar — horizontal row of open document tabs.
@@ -13,7 +13,7 @@ import { LayoutGrid, Square, X } from "lucide-react";
 export function TabBar() {
   const openTabs = useAppStore((s) => s.openTabs);
   const activeTabId = useAppStore((s) => s.activeTabId);
-  const splitTabId = useAppStore((s) => s.splitTabId);
+  const splitTabs = useAppStore((s) => s.splitTabs);
   const setActiveTab = useAppStore((s) => s.setActiveTab);
   const closeTab = useAppStore((s) => s.closeTab);
   const closeOtherTabs = useAppStore((s) => s.closeOtherTabs);
@@ -21,7 +21,6 @@ export function TabBar() {
   const closeTabsToLeft = useAppStore((s) => s.closeTabsToLeft);
   const closeAllTabs = useAppStore((s) => s.closeAllTabs);
   const openTabInSplit = useAppStore((s) => s.openTabInSplit);
-  const closeSplit = useAppStore((s) => s.closeSplit);
 
   const { state: contextMenu, ref: menuRef, openAt: openContextMenu, close: closeContextMenu, position: menuPos } = usePopover();
   const contextTabIdRef = useRef<string>("");
@@ -34,6 +33,12 @@ export function TabBar() {
 
   if (openTabs.length === 0) return null;
 
+  const contextTab = openTabs.find((t) => t.id === contextTabIdRef.current);
+  const canSplit = contextTab && contextTab.type !== "history" && contextTab.type !== "asset";
+  const isAlreadyInSplit = contextTab
+    ? splitTabs.some((st) => st.path === contextTab.path && st.type === contextTab.type)
+    : false;
+
   return (
     <div
       className="no-select flex items-stretch bg-[rgb(var(--color-surface-alt))] shrink-0 overflow-x-auto"
@@ -44,7 +49,7 @@ export function TabBar() {
           key={tab.id}
           tab={tab}
           isActive={tab.id === activeTabId}
-          isSplit={tab.id === splitTabId}
+          isSplit={splitTabs.some((st) => st.path === tab.path && st.type === tab.type)}
           onSelect={() => setActiveTab(tab.id)}
           onClose={() => closeTab(tab.id)}
           onContextMenu={(e) => handleTabContextMenu(e, tab.id)}
@@ -71,22 +76,13 @@ export function TabBar() {
           className="fixed z-dropdown py-1 min-w-[200px] bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-lg shadow-lg"
           style={{ left: menuPos?.x, top: menuPos?.y }}
         >
-          {contextTabIdRef.current !== splitTabId && (
+          {canSplit && (
             <button
               className="flex items-center gap-2 w-full px-3 py-1.5 text-[12px] text-left text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))] transition-colors"
               onClick={() => { openTabInSplit(contextTabIdRef.current); closeContextMenu(); }}
             >
               <LayoutGrid className="w-3.5 h-3.5" />
-              Open to the Side
-            </button>
-          )}
-          {splitTabId && contextTabIdRef.current === splitTabId && (
-            <button
-              className="flex items-center gap-2 w-full px-3 py-1.5 text-[12px] text-left text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))] transition-colors"
-              onClick={() => { closeSplit(); closeContextMenu(); }}
-            >
-              <Square className="w-3.5 h-3.5" />
-              Close Split
+              {isAlreadyInSplit ? "Focus in Split" : "Open to the Side"}
             </button>
           )}
           <div className="my-1 border-t border-[rgb(var(--color-border-subtle))]" />
