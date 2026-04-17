@@ -1,15 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { X, Sparkles, Pencil, Eye } from "lucide-react";
+import { X, Sparkles, Pencil } from "lucide-react";
 import { useAppStore } from "../stores/appStore";
 import type { EditorTab } from "../stores/appStore";
 import type { Sketch, Storyboard } from "../types/sketch";
 import type { PlanningRow } from "../types/sketch";
 import { ScriptTable } from "./ScriptTable";
 import { MarkdownEditor } from "./MarkdownEditor";
-import { SafeMarkdown } from "./SafeMarkdown";
 import { SketchIcon, StoryboardIcon, NoteIcon } from "./Icons";
 import { SketchForm } from "./SketchForm";
+import { NoteEditor } from "./NoteEditor";
 import { StoryboardView } from "./StoryboardView";
 
 /**
@@ -110,7 +110,7 @@ export function SplitPaneContent() {
               className={`absolute inset-0 overflow-y-auto ${tab.id !== splitActiveTabId ? "hidden" : ""}`}
             >
               {tab.type === "sketch" && (isActiveMain ? <SketchForm /> : <SketchSplitEditor path={tab.path} />)}
-              {tab.type === "note" && (isActiveMain ? <NoteEditorSplitInstance /> : <NoteSplitEditor path={tab.path} />)}
+              {tab.type === "note" && (isActiveMain ? <NoteEditor /> : <NoteSplitEditor path={tab.path} />)}
               {tab.type === "storyboard" && (isActiveMain ? <StoryboardView /> : <StoryboardPreviewContent path={tab.path} />)}
             </div>
           );
@@ -472,80 +472,6 @@ function StoryboardPreviewContent({ path }: { path: string }) {
   );
 }
 
-
-/**
- * Same-file note editor for the split pane.
- * Reads content from the global store (so edits in either pane are immediately reflected
- * in the other), but keeps its own independent mode state — defaulting to preview so the
- * natural split workflow is: edit on the left, live preview on the right.
- */
-function NoteEditorSplitInstance() {
-  const activeNotePath = useAppStore((s) => s.activeNotePath);
-  const activeNoteContent = useAppStore((s) => s.activeNoteContent);
-  const updateNote = useAppStore((s) => s.updateNote);
-  const projectRoot = useAppStore((s) => s.currentProject?.root);
-  const [mode, setMode] = useState<"edit" | "preview">("preview");
-
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pendingRef = useRef<string | null>(null);
-  const updateNoteRef = useRef(updateNote);
-  updateNoteRef.current = updateNote;
-
-  useEffect(() => {
-    return () => {
-      if (saveTimerRef.current) {
-        clearTimeout(saveTimerRef.current);
-        if (pendingRef.current !== null) updateNoteRef.current(pendingRef.current);
-      }
-    };
-  }, []);
-
-  const handleChange = (value: string) => {
-    pendingRef.current = value;
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(() => {
-      pendingRef.current = null;
-      updateNoteRef.current(value);
-    }, 800);
-  };
-
-  if (!activeNotePath || activeNoteContent === null) return null;
-
-  return (
-    <div className="flex flex-col flex-1 overflow-hidden h-full">
-      {/* Minimal toolbar — just the mode toggle */}
-      <div className="flex items-center justify-end px-4 py-1.5 border-b border-[rgb(var(--color-border))] shrink-0">
-        <button
-          onClick={() => setMode(mode === "edit" ? "preview" : "edit")}
-          className="flex items-center gap-1.5 px-2 py-1 text-[11px] rounded text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors"
-          title={mode === "edit" ? "Switch to preview" : "Switch to edit"}
-        >
-          {mode === "edit" ? <Eye className="w-3 h-3" /> : <Pencil className="w-3 h-3" />}
-          {mode === "edit" ? "Preview" : "Edit"}
-        </button>
-      </div>
-
-      <div className="flex-1 min-h-0 overflow-y-auto">
-        {mode === "edit" ? (
-          <div className="px-4 h-full">
-            <MarkdownEditor
-              key={activeNotePath}
-              editorKey={activeNotePath}
-              value={activeNoteContent}
-              onChange={handleChange}
-              placeholder="Start writing..."
-              saveImages={!!projectRoot}
-            />
-          </div>
-        ) : (
-          <div className="px-8 py-6">
-            <SafeMarkdown>{activeNoteContent}</SafeMarkdown>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
 
 function LoadingSpinner() {
   return (

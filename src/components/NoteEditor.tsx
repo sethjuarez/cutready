@@ -30,12 +30,22 @@ export function NoteEditor() {
   const projectRoot = useAppStore((s) => s.currentProject?.root);
   const addActivityEntries = useAppStore((s) => s.addActivityEntries);
   const setNotePreview = useAppStore((s) => s.setNotePreview);
-  const isPreview = useAppStore((s) => activeNotePath ? s.notePreviewPaths.has(activeNotePath) : false);
-  const { settings, updateSetting } = useSettings();
-  const mode = isPreview ? "preview" : "edit";
+  // Read initial mode from persisted store, but keep it as local state so
+  // multiple instances of NoteEditor (split pane) can be controlled independently.
+  const persistedIsPreview = useAppStore((s) => activeNotePath ? s.notePreviewPaths.has(activeNotePath) : false);
+  const [mode, setModeLocal] = useState<"edit" | "preview">(persistedIsPreview ? "preview" : "edit");
+
+  // Re-initialise mode when switching to a different note tab.
+  useEffect(() => {
+    setModeLocal(persistedIsPreview ? "preview" : "edit");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeNotePath]);
+
   const setMode = useCallback((m: "edit" | "preview") => {
+    setModeLocal(m);
     if (activeNotePath) setNotePreview(activeNotePath, m === "preview");
   }, [activeNotePath, setNotePreview]);
+  const { settings, updateSetting } = useSettings();
   const [aiCleaning, setAiCleaning] = useState(false);
   const [aiUpdatedFlash, setAiUpdatedFlash] = useState(false);
   const [richPasteBusy, setRichPasteBusy] = useState(false);
