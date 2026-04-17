@@ -29,7 +29,7 @@ import type {
 } from "../types/sketch";
 
 /** The panels / views available in the app. */
-export type AppView = "home" | "sketch" | "assets" | "explorer" | "editor" | "recording" | "settings" | "workspace" | "chat";
+export type AppView = "home" | "sketch" | "storyboards" | "sketches" | "notes" | "assets" | "explorer" | "editor" | "recording" | "settings" | "workspace" | "chat";
 
 /** Sidebar position. */
 export type SidebarPosition = "left" | "right";
@@ -256,6 +256,14 @@ interface AppStoreState {
   openTab: (tab: Omit<EditorTab, "id">) => void;
   /** Close a tab by id. */
   closeTab: (tabId: string) => void;
+  /** Close all tabs except the given one. */
+  closeOtherTabs: (tabId: string) => void;
+  /** Close all tabs to the right of the given tab. */
+  closeTabsToRight: (tabId: string) => void;
+  /** Close all tabs to the left of the given tab. */
+  closeTabsToLeft: (tabId: string) => void;
+  /** Close all open tabs. */
+  closeAllTabs: () => void;
   /** Set the active tab. */
   setActiveTab: (tabId: string) => void;
   /** Open a tab in the split (right) pane. */
@@ -643,7 +651,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     }
     // Navigate away from non-editor views (settings, home) to show the tab
     if (view === "settings" || view === "home") {
-      set({ view: "sketch" });
+      set({ view: "storyboards" });
     }
     get()._persistTabs();
   },
@@ -679,6 +687,48 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     } else {
       set({ activeSketchPath: null, activeSketch: null, activeStoryboardPath: null, activeStoryboard: null, activeNotePath: null, activeNoteContent: null });
     }
+    get()._persistTabs();
+  },
+  closeOtherTabs: (tabId) => {
+    const { openTabs, splitTabId } = get();
+    const keep = openTabs.find((t) => t.id === tabId);
+    if (!keep) return;
+    const nextSplit = splitTabId === tabId ? splitTabId : null;
+    set({ openTabs: [keep], activeTabId: tabId, splitTabId: nextSplit });
+    if (keep.type === "sketch") get().openSketch(keep.path);
+    else if (keep.type === "storyboard") get().openStoryboard(keep.path);
+    else if (keep.type === "note") get().openNote(keep.path);
+    get()._persistTabs();
+  },
+  closeTabsToRight: (tabId) => {
+    const { openTabs, activeTabId, splitTabId } = get();
+    const idx = openTabs.findIndex((t) => t.id === tabId);
+    if (idx === -1) return;
+    const next = openTabs.slice(0, idx + 1);
+    const nextActive = next.find((t) => t.id === activeTabId) ? activeTabId : next[next.length - 1]?.id ?? null;
+    const nextSplit = next.find((t) => t.id === splitTabId) ? splitTabId : null;
+    set({ openTabs: next, activeTabId: nextActive, splitTabId: nextSplit });
+    if (nextActive && nextActive !== activeTabId) get().setActiveTab(nextActive);
+    get()._persistTabs();
+  },
+  closeTabsToLeft: (tabId) => {
+    const { openTabs, activeTabId, splitTabId } = get();
+    const idx = openTabs.findIndex((t) => t.id === tabId);
+    if (idx === -1) return;
+    const next = openTabs.slice(idx);
+    const nextActive = next.find((t) => t.id === activeTabId) ? activeTabId : next[0]?.id ?? null;
+    const nextSplit = next.find((t) => t.id === splitTabId) ? splitTabId : null;
+    set({ openTabs: next, activeTabId: nextActive, splitTabId: nextSplit });
+    if (nextActive && nextActive !== activeTabId) get().setActiveTab(nextActive);
+    get()._persistTabs();
+  },
+  closeAllTabs: () => {
+    set({
+      openTabs: [], activeTabId: null, splitTabId: null,
+      activeSketchPath: null, activeSketch: null,
+      activeStoryboardPath: null, activeStoryboard: null,
+      activeNotePath: null, activeNoteContent: null,
+    });
     get()._persistTabs();
   },
   setActiveTab: (tabId) => {

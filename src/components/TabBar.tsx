@@ -16,6 +16,10 @@ export function TabBar() {
   const splitTabId = useAppStore((s) => s.splitTabId);
   const setActiveTab = useAppStore((s) => s.setActiveTab);
   const closeTab = useAppStore((s) => s.closeTab);
+  const closeOtherTabs = useAppStore((s) => s.closeOtherTabs);
+  const closeTabsToRight = useAppStore((s) => s.closeTabsToRight);
+  const closeTabsToLeft = useAppStore((s) => s.closeTabsToLeft);
+  const closeAllTabs = useAppStore((s) => s.closeAllTabs);
   const openTabInSplit = useAppStore((s) => s.openTabInSplit);
   const closeSplit = useAppStore((s) => s.closeSplit);
 
@@ -49,6 +53,17 @@ export function TabBar() {
       {/* Fill remaining space with border-bottom */}
       <div className="flex-1 border-b border-[rgb(var(--color-border))]" />
 
+      {/* Close All Tabs button */}
+      {openTabs.length > 0 && (
+        <button
+          className="flex items-center justify-center w-8 h-full border-b border-l border-[rgb(var(--color-border))] text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors shrink-0"
+          title="Close All Tabs"
+          onClick={() => closeAllTabs()}
+        >
+          <XMarkIcon className="w-3 h-3" />
+        </button>
+      )}
+
       {/* Tab context menu */}
       {contextMenu && (
         <div
@@ -74,12 +89,42 @@ export function TabBar() {
               Close Split
             </button>
           )}
+          <div className="my-1 border-t border-[rgb(var(--color-border-subtle))]" />
           <button
             className="flex items-center gap-2 w-full px-3 py-1.5 text-[12px] text-left text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))] transition-colors"
             onClick={() => { closeTab(contextTabIdRef.current); closeContextMenu(); }}
           >
             <XMarkIcon className="w-3.5 h-3.5" />
             Close Tab
+          </button>
+          <button
+            className="flex items-center gap-2 w-full px-3 py-1.5 text-[12px] text-left text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))] transition-colors"
+            onClick={() => { closeOtherTabs(contextTabIdRef.current); closeContextMenu(); }}
+          >
+            <XMarkIcon className="w-3.5 h-3.5" />
+            Close Others
+          </button>
+          <button
+            className="flex items-center gap-2 w-full px-3 py-1.5 text-[12px] text-left text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))] transition-colors"
+            onClick={() => { closeTabsToRight(contextTabIdRef.current); closeContextMenu(); }}
+          >
+            <XMarkIcon className="w-3.5 h-3.5" />
+            Close to the Right
+          </button>
+          <button
+            className="flex items-center gap-2 w-full px-3 py-1.5 text-[12px] text-left text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))] transition-colors"
+            onClick={() => { closeTabsToLeft(contextTabIdRef.current); closeContextMenu(); }}
+          >
+            <XMarkIcon className="w-3.5 h-3.5" />
+            Close to the Left
+          </button>
+          <div className="my-1 border-t border-[rgb(var(--color-border-subtle))]" />
+          <button
+            className="flex items-center gap-2 w-full px-3 py-1.5 text-[12px] text-left text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))] transition-colors"
+            onClick={() => { closeAllTabs(); closeContextMenu(); }}
+          >
+            <XMarkIcon className="w-3.5 h-3.5" />
+            Close All
           </button>
         </div>
       )}

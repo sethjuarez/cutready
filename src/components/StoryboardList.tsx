@@ -66,9 +66,11 @@ function SortableSidebarItem({ id, children }: { id: string; children: React.Rea
 
 /**
  * StoryboardList — Documents pane: Storyboards, Sketches, and Notes.
+ * Pass `mode` to show only one section (used by dedicated sidebar views).
  * File tree view is now in the separate Explorer pane.
  */
-export function StoryboardList() {
+export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "notes" | "all" }) {
+  const resolvedMode = mode ?? "all";
   const storyboards = useAppStore((s) => s.storyboards);
   const sketches = useAppStore((s) => s.sketches);
   const notes = useAppStore((s) => s.notes);
@@ -392,349 +394,420 @@ export function StoryboardList() {
       {/* ── Project switcher ── */}
       <ProjectSwitcher />
 
-      {/* ── Documents header ──────────────────────────────── */}
-      <div className="flex items-center justify-between px-3 h-9 shrink-0 border-b border-[rgb(var(--color-border-subtle))]">
-        <span className="text-[12px] font-medium text-[rgb(var(--color-text-secondary))]">
-          Documents
-        </span>
-        <div className="flex items-center gap-1">
-          <button
-            onClick={handleImport}
-            className="p-1 rounded-md text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10 transition-colors disabled:opacity-50 disabled:pointer-events-none"
-            title="Import .sk, .sb, or document"
-            disabled={importing}
-          >
-            {importing ? (
-              <svg className="w-3 h-3 animate-spin text-[rgb(var(--color-text-secondary))]" viewBox="0 0 24 24" fill="none">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-              </svg>
-            ) : (
-              <ArrowDownTrayIcon className="w-3 h-3" />
-            )}
-          </button>
+      {/* ── Documents header (all-mode only) ──────────────────────────────── */}
+      {resolvedMode === "all" && (
+        <div className="flex items-center justify-between px-3 h-9 shrink-0 border-b border-[rgb(var(--color-border-subtle))]">
+          <span className="text-[12px] font-medium text-[rgb(var(--color-text-secondary))]">
+            Documents
+          </span>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={handleImport}
+              className="p-1 rounded-md text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10 transition-colors disabled:opacity-50 disabled:pointer-events-none"
+              title="Import .sk, .sb, or document"
+              disabled={importing}
+            >
+              {importing ? (
+                <svg className="w-3 h-3 animate-spin text-[rgb(var(--color-text-secondary))]" viewBox="0 0 24 24" fill="none">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+              ) : (
+                <ArrowDownTrayIcon className="w-3 h-3" />
+              )}
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* ── Storyboards section ────────────────────────── */}
-      <div className="flex items-center justify-between px-3 h-9 shrink-0 border-b border-[rgb(var(--color-border-subtle))]">
-        <span className="text-[12px] font-medium text-[rgb(var(--color-text-secondary))]">
-          Storyboards
-        </span>
-        <button
-          onClick={() => setIsCreatingSb(true)}
-          className="p-1 rounded-md text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10 transition-colors"
-          title="New storyboard"
-        >
-          <PlusIcon className="w-3.5 h-3.5" />
-        </button>
-      </div>
-
-      {isCreatingSb && (
-        <div className="px-3 py-2 border-b border-[rgb(var(--color-border))]">
-          <input
-            type="text"
-            value={newSbTitle}
-            onChange={(e) => setNewSbTitle(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") handleCreateSb();
-              if (e.key === "Escape") { setIsCreatingSb(false); setNewSbTitle(""); }
-            }}
-            placeholder="Storyboard name..."
-            autoFocus
-            className="w-full px-2 py-1.5 rounded-md bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] text-xs text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/50 focus:outline-none focus:ring-1 focus:ring-[rgb(var(--color-accent))]/40"
-          />
-        </div>
-      )}
-
-      <div className="overflow-y-auto py-1" style={{ maxHeight: "40%" }}>
-        {orderedStoryboards.length === 0 && !isCreatingSb ? (
-          <button
-            onClick={() => setIsCreatingSb(true)}
-            className="w-full px-3 py-4 text-xs text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] transition-colors"
-          >
-            + New storyboard
-          </button>
-        ) : (
-          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd("storyboards")}>
-            <SortableContext items={orderedStoryboards.map((sb) => sb.path)} strategy={verticalListSortingStrategy}>
-              {orderedStoryboards.map((sb) => (
-                <SortableSidebarItem key={sb.path} id={sb.path}>
-                  <div
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => { if (!renamingItem) openStoryboard(sb.path); }}
-                    onDoubleClick={(e) => { e.stopPropagation(); startRename("storyboard", sb.path); }}
-                    onKeyDown={(e) => {
-                      if (e.key === "F2") { e.preventDefault(); startRename("storyboard", sb.path); }
-                      else if (e.key === "Enter" || e.key === " ") { if (!renamingItem) openStoryboard(sb.path); }
-                    }}
-                    className={`group/item w-full flex items-center gap-2 px-3 py-2.5 text-left transition-colors cursor-pointer ${
-                      sb.path === activeStoryboardPath
-                        ? "bg-success/10 text-success"
-                        : "text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))]"
-                    }`}
-                  >
-                    <StoryboardIcon className="shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      {renamingItem?.path === sb.path ? (
-                        <input
-                          ref={renameInputRef}
-                          value={renameValue}
-                          onChange={(e) => setRenameValue(e.target.value)}
-                          onKeyDown={(e) => {
-                            e.stopPropagation();
-                            if (e.key === "Enter") commitRename();
-                            if (e.key === "Escape") cancelRename();
-                          }}
-                          onBlur={commitRename}
-                          onClick={(e) => e.stopPropagation()}
-                          className="w-full px-1 py-0.5 text-xs font-medium bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-accent))]/40 rounded focus:outline-none focus:ring-1 focus:ring-[rgb(var(--color-accent))]/40 text-[rgb(var(--color-text))]"
-                        />
-                      ) : (
-                        <>
-                          <div className="text-xs font-medium truncate">{sb.title}</div>
-                          <div className="text-[10px] text-[rgb(var(--color-text-secondary))]">
-                            {sb.sketch_count} {sb.sketch_count === 1 ? "sketch" : "sketches"}
-                          </div>
-                        </>
-                      )}
-                    </div>
-                    {renamingItem?.path !== sb.path && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          requestDelete("storyboard", sb.path, sb.title);
-                        }}
-                        className="opacity-0 group-hover/item:opacity-100 p-0.5 rounded text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] transition-all"
-                        title="Delete storyboard"
-                      >
-                        <TrashIcon className="w-3 h-3" />
-                      </button>
-                    )}
-                  </div>
-                </SortableSidebarItem>
-              ))}
-            </SortableContext>
-          </DndContext>
-        )}
-      </div>
-
-      {/* ── Sketches section──────────────────────────── */}
-      <div className="flex items-center justify-between px-3 h-9 shrink-0 border-y border-[rgb(var(--color-border-subtle))]">
-        <span className="text-[12px] font-medium text-[rgb(var(--color-text-secondary))]">
-          Sketches
-        </span>
-        <button
-          onClick={() => setIsCreatingSk(true)}
-          className="p-1 rounded-md text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10 transition-colors"
-          title="New sketch"
-        >
-          <PlusIcon className="w-3.5 h-3.5" />
-        </button>
-      </div>
-
-      {isCreatingSk && (
-        <div className="px-3 py-2 border-b border-[rgb(var(--color-border))]">
-          <input
-            type="text"
-            value={newSkTitle}
-            onChange={(e) => setNewSkTitle(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") handleCreateSk();
-              if (e.key === "Escape") { setIsCreatingSk(false); setNewSkTitle(""); }
-            }}
-            placeholder="Sketch name..."
-            autoFocus
-            className="w-full px-2 py-1.5 rounded-md bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] text-xs text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/50 focus:outline-none focus:ring-1 focus:ring-[rgb(var(--color-accent))]/40"
-          />
-        </div>
-      )}
-
-      <div className="flex-1 overflow-y-auto py-1">
-        {orderedSketches.length === 0 && !isCreatingSk ? (
-          <button
-            onClick={() => setIsCreatingSk(true)}
-            className="w-full px-3 py-4 text-xs text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] transition-colors"
-          >
-            + New sketch
-          </button>
-        ) : (
-          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd("sketches")}>
-            <SortableContext items={orderedSketches.map((sk) => sk.path)} strategy={verticalListSortingStrategy}>
-              {orderedSketches.map((sk) => (
-                <SortableSidebarItem key={sk.path} id={sk.path}>
-                  <div
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => { if (!renamingItem) handleOpenSketchStandalone(sk.path); }}
-                    onDoubleClick={(e) => { e.stopPropagation(); startRename("sketch", sk.path); }}
-                    onKeyDown={(e) => {
-                      if (e.key === "F2") { e.preventDefault(); startRename("sketch", sk.path); }
-                      else if (e.key === "Enter" || e.key === " ") { if (!renamingItem) handleOpenSketchStandalone(sk.path); }
-                    }}
-                    className={`group/item w-full flex items-center gap-2 px-3 py-2.5 text-left transition-colors cursor-pointer ${
-                      sk.path === activeSketchPath
-                        ? "bg-violet-500/10 text-[rgb(var(--color-accent))]"
-                        : "text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))]"
-                    }`}
-                  >
-                    <SketchIcon className="shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      {renamingItem?.path === sk.path ? (
-                        <input
-                          ref={renameInputRef}
-                          value={renameValue}
-                          onChange={(e) => setRenameValue(e.target.value)}
-                          onKeyDown={(e) => {
-                            e.stopPropagation();
-                            if (e.key === "Enter") commitRename();
-                            if (e.key === "Escape") cancelRename();
-                          }}
-                          onBlur={commitRename}
-                          onClick={(e) => e.stopPropagation()}
-                          className="w-full px-1 py-0.5 text-xs font-medium bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-accent))]/40 rounded focus:outline-none focus:ring-1 focus:ring-[rgb(var(--color-accent))]/40 text-[rgb(var(--color-text))]"
-                        />
-                      ) : (
-                        <>
-                          <div className="text-xs font-medium truncate">{sk.title}</div>
-                          <div className="text-[10px] text-[rgb(var(--color-text-secondary))]">
-                            {sk.row_count} {sk.row_count === 1 ? "row" : "rows"}
-                          </div>
-                        </>
-                      )}
-                    </div>
-                    {renamingItem?.path !== sk.path && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          requestDelete("sketch", sk.path, sk.title);
-                        }}
-                        className="opacity-0 group-hover/item:opacity-100 p-0.5 rounded text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] transition-all"
-                        title="Delete sketch"
-                      >
-                        <TrashIcon className="w-3 h-3" />
-                      </button>
-                    )}
-                  </div>
-                </SortableSidebarItem>
-              ))}
-            </SortableContext>
-          </DndContext>
-        )}
-      </div>
-
-      {/* ── Notes section─────────────────────────────── */}
-      <div className="flex items-center justify-between px-3 h-9 shrink-0 border-y border-[rgb(var(--color-border-subtle))]">
-        <span className="text-[12px] font-medium text-[rgb(var(--color-text-secondary))]">
-          Notes
-        </span>
-        <button
-          onClick={() => setIsCreatingNote(true)}
-          className="p-1 rounded-md text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10 transition-colors"
-          title="New note"
-        >
-          <PlusIcon className="w-3.5 h-3.5" />
-        </button>
-      </div>
-
-      {isCreatingNote && (
-        <div className="px-3 py-2 border-b border-[rgb(var(--color-border))]">
-          <input
-            type="text"
-            value={newNoteTitle}
-            onChange={(e) => setNewNoteTitle(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") handleCreateNote();
-              if (e.key === "Escape") { setIsCreatingNote(false); setNewNoteTitle(""); }
-            }}
-            placeholder="Note name..."
-            autoFocus
-            className="w-full px-2 py-1.5 rounded-md bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] text-xs text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/50 focus:outline-none focus:ring-1 focus:ring-[rgb(var(--color-accent))]/40"
-          />
-        </div>
-      )}
-
-      <div className="flex-1 overflow-y-auto py-1">
-        {orderedNotes.length === 0 && !isCreatingNote ? (
-          <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
-            <p className="text-xs text-[rgb(var(--color-text-secondary))] mb-3 leading-relaxed">
-              Import a document or create a new note
-            </p>
-            <div className="flex gap-2">
+      {(resolvedMode === "all" || resolvedMode === "storyboards") && (
+        <>
+          <div className="flex items-center justify-between px-3 h-9 shrink-0 border-b border-[rgb(var(--color-border-subtle))]">
+            <span className="text-[12px] font-medium text-[rgb(var(--color-text-secondary))]">
+              Storyboards
+            </span>
+            <div className="flex items-center gap-1">
+              {resolvedMode === "storyboards" && (
+                <button
+                  onClick={handleImport}
+                  className="p-1 rounded-md text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10 transition-colors disabled:opacity-50 disabled:pointer-events-none"
+                  title="Import"
+                  disabled={importing}
+                >
+                  {importing ? (
+                    <svg className="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                  ) : (
+                    <ArrowDownTrayIcon className="w-3 h-3" />
+                  )}
+                </button>
+              )}
               <button
-                onClick={() => setIsCreatingNote(true)}
-                className="px-3 py-1.5 text-[11px] rounded-lg border border-[rgb(var(--color-border))] text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:border-[rgb(var(--color-accent))] transition-colors"
+                onClick={() => setIsCreatingSb(true)}
+                className="p-1 rounded-md text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10 transition-colors"
+                title="New storyboard"
               >
-                + New note
-              </button>
-              <button
-                onClick={handleImport}
-                className="px-3 py-1.5 text-[11px] rounded-lg border border-[rgb(var(--color-border))] text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:border-[rgb(var(--color-accent))] transition-colors"
-              >
-                Import
+                <PlusIcon className="w-3.5 h-3.5" />
               </button>
             </div>
           </div>
-        ) : (
-          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd("notes")}>
-            <SortableContext items={orderedNotes.map((n) => n.path)} strategy={verticalListSortingStrategy}>
-              {orderedNotes.map((note) => (
-                <SortableSidebarItem key={note.path} id={note.path}>
-                  <div
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => { if (!renamingItem) openNote(note.path); }}
-                    onDoubleClick={(e) => { e.stopPropagation(); startRename("note", note.path); }}
-                    onKeyDown={(e) => {
-                      if (e.key === "F2") { e.preventDefault(); startRename("note", note.path); }
-                      else if (e.key === "Enter" || e.key === " ") { if (!renamingItem) openNote(note.path); }
-                    }}
-                    className={`group/item w-full flex items-center gap-2 px-3 py-2.5 text-left transition-colors cursor-pointer ${
-                      note.path === activeNotePath
-                        ? "bg-rose-500/10 text-rose-500"
-                        : "text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))]"
-                    }`}
-                  >
-                    <NoteIcon className="shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      {renamingItem?.path === note.path ? (
-                        <input
-                          ref={renameInputRef}
-                          value={renameValue}
-                          onChange={(e) => setRenameValue(e.target.value)}
-                          onKeyDown={(e) => {
-                            e.stopPropagation();
-                            if (e.key === "Enter") commitRename();
-                            if (e.key === "Escape") cancelRename();
-                          }}
-                          onBlur={commitRename}
-                          onClick={(e) => e.stopPropagation()}
-                          className="w-full px-1 py-0.5 text-xs font-medium bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-accent))]/40 rounded focus:outline-none focus:ring-1 focus:ring-[rgb(var(--color-accent))]/40 text-[rgb(var(--color-text))]"
-                        />
-                      ) : (
-                        <div className="text-xs font-medium truncate">{note.title}</div>
-                      )}
-                    </div>
-                    {renamingItem?.path !== note.path && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          requestDelete("note", note.path, note.title);
+
+          {isCreatingSb && (
+            <div className="px-3 py-2 border-b border-[rgb(var(--color-border))]">
+              <input
+                type="text"
+                value={newSbTitle}
+                onChange={(e) => setNewSbTitle(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleCreateSb();
+                  if (e.key === "Escape") { setIsCreatingSb(false); setNewSbTitle(""); }
+                }}
+                placeholder="Storyboard name..."
+                autoFocus
+                className="w-full px-2 py-1.5 rounded-md bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] text-xs text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/50 focus:outline-none focus:ring-1 focus:ring-[rgb(var(--color-accent))]/40"
+              />
+            </div>
+          )}
+
+          <div className="overflow-y-auto py-1" style={resolvedMode === "all" ? { maxHeight: "40%" } : { flex: 1 }}>
+            {orderedStoryboards.length === 0 && !isCreatingSb ? (
+              <button
+                onClick={() => setIsCreatingSb(true)}
+                className="w-full px-3 py-4 text-xs text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] transition-colors"
+              >
+                + New storyboard
+              </button>
+            ) : (
+              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd("storyboards")}>
+                <SortableContext items={orderedStoryboards.map((sb) => sb.path)} strategy={verticalListSortingStrategy}>
+                  {orderedStoryboards.map((sb) => (
+                    <SortableSidebarItem key={sb.path} id={sb.path}>
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => { if (!renamingItem) openStoryboard(sb.path); }}
+                        onDoubleClick={(e) => { e.stopPropagation(); startRename("storyboard", sb.path); }}
+                        onKeyDown={(e) => {
+                          if (e.key === "F2") { e.preventDefault(); startRename("storyboard", sb.path); }
+                          else if (e.key === "Enter" || e.key === " ") { if (!renamingItem) openStoryboard(sb.path); }
                         }}
-                        className="opacity-0 group-hover/item:opacity-100 p-0.5 rounded text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] transition-all"
-                        title="Delete note"
+                        className={`group/item w-full flex items-center gap-2 px-3 py-2.5 text-left transition-colors cursor-pointer ${
+                          sb.path === activeStoryboardPath
+                            ? "bg-success/10 text-success"
+                            : "text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))]"
+                        }`}
                       >
-                        <TrashIcon className="w-3 h-3" />
-                      </button>
-                    )}
-                  </div>
-                </SortableSidebarItem>
-              ))}
-            </SortableContext>
-          </DndContext>
-        )}
-      </div>
+                        <StoryboardIcon className="shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          {renamingItem?.path === sb.path ? (
+                            <input
+                              ref={renameInputRef}
+                              value={renameValue}
+                              onChange={(e) => setRenameValue(e.target.value)}
+                              onKeyDown={(e) => {
+                                e.stopPropagation();
+                                if (e.key === "Enter") commitRename();
+                                if (e.key === "Escape") cancelRename();
+                              }}
+                              onBlur={commitRename}
+                              onClick={(e) => e.stopPropagation()}
+                              className="w-full px-1 py-0.5 text-xs font-medium bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-accent))]/40 rounded focus:outline-none focus:ring-1 focus:ring-[rgb(var(--color-accent))]/40 text-[rgb(var(--color-text))]"
+                            />
+                          ) : (
+                            <>
+                              <div className="text-xs font-medium truncate">{sb.title}</div>
+                              <div className="text-[10px] text-[rgb(var(--color-text-secondary))]">
+                                {sb.sketch_count} {sb.sketch_count === 1 ? "sketch" : "sketches"}
+                              </div>
+                            </>
+                          )}
+                        </div>
+                        {renamingItem?.path !== sb.path && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              requestDelete("storyboard", sb.path, sb.title);
+                            }}
+                            className="opacity-0 group-hover/item:opacity-100 p-0.5 rounded text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] transition-all"
+                            title="Delete storyboard"
+                          >
+                            <TrashIcon className="w-3 h-3" />
+                          </button>
+                        )}
+                      </div>
+                    </SortableSidebarItem>
+                  ))}
+                </SortableContext>
+              </DndContext>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* ── Sketches section──────────────────────────── */}
+      {(resolvedMode === "all" || resolvedMode === "sketches") && (
+        <>
+          <div className="flex items-center justify-between px-3 h-9 shrink-0 border-y border-[rgb(var(--color-border-subtle))]">
+            <span className="text-[12px] font-medium text-[rgb(var(--color-text-secondary))]">
+              Sketches
+            </span>
+            <div className="flex items-center gap-1">
+              {resolvedMode === "sketches" && (
+                <button
+                  onClick={handleImport}
+                  className="p-1 rounded-md text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10 transition-colors disabled:opacity-50 disabled:pointer-events-none"
+                  title="Import"
+                  disabled={importing}
+                >
+                  {importing ? (
+                    <svg className="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                  ) : (
+                    <ArrowDownTrayIcon className="w-3 h-3" />
+                  )}
+                </button>
+              )}
+              <button
+                onClick={() => setIsCreatingSk(true)}
+                className="p-1 rounded-md text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10 transition-colors"
+                title="New sketch"
+              >
+                <PlusIcon className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+
+          {isCreatingSk && (
+            <div className="px-3 py-2 border-b border-[rgb(var(--color-border))]">
+              <input
+                type="text"
+                value={newSkTitle}
+                onChange={(e) => setNewSkTitle(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleCreateSk();
+                  if (e.key === "Escape") { setIsCreatingSk(false); setNewSkTitle(""); }
+                }}
+                placeholder="Sketch name..."
+                autoFocus
+                className="w-full px-2 py-1.5 rounded-md bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] text-xs text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/50 focus:outline-none focus:ring-1 focus:ring-[rgb(var(--color-accent))]/40"
+              />
+            </div>
+          )}
+
+          <div className="flex-1 overflow-y-auto py-1">
+            {orderedSketches.length === 0 && !isCreatingSk ? (
+              <button
+                onClick={() => setIsCreatingSk(true)}
+                className="w-full px-3 py-4 text-xs text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] transition-colors"
+              >
+                + New sketch
+              </button>
+            ) : (
+              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd("sketches")}>
+                <SortableContext items={orderedSketches.map((sk) => sk.path)} strategy={verticalListSortingStrategy}>
+                  {orderedSketches.map((sk) => (
+                    <SortableSidebarItem key={sk.path} id={sk.path}>
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => { if (!renamingItem) handleOpenSketchStandalone(sk.path); }}
+                        onDoubleClick={(e) => { e.stopPropagation(); startRename("sketch", sk.path); }}
+                        onKeyDown={(e) => {
+                          if (e.key === "F2") { e.preventDefault(); startRename("sketch", sk.path); }
+                          else if (e.key === "Enter" || e.key === " ") { if (!renamingItem) handleOpenSketchStandalone(sk.path); }
+                        }}
+                        className={`group/item w-full flex items-center gap-2 px-3 py-2.5 text-left transition-colors cursor-pointer ${
+                          sk.path === activeSketchPath
+                            ? "bg-violet-500/10 text-[rgb(var(--color-accent))]"
+                            : "text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))]"
+                        }`}
+                      >
+                        <SketchIcon className="shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          {renamingItem?.path === sk.path ? (
+                            <input
+                              ref={renameInputRef}
+                              value={renameValue}
+                              onChange={(e) => setRenameValue(e.target.value)}
+                              onKeyDown={(e) => {
+                                e.stopPropagation();
+                                if (e.key === "Enter") commitRename();
+                                if (e.key === "Escape") cancelRename();
+                              }}
+                              onBlur={commitRename}
+                              onClick={(e) => e.stopPropagation()}
+                              className="w-full px-1 py-0.5 text-xs font-medium bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-accent))]/40 rounded focus:outline-none focus:ring-1 focus:ring-[rgb(var(--color-accent))]/40 text-[rgb(var(--color-text))]"
+                            />
+                          ) : (
+                            <>
+                              <div className="text-xs font-medium truncate">{sk.title}</div>
+                              <div className="text-[10px] text-[rgb(var(--color-text-secondary))]">
+                                {sk.row_count} {sk.row_count === 1 ? "row" : "rows"}
+                              </div>
+                            </>
+                          )}
+                        </div>
+                        {renamingItem?.path !== sk.path && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              requestDelete("sketch", sk.path, sk.title);
+                            }}
+                            className="opacity-0 group-hover/item:opacity-100 p-0.5 rounded text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] transition-all"
+                            title="Delete sketch"
+                          >
+                            <TrashIcon className="w-3 h-3" />
+                          </button>
+                        )}
+                      </div>
+                    </SortableSidebarItem>
+                  ))}
+                </SortableContext>
+              </DndContext>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* ── Notes section─────────────────────────────── */}
+      {(resolvedMode === "all" || resolvedMode === "notes") && (
+        <>
+          <div className="flex items-center justify-between px-3 h-9 shrink-0 border-y border-[rgb(var(--color-border-subtle))]">
+            <span className="text-[12px] font-medium text-[rgb(var(--color-text-secondary))]">
+              Notes
+            </span>
+            <div className="flex items-center gap-1">
+              {resolvedMode === "notes" && (
+                <button
+                  onClick={handleImport}
+                  className="p-1 rounded-md text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10 transition-colors disabled:opacity-50 disabled:pointer-events-none"
+                  title="Import"
+                  disabled={importing}
+                >
+                  {importing ? (
+                    <svg className="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                  ) : (
+                    <ArrowDownTrayIcon className="w-3 h-3" />
+                  )}
+                </button>
+              )}
+              <button
+                onClick={() => setIsCreatingNote(true)}
+                className="p-1 rounded-md text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10 transition-colors"
+                title="New note"
+              >
+                <PlusIcon className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+
+          {isCreatingNote && (
+            <div className="px-3 py-2 border-b border-[rgb(var(--color-border))]">
+              <input
+                type="text"
+                value={newNoteTitle}
+                onChange={(e) => setNewNoteTitle(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleCreateNote();
+                  if (e.key === "Escape") { setIsCreatingNote(false); setNewNoteTitle(""); }
+                }}
+                placeholder="Note name..."
+                autoFocus
+                className="w-full px-2 py-1.5 rounded-md bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] text-xs text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/50 focus:outline-none focus:ring-1 focus:ring-[rgb(var(--color-accent))]/40"
+              />
+            </div>
+          )}
+
+          <div className="flex-1 overflow-y-auto py-1">
+            {orderedNotes.length === 0 && !isCreatingNote ? (
+              <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
+                <p className="text-xs text-[rgb(var(--color-text-secondary))] mb-3 leading-relaxed">
+                  Import a document or create a new note
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setIsCreatingNote(true)}
+                    className="px-3 py-1.5 text-[11px] rounded-lg border border-[rgb(var(--color-border))] text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:border-[rgb(var(--color-accent))] transition-colors"
+                  >
+                    + New note
+                  </button>
+                  <button
+                    onClick={handleImport}
+                    className="px-3 py-1.5 text-[11px] rounded-lg border border-[rgb(var(--color-border))] text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:border-[rgb(var(--color-accent))] transition-colors"
+                  >
+                    Import
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd("notes")}>
+                <SortableContext items={orderedNotes.map((n) => n.path)} strategy={verticalListSortingStrategy}>
+                  {orderedNotes.map((note) => (
+                    <SortableSidebarItem key={note.path} id={note.path}>
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => { if (!renamingItem) openNote(note.path); }}
+                        onDoubleClick={(e) => { e.stopPropagation(); startRename("note", note.path); }}
+                        onKeyDown={(e) => {
+                          if (e.key === "F2") { e.preventDefault(); startRename("note", note.path); }
+                          else if (e.key === "Enter" || e.key === " ") { if (!renamingItem) openNote(note.path); }
+                        }}
+                        className={`group/item w-full flex items-center gap-2 px-3 py-2.5 text-left transition-colors cursor-pointer ${
+                          note.path === activeNotePath
+                            ? "bg-rose-500/10 text-rose-500"
+                            : "text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))]"
+                        }`}
+                      >
+                        <NoteIcon className="shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          {renamingItem?.path === note.path ? (
+                            <input
+                              ref={renameInputRef}
+                              value={renameValue}
+                              onChange={(e) => setRenameValue(e.target.value)}
+                              onKeyDown={(e) => {
+                                e.stopPropagation();
+                                if (e.key === "Enter") commitRename();
+                                if (e.key === "Escape") cancelRename();
+                              }}
+                              onBlur={commitRename}
+                              onClick={(e) => e.stopPropagation()}
+                              className="w-full px-1 py-0.5 text-xs font-medium bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-accent))]/40 rounded focus:outline-none focus:ring-1 focus:ring-[rgb(var(--color-accent))]/40 text-[rgb(var(--color-text))]"
+                            />
+                          ) : (
+                            <div className="text-xs font-medium truncate">{note.title}</div>
+                          )}
+                        </div>
+                        {renamingItem?.path !== note.path && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              requestDelete("note", note.path, note.title);
+                            }}
+                            className="opacity-0 group-hover/item:opacity-100 p-0.5 rounded text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] transition-all"
+                            title="Delete note"
+                          >
+                            <TrashIcon className="w-3 h-3" />
+                          </button>
+                        )}
+                      </div>
+                    </SortableSidebarItem>
+                  ))}
+                </SortableContext>
+              </DndContext>
+            )}
+          </div>
+        </>
+      )}
 
       {/* Delete confirmation overlay */}
       {pendingDelete && (
