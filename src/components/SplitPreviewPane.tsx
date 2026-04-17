@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { X, AlertTriangle, Sparkles, Pencil } from "lucide-react";
+import { X, Sparkles, Pencil } from "lucide-react";
 import { useAppStore } from "../stores/appStore";
 import type { EditorTab } from "../stores/appStore";
 import type { Sketch, Storyboard } from "../types/sketch";
@@ -8,6 +8,9 @@ import type { PlanningRow } from "../types/sketch";
 import { ScriptTable } from "./ScriptTable";
 import { MarkdownEditor } from "./MarkdownEditor";
 import { SketchIcon, StoryboardIcon, NoteIcon } from "./Icons";
+import { SketchForm } from "./SketchForm";
+import { NoteEditor } from "./NoteEditor";
+import { StoryboardView } from "./StoryboardView";
 
 /**
  * SplitTabBar — compact tab bar for the split pane, rendered beside the main TabBar.
@@ -82,42 +85,36 @@ export function SplitTabBar() {
 export function SplitPaneContent() {
   const splitTabs = useAppStore((s) => s.splitTabs);
   const splitActiveTabId = useAppStore((s) => s.splitActiveTabId);
-  const activeTabId = useAppStore((s) => s.activeTabId);
-  const openTabs = useAppStore((s) => s.openTabs);
   const setActiveEditorGroup = useAppStore((s) => s.setActiveEditorGroup);
-
-  const activeMainTab = openTabs.find((t) => t.id === activeTabId);
-  const activeSplitTab = splitTabs.find((t) => t.id === splitActiveTabId);
-  const sameFile =
-    activeMainTab &&
-    activeSplitTab &&
-    activeMainTab.path === activeSplitTab.path &&
-    activeMainTab.type === activeSplitTab.type;
+  const activeSketchPath = useAppStore((s) => s.activeSketchPath);
+  const activeNotePath = useAppStore((s) => s.activeNotePath);
+  const activeStoryboardPath = useAppStore((s) => s.activeStoryboardPath);
 
   if (splitTabs.length === 0) return null;
 
   return (
     <div className="flex flex-col h-full min-w-0" onMouseDown={() => setActiveEditorGroup("split")}>
-      {/* Same-file warning */}
-      {sameFile && (
-        <div className="flex items-center gap-2 px-3 py-1.5 bg-warning/10 border-b border-warning/30 text-[11px] text-warning shrink-0">
-          <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-          Same file open in both panes — last save wins
-        </div>
-      )}
-
       {/* Content — all tabs mounted, inactive hidden to preserve pending saves */}
       <div className="flex-1 min-h-0 relative">
-        {splitTabs.map((tab) => (
-          <div
-            key={tab.id}
-            className={`absolute inset-0 overflow-y-auto ${tab.id !== splitActiveTabId ? "hidden" : ""}`}
-          >
-            {tab.type === "sketch" && <SketchSplitEditor path={tab.path} />}
-            {tab.type === "note" && <NoteSplitEditor path={tab.path} />}
-            {tab.type === "storyboard" && <StoryboardPreviewContent path={tab.path} />}
-          </div>
-        ))}
+        {splitTabs.map((tab) => {
+          // When the split tab shows the same file as the main pane, render the real
+          // component so it has identical functionality (reads same global store state).
+          const isActiveMain =
+            (tab.type === "sketch" && tab.path === activeSketchPath) ||
+            (tab.type === "note" && tab.path === activeNotePath) ||
+            (tab.type === "storyboard" && tab.path === activeStoryboardPath);
+
+          return (
+            <div
+              key={tab.id}
+              className={`absolute inset-0 overflow-y-auto ${tab.id !== splitActiveTabId ? "hidden" : ""}`}
+            >
+              {tab.type === "sketch" && (isActiveMain ? <SketchForm /> : <SketchSplitEditor path={tab.path} />)}
+              {tab.type === "note" && (isActiveMain ? <NoteEditor /> : <NoteSplitEditor path={tab.path} />)}
+              {tab.type === "storyboard" && (isActiveMain ? <StoryboardView /> : <StoryboardPreviewContent path={tab.path} />)}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
