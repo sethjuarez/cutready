@@ -218,7 +218,7 @@ function Tab({
         e.dataTransfer.setData("application/x-cutready-tab", JSON.stringify({ tabId: tab.id, source: "main" }));
         e.dataTransfer.effectAllowed = "move";
       }}
-      className={`group relative flex items-center gap-1.5 pl-3 pr-2 h-[36px] text-[12px] cursor-pointer shrink-0 select-none transition-colors ${
+      className={`group relative flex items-center gap-1.5 pl-3 pr-2 h-[40px] text-[12px] cursor-pointer shrink-0 select-none transition-colors ${
         isActive
           ? "bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text))]"
           : isSplit
@@ -244,7 +244,7 @@ function Tab({
       )}
 
       {/* Separator between tabs */}
-      <span className={`absolute top-[6px] bottom-[6px] right-0 w-px ${
+      <span className={`absolute top-[8px] bottom-[8px] right-0 w-px ${
         isActive ? "bg-transparent" : "bg-[rgb(var(--color-border))]"
       }`} />
 
@@ -264,7 +264,7 @@ function Tab({
 
       {/* Close button */}
       <button
-        className={`flex items-center justify-center w-[18px] h-[18px] rounded transition-all shrink-0 ${
+        className={`flex items-center justify-center w-[20px] h-[20px] rounded transition-all shrink-0 ${
           isActive
             ? "opacity-60 hover:opacity-100 hover:bg-[rgb(var(--color-surface-alt))]"
             : "opacity-0 group-hover:opacity-60 hover:!opacity-100 hover:bg-[rgb(var(--color-surface))]"
