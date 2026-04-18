@@ -376,7 +376,7 @@ export function AppLayout() {
             {/* Upper: main content */}
             <div className="flex-1 min-h-0">
               {view === "home" && <div className="h-full overflow-y-auto"><HomePanel /></div>}
-              {(view === "sketch" || view === "storyboards" || view === "sketches" || view === "notes" || view === "assets" || view === "explorer") && (isMerging ? <MergeConflictPanel /> : <StoryboardPanel />)}
+              {(view === "project" || view === "sketch" || view === "storyboards" || view === "sketches" || view === "notes" || view === "assets" || view === "explorer") && (isMerging ? <MergeConflictPanel /> : <StoryboardPanel />)}
               {view === "editor" && <div className="h-full overflow-y-auto"><ScriptEditorPanel /></div>}
               {view === "recording" && <div className="h-full overflow-y-auto"><RecordingPanel /></div>}
               {view === "settings" && <div className="h-full overflow-y-auto"><SettingsPanel mode="global" /></div>}
@@ -444,6 +444,8 @@ function PrimarySidebar() {
           <AssetList />
         ) : view === "explorer" ? (
           <FileTreeView />
+        ) : view === "project" ? (
+          <StoryboardList />
         ) : view === "storyboards" ? (
           <StoryboardList mode="storyboards" />
         ) : view === "sketches" ? (

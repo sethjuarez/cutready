@@ -29,7 +29,7 @@ import type {
 } from "../types/sketch";
 
 /** The panels / views available in the app. */
-export type AppView = "home" | "sketch" | "storyboards" | "sketches" | "notes" | "assets" | "explorer" | "editor" | "recording" | "settings" | "workspace" | "chat";
+export type AppView = "home" | "project" | "sketch" | "storyboards" | "sketches" | "notes" | "assets" | "explorer" | "editor" | "recording" | "settings" | "workspace" | "chat";
 
 /** Sidebar position. */
 export type SidebarPosition = "left" | "right";
@@ -933,7 +933,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       const project = await invoke<ProjectView>("create_project_folder", { path });
       set({
         currentProject: project,
-        view: "sketch",
+        view: "project",
         openTabs: [],
         activeTabId: null,
         splitTabs: [],
@@ -969,7 +969,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       const project = await invoke<ProjectView>("open_project_folder", { path });
       set({
         currentProject: project,
-        view: "sketch",
+        view: "project",
         openTabs: [],
         activeTabId: null,
         splitTabs: [],
@@ -1508,7 +1508,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     const filename = path.split("/").pop() ?? path;
     get().openTab({ type: "asset", path, title: filename });
     // Navigate to assets view if not already there
-    if (get().view !== "assets" && get().view !== "sketch") {
+    if (get().view !== "assets" && get().view !== "sketch" && get().view !== "project") {
       set({ view: "assets" });
     }
   },
