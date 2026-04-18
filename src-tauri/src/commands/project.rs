@@ -626,6 +626,62 @@ pub async fn transfer_asset(
 
 
 
+/// Open a system terminal in the given directory.
+///
+/// On Windows: tries Windows Terminal (`wt`), falls back to PowerShell.
+/// On macOS: opens Terminal.app via `open -a Terminal`.
+/// On Linux: tries common terminal emulators in order.
+#[tauri::command]
+pub async fn open_in_terminal(path: String) -> Result<(), String> {
+    let dir = std::path::PathBuf::from(&path);
+    if !dir.exists() {
+        return Err(format!("Directory does not exist: {}", path));
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        // Try Windows Terminal first, fall back to PowerShell
+        let wt = std::process::Command::new("cmd")
+            .args(["/c", "start", "wt", "-d", &path])
+            .creation_flags(0x08000000)
+            .spawn();
+        if wt.is_err() {
+            std::process::Command::new("cmd")
+                .args(["/c", "start", "powershell", "-NoExit", "-Command",
+                       &format!("Set-Location '{}'", path.replace('\'', "''"))])
+                .creation_flags(0x08000000)
+                .spawn()
+                .map_err(|e| e.to_string())?;
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .args(["-a", "Terminal", &path])
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        let found = ["x-terminal-emulator", "gnome-terminal", "konsole", "xfce4-terminal", "xterm"]
+            .iter()
+            .find_map(|term| {
+                std::process::Command::new(term)
+                    .args(["--working-directory", &path])
+                    .spawn()
+                    .ok()
+            });
+        if found.is_none() {
+            return Err("No terminal emulator found. Install gnome-terminal, konsole, or xterm.".to_string());
+        }
+    }
+
+    Ok(())
+}
+
 /// Read workspace settings from the current repo's .cutready/settings.json.
 #[tauri::command]
 pub async fn get_workspace_settings(

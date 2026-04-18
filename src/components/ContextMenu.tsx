@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { ChevronRight } from "lucide-react";
 
 export interface ContextMenuItem {
-  label: string;
+  label?: string;
   icon?: React.ReactNode;
   action?: () => void;
   submenu?: ContextMenuItem[];

@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { useAppStore, type ActivityEntry } from "../stores/appStore";
 import {
   BarChart2,
@@ -13,6 +14,7 @@ import {
   FileText,
   Users,
   Wrench,
+  SquareTerminal,
 } from "lucide-react";
 
 /** Format activity log as plain text and copy to clipboard / save to file. */
@@ -43,7 +45,7 @@ async function exportActivity(entries: ActivityEntry[]) {
   URL.revokeObjectURL(url);
 }
 
-type OutputTab = "activity" | "debug";
+type OutputTab = "activity" | "debug" | "terminal";
 
 interface OutputPanelProps {
   onCollapse: () => void;
@@ -58,6 +60,7 @@ export function OutputPanel({ onCollapse }: OutputPanelProps) {
   const debugEntries = useAppStore((s) => s.debugLog);
   const clearActivityLog = useAppStore((s) => s.clearActivityLog);
   const clearDebugLog = useAppStore((s) => s.clearDebugLog);
+  const currentProject = useAppStore((s) => s.currentProject);
   const scrollRef = useRef<HTMLDivElement>(null);
   // No auto-scroll needed — newest entries render at top via flex-col-reverse
 
@@ -80,6 +83,13 @@ export function OutputPanel({ onCollapse }: OutputPanelProps) {
           >
             <Bug className="w-3 h-3" />
             Debug
+          </TabButton>
+          <TabButton
+            active={activeTab === "terminal"}
+            onClick={() => setActiveTab("terminal")}
+          >
+            <SquareTerminal className="w-3 h-3" />
+            Terminal
           </TabButton>
         </div>
         <div className="flex items-center gap-1">
@@ -134,6 +144,25 @@ export function OutputPanel({ onCollapse }: OutputPanelProps) {
               ))
             )}
           </>
+        )}
+        {activeTab === "terminal" && (
+          <div className="flex flex-col items-center justify-center h-full gap-3 text-center px-4">
+            <SquareTerminal className="w-6 h-6 text-[rgb(var(--color-text-secondary))]/40" />
+            <div>
+              <p className="text-[rgb(var(--color-text-secondary))] text-xs mb-0.5">
+                {currentProject ? currentProject.root : "No project open"}
+              </p>
+              {currentProject && (
+                <button
+                  onClick={() => invoke("open_in_terminal", { path: currentProject.root })}
+                  className="mt-2 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-[rgb(var(--color-surface-alt))] border border-[rgb(var(--color-border))] text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:border-[rgb(var(--color-text-secondary))]/40 transition-colors mx-auto"
+                >
+                  <SquareTerminal className="w-3 h-3" />
+                  Open in Terminal
+                </button>
+              )}
+            </div>
+          </div>
         )}
       </div>
     </div>

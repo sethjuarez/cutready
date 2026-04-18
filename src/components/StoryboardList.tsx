@@ -14,7 +14,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { invoke } from "@tauri-apps/api/core";
-import { ArrowRight, Copy, Download, FolderOpen, Plus, Trash2 } from "lucide-react";
+import { ArrowRight, Copy, Download, FolderOpen, Plus, SquareTerminal, Trash2 } from "lucide-react";
 import { useAppStore, type SidebarOrder } from "../stores/appStore";
 import type { ProjectEntry } from "../types/project";
 import { SketchIcon, StoryboardIcon, NoteIcon } from "./Icons";
@@ -316,18 +316,32 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
     path: string,
     title: string,
   ): ContextMenuItem[] => {
-    if (!isMultiProject || otherProjects.length === 0) return [];
-    const projectItems = (action: "move" | "copy"): ContextMenuItem[] =>
-      otherProjects.map((p) => ({
-        label: p.name,
-        icon: <FolderOpen className="w-3.5 h-3.5" />,
-        action: () => handleTransfer(action, type, path, title, p),
-      }));
-    return [
-      { label: "Move to", icon: <ArrowRight className="w-3.5 h-3.5" />, submenu: projectItems("move") },
-      { label: "Copy to", icon: <Copy className="w-3.5 h-3.5" />, submenu: projectItems("copy") },
-    ];
-  }, [isMultiProject, otherProjects, handleTransfer]);
+    const items: ContextMenuItem[] = [];
+
+    if (currentProject) {
+      items.push({
+        label: "Open in Terminal",
+        icon: <SquareTerminal className="w-3.5 h-3.5" />,
+        action: () => invoke("open_in_terminal", { path: currentProject.root }),
+      });
+    }
+
+    if (isMultiProject && otherProjects.length > 0) {
+      if (items.length > 0) items.push({ separator: true });
+      const projectItems = (action: "move" | "copy"): ContextMenuItem[] =>
+        otherProjects.map((p) => ({
+          label: p.name,
+          icon: <FolderOpen className="w-3.5 h-3.5" />,
+          action: () => handleTransfer(action, type, path, title, p),
+        }));
+      items.push(
+        { label: "Move to", icon: <ArrowRight className="w-3.5 h-3.5" />, submenu: projectItems("move") },
+        { label: "Copy to", icon: <Copy className="w-3.5 h-3.5" />, submenu: projectItems("copy") },
+      );
+    }
+
+    return items;
+  }, [currentProject, isMultiProject, otherProjects, handleTransfer]);
 
   useEffect(() => {
     loadStoryboards();

@@ -309,6 +309,9 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
       return { path: (args as { existingName: string }).existingName.toLowerCase().replace(/\s+/g, "-"), name: (args as { existingName: string }).existingName, description: null };
     case "transfer_asset":
       return null; // no-op in dev mock
+    case "open_in_terminal":
+      console.log("[devMock] open_in_terminal", args);
+      return null;
     case "get_workspace_settings":
       return {};
     case "set_workspace_settings":
