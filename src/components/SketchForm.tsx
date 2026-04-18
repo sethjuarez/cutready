@@ -124,7 +124,7 @@ export function SketchForm() {
     const newRows = activeSketch.rows ?? [];
     const indices = snap.changedIndices.length > 0
       ? snap.changedIndices
-      : newRows.map((_, i) => i); // empty = all rows (set_planning_rows)
+      : newRows.map((_, i) => i); // empty = all rows (write_sketch)
 
     const diffs: RowDiff[] = [];
     const highlighted = new Set<number>();
@@ -404,7 +404,7 @@ The Actions describe what happens on screen — use them as visual design hints.
             {localTitle && (
               <button
                 onClick={() => sendChatPrompt(
-                  `Improve the title of sketch "${activeSketchPath ?? "current"}". Current title: "${localTitle}". Suggest a more compelling, concise title. IMPORTANT: Only update the title — do NOT change the description or any rows. Use set_planning_rows with the improved title but keep the existing description and all rows exactly as they are.`,
+                  `Improve the title of sketch "${activeSketchPath ?? "current"}". Current title: "${localTitle}". Suggest a more compelling, concise title. IMPORTANT: Only update the title — do NOT change the description or any rows. Use write_sketch with the improved title but keep the existing description and all rows exactly as they are.`,
                   { silent: true }
                 )}
                 className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover/title:opacity-100 p-1 rounded text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10 transition-all"
@@ -522,8 +522,8 @@ The Actions describe what happens on screen — use them as visual design hints.
             <button
               onClick={() => sendChatPrompt(
                 localDesc
-                  ? `Improve the description of sketch "${activeSketchPath ?? "current"}". Current description: "${localDesc}". Make it clearer and more informative. IMPORTANT: Only update the description — do NOT change the title or any rows. Use set_planning_rows with the improved description but keep the existing title and all rows exactly as they are.`
-                  : `Write a description for sketch "${activeSketchPath ?? "current"}" titled "${localTitle}". Look at the planning rows to understand what the sketch covers and write a concise description. IMPORTANT: Only update the description — do NOT change the title or any rows. Use set_planning_rows with the new description but keep the existing title and all rows exactly as they are.`,
+                  ? `Improve the description of sketch "${activeSketchPath ?? "current"}". Current description: "${localDesc}". Make it clearer and more informative. IMPORTANT: Only update the description — do NOT change the title or any rows. Use write_sketch with the improved description but keep the existing title and all rows exactly as they are.`
+                  : `Write a description for sketch "${activeSketchPath ?? "current"}" titled "${localTitle}". Look at the planning rows to understand what the sketch covers and write a concise description. IMPORTANT: Only update the description — do NOT change the title or any rows. Use write_sketch with the new description but keep the existing title and all rows exactly as they are.`,
                 { silent: true }
               )}
               className="absolute right-2 top-2 flex items-center gap-1 opacity-0 group-hover/desc:opacity-100 p-1 rounded text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10 transition-all"
@@ -542,7 +542,7 @@ The Actions describe what happens on screen — use them as visual design hints.
               onClick={() => sendChatPrompt(
                 localRows.length === 0
                   ? `Generate a complete sketch plan for "${activeSketch?.title ?? "this sketch"}". ${activeSketch?.description && typeof activeSketch.description === "string" ? `Description: ${activeSketch.description}. ` : ""}Create well-structured planning rows with time, narrative, and demo_actions.`
-                  : `Review and improve the entire sketch "${activeSketchPath ?? "current"}". Refine the narrative flow, tighten timing, and make demo actions more specific. Use set_planning_rows to apply changes.`,
+                  : `Review and improve the entire sketch "${activeSketchPath ?? "current"}". Refine the narrative flow, tighten timing, and make demo actions more specific. Use write_sketch to apply changes.`,
                 { silent: true }
               )}
               className="flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10 transition-colors"

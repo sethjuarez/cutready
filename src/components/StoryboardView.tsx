@@ -335,8 +335,8 @@ export function StoryboardView() {
           <button
             onClick={() => sendChatPrompt(
               localDesc
-                ? `Improve the description of the storyboard "${activeStoryboard.title}" (path: "${activeStoryboardPath}"). Current description: "${localDesc}". Write a clearer, more compelling description that summarizes the demo flow. Keep it concise (2-3 sentences). Use the update_storyboard tool to save the new description.`
-                : `Write a description for the storyboard "${activeStoryboard.title}" (path: "${activeStoryboardPath}"). Look at the sketches to understand the demo flow and write a concise (2-3 sentence) description. Use the update_storyboard tool to save the description.`,
+                ? `Improve the description of the storyboard "${activeStoryboard.title}" (path: "${activeStoryboardPath}"). Current description: "${localDesc}". Write a clearer, more compelling description that summarizes the demo flow. Keep it concise (2-3 sentences). Use the write_storyboard tool to save the new description.`
+                : `Write a description for the storyboard "${activeStoryboard.title}" (path: "${activeStoryboardPath}"). Look at the sketches to understand the demo flow and write a concise (2-3 sentence) description. Use the write_storyboard tool to save the description.`,
               { silent: true }
             )}
             className="absolute right-1 top-1 opacity-60 hover:opacity-100 p-1 rounded text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10 transition-all"

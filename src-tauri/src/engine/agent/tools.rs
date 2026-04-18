@@ -9,7 +9,6 @@ use serde_json::{json, Value};
 
 use crate::engine::agent::llm::{ContentPart, ImageUrl, Tool, ToolCall};
 use crate::engine::project;
-use crate::engine::versioning;
 use crate::models::sketch::PlanningRow;
 
 // ---------------------------------------------------------------------------
@@ -209,39 +208,57 @@ pub fn all_tools() -> Vec<Tool> {
     vec![
         Tool::function(
             "list_project_files",
-            "List all sketches and notes in the project",
-            json!({ "type": "object", "properties": {}, "required": [] }),
-        ),
-        Tool::function(
-            "read_note",
-            "Read the full markdown content of a note",
+            "List all sketches, notes, and storyboards in the project. Pass include_images: true to also list screenshots from .cutready/screenshots/.",
             json!({
                 "type": "object",
                 "properties": {
-                    "path": { "type": "string", "description": "Relative path exactly as returned by list_project_files (e.g. 'getting-started.md' or 'docs/overview.md')" }
+                    "include_images": { "type": "boolean", "description": "When true, also lists images/screenshots available for use in sketch rows (default: false)" }
+                },
+                "required": []
+            }),
+        ),
+        Tool::function(
+            "read_note",
+            "Read the full markdown content of a note.",
+            json!({
+                "type": "object",
+                "properties": {
+                    "path": { "type": "string", "description": "Relative path exactly as returned by list_project_files (e.g. 'getting-started.md')" }
                 },
                 "required": ["path"]
+            }),
+        ),
+        Tool::function(
+            "write_note",
+            "Create a new note or overwrite an existing note with the given content. Creates the file if it doesn't exist; overwrites if it does.",
+            json!({
+                "type": "object",
+                "properties": {
+                    "path": { "type": "string", "description": "Relative path for the note (e.g. 'meeting-notes.md', 'ideas.md'). Must end with .md." },
+                    "content": { "type": "string", "description": "The full markdown content for the note" }
+                },
+                "required": ["path", "content"]
             }),
         ),
         Tool::function(
             "read_sketch",
-            "Read a sketch's planning rows (time, narrative, demo_actions, screenshot). IMPORTANT: You must provide the 'path' argument — call list_project_files first if you don't know it.",
+            "Read a sketch's planning rows (time, narrative, demo_actions, screenshot). Call list_project_files first if you don't know the path.",
             json!({
                 "type": "object",
                 "properties": {
-                    "path": { "type": "string", "description": "REQUIRED. Relative path exactly as returned by list_project_files (e.g. 'introduction.sk' or 'demos/overview.sk')" }
+                    "path": { "type": "string", "description": "REQUIRED. Relative path exactly as returned by list_project_files (e.g. 'introduction.sk')" }
                 },
                 "required": ["path"]
             }),
         ),
         Tool::function(
-            "set_planning_rows",
-            "Replace ALL planning rows in a sketch, or create a new sketch if it doesn't exist yet. Use this to generate a full plan from scratch.",
+            "write_sketch",
+            "Replace ALL planning rows in a sketch, or create a new sketch if the path doesn't exist. Use this to generate a full plan from scratch or restructure an existing sketch.",
             json!({
                 "type": "object",
                 "properties": {
                     "path": { "type": "string", "description": "Relative path to the sketch. Use a path from list_project_files to update, or a new filename like 'my-sketch.sk' to create" },
-                    "title": { "type": "string", "description": "Title for the sketch (optional, used when creating a new sketch)" },
+                    "title": { "type": "string", "description": "Title for the sketch (optional when updating; used when creating)" },
                     "description": { "type": "string", "description": "Brief description of the sketch content and purpose (optional)" },
                     "rows": {
                         "type": "array",
@@ -251,7 +268,7 @@ pub fn all_tools() -> Vec<Tool> {
                                 "time": { "type": "string", "description": "Duration (e.g. '~30s', '1:00')" },
                                 "narrative": { "type": "string", "description": "Voiceover/narration bullets" },
                                 "demo_actions": { "type": "string", "description": "On-screen action bullets" },
-                                "screenshot": { "type": "string", "description": "Optional path to a screenshot image (relative, e.g. '.cutready/screenshots/pasted-123.png'). Use list_project_images or read the note content to find existing image paths." }
+                                "screenshot": { "type": "string", "description": "Optional path to a screenshot image (relative, from list_project_files with include_images: true)" }
                             },
                             "required": ["time", "narrative", "demo_actions"]
                         }
@@ -261,17 +278,8 @@ pub fn all_tools() -> Vec<Tool> {
             }),
         ),
         Tool::function(
-            "list_project_images",
-            "List all images/screenshots in the project's .cutready/screenshots directory. Returns paths that can be used as screenshot values in planning rows.",
-            json!({
-                "type": "object",
-                "properties": {},
-                "required": []
-            }),
-        ),
-        Tool::function(
             "update_planning_row",
-            "Update a single planning row by index. Only fields provided are changed.",
+            "Update a single planning row by index. Only fields provided are changed — useful for targeted edits without touching other rows.",
             json!({
                 "type": "object",
                 "properties": {
@@ -280,7 +288,7 @@ pub fn all_tools() -> Vec<Tool> {
                     "time": { "type": "string", "description": "New time value (optional)" },
                     "narrative": { "type": "string", "description": "New narrative (optional)" },
                     "demo_actions": { "type": "string", "description": "New demo actions (optional)" },
-                    "screenshot": { "type": "string", "description": "New screenshot path (optional, e.g. '.cutready/screenshots/pasted-123.png')" }
+                    "screenshot": { "type": "string", "description": "New screenshot path (optional)" }
                 },
                 "required": ["path", "index"]
             }),
@@ -324,10 +332,65 @@ pub fn all_tools() -> Vec<Tool> {
                     "index": { "type": "integer", "description": "REQUIRED. 0-based row index (e.g. 0 for the first row, 5 for the sixth)" },
                     "plan": {
                         "type": "string",
-                        "description": "REQUIRED. English description of the visual design: what elements to show, where they go on the 960×540 canvas, color choices, and animation sequence"
+                        "description": "REQUIRED. English description of the visual design: what elements to show, where they go on the 960x540 canvas, color choices, and animation sequence"
                     }
                 },
                 "required": ["path", "index", "plan"]
+            }),
+        ),
+        Tool::function(
+            "read_storyboard",
+            "Read a storyboard's title, description, and ordered sketch sequence.",
+            json!({
+                "type": "object",
+                "properties": {
+                    "path": { "type": "string", "description": "Relative path to the storyboard .sb file (from list_project_files)" }
+                },
+                "required": ["path"]
+            }),
+        ),
+        Tool::function(
+            "write_storyboard",
+            "Create a new storyboard or update an existing one. When 'items' is omitted, only title/description are updated and the existing sketch sequence is preserved. When 'items' is provided, the entire sequence is replaced.",
+            json!({
+                "type": "object",
+                "properties": {
+                    "path": { "type": "string", "description": "Relative path for the storyboard (e.g. 'demo-flow.sb'). Use a path from list_project_files to update, or a new filename to create." },
+                    "title": { "type": "string", "description": "Title for the storyboard" },
+                    "description": { "type": "string", "description": "Description of what this storyboard covers" },
+                    "items": {
+                        "type": "array",
+                        "description": "Ordered sketch sequence. When provided, replaces all existing items. When omitted, preserves the existing sequence.",
+                        "items": {
+                            "oneOf": [
+                                {
+                                    "type": "object",
+                                    "description": "A direct reference to a sketch",
+                                    "properties": {
+                                        "type": { "type": "string", "enum": ["sketch_ref"] },
+                                        "path": { "type": "string", "description": "Relative path to the sketch (e.g. 'intro.sk')" }
+                                    },
+                                    "required": ["type", "path"]
+                                },
+                                {
+                                    "type": "object",
+                                    "description": "A named section grouping multiple sketches",
+                                    "properties": {
+                                        "type": { "type": "string", "enum": ["section"] },
+                                        "title": { "type": "string", "description": "Section heading" },
+                                        "sketches": {
+                                            "type": "array",
+                                            "items": { "type": "string" },
+                                            "description": "Relative paths to sketches in this section"
+                                        }
+                                    },
+                                    "required": ["type", "title", "sketches"]
+                                }
+                            ]
+                        }
+                    }
+                },
+                "required": ["path"]
             }),
         ),
         Tool::function(
@@ -343,111 +406,8 @@ pub fn all_tools() -> Vec<Tool> {
             }),
         ),
         agentive::web::fetch_url_tool(),
-        Tool::function(
-            "save_feedback",
-            "Save user feedback about CutReady. Use this when the user wants to submit feedback, report a bug, request a feature, or share thoughts about the app or an interaction.",
-            json!({
-                "type": "object",
-                "properties": {
-                    "category": { "type": "string", "enum": ["General", "Bug", "Feature", "Design"], "description": "Feedback category" },
-                    "feedback": { "type": "string", "description": "The user's feedback text" }
-                },
-                "required": ["category", "feedback"]
-            }),
-        ),
-        Tool::function(
-            "update_note",
-            "Update the full content of an existing note. Use this to clean up, restructure, or rewrite note content.",
-            json!({
-                "type": "object",
-                "properties": {
-                    "path": { "type": "string", "description": "Relative path to the note (from list_project_files)" },
-                    "content": { "type": "string", "description": "The full markdown content for the note" }
-                },
-                "required": ["path", "content"]
-            }),
-        ),
-        Tool::function(
-            "create_note",
-            "Create a brand new note in the project. Use this when the user asks you to write something down, take notes, create a document, or save information from the conversation as a note.",
-            json!({
-                "type": "object",
-                "properties": {
-                    "filename": { "type": "string", "description": "Filename for the note (e.g. 'meeting-notes.md', 'ideas.md'). Will be created in the project root." },
-                    "content": { "type": "string", "description": "The full markdown content for the note" }
-                },
-                "required": ["filename", "content"]
-            }),
-        ),
-        Tool::function(
-            "update_storyboard",
-            "Update the title and/or description of an existing storyboard.",
-            json!({
-                "type": "object",
-                "properties": {
-                    "path": { "type": "string", "description": "Relative path to the storyboard .sb file (from list_project_files)" },
-                    "title": { "type": "string", "description": "New title for the storyboard (optional, keeps existing if omitted)" },
-                    "description": { "type": "string", "description": "New description for the storyboard" }
-                },
-                "required": ["path"]
-            }),
-        ),
         agentive::memory::recall_memory_tool(),
         agentive::memory::save_memory_tool(),
-        // ── Snapshot / versioning tools ──────────────────────────────
-        Tool::function(
-            "list_snapshots",
-            "List the project's version history (git snapshots) in reverse chronological order. Returns commit IDs, messages, and timestamps. Use this to find snapshot IDs for read_file_at_snapshot or compare_snapshots.",
-            json!({
-                "type": "object",
-                "properties": {
-                    "limit": { "type": "integer", "description": "Maximum number of snapshots to return (default: 20)" }
-                },
-                "required": []
-            }),
-        ),
-        Tool::function(
-            "read_file_at_snapshot",
-            "Read the content of a specific file at a historical snapshot. Use this to see what a sketch, note, or storyboard looked like at a previous point in time. Get snapshot IDs from list_snapshots.",
-            json!({
-                "type": "object",
-                "properties": {
-                    "snapshot_id": { "type": "string", "description": "The commit/snapshot ID (from list_snapshots)" },
-                    "path": { "type": "string", "description": "Relative file path (e.g. 'introduction.sk', 'notes/script.md')" }
-                },
-                "required": ["snapshot_id", "path"]
-            }),
-        ),
-        Tool::function(
-            "compare_snapshots",
-            "Compare two snapshots and see which files changed between them, including line-level addition/deletion counts. Use this to understand what evolved between versions.",
-            json!({
-                "type": "object",
-                "properties": {
-                    "from_snapshot": { "type": "string", "description": "The older snapshot ID (from list_snapshots)" },
-                    "to_snapshot": { "type": "string", "description": "The newer snapshot ID (from list_snapshots)" }
-                },
-                "required": ["from_snapshot", "to_snapshot"]
-            }),
-        ),
-        Tool::function(
-            "list_timelines",
-            "List all timelines (branches) in the project. Shows which timeline is currently active, snapshot counts, and display labels.",
-            json!({
-                "type": "object",
-                "properties": {},
-                "required": []
-            }),
-        ),
-        Tool::function(
-            "get_current_snapshot",
-            "Get information about the current snapshot (HEAD commit) and active timeline. Use this to orient yourself in the project's version history.",
-            json!({
-                "type": "object",
-                "properties": {},
-                "required": []
-            }),
-        ),
     ]
 }
 
@@ -465,25 +425,18 @@ pub fn execute_tool(call: &ToolCall, project_root: &Path, vision_enabled: bool) 
 
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         match call.function.name.as_str() {
-            "list_project_files" => agentive::ToolOutput::from(exec_list_project_files(project_root)),
+            "list_project_files" => agentive::ToolOutput::from(exec_list_project_files(project_root, &args)),
             "read_note" => exec_read_note(project_root, &args, vision_enabled),
+            "write_note" => agentive::ToolOutput::from(exec_write_note(project_root, &args)),
             "read_sketch" => exec_read_sketch(project_root, &args, vision_enabled),
-            "set_planning_rows" => agentive::ToolOutput::from(exec_set_planning_rows(project_root, &args)),
+            "write_sketch" => agentive::ToolOutput::from(exec_write_sketch(project_root, &args)),
             "update_planning_row" => agentive::ToolOutput::from(exec_update_planning_row(project_root, &args)),
             "set_row_visual" => agentive::ToolOutput::from(exec_set_row_visual(project_root, &args)),
             "design_plan" => agentive::ToolOutput::from(exec_design_plan(project_root, &args)),
-            "list_project_images" => agentive::ToolOutput::from(exec_list_project_images(project_root)),
-            "save_feedback" => agentive::ToolOutput::from(exec_save_feedback(&args)),
-            "update_note" => agentive::ToolOutput::from(exec_update_note(project_root, &args)),
-            "create_note" => agentive::ToolOutput::from(exec_create_note(project_root, &args)),
-            "update_storyboard" => agentive::ToolOutput::from(exec_update_storyboard(project_root, &args)),
+            "read_storyboard" => agentive::ToolOutput::from(exec_read_storyboard(project_root, &args)),
+            "write_storyboard" => agentive::ToolOutput::from(exec_write_storyboard(project_root, &args)),
             "recall_memory" => agentive::ToolOutput::from(exec_recall_memory(project_root, &args)),
             "save_memory" => agentive::ToolOutput::from(exec_save_memory(project_root, &args)),
-            "list_snapshots" => agentive::ToolOutput::from(exec_list_snapshots(project_root, &args)),
-            "read_file_at_snapshot" => agentive::ToolOutput::from(exec_read_file_at_snapshot(project_root, &args)),
-            "compare_snapshots" => agentive::ToolOutput::from(exec_compare_snapshots(project_root, &args)),
-            "list_timelines" => agentive::ToolOutput::from(exec_list_timelines(project_root)),
-            "get_current_snapshot" => agentive::ToolOutput::from(exec_get_current_snapshot(project_root)),
             "fetch_url" => {
                 let url = args.get("url").and_then(|v| v.as_str()).unwrap_or("").to_string();
                 agentive::ToolOutput::from(tokio::task::block_in_place(|| {
@@ -570,12 +523,13 @@ fn resolve_path(project_root: &Path, rel: &str) -> PathBuf {
     project_root.join(rel)
 }
 
-fn exec_list_project_files(root: &Path) -> String {
+fn exec_list_project_files(root: &Path, args: &Value) -> String {
+    let include_images = args.get("include_images").and_then(|v| v.as_bool()).unwrap_or(false);
     let mut out = String::new();
 
     if let Ok(sketches) = project::scan_sketches(root) {
         out.push_str("## Sketches\n");
-        out.push_str("Use the exact path value with read_sketch/set_planning_rows/update_planning_row.\n");
+        out.push_str("Use the exact path value with read_sketch/write_sketch/update_planning_row.\n");
         for s in &sketches {
             out.push_str(&format!(
                 "- path: \"{}\" — {} ({} rows)\n",
@@ -586,7 +540,7 @@ fn exec_list_project_files(root: &Path) -> String {
 
     if let Ok(notes) = project::scan_notes(root) {
         out.push_str("\n## Notes\n");
-        out.push_str("Use the exact path value with read_note or update_note.\n");
+        out.push_str("Use the exact path value with read_note or write_note.\n");
         for n in &notes {
             out.push_str(&format!("- path: \"{}\" — {}\n", n.path, n.title));
         }
@@ -594,7 +548,7 @@ fn exec_list_project_files(root: &Path) -> String {
 
     if let Ok(storyboards) = project::scan_storyboards(root) {
         out.push_str("\n## Storyboards\n");
-        out.push_str("Use the exact path value with update_storyboard.\n");
+        out.push_str("Use the exact path value with read_storyboard or write_storyboard.\n");
         for sb in &storyboards {
             out.push_str(&format!(
                 "- path: \"{}\" — {} ({} sketches)\n",
@@ -603,8 +557,35 @@ fn exec_list_project_files(root: &Path) -> String {
         }
     }
 
+    if include_images {
+        let screenshots_dir = root.join(".cutready").join("screenshots");
+        if screenshots_dir.exists() {
+            let mut images = Vec::new();
+            if let Ok(entries) = std::fs::read_dir(&screenshots_dir) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+                        if matches!(ext.to_lowercase().as_str(), "png" | "jpg" | "jpeg" | "gif" | "webp") {
+                            if let Ok(rel) = path.strip_prefix(root) {
+                                images.push(rel.to_string_lossy().replace('\\', "/"));
+                            }
+                        }
+                    }
+                }
+            }
+            if !images.is_empty() {
+                images.sort();
+                out.push_str("\n## Screenshots\n");
+                out.push_str("Use these paths as 'screenshot' values in write_sketch or update_planning_row.\n");
+                for img in &images {
+                    out.push_str(&format!("- {}\n", img));
+                }
+            }
+        }
+    }
+
     if out.is_empty() {
-        "No sketches or notes found in this project.".into()
+        "No sketches, notes, or storyboards found in this project.".into()
     } else {
         out
     }
@@ -637,7 +618,7 @@ fn exec_read_sketch(root: &Path, args: &Value, vision_enabled: bool) -> agentive
     let path = match args.get("path").and_then(|v| v.as_str()) {
         Some(p) => resolve_path(root, p),
         None => {
-            let listing = exec_list_project_files(root);
+            let listing = exec_list_project_files(root, &Value::Null);
             return agentive::ToolOutput::from(format!(
                 "Error: missing 'path' argument. Call read_sketch with a path from the list below.\n\n{listing}"
             ));
@@ -683,7 +664,7 @@ fn exec_read_sketch(root: &Path, args: &Value, vision_enabled: bool) -> agentive
     }
 }
 
-fn exec_set_planning_rows(root: &Path, args: &Value) -> String {
+fn exec_write_sketch(root: &Path, args: &Value) -> String {
     let path = match args.get("path").and_then(|v| v.as_str()) {
         Some(p) => resolve_path(root, p),
         None => return "Error: missing 'path' argument".into(),
@@ -762,7 +743,7 @@ fn exec_update_planning_row(root: &Path, args: &Value) -> String {
     let path = match args.get("path").and_then(|v| v.as_str()) {
         Some(p) => resolve_path(root, p),
         None => {
-            let listing = exec_list_project_files(root);
+            let listing = exec_list_project_files(root, &Value::Null);
             return format!(
                 "Error: missing 'path' argument. Call update_planning_row with a path from the list below.\n\n{listing}"
             );
@@ -816,7 +797,7 @@ fn exec_set_row_visual(root: &Path, args: &Value) -> String {
     let path = match args.get("path").and_then(|v| v.as_str()) {
         Some(p) => resolve_path(root, p),
         None => {
-            let listing = exec_list_project_files(root);
+            let listing = exec_list_project_files(root, &Value::Null);
             return format!(
                 "Error: missing 'path' argument. Call set_row_visual with a path from the list below.\n\n{listing}"
             );
@@ -919,7 +900,7 @@ fn exec_design_plan(root: &Path, args: &Value) -> String {
     let path = match args.get("path").and_then(|v| v.as_str()) {
         Some(p) => resolve_path(root, p),
         None => {
-            let listing = exec_list_project_files(root);
+            let listing = exec_list_project_files(root, &Value::Null);
             return format!(
                 "Error: missing 'path' argument. Call design_plan with a path from the list below.\n\n{listing}"
             );
@@ -1134,85 +1115,25 @@ fn validate_dsl_doc(visual: &Value, errors: &mut Vec<String>) {
     }
 }
 
-fn exec_list_project_images(root: &Path) -> String {
-    let screenshots_dir = root.join(".cutready").join("screenshots");
-    if !screenshots_dir.exists() {
-        return "No screenshots directory found.".into();
-    }
-    let mut images = Vec::new();
-    if let Ok(entries) = std::fs::read_dir(&screenshots_dir) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
-                if matches!(ext.to_lowercase().as_str(), "png" | "jpg" | "jpeg" | "gif" | "webp" | "svg") {
-                    if let Ok(rel) = path.strip_prefix(root) {
-                        images.push(rel.to_string_lossy().replace('\\', "/"));
-                    }
-                }
-            }
-        }
-    }
-    if images.is_empty() {
-        return "No images found in .cutready/screenshots/".into();
-    }
-    images.sort();
-    let mut out = format!("Found {} image(s):\n", images.len());
-    for img in &images {
-        out.push_str(&format!("  {}\n", img));
-    }
-    out.push_str("\nUse these paths as 'screenshot' values in set_planning_rows or update_planning_row.");
-    out
-}
-
-fn exec_save_feedback(args: &Value) -> String {
-    let category = args.get("category").and_then(|v| v.as_str()).unwrap_or("General");
-    let feedback = match args.get("feedback").and_then(|v| v.as_str()) {
-        Some(f) if !f.trim().is_empty() => f.trim(),
-        _ => return "Error: feedback text is required".into(),
+fn exec_write_note(root: &Path, args: &Value) -> String {
+    let rel = match args.get("path").and_then(|v| v.as_str()) {
+        Some(p) => p,
+        None => return "Error: missing 'path' argument (e.g. 'my-note.md')".into(),
     };
-
-    // Use the same app data path as commands/feedback.rs
-    let data_dir = dirs::data_dir()
-        .map(|d| d.join("com.cutready"))
-        .unwrap_or_else(|| PathBuf::from("."));
-    if let Err(e) = std::fs::create_dir_all(&data_dir) {
-        return format!("Error creating data dir: {e}");
-    }
-
-    let path = data_dir.join("feedback.json");
-    let mut entries: Vec<Value> = if path.exists() {
-        let content = std::fs::read_to_string(&path).unwrap_or_else(|_| "[]".into());
-        serde_json::from_str(&content).unwrap_or_default()
-    } else {
-        vec![]
+    // Enforce .md extension and safe path
+    let safe_rel = {
+        let trimmed = rel.trim().replace(['\\'], "/");
+        if trimmed.ends_with(".md") { trimmed } else { format!("{trimmed}.md") }
     };
-
-    entries.push(json!({
-        "category": category,
-        "feedback": feedback,
-        "date": chrono::Utc::now().to_rfc3339(),
-    }));
-
-    match serde_json::to_string_pretty(&entries) {
-        Ok(json) => match std::fs::write(&path, json) {
-            Ok(()) => format!("Feedback saved: [{}] {}", category, feedback),
-            Err(e) => format!("Error writing feedback: {e}"),
-        },
-        Err(e) => format!("Serialization error: {e}"),
-    }
-}
-
-fn exec_update_note(root: &Path, args: &Value) -> String {
-    let path = match args.get("path").and_then(|v| v.as_str()) {
-        Some(p) => resolve_path(root, p),
-        None => return "Error: missing 'path' argument".into(),
+    let path = match project::safe_resolve(root, &safe_rel) {
+        Ok(p) => p,
+        Err(_) => return format!("Error: invalid path '{safe_rel}' — path traversal not allowed"),
     };
     let content = match args.get("content").and_then(|v| v.as_str()) {
         Some(c) => c,
         None => return "Error: missing 'content' argument".into(),
     };
 
-    // Ensure parent directories exist for new notes
     if let Some(parent) = path.parent() {
         if !parent.exists() {
             if let Err(e) = std::fs::create_dir_all(parent) {
@@ -1221,68 +1142,131 @@ fn exec_update_note(root: &Path, args: &Value) -> String {
         }
     }
 
+    let created = !path.exists();
     match project::write_note(&path, content) {
-        Ok(()) => format!("Updated note at {}", path.display()),
+        Ok(()) => {
+            if created {
+                format!("Created note '{safe_rel}'")
+            } else {
+                format!("Updated note '{safe_rel}'")
+            }
+        }
         Err(e) => format!("Error writing note: {e}"),
     }
 }
 
-fn exec_update_storyboard(root: &Path, args: &Value) -> String {
+fn exec_read_storyboard(root: &Path, args: &Value) -> String {
     let rel = match args.get("path").and_then(|v| v.as_str()) {
         Some(p) => p,
         None => return "Error: missing 'path' argument".into(),
     };
-    let abs = resolve_path(root, rel);
+    let path = resolve_path(root, rel);
+    match project::read_storyboard(&path) {
+        Ok(sb) => {
+            let mut out = format!("# {}\n", sb.title);
+            if !sb.description.is_empty() {
+                out.push_str(&format!("\n{}\n", sb.description));
+            }
+            out.push_str("\n## Sketch Sequence\n");
+            if sb.items.is_empty() {
+                out.push_str("(no sketches)\n");
+            } else {
+                for (i, item) in sb.items.iter().enumerate() {
+                    match item {
+                        crate::models::sketch::StoryboardItem::SketchRef { path: sketch_path } => {
+                            out.push_str(&format!("{}. sketch_ref: \"{}\"\n", i + 1, sketch_path));
+                        }
+                        crate::models::sketch::StoryboardItem::Section { title, sketches } => {
+                            out.push_str(&format!("{}. section: \"{}\" ({} sketches)\n", i + 1, title, sketches.len()));
+                            for sp in sketches {
+                                out.push_str(&format!("   - \"{}\"\n", sp));
+                            }
+                        }
+                    }
+                }
+            }
+            out
+        }
+        Err(e) => format!("Error reading storyboard: {e}"),
+    }
+}
 
-    // Read existing storyboard
-    let mut sb = match project::read_storyboard(&abs) {
-        Ok(sb) => sb,
-        Err(e) => return format!("Error reading storyboard: {e}"),
+fn exec_write_storyboard(root: &Path, args: &Value) -> String {
+    let rel = match args.get("path").and_then(|v| v.as_str()) {
+        Some(p) => p,
+        None => return "Error: missing 'path' argument".into(),
+    };
+    let safe_rel = {
+        let trimmed = rel.trim().replace(['\\'], "/");
+        if trimmed.ends_with(".sb") { trimmed } else { format!("{trimmed}.sb") }
+    };
+    let path = match project::safe_resolve(root, &safe_rel) {
+        Ok(p) => p,
+        Err(_) => return format!("Error: invalid path '{safe_rel}' — path traversal not allowed"),
     };
 
-    // Apply updates
+    // Load existing or create new
+    let mut sb = match project::read_storyboard(&path) {
+        Ok(existing) => existing,
+        Err(_) => crate::models::sketch::Storyboard::new(
+            args.get("title").and_then(|v| v.as_str()).unwrap_or("Untitled")
+        ),
+    };
+
     if let Some(title) = args.get("title").and_then(|v| v.as_str()) {
         sb.title = title.to_string();
     }
     if let Some(desc) = args.get("description").and_then(|v| v.as_str()) {
         sb.description = desc.to_string();
     }
+
+    // Replace items only when explicitly provided
+    if let Some(items_val) = args.get("items").and_then(|v| v.as_array()) {
+        let mut new_items = Vec::new();
+        for (i, item) in items_val.iter().enumerate() {
+            let item_type = item.get("type").and_then(|v| v.as_str()).unwrap_or("");
+            match item_type {
+                "sketch_ref" => {
+                    let sketch_path = match item.get("path").and_then(|v| v.as_str()) {
+                        Some(p) => p.to_string(),
+                        None => return format!("Error: items[{i}] sketch_ref is missing 'path'"),
+                    };
+                    if !sketch_path.ends_with(".sk") {
+                        return format!("Error: items[{i}] sketch_ref path must end with .sk (got '{sketch_path}')");
+                    }
+                    new_items.push(crate::models::sketch::StoryboardItem::SketchRef { path: sketch_path });
+                }
+                "section" => {
+                    let title = match item.get("title").and_then(|v| v.as_str()) {
+                        Some(t) if !t.trim().is_empty() => t.to_string(),
+                        _ => return format!("Error: items[{i}] section is missing 'title'"),
+                    };
+                    let sketches: Vec<String> = match item.get("sketches").and_then(|v| v.as_array()) {
+                        Some(arr) if !arr.is_empty() => arr
+                            .iter()
+                            .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                            .collect(),
+                        Some(_) => return format!("Error: items[{i}] section '{title}' must have at least one sketch"),
+                        None => return format!("Error: items[{i}] section '{title}' is missing 'sketches' array"),
+                    };
+                    for sp in &sketches {
+                        if !sp.ends_with(".sk") {
+                            return format!("Error: items[{i}] section sketch path must end with .sk (got '{sp}')");
+                        }
+                    }
+                    new_items.push(crate::models::sketch::StoryboardItem::Section { title, sketches });
+                }
+                other => return format!("Error: items[{i}] unknown type '{other}' — must be 'sketch_ref' or 'section'"),
+            }
+        }
+        sb.items = new_items;
+    }
+
     sb.updated_at = chrono::Utc::now();
 
-    match project::write_storyboard(&sb, &abs, root) {
-        Ok(()) => format!("Updated storyboard \"{}\" at {}", sb.title, rel),
+    match project::write_storyboard(&sb, &path, root) {
+        Ok(()) => format!("Saved storyboard \"{}\" at '{safe_rel}' ({} items)", sb.title, sb.items.len()),
         Err(e) => format!("Error writing storyboard: {e}"),
-    }
-}
-
-fn exec_create_note(root: &Path, args: &Value) -> String {
-    let filename = match args.get("filename").and_then(|v| v.as_str()) {
-        Some(f) => f,
-        None => return "Error: missing 'filename' argument".into(),
-    };
-    let content = match args.get("content").and_then(|v| v.as_str()) {
-        Some(c) => c,
-        None => return "Error: missing 'content' argument".into(),
-    };
-
-    // Sanitize: ensure it ends with .md and has no path separators
-    let safe_name = filename
-        .trim()
-        .replace(['/', '\\'], "-");
-    let safe_name = if safe_name.ends_with(".md") {
-        safe_name
-    } else {
-        format!("{safe_name}.md")
-    };
-
-    let path = resolve_path(root, &safe_name);
-    if path.exists() {
-        return format!("Error: note '{}' already exists. Use update_note to modify it.", safe_name);
-    }
-
-    match project::write_note(&path, content) {
-        Ok(()) => format!("Created note '{}' successfully", safe_name),
-        Err(e) => format!("Error creating note: {e}"),
     }
 }
 
@@ -1690,190 +1674,8 @@ fn flatten_nodes(children: &[Value]) -> Vec<&Value> {
 }
 
 // ---------------------------------------------------------------------------
-// Snapshot / versioning tool implementations
+// Tests
 // ---------------------------------------------------------------------------
-
-/// Find the repo root (where .git lives) by walking up from the project root.
-/// In single-project mode these are the same; in multi-project mode the repo
-/// root is the parent containing .git/.
-fn find_repo_root(project_root: &Path) -> PathBuf {
-    let mut current = project_root.to_path_buf();
-    loop {
-        if current.join(".git").exists() {
-            return current;
-        }
-        match current.parent() {
-            Some(parent) => current = parent.to_path_buf(),
-            None => return project_root.to_path_buf(),
-        }
-    }
-}
-
-fn exec_list_snapshots(root: &Path, args: &Value) -> String {
-    let repo_root = find_repo_root(root);
-    let limit = args.get("limit").and_then(|v| v.as_u64()).unwrap_or(20) as usize;
-
-    match versioning::list_versions(&repo_root) {
-        Ok(versions) => {
-            if versions.is_empty() {
-                return "No snapshots found. The project has no version history yet.".into();
-            }
-            let mut out = format!("## Snapshots ({} total, showing up to {})\n\n", versions.len(), limit);
-            for v in versions.iter().take(limit) {
-                let ts = v.timestamp.format("%Y-%m-%d %H:%M");
-                out.push_str(&format!("- `{}` — {} ({})\n", &v.id[..8.min(v.id.len())], v.message, ts));
-            }
-            if versions.len() > limit {
-                out.push_str(&format!("\n_{} more snapshots not shown. Use `limit` to see more._\n", versions.len() - limit));
-            }
-            out
-        }
-        Err(e) => format!("Error listing snapshots: {e}"),
-    }
-}
-
-fn exec_read_file_at_snapshot(root: &Path, args: &Value) -> String {
-    let repo_root = find_repo_root(root);
-    let snapshot_id = match args.get("snapshot_id").and_then(|v| v.as_str()) {
-        Some(id) => id,
-        None => return "Error: 'snapshot_id' is required".into(),
-    };
-    let path = match args.get("path").and_then(|v| v.as_str()) {
-        Some(p) => p,
-        None => return "Error: 'path' is required".into(),
-    };
-
-    // In multi-project repos, the file path is relative to the project root,
-    // but git stores paths relative to repo root. Compute the prefix.
-    let prefix = if repo_root != root {
-        root.strip_prefix(&repo_root)
-            .map(|p| p.to_string_lossy().replace('\\', "/"))
-            .unwrap_or_default()
-    } else {
-        String::new()
-    };
-    let git_path = if prefix.is_empty() {
-        path.to_string()
-    } else {
-        format!("{}/{}", prefix, path)
-    };
-
-    match versioning::get_file_at_version(&repo_root, snapshot_id, &git_path) {
-        Ok(bytes) => {
-            match String::from_utf8(bytes) {
-                Ok(content) => {
-                    let short_id = &snapshot_id[..8.min(snapshot_id.len())];
-                    format!("## {} at snapshot {}\n\n{}", path, short_id, content)
-                }
-                Err(_) => format!("File '{}' exists at this snapshot but is binary (not text).", path),
-            }
-        }
-        Err(e) => format!("Error reading '{}' at snapshot {}: {}", path, &snapshot_id[..8.min(snapshot_id.len())], e),
-    }
-}
-
-fn exec_compare_snapshots(root: &Path, args: &Value) -> String {
-    let repo_root = find_repo_root(root);
-    let from = match args.get("from_snapshot").and_then(|v| v.as_str()) {
-        Some(id) => id,
-        None => return "Error: 'from_snapshot' is required".into(),
-    };
-    let to = match args.get("to_snapshot").and_then(|v| v.as_str()) {
-        Some(id) => id,
-        None => return "Error: 'to_snapshot' is required".into(),
-    };
-
-    match versioning::diff_snapshots(&repo_root, from, to) {
-        Ok(entries) => {
-            if entries.is_empty() {
-                return format!(
-                    "No differences between snapshots `{}` and `{}`.",
-                    &from[..8.min(from.len())],
-                    &to[..8.min(to.len())]
-                );
-            }
-            let mut out = format!(
-                "## Changes: `{}` → `{}`\n\n| File | Status | +Lines | -Lines |\n| --- | --- | --- | --- |\n",
-                &from[..8.min(from.len())],
-                &to[..8.min(to.len())]
-            );
-            for e in &entries {
-                out.push_str(&format!(
-                    "| {} | {} | +{} | -{} |\n",
-                    e.path, e.status, e.additions, e.deletions
-                ));
-            }
-            let total_add: u32 = entries.iter().map(|e| e.additions).sum();
-            let total_del: u32 = entries.iter().map(|e| e.deletions).sum();
-            out.push_str(&format!(
-                "\n**{} file(s) changed**, +{} -{} lines\n",
-                entries.len(), total_add, total_del
-            ));
-            out
-        }
-        Err(e) => format!("Error comparing snapshots: {e}"),
-    }
-}
-
-fn exec_list_timelines(root: &Path) -> String {
-    let repo_root = find_repo_root(root);
-    match versioning::list_timelines(&repo_root) {
-        Ok(timelines) => {
-            if timelines.is_empty() {
-                return "No timelines found.".into();
-            }
-            let mut out = "## Timelines\n\n".to_string();
-            for t in &timelines {
-                let active = if t.is_active { " ← active" } else { "" };
-                out.push_str(&format!(
-                    "- **{}** (\"{}\"): {} snapshot(s){}\n",
-                    t.name, t.label, t.snapshot_count, active
-                ));
-            }
-            out
-        }
-        Err(e) => format!("Error listing timelines: {e}"),
-    }
-}
-
-fn exec_get_current_snapshot(root: &Path) -> String {
-    let repo_root = find_repo_root(root);
-
-    // Get current timeline
-    let timeline = match versioning::list_timelines(&repo_root) {
-        Ok(tls) => tls.into_iter().find(|t| t.is_active),
-        Err(_) => None,
-    };
-
-    // Get HEAD commit
-    let head = match versioning::list_versions(&repo_root) {
-        Ok(versions) => versions.into_iter().next(),
-        Err(_) => None,
-    };
-
-    let mut out = "## Current State\n\n".to_string();
-    if let Some(tl) = &timeline {
-        out.push_str(&format!("- **Timeline**: {} (\"{}\")\n", tl.name, tl.label));
-        out.push_str(&format!("- **Snapshots on this timeline**: {}\n", tl.snapshot_count));
-    } else {
-        out.push_str("- **Timeline**: (detached or unknown)\n");
-    }
-    if let Some(v) = &head {
-        let ts = v.timestamp.format("%Y-%m-%d %H:%M");
-        out.push_str(&format!("- **HEAD**: `{}` — {} ({})\n", &v.id[..8.min(v.id.len())], v.message, ts));
-    } else {
-        out.push_str("- **HEAD**: (no commits yet)\n");
-    }
-
-    // Check for unsaved changes
-    if let Ok(dirty) = versioning::has_unsaved_changes(&repo_root) {
-        if dirty {
-            out.push_str("- **Unsaved changes**: yes\n");
-        }
-    }
-
-    out
-}
 
 #[cfg(test)]
 mod tests {

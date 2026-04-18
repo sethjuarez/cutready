@@ -81,7 +81,7 @@ export const BUILT_IN_AGENTS: AgentPreset[] = [
     prompt: `You are CutReady AI — Planner mode. You help users plan demo videos by **recommending** changes, not making them directly.
 
 ## Your Role
-Analyze the current project and suggest a plan for creating or improving sketches. You gather context, think through structure, and present your recommendations in chat — but you **never** call set_planning_rows or update_planning_row yourself.
+Analyze the current project and suggest a plan for creating or improving sketches. You gather context, think through structure, and present your recommendations in chat — but you **never** call write_sketch or update_planning_row yourself.
 
 ## How to Think
 1. **Understand**: What is the user trying to accomplish? What kind of demo are they building?
@@ -97,7 +97,7 @@ Present your plan as a markdown table so the user can review before asking the W
 
 ## Guidelines
 - Read referenced files before making suggestions
-- **Do NOT call set_planning_rows or update_planning_row** — present your plan in chat text only
+- **Do NOT call write_sketch or update_planning_row** — present your plan in chat text only
 - The user will hand off to the Writer or Editor agent to apply your plan
 - Keep narrative concise — these are voiceover bullets, not essays
 - Time estimates should be realistic for live demos (~15-60s per row)
@@ -125,7 +125,7 @@ Help users write compelling voiceover scripts and narratives for their demo reco
 - Ensure smooth transitions between rows (the narrative should flow as a continuous script)
 - Highlight key product features and benefits
 - Avoid jargon unless the audience expects it
-- **Always apply changes via update_planning_row or set_planning_rows** — don't paste revised content as text in chat
+- **Always apply changes via update_planning_row or write_sketch** — don't paste revised content as text in chat
 - Use update_planning_row for targeted narrative edits
 - Use markdown formatting in responses
 - **Never use em-dash (—) or en-dash (–) in any text content.** Use -- or - instead.
@@ -158,7 +158,7 @@ Make targeted changes to specific cells in the planning table. Be concise and ef
 
 ## Guidelines
 - Use update_planning_row for single-cell changes (preferred)
-- Only use set_planning_rows if the user asks to restructure the entire sketch
+- Only use write_sketch if the user asks to restructure the entire sketch
 - **Always apply edits via tools** — don't paste revised content as text in chat
 - Keep responses brief — just confirm the change
 - Don't add unsolicited suggestions unless asked
@@ -546,7 +546,7 @@ function ChatTab() {
           const toolName = ev.name ?? "";
           const resultText = ev.result ?? "";
           const isSuccess = !resultText.startsWith("Error");
-          if (isSuccess && (toolName === "set_planning_rows" || toolName === "update_planning_row" || toolName === "set_row_visual" || toolName === "design_plan")) {
+          if (isSuccess && (toolName === "write_sketch" || toolName === "update_planning_row" || toolName === "set_row_visual" || toolName === "design_plan")) {
             loadSketches();
             try {
               const args = JSON.parse(pendingToolArgsRef.current[toolName] ?? "{}");
@@ -557,7 +557,7 @@ function ChatTab() {
                 const idx = typeof args.index === "number" ? args.index : parseInt(args.index, 10);
                 if (!isNaN(idx)) changedRows.push(idx);
               }
-              // set_planning_rows: leave changedRows empty → highlights all
+              // write_sketch: leave changedRows empty → highlights all
               const detail = { rows: changedRows, toolName };
               if (sketchPath) {
                 // Dispatch BEFORE openSketch so SketchForm can snapshot current state
@@ -570,7 +570,7 @@ function ChatTab() {
               window.dispatchEvent(new CustomEvent("cutready:ai-sketch-updated", { detail: { rows: [], toolName } }));
             }
           }
-          if (isSuccess && toolName === "update_note") {
+          if (isSuccess && toolName === "write_note") {
             loadNotes();
             try {
               const args = JSON.parse(pendingToolArgsRef.current[toolName] ?? "{}");
@@ -579,22 +579,12 @@ function ChatTab() {
             // Signal that AI edited a note so UI can show feedback
             window.dispatchEvent(new CustomEvent("cutready:ai-note-updated"));
           }
-          if (isSuccess && toolName === "update_storyboard") {
+          if (isSuccess && toolName === "write_storyboard") {
             loadStoryboards();
             try {
               const args = JSON.parse(pendingToolArgsRef.current[toolName] ?? "{}");
               if (args.path) openStoryboard(args.path);
             } catch { /* ignore parse errors */ }
-          }
-          if (isSuccess && toolName === "create_note") {
-            loadNotes();
-            try {
-              const args = JSON.parse(pendingToolArgsRef.current[toolName] ?? "{}");
-              const filename = args.filename?.trim()?.replace(/[/\\]/g, "-");
-              const safeName = filename?.endsWith(".md") ? filename : `${filename}.md`;
-              if (safeName) openNote(safeName);
-            } catch { /* ignore parse errors */ }
-            window.dispatchEvent(new CustomEvent("cutready:ai-note-updated"));
           }
           break;
         }
