@@ -577,6 +577,26 @@ pub async fn transfer_asset(
         return Err(format!("FILE_EXISTS:{}", dest_rel));
     }
 
+    // Collect asset refs BEFORE moving (so we can read the source file)
+    let file_ext = source_rel.rsplit('.').next().unwrap_or("");
+    let asset_refs: Vec<String> = if let Ok(content) = std::fs::read_to_string(&source) {
+        project::collect_asset_refs(&content, file_ext)
+    } else {
+        Vec::new()
+    };
+
+    // Copy all referenced assets to the dest project (always copy — assets may be shared)
+    for asset_rel in &asset_refs {
+        let Ok(asset_src) = project::safe_resolve(&source_project_root, asset_rel) else { continue };
+        if !asset_src.exists() { continue; }
+        let Ok(asset_dest) = project::safe_resolve(&dest_project_root, asset_rel) else { continue };
+        if asset_dest.exists() { continue; } // already present at dest, skip
+        if let Some(parent) = asset_dest.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        let _ = std::fs::copy(&asset_src, &asset_dest);
+    }
+
     // Create parent directories at destination
     if let Some(parent) = dest.parent() {
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
@@ -588,6 +608,14 @@ pub async fn transfer_asset(
             std::fs::copy(&source, &dest).map_err(|e| e.to_string())?;
             std::fs::remove_file(&source)
                 .map_err(|e| format!("Copied but failed to remove source: {e}"))?;
+        }
+        // After the source file is gone, remove any assets now unreferenced in source
+        for asset_rel in &asset_refs {
+            let Ok(asset_src) = project::safe_resolve(&source_project_root, asset_rel) else { continue };
+            if !asset_src.exists() { continue; }
+            if project::count_asset_refs(&source_project_root, asset_rel) == 0 {
+                let _ = std::fs::remove_file(&asset_src);
+            }
         }
     } else {
         std::fs::copy(&source, &dest).map_err(|e| e.to_string())?;

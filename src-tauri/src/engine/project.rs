@@ -858,7 +858,51 @@ fn extract_sketch_visual_refs(content: &str) -> Vec<String> {
     refs
 }
 
-/// List all images in .cutready/screenshots/ and visuals in .cutready/visuals/
+/// Collect all `.cutready/` asset paths referenced by a file's content.
+/// - `.sk` files: screenshot fields + visual fields from planning rows
+/// - `.md` files: screenshot paths from markdown/HTML image syntax
+/// - `.sb` files: no direct asset references
+pub fn collect_asset_refs(content: &str, file_ext: &str) -> Vec<String> {
+    match file_ext {
+        "sk" => {
+            let mut refs = extract_sketch_screenshot_refs(content);
+            refs.extend(extract_sketch_visual_refs(content));
+            refs
+        }
+        "md" => extract_screenshot_refs(content),
+        _ => Vec::new(),
+    }
+}
+
+/// Count how many files in `project_root` still reference `asset_rel`.
+/// Used after a move to decide whether to delete the source asset.
+pub fn count_asset_refs(project_root: &Path, asset_rel: &str) -> usize {
+    let mut count = 0;
+    let _ = scan_files_recursive(project_root, project_root, "sk", &mut |_, abs_path| {
+        if let Ok(content) = std::fs::read_to_string(abs_path) {
+            for r in extract_sketch_screenshot_refs(&content)
+                .into_iter()
+                .chain(extract_sketch_visual_refs(&content))
+            {
+                if r == asset_rel {
+                    count += 1;
+                }
+            }
+        }
+    });
+    let _ = scan_files_recursive(project_root, project_root, "md", &mut |_, abs_path| {
+        if let Ok(content) = std::fs::read_to_string(abs_path) {
+            for r in extract_screenshot_refs(&content) {
+                if r == asset_rel {
+                    count += 1;
+                }
+            }
+        }
+    });
+    count
+}
+
+
 /// with their reference info.
 ///
 /// For each asset, scans all .md notes and .sk sketches to find which ones reference it.
