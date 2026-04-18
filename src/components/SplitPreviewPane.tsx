@@ -156,7 +156,7 @@ function SplitTab({
         e.dataTransfer.setData("application/x-cutready-tab", JSON.stringify({ tabId: tab.id, source: "split" }));
         e.dataTransfer.effectAllowed = "move";
       }}
-      className={`group relative flex items-center gap-1.5 px-2.5 h-[32px] text-[11px] cursor-pointer shrink-0 select-none transition-colors ${
+      className={`group relative flex items-center gap-1.5 pl-2.5 pr-1.5 h-[32px] text-[11px] cursor-pointer shrink-0 select-none transition-colors ${
         isActive
           ? "bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text))]"
           : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))]"
