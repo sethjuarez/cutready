@@ -307,6 +307,8 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
       return (args as { newName: string }).newName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
     case "migrate_to_multi_project":
       return { path: (args as { existingName: string }).existingName.toLowerCase().replace(/\s+/g, "-"), name: (args as { existingName: string }).existingName, description: null };
+    case "transfer_asset":
+      return null; // no-op in dev mock
     case "get_workspace_settings":
       return {};
     case "set_workspace_settings":

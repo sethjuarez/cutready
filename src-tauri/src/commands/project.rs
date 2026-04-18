@@ -523,7 +523,80 @@ pub async fn migrate_to_multi_project(
     Ok(entry)
 }
 
-// ── Workspace (per-repo) settings ─────────────────────────────────
+/// Transfer (move or copy) an asset to another project within the same repo.
+///
+/// `source_rel`: path relative to the current project root (e.g. `"flows/login.sk"`).
+/// `dest_project_path`: repo-relative manifest key of the destination project (e.g. `"login"` or `"."`).
+/// `dest_rel`: path relative to the destination project root.
+/// `remove_source`: if true, delete the source after copying (move semantics).
+///
+/// Returns `Err("FILE_EXISTS:<dest_rel>")` when the destination already exists,
+/// so the frontend can offer a "Save As" rename flow.
+#[tauri::command]
+pub async fn transfer_asset(
+    source_rel: String,
+    dest_project_path: String,
+    dest_rel: String,
+    remove_source: bool,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    const ALLOWED_EXTS: &[&str] = &[".sk", ".sb", ".md"];
+
+    let (source_project_root, repo_root) = project_and_repo_root(&state)?;
+
+    // Validate file extension on both source and dest
+    if !ALLOWED_EXTS.iter().any(|ext| source_rel.ends_with(ext)) {
+        return Err(format!("Only .sk, .sb, and .md files can be transferred (got '{}')", source_rel));
+    }
+    if !ALLOWED_EXTS.iter().any(|ext| dest_rel.ends_with(ext)) {
+        return Err(format!("Destination must end with .sk, .sb, or .md (got '{}')", dest_rel));
+    }
+
+    // Resolve dest project root — validated against the manifest to prevent arbitrary paths
+    let dest_project_root = if dest_project_path == "." {
+        repo_root.clone()
+    } else {
+        let projects = project::list_projects(&repo_root);
+        projects
+            .iter()
+            .find(|p| p.path == dest_project_path)
+            .ok_or_else(|| format!("Project '{}' not found in repo manifest", dest_project_path))?;
+        repo_root.join(&dest_project_path)
+    };
+
+    // Resolve both paths safely
+    let source = project::safe_resolve(&source_project_root, &source_rel)
+        .map_err(|e| e.to_string())?;
+    let dest = project::safe_resolve(&dest_project_root, &dest_rel)
+        .map_err(|e| e.to_string())?;
+
+    if !source.exists() {
+        return Err(format!("Source file not found: '{}'", source_rel));
+    }
+    if dest.exists() {
+        return Err(format!("FILE_EXISTS:{}", dest_rel));
+    }
+
+    // Create parent directories at destination
+    if let Some(parent) = dest.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+
+    if remove_source {
+        // Prefer atomic rename; fall back to copy+delete across devices
+        if std::fs::rename(&source, &dest).is_err() {
+            std::fs::copy(&source, &dest).map_err(|e| e.to_string())?;
+            std::fs::remove_file(&source)
+                .map_err(|e| format!("Copied but failed to remove source: {e}"))?;
+        }
+    } else {
+        std::fs::copy(&source, &dest).map_err(|e| e.to_string())?;
+    }
+
+    Ok(())
+}
+
+
 
 /// Read workspace settings from the current repo's .cutready/settings.json.
 #[tauri::command]

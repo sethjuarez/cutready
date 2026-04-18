@@ -208,6 +208,7 @@ pub fn run() {
             commands::project::delete_project,
             commands::project::rename_project,
             commands::project::migrate_to_multi_project,
+            commands::project::transfer_asset,
             commands::project::get_workspace_settings,
             commands::project::set_workspace_settings,
             commands::project::resolve_deep_link,

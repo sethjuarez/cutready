@@ -14,11 +14,13 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { invoke } from "@tauri-apps/api/core";
-import { Download, Plus, Trash2 } from "lucide-react";
+import { ArrowRight, Copy, Download, FolderOpen, Plus, Trash2 } from "lucide-react";
 import { useAppStore, type SidebarOrder } from "../stores/appStore";
+import type { ProjectEntry } from "../types/project";
 import { SketchIcon, StoryboardIcon, NoteIcon } from "./Icons";
 import { ProjectSwitcher } from "./ProjectSwitcher";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { ContextMenu, type ContextMenuItem } from "./ContextMenu";
 import { useToastStore } from "../stores/toastStore";
 
 /** Sort items by manifest order. Items not in the manifest go at the end. */
@@ -101,6 +103,18 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
   const closeStoryboard = useAppStore((s) => s.closeStoryboard);
   const sidebarOrder = useAppStore((s) => s.sidebarOrder);
   const saveSidebarOrder = useAppStore((s) => s.saveSidebarOrder);
+  const projects = useAppStore((s) => s.projects);
+  const isMultiProject = useAppStore((s) => s.isMultiProject);
+  const currentProject = useAppStore((s) => s.currentProject);
+  const closeTab = useAppStore((s) => s.closeTab);
+
+  // Derive the current project's manifest key to filter it from the "move to" list
+  const currentProjectEntryPath = currentProject
+    ? (currentProject.root.replace(/\\/g, "/") === currentProject.repo_root.replace(/\\/g, "/")
+        ? "."
+        : currentProject.root.replace(/\\/g, "/").replace(currentProject.repo_root.replace(/\\/g, "/") + "/", ""))
+    : null;
+  const otherProjects = projects.filter((p) => p.path !== currentProjectEntryPath);
 
   const [isCreatingSb, setIsCreatingSb] = useState(false);
   const [newSbTitle, setNewSbTitle] = useState("");
@@ -112,6 +126,39 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
   const [drmConfirm, setDrmConfirm] = useState<{ resolve: (ok: boolean) => void } | null>(null);
   const [importing, setImporting] = useState(false);
   const showToast = useToastStore((s) => s.show);
+
+  // ── Transfer (move/copy to project) state ───────────────────────
+  const [contextMenu, setContextMenu] = useState<{
+    type: "sketch" | "note" | "storyboard";
+    path: string;
+    title: string;
+    x: number;
+    y: number;
+  } | null>(null);
+
+  const [transferWarning, setTransferWarning] = useState<{
+    action: "move" | "copy";
+    type: "sketch" | "note" | "storyboard";
+    sourcePath: string;
+    sourceTitle: string;
+    destProject: ProjectEntry;
+    usedBy: string[];
+  } | null>(null);
+
+  const [transferConflict, setTransferConflict] = useState<{
+    action: "move" | "copy";
+    type: "sketch" | "note" | "storyboard";
+    sourcePath: string;
+    sourceTitle: string;
+    destProject: ProjectEntry;
+    ext: string;
+  } | null>(null);
+  const [conflictName, setConflictName] = useState("");
+  const conflictInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (transferConflict) requestAnimationFrame(() => conflictInputRef.current?.select());
+  }, [transferConflict]);
 
   // ── Inline rename state ──────────────────────────────────────────
   const [renamingItem, setRenamingItem] = useState<{ type: "storyboard" | "sketch" | "note"; path: string } | null>(null);
@@ -207,6 +254,80 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
     }
     setPendingDelete({ type, path, title, usedBy });
   }, []);
+
+  const doTransfer = useCallback(async (
+    action: "move" | "copy",
+    type: "sketch" | "note" | "storyboard",
+    sourcePath: string,
+    sourceTitle: string,
+    destProject: ProjectEntry,
+    destRel: string,
+  ) => {
+    try {
+      await invoke("transfer_asset", {
+        sourceRel: sourcePath,
+        destProjectPath: destProject.path,
+        destRel,
+        removeSource: action === "move",
+      });
+      await Promise.all([loadSketches(), loadNotes(), loadStoryboards()]);
+      if (action === "move") {
+        const tab = useAppStore.getState().openTabs.find((t) => t.path === sourcePath);
+        if (tab) closeTab(tab.id);
+      }
+      showToast(`${action === "move" ? "Moved" : "Copied"} "${sourceTitle}" to ${destProject.name}`, 3000, "success");
+    } catch (err) {
+      const errMsg = String(err);
+      if (errMsg.startsWith("FILE_EXISTS:")) {
+        const destRelExisting = errMsg.replace("FILE_EXISTS:", "");
+        const filename = destRelExisting.split("/").pop() ?? sourceTitle;
+        const dotIdx = filename.lastIndexOf(".");
+        const ext = dotIdx >= 0 ? filename.slice(dotIdx) : "";
+        const stem = dotIdx >= 0 ? filename.slice(0, dotIdx) : filename;
+        setTransferConflict({ action, type, sourcePath, sourceTitle, destProject, ext });
+        setConflictName(stem);
+      } else {
+        showToast(`Failed to ${action}: ${errMsg}`, 4000, "error");
+      }
+    }
+  }, [loadSketches, loadNotes, loadStoryboards, closeTab, showToast]);
+
+  const handleTransfer = useCallback(async (
+    action: "move" | "copy",
+    type: "sketch" | "note" | "storyboard",
+    path: string,
+    title: string,
+    destProject: ProjectEntry,
+  ) => {
+    // Warn if moving a sketch that's referenced by storyboards
+    if (action === "move" && type === "sketch") {
+      let usedBy: string[] = [];
+      try { usedBy = await invoke<string[]>("sketch_used_by_storyboards", { relativePath: path }); } catch { /* ignore */ }
+      if (usedBy.length > 0) {
+        setTransferWarning({ action, type, sourcePath: path, sourceTitle: title, destProject, usedBy });
+        return;
+      }
+    }
+    doTransfer(action, type, path, title, destProject, path);
+  }, [doTransfer]);
+
+  const buildContextMenuItems = useCallback((
+    type: "sketch" | "note" | "storyboard",
+    path: string,
+    title: string,
+  ): ContextMenuItem[] => {
+    if (!isMultiProject || otherProjects.length === 0) return [];
+    const projectItems = (action: "move" | "copy"): ContextMenuItem[] =>
+      otherProjects.map((p) => ({
+        label: p.name,
+        icon: <FolderOpen className="w-3.5 h-3.5" />,
+        action: () => handleTransfer(action, type, path, title, p),
+      }));
+    return [
+      { label: "Move to", icon: <ArrowRight className="w-3.5 h-3.5" />, submenu: projectItems("move") },
+      { label: "Copy to", icon: <Copy className="w-3.5 h-3.5" />, submenu: projectItems("copy") },
+    ];
+  }, [isMultiProject, otherProjects, handleTransfer]);
 
   useEffect(() => {
     loadStoryboards();
@@ -490,6 +611,10 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                         tabIndex={0}
                         onClick={() => { if (!renamingItem) openStoryboard(sb.path); }}
                         onDoubleClick={(e) => { e.stopPropagation(); startRename("storyboard", sb.path); }}
+                        onContextMenu={(e) => {
+                          const items = buildContextMenuItems("storyboard", sb.path, sb.title);
+                          if (items.length > 0) { e.preventDefault(); setContextMenu({ type: "storyboard", path: sb.path, title: sb.title, x: e.clientX, y: e.clientY }); }
+                        }}
                         onKeyDown={(e) => {
                           if (e.key === "F2") { e.preventDefault(); startRename("storyboard", sb.path); }
                           else if (e.key === "Enter" || e.key === " ") { if (!renamingItem) openStoryboard(sb.path); }
@@ -617,6 +742,10 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                         tabIndex={0}
                         onClick={() => { if (!renamingItem) handleOpenSketchStandalone(sk.path); }}
                         onDoubleClick={(e) => { e.stopPropagation(); startRename("sketch", sk.path); }}
+                        onContextMenu={(e) => {
+                          const items = buildContextMenuItems("sketch", sk.path, sk.title);
+                          if (items.length > 0) { e.preventDefault(); setContextMenu({ type: "sketch", path: sk.path, title: sk.title, x: e.clientX, y: e.clientY }); }
+                        }}
                         onKeyDown={(e) => {
                           if (e.key === "F2") { e.preventDefault(); startRename("sketch", sk.path); }
                           else if (e.key === "Enter" || e.key === " ") { if (!renamingItem) handleOpenSketchStandalone(sk.path); }
@@ -757,6 +886,10 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                         tabIndex={0}
                         onClick={() => { if (!renamingItem) openNote(note.path); }}
                         onDoubleClick={(e) => { e.stopPropagation(); startRename("note", note.path); }}
+                        onContextMenu={(e) => {
+                          const items = buildContextMenuItems("note", note.path, note.title);
+                          if (items.length > 0) { e.preventDefault(); setContextMenu({ type: "note", path: note.path, title: note.title, x: e.clientX, y: e.clientY }); }
+                        }}
                         onKeyDown={(e) => {
                           if (e.key === "F2") { e.preventDefault(); startRename("note", note.path); }
                           else if (e.key === "Enter" || e.key === " ") { if (!renamingItem) openNote(note.path); }
@@ -860,6 +993,104 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
         onConfirm={() => { drmConfirm?.resolve(true); setDrmConfirm(null); }}
         onCancel={() => { drmConfirm?.resolve(false); setDrmConfirm(null); }}
       />
+
+      {/* Context menu (portal — rendered above DnD layer) */}
+      {contextMenu && (
+        <ContextMenu
+          position={{ x: contextMenu.x, y: contextMenu.y }}
+          items={buildContextMenuItems(contextMenu.type, contextMenu.path, contextMenu.title)}
+          onClose={() => setContextMenu(null)}
+        />
+      )}
+
+      {/* Transfer warning: moving a sketch used by storyboards */}
+      {transferWarning && (
+        <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/40">
+          <div className="bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-xl shadow-xl p-5 max-w-sm mx-4">
+            <p className="text-sm text-[rgb(var(--color-text))] mb-2 font-medium">
+              Move "{transferWarning.sourceTitle}"?
+            </p>
+            <div className="mb-3 px-3 py-2 rounded-lg bg-warning/10 border border-warning/30">
+              <p className="text-xs text-warning font-medium mb-1">
+                ⚠ Used in {transferWarning.usedBy.length === 1 ? "a storyboard" : `${transferWarning.usedBy.length} storyboards`}:
+              </p>
+              <ul className="text-[11px] text-amber-300/80 list-disc list-inside">
+                {transferWarning.usedBy.map((t) => <li key={t}>{t}</li>)}
+              </ul>
+              <p className="text-[11px] text-amber-300/80 mt-1">Moving will leave broken references in this project.</p>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => setTransferWarning(null)}
+                className="px-3 py-1.5 text-xs rounded-lg border border-[rgb(var(--color-border))] text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  const { action, type, sourcePath, sourceTitle, destProject } = transferWarning;
+                  setTransferWarning(null);
+                  doTransfer(action, type, sourcePath, sourceTitle, destProject, sourcePath);
+                }}
+                className="px-3 py-1.5 text-xs rounded-lg bg-warning text-white hover:bg-warning/80 transition-colors"
+              >
+                Move anyway
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Transfer conflict: file already exists at destination */}
+      {transferConflict && (
+        <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/40">
+          <div className="bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-xl shadow-xl p-5 max-w-sm mx-4">
+            <p className="text-sm text-[rgb(var(--color-text))] mb-1 font-medium">File already exists</p>
+            <p className="text-xs text-[rgb(var(--color-text-secondary))] mb-3">
+              A file with this name already exists in "{transferConflict.destProject.name}". Enter a new name:
+            </p>
+            <input
+              ref={conflictInputRef}
+              value={conflictName}
+              onChange={(e) => setConflictName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  const stem = conflictName.trim();
+                  if (!stem) return;
+                  const { action, type, sourcePath, sourceTitle, destProject, ext } = transferConflict;
+                  setTransferConflict(null);
+                  const dir = sourcePath.includes("/") ? sourcePath.substring(0, sourcePath.lastIndexOf("/") + 1) : "";
+                  doTransfer(action, type, sourcePath, sourceTitle, destProject, `${dir}${stem}${ext}`);
+                }
+                if (e.key === "Escape") setTransferConflict(null);
+              }}
+              placeholder="new-name"
+              className="w-full px-3 py-2 text-xs rounded-lg bg-[rgb(var(--color-surface-alt))] border border-[rgb(var(--color-border))] text-[rgb(var(--color-text))] focus:outline-none focus:ring-1 focus:ring-[rgb(var(--color-accent))]/40 mb-3"
+            />
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => setTransferConflict(null)}
+                className="px-3 py-1.5 text-xs rounded-lg border border-[rgb(var(--color-border))] text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  const stem = conflictName.trim();
+                  if (!stem) return;
+                  const { action, type, sourcePath, sourceTitle, destProject, ext } = transferConflict;
+                  setTransferConflict(null);
+                  const dir = sourcePath.includes("/") ? sourcePath.substring(0, sourcePath.lastIndexOf("/") + 1) : "";
+                  doTransfer(action, type, sourcePath, sourceTitle, destProject, `${dir}${stem}${ext}`);
+                }}
+                className="px-3 py-1.5 text-xs rounded-lg bg-[rgb(var(--color-accent))] text-white hover:bg-[rgb(var(--color-accent-hover))] transition-colors"
+              >
+                {transferConflict.action === "move" ? "Move As" : "Copy As"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
