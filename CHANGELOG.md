@@ -9,6 +9,89 @@
 Covector manages this changelog. Do not edit manually.
 Each release section is generated from `.changes/*.md` files.
 
+## [1.0.0](https://github.com/sethjuarez/cutready/compare/v0.18.0...v1.0.0) (2026-04-18)
+
+
+### ⚠ BREAKING CHANGES
+
+* The copilot_sdk AI provider option is no longer available. Users with this setting will need to switch to azure_openai or openai.
+* LlmClient removed. Use build_provider() + agentive.
+
+### Features
+
+* add inline file rename for sketches, notes, and storyboards ([14d46a5](https://github.com/sethjuarez/cutready/commit/14d46a5824a42535886942ca326c009fdd7fb495))
+* add Microsoft Foundry and Anthropic provider support ([daafe77](https://github.com/sethjuarez/cutready/commit/daafe77b4893840ae41724dcb72e98217380bef0))
+* add multi-ref support to usePopover ([3144393](https://github.com/sethjuarez/cutready/commit/314439321b20be523b550fb4bd9ac80973ea1b5b))
+* add Open in Terminal button ([b418575](https://github.com/sethjuarez/cutready/commit/b4185755c7ac52c02cf5d39a959d107eda7814c9)), closes [#29](https://github.com/sethjuarez/cutready/issues/29)
+* add standalone feedback dialog for command palette ([ba583be](https://github.com/sethjuarez/cutready/commit/ba583be4a88890f0d1618c71e59cf3a8c052511c))
+* add Zen Chat Mode — full-area chat view ([b292707](https://github.com/sethjuarez/cutready/commit/b292707dfb65e298752b4bf2fefc935763a0625a))
+* **agent:** fetch_url appends deduplicated link list to output ([4aee071](https://github.com/sethjuarez/cutready/commit/4aee0718e980759155ad62c4fd2dfca724f42b0b))
+* **agent:** refactor tool set from 21 to 14 tools ([3fce799](https://github.com/sethjuarez/cutready/commit/3fce799d993dc7a371e52166a61656d5d0075ce1))
+* **ai-ux:** stop button, friendly errors, pending styling, agent descriptions ([b8782b8](https://github.com/sethjuarez/cutready/commit/b8782b8f1f3f74b83e2f11db0ee7d8551f2d8be5))
+* **editor:** independent mode state for same-file split pane instances ([56f9b04](https://github.com/sethjuarez/cutready/commit/56f9b04eefdf4769808041d0caaec4f6b32f2b62))
+* **editor:** sidebar split into dedicated views + editable split pane + tab close actions ([d225c47](https://github.com/sethjuarez/cutready/commit/d225c47f401f90be1255928bb94a2a3d3411e3ec))
+* **editor:** VS Code-style split pane parity ([e629798](https://github.com/sethjuarez/cutready/commit/e629798bbb611cc201063c0bb7de4579ba747e83))
+* **editor:** VS Code-style tabbed split pane (issue [#14](https://github.com/sethjuarez/cutready/issues/14)) ([7e980ed](https://github.com/sethjuarez/cutready/commit/7e980edd58b38aeda23e883cde9ec7a0fe547317))
+* improve provider UI with Foundry auth toggle and update architecture docs ([8b3cabd](https://github.com/sethjuarez/cutready/commit/8b3cabddc95b8a5287cb99963feff87f6516dc2a))
+* render user chat messages as markdown ([4ba85b9](https://github.com/sethjuarez/cutready/commit/4ba85b997405a24fb54927ebde49abad6314b15b))
+* replace shared types with agentive re-exports ([f2898ec](https://github.com/sethjuarez/cutready/commit/f2898ecda601d85256007a2d6687b96ff1749bb1))
+* restore vision image support via agentive ToolOutput ([bfc0332](https://github.com/sethjuarez/cutready/commit/bfc03328e7d92a752055ce3d1c113383e1f45683))
+* **settings:** add check for updates button and changelog link ([5991e0a](https://github.com/sethjuarez/cutready/commit/5991e0ade6d846ec34518f2e0476b8bfce572437))
+* **settings:** add Updates tab with full release notes ([50f69dc](https://github.com/sethjuarez/cutready/commit/50f69dcd17561e3c80d6a61ea6e9b3ff8f8cd7ba))
+* **sidebar:** add Project view icon for all-items explorer ([c0dc079](https://github.com/sethjuarez/cutready/commit/c0dc07940d206d2779253b5ab5734dc367a7aa4d))
+* **sidebar:** right-click move/copy items between projects ([d5ba426](https://github.com/sethjuarez/cutready/commit/d5ba4269a19eed96541d99c2c5fc5f535cf29c01))
+* **titlebar:** add move sidebar to other side button ([4b92e7c](https://github.com/sethjuarez/cutready/commit/4b92e7cb82a2af2625bbe547ecc3c108716414e2))
+* **titlebar:** restore panel toggle buttons ([9343ba4](https://github.com/sethjuarez/cutready/commit/9343ba4d5969a7c4f449c0270939143afc14159e))
+* **ui:** migrate from Heroicons to Lucide React with improved semantic icons ([ba57d08](https://github.com/sethjuarez/cutready/commit/ba57d08b5e9ea4c4824590b7c7dbbaa4308a6722))
+* **ux:** keyboard shortcuts dialog, tooltips, and loading indicators ([6020863](https://github.com/sethjuarez/cutready/commit/60208638d4b021ccb163fbcd1986bc62952d992e))
+
+
+### Bug Fixes
+
+* add ARIA listbox to CommandPalette and fix titlebar coupling ([31431a3](https://github.com/sethjuarez/cutready/commit/31431a354e78ee4bb8768e3db7d0009979ec96fe))
+* **chat:** restore display-friendly user message after backend enrichment ([fe5837b](https://github.com/sethjuarez/cutready/commit/fe5837be72d72285e1b931b2d6f3d941de237c76))
+* close media popover on scroll ([1e567c8](https://github.com/sethjuarez/cutready/commit/1e567c848648603a9eef3186a76f19fd6f1d0b53))
+* command palette arrow key navigation and selection highlight ([fb5f555](https://github.com/sethjuarez/cutready/commit/fb5f55521e10592ba3bd8f595490a1ce6318267e))
+* command palette arrow navigation + add icons to commands ([669961d](https://github.com/sethjuarez/cutready/commit/669961dbc2d1ceee33d9632a0906c681b22ec411))
+* **editor:** balance tab close button spacing ([5769479](https://github.com/sethjuarez/cutready/commit/5769479772e853586f13d072440f26d2e12b3305))
+* **editor:** center tab close buttons and clean up tab bar bottom border ([00334d4](https://github.com/sethjuarez/cutready/commit/00334d4073fd9e3f7ad05c9c73db5d29deae5e3f))
+* **editor:** dim active indicator in unfocused tab group ([0211cf8](https://github.com/sethjuarez/cutready/commit/0211cf8ba35d1d9fbb079f9f0dc2f520cd753b68))
+* **editor:** increase tab height to 40px for better visual centering ([4d1245f](https://github.com/sethjuarez/cutready/commit/4d1245f77b1ee4511961c739aeb1592e9703d383))
+* **editor:** make NoteEditor mode state local for independent split pane control ([8c7dcdb](https://github.com/sethjuarez/cutready/commit/8c7dcdb0de6183593256f4b46dd5dddb477e922a))
+* **editor:** remove active group highlight, add close-split button, full sketch editor in split pane ([c4f1378](https://github.com/sethjuarez/cutready/commit/c4f1378bb1769a94e0287dfdf3ee986a3adcd782))
+* **editor:** same-file split shows full component, remove same-file warning ([7d13915](https://github.com/sethjuarez/cutready/commit/7d1391572defde86f842887e7696f698fcfce964))
+* **editor:** wrap close buttons in self-stretch div for correct height ([b0be52f](https://github.com/sethjuarez/cutready/commit/b0be52f1050e0c69bdff42808a98e8830467ba94))
+* media add popover clipped by overflow-hidden container ([da27db8](https://github.com/sethjuarez/cutready/commit/da27db84616ba7d4119b35b7bab8100d1b6ce133))
+* open external links in system browser instead of webview ([cf28310](https://github.com/sethjuarez/cutready/commit/cf2831071d20cd2f506dedc9dae29fe65dadee49))
+* overlay button theming for both themes ([b1120ee](https://github.com/sethjuarez/cutready/commit/b1120ee298f3af67f278a24b92ae01767c2ecd44))
+* propagate reference_resolver and steering to sub-agents ([6174d06](https://github.com/sethjuarez/cutready/commit/6174d06d4ea72e3c15e4e163596db55d08c81276))
+* reset stale state when creating a new project ([5b13093](https://github.com/sethjuarez/cutready/commit/5b1309375e10c5d0ff4caa90db703a1460c3448b))
+* resolve all clippy warnings across backend ([0bc404c](https://github.com/sethjuarez/cutready/commit/0bc404ccf2573480e6be699443c33ba86d7c261b))
+* set acceptFirstMouse on macOS to fix unresponsive UI on first click ([027f65f](https://github.com/sethjuarez/cutready/commit/027f65f693a0f0c17b8849b802f6f30d01e1f022)), closes [#26](https://github.com/sethjuarez/cutready/issues/26)
+* **sidebar:** use PencilSquareIcon for Notes view ([648ccfe](https://github.com/sethjuarez/cutready/commit/648ccfed3f67924465e1017f0782db13b37eb201))
+* **sync:** add debug logging to git fetch/push for diagnostics ([63c831f](https://github.com/sethjuarez/cutready/commit/63c831f5800c48f995894a7926b5b9ae3f7891cc))
+* **sync:** friendly error and stop polling on 404 remote ([28a2bba](https://github.com/sethjuarez/cutready/commit/28a2bbacf7dcfe508ca439e88baf725743f9fc51))
+* **sync:** inject GH_TOKEN env var for git fetch/push auth ([704df61](https://github.com/sethjuarez/cutready/commit/704df61668a2c77fe6b0ad37569ae2e577ed2b30))
+* **sync:** inject token directly into HTTPS URL for reliable git auth ([f36374c](https://github.com/sethjuarez/cutready/commit/f36374c3876a0e9d87ca010cd82c9615b20ca3a5))
+* **sync:** keep remote configured on 404, only show friendly message ([2051bd5](https://github.com/sethjuarez/cutready/commit/2051bd5b021d2628e2b852f8ada6c8adf4ef8595))
+* **sync:** resolve gh token in Rust as fallback for fetch/push/pull ([bec2410](https://github.com/sethjuarez/cutready/commit/bec24106ad57ed420c02d9ef3d55759e277ca1c9))
+* **sync:** use git subprocess for fetch/push instead of libgit2 ([92b9b3c](https://github.com/sethjuarez/cutready/commit/92b9b3c61377f9404fc64e15c360a12e586f541c))
+* **tabs:** remove bottom border on inactive tabs, center close X in full tab height ([1416124](https://github.com/sethjuarez/cutready/commit/1416124dbefc3bc7031695ca0654347700723d25))
+* **titlebar:** match sidebar swap icon to Sidebar context menu ([24b1a50](https://github.com/sethjuarez/cutready/commit/24b1a504a33f2cf4a24e9101bc34a6de2a316a79))
+* **titlebar:** move sidebar-flip button left, use LayoutGrid icon ([7a87266](https://github.com/sethjuarez/cutready/commit/7a872668ef99af7b3c083c1ff7a8d6792d0cc2f7))
+* **transfer:** copy/move referenced visuals and screenshots with asset ([8bd1b24](https://github.com/sethjuarez/cutready/commit/8bd1b24e57ee49644fb388319b499f776692031d))
+* **ui:** remove border on close-all button, increase titlebar height to 46px ([3a5061a](https://github.com/sethjuarez/cutready/commit/3a5061a90b67400f6ae9bf020ffba44cae3e54fa))
+* update remaining E2E tests for new panel and feedback UX ([4129bf0](https://github.com/sethjuarez/cutready/commit/4129bf0313abbfa27c39573f764c51ab5dc636a3))
+* update versioning E2E tests for new secondary panel UX ([4e49cf2](https://github.com/sethjuarez/cutready/commit/4e49cf278d32a64d2d0f86897d51316d51630a98))
+* update visual-cell E2E test to use More Actions menu for Preview ([99d3fc3](https://github.com/sethjuarez/cutready/commit/99d3fc3a0594289ea3844bdeb9ec16d471c2dd9f))
+* **ux:** implement 10 UX improvements from review ([16a7386](https://github.com/sethjuarez/cutready/commit/16a7386e02235e78e4b826e9c1a822e178b3875c))
+
+
+### Code Refactoring
+
+* remove GitHub Copilot SDK integration (-1,748 lines) ([1a7066c](https://github.com/sethjuarez/cutready/commit/1a7066c39f05a57caa7b7892407e5821519a2ca9))
+* replace LlmClient and runner with agentive crate ([a7b244b](https://github.com/sethjuarez/cutready/commit/a7b244b73687c513e1348ab53bf7e565775afbb6))
+
 ## [0.18.0](https://github.com/sethjuarez/cutready/compare/v0.17.1...v0.18.0) (2026-03-21)
 
 
