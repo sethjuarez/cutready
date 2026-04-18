@@ -19,6 +19,7 @@ import {
   Info,
   Download,
   CheckCircle,
+  ExternalLink,
 } from "lucide-react";
 
 interface ModelInfo {
@@ -1582,13 +1583,21 @@ function MemoryTab() {
 
 function UpdatesTab() {
   const update = useUpdateStore((s) => s.update);
+  const checking = useUpdateStore((s) => s.checking);
+  const checkForUpdate = useUpdateStore((s) => s.checkForUpdate);
   const [currentVersion, setCurrentVersion] = useState<string | null>(null);
   const [installing, setInstalling] = useState(false);
   const [progress, setProgress] = useState("");
+  const [checked, setChecked] = useState(false);
 
   useEffect(() => {
     getVersion().then(setCurrentVersion).catch(() => {});
   }, []);
+
+  const handleCheck = async () => {
+    await checkForUpdate();
+    setChecked(true);
+  };
 
   const handleInstall = async () => {
     if (!update) return;
@@ -1614,7 +1623,7 @@ function UpdatesTab() {
 
   return (
     <div className="max-w-xl">
-      {/* Current version */}
+      {/* Current version + actions */}
       <div className="flex items-center justify-between mb-6 p-4 rounded-xl bg-[rgb(var(--color-surface-alt))] border border-[rgb(var(--color-border))]">
         <div>
           <p className="text-xs text-[rgb(var(--color-text-secondary))] uppercase tracking-wider mb-0.5">Installed</p>
@@ -1622,12 +1631,22 @@ function UpdatesTab() {
             {currentVersion ? `v${currentVersion}` : "…"}
           </p>
         </div>
-        {!update && (
-          <div className="flex items-center gap-1.5 text-xs text-success">
-            <CheckCircle className="w-3.5 h-3.5" />
-            Up to date
-          </div>
-        )}
+        <div className="flex items-center gap-2">
+          {!update && checked && (
+            <div className="flex items-center gap-1.5 text-xs text-success">
+              <CheckCircle className="w-3.5 h-3.5" />
+              Up to date
+            </div>
+          )}
+          <button
+            onClick={handleCheck}
+            disabled={checking}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border border-[rgb(var(--color-border))] text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:border-[rgb(var(--color-text-secondary))]/40 transition-colors disabled:opacity-50"
+          >
+            <RefreshCw className={`w-3 h-3 ${checking ? "animate-spin" : ""}`} />
+            {checking ? "Checking…" : "Check for Updates"}
+          </button>
+        </div>
       </div>
 
       {/* Update available */}
@@ -1660,9 +1679,20 @@ function UpdatesTab() {
           )}
         </div>
       ) : (
-        <p className="text-sm text-[rgb(var(--color-text-secondary))]">
-          CutReady checks for updates automatically. You'll see a notification in the title bar when one is available.
-        </p>
+        <div className="flex flex-col gap-2">
+          <p className="text-sm text-[rgb(var(--color-text-secondary))]">
+            CutReady checks for updates automatically. You'll see a notification in the title bar when one is available.
+          </p>
+          <a
+            href="https://github.com/sethjuarez/cutready/blob/main/CHANGELOG.md"
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1.5 text-xs text-[rgb(var(--color-accent))] hover:underline"
+          >
+            <ExternalLink className="w-3 h-3" />
+            View full changelog on GitHub
+          </a>
+        </div>
       )}
     </div>
   );
