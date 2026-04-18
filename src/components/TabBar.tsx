@@ -46,7 +46,7 @@ export function TabBar() {
 
   return (
     <div
-      className={`no-select flex items-stretch bg-[rgb(var(--color-surface-alt))] shrink-0 overflow-x-auto ${
+      className={`no-select flex items-stretch bg-[rgb(var(--color-surface-alt))] shrink-0 overflow-x-auto border-b border-[rgb(var(--color-border))] ${
         isDragOver ? "border-b-[2px] border-b-[rgb(var(--color-accent))]" : ""
       }`}
       style={{ scrollbarWidth: "none" }}
@@ -90,13 +90,13 @@ export function TabBar() {
           onContextMenu={(e) => handleTabContextMenu(e, tab.id)}
         />
       ))}
-      {/* Fill remaining space with border-bottom */}
-      <div className="flex-1 border-b border-[rgb(var(--color-border))]" />
+      {/* Fill remaining space */}
+      <div className="flex-1" />
 
       {/* Close All Tabs button */}
       {openTabs.length > 0 && (
         <button
-          className="flex items-center justify-center w-8 h-full border-b border-[rgb(var(--color-border))] text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors shrink-0"
+          className="flex items-center justify-center w-8 h-full text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors shrink-0"
           title="Close All Tabs"
           onClick={() => closeAllTabs()}
         >
@@ -264,7 +264,7 @@ function Tab({
 
       {/* Close button */}
       <button
-        className={`flex items-center justify-center w-[18px] h-full rounded transition-all shrink-0 ${
+        className={`flex items-center justify-center w-[18px] h-[18px] rounded transition-all shrink-0 ${
           isActive
             ? "opacity-60 hover:opacity-100 hover:bg-[rgb(var(--color-surface-alt))]"
             : "opacity-0 group-hover:opacity-60 hover:!opacity-100 hover:bg-[rgb(var(--color-surface))]"

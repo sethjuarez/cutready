@@ -66,9 +66,9 @@ export function SplitTabBar() {
           onClose={() => closeTabInSplit(tab.id)}
         />
       ))}
-      <div className="flex-1 border-b border-[rgb(var(--color-border))]" />
+      <div className="flex-1" />
       <button
-        className="flex items-center justify-center w-8 h-full border-b border-[rgb(var(--color-border))] text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors shrink-0"
+        className="flex items-center justify-center w-8 h-full text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors shrink-0"
         title="Close Split Pane"
         onClick={closeSplit}
       >
@@ -174,7 +174,7 @@ function SplitTab({
         {tab.title}
       </span>
       <button
-        className={`flex items-center justify-center w-[16px] h-full rounded transition-all shrink-0 ${
+        className={`flex items-center justify-center w-[16px] h-[16px] rounded transition-all shrink-0 ${
           isActive
             ? "opacity-60 hover:opacity-100 hover:bg-[rgb(var(--color-surface-alt))]"
             : "opacity-0 group-hover:opacity-60 hover:!opacity-100 hover:bg-[rgb(var(--color-surface))]"
