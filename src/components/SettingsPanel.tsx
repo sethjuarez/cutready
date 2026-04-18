@@ -1,9 +1,13 @@
 import { useState, useEffect } from "react";
 import { useSettings, useSettingsStore, type AgentPreset } from "../hooks/useSettings";
 import { invoke } from "@tauri-apps/api/core";
+import { getVersion } from "@tauri-apps/api/app";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
+import { relaunch } from "@tauri-apps/plugin-process";
 import { BUILT_IN_AGENTS } from "./ChatPanel";
 import { useToastStore } from "../stores/toastStore";
+import { useUpdateStore } from "../stores/updateStore";
+import { SafeMarkdown } from "./SafeMarkdown";
 import {
   X,
   RefreshCw,
@@ -13,6 +17,8 @@ import {
   Trash2,
   LayoutGrid,
   Info,
+  Download,
+  CheckCircle,
 } from "lucide-react";
 
 interface ModelInfo {
@@ -35,7 +41,7 @@ interface AuthCodeFlowInit {
   port: number;
 }
 
-type SettingsTab = "ai" | "agents" | "memory" | "display" | "feedback" | "repository";
+type SettingsTab = "ai" | "agents" | "memory" | "display" | "feedback" | "repository" | "updates";
 
 import { inputClass, tabBtnClass } from "../styles";
 import { FoundryResourcePicker } from "./FoundryResourcePicker";
@@ -167,7 +173,7 @@ export function SettingsPanel({ mode = "global" }: { mode?: "global" | "workspac
   const canFetchModels = canFetchModelsFor(settings);
 
   // Tabs depend on mode
-  const globalTabs = ["display", "ai", "agents", "feedback"] as const;
+  const globalTabs = ["display", "ai", "agents", "feedback", "updates"] as const;
   const workspaceTabs = ["repository", "memory", "ai", "agents", "display"] as const;
   const tabs = mode === "workspace" ? workspaceTabs : globalTabs;
   const tabLabels: Record<string, string> = {
@@ -177,6 +183,7 @@ export function SettingsPanel({ mode = "global" }: { mode?: "global" | "workspac
     memory: "Memory",
     feedback: "Feedback",
     repository: "Git Remote",
+    updates: "Updates",
   };
 
   return (
@@ -244,6 +251,9 @@ export function SettingsPanel({ mode = "global" }: { mode?: "global" | "workspac
       )}
       {activeTab === "repository" && (
         <RepositoryTab settings={settings} updateSetting={updateSetting} />
+      )}
+      {activeTab === "updates" && (
+        <UpdatesTab />
       )}
     </div>
   );
@@ -1564,6 +1574,95 @@ function MemoryTab() {
             );
           })}
         </div>
+      )}
+    </div>
+  );
+}
+
+
+function UpdatesTab() {
+  const update = useUpdateStore((s) => s.update);
+  const [currentVersion, setCurrentVersion] = useState<string | null>(null);
+  const [installing, setInstalling] = useState(false);
+  const [progress, setProgress] = useState("");
+
+  useEffect(() => {
+    getVersion().then(setCurrentVersion).catch(() => {});
+  }, []);
+
+  const handleInstall = async () => {
+    if (!update) return;
+    setInstalling(true);
+    try {
+      let downloaded = 0;
+      await update.downloadAndInstall((event) => {
+        switch (event.event) {
+          case "Started": setProgress("Downloading…"); break;
+          case "Progress":
+            downloaded += event.data.chunkLength;
+            setProgress(`Downloading… ${(downloaded / 1024 / 1024).toFixed(1)} MB`);
+            break;
+          case "Finished": setProgress("Installing…"); break;
+        }
+      });
+      await relaunch();
+    } catch {
+      setProgress("Installation failed.");
+      setInstalling(false);
+    }
+  };
+
+  return (
+    <div className="max-w-xl">
+      {/* Current version */}
+      <div className="flex items-center justify-between mb-6 p-4 rounded-xl bg-[rgb(var(--color-surface-alt))] border border-[rgb(var(--color-border))]">
+        <div>
+          <p className="text-xs text-[rgb(var(--color-text-secondary))] uppercase tracking-wider mb-0.5">Installed</p>
+          <p className="text-sm font-semibold text-[rgb(var(--color-text))]">
+            {currentVersion ? `v${currentVersion}` : "…"}
+          </p>
+        </div>
+        {!update && (
+          <div className="flex items-center gap-1.5 text-xs text-success">
+            <CheckCircle className="w-3.5 h-3.5" />
+            Up to date
+          </div>
+        )}
+      </div>
+
+      {/* Update available */}
+      {update ? (
+        <div className="rounded-xl border border-[rgb(var(--color-accent))]/30 bg-[rgb(var(--color-accent))]/5 overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-[rgb(var(--color-accent))]/20">
+            <div>
+              <p className="text-xs text-[rgb(var(--color-text-secondary))] uppercase tracking-wider mb-0.5">Update Available</p>
+              <p className="text-sm font-semibold text-[rgb(var(--color-accent))]">v{update.version}</p>
+            </div>
+            {installing ? (
+              <span className="text-xs text-[rgb(var(--color-accent))]">{progress}</span>
+            ) : (
+              <button
+                onClick={handleInstall}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-[rgb(var(--color-accent))] text-white hover:bg-[rgb(var(--color-accent-hover))] transition-colors"
+              >
+                <Download className="w-3.5 h-3.5" />
+                Download &amp; Install
+              </button>
+            )}
+          </div>
+          {update.body && (
+            <div className="px-4 py-3 max-h-[420px] overflow-y-auto">
+              <p className="text-xs text-[rgb(var(--color-text-secondary))] uppercase tracking-wider mb-2">Release Notes</p>
+              <div className="prose prose-sm text-[rgb(var(--color-text))] text-xs leading-relaxed [&_h1]:text-sm [&_h1]:font-semibold [&_h1]:mb-1 [&_h2]:text-xs [&_h2]:font-semibold [&_h2]:mt-3 [&_h2]:mb-1 [&_ul]:pl-4 [&_li]:mb-0.5 [&_a]:text-[rgb(var(--color-accent))] [&_a]:underline [&_code]:bg-[rgb(var(--color-surface))] [&_code]:px-1 [&_code]:rounded">
+                <SafeMarkdown>{update.body}</SafeMarkdown>
+              </div>
+            </div>
+          )}
+        </div>
+      ) : (
+        <p className="text-sm text-[rgb(var(--color-text-secondary))]">
+          CutReady checks for updates automatically. You'll see a notification in the title bar when one is available.
+        </p>
       )}
     </div>
   );
