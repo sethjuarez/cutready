@@ -14,6 +14,7 @@ export function TabBar() {
   const openTabs = useAppStore((s) => s.openTabs);
   const activeTabId = useAppStore((s) => s.activeTabId);
   const splitTabs = useAppStore((s) => s.splitTabs);
+  const activeEditorGroup = useAppStore((s) => s.activeEditorGroup);
   const setActiveTab = useAppStore((s) => s.setActiveTab);
   const closeTab = useAppStore((s) => s.closeTab);
   const closeOtherTabs = useAppStore((s) => s.closeOtherTabs);
@@ -84,6 +85,7 @@ export function TabBar() {
           key={tab.id}
           tab={tab}
           isActive={tab.id === activeTabId}
+          isGroupFocused={activeEditorGroup === "main"}
           isSplit={splitTabs.some((st) => st.path === tab.path && st.type === tab.type)}
           onSelect={() => setActiveTab(tab.id)}
           onClose={() => closeTab(tab.id)}
@@ -169,6 +171,7 @@ function Tab({
   tab,
   isActive,
   isSplit,
+  isGroupFocused,
   onSelect,
   onClose,
   onContextMenu,
@@ -176,6 +179,7 @@ function Tab({
   tab: EditorTab;
   isActive: boolean;
   isSplit: boolean;
+  isGroupFocused: boolean;
   onSelect: () => void;
   onClose: () => void;
   onContextMenu: (e: React.MouseEvent) => void;
@@ -231,9 +235,9 @@ function Tab({
       onContextMenu={onContextMenu}
       title={`${typeLabel}: ${tab.path}`}
     >
-      {/* Active tab: colored bar on top */}
+      {/* Active tab: colored bar on top — dimmed when group is not focused */}
       {isActive && (
-        <span className={`absolute top-0 left-0 right-0 h-[2px] ${typeClasses.bar}`} />
+        <span className={`absolute top-0 left-0 right-0 h-[2px] ${typeClasses.bar} ${isGroupFocused ? "" : "opacity-40"}`} />
       )}
       {/* Split tab: dotted bar on top */}
       {isSplit && !isActive && (

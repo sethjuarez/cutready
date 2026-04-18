@@ -19,6 +19,7 @@ import { StoryboardView } from "./StoryboardView";
 export function SplitTabBar() {
   const splitTabs = useAppStore((s) => s.splitTabs);
   const splitActiveTabId = useAppStore((s) => s.splitActiveTabId);
+  const activeEditorGroup = useAppStore((s) => s.activeEditorGroup);
   const setActiveSplitTab = useAppStore((s) => s.setActiveSplitTab);
   const closeTabInSplit = useAppStore((s) => s.closeTabInSplit);
   const setActiveEditorGroup = useAppStore((s) => s.setActiveEditorGroup);
@@ -62,6 +63,7 @@ export function SplitTabBar() {
           key={tab.id}
           tab={tab}
           isActive={tab.id === splitActiveTabId}
+          isGroupFocused={activeEditorGroup === "split"}
           onSelect={() => { setActiveSplitTab(tab.id); setActiveEditorGroup("split"); }}
           onClose={() => closeTabInSplit(tab.id)}
         />
@@ -131,11 +133,13 @@ export function SplitPreviewPane() {
 function SplitTab({
   tab,
   isActive,
+  isGroupFocused,
   onSelect,
   onClose,
 }: {
   tab: EditorTab;
   isActive: boolean;
+  isGroupFocused: boolean;
   onSelect: () => void;
   onClose: () => void;
 }) {
@@ -167,7 +171,7 @@ function SplitTab({
       title={`${tab.type}: ${tab.path}`}
     >
       {isActive && (
-        <span className={`absolute top-0 left-0 right-0 h-[2px] ${typeClasses.bar}`} />
+        <span className={`absolute top-0 left-0 right-0 h-[2px] ${typeClasses.bar} ${isGroupFocused ? "" : "opacity-40"}`} />
       )}
       <span className={`shrink-0 ${isActive ? typeClasses.icon : "opacity-60"}`}>
         <TabIcon size={11} />
