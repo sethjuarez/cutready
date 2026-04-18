@@ -405,7 +405,17 @@ pub fn all_tools() -> Vec<Tool> {
                 "required": ["agent_id", "message"]
             }),
         ),
-        agentive::web::fetch_url_tool(),
+        agentive::types::Tool::function(
+            "fetch_url",
+            "Fetch a web page and return its clean text content. The response includes the page text followed by a deduplicated list of all links found on the page. If the user asks you to follow links or explore further, call fetch_url again on any of those URLs.",
+            serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "url": { "type": "string", "description": "The URL to fetch (must start with http:// or https://)" }
+                },
+                "required": ["url"]
+            }),
+        ),
         agentive::memory::recall_memory_tool(),
         agentive::memory::save_memory_tool(),
     ]
@@ -442,7 +452,33 @@ pub fn execute_tool(call: &ToolCall, project_root: &Path, vision_enabled: bool) 
                 agentive::ToolOutput::from(tokio::task::block_in_place(|| {
                     tokio::runtime::Handle::current().block_on(async {
                         match agentive::web::fetch_and_clean(&url).await {
-                            Ok(content) => content,
+                            Ok(content) => {
+                                // Extract markdown links for the agent to optionally follow
+                                let mut links: Vec<String> = Vec::new();
+                                let mut rest = content.as_str();
+                                while let Some(bracket) = rest.find("](") {
+                                    let after = &rest[bracket + 2..];
+                                    if let Some(end) = after.find(')') {
+                                        let href = after[..end].trim();
+                                        if href.starts_with("http://") || href.starts_with("https://") {
+                                            let href = href.to_string();
+                                            if !links.contains(&href) {
+                                                links.push(href);
+                                            }
+                                        }
+                                    }
+                                    rest = &rest[bracket + 2..];
+                                }
+                                if links.is_empty() {
+                                    content
+                                } else {
+                                    format!(
+                                        "{content}\n\n---\nLinks on this page ({count}):\n{list}",
+                                        count = links.len(),
+                                        list = links.iter().map(|l| format!("- {l}")).collect::<Vec<_>>().join("\n")
+                                    )
+                                }
+                            }
                             Err(e) => format!("Error fetching URL: {e}"),
                         }
                     })
