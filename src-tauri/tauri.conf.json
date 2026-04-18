@@ -23,7 +23,8 @@
         "decorations": false,
         "shadow": true,
         "resizable": true,
-        "fullscreen": false
+        "fullscreen": false,
+        "acceptFirstMouse": true
       }
     ],
     "security": {
