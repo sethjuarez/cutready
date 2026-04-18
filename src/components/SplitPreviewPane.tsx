@@ -67,13 +67,15 @@ export function SplitTabBar() {
         />
       ))}
       <div className="flex-1" />
-      <button
-        className="flex items-center justify-center w-8 h-full text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors shrink-0"
-        title="Close Split Pane"
-        onClick={closeSplit}
-      >
-        <X className="w-3 h-3" />
-      </button>
+      <div className="self-stretch flex items-center">
+        <button
+          className="flex items-center justify-center w-8 h-full text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors"
+          title="Close Split Pane"
+          onClick={closeSplit}
+        >
+          <X className="w-3 h-3" />
+        </button>
+      </div>
     </div>
   );
 }

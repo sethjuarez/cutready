@@ -95,13 +95,15 @@ export function TabBar() {
 
       {/* Close All Tabs button */}
       {openTabs.length > 0 && (
-        <button
-          className="flex items-center justify-center w-8 h-full text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors shrink-0"
-          title="Close All Tabs"
-          onClick={() => closeAllTabs()}
-        >
-          <X className="w-3 h-3" />
-        </button>
+        <div className="self-stretch flex items-center">
+          <button
+            className="flex items-center justify-center w-8 h-full text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors"
+            title="Close All Tabs"
+            onClick={() => closeAllTabs()}
+          >
+            <X className="w-3 h-3" />
+          </button>
+        </div>
       )}
 
       {/* Tab context menu */}
