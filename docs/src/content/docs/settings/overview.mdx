@@ -19,7 +19,7 @@ global defaults. Both open as full-width panels (no sidebar).
 Open global settings from the **gear icon** (⚙️) pinned to the bottom of the
 sidebar. Global settings apply across all workspaces.
 
-<Screenshot src="/images/settings-panel.png" darkSrc="/images/settings-panel-dark.png" alt="Global settings panel" caption="Global settings with Display, AI Provider, Agents, and Feedback tabs" />
+<Screenshot src="/images/settings-panel.png" darkSrc="/images/settings-panel-dark.png" alt="Global settings panel" caption="Global settings with Display, AI Provider, Agents, Feedback, and Updates tabs" />
 
 <Tabs>
 <TabItem label="Display">
@@ -38,18 +38,29 @@ Configure the visual appearance of CutReady:
 
 ### Provider Selector
 
-<Screenshot src="/images/settings-ai-provider.png" darkSrc="/images/settings-ai-provider-dark.png" alt="AI Provider settings" caption="Configure your AI provider — Azure OpenAI or OpenAI with endpoint, auth, and model selection" />
+<Screenshot src="/images/settings-ai-provider.png" darkSrc="/images/settings-ai-provider-dark.png" alt="AI Provider settings" caption="Configure your AI provider — choose from Microsoft Foundry, Azure OpenAI, OpenAI, or Anthropic" />
 
 Choose between supported LLM providers:
 
 | Provider | Auth Method | Configuration |
 | --- | --- | --- |
-| **Azure OpenAI** | OAuth or API key | Endpoint, Tenant ID, Client ID, model |
+| **Microsoft Foundry** | API key or Azure OAuth | Foundry project endpoint, model |
+| **Azure OpenAI** | API key or Azure OAuth | Endpoint, Tenant ID, Client ID, model |
 | **OpenAI** | API key | API key, model |
+| **Anthropic** | API key | API key, model |
+
+### Microsoft Foundry Setup
+
+For Microsoft AI Foundry (recommended for Azure users):
+
+- **API Endpoint** — Your Foundry project URL (e.g.,
+  `https://your-hub.services.ai.azure.com/api/projects/your-project`)
+- **Authentication** — API Key or Azure OAuth sign-in
+- **Model** — Choose from deployed models (use **Refresh** to load them)
 
 ### Azure OpenAI Setup
 
-For Azure OpenAI, configure the following:
+For Azure OpenAI:
 
 - **API Endpoint** — Your Azure OpenAI resource URL (e.g.,
   `https://your-resource.openai.azure.com/`)
@@ -68,6 +79,13 @@ For direct OpenAI access:
 - **API Key** — Your OpenAI API key
 - **Model** — The model to use (e.g., `gpt-4o`, `gpt-4o-mini`)
 
+### Anthropic Setup
+
+For Anthropic Claude models:
+
+- **API Key** — Your Anthropic API key
+- **Model** — The model to use (e.g., `claude-3-5-sonnet-latest`)
+
 <Aside type="tip">
   API keys and tokens are stored in an **encrypted IOTA Stronghold vault**
   (`vault.hold` in the app data directory). They are never stored in plaintext
@@ -81,7 +99,7 @@ For direct OpenAI access:
 
 <Screenshot src="/images/settings-agents.png" darkSrc="/images/settings-agents-dark.png" alt="Agents settings" caption="Manage built-in and custom AI agents with their system prompts" />
 
-CutReady ships with three built-in agents that are **read-only** — you can
+CutReady ships with four built-in agents that are **read-only** — you can
 view their system prompts but not modify them:
 
 | Agent | Purpose |
@@ -89,6 +107,7 @@ view their system prompts but not modify them:
 | **Planner** | Demo planning, structure, and flow |
 | **Writer** | Narrative refinement and voiceover text |
 | **Editor** | Precise, surgical edits to specific content |
+| **Designer** | Elucim visual generation for sketch rows |
 
 ### Custom Agents
 
@@ -133,6 +152,23 @@ Each feedback entry has hover buttons for:
 
 You can also **Copy All** to get all feedback entries at once, or **Clear All**
 to reset your feedback history.
+
+</TabItem>
+<TabItem label="Updates">
+
+### Software Updates
+
+Check for and install CutReady updates without leaving the app:
+
+- **Installed version** — Shows the currently running version
+- **Check for Updates** — Queries for the latest release (shows a spinner while checking)
+- **Up to date ✓** — Shown when no update is available
+- When an update is available, shows the new version number, full release notes
+  (rendered as markdown), and a **Download & Install** button with a progress indicator
+- **View full changelog on GitHub** — Link to the complete release history
+
+Updates are delivered via the built-in Tauri updater. Install applies the update
+and prompts you to restart CutReady.
 
 </TabItem>
 </Tabs>

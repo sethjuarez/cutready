@@ -29,13 +29,14 @@ interface:
 
 ## Built-in Agents
 
-CutReady includes three specialized agents, each tuned for a different task:
+CutReady includes four specialized agents, each tuned for a different task:
 
 | Agent | Purpose | Best for |
 | --- | --- | --- |
 | **Planner** | Sketch planning and structure | Generating planning rows, organizing demo flow |
 | **Writer** | Narrative refinement | Improving voiceover text, making scripts engaging |
 | **Editor** | Surgical edits | Precise changes to specific cells or rows |
+| **Designer** | Elucim visual generation | Creating framing visuals for sketch rows |
 
 Switch between agents using the **agent selector** dropdown at the top of the
 chat panel. Each agent has a distinct system prompt that shapes its behavior.
@@ -54,7 +55,7 @@ it invokes backend tools:
 | `list_project_files` | Lists files in the project directory |
 | `list_project_images` | Discovers available screenshots in the project |
 | `read_note` | Reads a markdown note file |
-| `fetch_url_content` | Fetches content from a URL for reference |
+| `fetch_url_content` | Fetches content from a URL; appends a structured "Links on this page" section so the agent can follow links when instructed |
 | `save_feedback` | Saves user feedback to the app data directory |
 
 Tool calls happen automatically as part of the conversation. You'll see the

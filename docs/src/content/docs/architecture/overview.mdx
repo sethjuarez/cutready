@@ -32,7 +32,9 @@ CutReady is a **Tauri v2** desktop application with a split architecture:
 │                         │  └── versioning.rs              │
 │                         │                               │
 │                         │  AI Layer                       │
-│                         │  └── Azure OpenAI (reqwest)     │
+│                         │  └── agentive crate             │
+│                         │      (Foundry/Azure/OpenAI/     │
+│                         │       Anthropic via reqwest)    │
 │                         │                                 │
 │                         │  Sidecar                        │
 │                         │  └── Playwright (Node.js)       │
@@ -91,19 +93,21 @@ The Rust backend handles:
 Lower-level implementations:
 - **interaction.rs** — CDP browser communication, Playwright sidecar management
 - **screenshot.rs** — Native screen capture via `xcap` crate
-- **versioning.rs** — Git operations via `gix` (gitoxide)
+- **versioning.rs** — Git operations via `gix` (gitoxide, pure-Rust git) — no external git needed
 
 ### AI Layer
 
-CutReady integrates with **Azure OpenAI** for AI-powered features:
+CutReady uses the **[agentive](https://github.com/sethjuarez/agentive)** crate to power AI features across 4 providers:
 
 - **API communication** via `reqwest` with configurable endpoints and OAuth support
 - **Function calling** for structured sketch manipulation (add rows, update fields)
 - **Streaming responses** delivered to the frontend via Tauri channels
 - **Silent mode** for sparkle buttons — results are applied directly without chat UI
+- **Responses API** auto-routing for codex/pro-series models
 
-The AI layer supports 3 built-in agents (Script Writer, Demo Planner, Sketch
-Improver) plus user-defined custom agents.
+Supported providers: **Microsoft Foundry**, **Azure OpenAI**, **OpenAI**, **Anthropic**.
+
+The AI layer supports 3 built-in agents (Planner, Writer, Editor) plus a Designer agent for visuals and user-defined custom agents.
 
 ### Models Layer (`src/models/`)
 

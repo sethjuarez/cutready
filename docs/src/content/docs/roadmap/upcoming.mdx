@@ -28,11 +28,11 @@ multi-project workspaces, encrypted secret storage, and collaboration features:
 - ✅ **Three-way merge engine** — Combine timelines with field-level conflict detection
 - ✅ **Conflict resolution UI** — Inline resolver for sketch, note, and storyboard conflicts
 - ✅ **History graph** — Full DAG visualization of all timelines, forks, and merges
-- ✅ **Remote sync** — Push/pull/sync with GitHub remotes via git2
+- ✅ **Remote sync** — Push/pull/sync with GitHub remotes via gix
 - ✅ **Markdown notes** — CodeMirror editor with AI cleanup, rich paste, and live preview
 - ✅ **Command palette** — Keyboard-driven command access (Ctrl+Shift+P)
 - ✅ **Cross-platform builds** — Windows, macOS (ARM + Intel), Linux
-- ✅ **AI assistant** — 3 built-in agents (Planner, Writer, Editor), custom agents, and color-coded file references
+- ✅ **AI assistant** — 4 built-in agents (Planner, Writer, Editor, Designer), custom agents, and color-coded file references
 - ✅ **AI change highlighting** — Modified rows highlighted with inline diffs and undo support; "Show AI Changes" button to re-view
 - ✅ **AI vision support** — Send images to the AI (configurable: off, notes only, notes+sketches)
 - ✅ **LLM compaction** — Smart conversation pruning when context gets long
@@ -43,15 +43,22 @@ multi-project workspaces, encrypted secret storage, and collaboration features:
 - ✅ **Activity panel** — Color-coded AI operation logs
 - ✅ **Debug panel** — Captures JS console and Rust backend logs for diagnostics
 - ✅ **Azure AI Foundry integration** — With OAuth support and deployed model discovery
+- ✅ **Anthropic provider** — Claude models supported alongside OpenAI and Azure providers
 - ✅ **Azure OAuth** — Browser-based OAuth flow for keyless Azure OpenAI
 - ✅ **Encrypted secret storage** — API keys, OAuth tokens, and PATs stored in an IOTA Stronghold encrypted vault
-- ✅ **Settings split** — Global settings (Display, AI Provider, Agents, Feedback) and workspace settings (Git Remote, Memory, Images, plus overrides)
+- ✅ **Settings split** — Global settings (Display, AI Provider, Agents, Feedback, **Updates**) and workspace settings (Git Remote, Memory, Images, plus overrides)
 - ✅ **Feedback system** — Title bar popover with debug log attachment, settings history, and AI-formatted GitHub Issue creation
 - ✅ **Smart rich paste** — AI-powered HTML-to-markdown conversion for Word and web content
 - ✅ **Auto-update** — Built-in update mechanism via Tauri updater
 - ✅ **Display settings** — Text size, row density, color palette, and editor width preferences
 - ✅ **Explorer tree view** — File browser in the sidebar showing all project files
 - ✅ **Title bar breadcrumb** — Shows workspace / project path in the title bar
+- ✅ **Move/Copy between projects** — Right-click any sketch, storyboard, or note to move or copy it to another project in the same workspace; referenced screenshots and visuals transfer automatically
+- ✅ **Open in Terminal** — Open a system terminal in the project directory from the Output Panel (Terminal tab) or right-click any file in the sidebar
+- ✅ **Terminal tab** — Third tab in the Output Panel (next to Activity and Debug) for quick terminal access
+- ✅ **Updates settings tab** — Check for and install app updates directly from Settings → Updates
+- ✅ **Sidebar-flip button** — LayoutGrid button in the title bar (leftmost panel toggle) moves the sidebar between left and right
+- ✅ **Agent link extraction** — The AI's web fetch tool appends a structured links section so the agent can follow links when instructed
 
 ## Upcoming: Browser Recording <Badge text="In Development" variant="note" />
 

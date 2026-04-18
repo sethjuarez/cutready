@@ -27,7 +27,8 @@ tree view, tabbed editors, resizable panels, and a command palette.
 │ gear)  │  (Sketch / Record / Script /     │                │
 │        │   Settings)                      │                │
 │        ├──────────────────────────────────┤                │
-│        │  Output Panel (Activity + Debug) │                │
+│        │  Output Panel                    │                │
+│        │  (Activity | Debug | Terminal)   │                │
 └────────┴──────────────────────────────────┴────────────────┘
 ```
 
@@ -50,7 +51,7 @@ The **Explorer tree view** shows all files in the current project — sketches
 a unified **Import** button for importing files into the project.
 
 - **Toggle visibility**: `Ctrl+B`
-- **Move sidebar**: Right-click for left/right positioning
+- **Move sidebar**: Click the **LayoutGrid** button (leftmost panel toggle in the title bar) to flip the sidebar between left and right
 - The sidebar remembers its width across sessions
 - **Escape** cancels any in-progress creation or rename action
 
@@ -71,18 +72,21 @@ CutReady uses a **frameless window** with a custom title bar that includes:
 - **Workspace / project breadcrumb** — Shows the current workspace and project path
 - Window controls (minimize, maximize, close)
 - **Feedback button** — chat-bubble icon to submit feedback with optional debug log
+- **LayoutGrid button** — leftmost panel toggle; click to flip the sidebar between left and right
 - Toggle buttons for sidebar, output panel, and chat panel
 - Drag area for moving the window
 
 ## Output Panel
 
-Toggle with **`Ctrl+\``** — a resizable bottom panel with two tabs:
+Toggle with **`Ctrl+\``** — a resizable bottom panel with three tabs:
 
 - **Activity** — real-time log of AI operations, tool calls, and sparkle actions
 - **Debug** — captures JavaScript console output and Rust backend log messages
   for diagnostics
+- **Terminal** — opens a system terminal in the project directory (Windows Terminal
+  or PowerShell on Windows, Terminal.app on macOS, gnome-terminal/konsole/xterm on Linux)
 
-Both tabs support export (download as `.log` file) and per-tab clear.
+All tabs support export (download as `.log` file) and per-tab clear. You can also open a terminal from the sidebar by right-clicking any sketch, storyboard, or note and choosing **Open in Terminal**.
 
 ## Feedback
 

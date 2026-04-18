@@ -8,15 +8,13 @@ sidebar:
 import { Aside } from '@astrojs/starlight/components';
 import Screenshot from '../../../components/Screenshot.astro';
 
-CutReady's AI features are powered by a pluggable LLM backend that supports
-streaming responses, function calling, and multiple agent configurations.
+CutReady's AI features are powered by the **[agentive](https://github.com/sethjuarez/agentive)** crate — a shared Rust library providing a pluggable LLM backend with streaming responses, function calling, and multiple agent configurations.
 
 <Screenshot src="/images/sketch-with-chat.png" darkSrc="/images/sketch-with-chat-dark.png" alt="AI chat panel with function calling" caption="The AI assistant uses function calling to read and modify sketches in real-time" />
 
 ## Provider Architecture
 
-The Rust backend defines an `LlmProvider` trait that abstracts over different
-LLM services:
+The agentive crate defines a `Provider` trait that abstracts over different LLM services:
 
 ```rust
 #[async_trait]
@@ -33,12 +31,14 @@ application. Currently supported:
 
 | Provider | Auth Method | Notes |
 | --- | --- | --- |
-| **Azure OpenAI** | OAuth (Azure AD) or API key | Default provider, uses Azure Foundry API |
+| **Microsoft Foundry** | API key or Azure OAuth | Azure AI Foundry project endpoints |
+| **Azure OpenAI** | API key or Azure OAuth | Standard Azure OpenAI resources |
 | **OpenAI** | API key | Direct OpenAI API access |
+| **Anthropic** | API key | Claude models |
 
-## Azure Foundry API
+## Foundry / Azure OpenAI API
 
-The default Azure provider connects via the Azure Foundry API with:
+The Azure-family providers connect via the Foundry or Azure OpenAI API with:
 
 - **OAuth authentication** — Azure AD token flow with Tenant ID and Client ID
 - **Streaming** — Server-sent events for real-time response streaming
@@ -81,6 +81,7 @@ Each agent has a **system prompt** that defines its personality and behavior:
 - **Planner** — Focused on demo structure, timing, and logical flow
 - **Writer** — Focused on engaging narration and natural voiceover language
 - **Editor** — Focused on precision, making minimal targeted changes
+- **Designer** — Focused on generating Elucim DSL visuals for sketch rows
 
 System prompts include the tool definitions (JSON schema) so the model knows
 what tools are available and how to invoke them.
@@ -101,7 +102,7 @@ This keeps the chat history focused on intentional conversations.
 
 ### Built-in Agents
 
-The three built-in agents (Planner, Writer, Editor) ship with CutReady and
+The four built-in agents (Planner, Writer, Editor, Designer) ship with CutReady and
 have read-only system prompts that are tuned for their respective tasks.
 
 ### Custom Agents
