@@ -9,6 +9,13 @@
 Covector manages this changelog. Do not edit manually.
 Each release section is generated from `.changes/*.md` files.
 
+## [1.1.0](https://github.com/sethjuarez/cutready/compare/v1.0.0...v1.1.0) (2026-04-19)
+
+
+### Features
+
+* add AI-safe locks and theme polish ([e3cc92d](https://github.com/sethjuarez/cutready/commit/e3cc92d00cb96da14d459066121cccd2b2753178)), closes [#30](https://github.com/sethjuarez/cutready/issues/30)
+
 ## [1.0.0](https://github.com/sethjuarez/cutready/compare/v0.18.0...v1.0.0) (2026-04-18)
 
 
