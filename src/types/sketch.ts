@@ -9,6 +9,10 @@ export type SketchState =
 
 /** A row in the sketch planning table. */
 export interface PlanningRow {
+  /** Whether the entire row is protected from edits. */
+  locked?: boolean;
+  /** Per-cell lock state for targeted AI-safe editing. */
+  locks?: Partial<Record<PlanningCellField, boolean>>;
   time: string;
   narrative: string;
   demo_actions: string;
@@ -19,9 +23,13 @@ export interface PlanningRow {
   design_plan?: string | null;
 }
 
+export type PlanningCellField = "time" | "narrative" | "demo_actions" | "screenshot" | "visual" | "design_plan";
+
 /** A sketch — a focused scene in a demo storyboard. */
 export interface Sketch {
   title: string;
+  /** Whether the whole sketch is protected from edits. */
+  locked?: boolean;
   /** Rich-text description — Lexical editor state JSON. */
   description: unknown;
   /** Planning table rows. */

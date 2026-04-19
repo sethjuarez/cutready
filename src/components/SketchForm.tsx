@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { SafeMarkdown } from "./SafeMarkdown";
-import { ChevronLeft, Sparkles, Monitor, Plus, X, Folder, MoreHorizontal } from "lucide-react";
+import { ChevronLeft, Sparkles, Monitor, Plus, X, Folder, Lock, Unlock, FileText } from "lucide-react";
 import { useAppStore } from "../stores/appStore";
 import { useToastStore } from "../stores/toastStore";
 import { ScriptTable } from "./ScriptTable";
@@ -10,8 +10,7 @@ import { ScreenCaptureOverlay } from "./ScreenCaptureOverlay";
 import { SketchPreview } from "./SketchPreview";
 import VisualCell from "./VisualCell";
 import { exportSketchToWord } from "../utils/exportToWord";
-import { usePopover } from "../hooks/usePopover";
-import type { PlanningRow } from "../types/sketch";
+import type { PlanningRow, Sketch } from "../types/sketch";
 import { diffRow, type RowDiff } from "../utils/textDiff";
 
 interface MonitorInfo {
@@ -52,7 +51,6 @@ export function SketchForm() {
   const lastAiDiffs = useRef<{ rows: Set<number>; diffs: RowDiff[] } | null>(null);
   // Snapshot of rows before an AI edit lands — used for diff computation
   const aiSnapshotRef = useRef<{ rows: PlanningRow[]; changedIndices: number[] } | null>(null);
-  const { state: showOverflow, toggle: toggleOverflow, close: closeOverflow, ref: overflowRef } = usePopover();
   const [visualPromptRow, setVisualPromptRow] = useState<number | null>(null);
   const [visualInstructions, setVisualInstructions] = useState("");
   const [localDesc, setLocalDesc] = useState(
@@ -71,6 +69,7 @@ export function SketchForm() {
   const currentProject = useAppStore((s) => s.currentProject);
   const sendChatPrompt = useAppStore((s) => s.sendChatPrompt);
   const projectRoot = currentProject?.root ?? "";
+  const sketchLocked = activeSketch?.locked ?? false;
 
   // Pending data + path captured at edit time for flush-on-unmount
   const pendingRowsRef = useRef<PlanningRow[] | null>(null);
@@ -188,6 +187,7 @@ export function SketchForm() {
 
   const handleTitleChange = useCallback(
     (value: string) => {
+      if (sketchLocked) return;
       setLocalTitle(value);
       if (!activeSketch || !activeSketchPath) return;
       pendingTitleRef.current = value;
@@ -198,11 +198,12 @@ export function SketchForm() {
         updateSketchTitle(activeSketchPath, value);
       }, 500);
     },
-    [activeSketch, activeSketchPath, updateSketchTitle],
+    [activeSketch, activeSketchPath, updateSketchTitle, sketchLocked],
   );
 
   const handleRowsChange = useCallback(
     (rows: PlanningRow[]) => {
+      if (sketchLocked) return;
       setLocalRows(rows);
       pendingRowsRef.current = rows;
       pendingPathRef.current = activeSketchPath;
@@ -212,8 +213,46 @@ export function SketchForm() {
         updateSketch({ rows });
       }, 500);
     },
-    [updateSketch, activeSketchPath],
+    [updateSketch, activeSketchPath, sketchLocked],
   );
+
+  const applySketchFromLockCommand = useCallback((sketch: Sketch) => {
+    if (!sketch) return;
+    useAppStore.setState({ activeSketch: sketch });
+    setLocalRows(sketch.rows ?? []);
+    setLocalTitle(sketch.title ?? "");
+    setLocalDesc(typeof sketch.description === "string" ? sketch.description : "");
+  }, []);
+
+  const handleSketchLockChange = useCallback(async (locked: boolean) => {
+    if (!activeSketchPath) return;
+    try {
+      const sketch = await invoke<Sketch>("set_sketch_lock", { relativePath: activeSketchPath, locked });
+      applySketchFromLockCommand(sketch);
+    } catch (err) {
+      console.error("[SketchForm] Failed to update sketch lock:", err);
+    }
+  }, [activeSketchPath, applySketchFromLockCommand]);
+
+  const handleRowLockChange = useCallback(async (index: number, locked: boolean) => {
+    if (!activeSketchPath) return;
+    try {
+      const sketch = await invoke<Sketch>("set_planning_row_lock", { relativePath: activeSketchPath, index, locked });
+      applySketchFromLockCommand(sketch);
+    } catch (err) {
+      console.error("[SketchForm] Failed to update row lock:", err);
+    }
+  }, [activeSketchPath, applySketchFromLockCommand]);
+
+  const handleCellLockChange = useCallback(async (index: number, field: string, locked: boolean) => {
+    if (!activeSketchPath) return;
+    try {
+      const sketch = await invoke<Sketch>("set_planning_cell_lock", { relativePath: activeSketchPath, index, field, locked });
+      applySketchFromLockCommand(sketch);
+    } catch (err) {
+      console.error("[SketchForm] Failed to update cell lock:", err);
+    }
+  }, [activeSketchPath, applySketchFromLockCommand]);
 
   // Flush pending debounced saves on unmount (e.g., tab close)
   // Skip flush if navigation cleared the active sketch (path is null in store)
@@ -347,6 +386,7 @@ The Actions describe what happens on screen — use them as visual design hints.
       });
     } catch (e) {
       console.error("[SketchForm] Failed to open preview window:", e);
+      setShowPreview(true);
     }
   }, [localRows, projectRoot, localTitle]);
 
@@ -354,7 +394,9 @@ The Actions describe what happens on screen — use them as visual design hints.
   const handlePreviewClick = useCallback(async () => {
     try {
       const monitors: MonitorInfo[] = await invoke("list_monitors");
-      if (monitors.length === 1) {
+      if (monitors.length === 0) {
+        setShowPreview(true);
+      } else if (monitors.length === 1) {
         await launchPreviewOnMonitor(monitors[0]);
       } else {
         setAvailableMonitors(monitors);
@@ -366,6 +408,15 @@ The Actions describe what happens on screen — use them as visual design hints.
       setShowPreview(true);
     }
   }, [launchPreviewOnMonitor]);
+
+  const handleExportWord = useCallback(() => {
+    if (!activeSketch) return;
+    exportSketchToWord(activeSketch, projectRoot, "landscape").then((exported) => {
+      if (!exported) return;
+      useToastStore.getState().show("Export complete");
+      useAppStore.getState().addActivityEntries([{ id: crypto.randomUUID(), timestamp: new Date(), source: "export", content: `Exported "${activeSketch.title}" to Word`, level: "success" }]);
+    }).catch(err => console.error("Word export failed:", err));
+  }, [activeSketch, projectRoot]);
 
   if (!activeSketch) return null;
 
@@ -391,17 +442,18 @@ The Actions describe what happens on screen — use them as visual design hints.
           </div>
         )}
 
-        {/* Title + overflow menu */}
+        {/* Title + sketch actions */}
         <div className="flex items-center gap-3 mb-4">
           <div className="relative flex-1 group/title">
             <input
               type="text"
               value={localTitle}
               onChange={(e) => handleTitleChange(e.target.value)}
+              readOnly={sketchLocked}
               placeholder="Sketch title..."
-              className="w-full text-2xl font-semibold bg-transparent text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/40 outline-none border-none"
+              className={`w-full text-2xl font-semibold bg-transparent text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/40 outline-none border-none ${localTitle && !sketchLocked ? "pr-24" : ""} ${sketchLocked ? "cursor-default" : ""}`}
             />
-            {localTitle && (
+            {localTitle && !sketchLocked && (
               <button
                 onClick={() => sendChatPrompt(
                   `Improve the title of sketch "${activeSketchPath ?? "current"}". Current title: "${localTitle}". Suggest a more compelling, concise title. IMPORTANT: Only update the title — do NOT change the description or any rows. Use write_sketch with the improved title but keep the existing description and all rows exactly as they are.`,
@@ -416,43 +468,32 @@ The Actions describe what happens on screen — use them as visual design hints.
             )}
           </div>
           {localRows.length > 0 && (
-            <div className="relative" ref={overflowRef}>
+            <button
+              onClick={handleExportWord}
+              className="p-1.5 rounded-md text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors"
+              title="Export to Word"
+            >
+              <span className="relative inline-flex h-4 w-4 items-center justify-center">
+                <FileText className="w-4 h-4" />
+                <span className="absolute -bottom-0.5 -right-0.5 rounded-[2px] bg-[rgb(var(--color-surface))] px-[1px] text-[7px] font-semibold leading-none text-[rgb(var(--color-accent))]">W</span>
+              </span>
+            </button>
+          )}
+          {localRows.length > 0 && (
+            <div className="relative">
               <button
-                onClick={toggleOverflow}
+                onClick={handlePreviewClick}
                 className="p-1.5 rounded-md text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors"
-                title="More actions"
+                title="Preview"
               >
-                <MoreHorizontal className="w-4 h-4" />
+                <Monitor className="w-4 h-4" />
               </button>
-              {showOverflow && (
-                <div className="absolute right-0 top-full mt-1 z-dropdown w-[180px] py-1 bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-lg shadow-lg">
-                  <button
-                    onClick={() => {
-                      if (!activeSketch) return;
-                      closeOverflow();
-                      exportSketchToWord(activeSketch, projectRoot, "landscape").then(() => {
-                        useToastStore.getState().show("Export complete");
-                        useAppStore.getState().addActivityEntries([{ id: crypto.randomUUID(), timestamp: new Date(), source: "export", content: `Exported "${activeSketch.title}" to Word`, level: "success" }]);
-                      }).catch(err => console.error("Word export failed:", err));
-                    }}
-                    className="w-full px-3 py-2 text-left text-[12px] text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors flex items-center gap-2"
-                  >
-                    Export to Word
-                  </button>
-                  <button
-                    onClick={() => { handlePreviewClick(); closeOverflow(); }}
-                    className="w-full px-3 py-2 text-left text-[12px] text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors flex items-center gap-2"
-                  >
-                    Preview
-                  </button>
-                </div>
-              )}
 
               {/* Monitor picker dropdown */}
               {showMonitorPicker && (
                 <>
-                  <div className="fixed inset-0 z-overlay" onClick={() => setShowMonitorPicker(false)} />
-                  <div className="absolute right-0 top-full mt-2 z-dropdown bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-lg shadow-lg py-1 min-w-[200px]">
+                  <div className="fixed inset-0 z-dropdown" onClick={() => setShowMonitorPicker(false)} />
+                  <div className="absolute right-0 top-full mt-2 z-modal bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-lg shadow-lg py-1 min-w-[200px]">
                     <div className="px-3 py-2 text-xs font-medium text-[rgb(var(--color-text-secondary))] uppercase tracking-wider border-b border-[rgb(var(--color-border))]">
                       Present on
                     </div>
@@ -482,6 +523,17 @@ The Actions describe what happens on screen — use them as visual design hints.
               )}
             </div>
           )}
+          <button
+            onClick={() => handleSketchLockChange(!sketchLocked)}
+            className={`p-1.5 rounded-md transition-colors ${
+              sketchLocked
+                ? "text-[rgb(var(--color-warning))] bg-[rgb(var(--color-warning))]/10 hover:bg-[rgb(var(--color-warning))]/15"
+                : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))]"
+            }`}
+            title={sketchLocked ? "Unlock sketch" : "Lock sketch"}
+          >
+            {sketchLocked ? <Lock className="w-4 h-4" /> : <Unlock className="w-4 h-4" />}
+          </button>
         </div>
 
         {/* Description — markdown preview, click to edit */}
@@ -491,6 +543,7 @@ The Actions describe what happens on screen — use them as visual design hints.
               ref={descRef}
               value={localDesc}
               onChange={(e) => {
+                if (sketchLocked) return;
                 setLocalDesc(e.target.value);
                 updateSketch({ description: e.target.value });
               }}
@@ -503,9 +556,9 @@ The Actions describe what happens on screen — use them as visual design hints.
           ) : (
             <div
               tabIndex={0}
-              onClick={() => setEditingDesc(true)}
-              onFocus={() => setEditingDesc(true)}
-              className="min-h-[2rem] rounded-lg px-3 py-2 text-sm cursor-text border border-transparent hover:border-[rgb(var(--color-border))] transition-colors"
+              onClick={() => { if (!sketchLocked) setEditingDesc(true); }}
+              onFocus={() => { if (!sketchLocked) setEditingDesc(true); }}
+              className={`min-h-[2rem] rounded-lg px-3 py-2 text-sm border border-transparent hover:border-[rgb(var(--color-border))] transition-colors ${!sketchLocked ? "pr-24" : ""} ${sketchLocked ? "cursor-default" : "cursor-text"}`}
             >
               {localDesc ? (
                 <div className="prose-desc text-[rgb(var(--color-text))] leading-relaxed">
@@ -518,7 +571,7 @@ The Actions describe what happens on screen — use them as visual design hints.
               )}
             </div>
           )}
-          {!editingDesc && (
+          {!editingDesc && !sketchLocked && (
             <button
               onClick={() => sendChatPrompt(
                 localDesc
@@ -538,6 +591,7 @@ The Actions describe what happens on screen — use them as visual design hints.
         {/* Planning Table */}
         <div>
           <div className="flex items-center justify-end mb-3">
+            {!sketchLocked && (
             <button
               onClick={() => sendChatPrompt(
                 localRows.length === 0
@@ -551,10 +605,12 @@ The Actions describe what happens on screen — use them as visual design hints.
               <Sparkles className="w-3 h-3" />
               {localRows.length === 0 ? "Generate" : "Improve"}
             </button>
+            )}
           </div>
           <ScriptTable
             rows={localRows}
             onChange={handleRowsChange}
+            readOnly={sketchLocked}
             onCaptureScreenshot={handleCaptureScreenshot}
             onPickImage={handlePickImage}
             onBrowseImage={handleBrowseImage}
@@ -579,6 +635,8 @@ The row already has a visual and design_plan. Read the sketch with read_sketch f
             }}
             projectRoot={projectRoot}
             sketchPath={activeSketchPath ?? undefined}
+            onRowLockChange={handleRowLockChange}
+            onCellLockChange={handleCellLockChange}
             highlightedRows={highlightedRows}
             rowDiffs={rowDiffs}
             aiSnapshotRows={aiSnapshotRef.current?.rows ?? null}
@@ -623,7 +681,7 @@ The row already has a visual and design_plan. Read the sketch with read_sketch f
 
       {/* Asset picker overlay — screenshots + visuals */}
       {imagePickerRowIdx !== null && (
-        <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/40" onClick={() => setImagePickerRowIdx(null)}>
+        <div className="fixed inset-0 z-modal flex items-center justify-center bg-[rgb(var(--color-overlay-scrim)/0.4)]" onClick={() => setImagePickerRowIdx(null)}>
           <div className="bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-xl shadow-2xl max-w-md w-full max-h-[60vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-4 py-3 border-b border-[rgb(var(--color-border))]">
               <span className="text-sm font-medium text-[rgb(var(--color-text))]">Pick an image or visual</span>
@@ -681,7 +739,7 @@ The row already has a visual and design_plan. Read the sketch with read_sketch f
 
       {/* Visual generation instructions popup */}
       {visualPromptRow !== null && (
-        <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/40" onClick={() => setVisualPromptRow(null)}>
+        <div className="fixed inset-0 z-modal flex items-center justify-center bg-[rgb(var(--color-overlay-scrim)/0.4)]" onClick={() => setVisualPromptRow(null)}>
           <div className="bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-xl shadow-2xl w-full max-w-md flex flex-col" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-4 py-3 border-b border-[rgb(var(--color-border))]">
               <span className="text-sm font-medium text-[rgb(var(--color-text))]">
@@ -720,7 +778,7 @@ The row already has a visual and design_plan. Read the sketch with read_sketch f
               </button>
               <button
                 onClick={handleGenerateVisual}
-                className="px-4 py-1.5 text-xs font-medium text-white bg-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent-hover))] rounded-md transition-colors flex items-center gap-1.5"
+                className="px-4 py-1.5 text-xs font-medium text-[rgb(var(--color-accent-fg))] bg-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent-hover))] rounded-md transition-colors flex items-center gap-1.5"
               >
                 <Sparkles className="w-3 h-3" />
                 Generate

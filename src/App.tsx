@@ -41,7 +41,7 @@ function App() {
             <p className="text-sm text-[rgb(var(--color-text-secondary))]">An unexpected error crashed the interface.</p>
             <button
               onClick={handleReset}
-              className="px-4 py-2 rounded-lg bg-[rgb(var(--color-accent))] text-white text-sm font-medium hover:bg-[rgb(var(--color-accent-hover))] transition-colors"
+              className="px-4 py-2 rounded-lg bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))] text-sm font-medium hover:bg-[rgb(var(--color-accent-hover))] transition-colors"
             >
               Reload interface
             </button>

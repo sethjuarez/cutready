@@ -19,6 +19,10 @@
   --color-warning: 217 119 6;
   --color-error: 220 38 38;
   --color-accent-fg: 255 255 255;
+  --color-overlay-scrim: 0 0 0;
+  --color-overlay-strong: 0 0 0;
+  --color-media-control-bg: 0 0 0;
+  --color-media-control-fg: 255 255 255;
   --titlebar-height: 46px;
   --statusbar-height: 28px;
   --z-sticky: 10;
@@ -54,6 +58,16 @@
   --color-warning: 251 191 36;
   --color-error: 248 113 113;
   --color-accent-fg: 255 255 255;
+  --color-overlay-scrim: 0 0 0;
+  --color-overlay-strong: 0 0 0;
+  --color-media-control-bg: 0 0 0;
+  --color-media-control-fg: 255 255 255;
+}
+
+select,
+select option {
+  background-color: rgb(var(--color-surface-alt));
+  color: rgb(var(--color-text));
 }
 
 /* Prevent text selection on UI chrome (title bar, buttons) */
@@ -153,6 +167,26 @@ html {
   color: rgb(var(--color-text));
 }
 
+.md-cell-editor {
+  appearance: none;
+  display: block;
+  box-sizing: border-box;
+  margin: 0;
+  min-height: 1.5rem;
+  overflow: hidden;
+  border: 0;
+  font: inherit;
+  letter-spacing: inherit;
+  font-synthesis: inherit;
+  text-rendering: inherit;
+  -webkit-font-smoothing: inherit;
+  -moz-osx-font-smoothing: inherit;
+  font-family: var(--app-font-family);
+  font-size: var(--editor-font-size, 0.8125rem);
+  line-height: var(--row-line-height, 1.5);
+  color: rgb(var(--color-text));
+}
+
 .md-cell-p {
   margin: 0;
 }
@@ -220,7 +254,7 @@ html {
 .md-cell-ul li,
 .md-cell-ol li {
   padding: 0.0625rem 0;
-  font-size: 0.8125rem;
+  font-size: var(--editor-font-size, 0.8125rem);
 }
 
 /* ── Markdown Preview (Note Editor) ──────────────────────── */

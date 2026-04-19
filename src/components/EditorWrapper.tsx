@@ -3,13 +3,16 @@
  *
  * Since 0.13.1, the editor threads the content theme through to the canvas
  * scene (fixing the previous gap where the scene always used built-in
- * DARK_THEME/LIGHT_THEME). We pass concrete hex themes (getCutReadyTheme)
- * so the canvas can generate proper --elucim-* vars.
+ * DARK_THEME/LIGHT_THEME). We pass concrete colors derived from the active
+ * CutReady theme palette so the canvas can generate proper --elucim-* vars.
  */
-import { memo, lazy, Suspense, useState, useEffect, useCallback, useRef } from "react";
+import { memo, lazy, Suspense, useState, useCallback, useRef } from "react";
 import type { ElucimDocument } from "@elucim/dsl";
-import { getCutReadyTheme } from "../theme/elucimTheme";
+import { elucimThemeFromTokens } from "../theme/elucimTheme";
+import { getThemePalette } from "../theme/appThemePalettes";
 import { useElucimImageResolver } from "../hooks/useElucimImageResolver";
+import { useSettings } from "../hooks/useSettings";
+import { useTheme } from "../hooks/useTheme";
 import { useAppStore, type AssetInfo } from "../stores/appStore";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { ProjectImagePicker } from "./ProjectImagePicker";
@@ -29,18 +32,8 @@ export default memo(function EditorWrapper({
 }: EditorWrapperProps) {
   const imageResolver = useElucimImageResolver();
   const projectRoot = useAppStore((s) => s.currentProject?.root ?? null);
-
-  // Detect light/dark for explicit colorScheme (auto can't parse var() strings)
-  const [isDark, setIsDark] = useState(() =>
-    document.documentElement.classList.contains("dark")
-  );
-  useEffect(() => {
-    const observer = new MutationObserver(() => {
-      setIsDark(document.documentElement.classList.contains("dark"));
-    });
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
-    return () => observer.disconnect();
-  }, []);
+  const { settings } = useSettings();
+  const { theme: resolvedTheme } = useTheme();
 
   // Promise-based picker: onBrowseImage opens the modal and returns a promise
   // that resolves when the user picks an image or cancels.
@@ -67,7 +60,9 @@ export default memo(function EditorWrapper({
     setPickerOpen(false);
   }, []);
 
-  const theme = getCutReadyTheme(isDark);
+  const palette = getThemePalette(settings.displayThemePalette);
+  const colors = palette[resolvedTheme];
+  const theme = elucimThemeFromTokens(colors);
 
   return (
     <ErrorBoundary
@@ -89,8 +84,8 @@ export default memo(function EditorWrapper({
           initialFrame="last"
           theme={theme}
           editorTheme={{
-            "color-scheme": isDark ? "dark" : "light",
-            "--elucim-editor-bg": isDark ? "#252220" : "#eae7e2",
+            "color-scheme": resolvedTheme,
+            "--elucim-editor-bg": `rgb(${colors.surfaceInset})`,
           }}
           onDocumentChange={onDocumentChange}
           onBrowseImage={projectRoot ? handleBrowseImage : undefined}

@@ -25,9 +25,8 @@ async function setupApp(page: Page) {
   // Show secondary panel via keyboard shortcut
   await page.keyboard.press("Control+Shift+B");
   await page.waitForTimeout(300);
-  // Open overflow menu and switch to Snapshots tab
-  await page.locator('button[title="More options"]').click();
-  await page.getByText("Snapshots").click();
+  // Switch to Snapshots via the secondary rail
+  await page.getByRole("button", { name: "Snapshots", exact: true }).click();
   await page.waitForTimeout(500);
 }
 
@@ -44,9 +43,8 @@ async function setOverrides(page: Page, overrides: Record<string, unknown>) {
   await page.waitForTimeout(200);
   await page.keyboard.press("Control+Shift+B");
   await page.waitForTimeout(200);
-  // Re-open Snapshots via overflow menu
-  await page.locator('button[title="More options"]').click();
-  await page.getByText("Snapshots").click();
+  // Re-open Snapshots via the secondary rail
+  await page.getByRole("button", { name: "Snapshots", exact: true }).click();
   await page.waitForTimeout(500);
 }
 

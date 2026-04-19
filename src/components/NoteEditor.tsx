@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { FileText, Sparkles, Pencil, Eye } from "lucide-react";
+import { FileText, Sparkles, Pencil, Eye, Lock, Unlock } from "lucide-react";
 import { SafeMarkdown } from "./SafeMarkdown";
 import { useAppStore } from "../stores/appStore";
 import { useSettings } from "../hooks/useSettings";
@@ -26,7 +26,9 @@ Rules:
 export function NoteEditor() {
   const activeNotePath = useAppStore((s) => s.activeNotePath);
   const activeNoteContent = useAppStore((s) => s.activeNoteContent);
+  const activeNoteLocked = useAppStore((s) => s.activeNoteLocked);
   const updateNote = useAppStore((s) => s.updateNote);
+  const setNoteLocked = useAppStore((s) => s.setNoteLocked);
   const projectRoot = useAppStore((s) => s.currentProject?.root);
   const addActivityEntries = useAppStore((s) => s.addActivityEntries);
   const setNotePreview = useAppStore((s) => s.setNotePreview);
@@ -115,6 +117,7 @@ export function NoteEditor() {
 
   const handleChange = useCallback(
     (value: string) => {
+      if (activeNoteLocked) return;
       pendingContentRef.current = value;
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
       saveTimeoutRef.current = setTimeout(() => {
@@ -122,7 +125,7 @@ export function NoteEditor() {
         updateNoteRef.current(value);
       }, 800);
     },
-    [],
+    [activeNoteLocked],
   );
 
   // Flush on unmount
@@ -139,7 +142,7 @@ export function NoteEditor() {
 
   // AI cleanup — send note content to model for formatting improvements
   const handleAiCleanup = useCallback(async () => {
-    if (!activeNoteContent || aiCleaning) return;
+    if (!activeNoteContent || aiCleaning || activeNoteLocked) return;
     const config = await getAiConfig();
     if (!config) return;
 
@@ -181,7 +184,7 @@ export function NoteEditor() {
     } finally {
       setAiCleaning(false);
     }
-  }, [activeNoteContent, aiCleaning, getAiConfig, updateNote, addActivityEntries]);
+  }, [activeNoteContent, aiCleaning, activeNoteLocked, getAiConfig, updateNote, addActivityEntries]);
 
   if (!activeNotePath) return null;
 
@@ -209,6 +212,18 @@ export function NoteEditor() {
         <span className="text-[10px] text-[rgb(var(--color-text-secondary))] px-1.5 py-0.5 rounded bg-[rgb(var(--color-surface-alt))]">.md</span>
 
         <div className="ml-auto flex items-center gap-1">
+          <button
+            onClick={() => setNoteLocked(activeNotePath, !activeNoteLocked)}
+            className={`flex items-center justify-center w-7 h-7 rounded-md transition-colors ${
+              activeNoteLocked
+                ? "text-[rgb(var(--color-warning))] bg-[rgb(var(--color-warning))]/10 hover:bg-[rgb(var(--color-warning))]/15"
+                : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))]"
+            }`}
+            title={activeNoteLocked ? "Unlock note" : "Lock note"}
+          >
+            {activeNoteLocked ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
+          </button>
+
           {/* Export to Word */}
           <ExportWordButton
             onExport={handleExportToWord}
@@ -220,7 +235,7 @@ export function NoteEditor() {
           {/* AI cleanup sparkle button */}
           <button
             onClick={handleAiCleanup}
-            disabled={aiCleaning || !settings.aiModel || !activeNoteContent}
+            disabled={aiCleaning || activeNoteLocked || !settings.aiModel || !activeNoteContent}
             className="flex items-center justify-center w-7 h-7 rounded-md text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
             title="Clean up with AI"
           >
@@ -238,13 +253,13 @@ export function NoteEditor() {
           {/* Edit / Preview toggle */}
           <div className="flex items-center gap-0.5 bg-[rgb(var(--color-surface-alt))] rounded-lg p-0.5">
             <button
-              onClick={() => setMode("edit")}
+              onClick={() => { if (!activeNoteLocked) setMode("edit"); }}
               className={`flex items-center justify-center w-7 h-7 rounded-md transition-colors ${
                 mode === "edit"
                   ? "bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text))] shadow-sm"
                   : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))]"
               }`}
-              title="Edit"
+              title={activeNoteLocked ? "Unlock note to edit" : "Edit"}
             >
               {/* Pencil icon */}
               <Pencil className="w-3.5 h-3.5" />
@@ -283,8 +298,15 @@ export function NoteEditor() {
         </div>
       )}
 
+      {activeNoteLocked && (
+        <div className="mx-6 mb-2 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[rgb(var(--color-warning))]/10 border border-[rgb(var(--color-warning))]/20 text-xs text-[rgb(var(--color-warning))]">
+          <Lock className="w-3 h-3" />
+          Note is locked. Unlock it to edit or use AI cleanup.
+        </div>
+      )}
+
       {/* Content */}
-      {mode === "edit" ? (
+      {mode === "edit" && !activeNoteLocked ? (
         <div className="flex-1 overflow-auto px-6">
           <div className="max-w-3xl mx-auto">
             <MarkdownEditor

@@ -150,7 +150,7 @@ export function FeedbackDialog({ isOpen, onClose }: FeedbackDialogProps) {
               }`}
             >
               <span
-                className={`pointer-events-none block h-[12px] w-[12px] rounded-full bg-white shadow-sm transition-transform mt-[1px] ${
+                className={`pointer-events-none block h-[12px] w-[12px] rounded-full bg-[rgb(var(--color-surface))] shadow-sm transition-transform mt-[1px] ${
                   includeDebug ? "translate-x-[13px]" : "translate-x-[1px]"
                 }`}
               />
@@ -168,7 +168,7 @@ export function FeedbackDialog({ isOpen, onClose }: FeedbackDialogProps) {
                 ? "text-[rgb(var(--color-text-secondary))]/30 bg-[rgb(var(--color-surface-alt))] cursor-not-allowed"
                 : copied
                   ? "text-success bg-success/15"
-                  : "text-white bg-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent-hover))]"
+                  : "text-[rgb(var(--color-accent-fg))] bg-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent-hover))]"
             }`}
           >
             {copied ? (

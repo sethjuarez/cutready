@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { X, Sparkles, Pencil } from "lucide-react";
+import { X, Sparkles, Pencil, Lock } from "lucide-react";
 import { useAppStore } from "../stores/appStore";
 import type { EditorTab } from "../stores/appStore";
 import type { Sketch, Storyboard } from "../types/sketch";
 import type { PlanningRow } from "../types/sketch";
 import { ScriptTable } from "./ScriptTable";
 import { MarkdownEditor } from "./MarkdownEditor";
+import { SafeMarkdown } from "./SafeMarkdown";
 import { SketchIcon, StoryboardIcon, NoteIcon } from "./Icons";
 import { SketchForm } from "./SketchForm";
 import { NoteEditor } from "./NoteEditor";
@@ -272,6 +273,7 @@ function SketchSplitEditor({ path }: { path: string }) {
   }, [path]);
 
   const handleTitleChange = (title: string) => {
+    if (sketch?.locked) return;
     setLocalTitle(title);
     pendingTitleRef.current = title;
     if (titleTimerRef.current) clearTimeout(titleTimerRef.current);
@@ -283,6 +285,7 @@ function SketchSplitEditor({ path }: { path: string }) {
   };
 
   const handleDescChange = (desc: string) => {
+    if (sketch?.locked) return;
     setLocalDesc(desc);
     pendingDescRef.current = desc;
     if (descTimerRef.current) clearTimeout(descTimerRef.current);
@@ -293,6 +296,7 @@ function SketchSplitEditor({ path }: { path: string }) {
   };
 
   const handleRowsChange = (rows: PlanningRow[]) => {
+    if (sketch?.locked) return;
     setLocalRows(rows);
     pendingRowsRef.current = rows;
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
@@ -316,10 +320,11 @@ function SketchSplitEditor({ path }: { path: string }) {
               type="text"
               value={localTitle}
               onChange={(e) => handleTitleChange(e.target.value)}
+              readOnly={sketch.locked}
               placeholder="Sketch title..."
               className="w-full text-2xl font-semibold bg-transparent text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/40 outline-none border-none"
             />
-            {localTitle && (
+            {localTitle && !sketch.locked && (
               <button
                 onClick={() => sendChatPrompt(
                   `Improve the title of sketch "${path}". Current title: "${localTitle}". Suggest a more compelling, concise title. IMPORTANT: Only update the title — do NOT change the description or any rows.`,
@@ -350,12 +355,12 @@ function SketchSplitEditor({ path }: { path: string }) {
           ) : (
             <div
               className="text-sm text-[rgb(var(--color-text-secondary))] cursor-text min-h-[1.5rem]"
-              onClick={() => setEditingDesc(true)}
+              onClick={() => { if (!sketch.locked) setEditingDesc(true); }}
             >
               {localDesc || <span className="text-[rgb(var(--color-text-secondary))]/40">Describe what this sketch covers...</span>}
             </div>
           )}
-          {!editingDesc && (
+          {!editingDesc && !sketch.locked && (
             <button
               className="absolute right-0 top-0 opacity-0 group-hover/desc:opacity-100 p-1 rounded text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] transition-all"
               onClick={() => setEditingDesc(true)}
@@ -369,6 +374,7 @@ function SketchSplitEditor({ path }: { path: string }) {
         <ScriptTable
           rows={localRows}
           onChange={handleRowsChange}
+          readOnly={sketch.locked}
           projectRoot={projectRoot}
           sketchPath={path}
         />
@@ -380,6 +386,7 @@ function SketchSplitEditor({ path }: { path: string }) {
 /** Fully editable note editor for the split pane — loads/saves independently. */
 function NoteSplitEditor({ path }: { path: string }) {
   const [content, setContent] = useState<string | null>(null);
+  const [locked, setLocked] = useState(false);
   const [error, setError] = useState(false);
   const projectRoot = useAppStore((s) => s.currentProject?.root ?? "");
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -387,18 +394,26 @@ function NoteSplitEditor({ path }: { path: string }) {
 
   useEffect(() => {
     let cancelled = false;
-    invoke<string>("get_note", { relativePath: path })
-      .then((c) => { if (!cancelled) setContent(c); })
+    Promise.all([
+      invoke<string>("get_note", { relativePath: path }),
+      invoke<{ locked: boolean }>("get_note_lock", { relativePath: path }),
+    ])
+      .then(([c, lock]) => {
+        if (!cancelled) {
+          setContent(c);
+          setLocked(lock.locked);
+        }
+      })
       .catch(() => { if (!cancelled) setError(true); });
     return () => {
       cancelled = true;
       // Flush any pending save on unmount
-      if (saveTimerRef.current && pendingContentRef.current !== null) {
+      if (!locked && saveTimerRef.current && pendingContentRef.current !== null) {
         clearTimeout(saveTimerRef.current);
         invoke("update_note", { relativePath: path, content: pendingContentRef.current }).catch(() => {});
       }
     };
-  }, [path]);
+  }, [path, locked]);
 
   // Re-load when AI updates
   useEffect(() => {
@@ -412,6 +427,7 @@ function NoteSplitEditor({ path }: { path: string }) {
   }, [path]);
 
   const handleChange = (value: string) => {
+    if (locked) return;
     setContent(value);
     pendingContentRef.current = value;
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
@@ -426,14 +442,26 @@ function NoteSplitEditor({ path }: { path: string }) {
 
   return (
     <div className="px-4 h-full">
-      <MarkdownEditor
-        key={path}
-        editorKey={path}
-        value={content}
-        onChange={handleChange}
-        placeholder="Start writing..."
-        saveImages={!!projectRoot}
-      />
+      {locked ? (
+        <div className="py-4">
+          <div className="mb-3 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[rgb(var(--color-warning))]/10 border border-[rgb(var(--color-warning))]/20 text-xs text-[rgb(var(--color-warning))]">
+            <Lock className="w-3 h-3" />
+            Note is locked.
+          </div>
+          <div className="prose-desc text-sm text-[rgb(var(--color-text))] leading-relaxed">
+            <SafeMarkdown>{content}</SafeMarkdown>
+          </div>
+        </div>
+      ) : (
+        <MarkdownEditor
+          key={path}
+          editorKey={path}
+          value={content}
+          onChange={handleChange}
+          placeholder="Start writing..."
+          saveImages={!!projectRoot}
+        />
+      )}
     </div>
   );
 }

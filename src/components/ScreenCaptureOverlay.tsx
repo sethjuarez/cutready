@@ -148,8 +148,8 @@ export function ScreenCaptureOverlay({ onCapture, onCancel }: ScreenCaptureOverl
   // ── Waiting for capture window ──
   if (waitingForCapture) {
     return (
-      <div className="fixed inset-0 z-modal bg-black/60 flex items-center justify-center">
-        <div className="text-white/60 text-sm animate-pulse">Capture in progress...</div>
+      <div className="fixed inset-0 z-modal bg-[rgb(var(--color-overlay-scrim)/0.6)] flex items-center justify-center">
+        <div className="text-[rgb(var(--color-media-control-fg)/0.6)] text-sm animate-pulse">Capture in progress...</div>
       </div>
     );
   }
@@ -157,16 +157,16 @@ export function ScreenCaptureOverlay({ onCapture, onCancel }: ScreenCaptureOverl
   // ── Loading ──
   if (loading) {
     return (
-      <div className="fixed inset-0 z-modal bg-black/90 flex items-center justify-center">
-        <div className="text-white text-sm animate-pulse">Preparing capture...</div>
+      <div className="fixed inset-0 z-modal bg-[rgb(var(--color-overlay-strong)/0.9)] flex items-center justify-center">
+        <div className="text-[rgb(var(--color-media-control-fg))] text-sm animate-pulse">Preparing capture...</div>
       </div>
     );
   }
 
   // ── Monitor picker (multi-monitor only) ──
   return (
-    <div className="fixed inset-0 z-modal bg-black/90 flex flex-col items-center justify-center gap-6">
-      <div className="text-white text-base font-medium">Select a screen to capture</div>
+    <div className="fixed inset-0 z-modal bg-[rgb(var(--color-overlay-strong)/0.9)] flex flex-col items-center justify-center gap-6">
+      <div className="text-[rgb(var(--color-media-control-fg))] text-base font-medium">Select a screen to capture</div>
       <div className="flex gap-4">
         {monitors.map((m) => (
           <button
@@ -174,14 +174,14 @@ export function ScreenCaptureOverlay({ onCapture, onCancel }: ScreenCaptureOverl
             onClick={() => openCaptureOnMonitor(m)}
             className="group flex flex-col items-center gap-2 p-2 rounded-lg border-2 border-transparent hover:border-[rgb(var(--color-accent))] transition-colors"
           >
-            <div className="w-48 h-28 rounded-md overflow-hidden bg-black/50 border border-white/10 group-hover:border-white/30 transition-colors">
+            <div className="w-48 h-28 rounded-md overflow-hidden bg-[rgb(var(--color-media-control-bg)/0.5)] border border-[rgb(var(--color-media-control-fg)/0.1)] group-hover:border-[rgb(var(--color-media-control-fg)/0.3)] transition-colors">
               {monitorPreviews.get(m.id) ? (
                 <img src={monitorPreviews.get(m.id)} alt={m.name} className="w-full h-full object-cover" />
               ) : (
-                <div className="w-full h-full flex items-center justify-center text-white/30 text-xs">No preview</div>
+                <div className="w-full h-full flex items-center justify-center text-[rgb(var(--color-media-control-fg)/0.3)] text-xs">No preview</div>
               )}
             </div>
-            <div className="text-white/80 text-xs">
+            <div className="text-[rgb(var(--color-media-control-fg)/0.8)] text-xs">
               {m.name} {m.is_primary ? "(Primary)" : ""} — {m.width}×{m.height}
             </div>
           </button>
@@ -189,7 +189,7 @@ export function ScreenCaptureOverlay({ onCapture, onCancel }: ScreenCaptureOverl
       </div>
       <button
         onClick={onCancel}
-        className="text-white/50 hover:text-white text-xs mt-2 transition-colors"
+        className="text-[rgb(var(--color-media-control-fg)/0.5)] hover:text-[rgb(var(--color-media-control-fg))] text-xs mt-2 transition-colors"
       >
         Cancel (Esc)
       </button>

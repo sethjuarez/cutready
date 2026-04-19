@@ -348,13 +348,13 @@ function createDocument(children: (Paragraph | Table)[], orientation: WordOrient
   });
 }
 
-async function saveDocument(doc: Document, defaultName: string): Promise<void> {
+async function saveDocument(doc: Document, defaultName: string): Promise<boolean> {
   const blob = await Packer.toBlob(doc);
   const filePath = await save({
     defaultPath: defaultName,
     filters: [{ name: "Word Document", extensions: ["docx"] }],
   });
-  if (!filePath) return;
+  if (!filePath) return false;
   const buffer = await blob.arrayBuffer();
   await writeFile(filePath, new Uint8Array(buffer));
   // Open the exported file in the default application
@@ -363,6 +363,7 @@ async function saveDocument(doc: Document, defaultName: string): Promise<void> {
   } catch (e) {
     console.error("[exportToWord] Failed to open file:", filePath, e);
   }
+  return true;
 }
 
 // ── Note (Markdown) → Word ───────────────────────────────────────
@@ -603,7 +604,7 @@ async function buildSketchContent(sketch: Sketch, projectRoot: string, level: (t
   return elements;
 }
 
-export async function exportSketchToWord(sketch: Sketch, projectRoot: string, orientation: WordOrientation = "landscape"): Promise<void> {
+export async function exportSketchToWord(sketch: Sketch, projectRoot: string, orientation: WordOrientation = "landscape"): Promise<boolean> {
   const children: (Paragraph | Table)[] = [
     new Paragraph({ text: sketch.title, heading: HeadingLevel.TITLE }),
     new Paragraph({
@@ -616,7 +617,7 @@ export async function exportSketchToWord(sketch: Sketch, projectRoot: string, or
   ];
 
   const doc = createDocument(children, orientation);
-  await saveDocument(doc, `${sanitizeFilename(sketch.title)}.docx`);
+  return saveDocument(doc, `${sanitizeFilename(sketch.title)}.docx`);
 }
 
 // ── Storyboard → Word ───────────────────────────────────────────

@@ -114,7 +114,11 @@ fn gh_token() -> Option<String> {
     cmd.output().ok().and_then(|o| {
         if o.status.success() {
             let s = String::from_utf8_lossy(&o.stdout).trim().to_string();
-            if s.is_empty() { None } else { Some(s) }
+            if s.is_empty() {
+                None
+            } else {
+                Some(s)
+            }
         } else {
             None
         }
@@ -143,15 +147,22 @@ fn build_authed_url(project_dir: &Path, remote_name: &str, token: Option<&str>) 
     let token = token?;
     // Read the configured remote URL from git
     let mut cmd = std::process::Command::new("git");
-    cmd.args(["remote", "get-url", remote_name]).current_dir(project_dir);
+    cmd.args(["remote", "get-url", remote_name])
+        .current_dir(project_dir);
     #[cfg(windows)]
-    { use std::os::windows::process::CommandExt; cmd.creation_flags(0x08000000); }
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000);
+    }
     let out = cmd.output().ok()?;
     let url = String::from_utf8_lossy(&out.stdout).trim().to_string();
     // Only rewrite HTTPS GitHub URLs
     if url.starts_with("https://github.com/") {
         let path = url.strip_prefix("https://github.com/")?;
-        Some(format!("https://x-access-token:{}@github.com/{}", token, path))
+        Some(format!(
+            "https://x-access-token:{}@github.com/{}",
+            token, path
+        ))
     } else {
         None
     }
@@ -177,11 +188,22 @@ pub fn fetch_remote(
         use std::os::windows::process::CommandExt;
         cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
     }
-    log::debug!("[remote] git fetch <url> --prune in {:?} (token: {})", project_dir, token_owned.is_some());
-    let output = cmd.output().map_err(|e| RemoteError::Other(format!("Failed to run git fetch: {}", e)))?;
+    log::debug!(
+        "[remote] git fetch <url> --prune in {:?} (token: {})",
+        project_dir,
+        token_owned.is_some()
+    );
+    let output = cmd
+        .output()
+        .map_err(|e| RemoteError::Other(format!("Failed to run git fetch: {}", e)))?;
     let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
     let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-    log::debug!("[remote] fetch exit={} stdout={:?} stderr={:?}", output.status, stdout, stderr);
+    log::debug!(
+        "[remote] fetch exit={} stdout={:?} stderr={:?}",
+        output.status,
+        stdout,
+        stderr
+    );
     if output.status.success() {
         Ok(())
     } else {
@@ -245,19 +267,36 @@ pub fn push_remote(
         .unwrap_or_else(|| remote_name.to_string());
 
     let mut cmd = std::process::Command::new("git");
-    cmd.args(["push", &push_target, &format!("{}:{}", local_branch, local_branch)])
-        .current_dir(project_dir)
-        .env("GIT_TERMINAL_PROMPT", "0");
+    cmd.args([
+        "push",
+        &push_target,
+        &format!("{}:{}", local_branch, local_branch),
+    ])
+    .current_dir(project_dir)
+    .env("GIT_TERMINAL_PROMPT", "0");
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
         cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
     }
-    log::debug!("[remote] git push <url> {}:{} in {:?} (token: {})", local_branch, local_branch, project_dir, token_owned.is_some());
-    let output = cmd.output().map_err(|e| RemoteError::Other(format!("Failed to run git push: {}", e)))?;
+    log::debug!(
+        "[remote] git push <url> {}:{} in {:?} (token: {})",
+        local_branch,
+        local_branch,
+        project_dir,
+        token_owned.is_some()
+    );
+    let output = cmd
+        .output()
+        .map_err(|e| RemoteError::Other(format!("Failed to run git push: {}", e)))?;
     let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
     let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-    log::debug!("[remote] push exit={} stdout={:?} stderr={:?}", output.status, stdout, stderr);
+    log::debug!(
+        "[remote] push exit={} stdout={:?} stderr={:?}",
+        output.status,
+        stdout,
+        stderr
+    );
     if output.status.success() {
         Ok(())
     } else {
@@ -292,7 +331,12 @@ pub fn pull_remote(
     let local_ref = format!("refs/heads/{}", branch);
     let local_oid = match repo.refname_to_id(&local_ref) {
         Ok(oid) => oid,
-        Err(_) => return Err(RemoteError::Other(format!("Local branch '{}' not found", branch))),
+        Err(_) => {
+            return Err(RemoteError::Other(format!(
+                "Local branch '{}' not found",
+                branch
+            )))
+        }
     };
 
     if local_oid == remote_oid {
@@ -306,15 +350,15 @@ pub fn pull_remote(
         let (ahead, behind) = repo.graph_ahead_behind(local_oid, remote_oid)?;
 
         // Attempt three-way merge using the merge engine
-        let merge_result = crate::engine::versioning_merge::merge_timelines(
-            project_dir,
-            &remote_ref,
-            &local_ref,
-        );
+        let merge_result =
+            crate::engine::versioning_merge::merge_timelines(project_dir, &remote_ref, &local_ref);
 
         match merge_result {
             Ok(crate::engine::versioning_merge::MergeResult::Clean { commit_id }) => {
-                return Ok(PullResult::Merged { commits: behind, commit_id });
+                return Ok(PullResult::Merged {
+                    commits: behind,
+                    commit_id,
+                });
             }
             Ok(crate::engine::versioning_merge::MergeResult::Conflicts { conflicts }) => {
                 return Ok(PullResult::Conflicts {
@@ -338,12 +382,18 @@ pub fn pull_remote(
 
     // Fast-forward: move local branch ref + checkout
     let mut local_branch_ref = repo.find_reference(&local_ref)?;
-    local_branch_ref.set_target(remote_oid, &format!("pull: fast-forward to {}", &remote_oid.to_string()[..8]))?;
+    local_branch_ref.set_target(
+        remote_oid,
+        &format!("pull: fast-forward to {}", &remote_oid.to_string()[..8]),
+    )?;
     repo.set_head(&local_ref)?;
     repo.checkout_head(Some(git2::build::CheckoutBuilder::new().force()))?;
 
     Ok(PullResult::FastForward {
-        commits: repo.graph_ahead_behind(remote_oid, local_oid).map(|(a, _)| a).unwrap_or(0),
+        commits: repo
+            .graph_ahead_behind(remote_oid, local_oid)
+            .map(|(a, _)| a)
+            .unwrap_or(0),
     })
 }
 
@@ -403,8 +453,9 @@ pub fn checkout_remote_branch(
     let commit = repo.find_commit(remote_oid)?;
 
     // Create local branch pointing to the same commit
-    repo.branch(branch, &commit, false)
-        .map_err(|e| RemoteError::Other(format!("Branch '{}' already exists locally: {}", branch, e)))?;
+    repo.branch(branch, &commit, false).map_err(|e| {
+        RemoteError::Other(format!("Branch '{}' already exists locally: {}", branch, e))
+    })?;
 
     // Set upstream tracking
     let mut local_branch = repo.find_branch(branch, git2::BranchType::Local)?;
@@ -421,11 +472,7 @@ pub fn checkout_remote_branch(
 // ─── Clone from URL ─────────────────────────────────────────────
 
 /// Clone a repository from a URL into the given destination directory.
-pub fn clone_from_url(
-    url: &str,
-    dest: &Path,
-    token: Option<&str>,
-) -> Result<(), RemoteError> {
+pub fn clone_from_url(url: &str, dest: &Path, token: Option<&str>) -> Result<(), RemoteError> {
     // If no explicit token, try to get one from `gh auth token`
     let gh_token: Option<String> = if token.is_none() {
         let mut cmd = std::process::Command::new("gh");
@@ -435,13 +482,15 @@ pub fn clone_from_url(
             use std::os::windows::process::CommandExt;
             cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
         }
-        cmd.output()
-            .ok()
-            .and_then(|o| if o.status.success() {
-                String::from_utf8(o.stdout).ok().map(|s| s.trim().to_string())
+        cmd.output().ok().and_then(|o| {
+            if o.status.success() {
+                String::from_utf8(o.stdout)
+                    .ok()
+                    .map(|s| s.trim().to_string())
             } else {
                 None
-            })
+            }
+        })
     } else {
         None
     };
@@ -485,7 +534,10 @@ mod tests {
         fs::write(&head_path, "ref: refs/heads/main\n").unwrap();
 
         // Add remote — use platform-appropriate file URL
-        let remote_url = format!("file:///{}", remote_dir.path().display().to_string().replace('\\', "/"));
+        let remote_url = format!(
+            "file:///{}",
+            remote_dir.path().display().to_string().replace('\\', "/")
+        );
         local_repo.remote("origin", &remote_url).unwrap();
 
         (remote_dir, local_dir)
@@ -508,7 +560,15 @@ mod tests {
 
         let parent = repo.head().ok().and_then(|h| h.peel_to_commit().ok());
         let parents: Vec<&git2::Commit> = parent.iter().collect();
-        repo.commit(Some("refs/heads/main"), &sig, &sig, message, &tree, &parents).unwrap();
+        repo.commit(
+            Some("refs/heads/main"),
+            &sig,
+            &sig,
+            message,
+            &tree,
+            &parents,
+        )
+        .unwrap();
     }
 
     #[test]
@@ -571,7 +631,10 @@ mod tests {
 
         // Create a second local clone
         let clone_dir = TempDir::new().unwrap();
-        let clone_url = format!("file:///{}", remote_dir.path().display().to_string().replace('\\', "/"));
+        let clone_url = format!(
+            "file:///{}",
+            remote_dir.path().display().to_string().replace('\\', "/")
+        );
         Repository::clone(&clone_url, clone_dir.path()).unwrap();
 
         // Make another commit in original and push
@@ -632,7 +695,10 @@ mod tests {
 
         // Clone a second copy
         let clone_dir = TempDir::new().unwrap();
-        let clone_url = format!("file:///{}", remote_dir.path().display().to_string().replace('\\', "/"));
+        let clone_url = format!(
+            "file:///{}",
+            remote_dir.path().display().to_string().replace('\\', "/")
+        );
         Repository::clone(&clone_url, clone_dir.path()).unwrap();
 
         // Make 2 more commits in original and push
@@ -660,7 +726,10 @@ mod tests {
         push_remote(local_dir.path(), "origin", "main", None).unwrap();
 
         let clone_dir = TempDir::new().unwrap();
-        let clone_url = format!("file:///{}", remote_dir.path().display().to_string().replace('\\', "/"));
+        let clone_url = format!(
+            "file:///{}",
+            remote_dir.path().display().to_string().replace('\\', "/")
+        );
         Repository::clone(&clone_url, clone_dir.path()).unwrap();
 
         // Pull with nothing new
@@ -687,7 +756,10 @@ mod tests {
 
         // Fetch in a clone to get remote tracking branches
         let clone_dir = TempDir::new().unwrap();
-        let clone_url = format!("file:///{}", remote_dir.path().display().to_string().replace('\\', "/"));
+        let clone_url = format!(
+            "file:///{}",
+            remote_dir.path().display().to_string().replace('\\', "/")
+        );
         Repository::clone(&clone_url, clone_dir.path()).unwrap();
 
         let branches = list_remote_branches(clone_dir.path(), "origin").unwrap();

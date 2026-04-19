@@ -958,7 +958,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
 
       {/* Delete confirmation overlay */}
       {pendingDelete && (
-        <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/40">
+        <div className="fixed inset-0 z-modal flex items-center justify-center bg-[rgb(var(--color-overlay-scrim)/0.4)]">
           <div className="bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-xl shadow-xl p-5 max-w-sm mx-4">
             <p className="text-sm text-[rgb(var(--color-text))] mb-1 font-medium">Delete {pendingDelete.type}?</p>
             <p className="text-xs text-[rgb(var(--color-text-secondary))] mb-2">
@@ -1019,7 +1019,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
 
       {/* Transfer warning: moving a sketch used by storyboards */}
       {transferWarning && (
-        <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/40">
+        <div className="fixed inset-0 z-modal flex items-center justify-center bg-[rgb(var(--color-overlay-scrim)/0.4)]">
           <div className="bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-xl shadow-xl p-5 max-w-sm mx-4">
             <p className="text-sm text-[rgb(var(--color-text))] mb-2 font-medium">
               Move "{transferWarning.sourceTitle}"?
@@ -1046,7 +1046,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                   setTransferWarning(null);
                   doTransfer(action, type, sourcePath, sourceTitle, destProject, sourcePath);
                 }}
-                className="px-3 py-1.5 text-xs rounded-lg bg-warning text-white hover:bg-warning/80 transition-colors"
+                className="px-3 py-1.5 text-xs rounded-lg bg-warning text-[rgb(var(--color-accent-fg))] hover:bg-warning/80 transition-colors"
               >
                 Move anyway
               </button>
@@ -1057,7 +1057,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
 
       {/* Transfer conflict: file already exists at destination */}
       {transferConflict && (
-        <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/40">
+        <div className="fixed inset-0 z-modal flex items-center justify-center bg-[rgb(var(--color-overlay-scrim)/0.4)]">
           <div className="bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-xl shadow-xl p-5 max-w-sm mx-4">
             <p className="text-sm text-[rgb(var(--color-text))] mb-1 font-medium">File already exists</p>
             <p className="text-xs text-[rgb(var(--color-text-secondary))] mb-3">
@@ -1097,7 +1097,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                   const dir = sourcePath.includes("/") ? sourcePath.substring(0, sourcePath.lastIndexOf("/") + 1) : "";
                   doTransfer(action, type, sourcePath, sourceTitle, destProject, `${dir}${stem}${ext}`);
                 }}
-                className="px-3 py-1.5 text-xs rounded-lg bg-[rgb(var(--color-accent))] text-white hover:bg-[rgb(var(--color-accent-hover))] transition-colors"
+                className="px-3 py-1.5 text-xs rounded-lg bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))] hover:bg-[rgb(var(--color-accent-hover))] transition-colors"
               >
                 {transferConflict.action === "move" ? "Move As" : "Copy As"}
               </button>

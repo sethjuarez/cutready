@@ -115,8 +115,8 @@ pub fn merge_timelines(
     source_timeline: &str,
     target_timeline: &str,
 ) -> Result<MergeResult, VersioningError> {
-    let repo = git2::Repository::open(project_dir)
-        .map_err(|e| VersioningError::Git(e.to_string()))?;
+    let repo =
+        git2::Repository::open(project_dir).map_err(|e| VersioningError::Git(e.to_string()))?;
 
     // Resolve branch refs
     let source_ref = timeline_ref_name(source_timeline);
@@ -154,18 +154,24 @@ pub fn merge_timelines(
     }
 
     // Three-way merge
-    let source_commit = repo.find_commit(source_oid)
+    let source_commit = repo
+        .find_commit(source_oid)
         .map_err(|e| VersioningError::Git(e.to_string()))?;
-    let target_commit = repo.find_commit(target_oid)
+    let target_commit = repo
+        .find_commit(target_oid)
         .map_err(|e| VersioningError::Git(e.to_string()))?;
-    let base_commit = repo.find_commit(base_oid)
+    let base_commit = repo
+        .find_commit(base_oid)
         .map_err(|e| VersioningError::Git(e.to_string()))?;
 
-    let source_tree = source_commit.tree()
+    let source_tree = source_commit
+        .tree()
         .map_err(|e| VersioningError::Git(e.to_string()))?;
-    let target_tree = target_commit.tree()
+    let target_tree = target_commit
+        .tree()
         .map_err(|e| VersioningError::Git(e.to_string()))?;
-    let base_tree = base_commit.tree()
+    let base_tree = base_commit
+        .tree()
         .map_err(|e| VersioningError::Git(e.to_string()))?;
 
     // Perform the three-way tree merge
@@ -184,12 +190,13 @@ pub fn merge_timelines(
         let tree_oid = index
             .write_tree_to(&repo)
             .map_err(|e| VersioningError::Git(e.to_string()))?;
-        let tree = repo.find_tree(tree_oid)
+        let tree = repo
+            .find_tree(tree_oid)
             .map_err(|e| VersioningError::Git(e.to_string()))?;
 
-        let sig = repo.signature().unwrap_or_else(|_| {
-            git2::Signature::now("CutReady", "app@cutready.local").unwrap()
-        });
+        let sig = repo
+            .signature()
+            .unwrap_or_else(|_| git2::Signature::now("CutReady", "app@cutready.local").unwrap());
 
         let message = format!("Merge {} into {}", source_timeline, target_timeline);
         let commit_oid = repo
@@ -222,8 +229,8 @@ pub fn apply_merge_resolution(
     target_timeline: &str,
     resolutions: Vec<FileResolution>,
 ) -> Result<String, VersioningError> {
-    let repo = git2::Repository::open(project_dir)
-        .map_err(|e| VersioningError::Git(e.to_string()))?;
+    let repo =
+        git2::Repository::open(project_dir).map_err(|e| VersioningError::Git(e.to_string()))?;
 
     let source_ref = timeline_ref_name(source_timeline);
     let target_ref = timeline_ref_name(target_timeline);
@@ -234,11 +241,14 @@ pub fn apply_merge_resolution(
         .merge_base(source_oid, target_oid)
         .map_err(|e| VersioningError::Git(format!("No common ancestor: {}", e)))?;
 
-    let source_commit = repo.find_commit(source_oid)
+    let source_commit = repo
+        .find_commit(source_oid)
         .map_err(|e| VersioningError::Git(e.to_string()))?;
-    let target_commit = repo.find_commit(target_oid)
+    let target_commit = repo
+        .find_commit(target_oid)
         .map_err(|e| VersioningError::Git(e.to_string()))?;
-    let base_commit = repo.find_commit(base_oid)
+    let base_commit = repo
+        .find_commit(base_oid)
         .map_err(|e| VersioningError::Git(e.to_string()))?;
 
     // Start with a three-way merge index again
@@ -246,9 +256,15 @@ pub fn apply_merge_resolution(
     merge_opts.file_favor(git2::FileFavor::Normal);
     let mut index = repo
         .merge_trees(
-            &base_commit.tree().map_err(|e| VersioningError::Git(e.to_string()))?,
-            &target_commit.tree().map_err(|e| VersioningError::Git(e.to_string()))?,
-            &source_commit.tree().map_err(|e| VersioningError::Git(e.to_string()))?,
+            &base_commit
+                .tree()
+                .map_err(|e| VersioningError::Git(e.to_string()))?,
+            &target_commit
+                .tree()
+                .map_err(|e| VersioningError::Git(e.to_string()))?,
+            &source_commit
+                .tree()
+                .map_err(|e| VersioningError::Git(e.to_string()))?,
             Some(&merge_opts),
         )
         .map_err(|e| VersioningError::Git(e.to_string()))?;
@@ -256,7 +272,8 @@ pub fn apply_merge_resolution(
     // Remove conflicts and add resolved entries
     for resolution in &resolutions {
         // Remove conflicting entries for this path
-        index.remove_all([resolution.path.as_str()].iter(), None)
+        index
+            .remove_all([resolution.path.as_str()].iter(), None)
             .map_err(|e| VersioningError::Git(e.to_string()))?;
 
         // Write resolved content as blob
@@ -288,14 +305,18 @@ pub fn apply_merge_resolution(
     let tree_oid = index
         .write_tree_to(&repo)
         .map_err(|e| VersioningError::Git(e.to_string()))?;
-    let tree = repo.find_tree(tree_oid)
+    let tree = repo
+        .find_tree(tree_oid)
         .map_err(|e| VersioningError::Git(e.to_string()))?;
 
-    let sig = repo.signature().unwrap_or_else(|_| {
-        git2::Signature::now("CutReady", "app@cutready.local").unwrap()
-    });
+    let sig = repo
+        .signature()
+        .unwrap_or_else(|_| git2::Signature::now("CutReady", "app@cutready.local").unwrap());
 
-    let message = format!("Merge {} into {} (resolved)", source_timeline, target_timeline);
+    let message = format!(
+        "Merge {} into {} (resolved)",
+        source_timeline, target_timeline
+    );
     let commit_oid = repo
         .commit(
             Some(&target_ref),
@@ -311,8 +332,7 @@ pub fn apply_merge_resolution(
     for resolution in &resolutions {
         let file_path = project_dir.join(&resolution.path);
         if let Some(parent) = file_path.parent() {
-            std::fs::create_dir_all(parent)
-                .map_err(|e| VersioningError::Io(e.to_string()))?;
+            std::fs::create_dir_all(parent).map_err(|e| VersioningError::Io(e.to_string()))?;
         }
         std::fs::write(&file_path, &resolution.content)
             .map_err(|e| VersioningError::Io(e.to_string()))?;
@@ -334,12 +354,12 @@ fn collect_conflicts(
     _source_tree: &git2::Tree,
 ) -> Result<Vec<ConflictFile>, VersioningError> {
     let mut conflicts = Vec::new();
-    let git_conflicts = index.conflicts()
+    let git_conflicts = index
+        .conflicts()
         .map_err(|e| VersioningError::Git(e.to_string()))?;
 
     for conflict_result in git_conflicts {
-        let conflict = conflict_result
-            .map_err(|e| VersioningError::Git(e.to_string()))?;
+        let conflict = conflict_result.map_err(|e| VersioningError::Git(e.to_string()))?;
 
         // Get the path from whichever entry exists
         let path = conflict
@@ -393,11 +413,7 @@ fn collect_conflicts(
 
 /// Compare two JSON documents against a common ancestor and return
 /// only the fields where both sides made different changes.
-pub fn json_field_diff(
-    ancestor_str: &str,
-    ours_str: &str,
-    theirs_str: &str,
-) -> Vec<FieldConflict> {
+pub fn json_field_diff(ancestor_str: &str, ours_str: &str, theirs_str: &str) -> Vec<FieldConflict> {
     let ancestor: serde_json::Value = match serde_json::from_str(ancestor_str) {
         Ok(v) => v,
         Err(_) => return Vec::new(),
@@ -425,7 +441,11 @@ fn collect_json_conflicts(
 ) {
     match (ancestor, ours, theirs) {
         // Both are objects — recurse into each key
-        (serde_json::Value::Object(a), serde_json::Value::Object(o), serde_json::Value::Object(t)) => {
+        (
+            serde_json::Value::Object(a),
+            serde_json::Value::Object(o),
+            serde_json::Value::Object(t),
+        ) => {
             // Collect all keys from all three
             let mut all_keys: Vec<&String> = a.keys().chain(o.keys()).chain(t.keys()).collect();
             all_keys.sort();
@@ -645,16 +665,13 @@ fn timeline_ref_name(timeline: &str) -> String {
     }
 }
 
-fn resolve_ref_oid(
-    repo: &git2::Repository,
-    ref_name: &str,
-) -> Result<git2::Oid, VersioningError> {
+fn resolve_ref_oid(repo: &git2::Repository, ref_name: &str) -> Result<git2::Oid, VersioningError> {
     let reference = repo
         .find_reference(ref_name)
         .map_err(|e| VersioningError::Git(format!("Cannot find ref '{}': {}", ref_name, e)))?;
-    reference
-        .target()
-        .ok_or_else(|| VersioningError::Git(format!("Ref '{}' is not a direct reference", ref_name)))
+    reference.target().ok_or_else(|| {
+        VersioningError::Git(format!("Ref '{}' is not a direct reference", ref_name))
+    })
 }
 
 fn update_branch_ref(
@@ -673,10 +690,10 @@ fn checkout_to_working_dir(
     oid: git2::Oid,
 ) -> Result<(), VersioningError> {
     // Use gix to write tree to working dir (consistent with existing checkout logic)
-    let gix_repo = gix::open(project_dir)
-        .map_err(|e| VersioningError::Git(e.to_string()))?;
+    let gix_repo = gix::open(project_dir).map_err(|e| VersioningError::Git(e.to_string()))?;
 
-    let commit = repo.find_commit(oid)
+    let commit = repo
+        .find_commit(oid)
         .map_err(|e| VersioningError::Git(e.to_string()))?;
     let tree_oid_str = commit.tree_id().to_string();
     let gix_tree_id = gix::ObjectId::from_hex(tree_oid_str.as_bytes())
@@ -693,9 +710,7 @@ fn clean_working_dir(project_dir: &Path) -> Result<(), VersioningError> {
     for entry in std::fs::read_dir(project_dir).map_err(|e| VersioningError::Io(e.to_string()))? {
         let entry = entry.map_err(|e| VersioningError::Io(e.to_string()))?;
         let name = entry.file_name().to_string_lossy().to_string();
-        if name == ".git"
-            || (name.starts_with('.') && name != ".cutready" && name != ".chats")
-        {
+        if name == ".git" || (name.starts_with('.') && name != ".cutready" && name != ".chats") {
             continue;
         }
         let path = entry.path();
@@ -742,11 +757,10 @@ fn write_tree_to_dir(
 
 fn read_blob_content(repo: &git2::Repository, entry: Option<&git2::IndexEntry>) -> String {
     match entry {
-        Some(e) => {
-            repo.find_blob(e.id)
-                .map(|blob| String::from_utf8_lossy(blob.content()).to_string())
-                .unwrap_or_default()
-        }
+        Some(e) => repo
+            .find_blob(e.id)
+            .map(|blob| String::from_utf8_lossy(blob.content()).to_string())
+            .unwrap_or_default(),
         None => String::new(),
     }
 }
@@ -777,24 +791,47 @@ mod tests {
 
         // Create initial files and commit on main
         fs::create_dir_all(dir.join("sketches")).unwrap();
-        fs::write(dir.join("sketches/intro.sk"), r#"{"title":"Hello","description":"initial"}"#).unwrap();
+        fs::write(
+            dir.join("sketches/intro.sk"),
+            r#"{"title":"Hello","description":"initial"}"#,
+        )
+        .unwrap();
         fs::create_dir_all(dir.join("notes")).unwrap();
-        fs::write(dir.join("notes/outline.md"), "# Outline\n\nLine 1\nLine 2\nLine 3\n").unwrap();
+        fs::write(
+            dir.join("notes/outline.md"),
+            "# Outline\n\nLine 1\nLine 2\nLine 3\n",
+        )
+        .unwrap();
 
         let mut index = repo.index().unwrap();
-        index.add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None).unwrap();
+        index
+            .add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None)
+            .unwrap();
         index.write().unwrap();
         let tree_oid = index.write_tree().unwrap();
         let tree = repo.find_tree(tree_oid).unwrap();
         let sig = git2::Signature::now("Test", "test@test.com").unwrap();
-        repo.commit(Some("refs/heads/main"), &sig, &sig, "Initial commit", &tree, &[]).unwrap();
+        repo.commit(
+            Some("refs/heads/main"),
+            &sig,
+            &sig,
+            "Initial commit",
+            &tree,
+            &[],
+        )
+        .unwrap();
 
         // Set HEAD to main
         repo.set_head("refs/heads/main").unwrap();
     }
 
     // Helper: commit changes on a specific branch
-    fn commit_on_branch(dir: &Path, branch: &str, files: &[(&str, &str)], message: &str) -> git2::Oid {
+    fn commit_on_branch(
+        dir: &Path,
+        branch: &str,
+        files: &[(&str, &str)],
+        message: &str,
+    ) -> git2::Oid {
         let repo = git2::Repository::open(dir).unwrap();
 
         // Resolve the branch ref
@@ -825,9 +862,11 @@ mod tests {
             let entry = git2::IndexEntry {
                 ctime: git2::IndexTime::new(0, 0),
                 mtime: git2::IndexTime::new(0, 0),
-                dev: 0, ino: 0,
+                dev: 0,
+                ino: 0,
                 mode: 0o100644,
-                uid: 0, gid: 0,
+                uid: 0,
+                gid: 0,
                 file_size: content.len() as u32,
                 id: blob_oid,
                 flags: (path.len() as u16) & 0xfff,
@@ -841,15 +880,21 @@ mod tests {
         let tree = repo.find_tree(tree_oid).unwrap();
         let sig = git2::Signature::now("Test", "test@test.com").unwrap();
 
-        repo.commit(Some(&branch_ref), &sig, &sig, message, &tree, &[&parent]).unwrap()
+        repo.commit(Some(&branch_ref), &sig, &sig, message, &tree, &[&parent])
+            .unwrap()
     }
 
     // Helper: create a fork branch from main's current tip
     fn create_fork(dir: &Path, fork_name: &str) {
         let repo = git2::Repository::open(dir).unwrap();
-        let main_oid = repo.find_reference("refs/heads/main").unwrap().target().unwrap();
+        let main_oid = repo
+            .find_reference("refs/heads/main")
+            .unwrap()
+            .target()
+            .unwrap();
         let fork_ref = format!("refs/heads/timeline/{}", fork_name);
-        repo.reference(&fork_ref, main_oid, false, "create fork").unwrap();
+        repo.reference(&fork_ref, main_oid, false, "create fork")
+            .unwrap();
     }
 
     #[test]
@@ -870,9 +915,15 @@ mod tests {
 
         // Create fork from main and add a commit
         create_fork(&dir, "experiment");
-        commit_on_branch(&dir, "experiment", &[
-            ("sketches/intro.sk", r#"{"title":"Hello v2","description":"updated"}"#),
-        ], "Update intro on fork");
+        commit_on_branch(
+            &dir,
+            "experiment",
+            &[(
+                "sketches/intro.sk",
+                r#"{"title":"Hello v2","description":"updated"}"#,
+            )],
+            "Update intro on fork",
+        );
 
         // Merge fork into main — should fast-forward
         let result = merge_timelines(&dir, "timeline/experiment", "main").unwrap();
@@ -885,8 +936,16 @@ mod tests {
 
         // Main should now point at fork's tip
         let repo = git2::Repository::open(&dir).unwrap();
-        let main_oid = repo.find_reference("refs/heads/main").unwrap().target().unwrap();
-        let fork_oid = repo.find_reference("refs/heads/timeline/experiment").unwrap().target().unwrap();
+        let main_oid = repo
+            .find_reference("refs/heads/main")
+            .unwrap()
+            .target()
+            .unwrap();
+        let fork_oid = repo
+            .find_reference("refs/heads/timeline/experiment")
+            .unwrap()
+            .target()
+            .unwrap();
         assert_eq!(main_oid, fork_oid);
     }
 
@@ -900,14 +959,23 @@ mod tests {
         create_fork(&dir, "experiment");
 
         // Main edits one file
-        commit_on_branch(&dir, "main", &[
-            ("sketches/intro.sk", r#"{"title":"Main title","description":"initial"}"#),
-        ], "Edit title on main");
+        commit_on_branch(
+            &dir,
+            "main",
+            &[(
+                "sketches/intro.sk",
+                r#"{"title":"Main title","description":"initial"}"#,
+            )],
+            "Edit title on main",
+        );
 
         // Fork edits a DIFFERENT file
-        commit_on_branch(&dir, "experiment", &[
-            ("notes/outline.md", "# Updated Outline\n\nNew content\n"),
-        ], "Edit outline on fork");
+        commit_on_branch(
+            &dir,
+            "experiment",
+            &[("notes/outline.md", "# Updated Outline\n\nNew content\n")],
+            "Edit outline on fork",
+        );
 
         // Merge fork into main — should be clean (no overlapping changes)
         let result = merge_timelines(&dir, "timeline/experiment", "main").unwrap();
@@ -933,13 +1001,25 @@ mod tests {
         create_fork(&dir, "experiment");
 
         // Both sides edit the SAME file differently
-        commit_on_branch(&dir, "main", &[
-            ("sketches/intro.sk", r#"{"title":"Main version","description":"from main"}"#),
-        ], "Edit intro on main");
+        commit_on_branch(
+            &dir,
+            "main",
+            &[(
+                "sketches/intro.sk",
+                r#"{"title":"Main version","description":"from main"}"#,
+            )],
+            "Edit intro on main",
+        );
 
-        commit_on_branch(&dir, "experiment", &[
-            ("sketches/intro.sk", r#"{"title":"Fork version","description":"from fork"}"#),
-        ], "Edit intro on fork");
+        commit_on_branch(
+            &dir,
+            "experiment",
+            &[(
+                "sketches/intro.sk",
+                r#"{"title":"Fork version","description":"from fork"}"#,
+            )],
+            "Edit intro on fork",
+        );
 
         let result = merge_timelines(&dir, "timeline/experiment", "main").unwrap();
         match result {
@@ -963,13 +1043,25 @@ mod tests {
 
         create_fork(&dir, "experiment");
 
-        commit_on_branch(&dir, "main", &[
-            ("sketches/intro.sk", r#"{"title":"Main version","description":"from main"}"#),
-        ], "Edit on main");
+        commit_on_branch(
+            &dir,
+            "main",
+            &[(
+                "sketches/intro.sk",
+                r#"{"title":"Main version","description":"from main"}"#,
+            )],
+            "Edit on main",
+        );
 
-        commit_on_branch(&dir, "experiment", &[
-            ("sketches/intro.sk", r#"{"title":"Fork version","description":"from fork"}"#),
-        ], "Edit on fork");
+        commit_on_branch(
+            &dir,
+            "experiment",
+            &[(
+                "sketches/intro.sk",
+                r#"{"title":"Fork version","description":"from fork"}"#,
+            )],
+            "Edit on fork",
+        );
 
         // First confirm there's a conflict
         let result = merge_timelines(&dir, "timeline/experiment", "main").unwrap();
@@ -981,7 +1073,8 @@ mod tests {
             content: r#"{"title":"Merged version","description":"resolved"}"#.to_string(),
         }];
 
-        let commit_id = apply_merge_resolution(&dir, "timeline/experiment", "main", resolutions).unwrap();
+        let commit_id =
+            apply_merge_resolution(&dir, "timeline/experiment", "main", resolutions).unwrap();
         assert!(!commit_id.is_empty());
 
         // Verify merge commit has 2 parents
@@ -1003,13 +1096,25 @@ mod tests {
 
         create_fork(&dir, "experiment");
 
-        commit_on_branch(&dir, "main", &[
-            ("notes/outline.md", "# Outline\n\nMain Line 1\nLine 2\nLine 3\n"),
-        ], "Edit note on main");
+        commit_on_branch(
+            &dir,
+            "main",
+            &[(
+                "notes/outline.md",
+                "# Outline\n\nMain Line 1\nLine 2\nLine 3\n",
+            )],
+            "Edit note on main",
+        );
 
-        commit_on_branch(&dir, "experiment", &[
-            ("notes/outline.md", "# Outline\n\nFork Line 1\nLine 2\nLine 3\n"),
-        ], "Edit note on fork");
+        commit_on_branch(
+            &dir,
+            "experiment",
+            &[(
+                "notes/outline.md",
+                "# Outline\n\nFork Line 1\nLine 2\nLine 3\n",
+            )],
+            "Edit note on fork",
+        );
 
         let result = merge_timelines(&dir, "timeline/experiment", "main").unwrap();
         match result {
@@ -1112,24 +1217,46 @@ mod tests {
         let theirs = "line1\nline2\nline3\ntheirs4\n";
 
         let conflicts = text_line_diff(ancestor, ours, theirs);
-        assert_eq!(conflicts.len(), 0, "Non-overlapping edits should not conflict");
+        assert_eq!(
+            conflicts.len(),
+            0,
+            "Non-overlapping edits should not conflict"
+        );
     }
 
     // ── Helper tests ───────────────────────────────────────────────
 
     #[test]
     fn classify_file_types() {
-        assert_eq!(classify_file_type("sketches/intro.sk"), ConflictFileType::Sketch);
-        assert_eq!(classify_file_type("storyboards/demo.sb"), ConflictFileType::Storyboard);
-        assert_eq!(classify_file_type("notes/outline.md"), ConflictFileType::Note);
-        assert_eq!(classify_file_type("assets/image.png"), ConflictFileType::Other);
+        assert_eq!(
+            classify_file_type("sketches/intro.sk"),
+            ConflictFileType::Sketch
+        );
+        assert_eq!(
+            classify_file_type("storyboards/demo.sb"),
+            ConflictFileType::Storyboard
+        );
+        assert_eq!(
+            classify_file_type("notes/outline.md"),
+            ConflictFileType::Note
+        );
+        assert_eq!(
+            classify_file_type("assets/image.png"),
+            ConflictFileType::Other
+        );
     }
 
     #[test]
     fn timeline_ref_resolution() {
         assert_eq!(timeline_ref_name("main"), "refs/heads/main");
-        assert_eq!(timeline_ref_name("fork-123"), "refs/heads/timeline/fork-123");
-        assert_eq!(timeline_ref_name("timeline/fork-123"), "refs/heads/timeline/fork-123");
+        assert_eq!(
+            timeline_ref_name("fork-123"),
+            "refs/heads/timeline/fork-123"
+        );
+        assert_eq!(
+            timeline_ref_name("timeline/fork-123"),
+            "refs/heads/timeline/fork-123"
+        );
         assert_eq!(timeline_ref_name("refs/heads/custom"), "refs/heads/custom");
     }
 }

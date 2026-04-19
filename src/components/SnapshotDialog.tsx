@@ -80,7 +80,7 @@ export function SnapshotDialog() {
   const willFork = isRewound;
 
   return (
-    <Dialog isOpen={snapshotPromptOpen} onClose={close} align="top" topOffset="20vh" width="w-full max-w-md mx-4" backdropClass="bg-black/40">
+    <Dialog isOpen={snapshotPromptOpen} onClose={close} align="top" topOffset="20vh" width="w-full max-w-md mx-4" backdropClass="bg-[rgb(var(--color-overlay-scrim)/0.4)]">
       <div className="bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-xl shadow-2xl overflow-hidden">
         {/* Header */}
         <div className="flex items-center gap-2.5 px-5 pt-5 pb-3">
@@ -148,7 +148,7 @@ export function SnapshotDialog() {
             <button
               onClick={handleSave}
               disabled={!label.trim() || (willFork && !forkLabel.trim()) || saving}
-              className="px-4 py-1.5 rounded-lg text-xs font-medium bg-[rgb(var(--color-accent))] text-white hover:bg-[rgb(var(--color-accent-hover))] disabled:opacity-40 transition-colors"
+            className="px-4 py-1.5 rounded-lg text-xs font-medium bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))] hover:bg-[rgb(var(--color-accent-hover))] disabled:opacity-40 transition-colors"
             >
               {saving ? "Saving..." : "Save Snapshot"}
             </button>

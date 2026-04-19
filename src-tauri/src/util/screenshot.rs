@@ -1,8 +1,8 @@
 //! Screenshot capture utilities using xcap.
 
+use image::ImageEncoder;
 use std::io::BufWriter;
 use std::path::{Path, PathBuf};
-use image::ImageEncoder;
 use xcap::Monitor;
 
 /// Information about an available monitor.
@@ -28,7 +28,9 @@ pub fn list_monitors() -> Result<Vec<MonitorInfo>, String> {
             x: m.x().map_err(|e| format!("Monitor x error: {e}"))?,
             y: m.y().map_err(|e| format!("Monitor y error: {e}"))?,
             width: m.width().map_err(|e| format!("Monitor width error: {e}"))?,
-            height: m.height().map_err(|e| format!("Monitor height error: {e}"))?,
+            height: m
+                .height()
+                .map_err(|e| format!("Monitor height error: {e}"))?,
             is_primary: m.is_primary().unwrap_or(false),
         });
     }
@@ -46,8 +48,7 @@ fn find_monitor(monitor_id: u32) -> Result<Monitor, String> {
 /// Ensure the screenshots directory exists and return its path.
 fn screenshots_dir(project_dir: &Path) -> Result<PathBuf, String> {
     let dir = project_dir.join(".cutready").join("screenshots");
-    std::fs::create_dir_all(&dir)
-        .map_err(|e| format!("Failed to create screenshots dir: {e}"))?;
+    std::fs::create_dir_all(&dir).map_err(|e| format!("Failed to create screenshots dir: {e}"))?;
     Ok(dir)
 }
 
@@ -64,12 +65,16 @@ fn screenshot_filename() -> String {
 fn save_jpeg(img: &image::RgbaImage, path: &Path) -> Result<(), String> {
     // JPEG doesn't support alpha — convert RGBA → RGB
     let rgb: image::RgbImage = image::DynamicImage::ImageRgba8(img.clone()).to_rgb8();
-    let file = std::fs::File::create(path)
-        .map_err(|e| format!("Failed to create file: {e}"))?;
+    let file = std::fs::File::create(path).map_err(|e| format!("Failed to create file: {e}"))?;
     let writer = BufWriter::new(file);
     let encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(writer, 95);
     encoder
-        .write_image(rgb.as_raw(), rgb.width(), rgb.height(), image::ExtendedColorType::Rgb8)
+        .write_image(
+            rgb.as_raw(),
+            rgb.width(),
+            rgb.height(),
+            image::ExtendedColorType::Rgb8,
+        )
         .map_err(|e| format!("JPEG encode failed: {e}"))
 }
 
@@ -184,8 +189,7 @@ pub fn crop_screenshot(
     height: u32,
 ) -> Result<String, String> {
     let source_abs = project_dir.join(source_rel);
-    let img = image::open(&source_abs)
-        .map_err(|e| format!("Failed to open source image: {e}"))?;
+    let img = image::open(&source_abs).map_err(|e| format!("Failed to open source image: {e}"))?;
 
     let cropped = image::imageops::crop_imm(&img, x, y, width, height).to_image();
 

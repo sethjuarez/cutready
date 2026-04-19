@@ -5,7 +5,7 @@
 use tauri::State;
 
 use crate::engine::project;
-use crate::models::sketch::{Sketch, SketchSummary};
+use crate::models::sketch::{PlanningCellLocks, Sketch, SketchSummary};
 use crate::AppState;
 
 /// Helper: get the project root from current state.
@@ -47,12 +47,15 @@ pub async fn update_sketch(
     let mut sketch = project::read_sketch(&abs_path).map_err(|e| e.to_string())?;
 
     if let Some(desc) = description {
+        project::ensure_sketch_unlocked(&sketch).map_err(|e| e.to_string())?;
         sketch.description = desc;
     }
     if let Some(r) = rows {
-        // Visuals are stored as file paths (strings), so they travel with the row
-        // through all frontend editing operations. No merge logic needed.
-        sketch.rows = r;
+        project::ensure_sketch_unlocked(&sketch).map_err(|e| e.to_string())?;
+        project::validate_rows_update_allowed(&sketch.rows, &r).map_err(|e| e.to_string())?;
+        let mut updated_rows = r;
+        project::apply_locked_row_metadata(&sketch.rows, &mut updated_rows);
+        sketch.rows = updated_rows;
     }
     sketch.updated_at = chrono::Utc::now();
 
@@ -70,6 +73,7 @@ pub async fn update_sketch_title(
     let abs_path = project::safe_resolve(&root, &relative_path).map_err(|e| e.to_string())?;
 
     let mut sketch = project::read_sketch(&abs_path).map_err(|e| e.to_string())?;
+    project::ensure_sketch_unlocked(&sketch).map_err(|e| e.to_string())?;
     sketch.title = title;
     sketch.updated_at = chrono::Utc::now();
 
@@ -114,6 +118,67 @@ pub async fn get_sketch(
 
     // Use migration-aware read: inline visuals → external files
     project::read_sketch_with_migration(&abs_path, &root).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn set_sketch_lock(
+    relative_path: String,
+    locked: bool,
+    state: State<'_, AppState>,
+) -> Result<Sketch, String> {
+    let root = project_root(&state)?;
+    let abs_path = project::safe_resolve(&root, &relative_path).map_err(|e| e.to_string())?;
+
+    let mut sketch = project::read_sketch(&abs_path).map_err(|e| e.to_string())?;
+    sketch.locked = locked;
+    sketch.updated_at = chrono::Utc::now();
+    project::write_sketch(&sketch, &abs_path, &root).map_err(|e| e.to_string())?;
+    Ok(sketch)
+}
+
+#[tauri::command]
+pub async fn set_planning_row_lock(
+    relative_path: String,
+    index: usize,
+    locked: bool,
+    state: State<'_, AppState>,
+) -> Result<Sketch, String> {
+    let root = project_root(&state)?;
+    let abs_path = project::safe_resolve(&root, &relative_path).map_err(|e| e.to_string())?;
+
+    let mut sketch = project::read_sketch(&abs_path).map_err(|e| e.to_string())?;
+    if index >= sketch.rows.len() {
+        return Err(format!("Row {} does not exist", index + 1));
+    }
+    sketch.rows[index].locked = locked;
+    sketch.updated_at = chrono::Utc::now();
+    project::write_sketch(&sketch, &abs_path, &root).map_err(|e| e.to_string())?;
+    Ok(sketch)
+}
+
+#[tauri::command]
+pub async fn set_planning_cell_lock(
+    relative_path: String,
+    index: usize,
+    field: String,
+    locked: bool,
+    state: State<'_, AppState>,
+) -> Result<Sketch, String> {
+    let root = project_root(&state)?;
+    let abs_path = project::safe_resolve(&root, &relative_path).map_err(|e| e.to_string())?;
+
+    let mut sketch = project::read_sketch(&abs_path).map_err(|e| e.to_string())?;
+    if index >= sketch.rows.len() {
+        return Err(format!("Row {} does not exist", index + 1));
+    }
+    let mut locks: PlanningCellLocks = sketch.rows[index].locks.clone();
+    if !locks.set(&field, locked) {
+        return Err(format!("Unknown planning cell field: {field}"));
+    }
+    sketch.rows[index].locks = locks;
+    sketch.updated_at = chrono::Utc::now();
+    project::write_sketch(&sketch, &abs_path, &root).map_err(|e| e.to_string())?;
+    Ok(sketch)
 }
 
 /// Read a visual JSON file and return its content.

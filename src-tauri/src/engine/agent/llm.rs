@@ -4,19 +4,18 @@
 //! agentive crate.  All heavy lifting — streaming, SSE parsing, agentic loops,
 //! model heuristics, and discovery — lives in agentive.
 
-use std::sync::Arc;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
 // ---------------------------------------------------------------------------
 // Shared types — re-exported from agentive
 // ---------------------------------------------------------------------------
 
-pub use agentive::{
-    ChatMessage, ContentPart, ImageUrl,
-    Provider, Tool, ToolCall,
-    context_budget, needs_responses_api, simple_chat, supports_vision,
-};
 pub use agentive::discovery::ModelInfo;
+pub use agentive::{
+    context_budget, needs_responses_api, simple_chat, supports_vision, ChatMessage, ContentPart,
+    ImageUrl, Provider, Tool, ToolCall,
+};
 
 // ---------------------------------------------------------------------------
 // CutReady-specific provider configuration

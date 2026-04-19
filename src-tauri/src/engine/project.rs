@@ -12,13 +12,27 @@
 //!     ├── onboarding/           (project 2)
 //!     └── storyboards/          (repo-level storyboards)
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use crate::engine::versioning;
 use crate::models::script::{ProjectEntry, ProjectManifest, ProjectView, RepoView};
-use crate::models::sketch::{
-    NoteSummary, Sketch, SketchSummary, Storyboard, StoryboardSummary,
-};
+use crate::models::sketch::{NoteSummary, Sketch, SketchSummary, Storyboard, StoryboardSummary};
+
+const LOCKS_PATH: &str = ".cutready/locks.json";
+
+/// Lock metadata for plain Markdown notes.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default)]
+pub struct NoteLockState {
+    #[serde(default)]
+    pub locked: bool,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default)]
+struct LockManifest {
+    #[serde(default)]
+    notes: BTreeMap<String, NoteLockState>,
+}
 
 /// Sidebar ordering manifest stored in `.cutready-order.json`.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default)]
@@ -63,7 +77,10 @@ pub fn safe_resolve(root: &Path, relative_path: &str) -> Result<PathBuf, Project
         let check = if resolved.exists() {
             resolved.canonicalize().ok()
         } else if let Some(parent) = resolved.parent() {
-            parent.canonicalize().ok().map(|p| p.join(resolved.file_name().unwrap_or_default()))
+            parent
+                .canonicalize()
+                .ok()
+                .map(|p| p.join(resolved.file_name().unwrap_or_default()))
         } else {
             None
         };
@@ -114,8 +131,8 @@ pub fn write_manifest(repo_root: &Path, manifest: &ProjectManifest) -> Result<()
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| ProjectError::Io(e.to_string()))?;
     }
-    let json = serde_json::to_string_pretty(manifest)
-        .map_err(|e| ProjectError::Io(e.to_string()))?;
+    let json =
+        serde_json::to_string_pretty(manifest).map_err(|e| ProjectError::Io(e.to_string()))?;
     std::fs::write(&path, json).map_err(|e| ProjectError::Io(e.to_string()))
 }
 
@@ -236,7 +253,10 @@ pub fn create_project_in_repo(
 
     let project_dir = repo_root.join(&path);
     if project_dir.exists() {
-        return Err(ProjectError::Io(format!("Directory '{}' already exists", path)));
+        return Err(ProjectError::Io(format!(
+            "Directory '{}' already exists",
+            path
+        )));
     }
 
     // Create the project subdirectory structure
@@ -308,8 +328,7 @@ pub fn migrate_to_multi_project(
         let src = cutready_dir.join(subdir);
         if src.exists() {
             let dest_cutready = target.join(".cutready");
-            std::fs::create_dir_all(&dest_cutready)
-                .map_err(|e| ProjectError::Io(e.to_string()))?;
+            std::fs::create_dir_all(&dest_cutready).map_err(|e| ProjectError::Io(e.to_string()))?;
             let dest = dest_cutready.join(subdir);
             std::fs::rename(&src, &dest).map_err(|e| ProjectError::Io(e.to_string()))?;
         }
@@ -342,11 +361,14 @@ pub fn migrate_to_multi_project(
 
 /// Write an elucim visual to `.cutready/visuals/<hash>.json`.
 /// Returns the relative path from project root (e.g., ".cutready/visuals/a1b2c3d4e5f6.json").
-pub fn write_visual(project_root: &Path, visual: &serde_json::Value) -> Result<String, ProjectError> {
+pub fn write_visual(
+    project_root: &Path,
+    visual: &serde_json::Value,
+) -> Result<String, ProjectError> {
     use sha2::{Digest, Sha256};
 
-    let json = serde_json::to_string_pretty(visual)
-        .map_err(|e| ProjectError::Serialize(e.to_string()))?;
+    let json =
+        serde_json::to_string_pretty(visual).map_err(|e| ProjectError::Serialize(e.to_string()))?;
 
     let digest = Sha256::digest(json.as_bytes());
     let short_hash: String = digest.iter().take(6).map(|b| format!("{b:02x}")).collect();
@@ -362,7 +384,10 @@ pub fn write_visual(project_root: &Path, visual: &serde_json::Value) -> Result<S
 }
 
 /// Read an elucim visual from a relative path.
-pub fn read_visual(project_root: &Path, visual_path: &str) -> Result<serde_json::Value, ProjectError> {
+pub fn read_visual(
+    project_root: &Path,
+    visual_path: &str,
+) -> Result<serde_json::Value, ProjectError> {
     let abs_path = safe_resolve(project_root, visual_path)?;
     if !abs_path.exists() {
         return Err(ProjectError::NotFound(visual_path.to_owned()));
@@ -372,17 +397,127 @@ pub fn read_visual(project_root: &Path, visual_path: &str) -> Result<serde_json:
 }
 
 /// Write a sketch to a `.sk` file.
-pub fn write_sketch(sketch: &Sketch, path: &Path, _project_root: &Path) -> Result<(), ProjectError> {
+pub fn write_sketch(
+    sketch: &Sketch,
+    path: &Path,
+    _project_root: &Path,
+) -> Result<(), ProjectError> {
     // Ensure parent directory exists
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| ProjectError::Io(e.to_string()))?;
     }
 
-    let json = serde_json::to_string_pretty(sketch)
-        .map_err(|e| ProjectError::Serialize(e.to_string()))?;
+    let json =
+        serde_json::to_string_pretty(sketch).map_err(|e| ProjectError::Serialize(e.to_string()))?;
     std::fs::write(path, json).map_err(|e| ProjectError::Io(e.to_string()))?;
 
     Ok(())
+}
+
+pub fn ensure_sketch_unlocked(sketch: &Sketch) -> Result<(), ProjectError> {
+    if sketch.locked {
+        return Err(ProjectError::Locked(
+            "This sketch is locked. Unlock it before editing.".into(),
+        ));
+    }
+    Ok(())
+}
+
+fn ensure_sketch_has_no_locked_content(sketch: &Sketch) -> Result<(), ProjectError> {
+    ensure_sketch_unlocked(sketch)?;
+    if sketch.rows.iter().any(|row| row.locked || row.locks.any()) {
+        return Err(ProjectError::Locked(
+            "This sketch contains locked rows or cells. Unlock them before deleting or renaming."
+                .into(),
+        ));
+    }
+    Ok(())
+}
+
+pub fn apply_locked_row_metadata(
+    existing: &[crate::models::sketch::PlanningRow],
+    updated: &mut [crate::models::sketch::PlanningRow],
+) {
+    for (old, new) in existing.iter().zip(updated.iter_mut()) {
+        new.locked = old.locked;
+        new.locks = old.locks.clone();
+    }
+}
+
+pub fn validate_rows_update_allowed(
+    existing: &[crate::models::sketch::PlanningRow],
+    updated: &[crate::models::sketch::PlanningRow],
+) -> Result<(), ProjectError> {
+    let has_locks = existing.iter().any(|row| row.locked || row.locks.any());
+    if has_locks && existing.len() != updated.len() {
+        return Err(ProjectError::Locked(
+            "Cannot add, remove, or reorder planning rows while a row or cell is locked.".into(),
+        ));
+    }
+
+    for (idx, (old, new)) in existing.iter().zip(updated.iter()).enumerate() {
+        if old.locked && !row_content_matches(old, new) {
+            return Err(ProjectError::Locked(format!(
+                "Planning row {} is locked. Unlock it before editing.",
+                idx + 1
+            )));
+        }
+        for field in locked_fields(old) {
+            if !field_matches(old, new, field) {
+                return Err(ProjectError::Locked(format!(
+                    "Planning row {} {} cell is locked. Unlock it before editing.",
+                    idx + 1,
+                    field.replace('_', " ")
+                )));
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn locked_fields(row: &crate::models::sketch::PlanningRow) -> Vec<&'static str> {
+    let mut fields = Vec::new();
+    for field in [
+        "time",
+        "narrative",
+        "demo_actions",
+        "screenshot",
+        "visual",
+        "design_plan",
+    ] {
+        if row.locks.is_locked(field) {
+            fields.push(field);
+        }
+    }
+    fields
+}
+
+fn row_content_matches(
+    old: &crate::models::sketch::PlanningRow,
+    new: &crate::models::sketch::PlanningRow,
+) -> bool {
+    old.time == new.time
+        && old.narrative == new.narrative
+        && old.demo_actions == new.demo_actions
+        && old.screenshot == new.screenshot
+        && old.visual == new.visual
+        && old.design_plan == new.design_plan
+}
+
+fn field_matches(
+    old: &crate::models::sketch::PlanningRow,
+    new: &crate::models::sketch::PlanningRow,
+    field: &str,
+) -> bool {
+    match field {
+        "time" => old.time == new.time,
+        "narrative" => old.narrative == new.narrative,
+        "demo_actions" => old.demo_actions == new.demo_actions,
+        "screenshot" | "visual" => old.screenshot == new.screenshot && old.visual == new.visual,
+        "design_plan" => old.design_plan == new.design_plan,
+        _ => true,
+    }
 }
 
 /// Read a sketch from a `.sk` file, migrating any inline visuals to external files.
@@ -396,15 +531,16 @@ pub fn read_sketch(path: &Path) -> Result<Sketch, ProjectError> {
 
 /// Read a sketch with optional migration of inline visuals.
 /// When `project_root` is provided, inline visuals are externalized to files.
-pub fn read_sketch_with_migration(path: &Path, project_root: &Path) -> Result<Sketch, ProjectError> {
+pub fn read_sketch_with_migration(
+    path: &Path,
+    project_root: &Path,
+) -> Result<Sketch, ProjectError> {
     read_sketch_inner(path, Some(project_root))
 }
 
 fn read_sketch_inner(path: &Path, project_root: Option<&Path>) -> Result<Sketch, ProjectError> {
     if !path.exists() {
-        return Err(ProjectError::NotFound(
-            path.to_string_lossy().into_owned(),
-        ));
+        return Err(ProjectError::NotFound(path.to_string_lossy().into_owned()));
     }
     let data = std::fs::read_to_string(path).map_err(|e| ProjectError::Io(e.to_string()))?;
     let mut sketch: Sketch =
@@ -439,15 +575,24 @@ fn read_sketch_inner(path: &Path, project_root: Option<&Path>) -> Result<Sketch,
     Ok(sketch)
 }
 
-/// Delete a sketch file and auto-commit.
+/// Delete an unlocked sketch file and auto-commit.
 pub fn delete_sketch(path: &Path, _project_root: &Path) -> Result<(), ProjectError> {
     if path.exists() {
+        let sketch = read_sketch(path)?;
+        ensure_sketch_has_no_locked_content(&sketch)?;
         std::fs::remove_file(path).map_err(|e| ProjectError::Io(e.to_string()))?;
     }
     Ok(())
 }
 
-/// Rename/move a project file and auto-commit.
+fn relative_project_path(path: &Path, project_root: &Path) -> Result<String, ProjectError> {
+    let rel = path
+        .strip_prefix(project_root)
+        .map_err(|_| ProjectError::PathTraversal(path.to_string_lossy().into_owned()))?;
+    Ok(rel.to_string_lossy().replace('\\', "/"))
+}
+
+/// Rename/move an unlocked project file and auto-commit.
 pub fn rename_file(
     old_path: &Path,
     new_path: &Path,
@@ -464,6 +609,17 @@ pub fn rename_file(
             "Destination already exists: {}",
             new_path.to_string_lossy()
         )));
+    }
+    match label {
+        "note" => {
+            let rel = relative_project_path(old_path, project_root)?;
+            ensure_note_unlocked(project_root, &rel)?;
+        }
+        "sketch" => {
+            let sketch = read_sketch(old_path)?;
+            ensure_sketch_has_no_locked_content(&sketch)?;
+        }
+        _ => {}
     }
     if let Some(parent) = new_path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| ProjectError::Io(e.to_string()))?;
@@ -498,8 +654,8 @@ pub fn write_storyboard(
         std::fs::create_dir_all(parent).map_err(|e| ProjectError::Io(e.to_string()))?;
     }
 
-    let json = serde_json::to_string_pretty(sb)
-        .map_err(|e| ProjectError::Serialize(e.to_string()))?;
+    let json =
+        serde_json::to_string_pretty(sb).map_err(|e| ProjectError::Serialize(e.to_string()))?;
     std::fs::write(path, json).map_err(|e| ProjectError::Io(e.to_string()))?;
 
     Ok(())
@@ -508,9 +664,7 @@ pub fn write_storyboard(
 /// Read a storyboard from a `.sb` file.
 pub fn read_storyboard(path: &Path) -> Result<Storyboard, ProjectError> {
     if !path.exists() {
-        return Err(ProjectError::NotFound(
-            path.to_string_lossy().into_owned(),
-        ));
+        return Err(ProjectError::NotFound(path.to_string_lossy().into_owned()));
     }
     let data = std::fs::read_to_string(path).map_err(|e| ProjectError::Io(e.to_string()))?;
     serde_json::from_str(&data).map_err(|e| ProjectError::Deserialize(e.to_string()))
@@ -530,13 +684,18 @@ pub fn delete_storyboard(path: &Path, _project_root: &Path) -> Result<(), Projec
 /// Returns summaries with relative paths from project root.
 pub fn scan_sketches(project_root: &Path) -> Result<Vec<SketchSummary>, ProjectError> {
     let mut summaries = Vec::new();
-    scan_files_recursive(project_root, project_root, "sk", &mut |rel_path, abs_path| {
-        if let Ok(data) = std::fs::read_to_string(abs_path) {
-            if let Ok(sketch) = serde_json::from_str::<Sketch>(&data) {
-                summaries.push(SketchSummary::from_sketch(&sketch, rel_path));
+    scan_files_recursive(
+        project_root,
+        project_root,
+        "sk",
+        &mut |rel_path, abs_path| {
+            if let Ok(data) = std::fs::read_to_string(abs_path) {
+                if let Ok(sketch) = serde_json::from_str::<Sketch>(&data) {
+                    summaries.push(SketchSummary::from_sketch(&sketch, rel_path));
+                }
             }
-        }
-    })?;
+        },
+    )?;
     summaries.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
     Ok(summaries)
 }
@@ -545,13 +704,18 @@ pub fn scan_sketches(project_root: &Path) -> Result<Vec<SketchSummary>, ProjectE
 /// Returns summaries with relative paths from project root.
 pub fn scan_storyboards(project_root: &Path) -> Result<Vec<StoryboardSummary>, ProjectError> {
     let mut summaries = Vec::new();
-    scan_files_recursive(project_root, project_root, "sb", &mut |rel_path, abs_path| {
-        if let Ok(data) = std::fs::read_to_string(abs_path) {
-            if let Ok(sb) = serde_json::from_str::<Storyboard>(&data) {
-                summaries.push(StoryboardSummary::from_storyboard(&sb, rel_path));
+    scan_files_recursive(
+        project_root,
+        project_root,
+        "sb",
+        &mut |rel_path, abs_path| {
+            if let Ok(data) = std::fs::read_to_string(abs_path) {
+                if let Ok(sb) = serde_json::from_str::<Storyboard>(&data) {
+                    summaries.push(StoryboardSummary::from_storyboard(&sb, rel_path));
+                }
             }
-        }
-    })?;
+        },
+    )?;
     summaries.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
     Ok(summaries)
 }
@@ -562,23 +726,28 @@ pub fn storyboards_referencing_sketch(
     sketch_rel_path: &str,
 ) -> Result<Vec<String>, ProjectError> {
     let mut titles = Vec::new();
-    scan_files_recursive(project_root, project_root, "sb", &mut |_rel_path, abs_path| {
-        if let Ok(data) = std::fs::read_to_string(abs_path) {
-            if let Ok(sb) = serde_json::from_str::<Storyboard>(&data) {
-                let refs_sketch = sb.items.iter().any(|item| match item {
-                    crate::models::sketch::StoryboardItem::SketchRef { path } => {
-                        path == sketch_rel_path
+    scan_files_recursive(
+        project_root,
+        project_root,
+        "sb",
+        &mut |_rel_path, abs_path| {
+            if let Ok(data) = std::fs::read_to_string(abs_path) {
+                if let Ok(sb) = serde_json::from_str::<Storyboard>(&data) {
+                    let refs_sketch = sb.items.iter().any(|item| match item {
+                        crate::models::sketch::StoryboardItem::SketchRef { path } => {
+                            path == sketch_rel_path
+                        }
+                        crate::models::sketch::StoryboardItem::Section { sketches, .. } => {
+                            sketches.iter().any(|s| s == sketch_rel_path)
+                        }
+                    });
+                    if refs_sketch {
+                        titles.push(sb.title.clone());
                     }
-                    crate::models::sketch::StoryboardItem::Section { sketches, .. } => {
-                        sketches.iter().any(|s| s == sketch_rel_path)
-                    }
-                });
-                if refs_sketch {
-                    titles.push(sb.title.clone());
                 }
             }
-        }
-    })?;
+        },
+    )?;
     Ok(titles)
 }
 //
@@ -587,28 +756,33 @@ pub fn storyboards_referencing_sketch(
 /// Recursively scan a project folder for all `.md` files.
 pub fn scan_notes(project_root: &Path) -> Result<Vec<NoteSummary>, ProjectError> {
     let mut summaries = Vec::new();
-    scan_files_recursive(project_root, project_root, "md", &mut |rel_path, abs_path| {
-        if let Ok(meta) = std::fs::metadata(abs_path) {
-            let updated_at = meta
-                .modified()
-                .ok()
-                .and_then(|t| {
-                    let duration = t.duration_since(std::time::UNIX_EPOCH).ok()?;
-                    chrono::DateTime::from_timestamp(duration.as_secs() as i64, 0)
-                })
-                .unwrap_or_else(chrono::Utc::now);
-            let title = Path::new(rel_path)
-                .file_stem()
-                .map(|s| s.to_string_lossy().into_owned())
-                .unwrap_or_else(|| rel_path.to_string());
-            summaries.push(NoteSummary {
-                path: rel_path.to_string(),
-                title,
-                size: meta.len(),
-                updated_at,
-            });
-        }
-    })?;
+    scan_files_recursive(
+        project_root,
+        project_root,
+        "md",
+        &mut |rel_path, abs_path| {
+            if let Ok(meta) = std::fs::metadata(abs_path) {
+                let updated_at = meta
+                    .modified()
+                    .ok()
+                    .and_then(|t| {
+                        let duration = t.duration_since(std::time::UNIX_EPOCH).ok()?;
+                        chrono::DateTime::from_timestamp(duration.as_secs() as i64, 0)
+                    })
+                    .unwrap_or_else(chrono::Utc::now);
+                let title = Path::new(rel_path)
+                    .file_stem()
+                    .map(|s| s.to_string_lossy().into_owned())
+                    .unwrap_or_else(|| rel_path.to_string());
+                summaries.push(NoteSummary {
+                    path: rel_path.to_string(),
+                    title,
+                    size: meta.len(),
+                    updated_at,
+                });
+            }
+        },
+    )?;
     summaries.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
     Ok(summaries)
 }
@@ -718,6 +892,63 @@ pub fn write_note(path: &Path, content: &str) -> Result<(), ProjectError> {
     std::fs::write(path, content).map_err(|e| ProjectError::Io(e.to_string()))
 }
 
+pub fn get_note_lock(
+    project_root: &Path,
+    relative_path: &str,
+) -> Result<NoteLockState, ProjectError> {
+    let rel = normalize_lock_path(relative_path);
+    let manifest = read_lock_manifest(project_root)?;
+    Ok(manifest.notes.get(&rel).cloned().unwrap_or_default())
+}
+
+pub fn set_note_lock(
+    project_root: &Path,
+    relative_path: &str,
+    locked: bool,
+) -> Result<NoteLockState, ProjectError> {
+    let rel = normalize_lock_path(relative_path);
+    let mut manifest = read_lock_manifest(project_root)?;
+    if locked {
+        manifest.notes.insert(rel, NoteLockState { locked: true });
+    } else {
+        manifest.notes.remove(&rel);
+    }
+    write_lock_manifest(project_root, &manifest)?;
+    Ok(NoteLockState { locked })
+}
+
+pub fn ensure_note_unlocked(project_root: &Path, relative_path: &str) -> Result<(), ProjectError> {
+    if get_note_lock(project_root, relative_path)?.locked {
+        return Err(ProjectError::Locked(
+            "This note is locked. Unlock it before editing.".into(),
+        ));
+    }
+    Ok(())
+}
+
+fn read_lock_manifest(project_root: &Path) -> Result<LockManifest, ProjectError> {
+    let path = project_root.join(LOCKS_PATH);
+    if !path.exists() {
+        return Ok(LockManifest::default());
+    }
+    let data = std::fs::read_to_string(&path).map_err(|e| ProjectError::Io(e.to_string()))?;
+    serde_json::from_str(&data).map_err(|e| ProjectError::Deserialize(e.to_string()))
+}
+
+fn write_lock_manifest(project_root: &Path, manifest: &LockManifest) -> Result<(), ProjectError> {
+    let path = project_root.join(LOCKS_PATH);
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| ProjectError::Io(e.to_string()))?;
+    }
+    let data = serde_json::to_string_pretty(manifest)
+        .map_err(|e| ProjectError::Serialize(e.to_string()))?;
+    std::fs::write(path, data).map_err(|e| ProjectError::Io(e.to_string()))
+}
+
+fn normalize_lock_path(relative_path: &str) -> String {
+    relative_path.trim().replace('\\', "/")
+}
+
 /// Delete a note file and clean up any images that become orphaned.
 ///
 /// Parses the note's markdown for `![...](path)` image references in
@@ -727,6 +958,8 @@ pub fn delete_note(path: &Path, project_root: &Path) -> Result<(), ProjectError>
     if !path.exists() {
         return Ok(());
     }
+    let rel = relative_project_path(path, project_root)?;
+    ensure_note_unlocked(project_root, &rel)?;
 
     // Read the note to find image references before deleting
     let content = std::fs::read_to_string(path).unwrap_or_default();
@@ -734,6 +967,7 @@ pub fn delete_note(path: &Path, project_root: &Path) -> Result<(), ProjectError>
 
     // Delete the note file
     std::fs::remove_file(path).map_err(|e| ProjectError::Io(e.to_string()))?;
+    let _ = set_note_lock(project_root, &rel, false);
 
     // If the note had no screenshot references, we're done
     if images_in_note.is_empty() {
@@ -902,7 +1136,6 @@ pub fn count_asset_refs(project_root: &Path, asset_rel: &str) -> usize {
     count
 }
 
-
 /// with their reference info.
 ///
 /// For each asset, scans all .md notes and .sk sketches to find which ones reference it.
@@ -956,38 +1189,49 @@ pub fn list_images_with_refs(project_root: &Path) -> Result<Vec<ImageRefInfo>, P
     }
 
     // Build a map of asset path → list of files that reference it
-    let mut ref_map: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
+    let mut ref_map: std::collections::HashMap<String, Vec<String>> =
+        std::collections::HashMap::new();
     for (path, _, _, _) in &assets {
         ref_map.insert(path.clone(), Vec::new());
     }
 
     // Scan markdown notes for screenshot references
-    scan_files_recursive(project_root, project_root, "md", &mut |rel_path, abs_path| {
-        if let Ok(content) = std::fs::read_to_string(abs_path) {
-            let refs = extract_screenshot_refs(&content);
-            for img_ref in refs {
-                if let Some(referrers) = ref_map.get_mut(&img_ref) {
-                    referrers.push(rel_path.to_string());
+    scan_files_recursive(
+        project_root,
+        project_root,
+        "md",
+        &mut |rel_path, abs_path| {
+            if let Ok(content) = std::fs::read_to_string(abs_path) {
+                let refs = extract_screenshot_refs(&content);
+                for img_ref in refs {
+                    if let Some(referrers) = ref_map.get_mut(&img_ref) {
+                        referrers.push(rel_path.to_string());
+                    }
                 }
             }
-        }
-    })?;
+        },
+    )?;
 
     // Scan sketch files for screenshot and visual field references
-    scan_files_recursive(project_root, project_root, "sk", &mut |rel_path, abs_path| {
-        if let Ok(content) = std::fs::read_to_string(abs_path) {
-            for img_ref in extract_sketch_screenshot_refs(&content) {
-                if let Some(referrers) = ref_map.get_mut(&img_ref) {
-                    referrers.push(rel_path.to_string());
+    scan_files_recursive(
+        project_root,
+        project_root,
+        "sk",
+        &mut |rel_path, abs_path| {
+            if let Ok(content) = std::fs::read_to_string(abs_path) {
+                for img_ref in extract_sketch_screenshot_refs(&content) {
+                    if let Some(referrers) = ref_map.get_mut(&img_ref) {
+                        referrers.push(rel_path.to_string());
+                    }
+                }
+                for vis_ref in extract_sketch_visual_refs(&content) {
+                    if let Some(referrers) = ref_map.get_mut(&vis_ref) {
+                        referrers.push(rel_path.to_string());
+                    }
                 }
             }
-            for vis_ref in extract_sketch_visual_refs(&content) {
-                if let Some(referrers) = ref_map.get_mut(&vis_ref) {
-                    referrers.push(rel_path.to_string());
-                }
-            }
-        }
-    })?;
+        },
+    )?;
 
     let mut result: Vec<ImageRefInfo> = assets
         .into_iter()
@@ -1086,8 +1330,8 @@ pub fn write_chat_session(path: &Path, session: &ChatSession) -> Result<(), Proj
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| ProjectError::Io(e.to_string()))?;
     }
-    let json = serde_json::to_string_pretty(session)
-        .map_err(|e| ProjectError::Io(e.to_string()))?;
+    let json =
+        serde_json::to_string_pretty(session).map_err(|e| ProjectError::Io(e.to_string()))?;
     std::fs::write(path, json).map_err(|e| ProjectError::Io(e.to_string()))
 }
 
@@ -1157,10 +1401,13 @@ pub fn read_workspace_state(repo_root: &Path, project_root: &Path) -> WorkspaceS
     if let Ok(data) = std::fs::read_to_string(&legacy_path) {
         if let Ok(ws) = serde_json::from_str::<WorkspaceState>(&data) {
             // Migrate: write to new location, remove legacy file
-            log::info!("[workspace] migrating workspace.json from {:?} → {:?}", legacy_path, new_path);
+            log::info!(
+                "[workspace] migrating workspace.json from {:?} → {:?}",
+                legacy_path,
+                new_path
+            );
             let _ = std::fs::create_dir_all(&state_dir);
-            let _ = serde_json::to_string_pretty(&ws)
-                .map(|json| std::fs::write(&new_path, json));
+            let _ = serde_json::to_string_pretty(&ws).map(|json| std::fs::write(&new_path, json));
             let _ = std::fs::remove_file(&legacy_path);
             return ws;
         }
@@ -1197,10 +1444,14 @@ pub fn read_sidebar_order(repo_root: &Path, project_root: &Path) -> SidebarOrder
     if let Ok(data) = std::fs::read_to_string(&legacy_path) {
         if let Ok(order) = serde_json::from_str::<SidebarOrder>(&data) {
             // Migrate: write to new location, remove legacy file
-            log::info!("[workspace] migrating sidebar order from {:?} → {:?}", legacy_path, new_path);
+            log::info!(
+                "[workspace] migrating sidebar order from {:?} → {:?}",
+                legacy_path,
+                new_path
+            );
             let _ = std::fs::create_dir_all(&state_dir);
-            let _ = serde_json::to_string_pretty(&order)
-                .map(|json| std::fs::write(&new_path, json));
+            let _ =
+                serde_json::to_string_pretty(&order).map(|json| std::fs::write(&new_path, json));
             let _ = std::fs::remove_file(&legacy_path);
             return order;
         }
@@ -1259,8 +1510,7 @@ pub fn save_with_label(
 ) -> Result<String, ProjectError> {
     // Auto-init git if missing so snapshots always work
     if !project_root.join(".git").exists() {
-        versioning::init_project_repo(project_root)
-            .map_err(|e| ProjectError::Io(e.to_string()))?;
+        versioning::init_project_repo(project_root).map_err(|e| ProjectError::Io(e.to_string()))?;
     }
     versioning::commit_snapshot(project_root, label, fork_label)
         .map_err(|e| ProjectError::Io(e.to_string()))
@@ -1319,6 +1569,8 @@ pub enum ProjectError {
     NotFound(String),
     #[error("Path traversal rejected: {0}")]
     PathTraversal(String),
+    #[error("{0}")]
+    Locked(String),
 }
 
 #[cfg(test)]
@@ -1376,6 +1628,38 @@ mod tests {
     }
 
     #[test]
+    fn delete_sketch_rejects_locked_sketch() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        let mut sketch = Sketch::new("Keep Me");
+        sketch.locked = true;
+        let path = root.join("locked.sk");
+
+        write_sketch(&sketch, &path, root).unwrap();
+        let err = delete_sketch(&path, root).unwrap_err();
+
+        assert!(matches!(err, ProjectError::Locked(_)));
+        assert!(path.exists());
+    }
+
+    #[test]
+    fn delete_sketch_rejects_locked_row_or_cell() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        let mut sketch = Sketch::new("Keep Row");
+        let mut row = crate::models::sketch::PlanningRow::new();
+        row.locks.narrative = true;
+        sketch.rows.push(row);
+        let path = root.join("locked-row.sk");
+
+        write_sketch(&sketch, &path, root).unwrap();
+        let err = delete_sketch(&path, root).unwrap_err();
+
+        assert!(matches!(err, ProjectError::Locked(_)));
+        assert!(path.exists());
+    }
+
+    #[test]
     fn rename_sketch_moves_file() {
         let tmp = TempDir::new().unwrap();
         let root = tmp.path();
@@ -1393,9 +1677,83 @@ mod tests {
     }
 
     #[test]
+    fn rename_sketch_rejects_locked_sketch() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        let mut sketch = Sketch::new("Keep Name");
+        sketch.locked = true;
+        let old_path = root.join("locked.sk");
+        let new_path = root.join("renamed.sk");
+
+        write_sketch(&sketch, &old_path, root).unwrap();
+        let err = rename_sketch(&old_path, &new_path, root).unwrap_err();
+
+        assert!(matches!(err, ProjectError::Locked(_)));
+        assert!(old_path.exists());
+        assert!(!new_path.exists());
+    }
+
+    #[test]
     fn read_nonexistent_sketch_errors() {
         let result = read_sketch(Path::new("/nonexistent/sketch.sk"));
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn note_lock_roundtrip() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+
+        assert!(!get_note_lock(root, "notes/a.md").unwrap().locked);
+        assert!(set_note_lock(root, "notes/a.md", true).unwrap().locked);
+        assert!(get_note_lock(root, "notes/a.md").unwrap().locked);
+        assert!(ensure_note_unlocked(root, "notes/a.md").is_err());
+        assert!(!set_note_lock(root, "notes/a.md", false).unwrap().locked);
+        assert!(!get_note_lock(root, "notes/a.md").unwrap().locked);
+    }
+
+    #[test]
+    fn delete_note_rejects_locked_note() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        let note = root.join("locked.md");
+
+        std::fs::write(&note, "Keep this").unwrap();
+        set_note_lock(root, "locked.md", true).unwrap();
+        let err = delete_note(&note, root).unwrap_err();
+
+        assert!(matches!(err, ProjectError::Locked(_)));
+        assert!(note.exists());
+        assert!(get_note_lock(root, "locked.md").unwrap().locked);
+    }
+
+    #[test]
+    fn rename_note_rejects_locked_note() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        let old_path = root.join("locked.md");
+        let new_path = root.join("renamed.md");
+
+        std::fs::write(&old_path, "Keep this").unwrap();
+        set_note_lock(root, "locked.md", true).unwrap();
+        let err = rename_file(&old_path, &new_path, root, "note").unwrap_err();
+
+        assert!(matches!(err, ProjectError::Locked(_)));
+        assert!(old_path.exists());
+        assert!(!new_path.exists());
+    }
+
+    #[test]
+    fn row_update_rejects_locked_cell_change() {
+        let mut old = crate::models::sketch::PlanningRow::new();
+        old.narrative = "Keep this".into();
+        old.locks.narrative = true;
+
+        let mut new = old.clone();
+        new.narrative = "Changed".into();
+
+        let err = validate_rows_update_allowed(&[old], &[new]).unwrap_err();
+        assert!(err.to_string().contains("narrative cell is locked"));
     }
 
     #[test]
@@ -1405,12 +1763,7 @@ mod tests {
 
         write_sketch(&Sketch::new("A"), &root.join("a.sk"), root).unwrap();
         write_sketch(&Sketch::new("B"), &root.join("b.sk"), root).unwrap();
-        write_sketch(
-            &Sketch::new("C"),
-            &root.join("sub").join("c.sk"),
-            root,
-        )
-        .unwrap();
+        write_sketch(&Sketch::new("C"), &root.join("sub").join("c.sk"), root).unwrap();
 
         let summaries = scan_sketches(root).unwrap();
         assert_eq!(summaries.len(), 3);
@@ -1599,7 +1952,10 @@ mod tests {
 
         delete_note(&note1, root).unwrap();
         assert!(!note1.exists(), "note1 should be deleted");
-        assert!(img.exists(), "shared image should be kept (note2 still references it)");
+        assert!(
+            img.exists(),
+            "shared image should be kept (note2 still references it)"
+        );
     }
 
     #[test]
@@ -1631,16 +1987,27 @@ mod tests {
         std::fs::write(
             root.join("my-note.md"),
             "# Hello\n\n![screenshot](.cutready/screenshots/pasted-001.png)\n",
-        ).unwrap();
+        )
+        .unwrap();
 
         let result = list_images_with_refs(root).unwrap();
         assert_eq!(result.len(), 2);
 
-        let img1 = result.iter().find(|i| i.path.contains("pasted-001")).unwrap();
-        assert_eq!(img1.referenced_by.len(), 1, "pasted-001 should be referenced by my-note.md");
+        let img1 = result
+            .iter()
+            .find(|i| i.path.contains("pasted-001"))
+            .unwrap();
+        assert_eq!(
+            img1.referenced_by.len(),
+            1,
+            "pasted-001 should be referenced by my-note.md"
+        );
         assert!(img1.referenced_by[0].contains("my-note.md"));
 
-        let img2 = result.iter().find(|i| i.path.contains("pasted-002")).unwrap();
+        let img2 = result
+            .iter()
+            .find(|i| i.path.contains("pasted-002"))
+            .unwrap();
         assert_eq!(img2.referenced_by.len(), 0, "pasted-002 should be orphaned");
     }
 
@@ -1658,7 +2025,8 @@ mod tests {
         std::fs::write(
             root.join("script-draft.md"),
             "Some text\n\n![pic](.cutready/screenshots/pasted-100.png)\n\nMore text",
-        ).unwrap();
+        )
+        .unwrap();
 
         let result = list_images_with_refs(root).unwrap();
         assert_eq!(result.len(), 1);
@@ -1705,7 +2073,8 @@ Some text
         std::fs::write(
             root.join("html-note.md"),
             "# Note\n\n<img src=\".cutready/screenshots/pasted-html.png\" alt=\"test\" />\n",
-        ).unwrap();
+        )
+        .unwrap();
 
         let result = list_images_with_refs(root).unwrap();
         assert_eq!(result.len(), 1);
@@ -1811,10 +2180,14 @@ Some text
         write_workspace_state(root, root, &ws).unwrap();
 
         // Should be in .git/cutready/, not .cutready/
-        assert!(root.join(".git/cutready/workspace.json").exists(),
-            "Workspace state should be in .git/cutready/");
-        assert!(!root.join(".cutready/workspace.json").exists(),
-            "Workspace state should NOT be in .cutready/");
+        assert!(
+            root.join(".git/cutready/workspace.json").exists(),
+            "Workspace state should be in .git/cutready/"
+        );
+        assert!(
+            !root.join(".cutready/workspace.json").exists(),
+            "Workspace state should NOT be in .cutready/"
+        );
     }
 
     #[test]
@@ -1829,18 +2202,26 @@ Some text
         std::fs::write(
             legacy_dir.join("workspace.json"),
             r#"{"open_tabs":[],"active_tab_id":"legacy-tab"}"#,
-        ).unwrap();
+        )
+        .unwrap();
 
         // Read should find it and migrate
         let ws = read_workspace_state(root, root);
-        assert_eq!(ws.active_tab_id.as_deref(), Some("legacy-tab"),
-            "Should read from legacy location");
+        assert_eq!(
+            ws.active_tab_id.as_deref(),
+            Some("legacy-tab"),
+            "Should read from legacy location"
+        );
 
         // Legacy file should be deleted, new file should exist
-        assert!(!legacy_dir.join("workspace.json").exists(),
-            "Legacy file should be deleted after migration");
-        assert!(root.join(".git/cutready/workspace.json").exists(),
-            "Migrated file should be in .git/cutready/");
+        assert!(
+            !legacy_dir.join("workspace.json").exists(),
+            "Legacy file should be deleted after migration"
+        );
+        assert!(
+            root.join(".git/cutready/workspace.json").exists(),
+            "Migrated file should be in .git/cutready/"
+        );
 
         // Reading again should find it in new location
         let ws2 = read_workspace_state(root, root);
@@ -1855,7 +2236,10 @@ Some text
 
         let ws = read_workspace_state(root, root);
         assert!(ws.open_tabs.is_empty(), "Default should have empty tabs");
-        assert!(ws.active_tab_id.is_none(), "Default should have no active tab");
+        assert!(
+            ws.active_tab_id.is_none(),
+            "Default should have no active tab"
+        );
     }
 
     #[test]
@@ -1873,16 +2257,21 @@ Some text
         std::fs::write(
             root.join(".cutready-order.json"),
             serde_json::to_string(&legacy_order).unwrap(),
-        ).unwrap();
+        )
+        .unwrap();
 
         let order = read_sidebar_order(root, root);
         assert_eq!(order.sketches, vec!["b.sk", "a.sk"]);
 
         // Legacy file should be deleted
-        assert!(!root.join(".cutready-order.json").exists(),
-            "Legacy order file should be deleted after migration");
-        assert!(root.join(".git/cutready/order.json").exists(),
-            "Migrated order should be in .git/cutready/");
+        assert!(
+            !root.join(".cutready-order.json").exists(),
+            "Legacy order file should be deleted after migration"
+        );
+        assert!(
+            root.join(".git/cutready/order.json").exists(),
+            "Migrated order should be in .git/cutready/"
+        );
     }
 
     #[test]
@@ -1890,9 +2279,14 @@ Some text
         let repo = PathBuf::from("/repo");
         let project = PathBuf::from("/repo/projects/demo");
         let dir = git_state_dir(&repo, &project);
-        assert!(dir.to_string_lossy().contains("cutready"),
-            "Should contain cutready dir");
-        assert!(dir.to_string_lossy().contains("demo"),
-            "Should contain project name for multi-project: {:?}", dir);
+        assert!(
+            dir.to_string_lossy().contains("cutready"),
+            "Should contain cutready dir"
+        );
+        assert!(
+            dir.to_string_lossy().contains("demo"),
+            "Should contain project name for multi-project: {:?}",
+            dir
+        );
     }
 }

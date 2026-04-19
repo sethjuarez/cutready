@@ -62,6 +62,8 @@ export interface GlobalSettings {
   displayEditorWidth: string;
   /** Font family: "system" | "sans" | "serif" | "mono" (default "system"). */
   displayFontFamily: string;
+  /** Theme palette: token set applied across light/dark modes. */
+  displayThemePalette: string;
   /** API-reported context window (tokens) for the selected model. */
   aiContextLength: number;
   /** Vision mode: "off", "notes", or "notes_and_sketches". */
@@ -116,6 +118,7 @@ const defaultGlobalSettings: GlobalSettings = {
   displayRowColors: "vivid",
   displayEditorWidth: "centered",
   displayFontFamily: "system",
+  displayThemePalette: "cutready",
   aiContextLength: 0,
   aiVisionMode: "notes_and_sketches",
   aiModelSupportsVision: "",

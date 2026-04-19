@@ -220,7 +220,7 @@ export function TitleBar({
         </button>
         <button
           onClick={handleClose}
-          className="inline-flex items-center justify-center w-11 h-full hover:bg-error hover:text-white transition-colors"
+          className="inline-flex items-center justify-center w-11 h-full hover:bg-error hover:text-[rgb(var(--color-accent-fg))] transition-colors"
           aria-label="Close"
         >
           <X className="w-2.5 h-2.5" />
@@ -297,7 +297,7 @@ function UpdateIndicator() {
           ) : (
             <button
               onClick={handleInstall}
-              className="w-full h-[26px] rounded text-[11px] font-medium bg-accent hover:bg-accent-hover text-white transition-colors"
+              className="w-full h-[26px] rounded text-[11px] font-medium bg-accent hover:bg-accent-hover text-[rgb(var(--color-accent-fg))] transition-colors"
             >
               Download &amp; Install
             </button>

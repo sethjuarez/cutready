@@ -179,7 +179,7 @@ export function RecordingPanel() {
             <button
               onClick={prepareBrowser}
               disabled={loading || !!isSelectedBrowserRunning}
-              className="flex w-full items-center justify-center gap-2 rounded-lg bg-[rgb(var(--color-accent))] px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[rgb(var(--color-accent-hover))] disabled:opacity-50"
+              className="flex w-full items-center justify-center gap-2 rounded-lg bg-[rgb(var(--color-accent))] px-5 py-2.5 text-sm font-medium text-[rgb(var(--color-accent-fg))] transition-colors hover:bg-[rgb(var(--color-accent-hover))] disabled:opacity-50"
             >
               {loading ? (
                 <svg
@@ -236,7 +236,7 @@ export function RecordingPanel() {
               <button
                 onClick={startRecording}
                 disabled={loading}
-                className="flex items-center gap-2 rounded-lg bg-[rgb(var(--color-accent))] px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[rgb(var(--color-accent-hover))] disabled:opacity-50"
+                className="flex items-center gap-2 rounded-lg bg-[rgb(var(--color-accent))] px-5 py-2.5 text-sm font-medium text-[rgb(var(--color-accent-fg))] transition-colors hover:bg-[rgb(var(--color-accent-hover))] disabled:opacity-50"
               >
                 <svg
                   width="14"
@@ -368,7 +368,7 @@ export function RecordingPanel() {
         <button
           onClick={startRecording}
           disabled={loading}
-          className="flex items-center gap-2 rounded-lg bg-[rgb(var(--color-accent))] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[rgb(var(--color-accent-hover))] disabled:opacity-50"
+          className="flex items-center gap-2 rounded-lg bg-[rgb(var(--color-accent))] px-4 py-2 text-sm font-medium text-[rgb(var(--color-accent-fg))] transition-colors hover:bg-[rgb(var(--color-accent-hover))] disabled:opacity-50"
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
             <circle cx="12" cy="12" r="10" />

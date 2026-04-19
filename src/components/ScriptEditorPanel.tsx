@@ -43,7 +43,7 @@ export function ScriptEditorPanel() {
         <div className="flex justify-center gap-3 mt-6">
           <button
             disabled
-            className="px-4 py-2 rounded-lg bg-[rgb(var(--color-accent))] text-white text-sm font-medium opacity-50 cursor-not-allowed"
+            className="px-4 py-2 rounded-lg bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))] text-sm font-medium opacity-50 cursor-not-allowed"
             title="Recording not yet implemented"
           >
             Record Demo

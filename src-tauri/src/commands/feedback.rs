@@ -32,8 +32,8 @@ pub fn save_feedback(app: tauri::AppHandle, entry: FeedbackEntry) -> Result<(), 
 
     entries.push(entry);
 
-    let json = serde_json::to_string_pretty(&entries)
-        .map_err(|e| format!("Serialization error: {e}"))?;
+    let json =
+        serde_json::to_string_pretty(&entries).map_err(|e| format!("Serialization error: {e}"))?;
     fs::write(&path, json).map_err(|e| format!("Could not write feedback: {e}"))?;
 
     Ok(())
@@ -90,8 +90,8 @@ pub fn delete_feedback(app: tauri::AppHandle, index: usize) -> Result<(), String
         return Err(format!("Index {} out of bounds ({})", index, entries.len()));
     }
     entries.remove(index);
-    let json = serde_json::to_string_pretty(&entries)
-        .map_err(|e| format!("Serialization error: {e}"))?;
+    let json =
+        serde_json::to_string_pretty(&entries).map_err(|e| format!("Serialization error: {e}"))?;
     fs::write(&path, json).map_err(|e| format!("Could not write feedback: {e}"))?;
     Ok(())
 }
@@ -109,7 +109,16 @@ pub async fn create_github_issue(
     use tokio::io::AsyncWriteExt;
 
     let mut cmd = tokio::process::Command::new("gh");
-    cmd.args(["issue", "create", "--repo", &repo, "--title", &title, "--body-file", "-"]);
+    cmd.args([
+        "issue",
+        "create",
+        "--repo",
+        &repo,
+        "--title",
+        &title,
+        "--body-file",
+        "-",
+    ]);
 
     if let Some(lbls) = &labels {
         for label in lbls {
@@ -117,7 +126,9 @@ pub async fn create_github_issue(
         }
     }
 
-    cmd.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
+    cmd.stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
     #[cfg(windows)]
     cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
 
@@ -131,11 +142,17 @@ pub async fn create_github_issue(
 
     // Write body to stdin
     if let Some(mut stdin) = child.stdin.take() {
-        stdin.write_all(body.as_bytes()).await.map_err(|e| format!("Failed to write issue body: {e}"))?;
+        stdin
+            .write_all(body.as_bytes())
+            .await
+            .map_err(|e| format!("Failed to write issue body: {e}"))?;
         // drop stdin to close the pipe
     }
 
-    let output = child.wait_with_output().await.map_err(|e| format!("gh process error: {e}"))?;
+    let output = child
+        .wait_with_output()
+        .await
+        .map_err(|e| format!("gh process error: {e}"))?;
 
     if output.status.success() {
         let url = String::from_utf8_lossy(&output.stdout).trim().to_string();
@@ -152,7 +169,11 @@ pub async fn create_github_issue(
 
 /// Collect all log files into a zip archive at the given destination path.
 #[tauri::command]
-pub fn export_logs(app: tauri::AppHandle, dest: String, debug_log: Option<String>) -> Result<(), String> {
+pub fn export_logs(
+    app: tauri::AppHandle,
+    dest: String,
+    debug_log: Option<String>,
+) -> Result<(), String> {
     use std::io::Write;
     use zip::write::SimpleFileOptions;
 
@@ -162,11 +183,9 @@ pub fn export_logs(app: tauri::AppHandle, dest: String, debug_log: Option<String
         .join("logs");
 
     let dest_path = std::path::PathBuf::from(&dest);
-    let file = fs::File::create(&dest_path)
-        .map_err(|e| format!("Could not create zip: {e}"))?;
+    let file = fs::File::create(&dest_path).map_err(|e| format!("Could not create zip: {e}"))?;
     let mut zip = zip::ZipWriter::new(file);
-    let options = SimpleFileOptions::default()
-        .compression_method(zip::CompressionMethod::Deflated);
+    let options = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
 
     // Collect backend log files
     if log_dir.exists() {
@@ -208,6 +227,7 @@ pub fn export_logs(app: tauri::AppHandle, dest: String, debug_log: Option<String
     zip.write_all(info.as_bytes())
         .map_err(|e| format!("Write error: {e}"))?;
 
-    zip.finish().map_err(|e| format!("Zip finalize error: {e}"))?;
+    zip.finish()
+        .map_err(|e| format!("Zip finalize error: {e}"))?;
     Ok(())
 }

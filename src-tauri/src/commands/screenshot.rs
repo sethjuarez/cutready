@@ -1,7 +1,7 @@
 //! Tauri commands for screen capture.
 
-use std::sync::Mutex;
 use serde::{Deserialize, Serialize};
+use std::sync::Mutex;
 use tauri::{Manager, State, WebviewUrl, WebviewWindowBuilder};
 
 use crate::util::screenshot;
@@ -86,12 +86,12 @@ pub async fn capture_all_monitors(
 
 /// Get capture params (called by the capture window on mount).
 #[tauri::command]
-pub async fn get_capture_params(
-    state: State<'_, CaptureState>,
-) -> Result<CaptureParams, String> {
+pub async fn get_capture_params(state: State<'_, CaptureState>) -> Result<CaptureParams, String> {
     eprintln!("[CAPTURE] get_capture_params called");
     let params = state.0.lock().map_err(|e| e.to_string())?;
-    params.clone().ok_or_else(|| "No capture params set".to_string())
+    params
+        .clone()
+        .ok_or_else(|| "No capture params set".to_string())
 }
 
 /// Open a borderless, always-on-top capture window covering the target monitor.
@@ -107,7 +107,10 @@ pub async fn open_capture_window(
     bg_path: String,
     project_root: String,
 ) -> Result<(), String> {
-    eprintln!("[CAPTURE] open_capture_window: monitor={} pos=({},{}) size={}x{}", monitor_id, phys_x, phys_y, phys_w, phys_h);
+    eprintln!(
+        "[CAPTURE] open_capture_window: monitor={} pos=({},{}) size={}x{}",
+        monitor_id, phys_x, phys_y, phys_w, phys_h
+    );
 
     // Store params in managed state for the capture window to read
     {
@@ -146,7 +149,10 @@ pub async fn open_capture_window(
     let logical_h = phys_h as f64 / scale;
     let logical_x = phys_x as f64 / scale;
     let logical_y = phys_y as f64 / scale;
-    eprintln!("[CAPTURE] logical pos=({},{}) size={}x{} scale={}", logical_x, logical_y, logical_w, logical_h, scale);
+    eprintln!(
+        "[CAPTURE] logical pos=({},{}) size={}x{} scale={}",
+        logical_x, logical_y, logical_w, logical_h, scale
+    );
 
     // Use initialization_script for mode flag; params via invoke("get_capture_params").
     // WebviewUrl::App("index.html") hits Tauri's special case (uses base URL directly).
@@ -179,7 +185,10 @@ pub async fn open_preview_window(
     phys_w: u32,
     phys_h: u32,
 ) -> Result<(), String> {
-    eprintln!("[PREVIEW] open_preview_window: pos=({},{}) size={}x{}", phys_x, phys_y, phys_w, phys_h);
+    eprintln!(
+        "[PREVIEW] open_preview_window: pos=({},{}) size={}x{}",
+        phys_x, phys_y, phys_w, phys_h
+    );
 
     // Destroy any existing preview window first
     if let Some(existing) = app.get_webview_window("preview") {
@@ -203,7 +212,10 @@ pub async fn open_preview_window(
     let logical_h = phys_h as f64 / scale;
     let logical_x = phys_x as f64 / scale;
     let logical_y = phys_y as f64 / scale;
-    eprintln!("[PREVIEW] logical pos=({},{}) size={}x{} scale={}", logical_x, logical_y, logical_w, logical_h, scale);
+    eprintln!(
+        "[PREVIEW] logical pos=({},{}) size={}x{} scale={}",
+        logical_x, logical_y, logical_w, logical_h, scale
+    );
 
     let win = WebviewWindowBuilder::new(&app, "preview", WebviewUrl::App("index.html".into()))
         .initialization_script("window.__IS_PREVIEW = true;")

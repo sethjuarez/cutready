@@ -123,9 +123,7 @@ pub async fn add_sketch_to_storyboard(
 
     let mut sb = project::read_storyboard(&sb_abs).map_err(|e| e.to_string())?;
 
-    let item = StoryboardItem::SketchRef {
-        path: sketch_path,
-    };
+    let item = StoryboardItem::SketchRef { path: sketch_path };
     match position {
         Some(pos) if pos < sb.items.len() => sb.items.insert(pos, item),
         _ => sb.items.push(item),

@@ -2,12 +2,10 @@
 
 use serde::Deserialize;
 
-use agentive::azure_oauth::{self, AuthCodeFlowInit, DeviceCodeResponse, TokenResponse};
-use crate::engine::agent::llm::{
-    self, ChatMessage, LlmConfig, LlmProvider, ModelInfo,
-};
+use crate::engine::agent::llm::{self, ChatMessage, LlmConfig, LlmProvider, ModelInfo};
 use crate::engine::agent::runner::{self, AgentEvent};
 use crate::AppState;
+use agentive::azure_oauth::{self, AuthCodeFlowInit, DeviceCodeResponse, TokenResponse};
 
 /// Serialisable provider config sent from the frontend.
 #[derive(Debug, Deserialize)]
@@ -58,7 +56,9 @@ pub async fn agent_chat(
 ) -> Result<ChatMessage, String> {
     let llm_config: LlmConfig = config.into();
     let provider = llm::build_provider(&llm_config, None);
-    llm::simple_chat(provider, messages).await.map_err(|e| e.to_string())
+    llm::simple_chat(provider, messages)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 /// Push a message onto the pending stack while the agent loop is running.
@@ -86,11 +86,7 @@ pub async fn agent_chat_with_tools(
 
     let project_root = {
         let guard = state.current_project.lock().unwrap();
-        guard
-            .as_ref()
-            .ok_or("No project open")?
-            .root
-            .clone()
+        guard.as_ref().ok_or("No project open")?.root.clone()
     };
 
     let steering = state.steering.clone();
@@ -102,7 +98,9 @@ pub async fn agent_chat_with_tools(
 
     // Determine effective vision: user setting AND model capability
     let vision_enabled = vision_mode != "off" && llm::supports_vision(&llm_config.model);
-    let vision = runner::VisionConfig { enabled: vision_enabled };
+    let vision = runner::VisionConfig {
+        enabled: vision_enabled,
+    };
 
     let provider = llm::build_provider(&llm_config, reported_context);
 
@@ -167,7 +165,8 @@ pub async fn get_chat_session(
         let guard = state.current_project.lock().unwrap();
         guard.as_ref().ok_or("No project open")?.root.clone()
     };
-    let abs = crate::engine::project::safe_resolve(&root, &relative_path).map_err(|e| e.to_string())?;
+    let abs =
+        crate::engine::project::safe_resolve(&root, &relative_path).map_err(|e| e.to_string())?;
     crate::engine::project::read_chat_session(&abs).map_err(|e| e.to_string())
 }
 
@@ -182,7 +181,8 @@ pub async fn save_chat_session(
         let guard = state.current_project.lock().unwrap();
         guard.as_ref().ok_or("No project open")?.root.clone()
     };
-    let abs = crate::engine::project::safe_resolve(&root, &relative_path).map_err(|e| e.to_string())?;
+    let abs =
+        crate::engine::project::safe_resolve(&root, &relative_path).map_err(|e| e.to_string())?;
     crate::engine::project::write_chat_session(&abs, &session).map_err(|e| e.to_string())
 }
 
@@ -196,7 +196,8 @@ pub async fn delete_chat_session(
         let guard = state.current_project.lock().unwrap();
         guard.as_ref().ok_or("No project open")?.root.clone()
     };
-    let abs = crate::engine::project::safe_resolve(&root, &relative_path).map_err(|e| e.to_string())?;
+    let abs =
+        crate::engine::project::safe_resolve(&root, &relative_path).map_err(|e| e.to_string())?;
     crate::engine::project::delete_chat_session(&abs).map_err(|e| e.to_string())
 }
 
@@ -206,9 +207,7 @@ pub async fn delete_chat_session(
 
 /// Get core memories formatted for injection into the system prompt.
 #[tauri::command]
-pub async fn get_memory_context(
-    state: tauri::State<'_, AppState>,
-) -> Result<String, String> {
+pub async fn get_memory_context(state: tauri::State<'_, AppState>) -> Result<String, String> {
     let root = {
         let guard = state.current_project.lock().unwrap();
         guard.as_ref().ok_or("No project open")?.root.clone()
@@ -258,10 +257,7 @@ pub async fn list_memories(
 
 /// Delete a memory by index.
 #[tauri::command]
-pub async fn delete_memory(
-    index: usize,
-    state: tauri::State<'_, AppState>,
-) -> Result<(), String> {
+pub async fn delete_memory(index: usize, state: tauri::State<'_, AppState>) -> Result<(), String> {
     let root = {
         let guard = state.current_project.lock().unwrap();
         guard.as_ref().ok_or("No project open")?.root.clone()
@@ -312,7 +308,11 @@ pub async fn azure_device_code_start(
     tenant_id: String,
     client_id: Option<String>,
 ) -> Result<DeviceCodeResponse, String> {
-    let tid = if tenant_id.is_empty() { "organizations" } else { &tenant_id };
+    let tid = if tenant_id.is_empty() {
+        "organizations"
+    } else {
+        &tenant_id
+    };
     azure_oauth::request_device_code(tid, client_id.as_deref(), None).await
 }
 
@@ -326,7 +326,11 @@ pub async fn azure_device_code_poll(
     timeout: u64,
     client_id: Option<String>,
 ) -> Result<TokenResponse, String> {
-    let tid = if tenant_id.is_empty() { "organizations" } else { &tenant_id };
+    let tid = if tenant_id.is_empty() {
+        "organizations"
+    } else {
+        &tenant_id
+    };
     azure_oauth::poll_for_token(tid, &device_code, interval, timeout, client_id.as_deref()).await
 }
 
@@ -338,7 +342,11 @@ pub async fn azure_token_refresh(
     client_id: Option<String>,
     scope: Option<String>,
 ) -> Result<TokenResponse, String> {
-    let tid = if tenant_id.is_empty() { "organizations" } else { &tenant_id };
+    let tid = if tenant_id.is_empty() {
+        "organizations"
+    } else {
+        &tenant_id
+    };
     azure_oauth::refresh_token(tid, &refresh_token, client_id.as_deref(), scope.as_deref()).await
 }
 
@@ -365,7 +373,11 @@ pub async fn azure_browser_auth_start(
     tenant_id: String,
     client_id: Option<String>,
 ) -> Result<AuthCodeFlowInit, String> {
-    let tid = if tenant_id.is_empty() { "organizations" } else { &tenant_id };
+    let tid = if tenant_id.is_empty() {
+        "organizations"
+    } else {
+        &tenant_id
+    };
     let (init, verifier) =
         azure_oauth::start_auth_code_flow(tid, client_id.as_deref(), None).await?;
 
@@ -386,13 +398,15 @@ pub async fn azure_browser_auth_complete(
     client_id: Option<String>,
     timeout: Option<u64>,
 ) -> Result<TokenResponse, String> {
-    let tid = if tenant_id.is_empty() { "organizations" } else { &tenant_id };
+    let tid = if tenant_id.is_empty() {
+        "organizations"
+    } else {
+        &tenant_id
+    };
 
     let (verifier, port) = {
         let guard = pending_auth().lock().await;
-        let p = guard
-            .as_ref()
-            .ok_or("No pending browser auth flow")?;
+        let p = guard.as_ref().ok_or("No pending browser auth flow")?;
         (p.code_verifier.clone(), p.port)
     };
 

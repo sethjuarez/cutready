@@ -14,8 +14,7 @@ test.describe("Phase 1 — Solo Timeline Switcher", () => {
     await page.waitForTimeout(500);
     await page.keyboard.press("Control+Shift+B");
     await page.waitForTimeout(300);
-    await page.locator('button[title="More options"]').click();
-    await page.getByText("Snapshots").click();
+    await page.getByRole("button", { name: "Snapshots", exact: true }).click();
     await page.waitForTimeout(500);
   });
 
@@ -50,8 +49,7 @@ test.describe("Phase 1 — Solo Timeline Switcher", () => {
     await page.waitForTimeout(200);
     await page.keyboard.press("Control+Shift+B");
     await page.waitForTimeout(200);
-    await page.locator('button[title="More options"]').click();
-    await page.getByText("Snapshots").click();
+    await page.getByRole("button", { name: "Snapshots", exact: true }).click();
     await page.waitForTimeout(500);
 
     const branchBtn = page.locator('button[title^="Branch:"]');
@@ -77,8 +75,7 @@ test.describe("Phase 1 — Solo Timeline Switcher", () => {
     await page.waitForTimeout(200);
     await page.keyboard.press("Control+Shift+B");
     await page.waitForTimeout(200);
-    await page.locator('button[title="More options"]').click();
-    await page.getByText("Snapshots").click();
+    await page.getByRole("button", { name: "Snapshots", exact: true }).click();
     await page.waitForTimeout(500);
 
     // Ctrl+S opens the snapshot dialog

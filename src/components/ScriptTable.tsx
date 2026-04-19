@@ -28,8 +28,10 @@ import {
   Plus,
   Camera,
   Check,
+  Lock,
+  Unlock,
 } from "lucide-react";
-import type { PlanningRow } from "../types/sketch";
+import type { PlanningCellField, PlanningRow } from "../types/sketch";
 import type { ElucimDocument } from "@elucim/dsl";
 
 
@@ -62,6 +64,14 @@ function emptyRow(): PlanningRow {
   return { time: "", narrative: "", demo_actions: "", screenshot: null };
 }
 
+function isCellLocked(row: PlanningRow, field: PlanningCellField): boolean {
+  return row.locked === true || row.locks?.[field] === true;
+}
+
+function hasAnyLock(row: PlanningRow): boolean {
+  return row.locked === true || Object.values(row.locks ?? {}).some(Boolean);
+}
+
 import type { RowDiff } from "../utils/textDiff";
 
 interface ScriptTableProps {
@@ -82,9 +92,11 @@ interface ScriptTableProps {
   onDismissHighlights?: () => void;
   hasLastAiDiffs?: boolean;
   onReShowHighlights?: () => void;
+  onRowLockChange?: (rowIndex: number, locked: boolean) => void;
+  onCellLockChange?: (rowIndex: number, field: PlanningCellField, locked: boolean) => void;
 }
 
-export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreenshot, onPickImage, onBrowseImage, onSparkle, onGenerateVisual, onNudgeVisual, projectRoot, sketchPath, highlightedRows, rowDiffs, aiSnapshotRows, onDismissHighlights, hasLastAiDiffs, onReShowHighlights }: ScriptTableProps) {
+export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreenshot, onPickImage, onBrowseImage, onSparkle, onGenerateVisual, onNudgeVisual, projectRoot, sketchPath, highlightedRows, rowDiffs, aiSnapshotRows, onDismissHighlights, hasLastAiDiffs, onReShowHighlights, onRowLockChange, onCellLockChange }: ScriptTableProps) {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
   const [visualLightbox, setVisualLightbox] = useState<{ visualPath: string; rowIndex: number } | null>(null);
@@ -234,6 +246,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
 
   const updateRow = useCallback(
     (index: number, field: keyof PlanningRow, value: string) => {
+      if (rowsRef.current[index]?.locked || rowsRef.current[index]?.locks?.[field as PlanningCellField]) return;
       pushUndo();
       const updated = rowsRef.current.map((r, i) =>
         i === index ? { ...r, [field]: value } : r,
@@ -258,6 +271,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
   const deleteRow = useCallback(
     (index: number) => {
       if (rowsRef.current.length <= 1) return;
+      if (hasAnyLock(rowsRef.current[index])) return;
       pushUndo();
       const updated = rowsRef.current.filter((_, i) => i !== index);
       onChange(updated);
@@ -268,6 +282,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
 
   const removeVisual = useCallback(
     (index: number) => {
+      if (isCellLocked(rowsRef.current[index], "visual") || isCellLocked(rowsRef.current[index], "screenshot")) return;
       pushUndo();
       const updated = rowsRef.current.map((r, i) =>
         i === index ? { ...r, visual: null } : r,
@@ -285,6 +300,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
       const oldIndex = rowIds.indexOf(active.id as string);
       const newIndex = rowIds.indexOf(over.id as string);
       if (oldIndex === -1 || newIndex === -1) return;
+      if (rowsRef.current.some(hasAnyLock)) return;
       pushUndo();
       const updated = [...rowsRef.current];
       const [moved] = updated.splice(oldIndex, 1);
@@ -335,7 +351,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
           <table className="w-full" style={{ tableLayout: "fixed", borderSpacing: "0 4px", borderCollapse: "separate" }}>
             <colgroup>
               {!readOnly && <col style={{ width: 28 }} />}
-              <col style={{ width: 54 }} />
+              <col style={{ width: 72 }} />
               <col />
               <col />
               <col style={{ width: 180 }} />
@@ -378,6 +394,8 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
                   rowDiff={rowDiffs?.find((d) => d.rowIndex === idx)}
                   onDismissHighlight={onDismissHighlights}
                   visualVersion={visualVersion}
+                  onRowLockChange={onRowLockChange}
+                  onCellLockChange={onCellLockChange}
                 />
               ))}
             </tbody>
@@ -389,7 +407,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
               <tbody>
                 <tr className="card-row shadow-lg" style={{ backgroundColor: "rgb(var(--color-surface-alt))" }}>
                   {!readOnly && <td className="p-1 w-7" style={{ borderLeft: `3px solid ${getRowColor(activeIdx)}` }} />}
-                  <td className="script-table-td text-xs" style={{ width: 50 }}>{rows[activeIdx].time}</td>
+                  <td className="script-table-td text-xs" style={{ width: 72 }}>{rows[activeIdx].time}</td>
                   <td className="script-table-td text-xs">
                     {rows[activeIdx].narrative || "—"}
                   </td>
@@ -408,7 +426,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
       {/* Lightbox overlay */}
       {lightboxSrc && (
         <div
-          className="fixed inset-0 z-modal flex items-center justify-center bg-black/80 cursor-pointer"
+          className="fixed inset-0 z-modal flex items-center justify-center bg-[rgb(var(--color-overlay-strong)/0.8)] cursor-pointer"
           onClick={() => setLightboxSrc(null)}
         >
           <img
@@ -419,7 +437,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
           />
           <button
             onClick={() => setLightboxSrc(null)}
-            className="absolute top-4 right-4 p-2 rounded-full bg-black/50 text-white/80 hover:text-white transition-colors"
+            className="absolute top-4 right-4 p-2 rounded-full bg-[rgb(var(--color-media-control-bg)/0.5)] text-[rgb(var(--color-media-control-fg)/0.8)] hover:text-[rgb(var(--color-media-control-fg))] transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -429,7 +447,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
       {/* Visual lightbox — near-fullscreen with preview/edit toggle */}
       {visualLightbox && (
         <div
-          className="fixed inset-0 z-modal flex items-center justify-center bg-black/80"
+          className="fixed inset-0 z-modal flex items-center justify-center bg-[rgb(var(--color-overlay-strong)/0.8)]"
           onClick={() => {
             if (lightboxMode === "edit" && editorDirty) return; // don't close dirty editor by backdrop click
             closeLightbox();
@@ -453,7 +471,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
                       onClick={() => setLightboxMode("preview")}
                       className={`px-3 py-1 rounded-md text-[12px] font-medium transition-colors ${
                         lightboxMode === "preview"
-                          ? "bg-[rgb(var(--color-accent))] text-white"
+                          ? "bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))]"
                           : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))]"
                       }`}
                     >
@@ -463,7 +481,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
                       onClick={() => setLightboxMode("edit")}
                       className={`px-3 py-1 rounded-md text-[12px] font-medium transition-colors ${
                         lightboxMode === "edit"
-                          ? "bg-[rgb(var(--color-accent))] text-white"
+                          ? "bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))]"
                           : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))]"
                       }`}
                     >
@@ -608,6 +626,8 @@ function SortableRow({
   rowDiff,
   onDismissHighlight,
   visualVersion,
+  onRowLockChange,
+  onCellLockChange,
 }: {
   id: string;
   row: PlanningRow;
@@ -632,8 +652,15 @@ function SortableRow({
   rowDiff?: RowDiff;
   onDismissHighlight?: () => void;
   visualVersion: number;
+  onRowLockChange?: (rowIndex: number, locked: boolean) => void;
+  onCellLockChange?: (rowIndex: number, field: PlanningCellField, locked: boolean) => void;
 }){
   const [diffExpanded, setDiffExpanded] = useState(true);
+  const rowLocked = row.locked === true;
+  const timeLocked = isCellLocked(row, "time");
+  const narrativeLocked = isCellLocked(row, "narrative");
+  const actionsLocked = isCellLocked(row, "demo_actions");
+  const mediaLocked = isCellLocked(row, "screenshot") || isCellLocked(row, "visual");
   const {
     attributes,
     listeners,
@@ -641,7 +668,7 @@ function SortableRow({
     transform,
     transition,
     isSorting,
-  } = useSortable({ id });
+  } = useSortable({ id, disabled: readOnly || hasAnyLock(row) });
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -657,7 +684,7 @@ function SortableRow({
     <tr
       ref={setNodeRef}
       style={{ ...style, backgroundColor: isHighlighted ? undefined : rowBg }}
-      className={`card-row group hover:shadow-sm ${isSorting ? "" : "transition-all"} ${isHighlighted ? "ai-highlight-row" : ""}`}
+      className={`card-row group hover:shadow-sm ${isSorting ? "" : "transition-all"} ${isHighlighted ? "ai-highlight-row" : ""} ${rowLocked ? "ring-1 ring-[rgb(var(--color-warning))]/25" : ""}`}
       onKeyDown={(e) => {
         if (readOnly) return;
         // Ctrl+Enter → add row below
@@ -686,32 +713,38 @@ function SortableRow({
       {!readOnly && (
         <td className="p-0 align-middle" style={{ borderLeft: `3px solid ${accentColor}` }}>
           <div
-            className="cursor-grab active:cursor-grabbing text-[rgb(var(--color-text-secondary))] flex items-center justify-center h-full"
+            className={`${hasAnyLock(row) ? "cursor-default text-[rgb(var(--color-warning))]" : "cursor-grab active:cursor-grabbing text-[rgb(var(--color-text-secondary))]"} flex items-center justify-center h-full`}
             {...attributes}
             {...listeners}
           >
             {/* Row number (visible by default), drag icon on hover */}
-            <span className="text-[0.625rem] font-medium opacity-40 group-hover:hidden">{idx + 1}</span>
-            <svg className="hidden group-hover:block opacity-50 hover:opacity-100 transition-opacity" width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+            <span className="text-[0.625rem] font-medium opacity-40 group-hover:hidden">{rowLocked ? <Lock className="w-3 h-3" /> : idx + 1}</span>
+            {!hasAnyLock(row) && <svg className="hidden group-hover:block opacity-50 hover:opacity-100 transition-opacity" width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
               <circle cx="9" cy="5" r="1.5" />
               <circle cx="15" cy="5" r="1.5" />
               <circle cx="9" cy="12" r="1.5" />
               <circle cx="15" cy="12" r="1.5" />
               <circle cx="9" cy="19" r="1.5" />
               <circle cx="15" cy="19" r="1.5" />
-            </svg>
+            </svg>}
           </div>
         </td>
       )}
       <td className="py-2 px-1.5 align-top text-[0.8125rem]" style={readOnly ? { borderLeft: `3px solid ${accentColor}` } : undefined}>
-        <div data-tab-cell={idx * 3}>
+        <div data-tab-cell={idx * 3} className="relative group/cell">
           <LocalInput
             value={row.time}
             onChange={(v) => updateRow(idx, "time", v)}
             placeholder="~30s"
-            readOnly={readOnly}
-            onAddRow={isLastRow && !readOnly ? () => addRow(idx) : undefined}
+            readOnly={readOnly || timeLocked}
+            onAddRow={isLastRow && !readOnly && !hasAnyLock(row) ? () => addRow(idx) : undefined}
+            hasActionRail={!readOnly && !rowLocked && !!onCellLockChange}
           />
+          {!readOnly && !rowLocked && onCellLockChange && (
+            <CellActionRail persistent={timeLocked}>
+              <CellLockButton locked={timeLocked} onClick={() => onCellLockChange(idx, "time", !timeLocked)} />
+            </CellActionRail>
+          )}
         </div>
       </td>
       <td className="script-table-td align-top overflow-hidden">
@@ -720,13 +753,21 @@ function SortableRow({
             value={row.narrative}
             onChange={(v) => updateRow(idx, "narrative", v)}
             placeholder="What to say..."
-            readOnly={readOnly}
-            onAddRow={isLastRow && !readOnly ? () => addRow(idx) : undefined}
+            readOnly={readOnly || narrativeLocked}
+            onAddRow={isLastRow && !readOnly && !hasAnyLock(row) ? () => addRow(idx) : undefined}
+            hasActionRail={!readOnly && (!!onCellLockChange || !!onSparkle)}
           />
-          {onSparkle && !readOnly && (
-            <SparkleButton onClick={() => onSparkle(
-              `Improve the narrative for row ${idx + 1} of sketch "${sketchPath ?? "current"}". Current text: "${row.narrative}". Make it more engaging and natural for spoken delivery. Use update_planning_row to change only this row.`
-            )} />
+          {!readOnly && (
+            <CellActionRail persistent={narrativeLocked}>
+              {onSparkle && !narrativeLocked && (
+                <SparkleButton onClick={() => onSparkle(
+                  `Improve the narrative for row ${idx + 1} of sketch "${sketchPath ?? "current"}". Current text: "${row.narrative}". Make it more engaging and natural for spoken delivery. Use update_planning_row to change only this row.`
+                )} />
+              )}
+              {!rowLocked && onCellLockChange && (
+                <CellLockButton locked={narrativeLocked} onClick={() => onCellLockChange(idx, "narrative", !narrativeLocked)} />
+              )}
+            </CellActionRail>
           )}
         </div>
       </td>
@@ -736,13 +777,21 @@ function SortableRow({
             value={row.demo_actions}
             onChange={(v) => updateRow(idx, "demo_actions", v)}
             placeholder="What to do..."
-            readOnly={readOnly}
-            onAddRow={isLastRow && !readOnly ? () => addRow(idx) : undefined}
+            readOnly={readOnly || actionsLocked}
+            onAddRow={isLastRow && !readOnly && !hasAnyLock(row) ? () => addRow(idx) : undefined}
+            hasActionRail={!readOnly && (!!onCellLockChange || !!onSparkle)}
           />
-          {onSparkle && !readOnly && (
-            <SparkleButton onClick={() => onSparkle(
-              `Improve the demo actions for row ${idx + 1} of sketch "${sketchPath ?? "current"}". Current text: "${row.demo_actions}". Make the steps clearer and more specific. Use update_planning_row to change only this row.`
-            )} />
+          {!readOnly && (
+            <CellActionRail persistent={actionsLocked}>
+              {onSparkle && !actionsLocked && (
+                <SparkleButton onClick={() => onSparkle(
+                  `Improve the demo actions for row ${idx + 1} of sketch "${sketchPath ?? "current"}". Current text: "${row.demo_actions}". Make the steps clearer and more specific. Use update_planning_row to change only this row.`
+                )} />
+              )}
+              {!rowLocked && onCellLockChange && (
+                <CellLockButton locked={actionsLocked} onClick={() => onCellLockChange(idx, "demo_actions", !actionsLocked)} />
+              )}
+            </CellActionRail>
           )}
         </div>
       </td>
@@ -750,6 +799,11 @@ function SortableRow({
         {row.visual ? (
           /* ── Elucim animated visual ── */
           <div className="relative group/vis cursor-pointer" onClick={() => onVisualClick(row.visual!, idx)}>
+            {!readOnly && !rowLocked && onCellLockChange && (
+              <div className="absolute right-1 top-1 z-10">
+                <CellLockButton locked={mediaLocked} onClick={() => onCellLockChange(idx, "screenshot", !mediaLocked)} className="bg-[rgb(var(--color-media-control-bg)/0.2)] text-[rgb(var(--color-media-control-fg))] hover:bg-[rgb(var(--color-media-control-bg)/0.4)]" />
+              </div>
+            )}
             <Suspense fallback={<div className="w-40 h-24 rounded-md bg-[rgb(var(--color-surface-alt))] border border-[rgb(var(--color-border))] animate-pulse" />}>
               <VisualCell
                 visualPath={row.visual!}
@@ -758,11 +812,11 @@ function SortableRow({
               />
             </Suspense>
             {/* Hover overlay with action buttons */}
-            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/vis:opacity-100 transition-opacity flex items-center justify-center gap-1.5 rounded-md" onClick={(e) => e.stopPropagation()}>
+            {!mediaLocked && <div className="absolute inset-0 bg-[rgb(var(--color-media-control-bg)/0.4)] opacity-0 group-hover/vis:opacity-100 transition-opacity flex items-center justify-center gap-1.5 rounded-md" onClick={(e) => e.stopPropagation()}>
               {/* Expand / preview */}
               <button
                 onClick={() => onVisualClick(row.visual!, idx)}
-                className="p-1 rounded-full bg-black/20 text-white hover:bg-black/40"
+                className="p-1 rounded-full bg-[rgb(var(--color-media-control-bg)/0.2)] text-[rgb(var(--color-media-control-fg))] hover:bg-[rgb(var(--color-media-control-bg)/0.4)]"
                 title="Preview visual (click to edit)"
               >
                 <Maximize2 className="w-3.5 h-3.5" />
@@ -771,7 +825,7 @@ function SortableRow({
               {!readOnly && onGenerateVisual && (
                 <button
                   onClick={() => onGenerateVisual(idx)}
-                  className="p-1 rounded-full bg-black/20 text-white hover:bg-[rgb(var(--color-accent))]/80"
+                  className="p-1 rounded-full bg-[rgb(var(--color-media-control-bg)/0.2)] text-[rgb(var(--color-media-control-fg))] hover:bg-[rgb(var(--color-accent)/0.8)]"
                   title="Regenerate visual with AI"
                 >
                   <Sparkles className="w-3.5 h-3.5" />
@@ -781,13 +835,13 @@ function SortableRow({
               {!readOnly && (
                 <button
                   onClick={() => onRemoveVisual?.(idx)}
-                  className="p-1 rounded-full bg-black/20 text-white hover:bg-error/80"
+                  className="p-1 rounded-full bg-[rgb(var(--color-media-control-bg)/0.2)] text-[rgb(var(--color-media-control-fg))] hover:bg-[rgb(var(--color-error)/0.8)]"
                   title="Remove visual"
                 >
                   <X className="w-3.5 h-3.5" />
                 </button>
               )}
-            </div>
+            </div>}
           </div>
         ) : row.screenshot ? (
           <div className="relative group/ss w-40 h-24 rounded-md bg-[rgb(var(--color-surface-alt))] border border-[rgb(var(--color-border))] overflow-hidden cursor-pointer"
@@ -796,20 +850,25 @@ function SortableRow({
               onImageClick(src);
             }}
           >
+            {!readOnly && !rowLocked && onCellLockChange && (
+              <div className="absolute right-1 top-1 z-10">
+                <CellLockButton locked={mediaLocked} onClick={() => onCellLockChange(idx, "screenshot", !mediaLocked)} className="bg-[rgb(var(--color-media-control-bg)/0.2)] text-[rgb(var(--color-media-control-fg))] hover:bg-[rgb(var(--color-media-control-bg)/0.4)]" />
+              </div>
+            )}
             <img
               src={projectRoot ? convertFileSrc(`${projectRoot}/${row.screenshot}`) : row.screenshot}
               alt=""
               className="w-full h-full object-cover"
             />
-            {!readOnly && (
-              <div className="absolute inset-0 bg-black/50 opacity-0 group-hover/ss:opacity-100 transition-opacity flex items-center justify-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+            {!readOnly && !mediaLocked && (
+              <div className="absolute inset-0 bg-[rgb(var(--color-media-control-bg)/0.5)] opacity-0 group-hover/ss:opacity-100 transition-opacity flex items-center justify-center gap-1.5" onClick={(e) => e.stopPropagation()}>
                 {/* View */}
                 <button
                   onClick={() => {
                     const src = projectRoot ? convertFileSrc(`${projectRoot}/${row.screenshot}`) : row.screenshot!;
                     onImageClick(src);
                   }}
-                  className="p-1 rounded-full bg-black/20 text-white hover:bg-black/30"
+                  className="p-1 rounded-full bg-[rgb(var(--color-media-control-bg)/0.2)] text-[rgb(var(--color-media-control-fg))] hover:bg-[rgb(var(--color-media-control-bg)/0.3)]"
                   title="View image"
                 >
                   <Search className="w-3.5 h-3.5" />
@@ -817,7 +876,7 @@ function SortableRow({
                 {/* Re-capture */}
                 <button
                   onClick={() => onCaptureScreenshot?.(idx)}
-                  className="p-1 rounded-full bg-black/20 text-white hover:bg-black/30"
+                  className="p-1 rounded-full bg-[rgb(var(--color-media-control-bg)/0.2)] text-[rgb(var(--color-media-control-fg))] hover:bg-[rgb(var(--color-media-control-bg)/0.3)]"
                   title="Re-capture screenshot"
                 >
                   <Camera className="w-3.5 h-3.5" />
@@ -826,7 +885,7 @@ function SortableRow({
                 {onPickImage && (
                   <button
                     onClick={() => onPickImage(idx)}
-                    className="p-1 rounded-full bg-black/20 text-white hover:bg-black/30"
+                    className="p-1 rounded-full bg-[rgb(var(--color-media-control-bg)/0.2)] text-[rgb(var(--color-media-control-fg))] hover:bg-[rgb(var(--color-media-control-bg)/0.3)]"
                     title="Pick from workspace images"
                   >
                     <ImageIcon className="w-3.5 h-3.5" />
@@ -836,7 +895,7 @@ function SortableRow({
                 {onBrowseImage && (
                   <button
                     onClick={() => onBrowseImage(idx)}
-                    className="p-1 rounded-full bg-black/20 text-white hover:bg-black/30"
+                    className="p-1 rounded-full bg-[rgb(var(--color-media-control-bg)/0.2)] text-[rgb(var(--color-media-control-fg))] hover:bg-[rgb(var(--color-media-control-bg)/0.3)]"
                     title="Browse for image file"
                   >
                     <Folder className="w-3.5 h-3.5" />
@@ -845,7 +904,7 @@ function SortableRow({
                 {/* Remove */}
                 <button
                   onClick={() => updateRow(idx, "screenshot", "")}
-                  className="p-1 rounded-full bg-black/20 text-white hover:bg-error/80"
+                  className="p-1 rounded-full bg-[rgb(var(--color-media-control-bg)/0.2)] text-[rgb(var(--color-media-control-fg))] hover:bg-[rgb(var(--color-error)/0.8)]"
                   title="Remove screenshot"
                 >
                   <X className="w-3.5 h-3.5" />
@@ -853,7 +912,7 @@ function SortableRow({
               </div>
             )}
           </div>
-        ) : !readOnly ? (
+        ) : !readOnly && !mediaLocked ? (
           <MediaAddPopover
             idx={idx}
             onCaptureScreenshot={onCaptureScreenshot}
@@ -862,26 +921,42 @@ function SortableRow({
             onGenerateVisual={onGenerateVisual}
           />
         ) : (
-          <span className="text-[10px] text-[rgb(var(--color-text-secondary))]">—</span>
+          <div className="relative min-h-8 flex items-center justify-center">
+            <span className="text-[10px] text-[rgb(var(--color-text-secondary))]">{mediaLocked ? "Locked" : "—"}</span>
+            {!readOnly && !rowLocked && onCellLockChange && (
+              <CellActionRail persistent={mediaLocked}>
+                <CellLockButton locked={mediaLocked} onClick={() => onCellLockChange(idx, "screenshot", !mediaLocked)} />
+              </CellActionRail>
+            )}
+          </div>
         )}
       </td>
       {!readOnly && (
         <td className="p-1 align-top">
-          <div className="flex flex-col gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-            <button
+          <div className={`flex flex-col gap-0.5 transition-opacity ${rowLocked ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>
+            {onRowLockChange && (
+              <button
+                onClick={() => onRowLockChange(idx, !rowLocked)}
+                className={`p-0.5 rounded transition-colors ${rowLocked ? "text-[rgb(var(--color-warning))] hover:bg-[rgb(var(--color-warning))]/10" : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))]"}`}
+                title={rowLocked ? "Unlock row" : "Lock row"}
+              >
+                {rowLocked ? <Lock className="w-3 h-3" /> : <Unlock className="w-3 h-3" />}
+              </button>
+            )}
+            {!hasAnyLock(row) && <button
               onClick={() => addRow(idx)}
               className="p-0.5 rounded text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] transition-colors"
               title="Add row below"
             >
               <Plus className="w-3 h-3" />
-            </button>
-            <button
+            </button>}
+            {!hasAnyLock(row) && <button
               onClick={() => deleteRow(idx)}
               className="p-0.5 rounded text-[rgb(var(--color-text-secondary))] hover:text-error transition-colors"
               title="Delete row"
             >
               <X className="w-3 h-3" />
-            </button>
+            </button>}
           </div>
         </td>
       )}
@@ -930,12 +1005,14 @@ function LocalInput({
   placeholder,
   readOnly,
   onAddRow,
+  hasActionRail = false,
 }: {
   value: string;
   onChange: (v: string) => void;
   placeholder: string;
   readOnly: boolean;
   onAddRow?: () => void;
+  hasActionRail?: boolean;
 }) {
   const [local, setLocal] = useState(value);
   const isFocusedRef = useRef(false);
@@ -963,7 +1040,7 @@ function LocalInput({
       }}
       placeholder={placeholder}
       readOnly={readOnly}
-      className="w-full bg-transparent text-xs px-1 py-0.5 rounded outline-none transition-colors focus:ring-1 focus:ring-[rgb(var(--color-accent))]/40 placeholder:text-[rgb(var(--color-text-secondary))]/40"
+      className={`w-full bg-transparent text-xs py-0.5 rounded outline-none transition-colors focus:ring-1 focus:ring-[rgb(var(--color-accent))]/40 placeholder:text-[rgb(var(--color-text-secondary))]/40 ${hasActionRail ? "pl-1 pr-5" : "px-1"}`}
     />
   );
 }
@@ -1142,12 +1219,14 @@ function MarkdownCell({
   placeholder,
   readOnly,
   onAddRow,
+  hasActionRail = false,
 }: {
   value: string;
   onChange: (v: string) => void;
   placeholder: string;
   readOnly: boolean;
   onAddRow?: () => void;
+  hasActionRail?: boolean;
 }){
   const [isEditing, setIsEditing] = useState(false);
   const [localValue, setLocalValue] = useState(value);
@@ -1200,7 +1279,7 @@ function MarkdownCell({
       <div
         data-cell
         tabIndex={readOnly ? undefined : 0}
-        className={`md-cell-preview min-h-[1.5rem] rounded outline-none transition-colors ${!readOnly ? "cursor-text focus:ring-1 focus:ring-[rgb(var(--color-accent))]/40" : ""}`}
+        className={`md-cell-preview min-h-[1.5rem] rounded outline-none transition-colors ${hasActionRail ? "pr-7" : ""} ${!readOnly ? "cursor-text focus:ring-1 focus:ring-[rgb(var(--color-accent))]/40" : ""}`}
         onClick={() => {
           if (!readOnly) setIsEditing(true);
         }}
@@ -1225,7 +1304,7 @@ function MarkdownCell({
         }}
       >
         {rendered || (
-          <span className="text-xs text-[rgb(var(--color-text-secondary))] opacity-40">
+          <span className="text-[rgb(var(--color-text-secondary))] opacity-40">
             {placeholder}
           </span>
         )}
@@ -1241,7 +1320,8 @@ function MarkdownCell({
       onChange={(e) => handleChange(e.target.value)}
       onBlur={() => setIsEditing(false)}
       placeholder={placeholder}
-      className="w-full bg-transparent text-xs px-1 py-0.5 rounded outline-none resize-none ring-1 ring-[rgb(var(--color-accent))]/40 placeholder:text-[rgb(var(--color-text-secondary))]/40"
+      rows={1}
+      className={`md-cell-editor w-full bg-transparent p-0 rounded outline-none resize-none ring-1 ring-[rgb(var(--color-accent))]/40 placeholder:text-[rgb(var(--color-text-secondary))]/40 ${hasActionRail ? "pr-7" : "pr-0"}`}
       onKeyDown={(e) => {
         // Tab / Shift+Tab → move to adjacent cell
         if (e.key === "Tab") {
@@ -1309,14 +1389,34 @@ function MarkdownCell({
 
 /* ── Sparkle button — appears on hover for AI-assisted editing ── */
 
+function CellActionRail({ children, persistent = false }: { children: ReactNode; persistent?: boolean }) {
+  return (
+    <div className={`absolute right-0.5 top-0.5 z-[1] flex w-4 flex-col items-center gap-0.5 transition-opacity group-hover/cell:opacity-100 focus-within:opacity-100 ${persistent ? "opacity-100" : "opacity-0"}`}>
+      {children}
+    </div>
+  );
+}
+
 function SparkleButton({ onClick }: { onClick: () => void }) {
   return (
     <button
       onClick={(e) => { e.stopPropagation(); onClick(); }}
-      className="absolute top-0.5 right-0.5 p-0.5 rounded opacity-0 group-hover/cell:opacity-100 transition-opacity text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10"
+      className="p-0.5 rounded text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10"
       title="Improve with AI"
     >
       <Sparkles className="w-3 h-3" />
+    </button>
+  );
+}
+
+function CellLockButton({ locked, onClick, className = "" }: { locked: boolean; onClick: () => void; className?: string }) {
+  return (
+    <button
+      onClick={(e) => { e.stopPropagation(); onClick(); }}
+      className={`p-0.5 rounded ${locked ? "text-[rgb(var(--color-warning))]" : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10"} ${className}`}
+      title={locked ? "Unlock cell" : "Lock cell"}
+    >
+      {locked ? <Lock className="w-3 h-3" /> : <Unlock className="w-3 h-3" />}
     </button>
   );
 }

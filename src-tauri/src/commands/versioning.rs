@@ -68,17 +68,14 @@ pub async fn preview_version(
         return Err("File path required for preview".into());
     }
 
-    let data = versioning::get_file_at_version(&root, &commit_id, target)
-        .map_err(|e| e.to_string())?;
+    let data =
+        versioning::get_file_at_version(&root, &commit_id, target).map_err(|e| e.to_string())?;
 
     String::from_utf8(data).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub async fn restore_version(
-    commit_id: String,
-    state: State<'_, AppState>,
-) -> Result<(), String> {
+pub async fn restore_version(commit_id: String, state: State<'_, AppState>) -> Result<(), String> {
     let root = versioning_root(&state)?;
     versioning::restore_version(&root, &commit_id).map_err(|e| e.to_string())?;
 
@@ -91,10 +88,7 @@ pub async fn restore_version(
 }
 
 #[tauri::command]
-pub async fn checkout_version(
-    commit_id: String,
-    state: State<'_, AppState>,
-) -> Result<(), String> {
+pub async fn checkout_version(commit_id: String, state: State<'_, AppState>) -> Result<(), String> {
     let root = versioning_root(&state)?;
     versioning::checkout_version(&root, &commit_id).map_err(|e| e.to_string())?;
 
@@ -162,10 +156,7 @@ pub async fn list_timelines(
 }
 
 #[tauri::command]
-pub async fn switch_timeline(
-    name: String,
-    state: State<'_, AppState>,
-) -> Result<(), String> {
+pub async fn switch_timeline(name: String, state: State<'_, AppState>) -> Result<(), String> {
     let root = versioning_root(&state)?;
     versioning::switch_timeline(&root, &name).map_err(|e| e.to_string())?;
     // Re-scan project
@@ -176,19 +167,13 @@ pub async fn switch_timeline(
 }
 
 #[tauri::command]
-pub async fn delete_timeline(
-    name: String,
-    state: State<'_, AppState>,
-) -> Result<(), String> {
+pub async fn delete_timeline(name: String, state: State<'_, AppState>) -> Result<(), String> {
     let root = versioning_root(&state)?;
     versioning::delete_timeline(&root, &name).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub async fn promote_timeline(
-    name: String,
-    state: State<'_, AppState>,
-) -> Result<(), String> {
+pub async fn promote_timeline(name: String, state: State<'_, AppState>) -> Result<(), String> {
     let root = versioning_root(&state)?;
     versioning::promote_timeline(&root, &name).map_err(|e| e.to_string())
 }
@@ -291,8 +276,7 @@ pub async fn get_sync_status(
     state: State<'_, AppState>,
 ) -> Result<versioning_remote::SyncStatus, String> {
     let root = versioning_root(&state)?;
-    versioning_remote::get_ahead_behind(&root, &branch, &remote_name)
-        .map_err(|e| e.to_string())
+    versioning_remote::get_ahead_behind(&root, &branch, &remote_name).map_err(|e| e.to_string())
 }
 
 /// Try to get a GitHub token from the `gh` CLI (internal helper).
@@ -307,7 +291,11 @@ fn try_gh_token() -> Option<String> {
     match cmd.output() {
         Ok(output) if output.status.success() => {
             let token = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            if token.is_empty() { None } else { Some(token) }
+            if token.is_empty() {
+                None
+            } else {
+                Some(token)
+            }
         }
         _ => None,
     }
@@ -343,8 +331,7 @@ pub async fn list_remote_branches(
     state: State<'_, AppState>,
 ) -> Result<Vec<String>, String> {
     let root = versioning_root(&state)?;
-    versioning_remote::list_remote_branches(&root, &remote_name)
-        .map_err(|e| e.to_string())
+    versioning_remote::list_remote_branches(&root, &remote_name).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -367,8 +354,7 @@ pub async fn save_editor_state(
     let root = versioning_root(&state)?;
     let dir = root.join(".git").join("cutready-editor-state");
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    std::fs::write(dir.join(format!("{}.json", commit_id)), editor_state)
-        .map_err(|e| e.to_string())
+    std::fs::write(dir.join(format!("{}.json", commit_id)), editor_state).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -377,9 +363,14 @@ pub async fn load_editor_state(
     state: State<'_, AppState>,
 ) -> Result<Option<String>, String> {
     let root = versioning_root(&state)?;
-    let path = root.join(".git").join("cutready-editor-state").join(format!("{}.json", commit_id));
+    let path = root
+        .join(".git")
+        .join("cutready-editor-state")
+        .join(format!("{}.json", commit_id));
     if path.exists() {
-        std::fs::read_to_string(&path).map(Some).map_err(|e| e.to_string())
+        std::fs::read_to_string(&path)
+            .map(Some)
+            .map_err(|e| e.to_string())
     } else {
         Ok(None)
     }
@@ -398,8 +389,7 @@ pub async fn diff_snapshots(
     state: State<'_, AppState>,
 ) -> Result<Vec<versioning::DiffEntry>, String> {
     let root = versioning_root(&state)?;
-    versioning::diff_snapshots(&root, &from_commit, &to_commit)
-        .map_err(|e| e.to_string())
+    versioning::diff_snapshots(&root, &from_commit, &to_commit).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -419,8 +409,15 @@ pub async fn check_large_files(
     let root = versioning_root(&state)?;
     let threshold_bytes = threshold_mb * 1024 * 1024;
     let mut large: Vec<(String, u64)> = Vec::new();
-    fn walk(dir: &std::path::Path, root: &std::path::Path, threshold: u64, out: &mut Vec<(String, u64)>) {
-        let Ok(entries) = std::fs::read_dir(dir) else { return };
+    fn walk(
+        dir: &std::path::Path,
+        root: &std::path::Path,
+        threshold: u64,
+        out: &mut Vec<(String, u64)>,
+    ) {
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return;
+        };
         for entry in entries.flatten() {
             let path = entry.path();
             let name = path.file_name().unwrap_or_default().to_string_lossy();
@@ -448,8 +445,7 @@ pub async fn clone_from_url(
     token: Option<String>,
 ) -> Result<(), String> {
     let dest_path = std::path::PathBuf::from(&dest);
-    versioning_remote::clone_from_url(&url, &dest_path, token.as_deref())
-        .map_err(|e| e.to_string())
+    versioning_remote::clone_from_url(&url, &dest_path, token.as_deref()).map_err(|e| e.to_string())
 }
 
 // ─── Merge operations ───────────────────────────────────────────

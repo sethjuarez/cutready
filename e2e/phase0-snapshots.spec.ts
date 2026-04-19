@@ -13,9 +13,8 @@ test.describe("Phase 0 — Snapshot UX", () => {
     // Toggle secondary panel via keyboard shortcut
     await page.keyboard.press("Control+Shift+B");
     await page.waitForTimeout(300);
-    // Open the overflow menu and switch to Snapshots tab
-    await page.locator('button[title="More options"]').click();
-    await page.getByText("Snapshots").click();
+    // Switch to Snapshots via the secondary rail
+    await page.getByRole("button", { name: "Snapshots", exact: true }).click();
     await page.waitForTimeout(500);
   });
 

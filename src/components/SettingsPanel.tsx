@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useSettings, useSettingsStore, type AgentPreset } from "../hooks/useSettings";
+import { useTheme, type ThemePreference } from "../hooks/useTheme";
 import { invoke } from "@tauri-apps/api/core";
 import { getVersion } from "@tauri-apps/api/app";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
@@ -42,10 +43,11 @@ interface AuthCodeFlowInit {
   port: number;
 }
 
-type SettingsTab = "ai" | "agents" | "memory" | "display" | "feedback" | "repository" | "updates";
+type SettingsTab = "ai" | "agents" | "memory" | "display" | "themes" | "feedback" | "repository" | "updates";
 
 import { inputClass, tabBtnClass } from "../styles";
 import { FoundryResourcePicker } from "./FoundryResourcePicker";
+import { THEME_PALETTES, type ThemePalette } from "../theme/appThemePalettes";
 
 /** Build the provider config payload for IPC calls like list_models / agent_chat_with_tools. */
 export function buildProviderConfig(settings: {
@@ -174,11 +176,12 @@ export function SettingsPanel({ mode = "global" }: { mode?: "global" | "workspac
   const canFetchModels = canFetchModelsFor(settings);
 
   // Tabs depend on mode
-  const globalTabs = ["display", "ai", "agents", "feedback", "updates"] as const;
-  const workspaceTabs = ["repository", "memory", "ai", "agents", "display"] as const;
+  const globalTabs = ["display", "themes", "ai", "agents", "feedback", "updates"] as const;
+  const workspaceTabs = ["repository", "memory", "display", "themes", "ai", "agents"] as const;
   const tabs = mode === "workspace" ? workspaceTabs : globalTabs;
   const tabLabels: Record<string, string> = {
     display: "Display",
+    themes: "Themes",
     ai: "AI Provider",
     agents: "Agents",
     memory: "Memory",
@@ -217,6 +220,9 @@ export function SettingsPanel({ mode = "global" }: { mode?: "global" | "workspac
       {/* Tab content */}
       {activeTab === "display" && (
         <DisplayTab settings={settings} updateSetting={updateSetting} />
+      )}
+      {activeTab === "themes" && (
+        <ThemesTab settings={settings} updateSetting={updateSetting} />
       )}
       {activeTab === "ai" && (
         <AIProviderTab
@@ -269,6 +275,129 @@ const fontSizes = [
   { value: 18, label: "XL (18px)" },
 ];
 
+function tokenRgb(value: string): string {
+  return `rgb(${value})`;
+}
+
+function ThemePaletteCard({
+  palette,
+  selected,
+  onSelect,
+  theme,
+}: {
+  palette: ThemePalette;
+  selected: boolean;
+  onSelect: () => void;
+  theme: "light" | "dark";
+}) {
+  const preview = palette[theme];
+  const swatches = [preview.surface, preview.surfaceAlt, preview.accent, preview.secondary].map(tokenRgb);
+  return (
+    <button
+      onClick={onSelect}
+      className={`group overflow-hidden rounded-xl border text-left transition-all ${
+        selected
+          ? "border-[rgb(var(--color-accent))] ring-1 ring-[rgb(var(--color-accent))]/40"
+          : "border-[rgb(var(--color-border))] hover:border-[rgb(var(--color-accent))]/60"
+      }`}
+      aria-pressed={selected}
+    >
+      <div
+        className="h-24 p-3"
+        style={{
+          backgroundColor: tokenRgb(preview.surface),
+          color: tokenRgb(preview.text),
+        }}
+      >
+        <div className="flex items-center gap-1.5">
+          <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: tokenRgb(preview.textSecondary) }} />
+          <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: tokenRgb(preview.textSecondary) }} />
+          <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: tokenRgb(preview.textSecondary) }} />
+          <span className="ml-auto h-2 w-8 rounded-full" style={{ backgroundColor: tokenRgb(preview.accent) }} />
+        </div>
+        <div className="mt-4 grid grid-cols-[0.65fr_1fr] gap-3">
+          <div className="space-y-2">
+            <div className="h-2 w-16 rounded-full" style={{ backgroundColor: tokenRgb(preview.surfaceAlt) }} />
+            <div className="h-2 w-12 rounded-full" style={{ backgroundColor: tokenRgb(preview.surfaceAlt) }} />
+            <div className="h-2 w-9 rounded-full" style={{ backgroundColor: tokenRgb(preview.surfaceAlt) }} />
+          </div>
+          <div className="space-y-2">
+            <div className="h-2 w-full rounded-full" style={{ backgroundColor: tokenRgb(preview.borderSubtle) }} />
+            <div className="h-2 w-5/6 rounded-full" style={{ backgroundColor: tokenRgb(preview.borderSubtle) }} />
+            <div className="flex gap-1">
+              {swatches.map((swatch) => (
+                <span key={swatch} className="h-1.5 flex-1 rounded-full" style={{ backgroundColor: swatch }} />
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+      <div className="flex items-center gap-2 bg-[rgb(var(--color-surface-alt))] px-3 py-2">
+        <div className="min-w-0">
+          <div className="truncate text-sm font-medium text-[rgb(var(--color-text))]">{palette.name}</div>
+          <div className="truncate text-[10px] text-[rgb(var(--color-text-secondary))]">{palette.description}</div>
+        </div>
+        {selected && (
+          <span className="ml-auto rounded-full bg-[rgb(var(--color-accent))]/10 px-2 py-0.5 text-[10px] font-medium text-[rgb(var(--color-accent))]">
+            Active
+          </span>
+        )}
+      </div>
+    </button>
+  );
+}
+
+function ThemesTab({ settings, updateSetting }: {
+  settings: ReturnType<typeof useSettings>["settings"];
+  updateSetting: ReturnType<typeof useSettings>["updateSetting"];
+}) {
+  const { preference, theme, setTheme } = useTheme();
+
+  return (
+    <div className="flex flex-col gap-6">
+      <fieldset className="flex flex-col gap-3">
+        <div>
+          <label className="text-sm font-medium">Theme Mode</label>
+          <p className="mt-1 text-xs text-[rgb(var(--color-text-secondary))]">Choose light, dark, or follow your system appearance.</p>
+        </div>
+        <div className="inline-flex w-fit rounded-xl bg-[rgb(var(--color-surface-alt))] p-1 border border-[rgb(var(--color-border))]">
+          {(["system", "light", "dark"] as ThemePreference[]).map((mode) => (
+            <button
+              key={mode}
+              onClick={() => setTheme(mode)}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium capitalize transition-colors ${
+                preference === mode
+                  ? "bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text))] shadow-sm"
+                  : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))]"
+              }`}
+            >
+              {mode}
+            </button>
+          ))}
+        </div>
+      </fieldset>
+
+      <fieldset className="flex flex-col gap-3">
+        <div>
+          <label className="text-sm font-medium">Theme Palette</label>
+          <p className="mt-1 text-xs text-[rgb(var(--color-text-secondary))]">Pick the token palette used across app surfaces, borders, text, and accent states.</p>
+        </div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {THEME_PALETTES.map((palette) => (
+            <ThemePaletteCard
+              key={palette.id}
+              palette={palette}
+              selected={settings.displayThemePalette === palette.id}
+              onSelect={() => updateSetting("displayThemePalette", palette.id)}
+              theme={theme}
+            />
+          ))}
+        </div>
+      </fieldset>
+    </div>
+  );
+}
+
 function DisplayTab({ settings, updateSetting }: {
   settings: ReturnType<typeof useSettings>["settings"];
   updateSetting: ReturnType<typeof useSettings>["updateSetting"];
@@ -290,7 +419,7 @@ function DisplayTab({ settings, updateSetting }: {
               onClick={() => updateSetting("displayFontFamily", f.id)}
               className={`flex-1 flex flex-col items-center gap-1 px-3 py-2.5 rounded-lg text-sm transition-colors border ${
                 settings.displayFontFamily === f.id
-                  ? "bg-[rgb(var(--color-accent))] text-white border-[rgb(var(--color-accent))]"
+                  ? "bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))] border-[rgb(var(--color-accent))]"
                   : "bg-[rgb(var(--color-surface-alt))] border-[rgb(var(--color-border))] text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))]"
               }`}
             >
@@ -350,7 +479,7 @@ function DisplayTab({ settings, updateSetting }: {
               onClick={() => updateSetting("displayRowDensity", d)}
               className={`px-3 py-1.5 rounded-lg text-sm capitalize transition-colors border ${
                 settings.displayRowDensity === d
-                  ? "bg-[rgb(var(--color-accent))] text-white border-[rgb(var(--color-accent))]"
+                  ? "bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))] border-[rgb(var(--color-accent))]"
                   : "bg-[rgb(var(--color-surface-alt))] border-[rgb(var(--color-border))] text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))]"
               }`}
             >
@@ -371,7 +500,7 @@ function DisplayTab({ settings, updateSetting }: {
               onClick={() => updateSetting("displayRowColors", c)}
               className={`px-3 py-1.5 rounded-lg text-sm capitalize transition-colors border ${
                 settings.displayRowColors === c
-                  ? "bg-[rgb(var(--color-accent))] text-white border-[rgb(var(--color-accent))]"
+                  ? "bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))] border-[rgb(var(--color-accent))]"
                   : "bg-[rgb(var(--color-surface-alt))] border-[rgb(var(--color-border))] text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))]"
               }`}
             >
@@ -392,7 +521,7 @@ function DisplayTab({ settings, updateSetting }: {
               onClick={() => updateSetting("displayEditorWidth", w)}
               className={`px-3 py-1.5 rounded-lg text-sm capitalize transition-colors border ${
                 settings.displayEditorWidth === w
-                  ? "bg-[rgb(var(--color-accent))] text-white border-[rgb(var(--color-accent))]"
+                  ? "bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))] border-[rgb(var(--color-accent))]"
                   : "bg-[rgb(var(--color-surface-alt))] border-[rgb(var(--color-border))] text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))]"
               }`}
             >
@@ -466,8 +595,8 @@ function AIProviderTab({ settings, updateSetting, isAzure, isFoundry, isAnthropi
                 onClick={() => updateSetting("aiAuthMode", mode)}
                 className={`px-3 py-1.5 rounded-lg text-sm transition-colors border ${
                   settings.aiAuthMode === mode
-                    ? "bg-[var(--color-accent)] text-white border-[var(--color-accent)]"
-                    : "bg-[var(--color-surface-alt)] border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"
+                    ? "bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))] border-[rgb(var(--color-accent))]"
+                    : "bg-[rgb(var(--color-surface-alt))] border-[rgb(var(--color-border))] text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))]"
                 }`}
               >
                 {mode === "api_key" ? "API Key" : "Azure Sign-in"}
@@ -582,7 +711,7 @@ function AIProviderTab({ settings, updateSetting, isAzure, isFoundry, isAnthropi
               <button
                 onClick={startOAuthFlow}
                 disabled={oauthStatus === "waiting" || oauthStatus === "polling"}
-                className="px-4 py-2 rounded-lg bg-[#0078d4] text-white text-sm font-medium hover:bg-[#106ebe] disabled:opacity-50 transition-colors w-fit"
+                className="px-4 py-2 rounded-lg bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))] text-sm font-medium hover:bg-[rgb(var(--color-accent-hover))] disabled:opacity-50 transition-colors w-fit"
               >
                 {oauthStatus === "waiting"
                   ? "Starting…"
@@ -863,7 +992,7 @@ function AgentsTab({ settings, updateSetting }: {
         <button
           onClick={addAgent}
           disabled={!newName.trim() || !newPrompt.trim()}
-          className="px-4 py-2 rounded-lg bg-[rgb(var(--color-accent))] text-white text-sm font-medium hover:opacity-90 disabled:opacity-40 transition-opacity w-fit"
+          className="px-4 py-2 rounded-lg bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))] text-sm font-medium hover:opacity-90 disabled:opacity-40 transition-opacity w-fit"
         >
           Add Agent
         </button>
@@ -1289,7 +1418,7 @@ function RepositoryTab({ settings, updateSetting }: {
           <button
             onClick={handleTestConnection}
             disabled={testStatus === "testing"}
-            className="px-3 py-2 rounded-lg text-xs font-medium bg-[rgb(var(--color-accent))] text-white hover:opacity-90 transition-opacity disabled:opacity-50"
+            className="px-3 py-2 rounded-lg text-xs font-medium bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))] hover:opacity-90 transition-opacity disabled:opacity-50"
           >
             {testStatus === "testing" ? "Testing\u2026" : "Test"}
           </button>
@@ -1662,7 +1791,7 @@ function UpdatesTab() {
             ) : (
               <button
                 onClick={handleInstall}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-[rgb(var(--color-accent))] text-white hover:bg-[rgb(var(--color-accent-hover))] transition-colors"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))] hover:bg-[rgb(var(--color-accent-hover))] transition-colors"
               >
                 <Download className="w-3.5 h-3.5" />
                 Download &amp; Install

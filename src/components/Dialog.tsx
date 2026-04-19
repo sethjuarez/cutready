@@ -13,7 +13,7 @@ interface DialogProps {
   width?: string;
   /** Optional id for aria-labelledby */
   labelledBy?: string;
-  /** Backdrop opacity, default "bg-black/25" */
+  /** Backdrop opacity, default tokenized scrim */
   backdropClass?: string;
 }
 
@@ -28,7 +28,7 @@ export function Dialog({
   topOffset = "20vh",
   width,
   labelledBy,
-  backdropClass = "bg-black/25",
+  backdropClass = "bg-[rgb(var(--color-overlay-scrim)/0.25)]",
 }: DialogProps) {
   const contentRef = useRef<HTMLDivElement>(null);
 

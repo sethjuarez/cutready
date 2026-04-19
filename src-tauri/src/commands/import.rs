@@ -65,7 +65,14 @@ pub async fn import_docx(
         .and_then(|s| s.to_str())
         .unwrap_or("imported-doc");
     let slug = slugify(filename);
-    let relative_path = format!("{}.md", if slug.is_empty() { "imported-doc" } else { &slug });
+    let relative_path = format!(
+        "{}.md",
+        if slug.is_empty() {
+            "imported-doc"
+        } else {
+            &slug
+        }
+    );
 
     let final_path = resolve_import_path(&root, &relative_path, "md", conflict)?;
     let abs_final = project::safe_resolve(&root, &final_path).map_err(|e| e.to_string())?;
@@ -91,7 +98,14 @@ pub async fn import_pdf(
         .and_then(|s| s.to_str())
         .unwrap_or("imported-pdf");
     let slug = slugify(filename);
-    let relative_path = format!("{}.md", if slug.is_empty() { "imported-pdf" } else { &slug });
+    let relative_path = format!(
+        "{}.md",
+        if slug.is_empty() {
+            "imported-pdf"
+        } else {
+            &slug
+        }
+    );
 
     let final_path = resolve_import_path(&root, &relative_path, "md", conflict)?;
     let abs_final = project::safe_resolve(&root, &final_path).map_err(|e| e.to_string())?;
@@ -119,7 +133,11 @@ pub async fn import_pptx(
     let slug = slugify(filename);
     let relative_path = format!(
         "{}.md",
-        if slug.is_empty() { "imported-presentation" } else { &slug }
+        if slug.is_empty() {
+            "imported-presentation"
+        } else {
+            &slug
+        }
     );
 
     let final_path = resolve_import_path(&root, &relative_path, "md", conflict)?;
@@ -148,7 +166,14 @@ pub async fn import_markdown(
         .and_then(|s| s.to_str())
         .unwrap_or("imported-note");
     let slug = slugify(filename);
-    let relative_path = format!("{}.md", if slug.is_empty() { "imported-note" } else { &slug });
+    let relative_path = format!(
+        "{}.md",
+        if slug.is_empty() {
+            "imported-note"
+        } else {
+            &slug
+        }
+    );
 
     let final_path = resolve_import_path(&root, &relative_path, "md", conflict)?;
 
@@ -173,8 +198,7 @@ pub async fn import_sketch(
     let conflict = conflict.as_deref().unwrap_or("check");
     let overwrite = conflict == "overwrite";
     let source_path = Path::new(&file_path);
-    let data =
-        fs::read_to_string(source_path).map_err(|e| format!("Failed to read file: {e}"))?;
+    let data = fs::read_to_string(source_path).map_err(|e| format!("Failed to read file: {e}"))?;
 
     let mut sketch: crate::models::sketch::Sketch =
         serde_json::from_str(&data).map_err(|e| format!("Invalid sketch file: {e}"))?;
@@ -184,7 +208,14 @@ pub async fn import_sketch(
         .and_then(|s| s.to_str())
         .unwrap_or("imported-sketch");
     let slug = slugify(filename);
-    let relative_path = format!("{}.sk", if slug.is_empty() { "imported-sketch" } else { &slug });
+    let relative_path = format!(
+        "{}.sk",
+        if slug.is_empty() {
+            "imported-sketch"
+        } else {
+            &slug
+        }
+    );
 
     let final_path = resolve_import_path(&root, &relative_path, "sk", conflict)?;
 
@@ -208,8 +239,7 @@ pub async fn import_storyboard(
     let root = project_root(&state)?;
     let conflict = conflict.as_deref().unwrap_or("check");
     let source_path = Path::new(&file_path);
-    let data =
-        fs::read_to_string(source_path).map_err(|e| format!("Failed to read file: {e}"))?;
+    let data = fs::read_to_string(source_path).map_err(|e| format!("Failed to read file: {e}"))?;
 
     let storyboard: crate::models::sketch::Storyboard =
         serde_json::from_str(&data).map_err(|e| format!("Invalid storyboard file: {e}"))?;
@@ -221,7 +251,11 @@ pub async fn import_storyboard(
     let slug = slugify(filename);
     let relative_path = format!(
         "{}.sb",
-        if slug.is_empty() { "imported-storyboard" } else { &slug }
+        if slug.is_empty() {
+            "imported-storyboard"
+        } else {
+            &slug
+        }
     );
 
     let final_path = resolve_import_path(&root, &relative_path, "sb", conflict)?;
@@ -297,7 +331,11 @@ fn copy_note_assets(content: &str, source_root: &Path, dest_root: &Path, overwri
         let mut rest = content;
         while let Some(pos) = rest.find(pattern) {
             let after = &rest[pos + pattern.len()..];
-            let end_char = if *pattern == "](" { ')' } else { pattern.chars().last().unwrap() };
+            let end_char = if *pattern == "](" {
+                ')'
+            } else {
+                pattern.chars().last().unwrap()
+            };
             if let Some(end) = after.find(end_char) {
                 let path = after[..end].trim();
                 if path.contains(".cutready/screenshots/") || path.contains(".cutready/visuals/") {

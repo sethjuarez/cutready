@@ -179,7 +179,9 @@ mod tests {
         let mut session = RecordedSession::new(RecordingMode::FreeForm);
         for i in 0..5 {
             session.actions.push(CapturedAction {
-                action: Action::Wait { duration_ms: i * 100 },
+                action: Action::Wait {
+                    duration_ms: i * 100,
+                },
                 metadata: ActionMetadata {
                     captured_screenshot: None,
                     selector_strategies: vec![],

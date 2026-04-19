@@ -142,6 +142,8 @@ interface AppStoreState {
   activeNotePath: string | null;
   /** The full active note content (loaded when editing). */
   activeNoteContent: string | null;
+  /** Whether the active note is locked against editing. */
+  activeNoteLocked: boolean;
   /** Note paths currently in preview mode (persists across tab switches). */
   notePreviewPaths: Set<string>;
 
@@ -372,6 +374,8 @@ interface AppStoreState {
   openNote: (notePath: string) => Promise<void>;
   /** Update the active note content. */
   updateNote: (content: string) => Promise<void>;
+  /** Lock or unlock a note. */
+  setNoteLocked: (notePath: string, locked: boolean) => Promise<void>;
   /** Delete a note. */
   deleteNote: (notePath: string) => Promise<void>;
   /** Close the active note. */
@@ -584,6 +588,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   notes: [],
   activeNotePath: null,
   activeNoteContent: null,
+  activeNoteLocked: false,
   notePreviewPaths: new Set(),
   assets: [],
   chatMessages: [],
@@ -714,7 +719,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         get().openNote(nextTab.path);
       }
     } else {
-      set({ activeSketchPath: null, activeSketch: null, activeStoryboardPath: null, activeStoryboard: null, activeNotePath: null, activeNoteContent: null });
+      set({ activeSketchPath: null, activeSketch: null, activeStoryboardPath: null, activeStoryboard: null, activeNotePath: null, activeNoteContent: null, activeNoteLocked: false });
     }
     get()._persistTabs();
   },
@@ -753,7 +758,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       openTabs: [], activeTabId: null, splitTabs: [], splitActiveTabId: null, activeEditorGroup: "main",
       activeSketchPath: null, activeSketch: null,
       activeStoryboardPath: null, activeStoryboard: null,
-      activeNotePath: null, activeNoteContent: null,
+      activeNotePath: null, activeNoteContent: null, activeNoteLocked: false,
     });
     get()._persistTabs();
   },
@@ -763,16 +768,16 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     if (!tab) return;
     set({ activeTabId: tabId });
     if (tab.type === "sketch") {
-      set({ activeStoryboardPath: null, activeStoryboard: null, activeNotePath: null, activeNoteContent: null });
+      set({ activeStoryboardPath: null, activeStoryboard: null, activeNotePath: null, activeNoteContent: null, activeNoteLocked: false });
       get().openSketch(tab.path);
     } else if (tab.type === "storyboard") {
-      set({ activeSketchPath: null, activeSketch: null, activeNotePath: null, activeNoteContent: null });
+      set({ activeSketchPath: null, activeSketch: null, activeNotePath: null, activeNoteContent: null, activeNoteLocked: false });
       get().openStoryboard(tab.path);
     } else if (tab.type === "note") {
       set({ activeSketchPath: null, activeSketch: null, activeStoryboardPath: null, activeStoryboard: null });
       get().openNote(tab.path);
     } else if (tab.type === "history") {
-      set({ activeSketchPath: null, activeSketch: null, activeStoryboardPath: null, activeStoryboard: null, activeNotePath: null, activeNoteContent: null });
+      set({ activeSketchPath: null, activeSketch: null, activeStoryboardPath: null, activeStoryboard: null, activeNotePath: null, activeNoteContent: null, activeNoteLocked: false });
     }
     get()._persistTabs();
   },
@@ -853,7 +858,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
 
     // Load content for the new active main tab (or clear)
     if (newActiveTabId) get().setActiveTab(newActiveTabId);
-    else set({ activeSketchPath: null, activeSketch: null, activeStoryboardPath: null, activeStoryboard: null, activeNotePath: null, activeNoteContent: null });
+    else set({ activeSketchPath: null, activeSketch: null, activeStoryboardPath: null, activeStoryboard: null, activeNotePath: null, activeNoteContent: null, activeNoteLocked: false });
 
     get()._persistTabs();
   },
@@ -945,6 +950,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         activeStoryboard: null,
         activeNotePath: null,
         activeNoteContent: null,
+        activeNoteLocked: false,
         chatMessages: [],
         chatSessionPath: null,
       });
@@ -981,6 +987,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         activeStoryboard: null,
         activeNotePath: null,
         activeNoteContent: null,
+        activeNoteLocked: false,
       });
       localStorage.setItem("cutready:lastProject", path);
       // Load multi-project state
@@ -1052,6 +1059,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       notes: [],
       activeNotePath: null,
       activeNoteContent: null,
+      activeNoteLocked: false,
       assets: [],
       chatMessages: [],
       chatSessionPath: null,
@@ -1134,6 +1142,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         activeStoryboard: null,
         activeNotePath: null,
         activeNoteContent: null,
+        activeNoteLocked: false,
         chatMessages: [],
         chatSessionPath: null,
       });
@@ -1417,6 +1426,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       set({
         activeNotePath: relativePath,
         activeNoteContent: "",
+        activeNoteLocked: false,
         activeSketchPath: null,
         activeSketch: null,
         activeStoryboardPath: null,
@@ -1431,11 +1441,15 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
 
   openNote: async (notePath) => {
     try {
-      const content = await invoke<string>("get_note", { relativePath: notePath });
+      const [content, lock] = await Promise.all([
+        invoke<string>("get_note", { relativePath: notePath }),
+        invoke<{ locked: boolean }>("get_note_lock", { relativePath: notePath }),
+      ]);
       const title = notePath.replace(/\.md$/, "").split("/").pop() ?? notePath;
       set({
         activeNotePath: notePath,
         activeNoteContent: content,
+        activeNoteLocked: lock.locked,
         activeSketchPath: null,
         activeSketch: null,
         activeStoryboardPath: null,
@@ -1448,8 +1462,9 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   },
 
   updateNote: async (content) => {
-    const { activeNotePath } = get();
+    const { activeNotePath, activeNoteLocked } = get();
     if (!activeNotePath) return;
+    if (activeNoteLocked) return;
     try {
       await invoke("update_note", { relativePath: activeNotePath, content });
       set({ activeNoteContent: content, isDirty: true });
@@ -1458,12 +1473,23 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     }
   },
 
+  setNoteLocked: async (notePath, locked) => {
+    try {
+      const lock = await invoke<{ locked: boolean }>("set_note_lock", { relativePath: notePath, locked });
+      if (get().activeNotePath === notePath) {
+        set({ activeNoteLocked: lock.locked });
+      }
+    } catch (err) {
+      console.error("Failed to update note lock:", err);
+    }
+  },
+
   deleteNote: async (notePath) => {
     try {
       await invoke("delete_note", { relativePath: notePath });
       const { activeNotePath, openTabs } = get();
       if (activeNotePath === notePath) {
-        set({ activeNotePath: null, activeNoteContent: null });
+        set({ activeNotePath: null, activeNoteContent: null, activeNoteLocked: false });
       }
       const tab = openTabs.find((t) => t.path === notePath && t.type === "note");
       if (tab) get().closeTab(tab.id);
@@ -1476,7 +1502,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   },
 
   closeNote: () => {
-    set({ activeNotePath: null, activeNoteContent: null });
+    set({ activeNotePath: null, activeNoteContent: null, activeNoteLocked: false });
   },
 
   setNotePreview: (notePath, preview) => {
@@ -1705,7 +1731,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   discardChanges: async () => {
     try {
       // Clear active editors FIRST to cancel pending debounced saves
-      set({ activeSketch: null, activeSketchPath: null, activeStoryboard: null, activeStoryboardPath: null, activeNotePath: null, activeNoteContent: null });
+      set({ activeSketch: null, activeSketchPath: null, activeStoryboard: null, activeStoryboardPath: null, activeNotePath: null, activeNoteContent: null, activeNoteLocked: false });
       await invoke("discard_changes");
       set({ isDirty: false });
       // Reload all file lists

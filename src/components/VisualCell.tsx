@@ -175,8 +175,8 @@ export default function VisualCell({ visualPath, mode, onClick, className, contr
         </ErrorBoundary>
 
         {/* Hover overlay with play icon */}
-        <div className="absolute inset-0 bg-black/30 opacity-0 group-hover/vis:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
-          <Play className="w-5 h-5 text-white/90" />
+        <div className="absolute inset-0 bg-[rgb(var(--color-media-control-bg)/0.3)] opacity-0 group-hover/vis:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
+          <Play className="w-5 h-5 text-[rgb(var(--color-media-control-fg)/0.9)]" />
         </div>
       </div>
     );

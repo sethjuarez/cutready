@@ -49,7 +49,7 @@ export function ProjectImagePicker({ onSelect, onCancel }: ProjectImagePickerPro
 
   return (
     <div
-      className="fixed inset-0 z-modal flex items-center justify-center bg-black/60 backdrop-blur-sm"
+      className="fixed inset-0 z-modal flex items-center justify-center bg-[rgb(var(--color-overlay-scrim)/0.6)] backdrop-blur-sm"
       onClick={onCancel}
     >
       <div
@@ -156,7 +156,7 @@ export function ProjectImagePicker({ onSelect, onCancel }: ProjectImagePickerPro
           <button
             onClick={handleConfirm}
             disabled={!selected}
-            className="px-4 py-1.5 rounded-lg text-xs font-medium bg-[rgb(var(--color-accent))] text-white hover:bg-[rgb(var(--color-accent-hover))] disabled:opacity-40 transition-colors"
+            className="px-4 py-1.5 rounded-lg text-xs font-medium bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))] hover:bg-[rgb(var(--color-accent-hover))] disabled:opacity-40 transition-colors"
           >
             Insert
           </button>

@@ -72,7 +72,7 @@ export function MergeConflictPanel() {
           <button
             onClick={handleApply}
             disabled={!allResolved || applying}
-            className="px-4 py-1.5 rounded-lg text-xs font-medium bg-[rgb(var(--color-accent))] text-white hover:bg-[rgb(var(--color-accent-hover))] disabled:opacity-40 transition-colors"
+            className="px-4 py-1.5 rounded-lg text-xs font-medium bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))] hover:bg-[rgb(var(--color-accent-hover))] disabled:opacity-40 transition-colors"
           >
             {applying ? "Combining…" : "Apply & Combine"}
           </button>

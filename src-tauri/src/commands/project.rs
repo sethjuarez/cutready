@@ -20,7 +20,9 @@ fn project_root(state: &AppState) -> Result<std::path::PathBuf, String> {
 }
 
 /// Helper: get both project root and repo root from current state.
-fn project_and_repo_root(state: &AppState) -> Result<(std::path::PathBuf, std::path::PathBuf), String> {
+fn project_and_repo_root(
+    state: &AppState,
+) -> Result<(std::path::PathBuf, std::path::PathBuf), String> {
     let current = state.current_project.lock().map_err(|e| e.to_string())?;
     let view = current.as_ref().ok_or("No project is currently open")?;
     Ok((view.root.clone(), view.repo_root.clone()))
@@ -125,9 +127,7 @@ pub async fn close_project(state: State<'_, AppState>) -> Result<(), String> {
 
 /// Get recent projects from the store.
 #[tauri::command]
-pub async fn get_recent_projects(
-    app: tauri::AppHandle,
-) -> Result<Vec<RecentProject>, String> {
+pub async fn get_recent_projects(app: tauri::AppHandle) -> Result<Vec<RecentProject>, String> {
     let store = app.store(STORE_FILE).map_err(|e| e.to_string())?;
 
     let recent: Vec<RecentProject> = store
@@ -140,19 +140,13 @@ pub async fn get_recent_projects(
 
 /// Add a project to the recent projects list.
 #[tauri::command]
-pub async fn add_recent_project(
-    path: String,
-    app: tauri::AppHandle,
-) -> Result<(), String> {
+pub async fn add_recent_project(path: String, app: tauri::AppHandle) -> Result<(), String> {
     add_to_recent_projects(&app, &path, None).map_err(|e| e.to_string())
 }
 
 /// Remove a project from the recent projects list.
 #[tauri::command]
-pub async fn remove_recent_project(
-    path: String,
-    app: tauri::AppHandle,
-) -> Result<(), String> {
+pub async fn remove_recent_project(path: String, app: tauri::AppHandle) -> Result<(), String> {
     let store = app.store(STORE_FILE).map_err(|e| e.to_string())?;
 
     let mut recent: Vec<RecentProject> = store
@@ -172,9 +166,7 @@ pub async fn remove_recent_project(
 
 /// Get the last parent folder used (for file dialogs).
 #[tauri::command]
-pub async fn get_last_parent_folder(
-    app: tauri::AppHandle,
-) -> Result<Option<String>, String> {
+pub async fn get_last_parent_folder(app: tauri::AppHandle) -> Result<Option<String>, String> {
     let store = app.store(STORE_FILE).map_err(|e| e.to_string())?;
 
     let folder: Option<String> = store
@@ -308,9 +300,7 @@ pub async fn set_workspace_state(
 
 /// List all files and directories in the project folder.
 #[tauri::command]
-pub async fn list_all_files(
-    state: State<'_, AppState>,
-) -> Result<Vec<project::FileEntry>, String> {
+pub async fn list_all_files(state: State<'_, AppState>) -> Result<Vec<project::FileEntry>, String> {
     let root = project_root(&state)?;
     project::scan_all_files(&root).map_err(|e| e.to_string())
 }
@@ -326,18 +316,14 @@ fn repo_root(state: &AppState) -> Result<PathBuf, String> {
 
 /// List all projects in the current repo.
 #[tauri::command]
-pub async fn list_projects(
-    state: State<'_, AppState>,
-) -> Result<Vec<ProjectEntry>, String> {
+pub async fn list_projects(state: State<'_, AppState>) -> Result<Vec<ProjectEntry>, String> {
     let root = repo_root(&state)?;
     Ok(project::list_projects(&root))
 }
 
 /// Whether the current repo has multiple projects.
 #[tauri::command]
-pub async fn is_multi_project(
-    state: State<'_, AppState>,
-) -> Result<bool, String> {
+pub async fn is_multi_project(state: State<'_, AppState>) -> Result<bool, String> {
     let root = repo_root(&state)?;
     Ok(project::is_multi_project(&root))
 }
@@ -387,8 +373,7 @@ pub async fn create_project_in_repo(
     state: State<'_, AppState>,
 ) -> Result<ProjectEntry, String> {
     let root = repo_root(&state)?;
-    project::create_project_in_repo(&root, &name, description.as_deref())
-        .map_err(|e| e.to_string())
+    project::create_project_in_repo(&root, &name, description.as_deref()).map_err(|e| e.to_string())
 }
 
 /// Delete a project from the current repo manifest.
@@ -447,8 +432,8 @@ pub async fn rename_project(
 
     // Single-project mode: renaming the sole project triggers migration
     if project_path == "." && !project::is_multi_project(&root) {
-        let entry = project::migrate_to_multi_project(&root, &new_name)
-            .map_err(|e| e.to_string())?;
+        let entry =
+            project::migrate_to_multi_project(&root, &new_name).map_err(|e| e.to_string())?;
 
         // Update current project to point at the new subdirectory
         let mut current = state.current_project.lock().map_err(|e| e.to_string())?;
@@ -482,7 +467,11 @@ pub async fn rename_project(
 
     // Update manifest: both name and path
     if let Some(mut manifest) = project::read_manifest(&root) {
-        if let Some(entry) = manifest.projects.iter_mut().find(|p| p.path == project_path) {
+        if let Some(entry) = manifest
+            .projects
+            .iter_mut()
+            .find(|p| p.path == project_path)
+        {
             entry.name = new_name.clone();
             entry.path = new_path.clone();
         }
@@ -510,8 +499,8 @@ pub async fn migrate_to_multi_project(
     state: State<'_, AppState>,
 ) -> Result<ProjectEntry, String> {
     let root = repo_root(&state)?;
-    let entry = project::migrate_to_multi_project(&root, &existing_name)
-        .map_err(|e| e.to_string())?;
+    let entry =
+        project::migrate_to_multi_project(&root, &existing_name).map_err(|e| e.to_string())?;
 
     // Update current project to point at the new subdirectory
     let view = ProjectView::in_repo(root, &entry.path, entry.name.clone());
@@ -546,10 +535,16 @@ pub async fn transfer_asset(
 
     // Validate file extension on both source and dest
     if !ALLOWED_EXTS.iter().any(|ext| source_rel.ends_with(ext)) {
-        return Err(format!("Only .sk, .sb, and .md files can be transferred (got '{}')", source_rel));
+        return Err(format!(
+            "Only .sk, .sb, and .md files can be transferred (got '{}')",
+            source_rel
+        ));
     }
     if !ALLOWED_EXTS.iter().any(|ext| dest_rel.ends_with(ext)) {
-        return Err(format!("Destination must end with .sk, .sb, or .md (got '{}')", dest_rel));
+        return Err(format!(
+            "Destination must end with .sk, .sb, or .md (got '{}')",
+            dest_rel
+        ));
     }
 
     // Resolve dest project root — validated against the manifest to prevent arbitrary paths
@@ -565,10 +560,9 @@ pub async fn transfer_asset(
     };
 
     // Resolve both paths safely
-    let source = project::safe_resolve(&source_project_root, &source_rel)
-        .map_err(|e| e.to_string())?;
-    let dest = project::safe_resolve(&dest_project_root, &dest_rel)
-        .map_err(|e| e.to_string())?;
+    let source =
+        project::safe_resolve(&source_project_root, &source_rel).map_err(|e| e.to_string())?;
+    let dest = project::safe_resolve(&dest_project_root, &dest_rel).map_err(|e| e.to_string())?;
 
     if !source.exists() {
         return Err(format!("Source file not found: '{}'", source_rel));
@@ -587,10 +581,18 @@ pub async fn transfer_asset(
 
     // Copy all referenced assets to the dest project (always copy — assets may be shared)
     for asset_rel in &asset_refs {
-        let Ok(asset_src) = project::safe_resolve(&source_project_root, asset_rel) else { continue };
-        if !asset_src.exists() { continue; }
-        let Ok(asset_dest) = project::safe_resolve(&dest_project_root, asset_rel) else { continue };
-        if asset_dest.exists() { continue; } // already present at dest, skip
+        let Ok(asset_src) = project::safe_resolve(&source_project_root, asset_rel) else {
+            continue;
+        };
+        if !asset_src.exists() {
+            continue;
+        }
+        let Ok(asset_dest) = project::safe_resolve(&dest_project_root, asset_rel) else {
+            continue;
+        };
+        if asset_dest.exists() {
+            continue;
+        } // already present at dest, skip
         if let Some(parent) = asset_dest.parent() {
             let _ = std::fs::create_dir_all(parent);
         }
@@ -611,8 +613,12 @@ pub async fn transfer_asset(
         }
         // After the source file is gone, remove any assets now unreferenced in source
         for asset_rel in &asset_refs {
-            let Ok(asset_src) = project::safe_resolve(&source_project_root, asset_rel) else { continue };
-            if !asset_src.exists() { continue; }
+            let Ok(asset_src) = project::safe_resolve(&source_project_root, asset_rel) else {
+                continue;
+            };
+            if !asset_src.exists() {
+                continue;
+            }
             if project::count_asset_refs(&source_project_root, asset_rel) == 0 {
                 let _ = std::fs::remove_file(&asset_src);
             }
@@ -623,8 +629,6 @@ pub async fn transfer_asset(
 
     Ok(())
 }
-
-
 
 /// Open a system terminal in the given directory.
 ///
@@ -648,8 +652,14 @@ pub async fn open_in_terminal(path: String) -> Result<(), String> {
             .spawn();
         if wt.is_err() {
             std::process::Command::new("cmd")
-                .args(["/c", "start", "powershell", "-NoExit", "-Command",
-                       &format!("Set-Location '{}'", path.replace('\'', "''"))])
+                .args([
+                    "/c",
+                    "start",
+                    "powershell",
+                    "-NoExit",
+                    "-Command",
+                    &format!("Set-Location '{}'", path.replace('\'', "''")),
+                ])
                 .creation_flags(0x08000000)
                 .spawn()
                 .map_err(|e| e.to_string())?;
@@ -666,16 +676,25 @@ pub async fn open_in_terminal(path: String) -> Result<(), String> {
 
     #[cfg(target_os = "linux")]
     {
-        let found = ["x-terminal-emulator", "gnome-terminal", "konsole", "xfce4-terminal", "xterm"]
-            .iter()
-            .find_map(|term| {
-                std::process::Command::new(term)
-                    .args(["--working-directory", &path])
-                    .spawn()
-                    .ok()
-            });
+        let found = [
+            "x-terminal-emulator",
+            "gnome-terminal",
+            "konsole",
+            "xfce4-terminal",
+            "xterm",
+        ]
+        .iter()
+        .find_map(|term| {
+            std::process::Command::new(term)
+                .args(["--working-directory", &path])
+                .spawn()
+                .ok()
+        });
         if found.is_none() {
-            return Err("No terminal emulator found. Install gnome-terminal, konsole, or xterm.".to_string());
+            return Err(
+                "No terminal emulator found. Install gnome-terminal, konsole, or xterm."
+                    .to_string(),
+            );
         }
     }
 
@@ -731,10 +750,7 @@ pub async fn resolve_deep_link(
         }
         if let Ok(config) = git2::Config::open(&git_config) {
             if let Ok(url) = config.get_string("remote.origin.url") {
-                let url_clean = url
-                    .to_lowercase()
-                    .trim_end_matches(".git")
-                    .to_string();
+                let url_clean = url.to_lowercase().trim_end_matches(".git").to_string();
                 if url_clean.contains(&target) {
                     return Ok(Some(project.path));
                 }

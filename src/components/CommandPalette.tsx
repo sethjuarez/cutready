@@ -96,7 +96,7 @@ export function CommandPalette({
 
   return (
     <div
-      className="fixed inset-0 z-modal flex justify-center pt-[var(--titlebar-height)] bg-black/25"
+      className="fixed inset-0 z-modal flex justify-center pt-[var(--titlebar-height)] bg-[rgb(var(--color-overlay-scrim)/0.25)]"
       onClick={onClose}
     >
       <div

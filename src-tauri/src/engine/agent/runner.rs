@@ -10,7 +10,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use crate::engine::agent::llm::ChatMessage;
-use crate::engine::agent::{tools};
+use crate::engine::agent::tools;
 use crate::engine::project;
 
 /// Maximum tool-call rounds to prevent infinite loops.
@@ -18,7 +18,6 @@ const MAX_TOOL_ROUNDS: usize = 10;
 
 /// Maximum delegation depth for sub-agents.
 const MAX_DELEGATION_DEPTH: usize = 2;
-
 
 // ---------------------------------------------------------------------------
 // Event types
@@ -82,7 +81,17 @@ pub async fn run(
     emit: impl Fn(AgentEvent) + Send + Sync + 'static,
 ) -> Result<agentive::RunnerResult, String> {
     let emit = Arc::new(emit);
-    run_inner(provider, messages, project_root, agent_prompts, steering, 0, vision, emit).await
+    run_inner(
+        provider,
+        messages,
+        project_root,
+        agent_prompts,
+        steering,
+        0,
+        vision,
+        emit,
+    )
+    .await
 }
 
 /// Internal runner with depth tracking for sub-agent delegation.
@@ -96,19 +105,27 @@ fn run_inner<'a>(
     depth: usize,
     vision: &'a VisionConfig,
     emit: Arc<dyn Fn(AgentEvent) + Send + Sync + 'static>,
-) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<agentive::RunnerResult, String>> + Send + 'a>> {
+) -> std::pin::Pin<
+    Box<dyn std::future::Future<Output = Result<agentive::RunnerResult, String>> + Send + 'a>,
+> {
     Box::pin(async move {
         let tool_defs = tools::all_tools();
 
         log::info!(
             "[agent] starting run (depth={}, {} messages, budget={}chars)",
-            depth, messages.len(), provider.context_budget_chars()
+            depth,
+            messages.len(),
+            provider.context_budget_chars()
         );
-        crate::util::trace::emit("agent_start", "agent", serde_json::json!({
-            "depth": depth,
-            "messages": messages.len(),
-            "budget_chars": provider.context_budget_chars(),
-        }));
+        crate::util::trace::emit(
+            "agent_start",
+            "agent",
+            serde_json::json!({
+                "depth": depth,
+                "messages": messages.len(),
+                "budget_chars": provider.context_budget_chars(),
+            }),
+        );
 
         // Configure agentive runner
         let config = agentive::RunnerConfig {
@@ -134,7 +151,12 @@ fn run_inner<'a>(
                 agentive::RunnerEvent::Status { message } => {
                     emit_events(AgentEvent::Status { message });
                 }
-                agentive::RunnerEvent::ToolCallStart { name, arguments, iteration, .. } => {
+                agentive::RunnerEvent::ToolCallStart {
+                    name,
+                    arguments,
+                    iteration,
+                    ..
+                } => {
                     let prev = last_iter.swap(iteration, std::sync::atomic::Ordering::Relaxed);
                     if prev != iteration && prev != usize::MAX {
                         emit_events(AgentEvent::DeltaReset);
@@ -164,7 +186,9 @@ fn run_inner<'a>(
         let tool_depth = depth;
         let steering_for_tools = steering.clone();
 
-        let tool_executor = move |tool_call: agentive::ToolCall| -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<agentive::ToolOutput, String>> + Send>> {
+        let tool_executor = move |tool_call: agentive::ToolCall| -> std::pin::Pin<
+            Box<dyn std::future::Future<Output = Result<agentive::ToolOutput, String>> + Send>,
+        > {
             let project_root = project_root_str.clone();
             let agent_prompts = agent_prompts_owned.clone();
             let provider = provider_for_tools.clone();
@@ -174,21 +198,29 @@ fn run_inner<'a>(
 
             if tool_call.function.name == "delegate_to_agent" {
                 exec_delegation(
-                    provider, &tool_call, &project_root, &agent_prompts,
-                    &tools, tool_depth, vision_enabled, steering, emit,
+                    provider,
+                    &tool_call,
+                    &project_root,
+                    &agent_prompts,
+                    &tools,
+                    tool_depth,
+                    vision_enabled,
+                    steering,
+                    emit,
                 )
             } else if tool_call.function.name == "fetch_url" {
                 let tc = tool_call;
                 Box::pin(async move {
-                    let args = agentive::parse_tool_args(&tc.function.arguments).unwrap_or(serde_json::json!({}));
+                    let args = agentive::parse_tool_args(&tc.function.arguments)
+                        .unwrap_or(serde_json::json!({}));
                     let url = args.get("url").and_then(|v| v.as_str()).unwrap_or("");
-                    agentive::web::fetch_and_clean(url).await
+                    agentive::web::fetch_and_clean(url)
+                        .await
                         .map(agentive::ToolOutput::from)
                 })
             } else {
-                let output = tools::execute_tool(
-                    &tool_call, Path::new(&project_root), vision_enabled,
-                );
+                let output =
+                    tools::execute_tool(&tool_call, Path::new(&project_root), vision_enabled);
                 Box::pin(std::future::ready(Ok(output)))
             }
         };
@@ -210,11 +242,15 @@ fn run_inner<'a>(
 
         let result = result.map_err(|e| format!("Agent error: {e}"))?;
 
-        crate::util::trace::emit("agent_done", "agent", serde_json::json!({
-            "rounds": result.total_usage.total_tokens,
-            "response_chars": result.response.len(),
-            "total_messages": result.messages.len(),
-        }));
+        crate::util::trace::emit(
+            "agent_done",
+            "agent",
+            serde_json::json!({
+                "rounds": result.total_usage.total_tokens,
+                "response_chars": result.response.len(),
+                "total_messages": result.messages.len(),
+            }),
+        );
 
         Ok(result)
     })
@@ -233,14 +269,18 @@ fn build_reference_resolver(project_root: &Path) -> agentive::ReferenceResolver 
     let root = project_root.to_path_buf();
     Arc::new(move |name: String| {
         let root = root.clone();
-        Box::pin(async move {
-            resolve_project_reference(&root, &name)
-        }) as std::pin::Pin<Box<dyn std::future::Future<Output = Option<agentive::ResolvedReference>> + Send>>
+        Box::pin(async move { resolve_project_reference(&root, &name) })
+            as std::pin::Pin<
+                Box<dyn std::future::Future<Output = Option<agentive::ResolvedReference>> + Send>,
+            >
     })
 }
 
 /// Try to resolve a reference name against project files.
-fn resolve_project_reference(root: &std::path::Path, name: &str) -> Option<agentive::ResolvedReference> {
+fn resolve_project_reference(
+    root: &std::path::Path,
+    name: &str,
+) -> Option<agentive::ResolvedReference> {
     // Try sketches
     if let Ok(sketches) = project::scan_sketches(root) {
         for s in &sketches {
@@ -347,11 +387,12 @@ fn exec_delegation(
     vision_enabled: bool,
     steering: agentive::Steering,
     emit: Arc<dyn Fn(AgentEvent) + Send + Sync + 'static>,
-) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<agentive::ToolOutput, String>> + Send>> {
+) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<agentive::ToolOutput, String>> + Send>>
+{
     if depth >= MAX_DELEGATION_DEPTH {
-        return Box::pin(std::future::ready(
-            Ok(agentive::ToolOutput::from("Error: maximum delegation depth reached — cannot delegate further")),
-        ));
+        return Box::pin(std::future::ready(Ok(agentive::ToolOutput::from(
+            "Error: maximum delegation depth reached — cannot delegate further",
+        ))));
     }
 
     let args: serde_json::Value =
@@ -359,20 +400,28 @@ fn exec_delegation(
 
     let agent_id = match args.get("agent_id").and_then(|v| v.as_str()) {
         Some(id) => id.to_string(),
-        None => return Box::pin(std::future::ready(Ok(agentive::ToolOutput::from("Error: missing 'agent_id' argument")))),
+        None => {
+            return Box::pin(std::future::ready(Ok(agentive::ToolOutput::from(
+                "Error: missing 'agent_id' argument",
+            ))))
+        }
     };
     let message = match args.get("message").and_then(|v| v.as_str()) {
         Some(m) => m.to_string(),
-        None => return Box::pin(std::future::ready(Ok(agentive::ToolOutput::from("Error: missing 'message' argument")))),
+        None => {
+            return Box::pin(std::future::ready(Ok(agentive::ToolOutput::from(
+                "Error: missing 'message' argument",
+            ))))
+        }
     };
 
     let prompt = match agent_prompts.get(&agent_id) {
         Some(p) => p.clone(),
         None => {
             let available = agent_prompts.keys().cloned().collect::<Vec<_>>().join(", ");
-            return Box::pin(std::future::ready(
-                Ok(agentive::ToolOutput::from(format!("Error: unknown agent '{agent_id}'. Available: {available}"))),
-            ));
+            return Box::pin(std::future::ready(Ok(agentive::ToolOutput::from(format!(
+                "Error: unknown agent '{agent_id}'. Available: {available}"
+            )))));
         }
     };
 
@@ -383,10 +432,7 @@ fn exec_delegation(
     let sub_depth = depth + 1;
 
     Box::pin(async move {
-        let sub_messages = vec![
-            ChatMessage::system(&prompt),
-            ChatMessage::user(&message),
-        ];
+        let sub_messages = vec![ChatMessage::system(&prompt), ChatMessage::user(&message)];
 
         emit(AgentEvent::AgentStart {
             agent_id: agent_id.clone(),
@@ -408,7 +454,9 @@ fn exec_delegation(
         let emit_for_tools = emit.clone();
         let steering_for_tools = steering.clone();
 
-        let sub_tool_executor = move |tool_call: agentive::ToolCall| -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<agentive::ToolOutput, String>> + Send>> {
+        let sub_tool_executor = move |tool_call: agentive::ToolCall| -> std::pin::Pin<
+            Box<dyn std::future::Future<Output = Result<agentive::ToolOutput, String>> + Send>,
+        > {
             let project_root = project_root_for_tools.clone();
             let agent_prompts = agent_prompts_for_tools.clone();
             let provider = provider_for_tools.clone();
@@ -418,43 +466,51 @@ fn exec_delegation(
 
             if tool_call.function.name == "delegate_to_agent" {
                 exec_delegation(
-                    provider, &tool_call, &project_root, &agent_prompts,
-                    &tools, sub_depth, vision_enabled, steering, emit,
+                    provider,
+                    &tool_call,
+                    &project_root,
+                    &agent_prompts,
+                    &tools,
+                    sub_depth,
+                    vision_enabled,
+                    steering,
+                    emit,
                 )
             } else if tool_call.function.name == "fetch_url" {
                 let tc = tool_call;
                 Box::pin(async move {
-                    let args = agentive::parse_tool_args(&tc.function.arguments).unwrap_or(serde_json::json!({}));
+                    let args = agentive::parse_tool_args(&tc.function.arguments)
+                        .unwrap_or(serde_json::json!({}));
                     let url = args.get("url").and_then(|v| v.as_str()).unwrap_or("");
-                    agentive::web::fetch_and_clean(url).await
+                    agentive::web::fetch_and_clean(url)
+                        .await
                         .map(agentive::ToolOutput::from)
                 })
             } else {
-                let output = tools::execute_tool(
-                    &tool_call, Path::new(&project_root), vision_enabled,
-                );
+                let output =
+                    tools::execute_tool(&tool_call, Path::new(&project_root), vision_enabled);
                 Box::pin(std::future::ready(Ok(output)))
             }
         };
 
         let cancel = agentive::CancellationToken::new();
         let sub_emit = emit.clone();
-        let sub_on_event = move |event: agentive::RunnerEvent| {
-            match event {
-                agentive::RunnerEvent::Token { token } => {
-                    sub_emit(AgentEvent::Delta { content: token });
-                }
-                agentive::RunnerEvent::Thinking { token } => {
-                    sub_emit(AgentEvent::Thinking { content: token });
-                }
-                agentive::RunnerEvent::ToolCallStart { name, arguments, .. } => {
-                    sub_emit(AgentEvent::ToolCall { name, arguments });
-                }
-                agentive::RunnerEvent::ToolResult { name, result, .. } => {
-                    sub_emit(AgentEvent::ToolResult { name, result });
-                }
-                _ => {}
+        let sub_on_event = move |event: agentive::RunnerEvent| match event {
+            agentive::RunnerEvent::Token { token } => {
+                sub_emit(AgentEvent::Delta { content: token });
             }
+            agentive::RunnerEvent::Thinking { token } => {
+                sub_emit(AgentEvent::Thinking { content: token });
+            }
+            agentive::RunnerEvent::ToolCallStart {
+                name, arguments, ..
+            } => {
+                sub_emit(AgentEvent::ToolCall { name, arguments });
+            }
+            agentive::RunnerEvent::ToolResult { name, result, .. } => {
+                sub_emit(AgentEvent::ToolResult { name, result });
+            }
+            _ => {}
         };
 
         let result_text = match agentive::run(
@@ -467,7 +523,9 @@ fn exec_delegation(
             steering,
             agentive::Guardrails::default(),
             sub_on_event,
-        ).await {
+        )
+        .await
+        {
             Ok(result) => format!("[Agent '{}' responded:]\n\n{}", agent_id, result.response),
             Err(e) => format!("Error from agent '{}': {}", agent_id, e),
         };

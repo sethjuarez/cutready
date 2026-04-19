@@ -160,8 +160,7 @@ pub async fn start_recording_session(
     let session = RecordedSession::new(RecordingMode::FreeForm);
     let session_id = session.id.to_string();
 
-    let screenshots_dir =
-        interaction::resolve_screenshots_dir(&project_root, "", &session_id);
+    let screenshots_dir = interaction::resolve_screenshots_dir(&project_root, "", &session_id);
     std::fs::create_dir_all(&screenshots_dir).map_err(|e| e.to_string())?;
 
     // Tell the sidecar to start observing
@@ -217,8 +216,7 @@ pub async fn stop_recording_session(state: State<'_, AppState>) -> Result<Record
             .ok_or("No project open")?
     };
 
-    let _ = interaction::save_session(&session, &project_root, "")
-        .map_err(|e| e.to_string())?;
+    let _ = interaction::save_session(&session, &project_root, "").map_err(|e| e.to_string())?;
 
     Ok(session)
 }

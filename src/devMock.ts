@@ -129,6 +129,10 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
     case "get_note":
     case "read_note":
       return MOCK_NOTE_CONTENT;
+    case "get_note_lock":
+      return { locked: false };
+    case "set_note_lock":
+      return { locked: (args as { locked?: boolean })?.locked ?? false };
     case "save_note":
       return null;
     case "create_note":
@@ -318,6 +322,22 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
       return null;
     case "get_sketch":
       return MOCK_SKETCH;
+    case "set_sketch_lock":
+      return { ...MOCK_SKETCH, locked: (args as { locked?: boolean })?.locked ?? false };
+    case "set_planning_row_lock": {
+      const { index, locked } = args as { index: number; locked: boolean };
+      return {
+        ...MOCK_SKETCH,
+        rows: MOCK_SKETCH.rows.map((row, i) => i === index ? { ...row, locked } : row),
+      };
+    }
+    case "set_planning_cell_lock": {
+      const { index, field, locked } = args as { index: number; field: string; locked: boolean };
+      return {
+        ...MOCK_SKETCH,
+        rows: MOCK_SKETCH.rows.map((row, i) => i === index ? { ...row, locks: { ...(row.locks ?? {}), [field]: locked } } : row),
+      };
+    }
     case "set_sidebar_order":
     case "set_workspace_state":
     case "promote_timeline":

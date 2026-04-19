@@ -11,9 +11,8 @@ test.describe("Sync Bar — remote collaboration", () => {
     // Toggle secondary panel via keyboard shortcut
     await page.keyboard.press("Control+Shift+B");
     await page.waitForTimeout(300);
-    // Open Snapshots via overflow menu
-    await page.locator('button[title="More options"]').click();
-    await page.getByText("Snapshots").click();
+    // Open Snapshots via the secondary rail
+    await page.getByRole("button", { name: "Snapshots", exact: true }).click();
 
     // SyncBar should NOT be visible since devMock returns no remote
     // and no repoRemoteUrl is set in settings
@@ -25,9 +24,8 @@ test.describe("Sync Bar — remote collaboration", () => {
   test("timeline selector shows active timeline", async ({ page }) => {
     await page.keyboard.press("Control+Shift+B");
     await page.waitForTimeout(300);
-    // Open Snapshots via overflow menu
-    await page.locator('button[title="More options"]').click();
-    await page.getByText("Snapshots").click();
+    // Open Snapshots via the secondary rail
+    await page.getByRole("button", { name: "Snapshots", exact: true }).click();
     await page.waitForTimeout(300);
 
     // The Snapshots header/back button should be visible

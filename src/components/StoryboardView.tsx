@@ -612,7 +612,7 @@ function EmptyState({
       <div className="flex gap-3">
         <button
           onClick={onAddNew}
-          className="flex items-center gap-2 px-4 py-2.5 text-xs font-medium rounded-xl bg-[rgb(var(--color-accent))] text-white hover:bg-[rgb(var(--color-accent-hover))] transition-colors"
+          className="flex items-center gap-2 px-4 py-2.5 text-xs font-medium rounded-xl bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))] hover:bg-[rgb(var(--color-accent-hover))] transition-colors"
         >
           <Plus className="w-3.5 h-3.5" />
           New Sketch
@@ -735,7 +735,7 @@ function AddBar({
       <div className="flex gap-1.5">
         <button
           onClick={onAddNew}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-[rgb(var(--color-accent))] text-white hover:bg-[rgb(var(--color-accent-hover))] transition-colors"
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))] hover:bg-[rgb(var(--color-accent-hover))] transition-colors"
         >
           <Plus className="w-3 h-3" />
           New Sketch

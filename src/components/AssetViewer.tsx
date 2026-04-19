@@ -151,7 +151,7 @@ function VisualAssetViewer({
       {/* Editor lightbox */}
       {editorOpen && (
         <div
-          className="fixed inset-0 z-modal flex items-center justify-center bg-black/80"
+          className="fixed inset-0 z-modal flex items-center justify-center bg-[rgb(var(--color-overlay-strong)/0.8)]"
           onClick={() => { if (!editorDirty && !saving) closeLightbox(); }}
         >
           <div

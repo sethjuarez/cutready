@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { SafeMarkdown } from "./SafeMarkdown";
@@ -26,8 +26,6 @@ import {
   X,
   Menu,
   Square,
-  ChevronLeft,
-  MoreVertical,
 } from "lucide-react";
 
 // ── Helpers ──────────────────────────────────────────────────────
@@ -368,73 +366,56 @@ function useDropdownMaxHeight(
 
 export function ChatPanel() {
   const [activeTab, setActiveTab] = useState<SecondaryTab>("chat");
-  const [showMenu, setShowMenu] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
-
-  // Close dropdown on outside click
-  useEffect(() => {
-    if (!showMenu) return;
-    function handleClick(e: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setShowMenu(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, [showMenu]);
+  const sidebarPosition = useAppStore((s) => s.sidebarPosition);
+  const railOnLeft = sidebarPosition === "right";
+  const tabs: Array<{ id: SecondaryTab; label: string; icon: ReactNode }> = [
+    { id: "chat", label: "Chat", icon: <IconSparkles size={13} /> },
+    { id: "sessions", label: "Sessions", icon: <IconHistory size={13} /> },
+    { id: "snapshots", label: "Snapshots", icon: <IconSave size={13} /> },
+  ];
+  const rail = (
+    <nav className={`no-select flex w-12 shrink-0 flex-col items-center gap-1.5 bg-[rgb(var(--color-surface))] py-3 ${
+      railOnLeft ? "border-r border-[rgb(var(--color-border))]" : "border-l border-[rgb(var(--color-border))]"
+    }`}>
+      {tabs.map((tab) => {
+        const isActive = activeTab === tab.id;
+        return (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`relative flex h-10 w-10 items-center justify-center rounded-lg transition-colors ${
+              isActive
+                ? "bg-[rgb(var(--color-accent))]/15 text-[rgb(var(--color-accent))]"
+                : "text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
+            }`}
+            title={tab.label}
+            aria-label={tab.label}
+            aria-pressed={isActive}
+          >
+            {tab.icon}
+            {isActive && (
+              <span className={`absolute top-1/4 h-1/2 w-[2px] rounded-full bg-[rgb(var(--color-accent))] ${
+                railOnLeft ? "left-[-6px]" : "right-[-6px]"
+              }`} />
+            )}
+          </button>
+        );
+      })}
+    </nav>
+  );
 
   return (
-    <div className="flex flex-col h-full bg-[rgb(var(--color-surface-inset))]">
-      {/* Header with back navigation / overflow menu */}
-      <div className="flex items-center justify-between px-3 h-10 border-b border-[rgb(var(--color-border))] shrink-0">
-        {activeTab === "chat" ? (
-          <span className="text-[13px] font-medium text-[rgb(var(--color-text))]">Chat</span>
-        ) : (
-          <button
-            onClick={() => setActiveTab("chat")}
-            className="flex items-center gap-1.5 text-[13px] font-medium text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] transition-colors"
-          >
-            <ChevronLeft className="w-3.5 h-3.5" />
-            {activeTab === "sessions" ? "Sessions" : "Snapshots"}
-          </button>
-        )}
-        {activeTab === "chat" && (
-          <div className="relative" ref={menuRef}>
-            <button
-              onClick={() => setShowMenu(!showMenu)}
-              className="p-1 rounded-md text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors"
-              title="More options"
-            >
-              <MoreVertical className="w-4 h-4" />
-            </button>
-            {showMenu && (
-              <div className="absolute right-0 top-full mt-1 z-20 w-[180px] py-1 bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-lg shadow-lg">
-                <button
-                  onClick={() => { setActiveTab("sessions"); setShowMenu(false); }}
-                  className="w-full px-3 py-2 text-left text-[12px] text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors flex items-center gap-2"
-                >
-                  <IconHistory size={14} />
-                  Session History
-                </button>
-                <button
-                  onClick={() => { setActiveTab("snapshots"); setShowMenu(false); }}
-                  className="w-full px-3 py-2 text-left text-[12px] text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors flex items-center gap-2"
-                >
-                  <IconSave size={14} />
-                  Snapshots
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
+    <div className="flex h-full bg-[rgb(var(--color-surface-inset))]">
+      {railOnLeft && rail}
 
       {/* Tab content */}
-      <div className="flex-1 min-h-0">
+      <div className="flex-1 min-w-0 min-h-0">
         {activeTab === "chat" && <ChatTab />}
         {activeTab === "sessions" && <ChatHistory onOpenSession={() => setActiveTab("chat")} />}
         {activeTab === "snapshots" && <VersionHistory />}
       </div>
+
+      {!railOnLeft && rail}
     </div>
   );
 }
@@ -475,9 +456,6 @@ function ChatTab() {
   const [contextFilter, setContextFilter] = useState("");
   const [showModelPicker, setShowModelPicker] = useState(false);
   const [showAgentPicker, setShowAgentPicker] = useState(false);
-  const [toolbarExpanded, setToolbarExpanded] = useState(() => {
-    return localStorage.getItem("cutready:chat-toolbar-expanded") === "true";
-  });
   const [expandedWebRef, setExpandedWebRef] = useState<string | null>(null);
   const [streamingText, setStreamingText] = useState<string>("");
   const [streamingThinking, setStreamingThinking] = useState<string>("");
@@ -636,14 +614,6 @@ function ChatTab() {
   const ctxMaxH = useDropdownMaxHeight(contextPickerRef, showContextPicker);
   const modelMaxH = useDropdownMaxHeight(modelPickerRef, showModelPicker);
   const agentMaxH= useDropdownMaxHeight(agentPickerRef, showAgentPicker);
-
-  const toggleToolbar = useCallback(() => {
-    setToolbarExpanded((prev) => {
-      const next = !prev;
-      localStorage.setItem("cutready:chat-toolbar-expanded", String(next));
-      return next;
-    });
-  }, []);
 
   // All agents: built-ins + custom
   const allAgents = useMemo(() => {
@@ -1390,134 +1360,113 @@ function ChatTab() {
             )}
           </div>
 
-          {/* Expand toggle */}
-          <button
-            className={`flex items-center justify-center w-[26px] h-[26px] rounded text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface))] transition-colors ${
-              toolbarExpanded ? "bg-[rgb(var(--color-surface))]" : ""
-            }`}
-            onClick={toggleToolbar}
-            title={toolbarExpanded ? "Hide options" : "Show agent, model & tools"}
-          >
-            <ChevronRight
-              width={12}
-              height={12}
-              className={`transition-transform ${toolbarExpanded ? "rotate-180" : ""}`}
-            />
-          </button>
-
-          {/* Agent, Model, Tools — conditionally visible */}
-          {toolbarExpanded && (
-            <>
-              {/* Agent picker */}
-              <div className="relative" ref={agentPickerRef}>
-                <button
-                  className={`flex items-center gap-1 px-1.5 h-[26px] rounded text-[11px] transition-colors ${
-                    showAgentPicker
-                      ? "bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text))]"
-                      : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface))]"
-                  }`}
-                  onClick={() => setShowAgentPicker(!showAgentPicker)}
-                  title="Select Agent"
-                >
-                  <IconSparkles size={11} />
-                  <span className="max-w-[80px] truncate">{selectedAgent.name}</span>
-                  <IconChevronDown size={10} />
-                </button>
-                {showAgentPicker && (
-                  <div className="absolute bottom-full left-0 mb-1 w-[240px] bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-lg shadow-lg overflow-hidden z-20 flex flex-col" style={{ maxHeight: agentMaxH }}>
-                    {BUILT_IN_AGENTS.length > 0 && (
-                      <>
-                        <div className="px-3 py-1.5 border-b border-[rgb(var(--color-border))] shrink-0">
-                          <span className="text-[10px] font-medium text-[rgb(var(--color-text-secondary))] uppercase tracking-wider">Built-in</span>
-                        </div>
-                        <div className="py-0.5">
-                          {BUILT_IN_AGENTS.map((agent) => (
-                            <button
-                              key={agent.id}
-                              className={`w-full flex items-center gap-2 px-3 py-1.5 text-[11px] text-left transition-colors ${
-                                selectedAgent.id === agent.id
-                                  ? "bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-text))]"
-                                  : "text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
-                              }`}
-                              onClick={() => {
-                                updateSetting("aiSelectedAgent", agent.id);
-                                setShowAgentPicker(false);
-                              }}
-                            >
-                              <IconSparkles size={11} />
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-1">
-                                  <span>{agent.name}</span>
-                                  {agent.modelOverride && (
-                                    <span className="text-[9px] text-[rgb(var(--color-text-secondary))] opacity-60">{agent.modelOverride}</span>
-                                  )}
-                                </div>
-                                {agent.description && (
-                                  <div className="text-[9px] text-[rgb(var(--color-text-secondary))] opacity-70 truncate">{agent.description}</div>
-                                )}
-                              </div>
-                              {selectedAgent.id === agent.id && <IconCheck size={11} />}
-                            </button>
-                          ))}
-                        </div>
-                      </>
-                    )}
-                    {(settings.aiAgents?.length ?? 0) > 0 && (
-                      <>
-                        <div className="px-3 py-1.5 border-t border-[rgb(var(--color-border))] shrink-0">
-                          <span className="text-[10px] font-medium text-[rgb(var(--color-text-secondary))] uppercase tracking-wider">Custom</span>
-                        </div>
-                        <div className="py-0.5 overflow-y-auto">
-                          {(settings.aiAgents || []).map((agent) => (
-                            <button
-                              key={agent.id}
-                              className={`w-full flex items-center gap-2 px-3 py-1.5 text-[11px] text-left transition-colors ${
-                                selectedAgent.id === agent.id
-                                  ? "bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-text))]"
-                                  : "text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
-                              }`}
-                              onClick={() => {
-                                updateSetting("aiSelectedAgent", agent.id);
-                                setShowAgentPicker(false);
-                              }}
-                            >
-                              <IconUser size={11} />
-                              <span className="truncate">{agent.name}</span>
-                              {selectedAgent.id === agent.id && <IconCheck size={11} />}
-                            </button>
-                          ))}
-                        </div>
-                      </>
-                    )}
-                  </div>
+          {/* Agent picker */}
+          <div className="relative" ref={agentPickerRef}>
+            <button
+              className={`flex items-center gap-1 px-1.5 h-[26px] rounded text-[11px] transition-colors ${
+                showAgentPicker
+                  ? "bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text))]"
+                  : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface))]"
+              }`}
+              onClick={() => setShowAgentPicker(!showAgentPicker)}
+              title="Select Agent"
+            >
+              <IconSparkles size={11} />
+              <span className="max-w-[80px] truncate">{selectedAgent.name}</span>
+              <IconChevronDown size={10} />
+            </button>
+            {showAgentPicker && (
+              <div className="absolute bottom-full left-0 mb-1 w-[240px] bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-lg shadow-lg overflow-hidden z-20 flex flex-col" style={{ maxHeight: agentMaxH }}>
+                {BUILT_IN_AGENTS.length > 0 && (
+                  <>
+                    <div className="px-3 py-1.5 border-b border-[rgb(var(--color-border))] shrink-0">
+                      <span className="text-[10px] font-medium text-[rgb(var(--color-text-secondary))] uppercase tracking-wider">Built-in</span>
+                    </div>
+                    <div className="py-0.5">
+                      {BUILT_IN_AGENTS.map((agent) => (
+                        <button
+                          key={agent.id}
+                          className={`w-full flex items-center gap-2 px-3 py-1.5 text-[11px] text-left transition-colors ${
+                            selectedAgent.id === agent.id
+                              ? "bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-text))]"
+                              : "text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
+                          }`}
+                          onClick={() => {
+                            updateSetting("aiSelectedAgent", agent.id);
+                            setShowAgentPicker(false);
+                          }}
+                        >
+                          <IconSparkles size={11} />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1">
+                              <span>{agent.name}</span>
+                              {agent.modelOverride && (
+                                <span className="text-[9px] text-[rgb(var(--color-text-secondary))] opacity-60">{agent.modelOverride}</span>
+                              )}
+                            </div>
+                            {agent.description && (
+                              <div className="text-[9px] text-[rgb(var(--color-text-secondary))] opacity-70 truncate">{agent.description}</div>
+                            )}
+                          </div>
+                          {selectedAgent.id === agent.id && <IconCheck size={11} />}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+                {(settings.aiAgents?.length ?? 0) > 0 && (
+                  <>
+                    <div className="px-3 py-1.5 border-t border-[rgb(var(--color-border))] shrink-0">
+                      <span className="text-[10px] font-medium text-[rgb(var(--color-text-secondary))] uppercase tracking-wider">Custom</span>
+                    </div>
+                    <div className="py-0.5 overflow-y-auto">
+                      {(settings.aiAgents || []).map((agent) => (
+                        <button
+                          key={agent.id}
+                          className={`w-full flex items-center gap-2 px-3 py-1.5 text-[11px] text-left transition-colors ${
+                            selectedAgent.id === agent.id
+                              ? "bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-text))]"
+                              : "text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
+                          }`}
+                          onClick={() => {
+                            updateSetting("aiSelectedAgent", agent.id);
+                            setShowAgentPicker(false);
+                          }}
+                        >
+                          <IconUser size={11} />
+                          <span className="truncate">{agent.name}</span>
+                          {selectedAgent.id === agent.id && <IconCheck size={11} />}
+                        </button>
+                      ))}
+                    </div>
+                  </>
                 )}
               </div>
+            )}
+          </div>
 
-              {/* Model picker */}
-              <div className="relative" ref={modelPickerRef}>
-                <button
-                  className={`flex items-center gap-1 px-1.5 h-[26px] rounded text-[11px] transition-colors ${
-                    showModelPicker
-                      ? "bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text))]"
-                      : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface))]"
-                  }`}
-                  onClick={() => setShowModelPicker(!showModelPicker)}
-                  title="Select Model"
-                >
-                  <span className="max-w-[100px] truncate">{settings.aiModel || "Model"}</span>
-                  <IconChevronDown size={10} />
-                </button>
-                {showModelPicker && (
-                  <ModelPickerDropdown
-                    currentModel={settings.aiModel}
-                    onClose={() => setShowModelPicker(false)}
-                    maxHeight={modelMaxH}
-                  />
-                )}
-              </div>
-
-            </>
-          )}
+          {/* Model picker */}
+          <div className="relative" ref={modelPickerRef}>
+            <button
+              className={`flex items-center gap-1 px-1.5 h-[26px] rounded text-[11px] transition-colors ${
+                showModelPicker
+                  ? "bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text))]"
+                  : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface))]"
+              }`}
+              onClick={() => setShowModelPicker(!showModelPicker)}
+              title="Select Model"
+            >
+              <span className="max-w-[100px] truncate">{settings.aiModel || "Model"}</span>
+              <IconChevronDown size={10} />
+            </button>
+            {showModelPicker && (
+              <ModelPickerDropdown
+                currentModel={settings.aiModel}
+                onClose={() => setShowModelPicker(false)}
+                maxHeight={modelMaxH}
+              />
+            )}
+          </div>
 
           <div className="flex-1" />
 
@@ -1729,7 +1678,7 @@ function MessageRow({ message, projectRoot, onDelete }: { message: ChatMessage; 
         <div className={`rounded-xl rounded-br-sm px-3 py-2 text-[13px] text-[rgb(var(--color-text))] break-words leading-[1.6] max-w-[85%] ${
           message.pending
             ? "bg-[rgb(var(--color-surface-alt))] border border-dashed border-[rgb(var(--color-border))] opacity-70"
-            : "bg-[#6b5ce7]/[0.05] border border-[#6b5ce7]/40 dark:bg-[#a49afa]/10 dark:border-[#a49afa]/40"
+            : "bg-[rgb(var(--color-accent))]/[0.05] border border-[rgb(var(--color-accent))]/40"
         }`}>
           {message.pending && (
             <span className="inline-flex items-center gap-1 text-[10px] text-[rgb(var(--color-text-secondary))] mb-1">

@@ -9,6 +9,59 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
+/// Lock state for editable planning row cells.
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct PlanningCellLocks {
+    #[serde(default)]
+    pub time: bool,
+    #[serde(default)]
+    pub narrative: bool,
+    #[serde(default)]
+    pub demo_actions: bool,
+    #[serde(default)]
+    pub screenshot: bool,
+    #[serde(default)]
+    pub visual: bool,
+    #[serde(default)]
+    pub design_plan: bool,
+}
+
+impl PlanningCellLocks {
+    pub fn is_locked(&self, field: &str) -> bool {
+        match field {
+            "time" => self.time,
+            "narrative" => self.narrative,
+            "demo_actions" => self.demo_actions,
+            "screenshot" => self.screenshot,
+            "visual" => self.visual,
+            "design_plan" => self.design_plan,
+            _ => false,
+        }
+    }
+
+    pub fn set(&mut self, field: &str, locked: bool) -> bool {
+        match field {
+            "time" => self.time = locked,
+            "narrative" => self.narrative = locked,
+            "demo_actions" => self.demo_actions = locked,
+            "screenshot" => self.screenshot = locked,
+            "visual" => self.visual = locked,
+            "design_plan" => self.design_plan = locked,
+            _ => return false,
+        }
+        true
+    }
+
+    pub fn any(&self) -> bool {
+        self.time
+            || self.narrative
+            || self.demo_actions
+            || self.screenshot
+            || self.visual
+            || self.design_plan
+    }
+}
+
 /// Lifecycle state of a sketch.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
@@ -26,6 +79,12 @@ pub enum SketchState {
 /// Row identity is its array index — no UUID needed.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PlanningRow {
+    /// Whether the entire row is protected from edits.
+    #[serde(default)]
+    pub locked: bool,
+    /// Per-cell lock state for targeted protection.
+    #[serde(default)]
+    pub locks: PlanningCellLocks,
     /// Approximate duration (e.g., "~30s", "1:00", "2m").
     pub time: String,
     /// Narrative bullet points for this step.
@@ -46,6 +105,8 @@ pub struct PlanningRow {
 impl PlanningRow {
     pub fn new() -> Self {
         Self {
+            locked: false,
+            locks: PlanningCellLocks::default(),
             time: String::new(),
             narrative: String::new(),
             demo_actions: String::new(),
@@ -69,6 +130,9 @@ impl Default for PlanningRow {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Sketch {
     pub title: String,
+    /// Whether the whole sketch is protected from edits.
+    #[serde(default)]
+    pub locked: bool,
     /// Rich-text description — stored as JSON value. Null if empty.
     #[serde(default)]
     pub description: serde_json::Value,
@@ -85,6 +149,7 @@ impl Sketch {
         let now = Utc::now();
         Self {
             title: title.into(),
+            locked: false,
             description: serde_json::Value::Null,
             rows: Vec::new(),
             state: SketchState::Draft,
@@ -270,6 +335,8 @@ mod tests {
     fn sketch_roundtrip() {
         let mut sketch = Sketch::new("Test Sketch");
         sketch.rows.push(PlanningRow {
+            locked: false,
+            locks: PlanningCellLocks::default(),
             time: "~30s".into(),
             narrative: "Click the button".into(),
             demo_actions: "Navigate, click CTA".into(),
@@ -342,6 +409,8 @@ mod tests {
     #[test]
     fn planning_row_roundtrip() {
         let row = PlanningRow {
+            locked: false,
+            locks: PlanningCellLocks::default(),
             time: "~30s".into(),
             narrative: "Click the sign-up button".into(),
             demo_actions: "Navigate to /signup, click CTA".into(),
@@ -360,6 +429,8 @@ mod tests {
         let from_new = PlanningRow::new();
         let from_default = PlanningRow::default();
         assert_eq!(from_new.time, from_default.time);
+        assert_eq!(from_new.locked, from_default.locked);
+        assert_eq!(from_new.locks, from_default.locks);
         assert_eq!(from_new.narrative, from_default.narrative);
         assert_eq!(from_new.demo_actions, from_default.demo_actions);
         assert_eq!(from_new.screenshot, from_default.screenshot);
@@ -504,5 +575,32 @@ mod tests {
         assert_eq!(sketch.state, SketchState::Draft);
         assert!(sketch.rows.is_empty());
         assert_eq!(sketch.description, serde_json::Value::Null);
+        assert!(!sketch.locked);
+    }
+
+    #[test]
+    fn planning_row_backward_compat_missing_locks() {
+        let json = r#"{
+            "time": "~30s",
+            "narrative": "Say hello",
+            "demo_actions": "Open the app",
+            "screenshot": null
+        }"#;
+        let row: PlanningRow = serde_json::from_str(json).unwrap();
+        assert!(!row.locked);
+        assert!(!row.locks.any());
+    }
+
+    #[test]
+    fn planning_cell_locks_roundtrip() {
+        let mut locks = PlanningCellLocks::default();
+        assert!(locks.set("narrative", true));
+        assert!(locks.is_locked("narrative"));
+        assert!(!locks.is_locked("demo_actions"));
+        assert!(!locks.set("unknown", true));
+
+        let json = serde_json::to_string(&locks).unwrap();
+        let parsed: PlanningCellLocks = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, locks);
     }
 }

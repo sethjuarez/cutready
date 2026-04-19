@@ -79,14 +79,7 @@ pub fn commit_snapshot(
 
     // Commit to HEAD (which is whatever branch/commit we're currently on)
     let commit_id = repo
-        .commit_as(
-            committer,
-            committer,
-            "HEAD",
-            message,
-            tree_id,
-            parents_refs,
-        )
+        .commit_as(committer, committer, "HEAD", message, tree_id, parents_refs)
         .map_err(|e| VersioningError::Git(e.to_string()))?;
 
     if forking {
@@ -152,8 +145,8 @@ pub fn discard_changes(project_dir: &Path) -> Result<(), VersioningError> {
 /// Check if working directory has changes not captured in a snapshot.
 pub fn has_unsaved_changes(project_dir: &Path) -> Result<bool, VersioningError> {
     // Use git2 status which handles CRLF normalization and .gitignore correctly.
-    let repo = git2::Repository::open(project_dir)
-        .map_err(|e| VersioningError::Git(e.to_string()))?;
+    let repo =
+        git2::Repository::open(project_dir).map_err(|e| VersioningError::Git(e.to_string()))?;
 
     // If no HEAD commit yet, any files = unsaved changes
     if repo.head().is_err() {
@@ -259,9 +252,7 @@ pub fn get_file_at_version(
     let entry = tree
         .lookup_entry_by_path(file_path)
         .map_err(|e| VersioningError::Git(e.to_string()))?
-        .ok_or_else(|| {
-            VersioningError::Git(format!("File not found at version: {}", file_path))
-        })?;
+        .ok_or_else(|| VersioningError::Git(format!("File not found at version: {}", file_path)))?;
 
     let object = entry
         .object()
@@ -323,8 +314,8 @@ pub fn pop_stash(project_dir: &Path) -> Result<bool, VersioningError> {
     if !stash_file.exists() {
         return Ok(false);
     }
-    let oid_str = std::fs::read_to_string(&stash_file)
-        .map_err(|e| VersioningError::Io(e.to_string()))?;
+    let oid_str =
+        std::fs::read_to_string(&stash_file).map_err(|e| VersioningError::Io(e.to_string()))?;
     let tree_id: gix::ObjectId = oid_str
         .trim()
         .parse()
@@ -352,10 +343,7 @@ pub fn has_stash(project_dir: &Path) -> bool {
 ///
 /// If the target IS the current HEAD, this is a no-op.
 /// If the target is on a different timeline, switches to that timeline first.
-pub fn navigate_to_snapshot(
-    project_dir: &Path,
-    commit_id: &str,
-) -> Result<(), VersioningError> {
+pub fn navigate_to_snapshot(project_dir: &Path, commit_id: &str) -> Result<(), VersioningError> {
     let repo = open_repo(project_dir)?;
 
     let target_oid: gix::ObjectId = commit_id
@@ -501,10 +489,7 @@ pub fn list_timelines(project_dir: &Path) -> Result<Vec<TimelineInfo>, Versionin
                     .strip_prefix(TIMELINE_PREFIX)
                     .unwrap_or(&full_name)
                     .to_string();
-                let label = labels
-                    .get(&slug)
-                    .cloned()
-                    .unwrap_or_else(|| slug.clone());
+                let label = labels.get(&slug).cloned().unwrap_or_else(|| slug.clone());
                 let is_active = active_branch.as_deref() == Some(&full_name)
                     || active_branch.as_deref() == Some(&format!("timeline/{}", slug));
                 let count = count_commits_on_ref(&repo, &full_name)?;
@@ -594,9 +579,7 @@ pub fn switch_timeline(project_dir: &Path, name: &str) -> Result<(), VersioningE
         .find_reference(&ref_name)
         .map_err(|e| VersioningError::Git(format!("Timeline not found: {}", e)))?;
 
-    let commit_id = reference
-        .id()
-        .detach();
+    let commit_id = reference.id().detach();
 
     // Switch HEAD to the branch
     set_head_to_branch(&repo, &ref_name)?;
@@ -618,7 +601,9 @@ pub fn switch_timeline(project_dir: &Path, name: &str) -> Result<(), VersioningE
 /// Delete a non-active timeline.
 pub fn delete_timeline(project_dir: &Path, name: &str) -> Result<(), VersioningError> {
     if name == MAIN_BRANCH {
-        return Err(VersioningError::Git("Cannot delete the main timeline".into()));
+        return Err(VersioningError::Git(
+            "Cannot delete the main timeline".into(),
+        ));
     }
 
     let repo = open_repo(project_dir)?;
@@ -629,7 +614,9 @@ pub fn delete_timeline(project_dir: &Path, name: &str) -> Result<(), VersioningE
     if active.as_deref() == Some(&ref_name)
         || active.as_deref() == Some(&format!("timeline/{}", name))
     {
-        return Err(VersioningError::Git("Cannot delete the active timeline".into()));
+        return Err(VersioningError::Git(
+            "Cannot delete the active timeline".into(),
+        ));
     }
 
     // Delete the ref
@@ -650,7 +637,9 @@ pub fn delete_timeline(project_dir: &Path, name: &str) -> Result<(), VersioningE
 /// The current main becomes a named fork ("Previous main").
 pub fn promote_timeline(project_dir: &Path, timeline_name: &str) -> Result<(), VersioningError> {
     if timeline_name == MAIN_BRANCH {
-        return Err(VersioningError::Git("Main is already the main timeline".into()));
+        return Err(VersioningError::Git(
+            "Main is already the main timeline".into(),
+        ));
     }
 
     let repo = open_repo(project_dir)?;
@@ -659,7 +648,9 @@ pub fn promote_timeline(project_dir: &Path, timeline_name: &str) -> Result<(), V
     // Get the fork's tip
     let fork_tip = repo
         .find_reference(&fork_ref)
-        .map_err(|e| VersioningError::Git(format!("Timeline '{}' not found: {}", timeline_name, e)))?
+        .map_err(|e| {
+            VersioningError::Git(format!("Timeline '{}' not found: {}", timeline_name, e))
+        })?
         .id()
         .detach();
 
@@ -686,10 +677,17 @@ pub fn promote_timeline(project_dir: &Path, timeline_name: &str) -> Result<(), V
 
     // Get the old fork's label for the promoted timeline
     let labels = load_timeline_labels(project_dir);
-    let fork_label = labels.get(timeline_name).cloned().unwrap_or_else(|| timeline_name.to_string());
+    let fork_label = labels
+        .get(timeline_name)
+        .cloned()
+        .unwrap_or_else(|| timeline_name.to_string());
 
     // Label the demoted main
-    save_timeline_label(project_dir, &old_main_slug, &format!("Previous main (before {})", fork_label))?;
+    save_timeline_label(
+        project_dir,
+        &old_main_slug,
+        &format!("Previous main (before {})", fork_label),
+    )?;
 
     // Move main ref to fork's tip
     reset_branch_ref(&repo, MAIN_BRANCH, fork_tip)?;
@@ -737,12 +735,10 @@ pub fn get_timeline_graph(project_dir: &Path) -> Result<Vec<GraphNode>, Versioni
         // Walk commits from this branch's tip
         let tip_oid = match repo.find_reference(&ref_name) {
             Ok(r) => r.id().detach(),
-            Err(_) => {
-                match repo.head_commit() {
-                    Ok(c) => c.id().detach(),
-                    Err(_) => continue,
-                }
-            }
+            Err(_) => match repo.head_commit() {
+                Ok(c) => c.id().detach(),
+                Err(_) => continue,
+            },
         };
 
         branch_tips.push((tip_oid, timeline.name.clone(), timeline.color_index));
@@ -764,7 +760,8 @@ pub fn get_timeline_graph(project_dir: &Path) -> Result<Vec<GraphNode>, Versioni
                 .map_err(|e| VersioningError::Git(e.to_string()))?;
             let timestamp = gix_time_to_chrono(time);
             let parents: Vec<String> = commit.parent_ids().map(|id| id.to_string()).collect();
-            let author = commit.author()
+            let author = commit
+                .author()
                 .map(|a| a.name.to_string())
                 .unwrap_or_default();
 
@@ -833,7 +830,8 @@ pub fn get_timeline_graph(project_dir: &Path) -> Result<Vec<GraphNode>, Versioni
                 .map_err(|e| VersioningError::Git(e.to_string()))?;
             let timestamp = gix_time_to_chrono(time);
             let parents: Vec<String> = commit.parent_ids().map(|id| id.to_string()).collect();
-            let author = commit.author()
+            let author = commit
+                .author()
                 .map(|a| a.name.to_string())
                 .unwrap_or_default();
 
@@ -912,31 +910,35 @@ pub fn diff_snapshots(
     let from_full = resolve_commit_id(project_dir, from_commit)?;
     let to_full = resolve_commit_id(project_dir, to_commit)?;
 
-    let repo = git2::Repository::open(project_dir)
-        .map_err(|e| VersioningError::Git(e.to_string()))?;
+    let repo =
+        git2::Repository::open(project_dir).map_err(|e| VersioningError::Git(e.to_string()))?;
 
-    let from_oid = git2::Oid::from_str(&from_full)
-        .map_err(|e| VersioningError::Git(e.to_string()))?;
-    let to_oid = git2::Oid::from_str(&to_full)
-        .map_err(|e| VersioningError::Git(e.to_string()))?;
+    let from_oid =
+        git2::Oid::from_str(&from_full).map_err(|e| VersioningError::Git(e.to_string()))?;
+    let to_oid = git2::Oid::from_str(&to_full).map_err(|e| VersioningError::Git(e.to_string()))?;
 
-    let from_tree = repo.find_commit(from_oid)
+    let from_tree = repo
+        .find_commit(from_oid)
         .map_err(|e| VersioningError::Git(e.to_string()))?
         .tree()
         .map_err(|e| VersioningError::Git(e.to_string()))?;
-    let to_tree = repo.find_commit(to_oid)
+    let to_tree = repo
+        .find_commit(to_oid)
         .map_err(|e| VersioningError::Git(e.to_string()))?
         .tree()
         .map_err(|e| VersioningError::Git(e.to_string()))?;
 
-    let diff = repo.diff_tree_to_tree(Some(&from_tree), Some(&to_tree), None)
+    let diff = repo
+        .diff_tree_to_tree(Some(&from_tree), Some(&to_tree), None)
         .map_err(|e| VersioningError::Git(e.to_string()))?;
 
     let mut entries: Vec<DiffEntry> = Vec::new();
     let num_deltas = diff.deltas().len();
     for i in 0..num_deltas {
         let delta = diff.deltas().nth(i).unwrap();
-        let path = delta.new_file().path()
+        let path = delta
+            .new_file()
+            .path()
             .or_else(|| delta.old_file().path())
             .unwrap_or(Path::new(""))
             .to_string_lossy()
@@ -959,7 +961,9 @@ pub fn diff_snapshots(
     let mut current_file: usize = 0;
     diff.print(git2::DiffFormat::Patch, |delta, _hunk, line| {
         // Find which entry this delta corresponds to
-        let dpath = delta.new_file().path()
+        let dpath = delta
+            .new_file()
+            .path()
             .or_else(|| delta.old_file().path())
             .unwrap_or(Path::new(""))
             .to_string_lossy()
@@ -980,15 +984,16 @@ pub fn diff_snapshots(
             }
         }
         true
-    }).map_err(|e| VersioningError::Git(e.to_string()))?;
+    })
+    .map_err(|e| VersioningError::Git(e.to_string()))?;
 
     Ok(entries)
 }
 
 /// Compare HEAD against the working directory and return file-level changes.
 pub fn diff_working_tree(project_dir: &Path) -> Result<Vec<DiffEntry>, VersioningError> {
-    let repo = git2::Repository::open(project_dir)
-        .map_err(|e| VersioningError::Git(e.to_string()))?;
+    let repo =
+        git2::Repository::open(project_dir).map_err(|e| VersioningError::Git(e.to_string()))?;
 
     let head_tree = repo
         .head()
@@ -1102,7 +1107,11 @@ pub struct IdentityStatus {
 pub fn check_git_identity(project_dir: &Path) -> IdentityStatus {
     // 1. Workspace settings
     if let Some((name, email)) = read_workspace_identity(project_dir) {
-        return IdentityStatus { name, email, is_fallback: false };
+        return IdentityStatus {
+            name,
+            email,
+            is_fallback: false,
+        };
     }
     // 2. Local git config
     let config_path = project_dir.join(".git").join("config");
@@ -1112,7 +1121,11 @@ pub fn check_git_identity(project_dir: &Path) -> IdentityStatus {
             let email = local.get_string("user.email").ok();
             if let (Some(n), Some(e)) = (name, email) {
                 if !n.is_empty() && !e.is_empty() {
-                    return IdentityStatus { name: n, email: e, is_fallback: false };
+                    return IdentityStatus {
+                        name: n,
+                        email: e,
+                        is_fallback: false,
+                    };
                 }
             }
         }
@@ -1121,7 +1134,11 @@ pub fn check_git_identity(project_dir: &Path) -> IdentityStatus {
     let (global_name, global_email) = resolve_global_git_identity(project_dir);
     if let (Some(n), Some(e)) = (&global_name, &global_email) {
         if !n.is_empty() && !e.is_empty() {
-            return IdentityStatus { name: n.clone(), email: e.clone(), is_fallback: false };
+            return IdentityStatus {
+                name: n.clone(),
+                email: e.clone(),
+                is_fallback: false,
+            };
         }
     }
     // 4. GitHub CLI
@@ -1130,7 +1147,11 @@ pub fn check_git_identity(project_dir: &Path) -> IdentityStatus {
     let email = gh_email.or(global_email);
     if let (Some(n), Some(e)) = (&name, &email) {
         if !n.is_empty() && !e.is_empty() {
-            return IdentityStatus { name: n.clone(), email: e.clone(), is_fallback: false };
+            return IdentityStatus {
+                name: n.clone(),
+                email: e.clone(),
+                is_fallback: false,
+            };
         }
     }
     // 5. Fallback — prompt needed
@@ -1150,11 +1171,13 @@ pub fn set_git_identity(
     // Write to local .git/config so gix picks it up for reflogs
     let config_path = project_dir.join(".git").join("config");
     if config_path.exists() {
-        let mut local = git2::Config::open(&config_path)
+        let mut local =
+            git2::Config::open(&config_path).map_err(|e| VersioningError::Git(e.to_string()))?;
+        local
+            .set_str("user.name", name)
             .map_err(|e| VersioningError::Git(e.to_string()))?;
-        local.set_str("user.name", name)
-            .map_err(|e| VersioningError::Git(e.to_string()))?;
-        local.set_str("user.email", email)
+        local
+            .set_str("user.email", email)
             .map_err(|e| VersioningError::Git(e.to_string()))?;
     }
     // Write to workspace settings so CutReady remembers across machines
@@ -1165,11 +1188,13 @@ pub fn set_git_identity(
 /// Read repoAuthorName/repoAuthorEmail from .cutready/settings.json.
 fn read_workspace_identity(project_dir: &Path) -> Option<(String, String)> {
     let settings = crate::engine::project::read_repo_settings(project_dir);
-    let name = settings.get("repoAuthorName")
+    let name = settings
+        .get("repoAuthorName")
         .and_then(|v| v.as_str())
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty());
-    let email = settings.get("repoAuthorEmail")
+    let email = settings
+        .get("repoAuthorEmail")
         .and_then(|v| v.as_str())
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty());
@@ -1183,8 +1208,14 @@ fn read_workspace_identity(project_dir: &Path) -> Option<(String, String)> {
 fn write_workspace_identity(project_dir: &Path, name: &str, email: &str) {
     let mut settings = crate::engine::project::read_repo_settings(project_dir);
     if let Some(obj) = settings.as_object_mut() {
-        obj.insert("repoAuthorName".into(), serde_json::Value::String(name.into()));
-        obj.insert("repoAuthorEmail".into(), serde_json::Value::String(email.into()));
+        obj.insert(
+            "repoAuthorName".into(),
+            serde_json::Value::String(name.into()),
+        );
+        obj.insert(
+            "repoAuthorEmail".into(),
+            serde_json::Value::String(email.into()),
+        );
     }
     let _ = crate::engine::project::write_repo_settings(project_dir, &settings);
 }
@@ -1231,13 +1262,15 @@ pub fn ensure_git_identity(project_dir: &Path) {
     // Write to local repo config (priority: global > gh > default)
     if let Ok(mut local) = git2::Config::open(&config_path) {
         if !has_local_name {
-            let name = global_name.as_deref()
+            let name = global_name
+                .as_deref()
                 .or(gh_name.as_deref())
                 .unwrap_or("CutReady");
             let _ = local.set_str("user.name", name);
         }
         if !has_local_email {
-            let email = global_email.as_deref()
+            let email = global_email
+                .as_deref()
                 .or(gh_email.as_deref())
                 .unwrap_or("app@cutready.local");
             let _ = local.set_str("user.email", email);
@@ -1270,8 +1303,7 @@ fn resolve_gh_identity() -> (Option<String>, Option<String>) {
         use std::os::windows::process::CommandExt;
         cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
     }
-    let output = match cmd.output()
-    {
+    let output = match cmd.output() {
         Ok(o) if o.status.success() => o,
         _ => return (None, None),
     };
@@ -1281,20 +1313,31 @@ fn resolve_gh_identity() -> (Option<String>, Option<String>) {
 
     let raw_name = parts.first().and_then(|s| {
         let s = s.trim();
-        if s.is_empty() || s == "null" { None } else { Some(s.to_string()) }
+        if s.is_empty() || s == "null" {
+            None
+        } else {
+            Some(s.to_string())
+        }
     });
     let login = parts.get(1).and_then(|s| {
         let s = s.trim();
-        if s.is_empty() || s == "null" { None } else { Some(s.to_string()) }
+        if s.is_empty() || s == "null" {
+            None
+        } else {
+            Some(s.to_string())
+        }
     });
     let raw_email = parts.get(2).and_then(|s| {
         let s = s.trim();
-        if s.is_empty() || s == "null" { None } else { Some(s.to_string()) }
+        if s.is_empty() || s == "null" {
+            None
+        } else {
+            Some(s.to_string())
+        }
     });
 
     let name = raw_name.or(login.clone());
-    let email = raw_email
-        .or_else(|| login.map(|l| format!("{}@users.noreply.github.com", l)));
+    let email = raw_email.or_else(|| login.map(|l| format!("{}@users.noreply.github.com", l)));
 
     (name, email)
 }
@@ -1306,8 +1349,8 @@ fn resolve_commit_id(project_dir: &Path, short_id: &str) -> Result<String, Versi
     if short_id.len() == 40 && short_id.chars().all(|c| c.is_ascii_hexdigit()) {
         return Ok(short_id.to_string());
     }
-    let repo = git2::Repository::open(project_dir)
-        .map_err(|e| VersioningError::Git(e.to_string()))?;
+    let repo =
+        git2::Repository::open(project_dir).map_err(|e| VersioningError::Git(e.to_string()))?;
     let obj = repo
         .revparse_single(short_id)
         .map_err(|e| VersioningError::Git(format!("Cannot resolve '{}': {}", short_id, e)))?;
@@ -1317,8 +1360,12 @@ fn resolve_commit_id(project_dir: &Path, short_id: &str) -> Result<String, Versi
 /// Sync the git index to match HEAD's tree so git2-based operations see
 /// a consistent view. Called after gix commits which bypass the index.
 fn sync_index_to_head(project_dir: &Path) {
-    let Ok(repo) = git2::Repository::open(project_dir) else { return };
-    let Ok(head) = repo.head().and_then(|h| h.peel_to_tree()) else { return };
+    let Ok(repo) = git2::Repository::open(project_dir) else {
+        return;
+    };
+    let Ok(head) = repo.head().and_then(|h| h.peel_to_tree()) else {
+        return;
+    };
     let Ok(mut index) = repo.index() else { return };
     let _ = index.read_tree(&head);
     let _ = index.write();
@@ -1363,7 +1410,12 @@ fn get_current_branch_name(repo: &gix::Repository) -> Option<String> {
     if content.starts_with("ref: ") {
         let ref_name = content.trim().strip_prefix("ref: ")?;
         // Return just the branch name part after refs/heads/
-        Some(ref_name.strip_prefix("refs/heads/").unwrap_or(ref_name).to_string())
+        Some(
+            ref_name
+                .strip_prefix("refs/heads/")
+                .unwrap_or(ref_name)
+                .to_string(),
+        )
     } else {
         None // Detached HEAD
     }
@@ -1386,7 +1438,9 @@ fn count_commits_on_ref(repo: &gix::Repository, ref_name: &str) -> Result<usize,
     let mut current = Some(oid);
     while let Some(id) = current {
         count += 1;
-        let commit = repo.find_commit(id).map_err(|e| VersioningError::Git(e.to_string()))?;
+        let commit = repo
+            .find_commit(id)
+            .map_err(|e| VersioningError::Git(e.to_string()))?;
         current = commit.parent_ids().next().map(|p| p.detach());
     }
     Ok(count)
@@ -1427,7 +1481,11 @@ fn write_timeline_labels(
     labels: &std::collections::HashMap<String, String>,
 ) -> Result<(), VersioningError> {
     let path = labels_path(project_dir);
-    let content: String = labels.iter().map(|(k, v)| format!("{}={}", k, v)).collect::<Vec<_>>().join("\n");
+    let content: String = labels
+        .iter()
+        .map(|(k, v)| format!("{}={}", k, v))
+        .collect::<Vec<_>>()
+        .join("\n");
     std::fs::write(&path, content).map_err(|e| VersioningError::Io(e.to_string()))
 }
 
@@ -1440,8 +1498,7 @@ fn prev_tip_path(project_dir: &Path) -> std::path::PathBuf {
 fn save_prev_tip(project_dir: &Path, oid: gix::ObjectId) -> Result<(), VersioningError> {
     let path = prev_tip_path(project_dir);
     if !path.exists() {
-        std::fs::write(&path, oid.to_string())
-            .map_err(|e| VersioningError::Io(e.to_string()))?;
+        std::fs::write(&path, oid.to_string()).map_err(|e| VersioningError::Io(e.to_string()))?;
     }
     Ok(())
 }
@@ -1472,8 +1529,7 @@ fn reset_branch_ref(
         ref_path = ref_path.join(component);
     }
     if let Some(parent) = ref_path.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|e| VersioningError::Io(e.to_string()))?;
+        std::fs::create_dir_all(parent).map_err(|e| VersioningError::Io(e.to_string()))?;
     }
     std::fs::write(&ref_path, format!("{}\n", target_oid))
         .map_err(|e| VersioningError::Io(e.to_string()))
@@ -1496,9 +1552,7 @@ fn build_tree_from_dir(
         let name = fs_entry.file_name().to_string_lossy().to_string();
 
         // Skip .git but include .cutready (screenshots, metadata) and .chats (chat sessions)
-        if name == ".git"
-            || (name.starts_with('.') && name != ".cutready" && name != ".chats")
-        {
+        if name == ".git" || (name.starts_with('.') && name != ".cutready" && name != ".chats") {
             continue;
         }
 
@@ -1547,9 +1601,7 @@ fn clean_working_dir(project_dir: &Path) -> Result<(), VersioningError> {
         let entry = entry.map_err(|e| VersioningError::Io(e.to_string()))?;
         let name = entry.file_name().to_string_lossy().to_string();
         // Skip .git but clean .cutready (screenshots, metadata) and .chats (chat sessions)
-        if name == ".git"
-            || (name.starts_with('.') && name != ".cutready" && name != ".chats")
-        {
+        if name == ".git" || (name.starts_with('.') && name != ".cutready" && name != ".chats") {
             continue;
         }
         let path = entry.path();
@@ -1747,7 +1799,11 @@ mod tests {
         commit_snapshot(tmp.path(), "baseline", None).unwrap();
 
         // Make edits
-        std::fs::write(tmp.path().join("project.json"), r#"{"name":"dirty","version":99}"#).unwrap();
+        std::fs::write(
+            tmp.path().join("project.json"),
+            r#"{"name":"dirty","version":99}"#,
+        )
+        .unwrap();
         std::fs::write(tmp.path().join("notes.txt"), "some notes").unwrap();
         assert!(has_unsaved_changes(tmp.path()).unwrap());
 
@@ -1807,7 +1863,11 @@ mod tests {
         init_project_repo(tmp.path()).unwrap();
 
         let id1 = commit_snapshot(tmp.path(), "v1", None).unwrap();
-        std::fs::write(tmp.path().join("project.json"), r#"{"name":"test","version":2}"#).unwrap();
+        std::fs::write(
+            tmp.path().join("project.json"),
+            r#"{"name":"test","version":2}"#,
+        )
+        .unwrap();
         commit_snapshot(tmp.path(), "v2", None).unwrap();
 
         // Create exploration from v1
@@ -1835,12 +1895,20 @@ mod tests {
         init_project_repo(tmp.path()).unwrap();
 
         let id1 = commit_snapshot(tmp.path(), "v1", None).unwrap();
-        std::fs::write(tmp.path().join("project.json"), r#"{"name":"test","version":2}"#).unwrap();
+        std::fs::write(
+            tmp.path().join("project.json"),
+            r#"{"name":"test","version":2}"#,
+        )
+        .unwrap();
         commit_snapshot(tmp.path(), "v2", None).unwrap();
 
         // Create exploration from v1 and add a commit there
         create_timeline(tmp.path(), &id1, "Exploration").unwrap();
-        std::fs::write(tmp.path().join("project.json"), r#"{"name":"test","version":3}"#).unwrap();
+        std::fs::write(
+            tmp.path().join("project.json"),
+            r#"{"name":"test","version":3}"#,
+        )
+        .unwrap();
         commit_snapshot(tmp.path(), "v3 on exploration", None).unwrap();
 
         let graph = get_timeline_graph(tmp.path()).unwrap();
@@ -1876,11 +1944,17 @@ mod tests {
 
         // The "future" commits should still be visible in the graph
         let graph = get_timeline_graph(tmp.path()).unwrap();
-        assert!(graph.len() >= 3, "Graph should show all commits via prev-tip");
+        assert!(
+            graph.len() >= 3,
+            "Graph should show all commits via prev-tip"
+        );
 
         // Navigate forward to v2 — should work without issues
         navigate_to_snapshot(tmp.path(), &id2).unwrap();
-        assert!(!has_unsaved_changes(tmp.path()).unwrap(), "Clean after forward nav");
+        assert!(
+            !has_unsaved_changes(tmp.path()).unwrap(),
+            "Clean after forward nav"
+        );
 
         // Navigate back to v1 again
         navigate_to_snapshot(tmp.path(), &id1).unwrap();
@@ -1890,10 +1964,17 @@ mod tests {
         let _new_id = commit_snapshot(tmp.path(), "new direction", None).unwrap();
 
         let timelines = list_timelines(tmp.path()).unwrap();
-        assert!(timelines.len() >= 2, "Fork created on commit, got {}", timelines.len());
+        assert!(
+            timelines.len() >= 2,
+            "Fork created on commit, got {}",
+            timelines.len()
+        );
         // The fork is for the NEW direction (not "before rewind" anymore)
         let fork = timelines.iter().find(|t| t.name != "main");
-        assert!(fork.is_some(), "Expected a fork timeline after commit from rewound state");
+        assert!(
+            fork.is_some(),
+            "Expected a fork timeline after commit from rewound state"
+        );
     }
 
     #[test]
@@ -1906,16 +1987,24 @@ mod tests {
         let _id2 = commit_snapshot(tmp.path(), "v2", None).unwrap();
 
         navigate_to_snapshot(tmp.path(), &id1).unwrap();
-        assert!(is_rewound(tmp.path()), "Should be rewound after backward nav");
+        assert!(
+            is_rewound(tmp.path()),
+            "Should be rewound after backward nav"
+        );
 
         std::fs::write(tmp.path().join("project.json"), r#"{"v":"alt"}"#).unwrap();
-        let _id3 = commit_snapshot(tmp.path(), "alternative approach", Some("Original plan")).unwrap();
+        let _id3 =
+            commit_snapshot(tmp.path(), "alternative approach", Some("Original plan")).unwrap();
 
         let timelines = list_timelines(tmp.path()).unwrap();
         // The user's label is on the NEW fork branch (the active one)
         let fork = timelines.iter().find(|t| t.name != "main");
         assert!(fork.is_some(), "Fork should exist");
-        assert_eq!(fork.unwrap().label, "Original plan", "Should use custom label");
+        assert_eq!(
+            fork.unwrap().label,
+            "Original plan",
+            "Should use custom label"
+        );
         assert!(!is_rewound(tmp.path()), "prev-tip cleared after commit");
     }
 
@@ -1970,13 +2059,17 @@ mod tests {
         std::fs::write(tmp.path().join("start.sk"), sketch2).unwrap();
         let id2 = commit_snapshot(tmp.path(), "row two", None).unwrap();
 
-        let sketch3 = r#"{"title":"Start","rows":[{"text":"row1"},{"text":"row2"},{"text":"row3"}]}"#;
+        let sketch3 =
+            r#"{"title":"Start","rows":[{"text":"row1"},{"text":"row2"},{"text":"row3"}]}"#;
         std::fs::write(tmp.path().join("start.sk"), sketch3).unwrap();
         let id3 = commit_snapshot(tmp.path(), "row three", None).unwrap();
 
         // Verify: HEAD is at id3, 3 versions, file has 3 rows
         assert_eq!(list_versions(tmp.path()).unwrap().len(), 3);
-        assert!(!has_unsaved_changes(tmp.path()).unwrap(), "Should be clean after commit");
+        assert!(
+            !has_unsaved_changes(tmp.path()).unwrap(),
+            "Should be clean after commit"
+        );
 
         // === Navigate backward to id1 ===
         navigate_to_snapshot(tmp.path(), &id1).unwrap();
@@ -1984,12 +2077,20 @@ mod tests {
         // File on disk should match id1's content
         let disk = std::fs::read_to_string(tmp.path().join("start.sk")).unwrap();
         assert!(disk.contains("row1"), "File should contain row1");
-        assert!(!disk.contains("row2"), "File should NOT contain row2 after navigating to id1");
-        assert!(!disk.contains("row3"), "File should NOT contain row3 after navigating to id1");
+        assert!(
+            !disk.contains("row2"),
+            "File should NOT contain row2 after navigating to id1"
+        );
+        assert!(
+            !disk.contains("row3"),
+            "File should NOT contain row3 after navigating to id1"
+        );
 
         // Should NOT be dirty (file matches HEAD)
-        assert!(!has_unsaved_changes(tmp.path()).unwrap(),
-            "Should be clean right after navigating — file matches HEAD");
+        assert!(
+            !has_unsaved_changes(tmp.path()).unwrap(),
+            "Should be clean right after navigating — file matches HEAD"
+        );
 
         // list_versions should show only id1 (that's where main points now)
         let versions = list_versions(tmp.path()).unwrap();
@@ -2002,7 +2103,10 @@ mod tests {
 
         // But the graph should show all commits (via prev-tip)
         let graph = get_timeline_graph(tmp.path()).unwrap();
-        assert!(graph.len() >= 3, "Graph should have at least 3 nodes via prev-tip");
+        assert!(
+            graph.len() >= 3,
+            "Graph should have at least 3 nodes via prev-tip"
+        );
         let head_nodes: Vec<_> = graph.iter().filter(|n| n.is_head).collect();
         assert_eq!(head_nodes.len(), 1, "Exactly one HEAD node");
         assert_eq!(head_nodes[0].id, id1, "HEAD should be id1");
@@ -2011,7 +2115,10 @@ mod tests {
         navigate_to_snapshot(tmp.path(), &id2).unwrap();
         let disk = std::fs::read_to_string(tmp.path().join("start.sk")).unwrap();
         assert!(disk.contains("row2"), "Should have row2 after forward nav");
-        assert!(!has_unsaved_changes(tmp.path()).unwrap(), "Clean after forward nav");
+        assert!(
+            !has_unsaved_changes(tmp.path()).unwrap(),
+            "Clean after forward nav"
+        );
 
         // Navigate back to id1 again
         navigate_to_snapshot(tmp.path(), &id1).unwrap();
@@ -2019,10 +2126,16 @@ mod tests {
         // === Edit and save new work from id1 — THIS creates the fork ===
         let sketch_new = r#"{"title":"Start","rows":[{"text":"row1"},{"text":"new direction"}]}"#;
         std::fs::write(tmp.path().join("start.sk"), sketch_new).unwrap();
-        assert!(has_unsaved_changes(tmp.path()).unwrap(), "Should be dirty after editing");
+        assert!(
+            has_unsaved_changes(tmp.path()).unwrap(),
+            "Should be dirty after editing"
+        );
 
         let _id4 = commit_snapshot(tmp.path(), "new direction", None).unwrap();
-        assert!(!has_unsaved_changes(tmp.path()).unwrap(), "Should be clean after saving");
+        assert!(
+            !has_unsaved_changes(tmp.path()).unwrap(),
+            "Should be clean after saving"
+        );
 
         // Fork should now exist (new direction goes on the fork, main keeps original)
         let timelines = list_timelines(tmp.path()).unwrap();
@@ -2039,11 +2152,16 @@ mod tests {
 
         // File should have 3 rows again
         let disk = std::fs::read_to_string(tmp.path().join("start.sk")).unwrap();
-        assert!(disk.contains("row3"), "After cross-timeline nav, file should have row3");
+        assert!(
+            disk.contains("row3"),
+            "After cross-timeline nav, file should have row3"
+        );
 
         // Should NOT be dirty
-        assert!(!has_unsaved_changes(tmp.path()).unwrap(),
-            "Should be clean after cross-timeline navigation");
+        assert!(
+            !has_unsaved_changes(tmp.path()).unwrap(),
+            "Should be clean after cross-timeline navigation"
+        );
 
         // Graph should still show everything
         let graph = get_timeline_graph(tmp.path()).unwrap();
@@ -2055,7 +2173,10 @@ mod tests {
         let disk = std::fs::read_to_string(tmp.path().join("start.sk")).unwrap();
         assert!(disk.contains("row2"), "Should have row2");
         assert!(!disk.contains("row3"), "Should NOT have row3");
-        assert!(!has_unsaved_changes(tmp.path()).unwrap(), "Clean after nav to id2");
+        assert!(
+            !has_unsaved_changes(tmp.path()).unwrap(),
+            "Clean after nav to id2"
+        );
     }
 
     /// Navigate back to initial (empty) commit — working dir should be clean and match commit tree.
@@ -2081,14 +2202,20 @@ mod tests {
             .map(|e| e.file_name().to_string_lossy().into_owned())
             .filter(|n| !n.starts_with('.'))
             .collect();
-        assert!(!files.contains(&"sketch.sk".to_string()),
-            "sketch.sk should not exist after navigating to initial commit");
-        assert!(files.contains(&"project.json".to_string()),
-            "project.json should still exist from initial commit");
+        assert!(
+            !files.contains(&"sketch.sk".to_string()),
+            "sketch.sk should not exist after navigating to initial commit"
+        );
+        assert!(
+            files.contains(&"project.json".to_string()),
+            "project.json should still exist from initial commit"
+        );
 
         // Should NOT be dirty
-        assert!(!has_unsaved_changes(tmp.path()).unwrap(),
-            "Should be clean after navigating to initial commit");
+        assert!(
+            !has_unsaved_changes(tmp.path()).unwrap(),
+            "Should be clean after navigating to initial commit"
+        );
     }
 
     /// Simulate the debounce race: navigate backward, then write stale data.
@@ -2112,14 +2239,19 @@ mod tests {
 
         // Simulate debounce race: stale write puts V2 content back
         std::fs::write(tmp.path().join("demo.sk"), sketch_v2).unwrap();
-        assert!(has_unsaved_changes(tmp.path()).unwrap(),
-            "Should be dirty after stale write — this is the bug the frontend fix prevents");
+        assert!(
+            has_unsaved_changes(tmp.path()).unwrap(),
+            "Should be dirty after stale write — this is the bug the frontend fix prevents"
+        );
 
         // Navigate to same commit again to re-checkout (like a refresh)
         navigate_to_snapshot(tmp.path(), &id1).unwrap();
         let disk = std::fs::read_to_string(tmp.path().join("demo.sk")).unwrap();
         assert!(disk.contains("V1"), "File should be V1 after re-checkout");
-        assert!(!has_unsaved_changes(tmp.path()).unwrap(), "Clean after re-checkout");
+        assert!(
+            !has_unsaved_changes(tmp.path()).unwrap(),
+            "Clean after re-checkout"
+        );
     }
 
     /// Shared ancestor commits should be attributed to the main timeline, not to forks.
@@ -2147,18 +2279,26 @@ mod tests {
 
         // Find the "one" commit (shared ancestor) — it should be on "main" timeline
         let one_node = graph.iter().find(|n| n.message == "one").unwrap();
-        assert_eq!(one_node.timeline, "main",
-            "Shared ancestor 'one' should be attributed to main, got '{}'", one_node.timeline);
+        assert_eq!(
+            one_node.timeline, "main",
+            "Shared ancestor 'one' should be attributed to main, got '{}'",
+            one_node.timeline
+        );
 
         // "two" should also stay on main (it was the original main tip, now on prev-tip fork → main still reaches it)
         let two_node = graph.iter().find(|n| n.message == "two").unwrap();
-        assert_eq!(two_node.timeline, "main",
-            "Original main commit 'two' should stay on main, got '{}'", two_node.timeline);
+        assert_eq!(
+            two_node.timeline, "main",
+            "Original main commit 'two' should stay on main, got '{}'",
+            two_node.timeline
+        );
 
         // The branch-specific commit should be on the fork timeline
         let branch_node = graph.iter().find(|n| n.message == "branch first").unwrap();
-        assert_ne!(branch_node.timeline, "main",
-            "Branch commit should NOT be on main");
+        assert_ne!(
+            branch_node.timeline, "main",
+            "Branch commit should NOT be on main"
+        );
     }
 
     #[test]
@@ -2186,25 +2326,39 @@ mod tests {
             oid,
             gix::refs::transaction::PreviousValue::Any,
             "test: create shared-tip branch",
-        ).unwrap();
+        )
+        .unwrap();
 
         // Get graph
         let graph = get_timeline_graph(tmp.path()).unwrap();
 
         // There should be alias node(s): same commit id1, different timelines
         let id1_nodes: Vec<_> = graph.iter().filter(|n| n.id == id1).collect();
-        assert!(id1_nodes.len() >= 2,
+        assert!(
+            id1_nodes.len() >= 2,
             "Expected at least 2 graph nodes for shared commit {}, got {}. Timelines: {:?}",
-            id1, id1_nodes.len(), id1_nodes.iter().map(|n| &n.timeline).collect::<Vec<_>>());
+            id1,
+            id1_nodes.len(),
+            id1_nodes.iter().map(|n| &n.timeline).collect::<Vec<_>>()
+        );
 
         // One should be on main, one on fork-newbranch
         let timelines: Vec<&str> = id1_nodes.iter().map(|n| n.timeline.as_str()).collect();
-        assert!(timelines.contains(&"fork-newbranch"),
-            "Expected fork-newbranch in timelines for shared commit, got {:?}", timelines);
+        assert!(
+            timelines.contains(&"fork-newbranch"),
+            "Expected fork-newbranch in timelines for shared commit, got {:?}",
+            timelines
+        );
 
         // The alias node should be marked as a branch tip
-        let alias = id1_nodes.iter().find(|n| n.timeline == "fork-newbranch").unwrap();
-        assert!(alias.is_branch_tip, "Alias node should have is_branch_tip=true");
+        let alias = id1_nodes
+            .iter()
+            .find(|n| n.timeline == "fork-newbranch")
+            .unwrap();
+        assert!(
+            alias.is_branch_tip,
+            "Alias node should have is_branch_tip=true"
+        );
     }
 
     // ── Snapshot graph integration tests ──────────────────────────
@@ -2235,7 +2389,11 @@ mod tests {
 
         // At this point we have main + one fork. Get the fork's name.
         let tls_before = list_timelines(tmp.path()).unwrap();
-        assert_eq!(tls_before.len(), 2, "Should have 2 timelines before adding third");
+        assert_eq!(
+            tls_before.len(),
+            2,
+            "Should have 2 timelines before adding third"
+        );
 
         // Create a third branch at "start" (shared tip, no unique commits)
         let repo = gix::open(tmp.path()).unwrap();
@@ -2245,22 +2403,34 @@ mod tests {
             start_oid,
             gix::refs::transaction::PreviousValue::Any,
             "test",
-        ).unwrap();
+        )
+        .unwrap();
 
         let graph = get_timeline_graph(tmp.path()).unwrap();
         let timelines_in_graph: std::collections::HashSet<&str> =
             graph.iter().map(|n| n.timeline.as_str()).collect();
 
         assert!(timelines_in_graph.contains("main"), "Graph missing main");
-        assert!(timelines_in_graph.contains("fork-newbranch"), "Graph missing shared-tip branch");
+        assert!(
+            timelines_in_graph.contains("fork-newbranch"),
+            "Graph missing shared-tip branch"
+        );
         // The fork created by commit_snapshot has a timestamp-based name
-        assert!(timelines_in_graph.len() >= 3,
-            "Expected at least 3 timelines in graph, got: {:?}", timelines_in_graph);
+        assert!(
+            timelines_in_graph.len() >= 3,
+            "Expected at least 3 timelines in graph, got: {:?}",
+            timelines_in_graph
+        );
 
         // list_timelines should also return all 3
         let tls = list_timelines(tmp.path()).unwrap();
-        assert_eq!(tls.len(), 3, "Expected 3 timelines, got {}: {:?}",
-            tls.len(), tls.iter().map(|t| &t.name).collect::<Vec<_>>());
+        assert_eq!(
+            tls.len(),
+            3,
+            "Expected 3 timelines, got {}: {:?}",
+            tls.len(),
+            tls.iter().map(|t| &t.name).collect::<Vec<_>>()
+        );
     }
 
     #[test]
@@ -2287,7 +2457,11 @@ mod tests {
 
         // Record branch tips before navigation
         let repo = gix::open(tmp.path()).unwrap();
-        let main_tip_before = repo.find_reference("refs/heads/main").unwrap().id().detach();
+        let main_tip_before = repo
+            .find_reference("refs/heads/main")
+            .unwrap()
+            .id()
+            .detach();
         let fork_tip_before = repo.find_reference(&fork_ref).unwrap().id().detach();
 
         // Navigate to various commits
@@ -2298,13 +2472,21 @@ mod tests {
 
         // Branch tips must not have moved
         let repo = gix::open(tmp.path()).unwrap();
-        let main_tip_after = repo.find_reference("refs/heads/main").unwrap().id().detach();
+        let main_tip_after = repo
+            .find_reference("refs/heads/main")
+            .unwrap()
+            .id()
+            .detach();
         let fork_tip_after = repo.find_reference(&fork_ref).unwrap().id().detach();
 
-        assert_eq!(main_tip_before, main_tip_after,
-            "main branch tip moved during navigation!");
-        assert_eq!(fork_tip_before, fork_tip_after,
-            "fork branch tip moved during navigation!");
+        assert_eq!(
+            main_tip_before, main_tip_after,
+            "main branch tip moved during navigation!"
+        );
+        assert_eq!(
+            fork_tip_before, fork_tip_after,
+            "fork branch tip moved during navigation!"
+        );
     }
 
     #[test]
@@ -2333,16 +2515,22 @@ mod tests {
         let graph = get_timeline_graph(tmp.path()).unwrap();
         let head_node = graph.iter().find(|n| n.is_head).unwrap();
         assert_eq!(head_node.id, fork1);
-        assert_eq!(head_node.timeline, fork_name,
-            "HEAD should be attributed to fork timeline, got '{}'", head_node.timeline);
+        assert_eq!(
+            head_node.timeline, fork_name,
+            "HEAD should be attributed to fork timeline, got '{}'",
+            head_node.timeline
+        );
 
         // Navigate to main tip — HEAD should be on main
         navigate_to_snapshot(tmp.path(), &id2).unwrap();
         let graph = get_timeline_graph(tmp.path()).unwrap();
         let head_node = graph.iter().find(|n| n.is_head).unwrap();
         assert_eq!(head_node.id, id2);
-        assert_eq!(head_node.timeline, "main",
-            "HEAD should be attributed to main, got '{}'", head_node.timeline);
+        assert_eq!(
+            head_node.timeline, "main",
+            "HEAD should be attributed to main, got '{}'",
+            head_node.timeline
+        );
     }
 
     #[test]
@@ -2369,8 +2557,10 @@ mod tests {
 
         // Main should still have id2 at its tip
         let main_nodes: Vec<_> = graph.iter().filter(|n| n.timeline == "main").collect();
-        assert!(main_nodes.iter().any(|n| n.id == id2),
-            "main should still contain 'second' commit");
+        assert!(
+            main_nodes.iter().any(|n| n.id == id2),
+            "main should still contain 'second' commit"
+        );
 
         // Navigate to id2 (main tip) — graph should update HEAD
         navigate_to_snapshot(tmp.path(), &id2).unwrap();
@@ -2398,15 +2588,30 @@ mod tests {
         let graph = get_timeline_graph(tmp.path()).unwrap();
 
         // Branch tips should be marked
-        let main_tip_node = graph.iter().find(|n| n.id == id2 && n.timeline == "main").unwrap();
-        assert!(main_tip_node.is_branch_tip, "main tip should have is_branch_tip=true");
+        let main_tip_node = graph
+            .iter()
+            .find(|n| n.id == id2 && n.timeline == "main")
+            .unwrap();
+        assert!(
+            main_tip_node.is_branch_tip,
+            "main tip should have is_branch_tip=true"
+        );
 
         let fork_tip_node = graph.iter().find(|n| n.id == fork_tip).unwrap();
-        assert!(fork_tip_node.is_branch_tip, "fork tip should have is_branch_tip=true");
+        assert!(
+            fork_tip_node.is_branch_tip,
+            "fork tip should have is_branch_tip=true"
+        );
 
         // Non-tip nodes should not be marked
-        let first_node = graph.iter().find(|n| n.id == id1 && n.timeline == "main").unwrap();
-        assert!(!first_node.is_branch_tip, "non-tip commit should have is_branch_tip=false");
+        let first_node = graph
+            .iter()
+            .find(|n| n.id == id1 && n.timeline == "main")
+            .unwrap();
+        assert!(
+            !first_node.is_branch_tip,
+            "non-tip commit should have is_branch_tip=false"
+        );
     }
 
     #[test]
@@ -2440,15 +2645,23 @@ mod tests {
         // Both branches should have nodes in the graph
         let timelines: std::collections::HashSet<&str> =
             graph.iter().map(|n| n.timeline.as_str()).collect();
-        assert!(timelines.contains("main"), "Graph missing main when HEAD at shared ancestor");
-        assert!(timelines.contains(fork_name.as_str()),
+        assert!(
+            timelines.contains("main"),
+            "Graph missing main when HEAD at shared ancestor"
+        );
+        assert!(
+            timelines.contains(fork_name.as_str()),
             "Graph missing fork '{}' when HEAD at shared ancestor. Timelines: {:?}",
-            fork_name, timelines);
+            fork_name,
+            timelines
+        );
 
         // list_timelines should mark one as active
         let tls = list_timelines(tmp.path()).unwrap();
-        assert!(tls.iter().any(|t| t.is_active),
-            "At least one timeline should be active even with detached HEAD");
+        assert!(
+            tls.iter().any(|t| t.is_active),
+            "At least one timeline should be active even with detached HEAD"
+        );
     }
 
     #[test]
@@ -2485,7 +2698,10 @@ mod tests {
 
         // HEAD should now be on the fork branch (attached)
         let tls = list_timelines(tmp.path()).unwrap();
-        let fork_b = tls.iter().find(|t| t.name != "main" && t.is_active).unwrap();
+        let fork_b = tls
+            .iter()
+            .find(|t| t.name != "main" && t.is_active)
+            .unwrap();
         eprintln!("Active fork: {} (label: {})", fork_b.name, fork_b.label);
 
         // Create another fork branch at same commit as main tip (duplicate)
@@ -2496,39 +2712,61 @@ mod tests {
             take2_oid,
             gix::refs::transaction::PreviousValue::Any,
             "test: duplicate branch at main tip",
-        ).unwrap();
+        )
+        .unwrap();
 
         // Get graph
         let graph = get_timeline_graph(tmp.path()).unwrap();
 
         eprintln!("\n=== Graph nodes ===");
         for n in &graph {
-            eprintln!("  {} | {:25} | lane={} | timeline={:20} | head={} | tip={}",
-                &n.id[..7], n.message, n.lane, n.timeline, n.is_head, n.is_branch_tip);
+            eprintln!(
+                "  {} | {:25} | lane={} | timeline={:20} | head={} | tip={}",
+                &n.id[..7],
+                n.message,
+                n.lane,
+                n.timeline,
+                n.is_head,
+                n.is_branch_tip
+            );
         }
 
         // All timelines present
         let timelines_in_graph: std::collections::HashSet<&str> =
             graph.iter().map(|n| n.timeline.as_str()).collect();
         assert!(timelines_in_graph.contains("main"), "Missing main");
-        assert!(timelines_in_graph.contains(fork_b.name.as_str()),
-            "Missing active fork {}", fork_b.name);
-        assert!(timelines_in_graph.contains("fork-duplicate"),
-            "Missing duplicate branch. Timelines: {:?}", timelines_in_graph);
+        assert!(
+            timelines_in_graph.contains(fork_b.name.as_str()),
+            "Missing active fork {}",
+            fork_b.name
+        );
+        assert!(
+            timelines_in_graph.contains("fork-duplicate"),
+            "Missing duplicate branch. Timelines: {:?}",
+            timelines_in_graph
+        );
 
         // HEAD on correct node
         let head_node = graph.iter().find(|n| n.is_head).unwrap();
         assert_eq!(head_node.id, other1, "HEAD should be at 'other 1'");
-        assert_eq!(head_node.timeline, fork_b.name,
-            "HEAD should be on active fork timeline");
+        assert_eq!(
+            head_node.timeline, fork_b.name,
+            "HEAD should be on active fork timeline"
+        );
 
         // "take 2" on main
-        assert!(graph.iter().any(|n| n.id == take2 && n.timeline == "main"),
-            "take 2 should appear on main timeline");
+        assert!(
+            graph.iter().any(|n| n.id == take2 && n.timeline == "main"),
+            "take 2 should appear on main timeline"
+        );
 
         // Duplicate branch shows as alias on "take 2"
-        assert!(graph.iter().any(|n| n.id == take2 && n.timeline == "fork-duplicate"),
-            "fork-duplicate should have an alias node on take 2");
+        assert!(
+            graph
+                .iter()
+                .any(|n| n.id == take2 && n.timeline == "fork-duplicate"),
+            "fork-duplicate should have an alias node on take 2"
+        );
 
         // No duplicate (same id + same timeline) nodes
         let mut seen = std::collections::HashSet::new();
@@ -2539,8 +2777,12 @@ mod tests {
 
         // list_timelines returns all branches
         let tls = list_timelines(tmp.path()).unwrap();
-        assert_eq!(tls.len(), 3, "Should have 3 timelines, got {:?}",
-            tls.iter().map(|t| &t.name).collect::<Vec<_>>());
+        assert_eq!(
+            tls.len(),
+            3,
+            "Should have 3 timelines, got {:?}",
+            tls.iter().map(|t| &t.name).collect::<Vec<_>>()
+        );
     }
 
     #[test]
@@ -2553,7 +2795,11 @@ mod tests {
         let id1 = commit_snapshot(tmp.path(), "Initial", None).unwrap();
 
         // Modify and add a new file
-        std::fs::write(tmp.path().join("test.sk"), r#"{"title":"Hello World","rows":[]}"#).unwrap();
+        std::fs::write(
+            tmp.path().join("test.sk"),
+            r#"{"title":"Hello World","rows":[]}"#,
+        )
+        .unwrap();
         std::fs::write(tmp.path().join("new.md"), "# New file").unwrap();
         let id2 = commit_snapshot(tmp.path(), "Changes", None).unwrap();
 
@@ -2592,7 +2838,11 @@ mod tests {
         let graph = get_timeline_graph(tmp.path()).unwrap();
         assert!(!graph.is_empty());
         for node in &graph {
-            assert!(!node.author.is_empty(), "Author should not be empty for node: {}", node.message);
+            assert!(
+                !node.author.is_empty(),
+                "Author should not be empty for node: {}",
+                node.message
+            );
         }
     }
 
@@ -2602,9 +2852,17 @@ mod tests {
         init_project_repo(tmp.path()).unwrap();
 
         // Create two commits on main
-        std::fs::write(tmp.path().join("main.sk"), r#"{"title":"Main v1","rows":[]}"#).unwrap();
+        std::fs::write(
+            tmp.path().join("main.sk"),
+            r#"{"title":"Main v1","rows":[]}"#,
+        )
+        .unwrap();
         let id1 = commit_snapshot(tmp.path(), "first commit", None).unwrap();
-        std::fs::write(tmp.path().join("main.sk"), r#"{"title":"Main v2","rows":[]}"#).unwrap();
+        std::fs::write(
+            tmp.path().join("main.sk"),
+            r#"{"title":"Main v2","rows":[]}"#,
+        )
+        .unwrap();
         let _id2 = commit_snapshot(tmp.path(), "second commit", None).unwrap();
 
         // Navigate back to first commit (creates prev-tip)
@@ -2616,21 +2874,41 @@ mod tests {
 
         // Should have main + a fork timeline
         let timelines = list_timelines(tmp.path()).unwrap();
-        assert!(timelines.len() >= 2, "Should have main + fork, got: {:?}", timelines.iter().map(|t| &t.name).collect::<Vec<_>>());
-        let fork_name = timelines.iter().find(|t| t.name != MAIN_BRANCH).unwrap().name.clone();
+        assert!(
+            timelines.len() >= 2,
+            "Should have main + fork, got: {:?}",
+            timelines.iter().map(|t| &t.name).collect::<Vec<_>>()
+        );
+        let fork_name = timelines
+            .iter()
+            .find(|t| t.name != MAIN_BRANCH)
+            .unwrap()
+            .name
+            .clone();
 
         // Promote the fork
         promote_timeline(tmp.path(), &fork_name).unwrap();
 
         // Main should now contain fork.sk
         let timelines_after = list_timelines(tmp.path()).unwrap();
-        let main = timelines_after.iter().find(|t| t.name == MAIN_BRANCH).unwrap();
+        let main = timelines_after
+            .iter()
+            .find(|t| t.name == MAIN_BRANCH)
+            .unwrap();
         assert!(main.is_active, "Main should be active after promote");
-        assert!(tmp.path().join("fork.sk").exists(), "fork.sk should exist after promote");
+        assert!(
+            tmp.path().join("fork.sk").exists(),
+            "fork.sk should exist after promote"
+        );
 
         // Old main should exist as a named fork
-        let old_main = timelines_after.iter().find(|t| t.name.starts_with("prev-main-"));
-        assert!(old_main.is_some(), "Old main should be preserved as a named fork");
+        let old_main = timelines_after
+            .iter()
+            .find(|t| t.name.starts_with("prev-main-"));
+        assert!(
+            old_main.is_some(),
+            "Old main should be preserved as a named fork"
+        );
     }
 
     #[test]
@@ -2649,11 +2927,19 @@ mod tests {
         let _fork_id = commit_snapshot(tmp.path(), "fork", None).unwrap();
 
         let timelines = list_timelines(tmp.path()).unwrap();
-        let fork_name = timelines.iter().find(|t| t.name != MAIN_BRANCH).unwrap().name.clone();
+        let fork_name = timelines
+            .iter()
+            .find(|t| t.name != MAIN_BRANCH)
+            .unwrap()
+            .name
+            .clone();
 
         // Promote should clear prev-tip
         promote_timeline(tmp.path(), &fork_name).unwrap();
-        assert!(!prev_tip_path(tmp.path()).exists(), "prev-tip should be cleared after promote");
+        assert!(
+            !prev_tip_path(tmp.path()).exists(),
+            "prev-tip should be cleared after promote"
+        );
     }
 
     #[test]
@@ -2678,8 +2964,10 @@ mod tests {
         std::fs::write(tmp.path().join("a.sk"), "content").unwrap();
         commit_snapshot(tmp.path(), "init", None).unwrap();
 
-        assert!(!has_unsaved_changes(tmp.path()).unwrap(),
-            "Should be clean immediately after commit");
+        assert!(
+            !has_unsaved_changes(tmp.path()).unwrap(),
+            "Should be clean immediately after commit"
+        );
     }
 
     #[test]
@@ -2692,8 +2980,10 @@ mod tests {
 
         // Add a new untracked file
         std::fs::write(tmp.path().join("b.sk"), "new content").unwrap();
-        assert!(has_unsaved_changes(tmp.path()).unwrap(),
-            "Should be dirty after adding untracked file");
+        assert!(
+            has_unsaved_changes(tmp.path()).unwrap(),
+            "Should be dirty after adding untracked file"
+        );
     }
 
     #[test]
@@ -2705,8 +2995,10 @@ mod tests {
         commit_snapshot(tmp.path(), "init", None).unwrap();
 
         std::fs::write(tmp.path().join("a.sk"), "v2").unwrap();
-        assert!(has_unsaved_changes(tmp.path()).unwrap(),
-            "Should be dirty after modifying tracked file");
+        assert!(
+            has_unsaved_changes(tmp.path()).unwrap(),
+            "Should be dirty after modifying tracked file"
+        );
     }
 
     #[test]
@@ -2718,8 +3010,10 @@ mod tests {
         commit_snapshot(tmp.path(), "init", None).unwrap();
 
         std::fs::remove_file(tmp.path().join("a.sk")).unwrap();
-        assert!(has_unsaved_changes(tmp.path()).unwrap(),
-            "Should be dirty after deleting tracked file");
+        assert!(
+            has_unsaved_changes(tmp.path()).unwrap(),
+            "Should be dirty after deleting tracked file"
+        );
     }
 
     #[test]
@@ -2741,13 +3035,17 @@ mod tests {
 
         // Add a file matching the exclude pattern — should not trigger dirty
         std::fs::write(tmp.path().join("ignored.tmp"), "should be ignored").unwrap();
-        assert!(!has_unsaved_changes(tmp.path()).unwrap(),
-            "Git-excluded files should not trigger dirty state");
+        assert!(
+            !has_unsaved_changes(tmp.path()).unwrap(),
+            "Git-excluded files should not trigger dirty state"
+        );
 
         // But a non-ignored file should still trigger dirty
         std::fs::write(tmp.path().join("new.sk"), "new content").unwrap();
-        assert!(has_unsaved_changes(tmp.path()).unwrap(),
-            "Non-ignored new file should trigger dirty state");
+        assert!(
+            has_unsaved_changes(tmp.path()).unwrap(),
+            "Non-ignored new file should trigger dirty state"
+        );
     }
 
     #[test]
@@ -2764,8 +3062,10 @@ mod tests {
         std::fs::create_dir_all(&state_dir).unwrap();
         std::fs::write(state_dir.join("workspace.json"), r#"{"open_tabs":[]}"#).unwrap();
 
-        assert!(!has_unsaved_changes(tmp.path()).unwrap(),
-            "Files in .git/ should never trigger dirty state");
+        assert!(
+            !has_unsaved_changes(tmp.path()).unwrap(),
+            "Files in .git/ should never trigger dirty state"
+        );
     }
 
     #[test]
@@ -2778,7 +3078,10 @@ mod tests {
 
         // Configure autocrlf at repo level
         let repo = git2::Repository::open(tmp.path()).unwrap();
-        repo.config().unwrap().set_bool("core.autocrlf", true).unwrap();
+        repo.config()
+            .unwrap()
+            .set_bool("core.autocrlf", true)
+            .unwrap();
         drop(repo);
 
         // Write a file with LF and commit via build_tree_from_dir (raw bytes)
@@ -2786,16 +3089,20 @@ mod tests {
         commit_snapshot(tmp.path(), "init", None).unwrap();
 
         // Clean right after commit
-        assert!(!has_unsaved_changes(tmp.path()).unwrap(),
-            "Should be clean right after commit");
+        assert!(
+            !has_unsaved_changes(tmp.path()).unwrap(),
+            "Should be clean right after commit"
+        );
 
         // Rewrite with CRLF — git2 status with autocrlf should normalize
         std::fs::write(tmp.path().join("a.sk"), "line1\r\nline2\r\n").unwrap();
 
         // With core.autocrlf=true, git2 normalizes CRLF→LF for comparison,
         // so the content should be considered unchanged
-        assert!(!has_unsaved_changes(tmp.path()).unwrap(),
-            "CRLF vs LF should not trigger dirty with core.autocrlf=true");
+        assert!(
+            !has_unsaved_changes(tmp.path()).unwrap(),
+            "CRLF vs LF should not trigger dirty with core.autocrlf=true"
+        );
     }
 
     #[test]
@@ -2805,8 +3112,10 @@ mod tests {
         git2::Repository::init(tmp.path()).unwrap();
 
         std::fs::write(tmp.path().join("a.txt"), "content").unwrap();
-        assert!(has_unsaved_changes(tmp.path()).unwrap(),
-            "Repo with no HEAD should be considered dirty");
+        assert!(
+            has_unsaved_changes(tmp.path()).unwrap(),
+            "Repo with no HEAD should be considered dirty"
+        );
     }
 
     #[test]
@@ -2838,8 +3147,10 @@ mod tests {
 
         // Verify local config has no identity
         let local = git2::Config::open(&config_path).unwrap();
-        assert!(local.get_string("user.name").is_err(),
-            "Test setup: local config should have no user.name");
+        assert!(
+            local.get_string("user.name").is_err(),
+            "Test setup: local config should have no user.name"
+        );
         drop(local);
 
         // Run our fix — should write identity to local config
@@ -2847,17 +3158,24 @@ mod tests {
 
         // Verify local config now has identity
         let local = git2::Config::open(&config_path).unwrap();
-        assert!(local.get_string("user.name").is_ok(),
-            "ensure_git_identity should have written user.name to local config");
-        assert!(local.get_string("user.email").is_ok(),
-            "ensure_git_identity should have written user.email to local config");
+        assert!(
+            local.get_string("user.name").is_ok(),
+            "ensure_git_identity should have written user.name to local config"
+        );
+        assert!(
+            local.get_string("user.email").is_ok(),
+            "ensure_git_identity should have written user.email to local config"
+        );
         drop(local);
 
         // Commit should succeed
         std::fs::write(tmp.path().join("test.sk"), "content").unwrap();
         let result = commit_snapshot(tmp.path(), "snapshot after identity fix", None);
-        assert!(result.is_ok(),
-            "commit_snapshot should succeed after ensure_git_identity: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "commit_snapshot should succeed after ensure_git_identity: {:?}",
+            result.err()
+        );
     }
 
     #[test]
@@ -2873,7 +3191,10 @@ mod tests {
             .lines()
             .filter(|l| {
                 let t = l.trim().to_lowercase();
-                if t.starts_with('[') { in_user = t.starts_with("[user]"); return !in_user; }
+                if t.starts_with('[') {
+                    in_user = t.starts_with("[user]");
+                    return !in_user;
+                }
                 !in_user
             })
             .collect::<Vec<_>>()
@@ -2887,7 +3208,10 @@ mod tests {
         set_git_identity(tmp.path(), name, email).unwrap();
 
         let status = check_git_identity(tmp.path());
-        assert!(!status.is_fallback, "After set_git_identity, should not be fallback");
+        assert!(
+            !status.is_fallback,
+            "After set_git_identity, should not be fallback"
+        );
         assert_eq!(status.name, name);
         assert_eq!(status.email, email);
     }
@@ -2907,7 +3231,10 @@ mod tests {
         // Should be in workspace settings
         let settings = crate::engine::project::read_repo_settings(tmp.path());
         assert_eq!(settings["repoAuthorName"].as_str().unwrap(), "Jane Doe");
-        assert_eq!(settings["repoAuthorEmail"].as_str().unwrap(), "jane@example.com");
+        assert_eq!(
+            settings["repoAuthorEmail"].as_str().unwrap(),
+            "jane@example.com"
+        );
 
         // resolve_committer should return workspace settings values
         let (name, email) = resolve_committer(tmp.path());

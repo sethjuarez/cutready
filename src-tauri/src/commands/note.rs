@@ -16,10 +16,7 @@ fn project_root(state: &AppState) -> Result<std::path::PathBuf, String> {
 }
 
 #[tauri::command]
-pub async fn create_note(
-    relative_path: String,
-    state: State<'_, AppState>,
-) -> Result<(), String> {
+pub async fn create_note(relative_path: String, state: State<'_, AppState>) -> Result<(), String> {
     let root = project_root(&state)?;
     let abs_path = project::safe_resolve(&root, &relative_path).map_err(|e| e.to_string())?;
 
@@ -32,14 +29,34 @@ pub async fn create_note(
 }
 
 #[tauri::command]
-pub async fn get_note(
-    relative_path: String,
-    state: State<'_, AppState>,
-) -> Result<String, String> {
+pub async fn get_note(relative_path: String, state: State<'_, AppState>) -> Result<String, String> {
     let root = project_root(&state)?;
     let abs_path = project::safe_resolve(&root, &relative_path).map_err(|e| e.to_string())?;
 
     project::read_note(&abs_path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn get_note_lock(
+    relative_path: String,
+    state: State<'_, AppState>,
+) -> Result<project::NoteLockState, String> {
+    let root = project_root(&state)?;
+    let _ = project::safe_resolve(&root, &relative_path).map_err(|e| e.to_string())?;
+
+    project::get_note_lock(&root, &relative_path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn set_note_lock(
+    relative_path: String,
+    locked: bool,
+    state: State<'_, AppState>,
+) -> Result<project::NoteLockState, String> {
+    let root = project_root(&state)?;
+    let _ = project::safe_resolve(&root, &relative_path).map_err(|e| e.to_string())?;
+
+    project::set_note_lock(&root, &relative_path, locked).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -50,16 +67,14 @@ pub async fn update_note(
 ) -> Result<(), String> {
     let root = project_root(&state)?;
     let abs_path = project::safe_resolve(&root, &relative_path).map_err(|e| e.to_string())?;
+    project::ensure_note_unlocked(&root, &relative_path).map_err(|e| e.to_string())?;
 
     project::write_note(&abs_path, &content).map_err(|e| e.to_string())?;
     Ok(())
 }
 
 #[tauri::command]
-pub async fn delete_note(
-    relative_path: String,
-    state: State<'_, AppState>,
-) -> Result<(), String> {
+pub async fn delete_note(relative_path: String, state: State<'_, AppState>) -> Result<(), String> {
     let root = project_root(&state)?;
     let abs_path = project::safe_resolve(&root, &relative_path).map_err(|e| e.to_string())?;
 
@@ -165,7 +180,9 @@ pub async fn delete_project_image(
     if !relative_path.starts_with(".cutready/screenshots/")
         && !relative_path.starts_with(".cutready/visuals/")
     {
-        return Err("Can only delete assets from .cutready/screenshots/ or .cutready/visuals/".into());
+        return Err(
+            "Can only delete assets from .cutready/screenshots/ or .cutready/visuals/".into(),
+        );
     }
     std::fs::remove_file(&abs_path).map_err(|e| format!("Failed to delete asset: {e}"))?;
     Ok(())
@@ -182,7 +199,8 @@ pub async fn delete_orphaned_images(state: State<'_, AppState>) -> Result<u32, S
         if asset.referenced_by.is_empty() {
             let abs = root.join(&asset.path);
             if abs.exists() {
-                std::fs::remove_file(&abs).map_err(|e| format!("Failed to delete {}: {e}", asset.path))?;
+                std::fs::remove_file(&abs)
+                    .map_err(|e| format!("Failed to delete {}: {e}", asset.path))?;
                 deleted += 1;
             }
         }

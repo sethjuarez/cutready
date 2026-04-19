@@ -140,8 +140,8 @@ export function CaptureWindow() {
   // ── Loading ──
   if (phase === "loading") {
     return (
-      <div className="fixed inset-0 bg-black flex items-center justify-center">
-        <div className="text-white/60 text-sm animate-pulse">Loading capture...</div>
+      <div className="fixed inset-0 bg-[rgb(var(--color-overlay-strong))] flex items-center justify-center">
+        <div className="text-[rgb(var(--color-media-control-fg)/0.6)] text-sm animate-pulse">Loading capture...</div>
       </div>
     );
   }
@@ -157,29 +157,29 @@ export function CaptureWindow() {
           backgroundPosition: "center",
         }}
       >
-        <div className="absolute inset-0 bg-black/50 pointer-events-none" />
+        <div className="absolute inset-0 bg-[rgb(var(--color-overlay-scrim)/0.5)] pointer-events-none" />
 
-        <div className="absolute top-6 left-1/2 -translate-x-1/2 flex items-center gap-3 bg-black/80 backdrop-blur-md rounded-xl px-5 py-3 shadow-2xl">
+        <div className="absolute top-6 left-1/2 -translate-x-1/2 flex items-center gap-3 bg-[rgb(var(--color-media-control-bg)/0.8)] backdrop-blur-md rounded-xl px-5 py-3 shadow-2xl">
           <button
             onClick={handleFullScreen}
             disabled={capturing}
-            className="flex items-center gap-2 text-sm text-white bg-white/10 hover:bg-white/20 px-4 py-2 rounded-lg transition-colors disabled:opacity-50"
+            className="flex items-center gap-2 text-sm text-[rgb(var(--color-media-control-fg))] bg-[rgb(var(--color-media-control-fg)/0.1)] hover:bg-[rgb(var(--color-media-control-fg)/0.2)] px-4 py-2 rounded-lg transition-colors disabled:opacity-50"
           >
             <Monitor className="w-4 h-4" />
             Full Screen
           </button>
-          <div className="w-px h-6 bg-white/20" />
+          <div className="w-px h-6 bg-[rgb(var(--color-media-control-fg)/0.2)]" />
           <button
             onClick={() => setPhase("select-region")}
-            className="flex items-center gap-2 text-sm text-white bg-white/10 hover:bg-white/20 px-4 py-2 rounded-lg transition-colors"
+            className="flex items-center gap-2 text-sm text-[rgb(var(--color-media-control-fg))] bg-[rgb(var(--color-media-control-fg)/0.1)] hover:bg-[rgb(var(--color-media-control-fg)/0.2)] px-4 py-2 rounded-lg transition-colors"
           >
             <LayoutGrid className="w-4 h-4" />
             Select Region
           </button>
-          <div className="w-px h-6 bg-white/20" />
+          <div className="w-px h-6 bg-[rgb(var(--color-media-control-fg)/0.2)]" />
           <button
             onClick={cancel}
-            className="text-xs text-white/50 hover:text-white px-2 py-1 transition-colors"
+            className="text-xs text-[rgb(var(--color-media-control-fg)/0.5)] hover:text-[rgb(var(--color-media-control-fg))] px-2 py-1 transition-colors"
           >
             Cancel (Esc)
           </button>
@@ -203,7 +203,7 @@ export function CaptureWindow() {
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
     >
-      <div className="absolute inset-0 bg-black/40 pointer-events-none" />
+      <div className="absolute inset-0 bg-[rgb(var(--color-overlay-scrim)/0.4)] pointer-events-none" />
 
       {/* Selection rectangle */}
       {rect && rect.w > 2 && rect.h > 2 && (
@@ -221,7 +221,7 @@ export function CaptureWindow() {
             }}
           />
           <div
-            className="absolute text-[11px] text-white bg-black/70 px-1.5 py-0.5 rounded pointer-events-none"
+            className="absolute text-[11px] text-[rgb(var(--color-media-control-fg))] bg-[rgb(var(--color-media-control-bg)/0.7)] px-1.5 py-0.5 rounded pointer-events-none"
             style={{ left: rect.x, top: rect.y + rect.h + 4 }}
           >
             {Math.round(rect.w)}×{Math.round(rect.h)}
@@ -230,9 +230,9 @@ export function CaptureWindow() {
       )}
 
       {/* Toolbar */}
-      <div className="absolute top-4 left-1/2 -translate-x-1/2 flex items-center gap-3 bg-black/70 backdrop-blur-sm rounded-lg px-4 py-2 pointer-events-auto">
-        <span className="text-white/80 text-xs">Click & drag to select a region</span>
-        <div className="w-px h-4 bg-white/20" />
+      <div className="absolute top-4 left-1/2 -translate-x-1/2 flex items-center gap-3 bg-[rgb(var(--color-media-control-bg)/0.7)] backdrop-blur-sm rounded-lg px-4 py-2 pointer-events-auto">
+        <span className="text-[rgb(var(--color-media-control-fg)/0.8)] text-xs">Click & drag to select a region</span>
+        <div className="w-px h-4 bg-[rgb(var(--color-media-control-fg)/0.2)]" />
         <button
           onClick={() => {
             setSelecting(false);
@@ -240,7 +240,7 @@ export function CaptureWindow() {
             setSelEnd(null);
             setPhase("choose-mode");
           }}
-          className="flex items-center gap-1 text-xs text-white/60 hover:text-white px-2 py-1 transition-colors"
+          className="flex items-center gap-1 text-xs text-[rgb(var(--color-media-control-fg)/0.6)] hover:text-[rgb(var(--color-media-control-fg))] px-2 py-1 transition-colors"
         >
           <ArrowLeft className="w-3 h-3" />
           Back (Esc)

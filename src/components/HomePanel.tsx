@@ -55,7 +55,7 @@ function ProjectAvatar({ name }: { name: string }) {
 
   return (
     <div
-      className="w-10 h-10 rounded-lg flex items-center justify-center text-white text-xs font-bold shrink-0 transition-transform group-hover:scale-105"
+      className="w-10 h-10 rounded-lg flex items-center justify-center text-[rgb(var(--color-accent-fg))] text-xs font-bold shrink-0 transition-transform group-hover:scale-105"
       style={{ background: `hsl(${hue}, 55%, 55%)` }}
     >
       {initials || "?"}
@@ -223,7 +223,7 @@ export function HomePanel() {
               onClick={() => { setShowCreate(true); setShowClone(false); }}
               className="group flex flex-col items-center gap-2 p-4 rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] hover:border-[rgb(var(--color-accent))] hover:shadow-lg hover:shadow-[rgb(var(--color-accent))]/5 transition-all"
             >
-              <div className="w-9 h-9 rounded-lg bg-[rgb(var(--color-accent))] text-white flex items-center justify-center group-hover:scale-110 transition-transform">
+              <div className="w-9 h-9 rounded-lg bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))] flex items-center justify-center group-hover:scale-110 transition-transform">
                 <ActionIcon type="new" />
               </div>
               <div>
@@ -280,7 +280,7 @@ export function HomePanel() {
                 <button
                   onClick={handleCreate}
                   disabled={!slug}
-                  className="px-4 py-2 rounded-lg bg-[rgb(var(--color-accent))] text-white text-sm font-medium hover:bg-[rgb(var(--color-accent-hover))] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="px-4 py-2 rounded-lg bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))] text-sm font-medium hover:bg-[rgb(var(--color-accent-hover))] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   Choose Folder
                 </button>
@@ -331,7 +331,7 @@ export function HomePanel() {
                 <button
                   onClick={handleClone}
                   disabled={!cloneUrl.trim() || cloning}
-                  className="px-4 py-2 rounded-lg bg-[rgb(var(--color-accent))] text-white text-sm font-medium hover:bg-[rgb(var(--color-accent-hover))] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="px-4 py-2 rounded-lg bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))] text-sm font-medium hover:bg-[rgb(var(--color-accent-hover))] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   {cloning ? "Cloning..." : "Choose Folder & Clone"}
                 </button>

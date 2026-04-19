@@ -41,7 +41,7 @@ export function ConfirmDialog({
   const colors = variantColors[variant];
 
   return (
-    <Dialog isOpen={open} onClose={onCancel} align="top" topOffset="20vh" width="w-full max-w-sm mx-4" backdropClass="bg-black/40">
+    <Dialog isOpen={open} onClose={onCancel} align="top" topOffset="20vh" width="w-full max-w-sm mx-4" backdropClass="bg-[rgb(var(--color-overlay-scrim)/0.4)]">
       <div className="bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-xl shadow-2xl overflow-hidden">
         <div className="px-5 pt-5 pb-4">
           <h2 className="text-sm font-semibold text-[rgb(var(--color-text))] mb-2">{title}</h2>
@@ -57,7 +57,7 @@ export function ConfirmDialog({
           <button
             ref={confirmRef}
             onClick={onConfirm}
-            className="px-4 py-1.5 rounded-lg text-xs font-medium text-white transition-colors"
+            className="px-4 py-1.5 rounded-lg text-xs font-medium text-[rgb(var(--color-accent-fg))] transition-colors"
             style={{ backgroundColor: colors.bg }}
           >
             {confirmLabel}

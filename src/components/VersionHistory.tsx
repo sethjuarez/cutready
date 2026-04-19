@@ -224,7 +224,7 @@ export function VersionHistory() {
           <div className="flex gap-1.5">
             <button
               onClick={handleNavSave}
-              className="flex-1 px-2 py-1 rounded-md text-[10px] font-medium bg-[rgb(var(--color-accent))] text-white hover:bg-[rgb(var(--color-accent-hover))] transition-colors"
+              className="flex-1 px-2 py-1 rounded-md text-[10px] font-medium bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))] hover:bg-[rgb(var(--color-accent-hover))] transition-colors"
             >
               Save snapshot
             </button>

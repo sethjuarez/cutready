@@ -122,17 +122,7 @@ async function ensureBottomPanel(page: Page) {
 
 /** Switch the secondary panel to a given tab */
 async function switchSecondaryTab(page: Page, tab: "Chat" | "Sessions" | "Snapshots") {
-  if (tab === "Chat") {
-    // If we're on a non-Chat tab, the back button is visible — click it
-    const backBtn = page.locator('button').filter({ hasText: /^(Snapshots|Sessions)$/ }).first();
-    if (await backBtn.isVisible({ timeout: 500 }).catch(() => false)) {
-      await backBtn.click();
-    }
-  } else {
-    // Open the overflow menu and click the desired tab
-    await page.locator('button[title="More options"]').click();
-    await page.getByText(tab).click();
-  }
+  await page.getByRole("button", { name: tab, exact: true }).click();
   await page.waitForTimeout(300);
 }
 
@@ -249,8 +239,8 @@ test.describe("Documentation Screenshots (1920×1080)", () => {
     await page.getByRole("button", { name: "Explorer" }).click();
     await page.waitForTimeout(300);
     await snap(page, "file-tree-view");
-    // Switch back to Documents pane
-    await page.getByRole("button", { name: "Documents" }).click();
+    // Switch back to the project documents pane
+    await page.getByRole("button", { name: "Project", exact: true }).click();
     await page.waitForTimeout(200);
   });
 

@@ -12,7 +12,13 @@ fn screenshots_dir(project_root: &Path) -> Result<std::path::PathBuf, String> {
 }
 
 /// Save raw image bytes to .cutready/screenshots/ with a unique name.
-fn save_image(project_root: &Path, prefix: &str, index: usize, data: &[u8], ext: &str) -> Result<String, String> {
+fn save_image(
+    project_root: &Path,
+    prefix: &str,
+    index: usize,
+    data: &[u8],
+    ext: &str,
+) -> Result<String, String> {
     let dir = screenshots_dir(project_root)?;
     let filename = format!("{prefix}-{index}.{ext}");
     let abs_path = dir.join(&filename);
@@ -22,11 +28,17 @@ fn save_image(project_root: &Path, prefix: &str, index: usize, data: &[u8], ext:
 
 /// Guess image extension from zip entry name.
 fn image_ext(name: &str) -> &str {
-    if name.ends_with(".png") { "png" }
-    else if name.ends_with(".gif") { "gif" }
-    else if name.ends_with(".bmp") { "bmp" }
-    else if name.ends_with(".svg") { "svg" }
-    else { "jpg" }
+    if name.ends_with(".png") {
+        "png"
+    } else if name.ends_with(".gif") {
+        "gif"
+    } else if name.ends_with(".bmp") {
+        "bmp"
+    } else if name.ends_with(".svg") {
+        "svg"
+    } else {
+        "jpg"
+    }
 }
 
 /// Extract text and images from a .docx file and return markdown.
@@ -50,7 +62,10 @@ pub fn docx_to_markdown(data: &[u8], project_root: &Path) -> Result<String, Stri
     let has_drm = (0..archive.len()).any(|i| {
         archive.by_index(i).ok().is_some_and(|f| {
             let n = f.name().to_lowercase();
-            n.contains("labelinfo") || n.contains("rights") || n.contains("miplabel") || n.contains("encryptedpackage")
+            n.contains("labelinfo")
+                || n.contains("rights")
+                || n.contains("miplabel")
+                || n.contains("encryptedpackage")
         })
     });
     if has_drm {
@@ -81,7 +96,8 @@ pub fn docx_to_markdown(data: &[u8], project_root: &Path) -> Result<String, Stri
     }
 
     // Parse document.xml.rels to map rId → media filename
-    let mut rid_to_media: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    let mut rid_to_media: std::collections::HashMap<String, String> =
+        std::collections::HashMap::new();
     if let Ok(rels_xml) = read_zip_text(&mut archive, "word/_rels/document.xml.rels") {
         parse_rels_for_media(&rels_xml, &mut rid_to_media);
     }
@@ -107,67 +123,72 @@ pub fn docx_to_markdown(data: &[u8], project_root: &Path) -> Result<String, Stri
     let mut buf = Vec::new();
     loop {
         match reader.read_event_into(&mut buf) {
-            Ok(quick_xml::events::Event::Start(ref e)) => {
-                match e.name().as_ref() {
-                    b"w:p" => {
-                        in_paragraph = true;
-                        paragraph_text.clear();
-                        heading_level = None;
-                    }
-                    b"w:pStyle" if in_paragraph => {
-                        for attr in e.attributes().flatten() {
-                            if attr.key.as_ref() == b"w:val" {
-                                let val = String::from_utf8_lossy(&attr.value);
-                                if val.starts_with("Heading") || val.starts_with("heading") {
-                                    let level = val.chars().filter(|c| c.is_ascii_digit())
-                                        .collect::<String>().parse::<u8>().unwrap_or(1);
-                                    heading_level = Some(level.min(6));
-                                }
+            Ok(quick_xml::events::Event::Start(ref e)) => match e.name().as_ref() {
+                b"w:p" => {
+                    in_paragraph = true;
+                    paragraph_text.clear();
+                    heading_level = None;
+                }
+                b"w:pStyle" if in_paragraph => {
+                    for attr in e.attributes().flatten() {
+                        if attr.key.as_ref() == b"w:val" {
+                            let val = String::from_utf8_lossy(&attr.value);
+                            if val.starts_with("Heading") || val.starts_with("heading") {
+                                let level = val
+                                    .chars()
+                                    .filter(|c| c.is_ascii_digit())
+                                    .collect::<String>()
+                                    .parse::<u8>()
+                                    .unwrap_or(1);
+                                heading_level = Some(level.min(6));
                             }
                         }
                     }
-                    b"w:t" => { in_t = true; }
-                    _ => {}
                 }
-            }
+                b"w:t" => {
+                    in_t = true;
+                }
+                _ => {}
+            },
             Ok(quick_xml::events::Event::Empty(ref e)) => {
                 // <a:blip r:embed="rId5"/> — image reference
                 if e.name().as_ref() == b"a:blip" {
                     for attr in e.attributes().flatten() {
                         if attr.key.as_ref() == b"r:embed" {
-                            pending_image_rid = Some(String::from_utf8_lossy(&attr.value).to_string());
+                            pending_image_rid =
+                                Some(String::from_utf8_lossy(&attr.value).to_string());
                         }
                     }
                 }
             }
-            Ok(quick_xml::events::Event::End(ref e)) => {
-                match e.name().as_ref() {
-                    b"w:p" => {
-                        if in_paragraph {
-                            if let Some(rid) = pending_image_rid.take() {
-                                if let Some(media_name) = rid_to_media.get(&rid) {
-                                    if let Some(rel_path) = image_map.get(media_name) {
-                                        md.push_str(&format!("![{media_name}]({rel_path})\n\n"));
-                                    }
+            Ok(quick_xml::events::Event::End(ref e)) => match e.name().as_ref() {
+                b"w:p" => {
+                    if in_paragraph {
+                        if let Some(rid) = pending_image_rid.take() {
+                            if let Some(media_name) = rid_to_media.get(&rid) {
+                                if let Some(rel_path) = image_map.get(media_name) {
+                                    md.push_str(&format!("![{media_name}]({rel_path})\n\n"));
                                 }
                             }
-                            let trimmed = paragraph_text.trim();
-                            if !trimmed.is_empty() {
-                                if let Some(level) = heading_level {
-                                    let hashes = "#".repeat(level as usize);
-                                    md.push_str(&format!("{hashes} {trimmed}\n\n"));
-                                } else {
-                                    md.push_str(trimmed);
-                                    md.push_str("\n\n");
-                                }
-                            }
-                            in_paragraph = false;
                         }
+                        let trimmed = paragraph_text.trim();
+                        if !trimmed.is_empty() {
+                            if let Some(level) = heading_level {
+                                let hashes = "#".repeat(level as usize);
+                                md.push_str(&format!("{hashes} {trimmed}\n\n"));
+                            } else {
+                                md.push_str(trimmed);
+                                md.push_str("\n\n");
+                            }
+                        }
+                        in_paragraph = false;
                     }
-                    b"w:t" => { in_t = false; }
-                    _ => {}
                 }
-            }
+                b"w:t" => {
+                    in_t = false;
+                }
+                _ => {}
+            },
             Ok(quick_xml::events::Event::Text(ref e)) => {
                 if in_t && in_paragraph {
                     let text = e.unescape().unwrap_or_default();
@@ -184,7 +205,11 @@ pub fn docx_to_markdown(data: &[u8], project_root: &Path) -> Result<String, Stri
     let result = md.trim().to_string();
 
     // Sanity check: if output looks like raw XML, the document is likely DRM-protected
-    if result.starts_with("<?xml") || result.contains("<clbl:") || result.contains("<XrML") || result.contains("Rights Label") {
+    if result.starts_with("<?xml")
+        || result.contains("<clbl:")
+        || result.contains("<XrML")
+        || result.contains("Rights Label")
+    {
         return Err("This document is DRM-protected (Microsoft Information Protection). Please open it in Word, save an unprotected copy (File → Save As), and import that instead.".to_string());
     }
 
@@ -229,7 +254,8 @@ pub fn pptx_to_markdown(data: &[u8], project_root: &Path) -> Result<String, Stri
         .filter(|n| n.starts_with("ppt/media/"))
         .collect();
 
-    let mut media_data: std::collections::HashMap<String, Vec<u8>> = std::collections::HashMap::new();
+    let mut media_data: std::collections::HashMap<String, Vec<u8>> =
+        std::collections::HashMap::new();
     for name in &media_entries {
         let mut buf = Vec::new();
         if let Ok(mut f) = archive.by_name(name) {
@@ -266,10 +292,18 @@ pub fn pptx_to_markdown(data: &[u8], project_root: &Path) -> Result<String, Stri
         let body_text = extract_pptx_text(&slide_text);
 
         // Read slide relationships to find images
-        let slide_num = slide_name.trim_start_matches("ppt/slides/slide").trim_end_matches(".xml");
+        let slide_num = slide_name
+            .trim_start_matches("ppt/slides/slide")
+            .trim_end_matches(".xml");
         let rels_name = format!("ppt/slides/_rels/slide{slide_num}.xml.rels");
         let image_path = if let Ok(rels_xml) = read_zip_text(&mut archive, &rels_name) {
-            find_first_image_from_rels(&rels_xml, &media_data, project_root, &prefix, &mut img_counter)
+            find_first_image_from_rels(
+                &rels_xml,
+                &media_data,
+                project_root,
+                &prefix,
+                &mut img_counter,
+            )
         } else {
             None
         };
@@ -293,7 +327,9 @@ pub fn pptx_to_markdown(data: &[u8], project_root: &Path) -> Result<String, Stri
             if let Some(first_line) = body.lines().next() {
                 md.push_str(&format!("# {}\n\n", first_line.trim()));
                 // Rest of body after the title line
-                let rest: String = body.lines().skip(1)
+                let rest: String = body
+                    .lines()
+                    .skip(1)
                     .map(|l| l.trim())
                     .filter(|l| !l.is_empty())
                     .collect::<Vec<_>>()
@@ -307,7 +343,9 @@ pub fn pptx_to_markdown(data: &[u8], project_root: &Path) -> Result<String, Stri
             // Use first line as slide heading
             if let Some(first_line) = body.lines().next() {
                 md.push_str(&format!("## Slide {} — {}\n\n", idx + 1, first_line.trim()));
-                let rest: String = body.lines().skip(1)
+                let rest: String = body
+                    .lines()
+                    .skip(1)
                     .map(|l| l.trim())
                     .filter(|l| !l.is_empty())
                     .collect::<Vec<_>>()
@@ -343,7 +381,8 @@ fn parse_rels_for_media(rels_xml: &str, out: &mut std::collections::HashMap<Stri
     let mut buf = Vec::new();
     loop {
         match reader.read_event_into(&mut buf) {
-            Ok(quick_xml::events::Event::Empty(ref e)) | Ok(quick_xml::events::Event::Start(ref e))
+            Ok(quick_xml::events::Event::Empty(ref e))
+            | Ok(quick_xml::events::Event::Start(ref e))
                 if e.name().as_ref() == b"Relationship" =>
             {
                 let mut rid = String::new();
@@ -380,7 +419,8 @@ fn find_first_image_from_rels(
     let mut buf = Vec::new();
     loop {
         match reader.read_event_into(&mut buf) {
-            Ok(quick_xml::events::Event::Empty(ref e)) | Ok(quick_xml::events::Event::Start(ref e))
+            Ok(quick_xml::events::Event::Empty(ref e))
+            | Ok(quick_xml::events::Event::Start(ref e))
                 if e.name().as_ref() == b"Relationship" =>
             {
                 let mut rel_type = String::new();
@@ -412,7 +452,10 @@ fn find_first_image_from_rels(
     None
 }
 
-fn read_zip_text(archive: &mut zip::ZipArchive<Cursor<&[u8]>>, name: &str) -> Result<String, String> {
+fn read_zip_text(
+    archive: &mut zip::ZipArchive<Cursor<&[u8]>>,
+    name: &str,
+) -> Result<String, String> {
     let mut xml = String::new();
     let mut file = archive
         .by_name(name)
@@ -433,26 +476,31 @@ fn extract_pptx_text(xml: &str) -> String {
 
     loop {
         match reader.read_event_into(&mut buf) {
-            Ok(quick_xml::events::Event::Start(ref e)) => {
-                match e.name().as_ref() {
-                    b"a:p" => { in_p = true; current_para.clear(); }
-                    b"a:t" => { in_t = true; }
-                    _ => {}
+            Ok(quick_xml::events::Event::Start(ref e)) => match e.name().as_ref() {
+                b"a:p" => {
+                    in_p = true;
+                    current_para.clear();
                 }
-            }
-            Ok(quick_xml::events::Event::End(ref e)) => {
-                match e.name().as_ref() {
-                    b"a:p" => {
-                        if in_p {
-                            let trimmed = current_para.trim().to_string();
-                            if !trimmed.is_empty() { paragraphs.push(trimmed); }
-                            in_p = false;
+                b"a:t" => {
+                    in_t = true;
+                }
+                _ => {}
+            },
+            Ok(quick_xml::events::Event::End(ref e)) => match e.name().as_ref() {
+                b"a:p" => {
+                    if in_p {
+                        let trimmed = current_para.trim().to_string();
+                        if !trimmed.is_empty() {
+                            paragraphs.push(trimmed);
                         }
+                        in_p = false;
                     }
-                    b"a:t" => { in_t = false; }
-                    _ => {}
                 }
-            }
+                b"a:t" => {
+                    in_t = false;
+                }
+                _ => {}
+            },
             Ok(quick_xml::events::Event::Text(ref e)) => {
                 if in_t && in_p {
                     let text = e.unescape().unwrap_or_default();

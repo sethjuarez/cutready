@@ -70,7 +70,11 @@ pub fn save_memory(
 /// Search memories by keyword.
 pub fn recall(project_root: &Path, query: &str) -> Vec<MemoryEntry> {
     let store = load(project_root);
-    log::debug!("[memory] recall query='{}' across {} memories", query, store.memories.len());
+    log::debug!(
+        "[memory] recall query='{}' across {} memories",
+        query,
+        store.memories.len()
+    );
     let results: Vec<MemoryEntry> = store.recall(query).into_iter().cloned().collect();
     log::debug!("[memory] recall returned {} results", results.len());
     results
@@ -88,11 +92,7 @@ pub fn format_recall_results(results: &[MemoryEntry]) -> String {
 }
 
 /// Save an archival session summary.
-pub fn archive_session(
-    project_root: &Path,
-    summary: &str,
-    session_id: &str,
-) -> Result<(), String> {
+pub fn archive_session(project_root: &Path, summary: &str, session_id: &str) -> Result<(), String> {
     let backend = FileBackend::new(project_root);
     let mut store = backend.load();
     store.archive_session(summary, session_id);
@@ -103,8 +103,13 @@ pub fn archive_session(
 pub fn delete_memory(project_root: &Path, index: usize) -> Result<(), String> {
     let backend = FileBackend::new(project_root);
     let mut store = backend.load();
-    store.delete(index)
-        .ok_or_else(|| format!("Memory index {} out of bounds ({})", index, store.memories.len()))?;
+    store.delete(index).ok_or_else(|| {
+        format!(
+            "Memory index {} out of bounds ({})",
+            index,
+            store.memories.len()
+        )
+    })?;
     backend.save(&store)
 }
 
@@ -113,13 +118,20 @@ pub fn update_memory(project_root: &Path, index: usize, content: &str) -> Result
     let backend = FileBackend::new(project_root);
     let mut store = backend.load();
     if !store.update(index, content) {
-        return Err(format!("Memory index {} out of bounds ({})", index, store.memories.len()));
+        return Err(format!(
+            "Memory index {} out of bounds ({})",
+            index,
+            store.memories.len()
+        ));
     }
     backend.save(&store)
 }
 
 /// Delete all memories of a given category, or all if None.
-pub fn clear_memories(project_root: &Path, category: Option<MemoryCategory>) -> Result<usize, String> {
+pub fn clear_memories(
+    project_root: &Path,
+    category: Option<MemoryCategory>,
+) -> Result<usize, String> {
     let backend = FileBackend::new(project_root);
     let mut store = backend.load();
     let removed = store.clear(category);
@@ -142,8 +154,20 @@ mod tests {
         let root = tmp.path();
         std::fs::create_dir_all(root.join(".cutready")).unwrap();
 
-        save_memory(root, MemoryCategory::Core, "User prefers short narration", vec!["preference".into()]).unwrap();
-        save_memory(root, MemoryCategory::Insight, "Dashboard demo needs more detail", vec!["demo".into()]).unwrap();
+        save_memory(
+            root,
+            MemoryCategory::Core,
+            "User prefers short narration",
+            vec!["preference".into()],
+        )
+        .unwrap();
+        save_memory(
+            root,
+            MemoryCategory::Insight,
+            "Dashboard demo needs more detail",
+            vec!["demo".into()],
+        )
+        .unwrap();
 
         let store = load(root);
         assert_eq!(store.memories.len(), 2);
@@ -156,9 +180,27 @@ mod tests {
         let root = tmp.path();
         std::fs::create_dir_all(root.join(".cutready")).unwrap();
 
-        save_memory(root, MemoryCategory::Core, "User prefers TypeScript", vec!["language".into()]).unwrap();
-        save_memory(root, MemoryCategory::Insight, "Dashboard needs chart builder", vec!["dashboard".into()]).unwrap();
-        save_memory(root, MemoryCategory::Archival, "Session discussed login flow", vec!["session:1".into()]).unwrap();
+        save_memory(
+            root,
+            MemoryCategory::Core,
+            "User prefers TypeScript",
+            vec!["language".into()],
+        )
+        .unwrap();
+        save_memory(
+            root,
+            MemoryCategory::Insight,
+            "Dashboard needs chart builder",
+            vec!["dashboard".into()],
+        )
+        .unwrap();
+        save_memory(
+            root,
+            MemoryCategory::Archival,
+            "Session discussed login flow",
+            vec!["session:1".into()],
+        )
+        .unwrap();
 
         let results = recall(root, "dashboard chart");
         assert_eq!(results.len(), 1);
@@ -175,13 +217,32 @@ mod tests {
         let root = tmp.path();
         std::fs::create_dir_all(root.join(".cutready")).unwrap();
 
-        save_memory(root, MemoryCategory::Core, "User likes blue", vec!["color-pref".into()]).unwrap();
-        save_memory(root, MemoryCategory::Core, "User likes purple", vec!["color-pref".into()]).unwrap();
+        save_memory(
+            root,
+            MemoryCategory::Core,
+            "User likes blue",
+            vec!["color-pref".into()],
+        )
+        .unwrap();
+        save_memory(
+            root,
+            MemoryCategory::Core,
+            "User likes purple",
+            vec!["color-pref".into()],
+        )
+        .unwrap();
 
         let store = load(root);
-        let cores: Vec<_> = store.memories.iter().filter(|m| m.category == MemoryCategory::Core).collect();
+        let cores: Vec<_> = store
+            .memories
+            .iter()
+            .filter(|m| m.category == MemoryCategory::Core)
+            .collect();
         assert_eq!(cores.len(), 1, "Should dedup core memories with same tags");
-        assert!(cores[0].content.contains("purple"), "Should keep the latest value");
+        assert!(
+            cores[0].content.contains("purple"),
+            "Should keep the latest value"
+        );
     }
 
     #[test]
@@ -197,11 +258,18 @@ mod tests {
         let root = tmp.path();
         std::fs::create_dir_all(root.join(".cutready")).unwrap();
 
-        archive_session(root, "Discussed login flow demo with 5 steps", "chat-2026-01-01").unwrap();
+        archive_session(
+            root,
+            "Discussed login flow demo with 5 steps",
+            "chat-2026-01-01",
+        )
+        .unwrap();
 
         let store = load(root);
         assert_eq!(store.memories.len(), 1);
         assert_eq!(store.memories[0].category, MemoryCategory::Archival);
-        assert!(store.memories[0].tags.contains(&"session:chat-2026-01-01".to_string()));
+        assert!(store.memories[0]
+            .tags
+            .contains(&"session:chat-2026-01-01".to_string()));
     }
 }

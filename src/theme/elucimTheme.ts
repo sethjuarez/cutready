@@ -1,4 +1,5 @@
 import type { ElucimTheme } from "@elucim/core";
+import type { ThemeColorTokens } from "./appThemePalettes";
 
 /**
  * Shared elucim content theme using CSS var() references.
@@ -67,6 +68,23 @@ export const CUTREADY_LIGHT: ElucimTheme = {
   warning: "#d97706",
   error: "#dc2626",
 };
+
+export function elucimThemeFromTokens(tokens: ThemeColorTokens): ElucimTheme {
+  return {
+    foreground: `rgb(${tokens.text})`,
+    background: `rgb(${tokens.surface})`,
+    accent: `rgb(${tokens.accent})`,
+    muted: `rgb(${tokens.textSecondary})`,
+    surface: `rgb(${tokens.surfaceAlt})`,
+    border: `rgb(${tokens.border})`,
+    primary: `rgb(${tokens.accent})`,
+    secondary: `rgb(${tokens.secondary})`,
+    tertiary: `rgb(${tokens.tertiary})`,
+    success: `rgb(${tokens.success})`,
+    warning: `rgb(${tokens.warning})`,
+    error: `rgb(${tokens.error})`,
+  };
+}
 
 /**
  * Returns the appropriate concrete CutReady theme for the given mode.

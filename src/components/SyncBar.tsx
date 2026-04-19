@@ -157,7 +157,7 @@ export function SyncBar() {
           <button
             onClick={() => actionFn()}
             disabled={isSyncing}
-            className="px-2.5 py-0.5 rounded text-[10px] font-medium bg-[rgb(var(--color-accent))] text-white hover:opacity-90 transition-opacity disabled:opacity-40"
+            className="px-2.5 py-0.5 rounded text-[10px] font-medium bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))] hover:opacity-90 transition-opacity disabled:opacity-40"
           >
             {isSyncing ? "Syncing\u2026" : actionLabel}
           </button>

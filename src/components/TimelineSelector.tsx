@@ -205,7 +205,7 @@ export function TimelineSelector() {
                 />
                 <button
                   onClick={handleCreate}
-                  className="px-2 py-1 rounded text-[10px] font-medium bg-[rgb(var(--color-accent))] text-white hover:opacity-90 transition-opacity"
+                  className="px-2 py-1 rounded text-[10px] font-medium bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))] hover:opacity-90 transition-opacity"
                 >
                   Create
                 </button>

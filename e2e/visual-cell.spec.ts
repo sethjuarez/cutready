@@ -310,9 +310,7 @@ test.describe("VisualCell — elucim DSL rendering", () => {
       };
     });
 
-    // Preview is inside "More actions" overflow menu
-    await page.locator('button[title="More actions"]').click();
-    await page.getByText("Preview", { exact: true }).click();
+    await page.getByRole("button", { name: "Preview", exact: true }).click();
     await page.waitForTimeout(2000); // Let animation auto-play
 
     // Screenshot in dark mode

@@ -187,7 +187,11 @@ pub fn resolve_sidecar_dir() -> PathBuf {
 }
 
 /// Resolve the screenshots directory for a recording session.
-pub fn resolve_screenshots_dir(project_root: &Path, _project_id: &str, session_id: &str) -> PathBuf {
+pub fn resolve_screenshots_dir(
+    project_root: &Path,
+    _project_id: &str,
+    session_id: &str,
+) -> PathBuf {
     project_root
         .join(".sessions")
         .join(session_id)
@@ -216,7 +220,11 @@ pub async fn prepare_browser(
         .await
         .map_err(|e| anyhow::anyhow!("Sidecar ping failed: {e}"))?;
 
-    let params = match (&options.user_data_dir, &options.profile_directory, &options.browser_channel) {
+    let params = match (
+        &options.user_data_dir,
+        &options.profile_directory,
+        &options.browser_channel,
+    ) {
         (Some(udd), Some(pd), Some(ch)) => serde_json::json!({
             "user_data_dir": udd,
             "profile_directory": pd,

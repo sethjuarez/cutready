@@ -176,7 +176,7 @@ export function ProjectSwitcher() {
                   <button
                     onClick={handleRename}
                     disabled={!renameValue.trim()}
-                    className="text-[11px] px-1.5 py-0.5 rounded bg-[rgb(var(--color-accent))] text-white disabled:opacity-40"
+                    className="text-[11px] px-1.5 py-0.5 rounded bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))] disabled:opacity-40"
                   >
                     ✓
                   </button>
@@ -244,7 +244,7 @@ export function ProjectSwitcher() {
                   <button
                     onClick={handleMigrate}
                     disabled={!migrateName.trim()}
-                    className="text-[11px] px-2 py-1 rounded bg-[rgb(var(--color-accent))] text-white disabled:opacity-40 hover:bg-[rgb(var(--color-accent-hover))] transition-colors"
+                    className="text-[11px] px-2 py-1 rounded bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))] disabled:opacity-40 hover:bg-[rgb(var(--color-accent-hover))] transition-colors"
                   >
                     Next →
                   </button>
@@ -269,7 +269,7 @@ export function ProjectSwitcher() {
                 <button
                   onClick={handleCreate}
                   disabled={!newName.trim()}
-                  className="text-[11px] px-2 py-1 rounded bg-[rgb(var(--color-accent))] text-white disabled:opacity-40 hover:bg-[rgb(var(--color-accent-hover))] transition-colors"
+                  className="text-[11px] px-2 py-1 rounded bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))] disabled:opacity-40 hover:bg-[rgb(var(--color-accent-hover))] transition-colors"
                 >
                   Add
                 </button>

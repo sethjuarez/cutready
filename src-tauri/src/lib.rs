@@ -96,15 +96,13 @@ pub fn run() {
 
             #[cfg(debug_assertions)]
             {
-                builder = builder
-                    .level(log::LevelFilter::Debug)
-                    .targets([
-                        tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Stdout),
-                        tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Webview),
-                        tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::LogDir {
-                            file_name: Some("dev-trace".into()),
-                        }),
-                    ]);
+                builder = builder.level(log::LevelFilter::Debug).targets([
+                    tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Stdout),
+                    tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Webview),
+                    tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::LogDir {
+                        file_name: Some("dev-trace".into()),
+                    }),
+                ]);
             }
             #[cfg(not(debug_assertions))]
             {
@@ -220,6 +218,9 @@ pub fn run() {
             commands::sketch::sketch_used_by_storyboards,
             commands::sketch::list_sketches,
             commands::sketch::get_sketch,
+            commands::sketch::set_sketch_lock,
+            commands::sketch::set_planning_row_lock,
+            commands::sketch::set_planning_cell_lock,
             commands::sketch::get_visual,
             commands::sketch::write_visual_doc,
             commands::sketch::rename_sketch,
@@ -291,6 +292,8 @@ pub fn run() {
             commands::screenshot::close_preview_window,
             commands::note::create_note,
             commands::note::get_note,
+            commands::note::get_note_lock,
+            commands::note::set_note_lock,
             commands::note::update_note,
             commands::note::delete_note,
             commands::note::rename_note,
@@ -344,10 +347,15 @@ pub fn run() {
                     let app = window.app_handle();
                     if let Some(state) = app.try_state::<AppState>() {
                         let summary = state.last_chat_summary.lock().unwrap().take();
-                        let root = state.current_project.lock().unwrap()
-                            .as_ref().map(|p| p.root.clone());
+                        let root = state
+                            .current_project
+                            .lock()
+                            .unwrap()
+                            .as_ref()
+                            .map(|p| p.root.clone());
                         if let (Some((session_id, text)), Some(root)) = (summary, root) {
-                            let _ = crate::engine::memory::archive_session(&root, &text, &session_id);
+                            let _ =
+                                crate::engine::memory::archive_session(&root, &text, &session_id);
                         }
                     }
                 }

@@ -60,10 +60,12 @@ pub fn extract_and_encode_images(markdown: &str, root: &Path) -> (String, Vec<Co
                     let after_bracket = pos + 2 + close_bracket + 1;
                     if after_bracket < bytes.len() && bytes[after_bracket] == b'(' {
                         if let Some(close_paren) = line[after_bracket + 1..].find(')') {
-                            let img_path_str = &line[after_bracket + 1..after_bracket + 1 + close_paren];
+                            let img_path_str =
+                                &line[after_bracket + 1..after_bracket + 1 + close_paren];
                             // Try to encode the image (respecting per-image and total budgets)
                             if parts.len() < MAX_IMAGES_PER_RESULT && total_b64 < MAX_TOTAL_BASE64 {
-                                if let Some((part, b64_len)) = encode_image_file(root, img_path_str) {
+                                if let Some((part, b64_len)) = encode_image_file(root, img_path_str)
+                                {
                                     if total_b64 + b64_len <= MAX_TOTAL_BASE64 {
                                         total_b64 += b64_len;
                                         parts.push(part);
@@ -109,7 +111,11 @@ fn encode_image_file(root: &Path, rel_path: &str) -> Option<(ContentPart, usize)
     // Check size
     let metadata = std::fs::metadata(&path).ok()?;
     if metadata.len() > MAX_IMAGE_BYTES {
-        log::debug!("[vision] skipping {} ({}MB > 5MB limit)", rel_path, metadata.len() / 1024 / 1024);
+        log::debug!(
+            "[vision] skipping {} ({}MB > 5MB limit)",
+            rel_path,
+            metadata.len() / 1024 / 1024
+        );
         return None;
     }
 
@@ -132,18 +138,27 @@ fn encode_image_file(root: &Path, rel_path: &str) -> Option<(ContentPart, usize)
     if b64_len > MAX_BASE64_PER_IMAGE {
         log::info!(
             "[vision] skipping {} — base64 too large after resize ({} > {} chars)",
-            rel_path, b64_len, MAX_BASE64_PER_IMAGE
+            rel_path,
+            b64_len,
+            MAX_BASE64_PER_IMAGE
         );
         return None;
     }
 
     // Always output as PNG after resize (the image crate decodes/re-encodes)
-    let out_mime = if final_bytes.len() < data.len() { "image/png" } else { mime };
+    let out_mime = if final_bytes.len() < data.len() {
+        "image/png"
+    } else {
+        mime
+    };
     let data_uri = format!("data:{out_mime};base64,{b64}");
 
     log::debug!(
         "[vision] encoded {} ({} bytes → {} after resize → {} b64 chars)",
-        rel_path, data.len(), final_bytes.len(), b64_len
+        rel_path,
+        data.len(),
+        final_bytes.len(),
+        b64_len
     );
 
     Some((
@@ -181,13 +196,20 @@ fn resize_image_if_needed(data: &[u8], _mime: &str) -> Vec<u8> {
     );
     log::info!(
         "[vision] resized {}x{} → {}x{} (max {}px)",
-        w, h, resized.width(), resized.height(), MAX_IMAGE_DIMENSION
+        w,
+        h,
+        resized.width(),
+        resized.height(),
+        MAX_IMAGE_DIMENSION
     );
 
     // Re-encode as PNG
     let mut buf = Vec::new();
     let mut cursor = std::io::Cursor::new(&mut buf);
-    if resized.write_to(&mut cursor, image::ImageFormat::Png).is_ok() {
+    if resized
+        .write_to(&mut cursor, image::ImageFormat::Png)
+        .is_ok()
+    {
         buf
     } else {
         data.to_vec()
@@ -426,29 +448,51 @@ pub fn all_tools() -> Vec<Tool> {
 // ---------------------------------------------------------------------------
 
 /// Execute a single tool call and return the result as a ToolOutput.
-pub fn execute_tool(call: &ToolCall, project_root: &Path, vision_enabled: bool) -> agentive::ToolOutput {
+pub fn execute_tool(
+    call: &ToolCall,
+    project_root: &Path,
+    vision_enabled: bool,
+) -> agentive::ToolOutput {
     let args: Value = agentive::parse_tool_args(&call.function.arguments).unwrap_or(json!({}));
     let start = std::time::Instant::now();
 
     // Entry trace — if tool_exec is missing but this appears, the tool panicked
-    log::debug!("[tool] ENTER {} (args {}bytes)", call.function.name, call.function.arguments.len());
+    log::debug!(
+        "[tool] ENTER {} (args {}bytes)",
+        call.function.name,
+        call.function.arguments.len()
+    );
 
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         match call.function.name.as_str() {
-            "list_project_files" => agentive::ToolOutput::from(exec_list_project_files(project_root, &args)),
+            "list_project_files" => {
+                agentive::ToolOutput::from(exec_list_project_files(project_root, &args))
+            }
             "read_note" => exec_read_note(project_root, &args, vision_enabled),
             "write_note" => agentive::ToolOutput::from(exec_write_note(project_root, &args)),
             "read_sketch" => exec_read_sketch(project_root, &args, vision_enabled),
             "write_sketch" => agentive::ToolOutput::from(exec_write_sketch(project_root, &args)),
-            "update_planning_row" => agentive::ToolOutput::from(exec_update_planning_row(project_root, &args)),
-            "set_row_visual" => agentive::ToolOutput::from(exec_set_row_visual(project_root, &args)),
+            "update_planning_row" => {
+                agentive::ToolOutput::from(exec_update_planning_row(project_root, &args))
+            }
+            "set_row_visual" => {
+                agentive::ToolOutput::from(exec_set_row_visual(project_root, &args))
+            }
             "design_plan" => agentive::ToolOutput::from(exec_design_plan(project_root, &args)),
-            "read_storyboard" => agentive::ToolOutput::from(exec_read_storyboard(project_root, &args)),
-            "write_storyboard" => agentive::ToolOutput::from(exec_write_storyboard(project_root, &args)),
+            "read_storyboard" => {
+                agentive::ToolOutput::from(exec_read_storyboard(project_root, &args))
+            }
+            "write_storyboard" => {
+                agentive::ToolOutput::from(exec_write_storyboard(project_root, &args))
+            }
             "recall_memory" => agentive::ToolOutput::from(exec_recall_memory(project_root, &args)),
             "save_memory" => agentive::ToolOutput::from(exec_save_memory(project_root, &args)),
             "fetch_url" => {
-                let url = args.get("url").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let url = args
+                    .get("url")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
                 agentive::ToolOutput::from(tokio::task::block_in_place(|| {
                     tokio::runtime::Handle::current().block_on(async {
                         match agentive::web::fetch_and_clean(&url).await {
@@ -460,7 +504,9 @@ pub fn execute_tool(call: &ToolCall, project_root: &Path, vision_enabled: bool) 
                                     let after = &rest[bracket + 2..];
                                     if let Some(end) = after.find(')') {
                                         let href = after[..end].trim();
-                                        if href.starts_with("http://") || href.starts_with("https://") {
+                                        if href.starts_with("http://")
+                                            || href.starts_with("https://")
+                                        {
                                             let href = href.to_string();
                                             if !links.contains(&href) {
                                                 links.push(href);
@@ -475,7 +521,11 @@ pub fn execute_tool(call: &ToolCall, project_root: &Path, vision_enabled: bool) 
                                     format!(
                                         "{content}\n\n---\nLinks on this page ({count}):\n{list}",
                                         count = links.len(),
-                                        list = links.iter().map(|l| format!("- {l}")).collect::<Vec<_>>().join("\n")
+                                        list = links
+                                            .iter()
+                                            .map(|l| format!("- {l}"))
+                                            .collect::<Vec<_>>()
+                                            .join("\n")
                                     )
                                 }
                             }
@@ -483,7 +533,7 @@ pub fn execute_tool(call: &ToolCall, project_root: &Path, vision_enabled: bool) 
                         }
                     })
                 }))
-            },
+            }
             other => agentive::ToolOutput::from(format!("Unknown tool: {other}")),
         }
     }));
@@ -499,39 +549,56 @@ pub fn execute_tool(call: &ToolCall, project_root: &Path, vision_enabled: bool) 
                 "unknown panic".to_string()
             };
             log::error!("[tool] PANIC in {}: {}", call.function.name, msg);
-            crate::util::trace::emit("tool_panic", "tools", serde_json::json!({
-                "name": call.function.name,
-                "panic": msg,
-            }));
+            crate::util::trace::emit(
+                "tool_panic",
+                "tools",
+                serde_json::json!({
+                    "name": call.function.name,
+                    "panic": msg,
+                }),
+            );
             agentive::ToolOutput::from(format!("Error: internal tool panic: {msg}"))
         }
     };
 
     let elapsed = start.elapsed();
     let result_text = output.text();
-    log::debug!("[tool] {} → {}chars in {:?}", call.function.name, result_text.len(), elapsed);
+    log::debug!(
+        "[tool] {} → {}chars in {:?}",
+        call.function.name,
+        result_text.len(),
+        elapsed
+    );
 
-    let is_error = result_text.starts_with("Error:") || result_text.starts_with("Validation failed");
-    crate::util::trace::emit("tool_exec", "tools", serde_json::json!({
-        "name": call.function.name,
-        "duration_ms": elapsed.as_millis(),
-        "result_len": result_text.len(),
-        "is_error": is_error,
-        "result_preview": if is_error {
-            crate::util::trace::truncate(result_text, 500)
-        } else {
-            crate::util::trace::truncate(result_text, 200)
-        },
-    }));
+    let is_error =
+        result_text.starts_with("Error:") || result_text.starts_with("Validation failed");
+    crate::util::trace::emit(
+        "tool_exec",
+        "tools",
+        serde_json::json!({
+            "name": call.function.name,
+            "duration_ms": elapsed.as_millis(),
+            "result_len": result_text.len(),
+            "is_error": is_error,
+            "result_preview": if is_error {
+                crate::util::trace::truncate(result_text, 500)
+            } else {
+                crate::util::trace::truncate(result_text, 200)
+            },
+        }),
+    );
 
     output
 }
-
+
 /// Extract a JSON object from a tool argument field. Handles three LLM behaviors:
 ///   1. `{"visual": { ... }}` → normal, returns the nested object
 ///   2. `{"visual": "{ ... }"}` → stringified, parses and returns
 ///   3. `{"version": "1.0", "root": {...}}` → flattened (LLM passed DSL as args directly)
-fn extract_json_object<'a>(args: &'a Value, key: &str) -> Result<std::borrow::Cow<'a, Value>, String> {
+fn extract_json_object<'a>(
+    args: &'a Value,
+    key: &str,
+) -> Result<std::borrow::Cow<'a, Value>, String> {
     match args.get(key) {
         Some(v) if v.is_object() => Ok(std::borrow::Cow::Borrowed(v)),
         Some(Value::String(s)) => {
@@ -542,7 +609,9 @@ fn extract_json_object<'a>(args: &'a Value, key: &str) -> Result<std::borrow::Co
                 Err(e) => Err(format!("Error: '{key}' is a string but not valid JSON: {e}. Pass the DSL as a JSON object, not a string.")),
             }
         }
-        Some(_) => Err(format!("Error: '{key}' must be a JSON object (the elucim DSL document)")),
+        Some(_) => Err(format!(
+            "Error: '{key}' must be a JSON object (the elucim DSL document)"
+        )),
         None => {
             // Fallback: LLM may have flattened the object into args directly.
             // Detect DSL documents by checking for version+root fields.
@@ -560,12 +629,17 @@ fn resolve_path(project_root: &Path, rel: &str) -> PathBuf {
 }
 
 fn exec_list_project_files(root: &Path, args: &Value) -> String {
-    let include_images = args.get("include_images").and_then(|v| v.as_bool()).unwrap_or(false);
+    let include_images = args
+        .get("include_images")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
     let mut out = String::new();
 
     if let Ok(sketches) = project::scan_sketches(root) {
         out.push_str("## Sketches\n");
-        out.push_str("Use the exact path value with read_sketch/write_sketch/update_planning_row.\n");
+        out.push_str(
+            "Use the exact path value with read_sketch/write_sketch/update_planning_row.\n",
+        );
         for s in &sketches {
             out.push_str(&format!(
                 "- path: \"{}\" — {} ({} rows)\n",
@@ -601,7 +675,10 @@ fn exec_list_project_files(root: &Path, args: &Value) -> String {
                 for entry in entries.flatten() {
                     let path = entry.path();
                     if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
-                        if matches!(ext.to_lowercase().as_str(), "png" | "jpg" | "jpeg" | "gif" | "webp") {
+                        if matches!(
+                            ext.to_lowercase().as_str(),
+                            "png" | "jpg" | "jpeg" | "gif" | "webp"
+                        ) {
                             if let Ok(rel) = path.strip_prefix(root) {
                                 images.push(rel.to_string_lossy().replace('\\', "/"));
                             }
@@ -684,13 +761,43 @@ fn exec_read_sketch(root: &Path, args: &Value, vision_enabled: bool) -> agentive
                     Some(plan) => format!("**Design Plan:** {}\n", plan),
                     None => String::new(),
                 };
+                let lock_line = if row.locked {
+                    "**Locked:** entire row\n".to_string()
+                } else {
+                    let locked_cells: Vec<&str> = [
+                        "time",
+                        "narrative",
+                        "demo_actions",
+                        "screenshot",
+                        "visual",
+                        "design_plan",
+                    ]
+                    .into_iter()
+                    .filter(|field| row.locks.is_locked(field))
+                    .collect();
+                    if locked_cells.is_empty() {
+                        String::new()
+                    } else {
+                        format!("**Locked cells:** {}\n", locked_cells.join(", "))
+                    }
+                };
                 out.push_str(&format!(
-                    "## Row {} [{}]\n**Narrative:** {}\n**Actions:** {}\n{}{}{}\n",
-                    i, row.time, row.narrative, row.demo_actions, screenshot_line, visual_line, plan_line
+                    "## Row {} [{}]\n{}**Narrative:** {}\n**Actions:** {}\n{}{}{}\n",
+                    i,
+                    row.time,
+                    lock_line,
+                    row.narrative,
+                    row.demo_actions,
+                    screenshot_line,
+                    visual_line,
+                    plan_line
                 ));
             }
             if vision_enabled && !image_parts.is_empty() {
-                log::info!("[vision] read_sketch: {} screenshots extracted", image_parts.len());
+                log::info!(
+                    "[vision] read_sketch: {} screenshots extracted",
+                    image_parts.len()
+                );
                 agentive::ToolOutput::with_images(out, image_parts)
             } else {
                 agentive::ToolOutput::from(out)
@@ -710,10 +817,12 @@ fn exec_write_sketch(root: &Path, args: &Value) -> String {
         None => return "Error: missing 'rows' argument".into(),
     };
 
-    let new_rows: Vec<PlanningRow> = match rows_val.as_array() {
+    let mut new_rows: Vec<PlanningRow> = match rows_val.as_array() {
         Some(arr) => arr
             .iter()
             .map(|r| PlanningRow {
+                locked: false,
+                locks: crate::models::sketch::PlanningCellLocks::default(),
                 time: r.get("time").and_then(|v| v.as_str()).unwrap_or("").into(),
                 narrative: r
                     .get("narrative")
@@ -725,18 +834,24 @@ fn exec_write_sketch(root: &Path, args: &Value) -> String {
                     .and_then(|v| v.as_str())
                     .unwrap_or("")
                     .into(),
-                screenshot: r.get("screenshot").and_then(|v| v.as_str()).map(|s| s.to_string()),
+                screenshot: r
+                    .get("screenshot")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string()),
                 visual: r.get("visual").cloned(),
-                design_plan: r.get("design_plan").and_then(|v| v.as_str()).map(|s| s.to_string()),
+                design_plan: r
+                    .get("design_plan")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string()),
             })
             .collect(),
         None => return "Error: 'rows' must be an array".into(),
     };
 
     // Load existing sketch or create a new one
-    let mut sketch = match project::read_sketch(&path) {
-        Ok(s) => s,
-        Err(_) => {
+    let mut sketch = match project::read_sketch(&path).ok() {
+        Some(s) => s,
+        None => {
             // New sketch — use provided title or derive from filename
             let title = args
                 .get("title")
@@ -749,6 +864,7 @@ fn exec_write_sketch(root: &Path, args: &Value) -> String {
                 });
             crate::models::sketch::Sketch {
                 title,
+                locked: false,
                 description: serde_json::Value::Null,
                 rows: vec![],
                 state: crate::models::sketch::SketchState::Draft,
@@ -758,6 +874,10 @@ fn exec_write_sketch(root: &Path, args: &Value) -> String {
         }
     };
 
+    if sketch.locked {
+        return "Error: This sketch is locked. Unlock it before editing with AI.".into();
+    }
+
     // Apply optional title/description updates (works for both new and existing sketches)
     if let Some(t) = args.get("title").and_then(|v| v.as_str()) {
         sketch.title = t.to_string();
@@ -766,6 +886,10 @@ fn exec_write_sketch(root: &Path, args: &Value) -> String {
         sketch.description = serde_json::Value::String(d.to_string());
     }
 
+    if let Err(e) = project::validate_rows_update_allowed(&sketch.rows, &new_rows) {
+        return format!("Error: {e}");
+    }
+    project::apply_locked_row_metadata(&sketch.rows, &mut new_rows);
     let count = new_rows.len();
     sketch.rows = new_rows;
 
@@ -789,7 +913,11 @@ fn exec_update_planning_row(root: &Path, args: &Value) -> String {
         Some(i) => i as usize,
         None => {
             let hint = match project::read_sketch(&path) {
-                Ok(s) => format!(" Sketch has {} rows (valid indices: 0–{}).", s.rows.len(), s.rows.len().saturating_sub(1)),
+                Ok(s) => format!(
+                    " Sketch has {} rows (valid indices: 0–{}).",
+                    s.rows.len(),
+                    s.rows.len().saturating_sub(1)
+                ),
                 Err(_) => String::new(),
             };
             return format!("Error: missing 'index' (0-based row index).{hint}");
@@ -807,6 +935,25 @@ fn exec_update_planning_row(root: &Path, args: &Value) -> String {
             index,
             sketch.rows.len()
         );
+    }
+
+    if sketch.locked {
+        return "Error: This sketch is locked. Unlock it before editing with AI.".into();
+    }
+    if sketch.rows[index].locked {
+        return format!(
+            "Error: Planning row {} is locked. Unlock it before editing with AI.",
+            index + 1
+        );
+    }
+    for field in ["time", "narrative", "demo_actions", "screenshot"] {
+        if args.get(field).is_some() && sketch.rows[index].locks.is_locked(field) {
+            return format!(
+                "Error: Planning row {} {} cell is locked. Unlock it before editing with AI.",
+                index + 1,
+                field.replace('_', " ")
+            );
+        }
     }
 
     let row = &mut sketch.rows[index];
@@ -843,7 +990,11 @@ fn exec_set_row_visual(root: &Path, args: &Value) -> String {
         Some(i) => i as usize,
         None => {
             let hint = match project::read_sketch(&path) {
-                Ok(s) => format!(" Sketch has {} rows (valid indices: 0–{}).", s.rows.len(), s.rows.len().saturating_sub(1)),
+                Ok(s) => format!(
+                    " Sketch has {} rows (valid indices: 0–{}).",
+                    s.rows.len(),
+                    s.rows.len().saturating_sub(1)
+                ),
                 Err(_) => String::new(),
             };
             return format!("Error: missing 'index' (0-based row index).{hint}");
@@ -860,6 +1011,24 @@ fn exec_set_row_visual(root: &Path, args: &Value) -> String {
             "Error: index {} out of range (sketch has {} rows)",
             index,
             sketch.rows.len()
+        );
+    }
+
+    if sketch.locked {
+        return "Error: This sketch is locked. Unlock it before editing with AI.".into();
+    }
+    if sketch.rows[index].locked {
+        return format!(
+            "Error: Planning row {} is locked. Unlock it before editing with AI.",
+            index + 1
+        );
+    }
+    if sketch.rows[index].locks.is_locked("visual")
+        || sketch.rows[index].locks.is_locked("screenshot")
+    {
+        return format!(
+            "Error: Planning row {} media cell is locked. Unlock it before editing with AI.",
+            index + 1
         );
     }
 
@@ -884,7 +1053,11 @@ fn exec_set_row_visual(root: &Path, args: &Value) -> String {
                     "Validation failed ({} error{}) — fix these and call set_row_visual again:\n{}",
                     errors.len(),
                     if errors.len() == 1 { "" } else { "s" },
-                    errors.iter().map(|e| format!("  • {e}")).collect::<Vec<_>>().join("\n")
+                    errors
+                        .iter()
+                        .map(|e| format!("  • {e}"))
+                        .collect::<Vec<_>>()
+                        .join("\n")
                 );
             }
             // Auto-critique for layout/readability issues
@@ -902,9 +1075,12 @@ fn exec_set_row_visual(root: &Path, args: &Value) -> String {
                 if !suggestions.is_empty() {
                     critique_note = format!(
                         "\n\nSuggestions for next time:\n{}",
-                        suggestions.iter().enumerate()
+                        suggestions
+                            .iter()
+                            .enumerate()
                             .map(|(i, s)| format!("  {}: {s}", i + 1))
-                            .collect::<Vec<_>>().join("\n")
+                            .collect::<Vec<_>>()
+                            .join("\n")
                     );
                 }
             }
@@ -923,7 +1099,12 @@ fn exec_set_row_visual(root: &Path, args: &Value) -> String {
     match project::write_sketch(&sketch, &path, root) {
         Ok(()) => {
             if sketch.rows[index].visual.is_some() {
-                format!("✓ Visual saved on row {} in {}{}", index, path.display(), critique_note)
+                format!(
+                    "✓ Visual saved on row {} in {}{}",
+                    index,
+                    path.display(),
+                    critique_note
+                )
             } else {
                 format!("Removed visual from row {} in {}", index, path.display())
             }
@@ -947,7 +1128,11 @@ fn exec_design_plan(root: &Path, args: &Value) -> String {
         None => {
             // Read the sketch to tell the model how many rows exist
             let hint = match project::read_sketch(&path) {
-                Ok(s) => format!(" Sketch has {} rows (valid indices: 0–{}).", s.rows.len(), s.rows.len().saturating_sub(1)),
+                Ok(s) => format!(
+                    " Sketch has {} rows (valid indices: 0–{}).",
+                    s.rows.len(),
+                    s.rows.len().saturating_sub(1)
+                ),
                 Err(_) => String::new(),
             };
             return format!("Error: missing 'index' (0-based row index).{hint}");
@@ -971,6 +1156,22 @@ fn exec_design_plan(root: &Path, args: &Value) -> String {
         );
     }
 
+    if sketch.locked {
+        return "Error: This sketch is locked. Unlock it before editing with AI.".into();
+    }
+    if sketch.rows[index].locked {
+        return format!(
+            "Error: Planning row {} is locked. Unlock it before editing with AI.",
+            index + 1
+        );
+    }
+    if sketch.rows[index].locks.is_locked("design_plan") {
+        return format!(
+            "Error: Planning row {} design plan cell is locked. Unlock it before editing with AI.",
+            index + 1
+        );
+    }
+
     sketch.rows[index].design_plan = Some(plan.clone());
 
     match project::write_sketch(&sketch, &path, root) {
@@ -989,26 +1190,46 @@ const VALID_ROOT_TYPES: &[&str] = &["scene", "player", "presentation"];
 
 // Valid elucim DSL child node types
 const VALID_NODE_TYPES: &[&str] = &[
-    "circle", "rect", "line", "arrow", "text", "group", "polygon",
-    "image", "axes", "latex", "graph", "matrix", "barChart", "slide",
-    "bezierCurve", "codeBlock",
+    "circle",
+    "rect",
+    "line",
+    "arrow",
+    "text",
+    "group",
+    "polygon",
+    "image",
+    "axes",
+    "latex",
+    "graph",
+    "matrix",
+    "barChart",
+    "slide",
+    "bezierCurve",
+    "codeBlock",
 ];
 
 fn validate_dsl_node(node: &Value, path: &str, errors: &mut Vec<String>) {
     let obj = match node.as_object() {
         Some(o) => o,
         None => {
-            errors.push(format!("{path}: expected object, got {}", node_type_name(node)));
+            errors.push(format!(
+                "{path}: expected object, got {}",
+                node_type_name(node)
+            ));
             return;
         }
     };
 
     if let Some(t) = obj.get("type").and_then(|v| v.as_str()) {
         if !VALID_ROOT_TYPES.contains(&t) && !VALID_NODE_TYPES.contains(&t) {
-            errors.push(format!("{path}.type: unknown node type \"{t}\". Valid types: {}", VALID_NODE_TYPES.join(", ")));
+            errors.push(format!(
+                "{path}.type: unknown node type \"{t}\". Valid types: {}",
+                VALID_NODE_TYPES.join(", ")
+            ));
         }
         // scene/player require width, height
-        if (t == "scene" || t == "player") && path == "root"
+        if (t == "scene" || t == "player")
+            && path == "root"
             && (!obj.contains_key("width") || !obj.contains_key("height"))
         {
             errors.push(format!("{path}: {t} requires width and height"));
@@ -1025,7 +1246,9 @@ fn validate_dsl_node(node: &Value, path: &str, errors: &mut Vec<String>) {
         // text nodes require the "content" property (NOT "text")
         if t == "text" && !obj.contains_key("content") {
             if obj.contains_key("text") {
-                errors.push(format!("{path}: text node uses \"content\" not \"text\" for the string value"));
+                errors.push(format!(
+                    "{path}: text node uses \"content\" not \"text\" for the string value"
+                ));
             } else {
                 errors.push(format!("{path}: text node requires a \"content\" string"));
             }
@@ -1035,21 +1258,31 @@ fn validate_dsl_node(node: &Value, path: &str, errors: &mut Vec<String>) {
             match obj.get("points").and_then(|v| v.as_array()) {
                 Some(pts) => {
                     if pts.len() < 3 {
-                        errors.push(format!("{path}.points: polygon requires at least 3 points (got {})", pts.len()));
+                        errors.push(format!(
+                            "{path}.points: polygon requires at least 3 points (got {})",
+                            pts.len()
+                        ));
                     }
                     for (i, pt) in pts.iter().enumerate() {
                         if let Some(arr) = pt.as_array() {
                             if arr.len() != 2 || !arr[0].is_number() || !arr[1].is_number() {
-                                errors.push(format!("{path}.points[{i}]: each point must be [number, number]"));
+                                errors.push(format!(
+                                    "{path}.points[{i}]: each point must be [number, number]"
+                                ));
                             }
                         } else {
-                            errors.push(format!("{path}.points[{i}]: each point must be [number, number], got {}", node_type_name(pt)));
+                            errors.push(format!(
+                                "{path}.points[{i}]: each point must be [number, number], got {}",
+                                node_type_name(pt)
+                            ));
                         }
                     }
                 }
                 None => {
                     if obj.contains_key("points") {
-                        errors.push(format!("{path}.points: must be an array of [number, number] pairs"));
+                        errors.push(format!(
+                            "{path}.points: must be an array of [number, number] pairs"
+                        ));
                     } else {
                         errors.push(format!("{path}: polygon requires a \"points\" array"));
                     }
@@ -1072,10 +1305,15 @@ fn validate_dsl_node(node: &Value, path: &str, errors: &mut Vec<String>) {
                 for (i, pt) in pts.iter().enumerate() {
                     if let Some(arr) = pt.as_array() {
                         if arr.len() != 2 || !arr[0].is_number() || !arr[1].is_number() {
-                            errors.push(format!("{path}.points[{i}]: each point must be [number, number]"));
+                            errors.push(format!(
+                                "{path}.points[{i}]: each point must be [number, number]"
+                            ));
                         }
                     } else {
-                        errors.push(format!("{path}.points[{i}]: each point must be [number, number], got {}", node_type_name(pt)));
+                        errors.push(format!(
+                            "{path}.points[{i}]: each point must be [number, number], got {}",
+                            node_type_name(pt)
+                        ));
                     }
                 }
             }
@@ -1159,7 +1397,11 @@ fn exec_write_note(root: &Path, args: &Value) -> String {
     // Enforce .md extension and safe path
     let safe_rel = {
         let trimmed = rel.trim().replace(['\\'], "/");
-        if trimmed.ends_with(".md") { trimmed } else { format!("{trimmed}.md") }
+        if trimmed.ends_with(".md") {
+            trimmed
+        } else {
+            format!("{trimmed}.md")
+        }
     };
     let path = match project::safe_resolve(root, &safe_rel) {
         Ok(p) => p,
@@ -1169,6 +1411,9 @@ fn exec_write_note(root: &Path, args: &Value) -> String {
         Some(c) => c,
         None => return "Error: missing 'content' argument".into(),
     };
+    if let Err(e) = project::ensure_note_unlocked(root, &safe_rel) {
+        return format!("Error: {e}");
+    }
 
     if let Some(parent) = path.parent() {
         if !parent.exists() {
@@ -1213,7 +1458,12 @@ fn exec_read_storyboard(root: &Path, args: &Value) -> String {
                             out.push_str(&format!("{}. sketch_ref: \"{}\"\n", i + 1, sketch_path));
                         }
                         crate::models::sketch::StoryboardItem::Section { title, sketches } => {
-                            out.push_str(&format!("{}. section: \"{}\" ({} sketches)\n", i + 1, title, sketches.len()));
+                            out.push_str(&format!(
+                                "{}. section: \"{}\" ({} sketches)\n",
+                                i + 1,
+                                title,
+                                sketches.len()
+                            ));
                             for sp in sketches {
                                 out.push_str(&format!("   - \"{}\"\n", sp));
                             }
@@ -1234,7 +1484,11 @@ fn exec_write_storyboard(root: &Path, args: &Value) -> String {
     };
     let safe_rel = {
         let trimmed = rel.trim().replace(['\\'], "/");
-        if trimmed.ends_with(".sb") { trimmed } else { format!("{trimmed}.sb") }
+        if trimmed.ends_with(".sb") {
+            trimmed
+        } else {
+            format!("{trimmed}.sb")
+        }
     };
     let path = match project::safe_resolve(root, &safe_rel) {
         Ok(p) => p,
@@ -1245,7 +1499,9 @@ fn exec_write_storyboard(root: &Path, args: &Value) -> String {
     let mut sb = match project::read_storyboard(&path) {
         Ok(existing) => existing,
         Err(_) => crate::models::sketch::Storyboard::new(
-            args.get("title").and_then(|v| v.as_str()).unwrap_or("Untitled")
+            args.get("title")
+                .and_then(|v| v.as_str())
+                .unwrap_or("Untitled"),
         ),
     };
 
@@ -1270,29 +1526,45 @@ fn exec_write_storyboard(root: &Path, args: &Value) -> String {
                     if !sketch_path.ends_with(".sk") {
                         return format!("Error: items[{i}] sketch_ref path must end with .sk (got '{sketch_path}')");
                     }
-                    new_items.push(crate::models::sketch::StoryboardItem::SketchRef { path: sketch_path });
+                    new_items.push(crate::models::sketch::StoryboardItem::SketchRef {
+                        path: sketch_path,
+                    });
                 }
                 "section" => {
                     let title = match item.get("title").and_then(|v| v.as_str()) {
                         Some(t) if !t.trim().is_empty() => t.to_string(),
                         _ => return format!("Error: items[{i}] section is missing 'title'"),
                     };
-                    let sketches: Vec<String> = match item.get("sketches").and_then(|v| v.as_array()) {
-                        Some(arr) if !arr.is_empty() => arr
-                            .iter()
-                            .filter_map(|v| v.as_str().map(|s| s.to_string()))
-                            .collect(),
-                        Some(_) => return format!("Error: items[{i}] section '{title}' must have at least one sketch"),
-                        None => return format!("Error: items[{i}] section '{title}' is missing 'sketches' array"),
-                    };
+                    let sketches: Vec<String> =
+                        match item.get("sketches").and_then(|v| v.as_array()) {
+                            Some(arr) if !arr.is_empty() => arr
+                                .iter()
+                                .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                                .collect(),
+                            Some(_) => {
+                                return format!(
+                                "Error: items[{i}] section '{title}' must have at least one sketch"
+                            )
+                            }
+                            None => {
+                                return format!(
+                                "Error: items[{i}] section '{title}' is missing 'sketches' array"
+                            )
+                            }
+                        };
                     for sp in &sketches {
                         if !sp.ends_with(".sk") {
                             return format!("Error: items[{i}] section sketch path must end with .sk (got '{sp}')");
                         }
                     }
-                    new_items.push(crate::models::sketch::StoryboardItem::Section { title, sketches });
+                    new_items
+                        .push(crate::models::sketch::StoryboardItem::Section { title, sketches });
                 }
-                other => return format!("Error: items[{i}] unknown type '{other}' — must be 'sketch_ref' or 'section'"),
+                other => {
+                    return format!(
+                    "Error: items[{i}] unknown type '{other}' — must be 'sketch_ref' or 'section'"
+                )
+                }
             }
         }
         sb.items = new_items;
@@ -1301,7 +1573,11 @@ fn exec_write_storyboard(root: &Path, args: &Value) -> String {
     sb.updated_at = chrono::Utc::now();
 
     match project::write_storyboard(&sb, &path, root) {
-        Ok(()) => format!("Saved storyboard \"{}\" at '{safe_rel}' ({} items)", sb.title, sb.items.len()),
+        Ok(()) => format!(
+            "Saved storyboard \"{}\" at '{safe_rel}' ({} items)",
+            sb.title,
+            sb.items.len()
+        ),
         Err(e) => format!("Error writing storyboard: {e}"),
     }
 }
@@ -1320,7 +1596,9 @@ fn exec_save_memory(root: &Path, args: &Value) -> String {
     let category = match args.get("category").and_then(|v| v.as_str()) {
         Some("core") => crate::engine::memory::MemoryCategory::Core,
         Some("insight") => crate::engine::memory::MemoryCategory::Insight,
-        Some(other) => return format!("Error: unknown category '{other}'. Use 'core' or 'insight'."),
+        Some(other) => {
+            return format!("Error: unknown category '{other}'. Use 'core' or 'insight'.")
+        }
         None => return "Error: missing 'category' argument".into(),
     };
 
@@ -1363,7 +1641,11 @@ impl BBox {
     fn overlap_area(&self, other: &BBox) -> f64 {
         let ox = (self.x + self.w).min(other.x + other.w) - self.x.max(other.x);
         let oy = (self.y + self.h).min(other.y + other.h) - self.y.max(other.y);
-        if ox > 0.0 && oy > 0.0 { ox * oy } else { 0.0 }
+        if ox > 0.0 && oy > 0.0 {
+            ox * oy
+        } else {
+            0.0
+        }
     }
 }
 
@@ -1371,7 +1653,10 @@ impl BBox {
 fn extract_bboxes(children: &[Value], offset_x: f64, offset_y: f64) -> Vec<BBox> {
     let mut boxes = Vec::new();
     for node in children {
-        let obj = match node.as_object() { Some(o) => o, None => continue };
+        let obj = match node.as_object() {
+            Some(o) => o,
+            None => continue,
+        };
         let t = obj.get("type").and_then(|v| v.as_str()).unwrap_or("");
         match t {
             "text" => {
@@ -1382,27 +1667,48 @@ fn extract_bboxes(children: &[Value], offset_x: f64, offset_y: f64) -> Vec<BBox>
                 let char_width = fs * 0.55;
                 let text_w = content.chars().count() as f64 * char_width;
                 let text_h = fs * 1.3;
-                let anchor = obj.get("textAnchor").and_then(|v| v.as_str()).unwrap_or("start");
+                let anchor = obj
+                    .get("textAnchor")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("start");
                 let bx = match anchor {
                     "middle" => x - text_w / 2.0,
                     "end" => x - text_w,
                     _ => x,
                 };
                 let by = y - fs; // text y is baseline
-                boxes.push(BBox { x: bx, y: by, w: text_w, h: text_h, label: format!("text '{}'", truncate(content, 20)) });
+                boxes.push(BBox {
+                    x: bx,
+                    y: by,
+                    w: text_w,
+                    h: text_h,
+                    label: format!("text '{}'", truncate(content, 20)),
+                });
             }
             "rect" => {
                 let x = obj.get("x").and_then(|v| v.as_f64()).unwrap_or(0.0) + offset_x;
                 let y = obj.get("y").and_then(|v| v.as_f64()).unwrap_or(0.0) + offset_y;
                 let w = obj.get("width").and_then(|v| v.as_f64()).unwrap_or(0.0);
                 let h = obj.get("height").and_then(|v| v.as_f64()).unwrap_or(0.0);
-                boxes.push(BBox { x, y, w, h, label: "rect".into() });
+                boxes.push(BBox {
+                    x,
+                    y,
+                    w,
+                    h,
+                    label: "rect".into(),
+                });
             }
             "circle" => {
                 let cx = obj.get("cx").and_then(|v| v.as_f64()).unwrap_or(0.0) + offset_x;
                 let cy = obj.get("cy").and_then(|v| v.as_f64()).unwrap_or(0.0) + offset_y;
                 let r = obj.get("r").and_then(|v| v.as_f64()).unwrap_or(0.0);
-                boxes.push(BBox { x: cx - r, y: cy - r, w: 2.0 * r, h: 2.0 * r, label: "circle".into() });
+                boxes.push(BBox {
+                    x: cx - r,
+                    y: cy - r,
+                    w: 2.0 * r,
+                    h: 2.0 * r,
+                    label: "circle".into(),
+                });
             }
             "group" => {
                 let gx = obj.get("x").and_then(|v| v.as_f64()).unwrap_or(0.0) + offset_x;
@@ -1419,7 +1725,11 @@ fn extract_bboxes(children: &[Value], offset_x: f64, offset_y: f64) -> Vec<BBox>
 
 fn truncate(s: &str, max: usize) -> String {
     let chars: String = s.chars().take(max).collect();
-    if chars.len() < s.len() { format!("{chars}…") } else { chars }
+    if chars.len() < s.len() {
+        format!("{chars}…")
+    } else {
+        chars
+    }
 }
 
 /// Run the critique analysis on a visual DSL document.
@@ -1439,7 +1749,10 @@ fn critique_visual_doc(visual: &Value) -> Result<(Vec<String>, Vec<String>), Str
 
     let canvas_w = root.get("width").and_then(|v| v.as_f64()).unwrap_or(960.0);
     let canvas_h = root.get("height").and_then(|v| v.as_f64()).unwrap_or(540.0);
-    let bg = root.get("background").and_then(|v| v.as_str()).unwrap_or("");
+    let bg = root
+        .get("background")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
 
     let mut issues: Vec<String> = Vec::new();
     let mut suggestions: Vec<String> = Vec::new();
@@ -1459,7 +1772,8 @@ fn critique_visual_doc(visual: &Value) -> Result<(Vec<String>, Vec<String>), Str
         ));
     } else if all_nodes.len() > 45 {
         suggestions.push(format!(
-            "ELEMENT_COUNT: {} elements — consider trimming to ~40 for cleaner design.", all_nodes.len()
+            "ELEMENT_COUNT: {} elements — consider trimming to ~40 for cleaner design.",
+            all_nodes.len()
         ));
     }
 
@@ -1479,9 +1793,7 @@ fn critique_visual_doc(visual: &Value) -> Result<(Vec<String>, Vec<String>), Str
             }
         }
         // Catch inner "card" rect with margins that doesn't fill edge-to-edge
-        if is_rect && rw >= canvas_w * 0.85 && rh >= canvas_h * 0.85
-            && (rx > 10.0 || ry > 10.0)
-        {
+        if is_rect && rw >= canvas_w * 0.85 && rh >= canvas_h * 0.85 && (rx > 10.0 || ry > 10.0) {
             let fill = first.get("fill").and_then(|v| v.as_str()).unwrap_or("");
             if fill.starts_with('$') {
                 issues.push(
@@ -1502,7 +1814,8 @@ fn critique_visual_doc(visual: &Value) -> Result<(Vec<String>, Vec<String>), Str
             // Short text that could be a label — suggest bigger
             suggestions.push(format!(
                 "SMALL_LABEL: text '{}' is fontSize {:.0} — consider 18+ for better readability.",
-                truncate(&tn.content, 25), tn.font_size
+                truncate(&tn.content, 25),
+                tn.font_size
             ));
         }
     }
@@ -1534,7 +1847,10 @@ fn critique_visual_doc(visual: &Value) -> Result<(Vec<String>, Vec<String>), Str
 
     // 4. Overlap detection (text-on-text only — non-blocking suggestion since
     // LLMs struggle to fix coordinate math reliably)
-    let text_bboxes: Vec<&BBox> = bboxes.iter().filter(|b| b.label.starts_with("text")).collect();
+    let text_bboxes: Vec<&BBox> = bboxes
+        .iter()
+        .filter(|b| b.label.starts_with("text"))
+        .collect();
     for i in 0..text_bboxes.len() {
         for j in (i + 1)..text_bboxes.len() {
             let a = text_bboxes[i];
@@ -1554,7 +1870,8 @@ fn critique_visual_doc(visual: &Value) -> Result<(Vec<String>, Vec<String>), Str
     let margin = 30.0;
     for bbox in &bboxes {
         if bbox.label.starts_with("text")
-            && (bbox.x < margin || bbox.y < margin
+            && (bbox.x < margin
+                || bbox.y < margin
                 || bbox.x + bbox.w > canvas_w - margin
                 || bbox.y + bbox.h > canvas_h - margin)
         {
@@ -1567,7 +1884,10 @@ fn critique_visual_doc(visual: &Value) -> Result<(Vec<String>, Vec<String>), Str
 
     // 6. Text overflow — text inside a container rect that exceeds rect bounds
     let rect_bboxes: Vec<&BBox> = bboxes.iter().filter(|b| b.label == "rect").collect();
-    let text_bboxes_all: Vec<&BBox> = bboxes.iter().filter(|b| b.label.starts_with("text")).collect();
+    let text_bboxes_all: Vec<&BBox> = bboxes
+        .iter()
+        .filter(|b| b.label.starts_with("text"))
+        .collect();
     for tb in &text_bboxes_all {
         // Check if text's center is inside any rect (= text is meant to be in that rect)
         let text_cx = tb.x + tb.w / 2.0;
@@ -1575,8 +1895,10 @@ fn critique_visual_doc(visual: &Value) -> Result<(Vec<String>, Vec<String>), Str
         let mut best_rect: Option<&BBox> = None;
         let mut best_area = f64::MAX;
         for rb in &rect_bboxes {
-            if text_cx >= rb.x && text_cx <= rb.x + rb.w
-                && text_cy >= rb.y && text_cy <= rb.y + rb.h
+            if text_cx >= rb.x
+                && text_cx <= rb.x + rb.w
+                && text_cy >= rb.y
+                && text_cy <= rb.y + rb.h
                 && rb.w * rb.h < best_area
             {
                 best_rect = Some(rb);
@@ -1602,7 +1924,8 @@ fn critique_visual_doc(visual: &Value) -> Result<(Vec<String>, Vec<String>), Str
     // ── Creative suggestions ──────────────────────────────────────────
 
     // 6. Shape variety
-    let mut type_counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    let mut type_counts: std::collections::HashMap<String, usize> =
+        std::collections::HashMap::new();
     for node in &all_nodes {
         if let Some(t) = node.get("type").and_then(|v| v.as_str()) {
             *type_counts.entry(t.to_string()).or_insert(0) += 1;
@@ -1635,14 +1958,24 @@ fn critique_visual_doc(visual: &Value) -> Result<(Vec<String>, Vec<String>), Str
         let avg_y: f64 = bboxes.iter().map(|b| b.y + b.h / 2.0).sum::<f64>() / bboxes.len() as f64;
         let avg_x: f64 = bboxes.iter().map(|b| b.x + b.w / 2.0).sum::<f64>() / bboxes.len() as f64;
         if avg_y < canvas_h * 0.35 {
-            suggestions.push("TOP_HEAVY: content is concentrated in the upper third — use more vertical space.".into());
+            suggestions.push(
+                "TOP_HEAVY: content is concentrated in the upper third — use more vertical space."
+                    .into(),
+            );
         } else if avg_y > canvas_h * 0.65 {
-            suggestions.push("BOTTOM_HEAVY: content is concentrated in the lower third — balance the layout.".into());
+            suggestions.push(
+                "BOTTOM_HEAVY: content is concentrated in the lower third — balance the layout."
+                    .into(),
+            );
         }
         if avg_x < canvas_w * 0.35 {
-            suggestions.push("LEFT_HEAVY: content is clustered on the left — spread across the width.".into());
+            suggestions.push(
+                "LEFT_HEAVY: content is clustered on the left — spread across the width.".into(),
+            );
         } else if avg_x > canvas_w * 0.65 {
-            suggestions.push("RIGHT_HEAVY: content is clustered on the right — balance the layout.".into());
+            suggestions.push(
+                "RIGHT_HEAVY: content is clustered on the right — balance the layout.".into(),
+            );
         }
     }
 
@@ -1678,13 +2011,24 @@ struct TextNodeInfo {
 fn collect_text_nodes(children: &[Value], offset_x: f64, offset_y: f64) -> Vec<TextNodeInfo> {
     let mut result = Vec::new();
     for node in children {
-        let obj = match node.as_object() { Some(o) => o, None => continue };
+        let obj = match node.as_object() {
+            Some(o) => o,
+            None => continue,
+        };
         let t = obj.get("type").and_then(|v| v.as_str()).unwrap_or("");
         if t == "text" {
             result.push(TextNodeInfo {
-                content: obj.get("content").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                content: obj
+                    .get("content")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string(),
                 font_size: obj.get("fontSize").and_then(|v| v.as_f64()).unwrap_or(16.0),
-                fill: obj.get("fill").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                fill: obj
+                    .get("fill")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string(),
             });
         } else if t == "group" {
             let gx = obj.get("x").and_then(|v| v.as_f64()).unwrap_or(0.0) + offset_x;
@@ -1716,7 +2060,9 @@ fn flatten_nodes(children: &[Value]) -> Vec<&Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::sketch::Sketch;
     use serde_json::json;
+    use tempfile::TempDir;
 
     /// Helper: run validate_dsl_doc and return a result string like the old exec_validate_dsl.
     fn run_validate(visual: &Value) -> String {
@@ -1740,12 +2086,149 @@ mod tests {
                 } else {
                     parts.push(format!("✗ FAIL ({} issues)", issues.len()));
                 }
-                for issue in &issues { parts.push(issue.clone()); }
-                for sug in &suggestions { parts.push(sug.clone()); }
+                for issue in &issues {
+                    parts.push(issue.clone());
+                }
+                for sug in &suggestions {
+                    parts.push(sug.clone());
+                }
                 parts.join("\n")
             }
             Err(e) => e,
         }
+    }
+
+    fn write_test_sketch(root: &Path, rel: &str, row: PlanningRow) {
+        let mut sketch = Sketch::new("Locked Tool Test");
+        sketch.rows = vec![row];
+        project::write_sketch(&sketch, &root.join(rel), root).unwrap();
+    }
+
+    #[test]
+    fn write_sketch_tool_rejects_locked_cell_change() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        let rel = "demo.sk";
+        let mut row = PlanningRow::new();
+        row.narrative = "Keep this narrative".into();
+        row.demo_actions = "Allowed old action".into();
+        row.locks.narrative = true;
+        write_test_sketch(root, rel, row);
+
+        let result = exec_write_sketch(
+            root,
+            &json!({
+                "path": rel,
+                "rows": [{
+                    "time": "",
+                    "narrative": "AI rewrite",
+                    "demo_actions": "Allowed new action"
+                }]
+            }),
+        );
+
+        assert!(
+            result.starts_with("Error:"),
+            "locked write should fail at the tool boundary: {result}"
+        );
+        assert!(
+            result.contains("narrative cell is locked"),
+            "error should identify the locked cell: {result}"
+        );
+        let saved = project::read_sketch(&root.join(rel)).unwrap();
+        assert_eq!(saved.rows[0].narrative, "Keep this narrative");
+        assert_eq!(saved.rows[0].demo_actions, "Allowed old action");
+    }
+
+    #[test]
+    fn update_planning_row_tool_rejects_locked_cell_change() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        let rel = "demo.sk";
+        let mut row = PlanningRow::new();
+        row.time = "0:10".into();
+        row.locks.time = true;
+        write_test_sketch(root, rel, row);
+
+        let result = exec_update_planning_row(
+            root,
+            &json!({
+                "path": rel,
+                "index": 0,
+                "time": "0:20"
+            }),
+        );
+
+        assert!(result.starts_with("Error:"), "{result}");
+        assert!(result.contains("time cell is locked"), "{result}");
+        let saved = project::read_sketch(&root.join(rel)).unwrap();
+        assert_eq!(saved.rows[0].time, "0:10");
+    }
+
+    #[test]
+    fn set_row_visual_tool_rejects_locked_media_cell() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        let rel = "demo.sk";
+        let mut row = PlanningRow::new();
+        row.locks.visual = true;
+        write_test_sketch(root, rel, row);
+
+        let result = exec_set_row_visual(
+            root,
+            &json!({
+                "path": rel,
+                "index": 0,
+                "visual": null
+            }),
+        );
+
+        assert!(result.starts_with("Error:"), "{result}");
+        assert!(result.contains("media cell is locked"), "{result}");
+    }
+
+    #[test]
+    fn design_plan_tool_rejects_locked_design_plan_cell() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        let rel = "demo.sk";
+        let mut row = PlanningRow::new();
+        row.locks.design_plan = true;
+        write_test_sketch(root, rel, row);
+
+        let result = exec_design_plan(
+            root,
+            &json!({
+                "path": rel,
+                "index": 0,
+                "plan": "New plan"
+            }),
+        );
+
+        assert!(result.starts_with("Error:"), "{result}");
+        assert!(result.contains("design plan cell is locked"), "{result}");
+    }
+
+    #[test]
+    fn write_note_tool_rejects_locked_note() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        let note = project::safe_resolve(root, "notes/a.md").unwrap();
+        std::fs::create_dir_all(note.parent().unwrap()).unwrap();
+        std::fs::write(&note, "Keep this note").unwrap();
+        project::set_note_lock(root, "notes/a.md", true).unwrap();
+
+        let result = exec_write_note(
+            root,
+            &json!({
+                "path": "notes/a.md",
+                "content": "AI rewrite"
+            }),
+        );
+
+        assert!(result.starts_with("Error:"), "{result}");
+        assert!(result.contains("This note is locked"), "{result}");
+        assert_eq!(std::fs::read_to_string(note).unwrap(), "Keep this note");
     }
 
     #[test]
@@ -1762,7 +2245,10 @@ mod tests {
             }
         });
         let result = run_critique(&visual);
-        assert!(result.contains("TINY_FONT"), "Should flag fontSize 8 as too small: {result}");
+        assert!(
+            result.contains("TINY_FONT"),
+            "Should flag fontSize 8 as too small: {result}"
+        );
     }
 
     #[test]
@@ -1778,8 +2264,14 @@ mod tests {
             }
         });
         let result = run_critique(&visual);
-        assert!(result.contains("MISSING_BG_TOKEN"), "Should flag hardcoded background: {result}");
-        assert!(result.contains("NO_TEXT_TOKENS"), "Should flag all-hex text fills: {result}");
+        assert!(
+            result.contains("MISSING_BG_TOKEN"),
+            "Should flag hardcoded background: {result}"
+        );
+        assert!(
+            result.contains("NO_TEXT_TOKENS"),
+            "Should flag all-hex text fills: {result}"
+        );
     }
 
     #[test]
@@ -1796,7 +2288,10 @@ mod tests {
             }
         });
         let result = run_critique(&visual);
-        assert!(result.contains("TEXT_OVERLAP"), "Should detect overlapping text at y=100 and y=105: {result}");
+        assert!(
+            result.contains("TEXT_OVERLAP"),
+            "Should detect overlapping text at y=100 and y=105: {result}"
+        );
     }
 
     #[test]
@@ -1819,7 +2314,10 @@ mod tests {
             }
         });
         let result = run_critique(&visual);
-        assert!(result.starts_with("✓ PASS"), "Clean visual should pass: {result}");
+        assert!(
+            result.starts_with("✓ PASS"),
+            "Clean visual should pass: {result}"
+        );
     }
 
     #[test]
@@ -1838,7 +2336,10 @@ mod tests {
             }
         });
         let result = run_critique(&visual);
-        assert!(result.contains("LOW_VARIETY"), "Should suggest shape variety: {result}");
+        assert!(
+            result.contains("LOW_VARIETY"),
+            "Should suggest shape variety: {result}"
+        );
     }
 
     #[test]
@@ -1855,7 +2356,10 @@ mod tests {
             }
         });
         let result = run_critique(&visual);
-        assert!(result.contains("TEXT_OVERFLOW"), "Should detect text overflowing container: {result}");
+        assert!(
+            result.contains("TEXT_OVERFLOW"),
+            "Should detect text overflowing container: {result}"
+        );
     }
 
     #[test]
@@ -1872,7 +2376,10 @@ mod tests {
             }
         });
         let result = run_critique(&visual);
-        assert!(result.contains("REDUNDANT_BG_RECT"), "Should catch redundant background rect: {result}");
+        assert!(
+            result.contains("REDUNDANT_BG_RECT"),
+            "Should catch redundant background rect: {result}"
+        );
     }
 
     #[test]
@@ -1889,7 +2396,10 @@ mod tests {
             }
         });
         let result = run_critique(&visual);
-        assert!(result.contains("INNER_CARD_RECT"), "Should catch inner card rect with margins: {result}");
+        assert!(
+            result.contains("INNER_CARD_RECT"),
+            "Should catch inner card rect with margins: {result}"
+        );
     }
 
     #[test]
@@ -1905,7 +2415,10 @@ mod tests {
             }
         });
         let result = run_validate(&visual);
-        assert!(result.contains("point must be [number, number]"), "Should catch object points: {result}");
+        assert!(
+            result.contains("point must be [number, number]"),
+            "Should catch object points: {result}"
+        );
     }
 
     #[test]
@@ -1921,7 +2434,10 @@ mod tests {
             }
         });
         let result = run_validate(&visual);
-        assert!(result.contains("Valid"), "Should accept valid polygon: {result}");
+        assert!(
+            result.contains("Valid"),
+            "Should accept valid polygon: {result}"
+        );
     }
 
     #[test]
@@ -1937,7 +2453,10 @@ mod tests {
             }
         });
         let result = run_validate(&visual);
-        assert!(result.contains("at least 3 points"), "Should require 3+ points: {result}");
+        assert!(
+            result.contains("at least 3 points"),
+            "Should require 3+ points: {result}"
+        );
     }
 
     #[test]
@@ -1953,8 +2472,14 @@ mod tests {
             }
         });
         let result = run_validate(&visual);
-        assert!(result.contains("requires \"x2\""), "Should catch missing x2: {result}");
-        assert!(result.contains("requires \"y2\""), "Should catch missing y2: {result}");
+        assert!(
+            result.contains("requires \"x2\""),
+            "Should catch missing x2: {result}"
+        );
+        assert!(
+            result.contains("requires \"y2\""),
+            "Should catch missing y2: {result}"
+        );
     }
 
     #[test]
@@ -1970,7 +2495,10 @@ mod tests {
             }
         });
         let result = run_validate(&visual);
-        assert!(result.contains("requires \"x1\""), "Should catch missing x1: {result}");
+        assert!(
+            result.contains("requires \"x1\""),
+            "Should catch missing x1: {result}"
+        );
     }
 
     #[test]
@@ -1986,7 +2514,10 @@ mod tests {
             }
         });
         let result = run_validate(&visual);
-        assert!(result.contains("point must be [number, number]"), "Should catch bad bezier point: {result}");
+        assert!(
+            result.contains("point must be [number, number]"),
+            "Should catch bad bezier point: {result}"
+        );
     }
 
     #[test]
@@ -1998,7 +2529,10 @@ mod tests {
         let visual = result.unwrap();
         let mut errors = Vec::new();
         validate_dsl_doc(&visual, &mut errors);
-        assert!(errors.is_empty(), "Parsed visual should be valid: {errors:?}");
+        assert!(
+            errors.is_empty(),
+            "Parsed visual should be valid: {errors:?}"
+        );
     }
 
     #[test]
@@ -2006,7 +2540,10 @@ mod tests {
         let args = json!({ "visual": "not valid json {" });
         let result = extract_json_object(&args, "visual");
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("not valid JSON"), "Should report parse error");
+        assert!(
+            result.unwrap_err().contains("not valid JSON"),
+            "Should report parse error"
+        );
     }
 
     #[test]
@@ -2026,7 +2563,10 @@ mod tests {
         let visual = result.unwrap();
         let mut errors = Vec::new();
         validate_dsl_doc(&visual, &mut errors);
-        assert!(errors.is_empty(), "Flattened DSL should be valid: {errors:?}");
+        assert!(
+            errors.is_empty(),
+            "Flattened DSL should be valid: {errors:?}"
+        );
     }
 
     #[test]

@@ -24,13 +24,21 @@ impl ProjectView {
             .map(|n| n.to_string_lossy().into_owned())
             .unwrap_or_else(|| "Untitled".into());
         let repo_root = root.clone();
-        Self { root, repo_root, name }
+        Self {
+            root,
+            repo_root,
+            name,
+        }
     }
 
     /// Create a project view for a subdirectory within a repo.
     pub fn in_repo(repo_root: PathBuf, project_path: &str, name: String) -> Self {
         let root = repo_root.join(project_path);
-        Self { root, repo_root, name }
+        Self {
+            root,
+            repo_root,
+            name,
+        }
     }
 }
 
@@ -93,7 +101,10 @@ mod tests {
         let view = ProjectView::new(PathBuf::from("/home/user/My Demo"));
         assert_eq!(view.name, "My Demo");
         assert_eq!(view.root, PathBuf::from("/home/user/My Demo"));
-        assert_eq!(view.repo_root, view.root, "single-project: repo_root == root");
+        assert_eq!(
+            view.repo_root, view.root,
+            "single-project: repo_root == root"
+        );
     }
 
     #[test]
@@ -127,8 +138,16 @@ mod tests {
     fn project_manifest_roundtrip() {
         let manifest = ProjectManifest {
             projects: vec![
-                ProjectEntry { path: "login".into(), name: "Login Flow".into(), description: None },
-                ProjectEntry { path: "onboarding".into(), name: "Onboarding".into(), description: Some("User onboarding demo".into()) },
+                ProjectEntry {
+                    path: "login".into(),
+                    name: "Login Flow".into(),
+                    description: None,
+                },
+                ProjectEntry {
+                    path: "onboarding".into(),
+                    name: "Onboarding".into(),
+                    description: Some("User onboarding demo".into()),
+                },
             ],
         };
         let json = serde_json::to_string_pretty(&manifest).unwrap();
