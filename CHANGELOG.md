@@ -9,6 +9,13 @@
 Covector manages this changelog. Do not edit manually.
 Each release section is generated from `.changes/*.md` files.
 
+## [1.1.1](https://github.com/sethjuarez/cutready/compare/v1.1.0...v1.1.1) (2026-04-20)
+
+
+### Bug Fixes
+
+* stabilize chat paste snapshots and exports ([90a1867](https://github.com/sethjuarez/cutready/commit/90a18679c0739bfaecfd6fcf409e98c8638d7ed8))
+
 ## [1.1.0](https://github.com/sethjuarez/cutready/compare/v1.0.0...v1.1.0) (2026-04-19)
 
 
