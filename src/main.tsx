@@ -13,8 +13,11 @@ import "@fontsource/lora/600.css";
 import "@fontsource/lora/700.css";
 import "./index.css";
 
-// Install dev mocks when running in browser without Tauri runtime
-if (import.meta.env.DEV && !(window as any).__TAURI_INTERNALS__) {
+// Install dev mocks when running in browser without Tauri runtime.
+// Some screenshot/documentation runs set NODE_ENV=production while Vite still
+// serves in development mode, so use MODE instead of DEV here.
+const isViteDevelopment = import.meta.env.MODE === "development";
+if (isViteDevelopment && !(window as any).__TAURI_INTERNALS__) {
   const { installDevMocks } = await import("./devMock");
   installDevMocks();
   // Expose appStore for dev tooling and Playwright screenshot scripts
@@ -23,7 +26,7 @@ if (import.meta.env.DEV && !(window as any).__TAURI_INTERNALS__) {
 }
 
 // Dev-mode: pipe JS errors to Rust log plugin → writes to dev-trace log file
-if (import.meta.env.DEV && (window as any).__TAURI_INTERNALS__) {
+if (isViteDevelopment && (window as any).__TAURI_INTERNALS__) {
   import("@tauri-apps/plugin-log").then(({ error: logError, warn: logWarn, info: logInfo, debug: logDebug }) => {
     window.addEventListener("error", (e) => {
       logError(`[JS] ${e.message} at ${e.filename}:${e.lineno}:${e.colno}`);
