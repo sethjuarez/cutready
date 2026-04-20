@@ -94,6 +94,78 @@ function extractSketchMutationsFromMessages(messages: ChatMessage[], fallbackPat
   return mutations;
 }
 
+const REFERENCED_DOCUMENT_RE = /<referenced_document\b[^>]*>[\s\S]*?<\/referenced_document>/gi;
+const WEB_CONTENT_RE = /\[Web Content:[^\]]+\][\s\S]*?(?=\n\[(?:Web|References):|\n{2,}\S|$)/gi;
+const TRUNCATED_MARKER_RE = /\[Truncated at \d+ chars\]/gi;
+
+function hasLlmOnlyReferencePayload(text: string): boolean {
+  return /<\/?referenced_document\b/i.test(text)
+    || /\[Web Content:/i.test(text)
+    || /\[Truncated at \d+ chars\]/i.test(text);
+}
+
+function sanitizeUserDisplayContent(content: ChatMessage["content"]): ChatMessage["content"] {
+  if (typeof content !== "string") return content;
+  return content
+    .replace(REFERENCED_DOCUMENT_RE, "")
+    .replace(WEB_CONTENT_RE, "")
+    .replace(TRUNCATED_MARKER_RE, "")
+    .trim();
+}
+
+export function reconcileMessagesForDisplay(
+  backendMessages: ChatMessage[],
+  displayMessages: ChatMessage[],
+  options: {
+    silent?: boolean;
+    assistantResponse?: string;
+    logger?: (message: string, details: Record<string, unknown>) => void;
+  } = {},
+): ChatMessage[] {
+  const nonSystemMessages = backendMessages.filter((m) => m.role !== "system");
+  const displayUsers = displayMessages.filter((m) => m.role === "user");
+  const lastUserMsgIdx = nonSystemMessages.reduce((idx, m, i) => m.role === "user" ? i : idx, -1);
+  let userOrdinal = 0;
+
+  const assistantResponse = options.assistantResponse?.trim();
+
+  return nonSystemMessages
+    .map((message, index) => {
+      if (options.silent && index === lastUserMsgIdx) return null;
+      if (message.role !== "user") return message;
+
+      const displayUser = displayUsers[userOrdinal++];
+      const backendText = textContent(message.content);
+      if (!displayUser && assistantResponse && backendText.trim() === assistantResponse) {
+        options.logger?.("Dropped backend user message that duplicated assistant response", {
+          index,
+          userOrdinal,
+          backendChars: backendText.length,
+        });
+        return null;
+      }
+
+      const restoredContent = displayUser?.content ?? sanitizeUserDisplayContent(message.content);
+      const restoredText = textContent(restoredContent);
+      const leakedReferencePayload = hasLlmOnlyReferencePayload(backendText);
+      const changedContent = restoredText !== backendText;
+
+      if (!displayUser || leakedReferencePayload || changedContent) {
+        options.logger?.("Restored display-safe user chat content", {
+          index,
+          userOrdinal,
+          leakedReferencePayload,
+          hadDisplayUser: Boolean(displayUser),
+          backendChars: backendText.length,
+          restoredChars: restoredText.length,
+        });
+      }
+
+      return { ...message, content: restoredContent };
+    })
+    .filter((message): message is ChatMessage => message !== null);
+}
+
 interface FileReference {
   type: "sketch" | "note" | "storyboard" | "web";
   path: string;
@@ -910,21 +982,14 @@ function ChatTab() {
       // Activity logging now handled by real-time agent-event listener
 
       // Use the backend's full conversation (with correct tool_call/tool_result ordering)
-      // but strip the system prompt and restore display-friendly user message content.
-      // The backend may inject <referenced_document> XML or web scrape content into the
-      // last user message for the LLM — we always restore the compact display version.
-      const nonSystemMessages = result.messages.filter((m) => m.role !== "system");
-      const lastUserMsgIdx = nonSystemMessages.reduce((idx, m, i) => m.role === "user" ? i : idx, -1);
-      const backendMessages = nonSystemMessages
-        .map((m, i) => {
-          // Always replace the last user message with the display-friendly version
-          if (i === lastUserMsgIdx && m.role === "user") {
-            return { ...m, content: userContent };
-          }
-          return m;
-        })
-        // For silent sends, remove the triggering user message from display
-        .filter((m, i) => !(silent && i === lastUserMsgIdx && m.role === "user"));
+      // but restore display-friendly user messages. The backend/reference resolver may
+      // inject <referenced_document> XML or web scrape content into any user turn for
+      // the LLM; none of that should become visible chat bubble content.
+      const backendMessages = reconcileMessagesForDisplay(result.messages, newMessages, {
+        silent,
+        assistantResponse: result.response,
+        logger: (message, details) => console.warn(`[chat] ${message}`, details),
+      });
 
       // Log response to activity
       const toolCallCount = backendMessages.filter(
