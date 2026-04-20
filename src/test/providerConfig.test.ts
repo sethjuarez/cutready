@@ -1,5 +1,5 @@
 import { describe, test, expect } from "vitest";
-import { buildProviderConfig, canFetchModelsFor } from "../components/SettingsPanel";
+import { buildProviderConfig, canFetchModelsFor, CUTREADY_FEEDBACK_REPO } from "../components/SettingsPanel";
 
 // ── buildProviderConfig ─────────────────────────────────────────
 
@@ -46,6 +46,28 @@ describe("buildProviderConfig", () => {
     expect(cfg.model).toBe("unused");
   });
 
+  test("includes model capability settings for agent routing", () => {
+    const cfg = buildProviderConfig({
+      ...base,
+      aiContextLength: 128000,
+      aiVisionMode: "notes_and_sketches",
+      aiModelSupportsVision: "true",
+    });
+
+    expect(cfg.context_length).toBe(128000);
+    expect(cfg.vision_mode).toBe("notes_and_sketches");
+    expect(cfg.model_supports_vision).toBe(true);
+  });
+
+  test("includes web access setting for agent tool availability", () => {
+    const cfg = buildProviderConfig({
+      ...base,
+      aiWebAccess: "enabled",
+    });
+
+    expect(cfg.web_access).toBe("enabled");
+  });
+
   test("Anthropic in api_key mode: bearer_token null", () => {
     const cfg = buildProviderConfig({
       ...base,
@@ -54,6 +76,12 @@ describe("buildProviderConfig", () => {
     });
     expect(cfg.provider).toBe("anthropic");
     expect(cfg.bearer_token).toBeNull();
+  });
+});
+
+describe("feedback issue target", () => {
+  test("always targets the CutReady product repository", () => {
+    expect(CUTREADY_FEEDBACK_REPO).toBe("sethjuarez/cutready");
   });
 });
 

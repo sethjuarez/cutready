@@ -192,7 +192,11 @@ impl SketchSummary {
 pub struct Storyboard {
     pub title: String,
     pub description: String,
+    /// Whether the whole storyboard is protected from edits.
+    #[serde(default)]
+    pub locked: bool,
     /// Ordered items: loose sketch refs and/or named sections.
+    #[serde(default)]
     pub items: Vec<StoryboardItem>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -204,6 +208,7 @@ impl Storyboard {
         Self {
             title: title.into(),
             description: String::new(),
+            locked: false,
             items: Vec::new(),
             created_at: now,
             updated_at: now,
@@ -230,6 +235,7 @@ pub struct StoryboardSummary {
     /// Relative path from project root (e.g., "full-demo.sb").
     pub path: String,
     pub title: String,
+    pub locked: bool,
     pub sketch_count: usize,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -249,6 +255,7 @@ impl StoryboardSummary {
         Self {
             path: path.into(),
             title: sb.title.clone(),
+            locked: sb.locked,
             sketch_count,
             created_at: sb.created_at,
             updated_at: sb.updated_at,
@@ -463,6 +470,7 @@ mod tests {
         let sb = Storyboard::new("Product Demo");
         assert_eq!(sb.title, "Product Demo");
         assert!(sb.description.is_empty());
+        assert!(!sb.locked);
         assert!(sb.items.is_empty());
     }
 
@@ -471,6 +479,7 @@ mod tests {
         let sb = Storyboard {
             title: "Full Demo".into(),
             description: "End-to-end product demo".into(),
+            locked: false,
             items: vec![
                 StoryboardItem::SketchRef {
                     path: "intro.sk".into(),
@@ -534,6 +543,7 @@ mod tests {
         let summary = StoryboardSummary::from_storyboard(&sb, "test.sb");
         assert_eq!(summary.path, "test.sb");
         assert_eq!(summary.title, "Test");
+        assert!(!summary.locked);
         assert_eq!(summary.sketch_count, 3);
     }
 

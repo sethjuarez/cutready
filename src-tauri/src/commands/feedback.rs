@@ -108,6 +108,10 @@ pub async fn create_github_issue(
     use std::process::Stdio;
     use tokio::io::AsyncWriteExt;
 
+    if !is_safe_github_repo(&repo) {
+        return Err("Invalid GitHub repository. Expected owner/repo.".into());
+    }
+
     let mut cmd = tokio::process::Command::new("gh");
     cmd.args([
         "issue",
@@ -165,6 +169,19 @@ pub async fn create_github_issue(
             Err(format!("gh issue create failed: {stderr}"))
         }
     }
+}
+
+fn is_safe_github_repo(repo: &str) -> bool {
+    let Some((owner, name)) = repo.split_once('/') else {
+        return false;
+    };
+    !owner.is_empty()
+        && !name.is_empty()
+        && !name.contains('/')
+        && [owner, name].iter().all(|part| {
+            part.chars()
+                .all(|ch| ch.is_ascii_alphanumeric() || ch == '-' || ch == '_' || ch == '.')
+        })
 }
 
 /// Collect all log files into a zip archive at the given destination path.
@@ -230,4 +247,22 @@ pub fn export_logs(
     zip.finish()
         .map_err(|e| format!("Zip finalize error: {e}"))?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_safe_github_repo;
+
+    #[test]
+    fn github_repo_validation_accepts_owner_repo() {
+        assert!(is_safe_github_repo("sethjuarez/cutready"));
+        assert!(is_safe_github_repo("my-org/repo.name"));
+    }
+
+    #[test]
+    fn github_repo_validation_rejects_unsafe_values() {
+        assert!(!is_safe_github_repo("sethjuarez"));
+        assert!(!is_safe_github_repo("sethjuarez/cutready/extra"));
+        assert!(!is_safe_github_repo("sethjuarez/$(bad)"));
+    }
 }

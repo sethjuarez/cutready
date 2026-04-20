@@ -4,7 +4,7 @@ import { SnapshotGraph } from "./SnapshotGraph";
 import { SnapshotDiffPanel } from "./SnapshotDiffPanel";
 import { SyncBar } from "./SyncBar";
 import { TimelineSelector } from "./TimelineSelector";
-import { RefreshCw, Search, Clock, Download } from "lucide-react";
+import { RefreshCw, Search, Clock, Download, GitPullRequestArrow, X } from "lucide-react";
 
 export function VersionHistory() {
   const graphNodes = useAppStore((s) => s.graphNodes);
@@ -19,6 +19,7 @@ export function VersionHistory() {
   const sidebarPosition = useAppStore((s) => s.sidebarPosition);
   const timelines = useAppStore((s) => s.timelines);
   const loadTimelines = useAppStore((s) => s.loadTimelines);
+  const squashSnapshots = useAppStore((s) => s.squashSnapshots);
   const currentRemote = useAppStore((s) => s.currentRemote);
   const saving = useAppStore((s) => s.saving);
   const hasRemote = !!currentRemote;
@@ -28,6 +29,11 @@ export function VersionHistory() {
   const [discarding, setDiscarding] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [showSearch, setShowSearch] = useState(false);
+  const [squashMode, setSquashMode] = useState(false);
+  const [selectedForSquash, setSelectedForSquash] = useState<Set<string>>(new Set());
+  const [squashLabel, setSquashLabel] = useState("");
+  const [squashError, setSquashError] = useState<string | null>(null);
+  const [squashing, setSquashing] = useState(false);
 
   // Show active branch + its ancestor history from the originating branch
   const activeTimeline = timelines.find((t) => t.is_active);
@@ -65,6 +71,13 @@ export function VersionHistory() {
   const timelineMap = new Map(
     timelines.map((t) => [t.name, { label: t.label, colorIndex: t.color_index }])
   );
+
+  const selectedNodes = activeNodes
+    .filter((node) => selectedForSquash.has(node.id))
+    .sort((a, b) => +new Date(b.timestamp) - +new Date(a.timestamp));
+  const selectedHead = selectedNodes.find((node) => node.is_head);
+  const selectedOldest = selectedNodes[selectedNodes.length - 1];
+  const canSquash = selectedNodes.length >= 2 && !!selectedHead && !hasRemote && !isRewound;
 
   useEffect(() => {
     loadGraphData();
@@ -111,6 +124,37 @@ export function VersionHistory() {
     await loadTimelines();
   }, [discardChanges, loadGraphData, loadTimelines]);
 
+  const toggleSquashSelection = useCallback((commitId: string) => {
+    setSelectedForSquash((prev) => {
+      const next = new Set(prev);
+      if (next.has(commitId)) next.delete(commitId);
+      else next.add(commitId);
+      return next;
+    });
+    setSquashError(null);
+  }, []);
+
+  const cancelSquash = useCallback(() => {
+    setSquashMode(false);
+    setSelectedForSquash(new Set());
+    setSquashLabel("");
+    setSquashError(null);
+  }, []);
+
+  const handleSquash = useCallback(async () => {
+    if (!selectedHead || !selectedOldest || !squashLabel.trim()) return;
+    setSquashing(true);
+    setSquashError(null);
+    try {
+      await squashSnapshots(selectedOldest.id, selectedHead.id, squashLabel.trim());
+      cancelSquash();
+    } catch (err) {
+      setSquashError(String(err));
+    } finally {
+      setSquashing(false);
+    }
+  }, [cancelSquash, selectedHead, selectedOldest, squashLabel, squashSnapshots]);
+
   const borderClass = sidebarPosition === "left" ? "border-l" : "border-r";
 
   return (
@@ -137,6 +181,27 @@ export function VersionHistory() {
             </button>
           )}
           <button
+            onClick={() => setSquashMode((value) => {
+              if (value) {
+                setSelectedForSquash(new Set());
+                setSquashLabel("");
+                setSquashError(null);
+              }
+              return !value;
+            })}
+            className={`group/btn flex items-center gap-1 p-1 rounded transition-colors ${
+              squashMode
+                ? "text-[rgb(var(--color-accent))] bg-[rgb(var(--color-accent))]/10"
+                : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))]"
+            }`}
+            title="Squash recent snapshots"
+          >
+            <GitPullRequestArrow className="shrink-0 w-3.5 h-3.5" />
+            <span className="max-w-0 overflow-hidden group-hover/btn:max-w-[10rem] transition-all duration-200 whitespace-nowrap text-[10px]">
+              Squash
+            </span>
+          </button>
+          <button
             onClick={() => { setShowSearch(!showSearch); if (showSearch) setSearchQuery(""); }}
             className={`p-1 rounded transition-colors ${showSearch ? "text-[rgb(var(--color-accent))]" : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))]"}`}
             title="Search snapshots"
@@ -154,7 +219,7 @@ export function VersionHistory() {
             </span>
           </button>
           <button
-            onClick={() => useAppStore.setState({ snapshotPromptOpen: true })}
+            onClick={() => useAppStore.getState().promptSnapshot()}
             className="group/btn flex items-center gap-1 p-1 rounded text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] transition-colors disabled:opacity-50 disabled:pointer-events-none"
             title="Save Workspace Snapshot (Ctrl+S)"
             disabled={saving}
@@ -185,6 +250,54 @@ export function VersionHistory() {
             className="w-full px-2 py-1 rounded text-[10px] bg-[rgb(var(--color-surface-alt))] border border-[rgb(var(--color-border))] text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/50 outline-none focus:border-[rgb(var(--color-accent))]"
             autoFocus
           />
+        </div>
+      )}
+
+      {squashMode && (
+        <div className="px-3 py-2 border-b border-[rgb(var(--color-accent))]/20 bg-[rgb(var(--color-accent))]/5 space-y-2">
+          <div className="flex items-start gap-2">
+            <div className="flex-1">
+              <div className="text-[10px] font-medium text-[rgb(var(--color-accent))]">
+                Select recent snapshots ending at HEAD
+              </div>
+              <div className="text-[10px] text-[rgb(var(--color-text-secondary))] leading-relaxed">
+                Squashing rewrites selected local snapshots and leaves your current workspace changes untouched.
+              </div>
+            </div>
+            <button
+              onClick={cancelSquash}
+              className="p-0.5 rounded text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] transition-colors"
+              title="Cancel squash"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+          <input
+            value={squashLabel}
+            onChange={(e) => setSquashLabel(e.target.value)}
+            placeholder="Squashed snapshot name..."
+            className="w-full px-2 py-1 rounded text-[10px] bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/50 outline-none focus:border-[rgb(var(--color-accent))]"
+          />
+          {isDirty && (
+            <div className="text-[10px] text-[rgb(var(--color-text-secondary))]">
+              Unsaved workspace changes will stay as-is after the squash.
+            </div>
+          )}
+          {(hasRemote || isRewound) && (
+            <div className="text-[10px] text-warning">
+              Squashing is available only on local timeline tips that are not rewound.
+            </div>
+          )}
+          {squashError && <div className="text-[10px] text-error">{squashError}</div>}
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={handleSquash}
+              disabled={!canSquash || !squashLabel.trim() || squashing}
+              className="flex-1 px-2 py-1 rounded-md text-[10px] font-medium bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))] hover:bg-[rgb(var(--color-accent-hover))] disabled:opacity-40 disabled:pointer-events-none transition-colors"
+            >
+              {squashing ? "Squashing..." : `Squash ${selectedNodes.length || ""} snapshots`}
+            </button>
+          </div>
         </div>
       )}
 
@@ -253,7 +366,7 @@ export function VersionHistory() {
             </div>
             <p className="text-sm font-medium text-[rgb(var(--color-text))] mb-1">No snapshots yet</p>
             <p className="text-xs text-[rgb(var(--color-text-secondary))] max-w-[240px] leading-relaxed">
-              Save a snapshot to create a restore point. Press <kbd className="px-1 py-0.5 rounded border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] text-[10px] font-mono">Ctrl+S</kbd> to quick-save.
+              Save a snapshot to create a restore point. Press <kbd className="px-1 py-0.5 rounded border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] text-[10px] font-mono">Ctrl+S</kbd> to name and save one.
             </p>
           </div>
         ) : (
@@ -267,6 +380,9 @@ export function VersionHistory() {
             timelineMap={timelineMap}
             hasMultipleTimelines={timelines.length > 1}
             showRemoteBadges={hasRemote}
+            selectionMode={squashMode}
+            selectedIds={selectedForSquash}
+            onToggleSelect={toggleSquashSelection}
             onNodeClick={handleNodeClick}
           />
           {searchQuery && activeNodes.length > 0 && activeNodes.filter((n) => n.message.toLowerCase().includes(searchQuery.toLowerCase())).length === 0 && (

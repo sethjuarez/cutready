@@ -163,13 +163,13 @@ export function AppLayout() {
       },
       {
         id: "snapshot.quickSave",
-        title: "Quick Save Snapshot",
+        title: "Save Snapshot",
         category: "Snapshot",
         keybinding: "Ctrl+S",
         icon: <Bookmark className="w-4 h-4" />,
         handler: () => {
-          const { currentProject, quickSave } = useAppStore.getState();
-          if (currentProject) quickSave();
+          const { currentProject, promptSnapshot } = useAppStore.getState();
+          if (currentProject) promptSnapshot();
         },
       },
       {
@@ -294,11 +294,11 @@ export function AppLayout() {
         if (currentProject) {
           promptSnapshot();
         }
-      } else if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+      } else if ((e.ctrlKey || e.metaKey) && (e.key === "S" || e.key === "s")) {
         e.preventDefault();
-        const { currentProject, quickSave } = useAppStore.getState();
+        const { currentProject, promptSnapshot } = useAppStore.getState();
         if (currentProject) {
-          quickSave();
+          promptSnapshot();
         }
       }
     };
@@ -390,7 +390,7 @@ export function AppLayout() {
       >
         <div className="flex flex-1 overflow-hidden" ref={mainRef}>
           {/* Activity bar on left (hidden on home) */}
-          {view !== "home" && sidebarPosition === "left" && <Sidebar />}
+          {view !== "home" && sidebarPosition === "left" && <Sidebar onFeedback={() => setFeedbackOpen(true)} />}
 
           {/* Primary sidebar (hidden on home, global settings, workspace settings, chat) */}
           {view !== "home" && view !== "settings" && view !== "workspace" && view !== "chat" && sidebarVisible && sidebarPosition === "left" && <PrimarySidebar />}
@@ -425,7 +425,7 @@ export function AppLayout() {
           {view !== "home" && view !== "settings" && view !== "workspace" && view !== "chat" && sidebarVisible && sidebarPosition === "right" && <PrimarySidebar />}
 
           {/* Activity bar on right (hidden on home) */}
-          {view !== "home" && sidebarPosition === "right" && <Sidebar />}
+          {view !== "home" && sidebarPosition === "right" && <Sidebar onFeedback={() => setFeedbackOpen(true)} />}
         </div>
       </div>
 

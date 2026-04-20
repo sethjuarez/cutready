@@ -121,10 +121,11 @@ export function SnapshotDialog() {
 
           {/* Snapshot name */}
           <div>
-            <label className="block text-xs font-medium text-[rgb(var(--color-text-secondary))] mb-1.5">
+            <label htmlFor="snapshot-name-input" className="block text-xs font-medium text-[rgb(var(--color-text-secondary))] mb-1.5">
               Snapshot name
             </label>
             <input
+              id="snapshot-name-input"
               ref={inputRef}
               type="text"
               value={label}

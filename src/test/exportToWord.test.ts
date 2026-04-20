@@ -2,6 +2,7 @@
  * Tests for exportToWord utility.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { inflateRawSync } from "node:zlib";
 
 // Mock Tauri dialog
 const mockSave = vi.fn();
@@ -48,6 +49,57 @@ vi.mock("@elucim/core", () => ({
 
 import { exportSketchToWord, exportStoryboardToWord, exportNoteToWord } from "../utils/exportToWord";
 import type { Sketch, Storyboard } from "../types/sketch";
+
+function findSignature(bytes: Uint8Array, signature: number, start: number, reverse = false): number {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  if (reverse) {
+    for (let i = start; i >= 0; i--) {
+      if (view.getUint32(i, true) === signature) return i;
+    }
+  } else {
+    for (let i = start; i <= bytes.length - 4; i++) {
+      if (view.getUint32(i, true) === signature) return i;
+    }
+  }
+  return -1;
+}
+
+function extractDocxEntry(bytes: Uint8Array, entryName: string): string {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const eocd = findSignature(bytes, 0x06054b50, bytes.length - 22, true);
+  expect(eocd).toBeGreaterThanOrEqual(0);
+  const centralDirOffset = view.getUint32(eocd + 16, true);
+
+  let offset = centralDirOffset;
+  while (offset < bytes.length && view.getUint32(offset, true) === 0x02014b50) {
+    const compression = view.getUint16(offset + 10, true);
+    const compressedSize = view.getUint32(offset + 20, true);
+    const fileNameLength = view.getUint16(offset + 28, true);
+    const extraLength = view.getUint16(offset + 30, true);
+    const commentLength = view.getUint16(offset + 32, true);
+    const localHeaderOffset = view.getUint32(offset + 42, true);
+    const nameStart = offset + 46;
+    const name = new TextDecoder().decode(bytes.slice(nameStart, nameStart + fileNameLength));
+
+    if (name === entryName) {
+      const localNameLength = view.getUint16(localHeaderOffset + 26, true);
+      const localExtraLength = view.getUint16(localHeaderOffset + 28, true);
+      const dataStart = localHeaderOffset + 30 + localNameLength + localExtraLength;
+      const compressed = bytes.slice(dataStart, dataStart + compressedSize);
+      const content = compression === 8 ? inflateRawSync(compressed) : Buffer.from(compressed);
+      return content.toString("utf8");
+    }
+
+    offset = nameStart + fileNameLength + extraLength + commentLength;
+  }
+
+  throw new Error(`DOCX entry not found: ${entryName}`);
+}
+
+function writtenDocumentXml(): string {
+  const bytes = mockWriteFile.mock.calls[0][1] as Uint8Array;
+  return extractDocxEntry(bytes, "word/document.xml");
+}
 
 function makeMockSketch(title = "Test Sketch", rowCount = 3): Sketch {
   return {
@@ -116,6 +168,22 @@ describe("exportSketchToWord", () => {
     await exportSketchToWord(sketch, "/projects/test");
     expect(mockWriteFile).toHaveBeenCalledTimes(1);
   }, 15_000);
+
+  it("renders sketch description markdown headings, lists, bold, italic, and links", async () => {
+    const sketch = makeMockSketch("Markdown Sketch", 0);
+    sketch.description = "# Scene Goal\n\n- **Bold** point\n- *Italic* point\n- [Docs](https://example.com)";
+
+    await exportSketchToWord(sketch, "/projects/test");
+
+    const xml = writtenDocumentXml();
+    expect(xml).toContain("Scene Goal");
+    expect(xml).not.toContain("# Scene Goal");
+    expect(xml).toContain("Bold");
+    expect(xml).toContain("<w:b/>");
+    expect(xml).toContain("Italic");
+    expect(xml).toContain("<w:i/>");
+    expect(xml).toContain("Docs (https://example.com)");
+  }, 15_000);
 });
 
 describe("exportStoryboardToWord", () => {
@@ -167,6 +235,53 @@ describe("exportStoryboardToWord", () => {
       expect.objectContaining({ defaultPath: "Empty-Board.docx" }),
     );
     expect(mockWriteFile).toHaveBeenCalledTimes(1);
+  }, 15_000);
+
+  it("includes planning row timing for storyboard sketches", async () => {
+    const sk1 = makeMockSketch("Intro", 1);
+    const sk2 = makeMockSketch("Demo", 1);
+    sk1.rows[0].time = "00:05";
+    sk2.rows[0].time = "01:15";
+
+    const storyboard: Storyboard = {
+      title: "Timed Storyboard",
+      description: "",
+      items: [
+        { type: "sketch_ref", path: "sketches/intro.sk" },
+        { type: "sketch_ref", path: "sketches/demo.sk" },
+      ],
+      created_at: "2025-01-01T00:00:00Z",
+      updated_at: "2025-01-01T00:00:00Z",
+    };
+
+    await exportStoryboardToWord(storyboard, "/projects/test", async () => new Map([
+      ["sketches/intro.sk", sk1],
+      ["sketches/demo.sk", sk2],
+    ]));
+
+    const xml = writtenDocumentXml();
+    expect(xml).toContain("00:05");
+    expect(xml).toContain("01:15");
+    expect(xml).toContain("Time");
+  }, 15_000);
+
+  it("renders storyboard description markdown instead of raw markdown text", async () => {
+    const storyboard: Storyboard = {
+      title: "Markdown Storyboard",
+      description: "# Story Goals\n\n- **Bold** beat\n- [Docs](https://example.com)",
+      items: [],
+      created_at: "2025-01-01T00:00:00Z",
+      updated_at: "2025-01-01T00:00:00Z",
+    };
+
+    await exportStoryboardToWord(storyboard, "/projects/test", async () => new Map());
+
+    const xml = writtenDocumentXml();
+    expect(xml).toContain("Story Goals");
+    expect(xml).not.toContain("# Story Goals");
+    expect(xml).toContain("Bold");
+    expect(xml).toContain("<w:b/>");
+    expect(xml).toContain("Docs (https://example.com)");
   }, 15_000);
 });
 

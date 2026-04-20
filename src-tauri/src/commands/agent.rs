@@ -6,6 +6,11 @@ use crate::engine::agent::llm::{self, ChatMessage, LlmConfig, LlmProvider, Model
 use crate::engine::agent::runner::{self, AgentEvent};
 use crate::AppState;
 use agentive::azure_oauth::{self, AuthCodeFlowInit, DeviceCodeResponse, TokenResponse};
+use std::time::{Duration, Instant};
+
+const SIMPLE_CHAT_TIMEOUT: Duration = Duration::from_secs(45);
+const MIN_SIMPLE_CHAT_TIMEOUT_MS: u64 = 5_000;
+const MAX_SIMPLE_CHAT_TIMEOUT_MS: u64 = 120_000;
 
 /// Serialisable provider config sent from the frontend.
 #[derive(Debug, Deserialize)]
@@ -22,6 +27,12 @@ pub struct ProviderConfig {
     /// Vision mode: "off", "notes", "notes_and_sketches".
     #[serde(default)]
     pub vision_mode: Option<String>,
+    /// Capability discovered for the selected model/deployment.
+    #[serde(default)]
+    pub model_supports_vision: Option<bool>,
+    /// Web search access: "disabled" or "enabled".
+    #[serde(default)]
+    pub web_access: Option<String>,
 }
 
 impl From<ProviderConfig> for LlmConfig {
@@ -53,12 +64,108 @@ pub async fn list_models(config: ProviderConfig) -> Result<Vec<ModelInfo>, Strin
 pub async fn agent_chat(
     config: ProviderConfig,
     messages: Vec<ChatMessage>,
+    timeout_ms: Option<u64>,
 ) -> Result<ChatMessage, String> {
+    let started = Instant::now();
+    let message_chars = agentive::context::estimate_chars(&messages);
+    let provider_name = config.provider.clone();
+    let model = config.model.clone();
+    let timeout = timeout_ms
+        .map(|ms| ms.clamp(MIN_SIMPLE_CHAT_TIMEOUT_MS, MAX_SIMPLE_CHAT_TIMEOUT_MS))
+        .map(Duration::from_millis)
+        .unwrap_or(SIMPLE_CHAT_TIMEOUT);
     let llm_config: LlmConfig = config.into();
     let provider = llm::build_provider(&llm_config, None);
-    llm::simple_chat(provider, messages)
-        .await
-        .map_err(|e| e.to_string())
+    let budget_chars = provider.context_budget_chars();
+    log::info!(
+        "[agent_chat] start provider={} model={} messages={} chars={} budget={}chars timeout={}ms",
+        provider_name,
+        model,
+        messages.len(),
+        message_chars,
+        budget_chars,
+        timeout.as_millis()
+    );
+    crate::util::trace::emit(
+        "agent_chat_start",
+        "agent",
+        serde_json::json!({
+            "provider": provider_name,
+            "model": model,
+            "messages": messages.len(),
+            "chars": message_chars,
+            "budget_chars": budget_chars,
+            "timeout_ms": timeout.as_millis(),
+        }),
+    );
+
+    match tokio::time::timeout(timeout, llm::simple_chat(provider, messages)).await {
+        Err(_) => {
+            let elapsed_ms = started.elapsed().as_millis();
+            log::warn!(
+                "[agent_chat] timeout provider={} model={} elapsed={}ms",
+                provider_name,
+                model,
+                elapsed_ms
+            );
+            crate::util::trace::emit(
+                "agent_chat_timeout",
+                "agent",
+                serde_json::json!({
+                    "provider": provider_name,
+                    "model": model,
+                    "elapsed_ms": elapsed_ms,
+                    "timeout_ms": timeout.as_millis(),
+                }),
+            );
+            Err(format!(
+                "AI request timed out after {} seconds",
+                timeout.as_secs()
+            ))
+        }
+        Ok(Ok(response)) => {
+            let elapsed_ms = started.elapsed().as_millis();
+            log::info!(
+                "[agent_chat] done provider={} model={} elapsed={}ms response_chars={}",
+                provider_name,
+                model,
+                elapsed_ms,
+                response.content.as_ref().map(|s| s.char_len()).unwrap_or(0)
+            );
+            crate::util::trace::emit(
+                "agent_chat_done",
+                "agent",
+                serde_json::json!({
+                    "provider": provider_name,
+                    "model": model,
+                    "elapsed_ms": elapsed_ms,
+                    "response_chars": response.content.as_ref().map(|s| s.char_len()).unwrap_or(0),
+                }),
+            );
+            Ok(response)
+        }
+        Ok(Err(err)) => {
+            let elapsed_ms = started.elapsed().as_millis();
+            log::warn!(
+                "[agent_chat] error provider={} model={} elapsed={}ms error={}",
+                provider_name,
+                model,
+                elapsed_ms,
+                err
+            );
+            crate::util::trace::emit(
+                "agent_chat_error",
+                "agent",
+                serde_json::json!({
+                    "provider": provider_name,
+                    "model": model,
+                    "elapsed_ms": elapsed_ms,
+                    "error": err.to_string(),
+                }),
+            );
+            Err(err.to_string())
+        }
+    }
 }
 
 /// Push a message onto the pending stack while the agent loop is running.
@@ -84,6 +191,9 @@ pub async fn agent_chat_with_tools(
 ) -> Result<AgentChatResult, String> {
     use tauri::Emitter;
 
+    let started = Instant::now();
+    let message_chars = agentive::context::estimate_chars(&messages);
+    let message_count = messages.len();
     let project_root = {
         let guard = state.current_project.lock().unwrap();
         guard.as_ref().ok_or("No project open")?.root.clone()
@@ -94,29 +204,114 @@ pub async fn agent_chat_with_tools(
     let prompts = agent_prompts.unwrap_or_default();
     let reported_context = config.context_length;
     let vision_mode = config.vision_mode.clone().unwrap_or_else(|| "off".into());
+    let discovered_vision_support = config.model_supports_vision;
+    let search_enabled = config.web_access.as_deref() == Some("enabled");
+    let provider_name = config.provider.clone();
+    let model = config.model.clone();
     let llm_config: LlmConfig = config.into();
 
-    // Determine effective vision: user setting AND model capability
-    let vision_enabled = vision_mode != "off" && llm::supports_vision(&llm_config.model);
+    // Determine effective vision: user setting AND discovered/static model capability.
+    let model_supports_vision = discovered_vision_support
+        .unwrap_or_else(|| llm::supports_vision(&llm_config.model));
+    let vision_enabled = vision_mode != "off" && model_supports_vision;
     let vision = runner::VisionConfig {
         enabled: vision_enabled,
     };
+    let web_access = runner::WebAccessConfig {
+        search_enabled,
+    };
 
     let provider = llm::build_provider(&llm_config, reported_context);
+    let budget_chars = provider.context_budget_chars();
+    log::info!(
+        "[agent_chat_with_tools] start provider={} model={} messages={} chars={} budget={}chars reported_context={:?} vision={} web_search={} prompts={}",
+        provider_name,
+        model,
+        message_count,
+        message_chars,
+        budget_chars,
+        reported_context,
+        vision.enabled,
+        web_access.search_enabled,
+        prompts.len()
+    );
+    crate::util::trace::emit(
+        "agent_chat_with_tools_start",
+        "agent",
+        serde_json::json!({
+            "provider": provider_name,
+            "model": model,
+            "messages": message_count,
+            "chars": message_chars,
+            "budget_chars": budget_chars,
+            "reported_context": reported_context,
+            "vision_enabled": vision.enabled,
+            "web_search_enabled": web_access.search_enabled,
+            "agent_prompts": prompts.len(),
+        }),
+    );
 
     let emit_handle = app.clone();
-    let result = runner::run(
+    let result = match runner::run(
         provider,
         messages,
         &project_root,
         &prompts,
         &steering,
         &vision,
+        &web_access,
         move |event: AgentEvent| {
             let _ = emit_handle.emit("agent-event", &event);
         },
     )
-    .await?;
+    .await {
+        Ok(result) => {
+            let elapsed_ms = started.elapsed().as_millis();
+            log::info!(
+                "[agent_chat_with_tools] done provider={} model={} elapsed={}ms response_chars={} total_messages={} total_tokens={}",
+                provider_name,
+                model,
+                elapsed_ms,
+                result.response.len(),
+                result.messages.len(),
+                result.total_usage.total_tokens
+            );
+            crate::util::trace::emit(
+                "agent_chat_with_tools_done",
+                "agent",
+                serde_json::json!({
+                    "provider": provider_name,
+                    "model": model,
+                    "elapsed_ms": elapsed_ms,
+                    "response_chars": result.response.len(),
+                    "total_messages": result.messages.len(),
+                    "total_tokens": result.total_usage.total_tokens,
+                }),
+            );
+            result
+        }
+        Err(err) => {
+            let elapsed_ms = started.elapsed().as_millis();
+            log::warn!(
+                "[agent_chat_with_tools] error provider={} model={} elapsed={}ms error={}",
+                provider_name,
+                model,
+                elapsed_ms,
+                err
+            );
+            crate::util::trace::emit(
+                "agent_chat_with_tools_error",
+                "agent",
+                serde_json::json!({
+                    "provider": provider_name,
+                    "model": model,
+                    "elapsed_ms": elapsed_ms,
+                    "error": err,
+                }),
+            );
+            return Err(err);
+        }
+    };
 
     Ok(AgentChatResult {
         messages: result.messages,
@@ -484,6 +679,8 @@ mod tests {
             bearer_token: Some("token".into()),
             context_length: Some(128_000),
             vision_mode: Some("off".into()),
+            model_supports_vision: Some(true),
+            web_access: Some("disabled".into()),
         }
     }
 

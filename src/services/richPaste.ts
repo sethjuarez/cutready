@@ -9,6 +9,7 @@ import TurndownService from "turndown";
 // @ts-expect-error — no type declarations for turndown-plugin-gfm
 import { gfm } from "turndown-plugin-gfm";
 import { invoke } from "@tauri-apps/api/core";
+import { agentChat } from "./agentChat";
 
 // ─── Turndown instance (singleton) ──────────────────────────────────
 
@@ -274,6 +275,10 @@ export interface RichPasteOptions {
   };
   /** Optional callback for status updates (shown in activity panel). */
   onStatus?: (message: string, level: "info" | "warn" | "error" | "success") => void;
+  /** Max time to wait for each AI cleanup request before falling back to basic conversion. */
+  aiTimeoutMs?: number;
+  /** Max time to wait for each pasted image save before skipping that image. */
+  imageSaveTimeoutMs?: number;
 }
 
 const AI_PASTE_PROMPT = `You are a document conversion assistant. The user pasted content from a Word document that was automatically converted from HTML to Markdown. The conversion has issues:
@@ -305,6 +310,19 @@ Rules:
 6. Use ATX-style headings (# H1, ## H2, etc.)
 7. Use - for bullet lists, 1. for numbered lists
 8. Return ONLY the cleaned Markdown — no explanations, no code fences`;
+
+const DEFAULT_AI_TIMEOUT_MS = 20_000;
+const DEFAULT_IMAGE_SAVE_TIMEOUT_MS = 10_000;
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeout = setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms`)), timeoutMs);
+  });
+  return Promise.race([promise, timeoutPromise]).finally(() => {
+    if (timeout) clearTimeout(timeout);
+  });
+}
 
 // ─── Paste complexity detection ────────────────────────────────────
 
@@ -371,10 +389,14 @@ export async function htmlToMarkdown(
     let savedCount = 0;
     for (const img of images) {
       try {
-        const relativePath = await invoke<string>("save_pasted_image", {
-          base64Data: img.base64,
-          extension: img.extension,
-        });
+        const relativePath = await withTimeout(
+          invoke<string>("save_pasted_image", {
+            base64Data: img.base64,
+            extension: img.extension,
+          }),
+          options.imageSaveTimeoutMs ?? DEFAULT_IMAGE_SAVE_TIMEOUT_MS,
+          "Rich paste image save",
+        );
         workingHtml = workingHtml.split(img.originalSrc).join(relativePath);
         savedCount++;
       } catch (e) {
@@ -411,7 +433,7 @@ export async function htmlToMarkdown(
     const turndownResult = turndownConvert(cleaned);
 
     try {
-      md = await refineMarkdownWithAi(turndownResult, AI_COMPLEX_PASTE_PROMPT, options.aiConfig, log);
+      md = await refineMarkdownWithAi(turndownResult, AI_COMPLEX_PASTE_PROMPT, options.aiConfig, log, options.aiTimeoutMs);
       if (md !== turndownResult) {
         log("Rich paste: AI conversion complete ✓", "success");
       }
@@ -427,7 +449,7 @@ export async function htmlToMarkdown(
     if (options.aiConfig && md.length > 0) {
       log(`Rich paste: refining with AI model (${options.aiConfig.model})…`, "info");
       try {
-        const refined = await refineMarkdownWithAi(md, AI_PASTE_PROMPT, options.aiConfig, log);
+        const refined = await refineMarkdownWithAi(md, AI_PASTE_PROMPT, options.aiConfig, log, options.aiTimeoutMs);
         if (refined !== md) {
           md = refined;
           log("Rich paste: AI refinement complete ✓", "success");
@@ -518,13 +540,17 @@ async function refineMarkdownWithAi(
   systemPrompt: string,
   config: NonNullable<RichPasteOptions["aiConfig"]>,
   log: (msg: string, level: "info" | "warn" | "error" | "success") => void,
+  aiTimeoutMs: number = DEFAULT_AI_TIMEOUT_MS,
 ): Promise<string> {
   const chunks = splitMarkdownChunks(md);
 
   if (chunks.length === 1) {
     // Single chunk — straightforward
-    const result = await refineChunk(chunks[0], systemPrompt, config);
-    if (result === null) return md; // AI failed, keep original
+    const result = await refineChunk(chunks[0], systemPrompt, config, aiTimeoutMs);
+    if (result === null) {
+      log("Rich paste: AI cleanup failed or timed out, using basic conversion", "warn");
+      return md;
+    }
     // Truncation guard
     if (md.length > 200 && result.length < md.length * 0.5) {
       log(`Rich paste: AI output looks truncated (${result.length} vs ${md.length} chars) — keeping original`, "warn");
@@ -540,7 +566,7 @@ async function refineMarkdownWithAi(
   const results: string[] = [];
   for (let i = 0; i < chunks.length; i++) {
     log(`Rich paste: refining chunk ${i + 1}/${chunks.length}…`, "info");
-    const result = await refineChunk(chunks[i], chunkPrompt, config);
+    const result = await refineChunk(chunks[i], chunkPrompt, config, aiTimeoutMs);
 
     if (result === null) {
       // AI failed on this chunk — use original
@@ -563,17 +589,19 @@ async function refineChunk(
   chunk: string,
   systemPrompt: string,
   config: NonNullable<RichPasteOptions["aiConfig"]>,
+  aiTimeoutMs: number = DEFAULT_AI_TIMEOUT_MS,
 ): Promise<string | null> {
   try {
     let content: string | null = null;
 
-    const refined = await invoke<{ role: string; content: string | null }>("agent_chat", {
+    const refined = await agentChat(
       config,
-      messages: [
+      [
         { role: "system", content: systemPrompt },
         { role: "user", content: chunk },
       ],
-    });
+      { timeoutMs: aiTimeoutMs },
+    );
     content = refined.content?.trim() ?? null;
 
     if (content && content.length > 0) {

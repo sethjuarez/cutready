@@ -1,5 +1,5 @@
 import { type ReactNode, useCallback } from "react";
-import { House, Clapperboard, FolderOpen, Monitor, SlidersHorizontal, SquarePen, NotebookPen, Images, LayoutList } from "lucide-react";
+import { House, Clapperboard, FolderOpen, Monitor, SlidersHorizontal, SquarePen, NotebookPen, Images, LayoutList, MessageSquare } from "lucide-react";
 import type { AppView } from "../stores/appStore";
 import { useAppStore } from "../stores/appStore";
 import { usePopover } from "../hooks/usePopover";
@@ -47,7 +47,7 @@ const navItems: { id: AppView; label: string; icon: ReactNode }[] = [
   },
 ];
 
-export function Sidebar() {
+export function Sidebar({ onFeedback }: { onFeedback?: () => void }) {
   const view = useAppStore((s) => s.view);
   const setView = useAppStore((s) => s.setView);
   const currentProject = useAppStore((s) => s.currentProject);
@@ -109,6 +109,17 @@ export function Sidebar() {
 
         {/* Spacer pushes settings gear to bottom */}
         <div className="flex-1" />
+
+        {/* Feedback — pinned above settings */}
+        {onFeedback && (
+          <button
+            onClick={onFeedback}
+            className="flex items-center justify-center w-10 h-10 rounded-lg transition-colors relative text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
+            title="Send Feedback"
+          >
+            <MessageSquare className="w-4 h-4" />
+          </button>
+        )}
 
         {/* Global settings gear — pinned to bottom */}
         {(() => {

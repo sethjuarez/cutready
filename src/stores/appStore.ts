@@ -1,6 +1,5 @@
 import { create } from "zustand";
 import { invoke, Channel } from "@tauri-apps/api/core";
-import { generateSnapshotName } from "../utils/snapshotName";
 import type { ProjectView, ProjectEntry, RecentProject } from "../types/project";
 import type {
   BrowserProfile,
@@ -351,6 +350,8 @@ interface AppStoreState {
   openStoryboard: (storyboardPath: string) => Promise<void>;
   /** Update storyboard title/description. */
   updateStoryboard: (update: { title?: string; description?: string }) => Promise<void>;
+  /** Lock or unlock the active storyboard. */
+  setStoryboardLocked: (locked: boolean) => Promise<void>;
   /** Delete a storyboard. */
   deleteStoryboard: (storyboardPath: string) => Promise<void>;
   /** Add a sketch to the active storyboard. */
@@ -457,10 +458,12 @@ interface AppStoreState {
   loadGraphData: () => Promise<void>;
   /** Toggle version history sidebar. */
   toggleVersionHistory: () => void;
-  /** Quick-save a snapshot with an auto-generated name (Ctrl+S). */
+  /** Open the named snapshot flow for legacy quick-save callers. */
   quickSave: () => Promise<void>;
   /** Open snapshot name prompt (and ensure panel is visible). */
   promptSnapshot: () => Promise<void>;
+  /** Squash a HEAD-anchored range of snapshots into one named snapshot. */
+  squashSnapshots: (oldestCommitId: string, newestCommitId: string, label: string) => Promise<void>;
 
   // ── Remote sync actions ────────────────────────────────────
   /** Detect configured remote for the project. */
@@ -1322,6 +1325,18 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     }
   },
 
+  setStoryboardLocked: async (locked) => {
+    const { activeStoryboardPath } = get();
+    if (!activeStoryboardPath) return;
+    try {
+      const storyboard = await invoke<Storyboard>("set_storyboard_lock", { relativePath: activeStoryboardPath, locked });
+      set({ activeStoryboard: storyboard });
+      await get().loadStoryboards();
+    } catch (err) {
+      console.error("Failed to update storyboard lock:", err);
+    }
+  },
+
   deleteStoryboard: async (storyboardPath) => {
     try {
       await invoke("delete_storyboard", { relativePath: storyboardPath });
@@ -1918,39 +1933,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   },
 
   quickSave: async () => {
-    // When rewound, a fork name is required — fall through to the named dialog
-    if (get().isRewound) {
-      get().promptSnapshot();
-      return;
-    }
-    try {
-      // Check identity first — if fallback, fall back to the named dialog
-      const status = await invoke<{ name: string; email: string; is_fallback: boolean }>("check_git_identity");
-      if (status.is_fallback) {
-        set({
-          identityPromptOpen: true,
-          identityPromptCallback: () => set({ snapshotPromptOpen: true }),
-        });
-        return;
-      }
-    } catch {
-      // If check fails, proceed with save anyway
-    }
-    set({ saving: true });
-    try {
-      const label = generateSnapshotName();
-      await get().saveVersion(label);
-      await get().loadGraphData();
-      await get().loadTimelines();
-      const { useToastStore } = await import("./toastStore");
-      useToastStore.getState().show("Snapshot saved", 2000);
-    } catch (err) {
-      console.error("Quick save failed:", err);
-      const { useToastStore } = await import("./toastStore");
-      useToastStore.getState().show(`Snapshot failed: ${err}`, 5000, "error");
-    } finally {
-      set({ saving: false });
-    }
+    await get().promptSnapshot();
   },
 
   promptSnapshot: async () => {
@@ -1968,6 +1951,24 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       // If check fails (e.g., no project open), proceed to snapshot dialog
     }
     set({ snapshotPromptOpen: true });
+  },
+
+  squashSnapshots: async (oldestCommitId, newestCommitId, label) => {
+    try {
+      await invoke<string>("squash_snapshots", {
+        oldestCommitId,
+        newestCommitId,
+        label,
+      });
+      await get().loadGraphData();
+      await get().loadTimelines();
+      await get().loadVersions();
+      await get().checkDirty();
+      await get().checkRewound();
+    } catch (err) {
+      console.error("Failed to squash snapshots:", err);
+      throw err;
+    }
   },
 
   // ── Remote sync actions ────────────────────────────────────

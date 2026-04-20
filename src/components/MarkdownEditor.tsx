@@ -22,6 +22,18 @@ import {
 import { invoke } from "@tauri-apps/api/core";
 import { useAppStore, type ActivityEntry } from "../stores/appStore";
 
+const RICH_PASTE_CONFIG_TIMEOUT_MS = 5_000;
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeout = setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms`)), timeoutMs);
+  });
+  return Promise.race([promise, timeoutPromise]).finally(() => {
+    if (timeout) clearTimeout(timeout);
+  });
+}
+
 /** Editor chrome theme — cursor, selection, gutters, layout. */
 const editorTheme = EditorView.theme({
   "&": {
@@ -91,7 +103,10 @@ function richPasteExtension(
         window.dispatchEvent(new CustomEvent("cutready:rich-paste-busy", { detail: true }));
 
         // Get fresh AI config (with refreshed token) then convert
-        getAiConfig().then((aiConfig) =>
+        withTimeout(getAiConfig(), RICH_PASTE_CONFIG_TIMEOUT_MS, "Rich paste AI config").catch((err) => {
+          logActivity(`Rich paste: AI config unavailable — ${err}`, "warn");
+          return undefined;
+        }).then((aiConfig) =>
           htmlToMarkdown(html, {
             saveImages,
             aiConfig,

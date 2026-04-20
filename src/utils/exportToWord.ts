@@ -31,11 +31,11 @@ import type { Sketch, Storyboard } from "../types/sketch";
 
 // ── Markdown → docx primitives ──────────────────────────────────
 
-/** Parse inline markdown into styled TextRuns and ImageRuns. Handles **bold**, *italic*, `code`, and ![alt](path) images. */
+/** Parse inline markdown into styled TextRuns and ImageRuns. Handles **bold**, *italic*, `code`, links, and ![alt](path) images. */
 function parseInlineMarkdown(text: string): TextRun[] {
   const runs: TextRun[] = [];
-  // Regex matches: image, `code`, ***bolditalic***, **bold**, *italic*, or plain text
-  const pattern = /(!\[[^\]]*\]\([^)]+\)|`[^`]+`|\*\*\*[^*]+\*\*\*|\*\*[^*]+\*\*|\*[^*]+\*)/g;
+  // Regex matches: image, link, `code`, ***bolditalic***, **bold**, *italic*, or plain text
+  const pattern = /(!\[[^\]]*\]\([^)]+\)|\[[^\]]+\]\([^)]+\)|`[^`]+`|\*\*\*[^*]+\*\*\*|\*\*[^*]+\*\*|\*[^*]+\*)/g;
   let lastIndex = 0;
 
   for (const match of text.matchAll(pattern)) {
@@ -48,6 +48,15 @@ function parseInlineMarkdown(text: string): TextRun[] {
       const altMatch = raw.match(/!\[([^\]]*)\]\(([^)]+)\)/);
       const alt = altMatch?.[1] || altMatch?.[2] || "image";
       runs.push(new TextRun({ text: `[${alt}]`, italics: true }));
+    } else if (raw.startsWith("[")) {
+      const linkMatch = raw.match(/\[([^\]]+)\]\(([^)]+)\)/);
+      const label = linkMatch?.[1] || raw;
+      const url = linkMatch?.[2];
+      runs.push(new TextRun({
+        text: url ? `${label} (${url})` : label,
+        color: "0563C1",
+        underline: {},
+      }));
     } else if (raw.startsWith("`")) {
       runs.push(new TextRun({ text: raw.slice(1, -1), font: "Consolas", bold: true }));
     } else if (raw.startsWith("***")) {
@@ -77,9 +86,21 @@ function markdownToParagraphs(text: string): Paragraph[] {
     const trimmed = line.trim();
     if (!trimmed) continue;
 
+    const headingMatch = trimmed.match(/^(#{1,3})\s+(.+)/);
+    if (headingMatch) {
+      const heading = headingMatch[1].length === 1
+        ? HeadingLevel.HEADING_1
+        : headingMatch[1].length === 2
+          ? HeadingLevel.HEADING_2
+          : HeadingLevel.HEADING_3;
+      paragraphs.push(new Paragraph({
+        children: parseInlineMarkdown(headingMatch[2]),
+        heading,
+      }));
+    }
     // Bullet list item: - text or * text (but not *italic*)
-    const bulletMatch = trimmed.match(/^[-*•]\s+(.+)/);
-    if (bulletMatch && !trimmed.match(/^\*[^*]+\*$/)) {
+    else if (trimmed.match(/^[-*•]\s+(.+)/) && !trimmed.match(/^\*[^*]+\*$/)) {
+      const bulletMatch = trimmed.match(/^[-*•]\s+(.+)/)!;
       paragraphs.push(new Paragraph({
         children: parseInlineMarkdown(bulletMatch[1]),
         bullet: { level: 0 },
@@ -651,7 +672,7 @@ export async function exportStoryboardToWord(
 
   if (storyboard.description?.trim()) {
     children.push(new Paragraph({}));
-    children.push(new Paragraph({ text: storyboard.description }));
+    children.push(...markdownToParagraphs(storyboard.description));
   }
 
   children.push(new Paragraph({})); // blank line before content

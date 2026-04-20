@@ -26,6 +26,18 @@ pub async fn save_with_label(
 }
 
 #[tauri::command]
+pub async fn squash_snapshots(
+    oldest_commit_id: String,
+    newest_commit_id: String,
+    label: String,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    let root = versioning_root(&state)?;
+    versioning::squash_head_snapshots(&root, &oldest_commit_id, &newest_commit_id, &label)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub async fn check_git_identity(
     state: State<'_, AppState>,
 ) -> Result<versioning::IdentityStatus, String> {

@@ -70,6 +70,8 @@ export interface GlobalSettings {
   aiVisionMode: "off" | "notes" | "notes_and_sketches";
   /** Whether the selected model supports vision (set when model is picked). */
   aiModelSupportsVision: string;
+  /** Web search access for chat agents: "disabled" or "enabled". */
+  aiWebAccess: "disabled" | "enabled";
   // Legacy fields (migrated on load)
   llmApiKey?: string;
   llmEndpoint?: string;
@@ -122,6 +124,7 @@ const defaultGlobalSettings: GlobalSettings = {
   aiContextLength: 0,
   aiVisionMode: "notes_and_sketches",
   aiModelSupportsVision: "",
+  aiWebAccess: "disabled",
 };
 
 export const defaultWorkspaceSettings: WorkspaceSettings = {

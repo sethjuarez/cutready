@@ -661,6 +661,15 @@ pub fn write_storyboard(
     Ok(())
 }
 
+pub fn ensure_storyboard_unlocked(storyboard: &Storyboard) -> Result<(), ProjectError> {
+    if storyboard.locked {
+        return Err(ProjectError::Locked(
+            "This storyboard is locked. Unlock it before editing.".into(),
+        ));
+    }
+    Ok(())
+}
+
 /// Read a storyboard from a `.sb` file.
 pub fn read_storyboard(path: &Path) -> Result<Storyboard, ProjectError> {
     if !path.exists() {
@@ -672,6 +681,10 @@ pub fn read_storyboard(path: &Path) -> Result<Storyboard, ProjectError> {
 
 /// Delete a storyboard file and auto-commit.
 pub fn delete_storyboard(path: &Path, _project_root: &Path) -> Result<(), ProjectError> {
+    if path.exists() {
+        let storyboard = read_storyboard(path)?;
+        ensure_storyboard_unlocked(&storyboard)?;
+    }
     if path.exists() {
         std::fs::remove_file(path).map_err(|e| ProjectError::Io(e.to_string()))?;
     }

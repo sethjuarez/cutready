@@ -57,6 +57,7 @@ pub async fn update_storyboard(
     let abs_path = project::safe_resolve(&root, &relative_path).map_err(|e| e.to_string())?;
 
     let mut sb = project::read_storyboard(&abs_path).map_err(|e| e.to_string())?;
+    project::ensure_storyboard_unlocked(&sb).map_err(|e| e.to_string())?;
 
     if let Some(t) = title {
         sb.title = t;
@@ -68,6 +69,22 @@ pub async fn update_storyboard(
 
     project::write_storyboard(&sb, &abs_path, &root).map_err(|e| e.to_string())?;
     Ok(())
+}
+
+#[tauri::command]
+pub async fn set_storyboard_lock(
+    relative_path: String,
+    locked: bool,
+    state: State<'_, AppState>,
+) -> Result<Storyboard, String> {
+    let root = project_root(&state)?;
+    let abs_path = project::safe_resolve(&root, &relative_path).map_err(|e| e.to_string())?;
+
+    let mut sb = project::read_storyboard(&abs_path).map_err(|e| e.to_string())?;
+    sb.locked = locked;
+    sb.updated_at = Utc::now();
+    project::write_storyboard(&sb, &abs_path, &root).map_err(|e| e.to_string())?;
+    Ok(sb)
 }
 
 #[tauri::command]
@@ -91,6 +108,8 @@ pub async fn rename_storyboard(
     let root = project_root(&state)?;
     let old_abs = project::safe_resolve(&root, &old_path).map_err(|e| e.to_string())?;
     let new_abs = project::safe_resolve(&root, &new_path).map_err(|e| e.to_string())?;
+    let sb = project::read_storyboard(&old_abs).map_err(|e| e.to_string())?;
+    project::ensure_storyboard_unlocked(&sb).map_err(|e| e.to_string())?;
 
     project::rename_file(&old_abs, &new_abs, &root, "storyboard").map_err(|e| e.to_string())?;
     Ok(())
@@ -122,6 +141,7 @@ pub async fn add_sketch_to_storyboard(
     }
 
     let mut sb = project::read_storyboard(&sb_abs).map_err(|e| e.to_string())?;
+    project::ensure_storyboard_unlocked(&sb).map_err(|e| e.to_string())?;
 
     let item = StoryboardItem::SketchRef { path: sketch_path };
     match position {
@@ -145,6 +165,7 @@ pub async fn remove_sketch_from_storyboard(
     let sb_abs = project::safe_resolve(&root, &storyboard_path).map_err(|e| e.to_string())?;
 
     let mut sb = project::read_storyboard(&sb_abs).map_err(|e| e.to_string())?;
+    project::ensure_storyboard_unlocked(&sb).map_err(|e| e.to_string())?;
 
     if position >= sb.items.len() {
         return Err("Position out of range".into());
@@ -168,6 +189,7 @@ pub async fn add_section_to_storyboard(
     let sb_abs = project::safe_resolve(&root, &storyboard_path).map_err(|e| e.to_string())?;
 
     let mut sb = project::read_storyboard(&sb_abs).map_err(|e| e.to_string())?;
+    project::ensure_storyboard_unlocked(&sb).map_err(|e| e.to_string())?;
 
     let item = StoryboardItem::Section {
         title,
@@ -195,6 +217,7 @@ pub async fn reorder_storyboard_items(
     let sb_abs = project::safe_resolve(&root, &storyboard_path).map_err(|e| e.to_string())?;
 
     let mut sb = project::read_storyboard(&sb_abs).map_err(|e| e.to_string())?;
+    project::ensure_storyboard_unlocked(&sb).map_err(|e| e.to_string())?;
     sb.items = items;
     sb.updated_at = Utc::now();
 

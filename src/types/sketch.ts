@@ -53,6 +53,8 @@ export interface SketchSummary {
 export interface Storyboard {
   title: string;
   description: string;
+  /** Whether the whole storyboard is protected from edits. */
+  locked?: boolean;
   items: StoryboardItem[];
   created_at: string;
   updated_at: string;
@@ -67,6 +69,7 @@ export type StoryboardItem =
 export interface StoryboardSummary {
   path: string;
   title: string;
+  locked?: boolean;
   sketch_count: number;
   created_at: string;
   updated_at: string;

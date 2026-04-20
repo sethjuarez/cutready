@@ -2,7 +2,7 @@ import { useEffect, useCallback, useState } from "react";
 import { useTheme } from "./hooks/useTheme";
 import { useGlobalHotkeys } from "./hooks/useGlobalHotkeys";
 import { useDebugLog } from "./hooks/useDebugLog";
-import { useDeepLink } from "./hooks/useDeepLink";
+import { getCurrentDeepLinkUrl, useDeepLink } from "./hooks/useDeepLink";
 import { StatusBar } from "./components/StatusBar";
 import { AppLayout } from "./components/AppLayout";
 import { ToastContainer } from "./components/ToastContainer";
@@ -21,14 +21,25 @@ function App() {
 
   // Auto-open last project on startup
   useEffect(() => {
-    const lastProject = localStorage.getItem("cutready:lastProject");
-    if (lastProject) {
-      useAppStore.getState().openProject(lastProject);
-    } else {
-      useAppStore.getState().loadRecentProjects();
+    let cancelled = false;
+    async function openStartupProject() {
+      const deepLinkUrl = await getCurrentDeepLinkUrl();
+      if (cancelled) return;
+      if (deepLinkUrl) return;
+
+      const lastProject = localStorage.getItem("cutready:lastProject");
+      if (lastProject) {
+        useAppStore.getState().openProject(lastProject);
+      } else {
+        useAppStore.getState().loadRecentProjects();
+      }
     }
+    openStartupProject();
     // Silent update check on startup
     useUpdateStore.getState().checkForUpdate();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   return (

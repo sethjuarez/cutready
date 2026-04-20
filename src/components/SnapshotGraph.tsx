@@ -136,12 +136,15 @@ interface Props {
   timelineMap: Map<string, TimelineInfo>;
   hasMultipleTimelines: boolean;
   showRemoteBadges?: boolean;
+  selectionMode?: boolean;
+  selectedIds?: Set<string>;
+  onToggleSelect?: (commitId: string) => void;
   onNodeClick: (commitId: string, isHead: boolean) => void;
 }
 
 /* ── Component ────────────────────────────────────────────────────── */
 export function SnapshotGraph({
-  nodes: rawNodes, isDirty, isRewound, timelineMap, hasMultipleTimelines, showRemoteBadges = false, onNodeClick,
+  nodes: rawNodes, isDirty, isRewound, timelineMap, hasMultipleTimelines, showRemoteBadges = false, selectionMode = false, selectedIds = new Set(), onToggleSelect, onNodeClick,
 }: Props) {
   const [hovered, setHovered] = useState<string | null>(null);
   const currentRemote = useAppStore((s) => s.currentRemote);
@@ -369,6 +372,7 @@ export function SnapshotGraph({
         const color = lc(tlInfo?.colorIndex ?? dl);
         const r = node.is_head ? HEAD_R : NODE_R;
         const isHov = hovered === node.id;
+        const selected = selectedIds.has(node.id);
         const tlLabel = tlInfo?.label ?? node.timeline;
         const nodeAliases = aliases.get(node.id);
 
@@ -395,14 +399,14 @@ export function SnapshotGraph({
                 style={{
                   left: x - r, top: "50%", transform: "translateY(-50%)",
                   width: r * 2, height: r * 2,
-                  backgroundColor: node.is_head || isHov ? color : "rgb(var(--color-surface))",
+                  backgroundColor: node.is_head || isHov || selected ? color : "rgb(var(--color-surface))",
                   border: `2px solid ${color}`,
-                  boxShadow: "0 0 0 2px rgb(var(--color-surface))",
-                  cursor: node.is_head ? "default" : "pointer",
+                  boxShadow: selected ? `0 0 0 4px ${color}25` : "0 0 0 2px rgb(var(--color-surface))",
+                  cursor: selectionMode || !node.is_head ? "pointer" : "default",
                   zIndex: 3, padding: 0,
                 }}
-                onClick={() => onNodeClick(node.id, node.is_head)}
-                title={node.is_head ? "Current snapshot (HEAD)" : `Navigate to: ${node.message}`}
+                onClick={() => selectionMode ? onToggleSelect?.(node.id) : onNodeClick(node.id, node.is_head)}
+                title={selectionMode ? `Select ${node.message}` : node.is_head ? "Current snapshot (HEAD)" : `Navigate to: ${node.message}`}
               />
               {/* Remote badge — left of the dot with connector line, mirroring branch labels */}
               {showRemoteBadges && node.is_remote_tip && (() => {
@@ -431,7 +435,7 @@ export function SnapshotGraph({
             <div
               className={`flex-1 min-w-0 pr-2 flex flex-col justify-center ${!node.is_head ? "cursor-pointer" : ""}`}
               style={{ paddingLeft: dl * LANE_W }}
-              onClick={() => !node.is_head && onNodeClick(node.id, node.is_head)}
+              onClick={() => selectionMode ? onToggleSelect?.(node.id) : !node.is_head && onNodeClick(node.id, node.is_head)}
             >
               <div className={`text-xs truncate leading-tight transition-colors ${
                 node.is_head ? "font-medium text-[rgb(var(--color-text))]"

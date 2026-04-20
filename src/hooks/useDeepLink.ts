@@ -23,17 +23,44 @@ import { useToastStore } from "../stores/toastStore";
 const isTauri = !!(window as any).__TAURI_INTERNALS__;
 
 /** Parse a cutready:// deep link URL into owner and repo. */
-function parseDeepLink(url: string): { owner: string; repo: string } | null {
-  // Match: cutready://gh/owner/repo or cutready://gh/owner/repo/
-  const match = url.match(/^cutready:\/\/gh\/([^/]+)\/([^/?#]+)/);
-  if (!match) return null;
-  return { owner: match[1], repo: match[2] };
+export function parseDeepLink(url: string): { owner: string; repo: string } | null {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "cutready:") return null;
+
+    const parts = [
+      parsed.hostname,
+      ...parsed.pathname.split("/"),
+    ].filter(Boolean).map((part) => decodeURIComponent(part));
+
+    const ghIndex = parts.findIndex((part) => part.toLowerCase() === "gh");
+    if (ghIndex < 0 || parts.length < ghIndex + 3) return null;
+
+    const owner = parts[ghIndex + 1]?.trim();
+    const repo = parts[ghIndex + 2]?.trim().replace(/\.git$/i, "");
+    if (!owner || !repo || owner.includes("/") || repo.includes("/")) return null;
+    return { owner, repo };
+  } catch {
+    return null;
+  }
+}
+
+export async function getCurrentDeepLinkUrl(): Promise<string | null> {
+  if (!isTauri) return null;
+  try {
+    const { getCurrent } = await import("@tauri-apps/plugin-deep-link");
+    const urls = await getCurrent();
+    return urls?.[0] ?? null;
+  } catch {
+    return null;
+  }
 }
 
 async function handleDeepLink(url: string) {
   const parsed = parseDeepLink(url);
   if (!parsed) {
     console.warn("Invalid deep link URL:", url);
+    useToastStore.getState().show("Invalid CutReady link");
     return;
   }
 
@@ -89,17 +116,9 @@ export function useDeepLink() {
       handleDeepLink(event.payload);
     });
 
-    // Check if app was launched via deep link (getCurrent)
-    // Use dynamic import to avoid errors in web mode
-    import("@tauri-apps/plugin-deep-link").then(({ getCurrent }) => {
-      getCurrent().then((urls) => {
-        if (urls && urls.length > 0) {
-          handleDeepLink(urls[0]);
-        }
-      }).catch(() => {
-        // Plugin may not be available in dev mode
-      });
-    }).catch(() => {});
+    getCurrentDeepLinkUrl().then((url) => {
+      if (url) handleDeepLink(url);
+    });
 
     return () => {
       unlisten.then((fn) => fn());

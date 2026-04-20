@@ -7,7 +7,11 @@
 
 use std::collections::HashMap;
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
+use std::time::Instant;
 
 use crate::engine::agent::llm::ChatMessage;
 use crate::engine::agent::tools;
@@ -18,6 +22,11 @@ const MAX_TOOL_ROUNDS: usize = 10;
 
 /// Maximum delegation depth for sub-agents.
 const MAX_DELEGATION_DEPTH: usize = 2;
+
+/// Retry with a smaller request when a provider error strongly suggests the
+/// submitted conversation exceeded the model or gateway request limit.
+const CONTEXT_FAILURE_RETRY_FRACTION_NUMERATOR: usize = 2;
+const CONTEXT_FAILURE_RETRY_FRACTION_DENOMINATOR: usize = 3;
 
 // ---------------------------------------------------------------------------
 // Event types
@@ -66,6 +75,11 @@ pub struct VisionConfig {
     pub enabled: bool,
 }
 
+#[derive(Debug, Clone)]
+pub struct WebAccessConfig {
+    pub search_enabled: bool,
+}
+
 // ---------------------------------------------------------------------------
 // Agentic loop — delegates to agentive::run()
 // ---------------------------------------------------------------------------
@@ -78,6 +92,7 @@ pub async fn run(
     agent_prompts: &HashMap<String, String>,
     steering: &agentive::Steering,
     vision: &VisionConfig,
+    web_access: &WebAccessConfig,
     emit: impl Fn(AgentEvent) + Send + Sync + 'static,
 ) -> Result<agentive::RunnerResult, String> {
     let emit = Arc::new(emit);
@@ -89,6 +104,7 @@ pub async fn run(
         steering,
         0,
         vision,
+        web_access,
         emit,
     )
     .await
@@ -104,18 +120,25 @@ fn run_inner<'a>(
     steering: &'a agentive::Steering,
     depth: usize,
     vision: &'a VisionConfig,
+    web_access: &'a WebAccessConfig,
     emit: Arc<dyn Fn(AgentEvent) + Send + Sync + 'static>,
 ) -> std::pin::Pin<
     Box<dyn std::future::Future<Output = Result<agentive::RunnerResult, String>> + Send + 'a>,
 > {
     Box::pin(async move {
-        let tool_defs = tools::all_tools();
+        let tool_defs = tools::all_tools(web_access.search_enabled);
+        let tool_count = tool_defs.len();
+        let starting_chars = agentive::context::estimate_chars(&messages);
 
         log::info!(
-            "[agent] starting run (depth={}, {} messages, budget={}chars)",
+            "[agent] starting run (depth={}, {} messages, chars={}, budget={}chars, tools={}, vision={}, web_search={})",
             depth,
             messages.len(),
-            provider.context_budget_chars()
+            starting_chars,
+            provider.context_budget_chars(),
+            tool_count,
+            vision.enabled,
+            web_access.search_enabled
         );
         crate::util::trace::emit(
             "agent_start",
@@ -123,15 +146,21 @@ fn run_inner<'a>(
             serde_json::json!({
                 "depth": depth,
                 "messages": messages.len(),
+                "chars": starting_chars,
                 "budget_chars": provider.context_budget_chars(),
+                "tools": tool_count,
+                "vision_enabled": vision.enabled,
+                "web_search_enabled": web_access.search_enabled,
             }),
         );
 
         // Configure agentive runner
         let config = agentive::RunnerConfig {
             max_iterations: MAX_TOOL_ROUNDS,
+            retry_on_400: false,
             auto_trim_context: true,
             sanitize_tool_results: true,
+            compaction_provider: Some(provider.clone()),
             reference_resolver: Some(build_reference_resolver(project_root)),
             ..Default::default()
         };
@@ -140,15 +169,48 @@ fn run_inner<'a>(
         let last_iteration = Arc::new(std::sync::atomic::AtomicUsize::new(usize::MAX));
         let emit_events = emit.clone();
         let last_iter = last_iteration.clone();
+        let run_started = Instant::now();
+        let saw_first_token = Arc::new(AtomicBool::new(false));
+        let saw_first_thinking = Arc::new(AtomicBool::new(false));
+        let saw_first_tool = Arc::new(AtomicBool::new(false));
+        let first_token_flag = saw_first_token.clone();
+        let first_thinking_flag = saw_first_thinking.clone();
+        let first_tool_flag = saw_first_tool.clone();
         let on_event = move |event: agentive::RunnerEvent| {
             match event {
                 agentive::RunnerEvent::Token { token } => {
+                    if !first_token_flag.swap(true, Ordering::Relaxed) {
+                        let elapsed_ms = run_started.elapsed().as_millis();
+                        log::info!("[agent] first token after {}ms", elapsed_ms);
+                        crate::util::trace::emit(
+                            "agent_first_token",
+                            "agent",
+                            serde_json::json!({ "elapsed_ms": elapsed_ms }),
+                        );
+                    }
                     emit_events(AgentEvent::Delta { content: token });
                 }
                 agentive::RunnerEvent::Thinking { token } => {
+                    if !first_thinking_flag.swap(true, Ordering::Relaxed) {
+                        let elapsed_ms = run_started.elapsed().as_millis();
+                        log::info!("[agent] first thinking token after {}ms", elapsed_ms);
+                        crate::util::trace::emit(
+                            "agent_first_thinking",
+                            "agent",
+                            serde_json::json!({ "elapsed_ms": elapsed_ms }),
+                        );
+                    }
                     emit_events(AgentEvent::Thinking { content: token });
                 }
                 agentive::RunnerEvent::Status { message } => {
+                    crate::util::trace::emit(
+                        "agent_status",
+                        "agent",
+                        serde_json::json!({
+                            "elapsed_ms": run_started.elapsed().as_millis(),
+                            "message": message,
+                        }),
+                    );
                     emit_events(AgentEvent::Status { message });
                 }
                 agentive::RunnerEvent::ToolCallStart {
@@ -161,10 +223,47 @@ fn run_inner<'a>(
                     if prev != iteration && prev != usize::MAX {
                         emit_events(AgentEvent::DeltaReset);
                     }
+                    let elapsed_ms = run_started.elapsed().as_millis();
+                    if !first_tool_flag.swap(true, Ordering::Relaxed) {
+                        log::info!("[agent] first tool call ({}) after {}ms", name, elapsed_ms);
+                    }
+                    crate::util::trace::emit(
+                        "agent_tool_call_start",
+                        "agent",
+                        serde_json::json!({
+                            "elapsed_ms": elapsed_ms,
+                            "name": name,
+                            "iteration": iteration,
+                            "args_chars": arguments.len(),
+                        }),
+                    );
                     emit_events(AgentEvent::ToolCall { name, arguments });
                 }
-                agentive::RunnerEvent::ToolResult { name, result, .. } => {
+                agentive::RunnerEvent::ToolResult { name, result, elapsed_ms, iteration, .. } => {
+                    crate::util::trace::emit(
+                        "agent_tool_result",
+                        "agent",
+                        serde_json::json!({
+                            "elapsed_ms": run_started.elapsed().as_millis(),
+                            "name": name,
+                            "iteration": iteration,
+                            "tool_elapsed_ms": elapsed_ms,
+                            "result_chars": result.len(),
+                        }),
+                    );
                     emit_events(AgentEvent::ToolResult { name, result });
+                }
+                agentive::RunnerEvent::Usage { usage } => {
+                    crate::util::trace::emit(
+                        "agent_usage",
+                        "agent",
+                        serde_json::json!({
+                            "elapsed_ms": run_started.elapsed().as_millis(),
+                            "prompt_tokens": usage.prompt_tokens,
+                            "completion_tokens": usage.completion_tokens,
+                            "total_tokens": usage.total_tokens,
+                        }),
+                    );
                 }
                 agentive::RunnerEvent::Done { response, .. } => {
                     emit_events(AgentEvent::Done { response });
@@ -218,6 +317,20 @@ fn run_inner<'a>(
                         .await
                         .map(agentive::ToolOutput::from)
                 })
+            } else if tool_call.function.name == "search_web" {
+                let tc = tool_call;
+                Box::pin(async move {
+                    let args = agentive::parse_tool_args(&tc.function.arguments)
+                        .unwrap_or(serde_json::json!({}));
+                    tools::exec_search_web(&args).await.map(agentive::ToolOutput::from)
+                })
+            } else if tool_call.function.name == "search_web" {
+                let tc = tool_call;
+                Box::pin(async move {
+                    let args = agentive::parse_tool_args(&tc.function.arguments)
+                        .unwrap_or(serde_json::json!({}));
+                    tools::exec_search_web(&args).await.map(agentive::ToolOutput::from)
+                })
             } else {
                 let output =
                     tools::execute_tool(&tool_call, Path::new(&project_root), vision_enabled);
@@ -228,19 +341,132 @@ fn run_inner<'a>(
         let cancel = agentive::CancellationToken::new();
 
         let result = agentive::run(
-            provider,
-            messages,
+            provider.clone(),
+            messages.clone(),
             tool_defs,
             tool_executor,
             config,
             cancel,
             steering.clone(),
             agentive::Guardrails::default(),
-            on_event,
+            &on_event,
         )
         .await;
 
-        let result = result.map_err(|e| format!("Agent error: {e}"))?;
+        let result = match result {
+            Ok(result) => result,
+            Err(err) if is_probable_context_failure(&err, starting_chars, provider.context_budget_chars()) => {
+                emit(AgentEvent::Status {
+                    message: "Context limit likely hit; compacting conversation before retry…".into(),
+                });
+                log::warn!(
+                    "[agent] provider error looked like context overflow; retrying after forced compaction: {}",
+                    err
+                );
+
+                let mut retry_messages = messages;
+                let retry_budget = forced_retry_budget(starting_chars, provider.context_budget_chars());
+                let (dropped_count, _) =
+                    agentive::context::trim_to_context_window(&mut retry_messages, retry_budget);
+
+                if dropped_count == 0 {
+                    emit(AgentEvent::Error {
+                        message: friendly_context_error(&err),
+                    });
+                    return Err(format!("Agent error: {}", friendly_context_error(&err)));
+                }
+
+                emit(AgentEvent::Status {
+                    message: format!("Compacted context — summarized {dropped_count} earlier messages"),
+                });
+
+                let retry_config = agentive::RunnerConfig {
+                    max_iterations: MAX_TOOL_ROUNDS,
+                    retry_on_400: false,
+                    auto_trim_context: true,
+                    sanitize_tool_results: true,
+                    compaction_provider: Some(provider.clone()),
+                    reference_resolver: Some(build_reference_resolver(project_root)),
+                    ..Default::default()
+                };
+
+                let project_root_str = project_root.to_string_lossy().to_string();
+                let agent_prompts_owned = agent_prompts.clone();
+                let provider_for_tools = provider.clone();
+                let tools_for_exec = tools::all_tools(web_access.search_enabled);
+                let emit_for_tools = emit.clone();
+                let vision_enabled = vision.enabled;
+                let tool_depth = depth;
+                let steering_for_tools = steering.clone();
+
+                let retry_tool_executor = move |tool_call: agentive::ToolCall| -> std::pin::Pin<
+                    Box<dyn std::future::Future<Output = Result<agentive::ToolOutput, String>> + Send>,
+                > {
+                    let project_root = project_root_str.clone();
+                    let agent_prompts = agent_prompts_owned.clone();
+                    let provider = provider_for_tools.clone();
+                    let tools = tools_for_exec.clone();
+                    let emit = emit_for_tools.clone();
+                    let steering = steering_for_tools.clone();
+
+                    if tool_call.function.name == "delegate_to_agent" {
+                        exec_delegation(
+                            provider,
+                            &tool_call,
+                            &project_root,
+                            &agent_prompts,
+                            &tools,
+                            tool_depth,
+                            vision_enabled,
+                            steering,
+                            emit,
+                        )
+                    } else if tool_call.function.name == "fetch_url" {
+                        let tc = tool_call;
+                        Box::pin(async move {
+                            let args = agentive::parse_tool_args(&tc.function.arguments)
+                                .unwrap_or(serde_json::json!({}));
+                            let url = args.get("url").and_then(|v| v.as_str()).unwrap_or("");
+                            agentive::web::fetch_and_clean(url)
+                                .await
+                                .map(agentive::ToolOutput::from)
+                        })
+                    } else if tool_call.function.name == "search_web" {
+                        let tc = tool_call;
+                        Box::pin(async move {
+                            let args = agentive::parse_tool_args(&tc.function.arguments)
+                                .unwrap_or(serde_json::json!({}));
+                            tools::exec_search_web(&args).await.map(agentive::ToolOutput::from)
+                        })
+                    } else {
+                        let output =
+                            tools::execute_tool(&tool_call, Path::new(&project_root), vision_enabled);
+                        Box::pin(std::future::ready(Ok(output)))
+                    }
+                };
+
+                agentive::run(
+                    provider,
+                    retry_messages,
+                    tools::all_tools(web_access.search_enabled),
+                    retry_tool_executor,
+                    retry_config,
+                    agentive::CancellationToken::new(),
+                    steering.clone(),
+                    agentive::Guardrails::default(),
+                    &on_event,
+                )
+                .await
+                .map_err(|retry_err| {
+                    let message = friendly_context_error(&retry_err);
+                    emit(AgentEvent::Error {
+                        message: message.clone(),
+                    });
+                    format!("Agent error: {message}")
+                })?
+            }
+            Err(err) => return Err(format!("Agent error: {err}")),
+        };
 
         crate::util::trace::emit(
             "agent_done",
@@ -254,6 +480,72 @@ fn run_inner<'a>(
 
         Ok(result)
     })
+}
+
+fn forced_retry_budget(estimated_chars: usize, provider_budget: usize) -> usize {
+    let reduced_provider_budget =
+        provider_budget * CONTEXT_FAILURE_RETRY_FRACTION_NUMERATOR / CONTEXT_FAILURE_RETRY_FRACTION_DENOMINATOR;
+    let reduced_current =
+        estimated_chars * CONTEXT_FAILURE_RETRY_FRACTION_NUMERATOR / CONTEXT_FAILURE_RETRY_FRACTION_DENOMINATOR;
+    reduced_provider_budget.min(reduced_current).max(1)
+}
+
+fn is_probable_context_failure(
+    err: &agentive::AgentError,
+    estimated_chars: usize,
+    provider_budget: usize,
+) -> bool {
+    match err {
+        agentive::AgentError::Api { status: 413, .. } => true,
+        agentive::AgentError::Api { status: 400, message } => {
+            is_context_error_text(message) || estimated_chars > provider_budget * 4 / 5
+        }
+        agentive::AgentError::Stream(message) => {
+            is_context_error_text(message)
+                || (message.contains("API error (400)") && estimated_chars > provider_budget * 4 / 5)
+        }
+        _ => false,
+    }
+}
+
+fn is_context_error_text(message: &str) -> bool {
+    let msg = message.to_ascii_lowercase();
+    let positive = [
+        "context length",
+        "maximum context",
+        "context window",
+        "token limit",
+        "too many tokens",
+        "request too large",
+        "payload too large",
+        "maximum request size",
+        "input is too long",
+        "context_length_exceeded",
+        "exceeds the model",
+    ];
+    let negative = [
+        "unauthorized",
+        "forbidden",
+        "permission",
+        "deployment not found",
+        "invalid model",
+        "unsupported parameter",
+        "invalid tool",
+        "invalid schema",
+        "api version",
+        "content filter",
+        "rate limit",
+    ];
+    positive.iter().any(|needle| msg.contains(needle))
+        && !negative.iter().any(|needle| msg.contains(needle))
+}
+
+fn friendly_context_error(err: &agentive::AgentError) -> String {
+    if is_context_error_text(&err.to_string()) {
+        "The chat is too large for the selected model even after compaction. Start a new chat or remove large pasted content, images, or tool results before retrying.".into()
+    } else {
+        format!("The model rejected the request after compaction: {err}")
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -319,11 +611,11 @@ fn resolve_project_reference(
         for sb in &storyboards {
             if matches_ref(name, &sb.path, &sb.title) {
                 let abs = root.join(&sb.path);
-                if let Ok(data) = std::fs::read_to_string(&abs) {
+                if let Ok(storyboard) = project::read_storyboard(&abs) {
                     return Some(agentive::ResolvedReference {
                         name: sb.title.clone(),
-                        content: data,
-                        content_type: "application/json".to_string(),
+                        content: super::tools::format_storyboard_for_agent(root, &storyboard),
+                        content_type: "text/markdown".to_string(),
                     });
                 }
             }
@@ -564,5 +856,109 @@ mod tests {
     #[test]
     fn matches_ref_no_match() {
         assert!(!matches_ref("setup", "intro.sk", "Introduction"));
+    }
+
+    #[test]
+    fn context_error_classifier_accepts_known_context_400() {
+        let err = agentive::AgentError::Api {
+            status: 400,
+            message: "context_length_exceeded: too many tokens".into(),
+        };
+
+        assert!(is_probable_context_failure(&err, 1_000, 100_000));
+    }
+
+    #[test]
+    fn context_error_classifier_accepts_oversized_generic_400() {
+        let err = agentive::AgentError::Api {
+            status: 400,
+            message: "<h2>Bad Request</h2>".into(),
+        };
+
+        assert!(is_probable_context_failure(&err, 90_000, 100_000));
+    }
+
+    #[test]
+    fn context_error_classifier_accepts_payload_413() {
+        let err = agentive::AgentError::Api {
+            status: 413,
+            message: "Payload Too Large".into(),
+        };
+
+        assert!(is_probable_context_failure(&err, 1_000, 100_000));
+    }
+
+    #[test]
+    fn context_error_classifier_accepts_stream_context_error() {
+        let err = agentive::AgentError::Stream(
+            "API error (400): maximum context length exceeded".into(),
+        );
+
+        assert!(is_probable_context_failure(&err, 1_000, 100_000));
+    }
+
+    #[test]
+    fn context_error_classifier_rejects_non_context_400() {
+        let err = agentive::AgentError::Api {
+            status: 400,
+            message: "invalid tool schema".into(),
+        };
+
+        assert!(!is_probable_context_failure(&err, 1_000, 100_000));
+    }
+
+    #[test]
+    fn context_error_classifier_rejects_small_generic_400() {
+        let err = agentive::AgentError::Api {
+            status: 400,
+            message: "<h2>Bad Request</h2>".into(),
+        };
+
+        assert!(!is_probable_context_failure(&err, 10_000, 100_000));
+    }
+
+    #[test]
+    fn context_error_classifier_rejects_auth_even_with_context_words() {
+        let err = agentive::AgentError::Api {
+            status: 400,
+            message: "Unauthorized request exceeded the context allowed by your permission".into(),
+        };
+
+        assert!(!is_probable_context_failure(&err, 1_000, 100_000));
+    }
+
+    #[test]
+    fn forced_retry_budget_is_smaller_than_current_request() {
+        let budget = forced_retry_budget(90_000, 100_000);
+
+        assert!(budget < 90_000);
+        assert_eq!(budget, 60_000);
+    }
+
+    #[test]
+    fn forced_retry_budget_uses_smaller_of_provider_and_request_budget() {
+        assert_eq!(forced_retry_budget(300_000, 90_000), 60_000);
+        assert_eq!(forced_retry_budget(90_000, 300_000), 60_000);
+    }
+
+    #[test]
+    fn forced_retry_budget_drives_actual_message_trimming() {
+        let mut messages = vec![ChatMessage::system("system prompt")];
+        for i in 0..10 {
+            messages.push(ChatMessage::user(&format!("request {i} {}", "x".repeat(2_000))));
+            messages.push(ChatMessage::assistant(&format!("response {i} {}", "y".repeat(2_000))));
+        }
+        let before = agentive::context::estimate_chars(&messages);
+        let retry_budget = forced_retry_budget(before, before + 10_000);
+
+        let (dropped, _) = agentive::context::trim_to_context_window(&mut messages, retry_budget);
+        let after = agentive::context::estimate_chars(&messages);
+
+        assert!(dropped > 0);
+        assert!(after <= retry_budget);
+        assert!(messages.iter().any(|m| {
+            m.text()
+                .is_some_and(|text| text.starts_with("[Earlier conversation summary]"))
+        }));
     }
 }

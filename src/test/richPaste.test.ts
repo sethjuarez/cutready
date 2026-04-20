@@ -405,6 +405,24 @@ describe("richPaste", () => {
       expect(markdown).toBeDefined();
     });
 
+    it("skips an embedded image when saving it times out", async () => {
+      mockInvoke.mockImplementationOnce(() => new Promise(() => {}));
+      const warnings: string[] = [];
+      const html = '<p>Before</p><p><img src="data:image/png;base64,iVBORw0KGgo=" /></p><p>After</p>';
+
+      const { markdown } = await htmlToMarkdown(html, {
+        saveImages: true,
+        imageSaveTimeoutMs: 5,
+        onStatus: (message, level) => {
+          if (level === "warn") warnings.push(message);
+        },
+      });
+
+      expect(markdown).toContain("Before");
+      expect(markdown).toContain("After");
+      expect(warnings.some((message) => message.includes("timed out"))).toBe(true);
+    });
+
     it("handles image with width/height attributes (Word-style)", async () => {
       const html = '<p><img src="data:image/png;base64,AAAA=" width="640" height="480" border="0"></p>';
       const { markdown } = await htmlToMarkdown(html, { saveImages: true });
@@ -607,6 +625,68 @@ describe("richPaste", () => {
     });
   });
 
+  describe("real-world clipboard payloads", () => {
+    it("browser article payload keeps headings, links, lists, and code", async () => {
+      const html = `<html><body>
+        <!--StartFragment-->
+        <article>
+          <h1>Azure AI Foundry Agent Updates</h1>
+          <p>Read the <a href="https://learn.microsoft.com/azure/ai-foundry/">official docs</a>.</p>
+          <h2>Highlights</h2>
+          <ul>
+            <li><strong>Tracing</strong> is now easier to inspect.</li>
+            <li>Use <code>list_models</code> before routing image requests.</li>
+          </ul>
+        </article>
+        <!--EndFragment-->
+      </body></html>`;
+
+      const { markdown } = await htmlToMarkdown(html);
+
+      expect(markdown).toContain("# Azure AI Foundry Agent Updates");
+      expect(markdown).toContain("[official docs](https://learn.microsoft.com/azure/ai-foundry/)");
+      expect(markdown).toContain("**Tracing**");
+      expect(markdown).toContain("`list_models`");
+      expect(markdown).not.toContain("StartFragment");
+    });
+
+    it("Teams-style payload strips shell chrome while keeping message content", async () => {
+      const html = `<div class="ts-message">
+        <div role="heading">Seth Juarez</div>
+        <p><span style="font-weight:600">Decision:</span> keep compaction conservative.</p>
+        <p>Next steps:</p>
+        <ol><li>Add classifier tests</li><li>Run a live smoke test</li></ol>
+      </div>`;
+
+      const { markdown } = await htmlToMarkdown(html);
+
+      expect(markdown).toContain("Seth Juarez");
+      expect(markdown).toContain("Decision:");
+      expect(markdown).toContain("keep compaction conservative");
+      expect(markdown).toContain("Add classifier tests");
+      expect(markdown).toContain("Run a live smoke test");
+      expect(markdown).not.toContain("ts-message");
+    });
+
+    it("Outlook-style payload strips Office conditionals and preserves action items", async () => {
+      const html = `<html><body>
+        <!--[if gte mso 9]><xml><o:OfficeDocumentSettings></o:OfficeDocumentSettings></xml><![endif]-->
+        <p class="MsoNormal"><b>Subject:</b> Demo follow-up</p>
+        <p class="MsoNormal">Please fix the following:</p>
+        <ul><li>Storyboard focus</li><li>Rich Paste timeout</li></ul>
+      </body></html>`;
+
+      const { markdown } = await htmlToMarkdown(html);
+
+      expect(markdown).toContain("**Subject:**");
+      expect(markdown).toContain("Demo follow-up");
+      expect(markdown).toContain("Storyboard focus");
+      expect(markdown).toContain("Rich Paste timeout");
+      expect(markdown).not.toContain("OfficeDocumentSettings");
+      expect(markdown).not.toContain("MsoNormal");
+    });
+  });
+
   // ─── Edge cases ────────────────────────────────────────────────
 
   describe("edge cases", () => {
@@ -649,6 +729,31 @@ describe("richPaste", () => {
     it("returns hadHtml: true", async () => {
       const result = await htmlToMarkdown("<p>Hello</p>");
       expect(result.hadHtml).toBe(true);
+    });
+
+    it("falls back to basic conversion when backend-enforced AI cleanup times out", async () => {
+      mockInvoke.mockRejectedValueOnce("agent_chat timed out after 5ms");
+      const html = '<h1>Report</h1><table><tr><td>A</td><td>B</td></tr><tr><td>1</td><td>2</td></tr></table><img src="chart.png">';
+      const warnings: string[] = [];
+
+      const { markdown } = await htmlToMarkdown(html, {
+        aiConfig: {
+          provider: "azure_openai",
+          endpoint: "https://example.test",
+          api_key: "test",
+          model: "gpt-test",
+          bearer_token: null,
+        },
+        aiTimeoutMs: 5,
+        onStatus: (message, level) => {
+          if (level === "warn") warnings.push(message);
+        },
+      });
+
+      expect(markdown).toContain("A");
+      expect(markdown).toContain("1");
+      expect(mockInvoke).toHaveBeenCalledWith("agent_chat", expect.objectContaining({ timeoutMs: 5 }));
+      expect(warnings.some((message) => message.includes("timed out"))).toBe(true);
     });
   });
 

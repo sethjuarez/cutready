@@ -92,7 +92,9 @@ pub async fn list_models(config: &LlmConfig) -> Result<Vec<ModelInfo>, String> {
         return Ok(anthropic_models());
     }
     let auth = resolve_auth(config);
-    agentive::discovery::list_models(&config.endpoint, &auth).await
+    agentive::discovery::list_models(&config.endpoint, &auth)
+        .await
+        .map(|models| models.into_iter().map(normalize_model_info).collect())
 }
 
 /// Map CutReady's LlmConfig to an agentive AuthStrategy.
@@ -116,6 +118,46 @@ fn resolve_auth(config: &LlmConfig) -> agentive::AuthStrategy {
             agentive::AuthStrategy::ApiKey(config.api_key.clone())
         }
     }
+}
+
+fn capability_model_name(model: &ModelInfo) -> &str {
+    model
+        .owned_by
+        .as_deref()
+        .filter(|owned_by| looks_like_model_id(owned_by))
+        .unwrap_or(&model.id)
+}
+
+fn looks_like_model_id(value: &str) -> bool {
+    let value = value.to_ascii_lowercase();
+    value.starts_with("gpt-")
+        || value.starts_with("o1")
+        || value.starts_with("o3")
+        || value.starts_with("o4")
+        || value.starts_with("claude-")
+        || value.starts_with("text-")
+        || value.starts_with("dall-")
+}
+
+fn normalize_model_info(mut model: ModelInfo) -> ModelInfo {
+    let model_name = capability_model_name(&model).to_string();
+    let mut caps = model.capabilities.take().unwrap_or_default();
+    let vision = supports_vision(&model_name);
+    let responses_api = needs_responses_api(&model_name);
+
+    caps.entry("vision".into()).or_insert_with(|| vision.to_string());
+    caps.entry("responses_api".into())
+        .or_insert_with(|| responses_api.to_string());
+    caps.entry("chat_completion".into())
+        .or_insert_with(|| (!responses_api).to_string());
+    caps.entry("streaming".into()).or_insert_with(|| "true".into());
+    caps.entry("tool_calling".into()).or_insert_with(|| "true".into());
+
+    if model.context_length.is_none() {
+        model.context_length = Some(context_budget(&model_name, None));
+    }
+    model.capabilities = Some(caps);
+    model
 }
 
 /// Known Anthropic models (no discovery API available).
@@ -292,6 +334,37 @@ mod tests {
         assert!(ids.contains(&"claude-sonnet-4-20250514"));
         assert!(ids.contains(&"claude-opus-4-20250514"));
         assert!(ids.contains(&"claude-haiku-3-5-20241022"));
+    }
+
+    #[test]
+    fn normalize_model_info_adds_context_and_capabilities() {
+        let model = normalize_model_info(ModelInfo {
+            id: "gpt-4o".into(),
+            owned_by: Some("openai".into()),
+            capabilities: None,
+            context_length: None,
+        });
+
+        assert_eq!(model.context_length, Some(context_budget("gpt-4o", None)));
+        let caps = model.capabilities.unwrap();
+        assert_eq!(caps.get("vision").map(String::as_str), Some("true"));
+        assert_eq!(caps.get("chat_completion").map(String::as_str), Some("true"));
+        assert_eq!(caps.get("responses_api").map(String::as_str), Some("false"));
+        assert_eq!(caps.get("tool_calling").map(String::as_str), Some("true"));
+    }
+
+    #[test]
+    fn normalize_model_info_uses_underlying_model_for_deployments() {
+        let model = normalize_model_info(ModelInfo {
+            id: "prod-demo-writer".into(),
+            owned_by: Some("gpt-5-codex".into()),
+            capabilities: None,
+            context_length: None,
+        });
+
+        let caps = model.capabilities.unwrap();
+        assert_eq!(caps.get("responses_api").map(String::as_str), Some("true"));
+        assert_eq!(caps.get("chat_completion").map(String::as_str), Some("false"));
     }
 
     // ── list_models ──────────────────────────────────────────────

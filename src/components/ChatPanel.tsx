@@ -550,12 +550,15 @@ function ChatTab() {
           }
           if (isSuccess && toolName === "write_note") {
             loadNotes();
+            let notePath: string | null = null;
             try {
               const args = JSON.parse(pendingToolArgsRef.current[toolName] ?? "{}");
-              if (args.path) openNote(args.path);
+              notePath = typeof args.path === "string" ? args.path : null;
+              if (notePath && notePath !== useAppStore.getState().activeNotePath) {
+                openNote(notePath);
+              }
             } catch { /* ignore parse errors */ }
-            // Signal that AI edited a note so UI can show feedback
-            window.dispatchEvent(new CustomEvent("cutready:ai-note-updated"));
+            window.dispatchEvent(new CustomEvent("cutready:ai-note-updated", { detail: { path: notePath } }));
           }
           if (isSuccess && toolName === "write_storyboard") {
             loadStoryboards();
@@ -680,6 +683,11 @@ function ChatTab() {
     bearer_token: settings.aiAuthMode === "azure_oauth" ? settings.aiAccessToken : null,
     context_length: settings.aiContextLength || null,
     vision_mode: settings.aiVisionMode || "off",
+    model_supports_vision:
+      settings.aiModelSupportsVision === ""
+        ? null
+        : settings.aiModelSupportsVision === "true",
+    web_access: settings.aiWebAccess || "disabled",
   }), [settings]);
 
   // Build system prompt from selected agent

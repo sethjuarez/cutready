@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { WordOrientation } from "../utils/exportToWord";
-import { Download, FileText } from "lucide-react";
+import { FileText } from "lucide-react";
 
 interface ExportWordButtonProps {
   onExport: (orientation: WordOrientation) => void | Promise<void>;
@@ -59,7 +59,10 @@ export function ExportWordButton({
             <path d="M21 12a9 9 0 1 1-6.219-8.56" />
           </svg>
         ) : (
-          <Download className="w-3.5 h-3.5" />
+          <span className="relative inline-flex h-3.5 w-3.5 items-center justify-center">
+            <FileText className="w-3.5 h-3.5" />
+            <span className="absolute -bottom-0.5 -right-0.5 rounded-[2px] bg-[rgb(var(--color-surface))] px-[1px] text-[7px] font-semibold leading-none text-[rgb(var(--color-accent))]">W</span>
+          </span>
         )}
         {showLabel && "Word"}
       </button>

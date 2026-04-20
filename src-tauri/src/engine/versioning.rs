@@ -122,6 +122,125 @@ pub fn commit_snapshot(
     Ok(commit_id.to_string())
 }
 
+/// Squash a consecutive first-parent range ending at HEAD into one named snapshot.
+///
+/// This intentionally only supports HEAD-anchored ranges. Squashing older interior
+/// commits would require replaying descendants, which is a riskier history rewrite.
+pub fn squash_head_snapshots(
+    project_dir: &Path,
+    oldest_commit_id: &str,
+    newest_commit_id: &str,
+    message: &str,
+) -> Result<String, VersioningError> {
+    let message = message.trim();
+    if message.is_empty() {
+        return Err(VersioningError::Git("Snapshot name is required".into()));
+    }
+
+    let repo = open_repo(project_dir)?;
+    let newest_oid: gix::ObjectId = resolve_commit_id(project_dir, newest_commit_id)?
+        .parse()
+        .map_err(|e: gix::hash::decode::Error| VersioningError::Git(e.to_string()))?;
+    let oldest_oid: gix::ObjectId = resolve_commit_id(project_dir, oldest_commit_id)?
+        .parse()
+        .map_err(|e: gix::hash::decode::Error| VersioningError::Git(e.to_string()))?;
+    let head_oid = repo
+        .head_commit()
+        .map_err(|e| VersioningError::Git(e.to_string()))?
+        .id()
+        .detach();
+
+    if newest_oid != head_oid {
+        return Err(VersioningError::Git(
+            "Only ranges ending at the current snapshot can be squashed safely".into(),
+        ));
+    }
+
+    ensure_no_remote_tip_in_range(project_dir, oldest_oid, newest_oid)?;
+
+    let mut selected = Vec::new();
+    let mut current = Some(newest_oid);
+    let mut parent_after_range = None;
+    while let Some(oid) = current {
+        let commit = repo
+            .find_commit(oid)
+            .map_err(|e| VersioningError::Git(e.to_string()))?;
+        let parents: Vec<gix::ObjectId> = commit.parent_ids().map(|p| p.detach()).collect();
+        if parents.len() > 1 {
+            return Err(VersioningError::Git(
+                "Merge commits cannot be squashed in this flow".into(),
+            ));
+        }
+        selected.push(oid);
+        if oid == oldest_oid {
+            parent_after_range = parents.first().copied();
+            break;
+        }
+        current = parents.first().copied();
+    }
+
+    if selected.last().copied() != Some(oldest_oid) {
+        return Err(VersioningError::Git(
+            "Selected snapshots must be consecutive on the current timeline".into(),
+        ));
+    }
+    if selected.len() < 2 {
+        return Err(VersioningError::Git(
+            "Select at least two snapshots to squash".into(),
+        ));
+    }
+
+    let (author_name, author_email) = resolve_committer(project_dir);
+    let g2_repo = git2::Repository::open(project_dir)
+        .map_err(|e| VersioningError::Git(e.to_string()))?;
+    let newest_git_oid = git2::Oid::from_str(&newest_oid.to_string())
+        .map_err(|e| VersioningError::Git(e.to_string()))?;
+    let newest_git_commit = g2_repo
+        .find_commit(newest_git_oid)
+        .map_err(|e| VersioningError::Git(e.to_string()))?;
+    let tree = newest_git_commit
+        .tree()
+        .map_err(|e| VersioningError::Git(e.to_string()))?;
+    let signature = git2::Signature::now(&author_name, &author_email)
+        .map_err(|e| VersioningError::Git(e.to_string()))?;
+    let parent_commits = parent_after_range
+        .iter()
+        .map(|oid| {
+            git2::Oid::from_str(&oid.to_string())
+                .map_err(|e| VersioningError::Git(e.to_string()))
+                .and_then(|git_oid| {
+                    g2_repo
+                        .find_commit(git_oid)
+                        .map_err(|e| VersioningError::Git(e.to_string()))
+                })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let parent_refs: Vec<&git2::Commit<'_>> = parent_commits.iter().collect();
+
+    let new_commit_id = g2_repo
+        .commit(
+            None,
+            &signature,
+            &signature,
+            message,
+            &tree,
+            &parent_refs,
+        )
+        .map_err(|e| VersioningError::Git(e.to_string()))?;
+    let head_ref_name = g2_repo
+        .head()
+        .ok()
+        .and_then(|head| head.name().map(str::to_string))
+        .ok_or_else(|| VersioningError::Git("No current branch to update".to_string()))?;
+    g2_repo
+        .find_reference(&head_ref_name)
+        .and_then(|mut reference| reference.set_target(new_commit_id, "squash snapshots"))
+        .map_err(|e| VersioningError::Git(e.to_string()))?;
+
+    sync_index_to_head(project_dir);
+    Ok(new_commit_id.to_string())
+}
+
 /// Check if the project is in a rewound state (prev-tip exists).
 pub fn is_rewound(project_dir: &Path) -> bool {
     prev_tip_path(project_dir).exists()
@@ -1421,6 +1540,51 @@ fn get_current_branch_name(repo: &gix::Repository) -> Option<String> {
     }
 }
 
+fn ensure_no_remote_tip_in_range(
+    project_dir: &Path,
+    oldest_oid: gix::ObjectId,
+    newest_oid: gix::ObjectId,
+) -> Result<(), VersioningError> {
+    let g2_repo = match git2::Repository::open(project_dir) {
+        Ok(repo) => repo,
+        Err(_) => return Ok(()),
+    };
+    let refs = g2_repo
+        .references()
+        .map_err(|e| VersioningError::Git(e.to_string()))?;
+    let mut protected = std::collections::HashSet::new();
+    for reference in refs.flatten() {
+        if let Some(name) = reference.name() {
+            if name.starts_with("refs/remotes/") && !name.ends_with("/HEAD") {
+                if let Some(oid) = reference.target() {
+                    protected.insert(oid.to_string());
+                }
+            }
+        }
+    }
+    if protected.is_empty() {
+        return Ok(());
+    }
+
+    let repo = open_repo(project_dir)?;
+    let mut current = Some(newest_oid);
+    while let Some(oid) = current {
+        if protected.contains(&oid.to_string()) {
+            return Err(VersioningError::Git(
+                "Cannot squash snapshots that are already present on a remote branch".into(),
+            ));
+        }
+        if oid == oldest_oid {
+            break;
+        }
+        let commit = repo
+            .find_commit(oid)
+            .map_err(|e| VersioningError::Git(e.to_string()))?;
+        current = commit.parent_ids().next().map(|p| p.detach());
+    }
+    Ok(())
+}
+
 fn count_commits_on_ref(repo: &gix::Repository, ref_name: &str) -> Result<usize, VersioningError> {
     let oid = if ref_name == "HEAD" {
         match repo.head_commit() {
@@ -1690,6 +1854,81 @@ mod tests {
         assert_eq!(versions.len(), 2);
         assert_eq!(versions[0].message, "Update version");
         assert_eq!(versions[1].message, "Initial commit");
+    }
+
+    #[test]
+    fn squash_head_snapshots_preserves_final_state() {
+        let tmp = setup_project_dir();
+        init_project_repo(tmp.path()).unwrap();
+
+        let id1 = commit_snapshot(tmp.path(), "one", None).unwrap();
+        std::fs::write(tmp.path().join("project.json"), r#"{"version":2}"#).unwrap();
+        let _id2 = commit_snapshot(tmp.path(), "two", None).unwrap();
+        std::fs::write(tmp.path().join("project.json"), r#"{"version":3}"#).unwrap();
+        let id3 = commit_snapshot(tmp.path(), "three", None).unwrap();
+
+        let squashed = squash_head_snapshots(tmp.path(), &id1, &id3, "clean checkpoint").unwrap();
+        assert_ne!(squashed, id3);
+
+        let versions = list_versions(tmp.path()).unwrap();
+        assert_eq!(versions.len(), 1);
+        assert_eq!(versions[0].message, "clean checkpoint");
+        assert_eq!(
+            std::fs::read_to_string(tmp.path().join("project.json")).unwrap(),
+            r#"{"version":3}"#
+        );
+    }
+
+    #[test]
+    fn squash_head_snapshots_preserves_dirty_workspace() {
+        let tmp = setup_project_dir();
+        init_project_repo(tmp.path()).unwrap();
+
+        let id1 = commit_snapshot(tmp.path(), "one", None).unwrap();
+        std::fs::write(tmp.path().join("project.json"), r#"{"version":2}"#).unwrap();
+        let _id2 = commit_snapshot(tmp.path(), "two", None).unwrap();
+        std::fs::write(tmp.path().join("project.json"), r#"{"version":3}"#).unwrap();
+        let id3 = commit_snapshot(tmp.path(), "three", None).unwrap();
+
+        std::fs::create_dir_all(tmp.path().join(".chats")).unwrap();
+        std::fs::write(tmp.path().join(".chats").join("session.json"), r#"{"dirty":true}"#).unwrap();
+        std::fs::write(tmp.path().join("draft.md"), "unsaved notes").unwrap();
+        assert!(has_unsaved_changes(tmp.path()).unwrap());
+
+        let squashed = squash_head_snapshots(tmp.path(), &id1, &id3, "dirty-safe squash").unwrap();
+        assert_ne!(squashed, id3);
+
+        let versions = list_versions(tmp.path()).unwrap();
+        assert_eq!(versions.len(), 1);
+        assert_eq!(versions[0].message, "dirty-safe squash");
+        assert_eq!(
+            std::fs::read_to_string(tmp.path().join("project.json")).unwrap(),
+            r#"{"version":3}"#
+        );
+        assert_eq!(
+            std::fs::read_to_string(tmp.path().join(".chats").join("session.json")).unwrap(),
+            r#"{"dirty":true}"#
+        );
+        assert_eq!(
+            std::fs::read_to_string(tmp.path().join("draft.md")).unwrap(),
+            "unsaved notes"
+        );
+        assert!(has_unsaved_changes(tmp.path()).unwrap());
+    }
+
+    #[test]
+    fn squash_head_snapshots_rejects_non_head_range() {
+        let tmp = setup_project_dir();
+        init_project_repo(tmp.path()).unwrap();
+
+        let id1 = commit_snapshot(tmp.path(), "one", None).unwrap();
+        std::fs::write(tmp.path().join("project.json"), r#"{"version":2}"#).unwrap();
+        let id2 = commit_snapshot(tmp.path(), "two", None).unwrap();
+        std::fs::write(tmp.path().join("project.json"), r#"{"version":3}"#).unwrap();
+        let _id3 = commit_snapshot(tmp.path(), "three", None).unwrap();
+
+        let err = squash_head_snapshots(tmp.path(), &id1, &id2, "bad squash").unwrap_err();
+        assert!(err.to_string().contains("current snapshot"));
     }
 
     #[test]

@@ -40,7 +40,7 @@ const MOCK_NOTES: NoteSummary[] = [
 ];
 
 const MOCK_STORYBOARDS: StoryboardSummary[] = [
-  { path: "storyboards/full-demo.sb", title: "Full Demo Flow", sketch_count: 2, created_at: "2025-01-15T09:00:00Z", updated_at: "2025-01-15T12:30:00Z" },
+  { path: "storyboards/full-demo.sb", title: "Full Demo Flow", locked: false, sketch_count: 2, created_at: "2025-01-15T09:00:00Z", updated_at: "2025-01-15T12:30:00Z" },
 ];
 
 const MOCK_NOTE_CONTENT = `# Script Draft
@@ -147,6 +147,19 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
       return {
         title: "Full Demo Flow",
         description: "End-to-end walkthrough of the platform's key features",
+        locked: false,
+        items: [
+          { type: "sketch_ref", path: "sketches/demo-introduction.sk" },
+          { type: "sketch_ref", path: "sketches/feature-deep-dive.sk" },
+        ],
+        created_at: "2025-01-15T09:00:00Z",
+        updated_at: "2025-01-15T12:30:00Z",
+      };
+    case "set_storyboard_lock":
+      return {
+        title: "Full Demo Flow",
+        description: "End-to-end walkthrough of the platform's key features",
+        locked: (args as { locked?: boolean })?.locked ?? false,
         items: [
           { type: "sketch_ref", path: "sketches/demo-introduction.sk" },
           { type: "sketch_ref", path: "sketches/feature-deep-dive.sk" },
@@ -184,6 +197,10 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
       return null;
     case "create_snapshot":
       return "new-snapshot-id";
+    case "save_with_label":
+      return "mock-commit-id";
+    case "squash_snapshots":
+      return "mock-squashed-commit-id";
     case "get_sidebar_order":
       return { storyboards: [], sketches: [], notes: [] };
     case "get_workspace_state":
@@ -214,10 +231,10 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
       return null;
     case "list_models":
       return [
-        { id: "gpt-4o", owned_by: "openai", capabilities: { vision: "true" }, context_length: 128000 },
-        { id: "gpt-4o-mini", owned_by: "openai", capabilities: {}, context_length: 128000 },
-        { id: "gpt-4-turbo", owned_by: "openai", capabilities: { vision: "true" }, context_length: 128000 },
-        { id: "o1-preview", owned_by: "openai", capabilities: {}, context_length: 128000 },
+        { id: "gpt-4o", owned_by: "openai", capabilities: { vision: "true", chat_completion: "true", responses_api: "false" }, context_length: 128000 },
+        { id: "gpt-4o-mini", owned_by: "openai", capabilities: { vision: "true", chat_completion: "true", responses_api: "false" }, context_length: 128000 },
+        { id: "gpt-4-turbo", owned_by: "openai", capabilities: { vision: "true", chat_completion: "true", responses_api: "false" }, context_length: 128000 },
+        { id: "gpt-5-codex", owned_by: "openai", capabilities: { vision: "false", chat_completion: "false", responses_api: "true" }, context_length: 272000 },
       ];
     case "list_azure_subscriptions":
       return [
@@ -343,6 +360,8 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
     case "promote_timeline":
     case "update_sketch":
     case "update_sketch_title":
+    case "update_storyboard":
+    case "update_note":
       return null;
     case "list_feedback":
       return [

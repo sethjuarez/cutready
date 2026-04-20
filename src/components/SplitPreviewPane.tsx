@@ -417,7 +417,10 @@ function NoteSplitEditor({ path }: { path: string }) {
 
   // Re-load when AI updates
   useEffect(() => {
-    const handler = () => {
+    const handler = (event: Event) => {
+      const updatedPath = (event as CustomEvent<{ path?: string | null }>).detail?.path;
+      if (updatedPath && updatedPath !== path) return;
+      if (pendingContentRef.current !== null) return;
       invoke<string>("get_note", { relativePath: path })
         .then((c) => setContent(c))
         .catch(() => {});

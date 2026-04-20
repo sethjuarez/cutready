@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useSettings, useSettingsStore, type AgentPreset } from "../hooks/useSettings";
 import { useTheme, type ThemePreference } from "../hooks/useTheme";
 import { invoke } from "@tauri-apps/api/core";
@@ -9,6 +9,8 @@ import { BUILT_IN_AGENTS } from "./ChatPanel";
 import { useToastStore } from "../stores/toastStore";
 import { useUpdateStore } from "../stores/updateStore";
 import { SafeMarkdown } from "./SafeMarkdown";
+import { Dialog } from "./Dialog";
+import { agentChat } from "../services/agentChat";
 import {
   X,
   RefreshCw,
@@ -57,6 +59,10 @@ export function buildProviderConfig(settings: {
   aiModel: string;
   aiAuthMode: string;
   aiAccessToken: string;
+  aiContextLength?: number;
+  aiVisionMode?: "off" | "notes" | "notes_and_sketches";
+  aiModelSupportsVision?: string;
+  aiWebAccess?: "disabled" | "enabled";
 }) {
   return {
     provider: settings.aiProvider,
@@ -67,6 +73,13 @@ export function buildProviderConfig(settings: {
       settings.aiAuthMode === "azure_oauth"
         ? settings.aiAccessToken
         : null,
+    context_length: settings.aiContextLength || null,
+    vision_mode: settings.aiVisionMode || "off",
+    model_supports_vision:
+      settings.aiModelSupportsVision === ""
+        ? null
+        : settings.aiModelSupportsVision === "true",
+    web_access: settings.aiWebAccess || "disabled",
   };
 }
 
@@ -394,6 +407,7 @@ function ThemesTab({ settings, updateSetting }: {
           ))}
         </div>
       </fieldset>
+
     </div>
   );
 }
@@ -811,6 +825,11 @@ function AIProviderTab({ settings, updateSetting, isAzure, isFoundry, isAnthropi
                   }`}
                 >
                   {m.id}
+                  <span className="ml-2 text-[10px] text-[rgb(var(--color-text-secondary))]">
+                    {m.context_length ? `${Math.round(m.context_length / 1000)}k ctx` : "ctx ?"}
+                    {m.capabilities?.vision === "true" ? " · vision" : ""}
+                    {m.capabilities?.responses_api === "true" ? " · responses" : ""}
+                  </span>
                 </button>
               ))}
           </div>
@@ -845,6 +864,21 @@ function AIProviderTab({ settings, updateSetting, isAzure, isFoundry, isAnthropi
             ⚠ The selected model does not support vision — images will be ignored.
           </p>
         )}
+      </fieldset>
+
+      <fieldset className="flex flex-col gap-2">
+        <label className="text-sm font-medium">Internet Search</label>
+        <select
+          value={settings.aiWebAccess || "disabled"}
+          onChange={(e) => updateSetting("aiWebAccess", e.target.value as "disabled" | "enabled")}
+          className="bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded px-3 py-1.5 text-sm"
+        >
+          <option value="disabled">Disabled — no public web search tool</option>
+          <option value="enabled">Enabled — agents may search when requested</option>
+        </select>
+        <p className="text-xs text-[rgb(var(--color-text-secondary))]">
+          When enabled, agents can call a web search tool for current public information. Project content is not sent unless you explicitly ask for it.
+        </p>
       </fieldset>
     </div>
   );
@@ -1010,8 +1044,11 @@ interface FeedbackEntry {
   debug_log?: string;
 }
 
-const GITHUB_REPO = "sethjuarez/cutready";
-const ISSUE_FORMAT_PROMPT = `You are formatting user feedback into a GitHub issue. Given the feedback below, produce a JSON object with two fields:
+interface IssueReviewDraft {
+  entry: FeedbackEntry;
+}
+
+const ISSUE_FORMAT_PROMPT = `You are formatting user feedback into a GitHub issue for the CutReady desktop app. Given the feedback below, produce a JSON object with two fields:
 - "title": A concise, descriptive issue title (max 80 chars)
 - "body": A well-formatted GitHub issue body in markdown. Include:
   - A clear description of the feedback
@@ -1024,6 +1061,8 @@ Respond ONLY with valid JSON, no markdown fences.`;
 
 /** Max URL length for browser safety. */
 const MAX_URL_LENGTH = 8000;
+const FEEDBACK_ISSUE_FORMAT_TIMEOUT_MS = 20_000;
+export const CUTREADY_FEEDBACK_REPO = "sethjuarez/cutready";
 
 function FeedbackListTab() {
   const [entries, setEntries] = useState<FeedbackEntry[]>([]);
@@ -1031,12 +1070,21 @@ function FeedbackListTab() {
   const [copied, setCopied] = useState(false);
   const [issuePending, setIssuePending] = useState<number | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<number | null>(null);
+  const [issueReview, setIssueReview] = useState<IssueReviewDraft | null>(null);
+  const [issueReviewTitle, setIssueReviewTitle] = useState("");
+  const [issueReviewBody, setIssueReviewBody] = useState("");
+  const [issueSubmitting, setIssueSubmitting] = useState(false);
+  const mountedRef = useRef(true);
 
   useEffect(() => {
+    mountedRef.current = true;
     invoke("list_feedback")
       .then((data) => setEntries(data as FeedbackEntry[]))
       .catch(() => {})
       .finally(() => setLoading(false));
+    return () => {
+      mountedRef.current = false;
+    };
   }, []);
 
   const copyAll = async () => {
@@ -1055,7 +1103,7 @@ function FeedbackListTab() {
     } catch { /* ignore */ }
   };
 
-   const copySingle = async (entry: FeedbackEntry) => {
+  const copySingle = async (entry: FeedbackEntry) => {
     let text = `## ${entry.category}\n**Date:** ${entry.date.split("T")[0]}\n\n${entry.feedback}`;
     if (entry.debug_log) text += `\n\n---\n### Debug Log\n\`\`\`\n${entry.debug_log}\n\`\`\``;
     try {
@@ -1089,9 +1137,71 @@ function FeedbackListTab() {
     return { title, body };
   };
 
-  /** Try LLM formatting, fall back to simple template. Then submit via gh CLI, fall back to browser. */
+  const openIssueReview = (entry: FeedbackEntry, title: string, body: string) => {
+    setIssueReview({ entry });
+    setIssueReviewTitle(title);
+    setIssueReviewBody(body);
+  };
+
+  const closeIssueReview = () => {
+    if (issueSubmitting) return;
+    setIssueReview(null);
+    setIssueReviewTitle("");
+    setIssueReviewBody("");
+  };
+
+  const submitReviewedIssue = async () => {
+    if (!issueReview || !issueReviewTitle.trim() || !issueReviewBody.trim()) return;
+    const { entry } = issueReview;
+    const title = issueReviewTitle.trim();
+    const body = issueReviewBody.trim();
+    setIssueSubmitting(true);
+
+    try {
+      const labels = [entry.category === "bug" ? "bug" : entry.category === "feature" ? "enhancement" : "feedback"];
+      const url = await invoke<string>("create_github_issue", {
+        repo: CUTREADY_FEEDBACK_REPO,
+        title,
+        body,
+        labels,
+      });
+      if (url) {
+        try { await shellOpen(url); } catch { /* opened via gh, URL still returned */ }
+        useToastStore.getState().show(`Issue created: ${url}`, 3000, "info");
+        setIssueReview(null);
+        setIssueReviewTitle("");
+        setIssueReviewBody("");
+        return;
+      }
+    } catch (ghErr) {
+      console.warn("[feedback] gh issue create failed, falling back to browser:", ghErr);
+    } finally {
+      setIssueSubmitting(false);
+    }
+
+    const baseUrl = `https://github.com/${CUTREADY_FEEDBACK_REPO}/issues/new?title=${encodeURIComponent(title)}&body=`;
+    const maxBodyLen = MAX_URL_LENGTH - baseUrl.length;
+    const encodedBody = encodeURIComponent(
+      body.length > maxBodyLen / 3
+        ? body.slice(0, Math.floor(maxBodyLen / 3)) + "\n\n…(truncated)"
+        : body,
+    );
+    const url = baseUrl + encodedBody;
+
+    try {
+      await shellOpen(url);
+    } catch {
+      await navigator.clipboard.writeText(`# ${title}\n\n${body}`).catch(() => {});
+      useToastStore.getState().show("Issue draft copied to clipboard", 3000, "info");
+    }
+    setIssueReview(null);
+    setIssueReviewTitle("");
+    setIssueReviewBody("");
+  };
+
+  /** Try LLM formatting, fall back to simple template. Then show a review modal before submission. */
   const formatAndOpenIssue = async (entry: FeedbackEntry, index: number) => {
-    if (issuePending !== null) return;
+    if (issuePending !== null || issueReview || issueSubmitting) return;
     setIssuePending(index);
 
     // Get app version
@@ -1105,7 +1215,6 @@ function FeedbackListTab() {
     let body: string;
 
     try {
-      // Try to get AI config from settings store
       const s = useSettingsStore.getState().settings;
       const hasAi = s.aiModel && s.aiEndpoint;
 
@@ -1130,6 +1239,7 @@ function FeedbackListTab() {
         };
 
         const userContent = [
+          `Target Repository: ${CUTREADY_FEEDBACK_REPO}`,
           `Category: ${entry.category}`,
           `Date: ${entry.date}`,
           `App Version: ${appVersion}`,
@@ -1137,19 +1247,17 @@ function FeedbackListTab() {
           ...(entry.debug_log ? [`Debug Log:\n${entry.debug_log}`] : []),
         ].join("\n\n");
 
-        let aiContent: string | null = null;
-
-        const result = await invoke<{ role: string; content: string | null }>("agent_chat", {
+        const result = await agentChat(
           config,
-          messages: [
+          [
             { role: "system", content: ISSUE_FORMAT_PROMPT },
             { role: "user", content: userContent },
           ],
-        });
-        aiContent = result.content;
+          { timeoutMs: FEEDBACK_ISSUE_FORMAT_TIMEOUT_MS },
+        );
 
-        if (aiContent) {
-          const parsed = JSON.parse(aiContent.trim());
+        if (result.content) {
+          const parsed = JSON.parse(result.content.trim());
           title = parsed.title || buildFallbackIssue(entry, appVersion).title;
           body = parsed.body || buildFallbackIssue(entry, appVersion).body;
         } else {
@@ -1158,46 +1266,17 @@ function FeedbackListTab() {
       } else {
         ({ title, body } = buildFallbackIssue(entry, appVersion));
       }
-    } catch {
+    } catch (e) {
       ({ title, body } = buildFallbackIssue(entry, appVersion));
-    }
-
-    // Try gh CLI first (no length limits, full body with debug log)
-    try {
-      const labels = [entry.category === "bug" ? "bug" : entry.category === "feature" ? "enhancement" : "feedback"];
-      const url = await invoke<string>("create_github_issue", {
-        repo: GITHUB_REPO,
-        title,
-        body,
-        labels,
-      });
-      if (url) {
-        try { await shellOpen(url); } catch { /* opened via gh, URL still returned */ }
-        useToastStore.getState().show(`Issue created: ${url}`, 3000, "info");
-        setIssuePending(null);
-        return;
+      if (String(e).includes("timed out")) {
+        useToastStore.getState().show("AI formatting timed out; using a local issue template.", 4000, "warning");
       }
-    } catch (ghErr) {
-      console.warn("[feedback] gh issue create failed, falling back to browser:", ghErr);
     }
 
-    // Fallback: open browser with URL (may truncate)
-    const baseUrl = `https://github.com/${GITHUB_REPO}/issues/new?title=${encodeURIComponent(title)}&body=`;
-    const maxBodyLen = MAX_URL_LENGTH - baseUrl.length;
-    const encodedBody = encodeURIComponent(
-      body.length > maxBodyLen / 3
-        ? body.slice(0, Math.floor(maxBodyLen / 3)) + "\n\n…(truncated)"
-        : body,
-    );
-    const url = baseUrl + encodedBody;
-
-    try {
-      await shellOpen(url);
-    } catch {
-      // Fallback: copy to clipboard
-      await navigator.clipboard.writeText(`# ${title}\n\n${body}`).catch(() => {});
+    if (!mountedRef.current) {
+      return;
     }
-
+    openIssueReview(entry, title, body);
     setIssuePending(null);
   };
 
@@ -1210,7 +1289,7 @@ function FeedbackListTab() {
       <div className="flex items-center justify-between">
         <p className="text-xs text-[rgb(var(--color-text-secondary))]">
           {entries.length === 0
-            ? <>No feedback submitted yet. Use the <MessageSquare className="w-3 h-3 inline -mt-0.5" /> button in the title bar.</>
+            ? <>No feedback submitted yet. Use the <MessageSquare className="w-3 h-3 inline -mt-0.5" /> button in the activity bar.</>
             : `${entries.length} feedback item${entries.length === 1 ? "" : "s"}`}
         </p>
         {entries.length > 0 && (
@@ -1312,7 +1391,7 @@ function FeedbackListTab() {
                     ? "text-[rgb(var(--color-accent))] animate-pulse"
                     : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface))]"
                 }`}
-                title="Create GitHub Issue"
+                title={`Create GitHub Issue in ${CUTREADY_FEEDBACK_REPO}`}
               >
                 {issuePending === i ? (
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="animate-spin">
@@ -1329,6 +1408,77 @@ function FeedbackListTab() {
           })}
         </div>
       )}
+
+      <Dialog
+        isOpen={!!issueReview}
+        onClose={closeIssueReview}
+        align="top"
+        topOffset="12vh"
+        width="w-[720px] max-w-[92vw]"
+        labelledBy="feedback-issue-review-title"
+        backdropClass="bg-[rgb(var(--color-overlay-scrim)/0.4)]"
+      >
+        <div className="bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-2xl shadow-2xl overflow-hidden">
+          <div className="flex items-start justify-between gap-4 px-5 py-4 border-b border-[rgb(var(--color-border))]">
+            <div>
+              <h3 id="feedback-issue-review-title" className="text-sm font-semibold text-[rgb(var(--color-text))]">
+                Review GitHub issue
+              </h3>
+              <p className="mt-1 text-xs text-[rgb(var(--color-text-secondary))]">
+                This will be submitted to <span className="font-mono text-[rgb(var(--color-text))]">{CUTREADY_FEEDBACK_REPO}</span>.
+              </p>
+            </div>
+            <button
+              onClick={closeIssueReview}
+              disabled={issueSubmitting}
+              className="flex items-center justify-center w-7 h-7 rounded-md text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] disabled:opacity-40 transition-colors"
+              title="Close"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          <div className="px-5 py-4 space-y-4">
+            <label className="block space-y-1.5">
+              <span className="text-xs font-medium text-[rgb(var(--color-text-secondary))]">Title</span>
+              <input
+                value={issueReviewTitle}
+                onChange={(e) => setIssueReviewTitle(e.target.value)}
+                className={`${inputClass} w-full`}
+                disabled={issueSubmitting}
+                autoFocus
+              />
+            </label>
+
+            <label className="block space-y-1.5">
+              <span className="text-xs font-medium text-[rgb(var(--color-text-secondary))]">Body</span>
+              <textarea
+                value={issueReviewBody}
+                onChange={(e) => setIssueReviewBody(e.target.value)}
+                disabled={issueSubmitting}
+                className="w-full h-[360px] px-3 py-2 rounded-lg bg-[rgb(var(--color-surface-alt))] border border-[rgb(var(--color-border))] text-sm font-mono leading-relaxed text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/50 focus:outline-none focus:ring-1 focus:ring-[rgb(var(--color-accent))]/40 resize-y disabled:opacity-60"
+              />
+            </label>
+          </div>
+
+          <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]/50">
+            <button
+              onClick={closeIssueReview}
+              disabled={issueSubmitting}
+              className="px-3 py-1.5 rounded-lg text-xs font-medium border border-[rgb(var(--color-border))] text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface))] disabled:opacity-40 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={submitReviewedIssue}
+              disabled={issueSubmitting || !issueReviewTitle.trim() || !issueReviewBody.trim()}
+              className="px-3 py-1.5 rounded-lg text-xs font-medium bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))] hover:bg-[rgb(var(--color-accent-hover))] disabled:opacity-40 disabled:pointer-events-none transition-colors"
+            >
+              {issueSubmitting ? "Creating issue..." : "Create issue"}
+            </button>
+          </div>
+        </div>
+      </Dialog>
     </div>
   );
 }

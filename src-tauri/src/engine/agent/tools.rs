@@ -226,8 +226,8 @@ pub fn encode_image_at_path(root: &Path, rel_path: &str) -> Option<ContentPart> 
 // ---------------------------------------------------------------------------
 
 /// All tools available to the AI assistant.
-pub fn all_tools() -> Vec<Tool> {
-    vec![
+pub fn all_tools(web_search_enabled: bool) -> Vec<Tool> {
+    let mut tools = vec![
         Tool::function(
             "list_project_files",
             "List all sketches, notes, and storyboards in the project. Pass include_images: true to also list screenshots from .cutready/screenshots/.",
@@ -440,7 +440,27 @@ pub fn all_tools() -> Vec<Tool> {
         ),
         agentive::memory::recall_memory_tool(),
         agentive::memory::save_memory_tool(),
-    ]
+    ];
+
+    if web_search_enabled {
+        tools.insert(
+            tools.len().saturating_sub(2),
+            agentive::types::Tool::function(
+                "search_web",
+                "Search the public web for current external information. Use only when the user asks to search/look up current information or when current public facts are required. Returns concise results with source URLs.",
+                serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "query": { "type": "string", "description": "Search query. Do not include private project content unless the user explicitly asked to search for it." },
+                        "max_results": { "type": "integer", "description": "Maximum results to return, 1-8. Default 5." }
+                    },
+                    "required": ["query"]
+                }),
+            ),
+        );
+    }
+
+    tools
 }
 
 // ---------------------------------------------------------------------------
@@ -626,6 +646,240 @@ fn extract_json_object<'a>(
 
 fn resolve_path(project_root: &Path, rel: &str) -> PathBuf {
     project_root.join(rel)
+}
+
+pub async fn exec_search_web(args: &Value) -> Result<String, String> {
+    let query = args
+        .get("query")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| "Error: missing 'query' argument".to_string())?;
+    let max_results = args
+        .get("max_results")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(5)
+        .clamp(1, 8) as usize;
+
+    let url = format!(
+        "https://duckduckgo.com/html/?q={}",
+        urlencoding::encode(query)
+    );
+    let html = reqwest::Client::new()
+        .get(url)
+        .header(
+            reqwest::header::USER_AGENT,
+            "CutReady/1.0 (+https://github.com/sethjuarez/cutready)",
+        )
+        .send()
+        .await
+        .map_err(|e| format!("Search request failed: {e}"))?
+        .error_for_status()
+        .map_err(|e| format!("Search provider returned an error: {e}"))?
+        .text()
+        .await
+        .map_err(|e| format!("Search response read failed: {e}"))?;
+
+    Ok(format_search_results(query, &html, max_results))
+}
+
+fn format_search_results(query: &str, html: &str, max_results: usize) -> String {
+    let mut out = format!("# Web search results for \"{}\"\n\n", query);
+    let results = parse_duckduckgo_results(html, max_results);
+    if results.is_empty() {
+        out.push_str("No search results found. Try a more specific query.");
+        return out;
+    }
+
+    for (index, result) in results.iter().enumerate() {
+        out.push_str(&format!(
+            "{}. [{}]({})\n",
+            index + 1,
+            result.title,
+            result.url
+        ));
+        if !result.snippet.is_empty() {
+            out.push_str(&format!("   {}\n", result.snippet));
+        }
+    }
+    out.push_str("\nUse these source URLs as citations when summarizing sourced facts.");
+    out
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct SearchResult {
+    title: String,
+    url: String,
+    snippet: String,
+}
+
+fn parse_duckduckgo_results(html: &str, max_results: usize) -> Vec<SearchResult> {
+    let mut results = Vec::new();
+    for chunk in html.split("result__a").skip(1) {
+        if results.len() >= max_results {
+            break;
+        }
+        let href = extract_attr(chunk, "href").unwrap_or_default();
+        let title_html = chunk
+            .split('>')
+            .nth(1)
+            .and_then(|s| s.split("</a>").next())
+            .unwrap_or_default();
+        let title = strip_tags(title_html);
+        if href.is_empty() || title.is_empty() {
+            continue;
+        }
+        let url = normalize_search_url(&href);
+        let snippet = chunk
+            .split("result__snippet")
+            .nth(1)
+            .and_then(|s| s.split("</a>").next())
+            .map(strip_tags)
+            .unwrap_or_default();
+        if !url.is_empty() && !results.iter().any(|r: &SearchResult| r.url == url) {
+            results.push(SearchResult {
+                title,
+                url,
+                snippet,
+            });
+        }
+    }
+    results
+}
+
+fn extract_attr(chunk: &str, attr: &str) -> Option<String> {
+    let needle = format!("{attr}=\"");
+    let start = chunk.find(&needle)? + needle.len();
+    let end = chunk[start..].find('"')? + start;
+    Some(html_unescape(&chunk[start..end]))
+}
+
+fn normalize_search_url(href: &str) -> String {
+    if let Some(uddg_pos) = href.find("uddg=") {
+        let encoded = &href[uddg_pos + 5..];
+        let encoded = encoded.split('&').next().unwrap_or(encoded);
+        return urlencoding::decode(encoded)
+            .map(|s| s.into_owned())
+            .unwrap_or_else(|_| href.to_string());
+    }
+    html_unescape(href)
+}
+
+fn strip_tags(value: &str) -> String {
+    let mut out = String::new();
+    let mut in_tag = false;
+    for ch in value.chars() {
+        match ch {
+            '<' => in_tag = true,
+            '>' => in_tag = false,
+            _ if !in_tag => out.push(ch),
+            _ => {}
+        }
+    }
+    html_unescape(out.trim()).split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+fn html_unescape(value: &str) -> String {
+    value
+        .replace("&amp;", "&")
+        .replace("&quot;", "\"")
+        .replace("&#x27;", "'")
+        .replace("&#39;", "'")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+}
+
+pub(crate) fn format_storyboard_for_agent(
+    root: &Path,
+    storyboard: &crate::models::sketch::Storyboard,
+) -> String {
+    let mut out = format!("# {}\n", storyboard.title);
+    out.push_str(&format!(
+        "\nLocked: {}\n",
+        if storyboard.locked { "yes" } else { "no" }
+    ));
+    if !storyboard.description.trim().is_empty() {
+        out.push_str(&format!("\n## Description\n{}\n", storyboard.description.trim()));
+    }
+
+    out.push_str("\n## Ordered Sequence\n");
+    if storyboard.items.is_empty() {
+        out.push_str("(no sketches)\n");
+        return out;
+    }
+
+    for (i, item) in storyboard.items.iter().enumerate() {
+        match item {
+            crate::models::sketch::StoryboardItem::SketchRef { path } => {
+                append_storyboard_sketch_summary(&mut out, root, i + 1, path);
+            }
+            crate::models::sketch::StoryboardItem::Section { title, sketches } => {
+                out.push_str(&format!(
+                    "{}. Section: \"{}\" ({} sketches)\n",
+                    i + 1,
+                    title,
+                    sketches.len()
+                ));
+                for (j, sketch_path) in sketches.iter().enumerate() {
+                    append_storyboard_sketch_summary(
+                        &mut out,
+                        root,
+                        j + 1,
+                        sketch_path,
+                    );
+                }
+            }
+        }
+    }
+
+    out
+}
+
+fn append_storyboard_sketch_summary(out: &mut String, root: &Path, index: usize, sketch_path: &str) {
+    let sketch_abs = match project::safe_resolve(root, sketch_path) {
+        Ok(path) => path,
+        Err(e) => {
+            out.push_str(&format!(
+                "{}. Sketch: \"{}\" (invalid path: {})\n",
+                index, sketch_path, e
+            ));
+            return;
+        }
+    };
+
+    match project::read_sketch(&sketch_abs) {
+        Ok(sketch) => {
+            out.push_str(&format!(
+                "{}. Sketch: \"{}\" ({})\n",
+                index, sketch.title, sketch_path
+            ));
+            if let Some(description) = sketch.description.as_str() {
+                if !description.trim().is_empty() {
+                    out.push_str(&format!("   Description: {}\n", description.trim()));
+                }
+            }
+            if sketch.rows.is_empty() {
+                out.push_str("   Rows: none\n");
+            } else {
+                out.push_str("   Rows:\n");
+                for (row_index, row) in sketch.rows.iter().enumerate() {
+                    out.push_str(&format!(
+                        "   - Row {} [{}]: narrative=\"{}\" actions=\"{}\"\n",
+                        row_index + 1,
+                        row.time,
+                        row.narrative,
+                        row.demo_actions
+                    ));
+                }
+            }
+        }
+        Err(e) => {
+            out.push_str(&format!(
+                "{}. Sketch: \"{}\" (missing or unreadable: {})\n",
+                index, sketch_path, e
+            ));
+        }
+    }
 }
 
 fn exec_list_project_files(root: &Path, args: &Value) -> String {
@@ -1443,36 +1697,7 @@ fn exec_read_storyboard(root: &Path, args: &Value) -> String {
     };
     let path = resolve_path(root, rel);
     match project::read_storyboard(&path) {
-        Ok(sb) => {
-            let mut out = format!("# {}\n", sb.title);
-            if !sb.description.is_empty() {
-                out.push_str(&format!("\n{}\n", sb.description));
-            }
-            out.push_str("\n## Sketch Sequence\n");
-            if sb.items.is_empty() {
-                out.push_str("(no sketches)\n");
-            } else {
-                for (i, item) in sb.items.iter().enumerate() {
-                    match item {
-                        crate::models::sketch::StoryboardItem::SketchRef { path: sketch_path } => {
-                            out.push_str(&format!("{}. sketch_ref: \"{}\"\n", i + 1, sketch_path));
-                        }
-                        crate::models::sketch::StoryboardItem::Section { title, sketches } => {
-                            out.push_str(&format!(
-                                "{}. section: \"{}\" ({} sketches)\n",
-                                i + 1,
-                                title,
-                                sketches.len()
-                            ));
-                            for sp in sketches {
-                                out.push_str(&format!("   - \"{}\"\n", sp));
-                            }
-                        }
-                    }
-                }
-            }
-            out
-        }
+        Ok(sb) => format_storyboard_for_agent(root, &sb),
         Err(e) => format!("Error reading storyboard: {e}"),
     }
 }
@@ -1497,7 +1722,12 @@ fn exec_write_storyboard(root: &Path, args: &Value) -> String {
 
     // Load existing or create new
     let mut sb = match project::read_storyboard(&path) {
-        Ok(existing) => existing,
+        Ok(existing) => {
+            if let Err(e) = project::ensure_storyboard_unlocked(&existing) {
+                return format!("Error writing storyboard: {e}");
+            }
+            existing
+        }
         Err(_) => crate::models::sketch::Storyboard::new(
             args.get("title")
                 .and_then(|v| v.as_str())
@@ -2102,6 +2332,77 @@ mod tests {
         let mut sketch = Sketch::new("Locked Tool Test");
         sketch.rows = vec![row];
         project::write_sketch(&sketch, &root.join(rel), root).unwrap();
+    }
+
+    #[test]
+    fn web_search_parser_extracts_sources() {
+        let html = r#"
+            <a rel="nofollow" class="result__a" href="/l/?kh=-1&amp;uddg=https%3A%2F%2Fexample.com%2Fdocs">Example &amp; Docs</a>
+            <a class="result__snippet">Current release notes and examples.</a>
+        "#;
+
+        let output = format_search_results("example docs", html, 5);
+
+        assert!(output.contains("[Example & Docs](https://example.com/docs)"));
+        assert!(output.contains("Current release notes and examples."));
+        assert!(output.contains("source URLs"));
+    }
+
+    #[test]
+    fn storyboard_context_includes_sketch_rows_and_missing_sketches() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        let mut row = PlanningRow::new();
+        row.time = "0:10".into();
+        row.narrative = "Introduce the dashboard".into();
+        row.demo_actions = "Open the dashboard".into();
+        let mut sketch = Sketch::new("Intro");
+        sketch.description = Value::String("Set up the product story".into());
+        sketch.rows = vec![row];
+        project::write_sketch(&sketch, &root.join("intro.sk"), root).unwrap();
+
+        let mut storyboard = crate::models::sketch::Storyboard::new("Launch Demo");
+        storyboard.description = "Full story".into();
+        storyboard.items = vec![
+            crate::models::sketch::StoryboardItem::SketchRef {
+                path: "intro.sk".into(),
+            },
+            crate::models::sketch::StoryboardItem::SketchRef {
+                path: "missing.sk".into(),
+            },
+        ];
+
+        let context = format_storyboard_for_agent(root, &storyboard);
+
+        assert!(context.contains("# Launch Demo"));
+        assert!(context.contains("Locked: no"));
+        assert!(context.contains("Sketch: \"Intro\" (intro.sk)"));
+        assert!(context.contains("Row 1 [0:10]: narrative=\"Introduce the dashboard\" actions=\"Open the dashboard\""));
+        assert!(context.contains("missing.sk"));
+        assert!(context.contains("missing or unreadable"));
+    }
+
+    #[test]
+    fn write_storyboard_tool_rejects_locked_storyboard() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        let rel = "locked.sb";
+        let mut storyboard = crate::models::sketch::Storyboard::new("Locked Story");
+        storyboard.locked = true;
+        project::write_storyboard(&storyboard, &root.join(rel), root).unwrap();
+
+        let result = exec_write_storyboard(
+            root,
+            &json!({
+                "path": rel,
+                "description": "AI rewrite"
+            }),
+        );
+
+        assert!(result.starts_with("Error writing storyboard:"), "{result}");
+        assert!(result.contains("storyboard is locked"), "{result}");
+        let saved = project::read_storyboard(&root.join(rel)).unwrap();
+        assert!(saved.description.is_empty());
     }
 
     #[test]

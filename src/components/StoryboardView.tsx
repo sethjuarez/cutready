@@ -24,6 +24,8 @@ import {
   X,
   Plus,
   FileText,
+  Lock,
+  Unlock,
 } from "lucide-react";
 import { useAppStore } from "../stores/appStore";
 import { useToastStore } from "../stores/toastStore";
@@ -61,6 +63,7 @@ export function StoryboardView() {
   const removeFromStoryboard = useAppStore((s) => s.removeFromStoryboard);
   const reorderStoryboardItems = useAppStore((s) => s.reorderStoryboardItems);
   const updateStoryboard = useAppStore((s) => s.updateStoryboard);
+  const setStoryboardLocked = useAppStore((s) => s.setStoryboardLocked);
   const loadSketches = useAppStore((s) => s.loadSketches);
   const sendChatPrompt = useAppStore((s) => s.sendChatPrompt);
 
@@ -75,15 +78,30 @@ export function StoryboardView() {
   const [editingDesc, setEditingDesc] = useState(false);
   const [localDesc, setLocalDesc] = useState(activeStoryboard?.description ?? "");
   const descRef = useRef<HTMLTextAreaElement>(null);
+  const descSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingDescRef = useRef<string | null>(null);
   const [availableMonitors, setAvailableMonitors] = useState<MonitorInfo[]>([]);
 
   const sketchMap = new Map(sketches.map((s) => [s.path, s]));
+  const storyboardLocked = activeStoryboard?.locked ?? false;
 
-  // Sync local desc when storyboard changes
+  // Reset the local description when switching storyboards.
   useEffect(() => {
     setLocalDesc(activeStoryboard?.description ?? "");
     setEditingDesc(false);
-  }, [activeStoryboard?.description]);
+    pendingDescRef.current = null;
+    if (descSaveTimerRef.current) {
+      clearTimeout(descSaveTimerRef.current);
+      descSaveTimerRef.current = null;
+    }
+  }, [activeStoryboardPath]);
+
+  // External updates can refresh the preview, but must not overwrite active typing.
+  useEffect(() => {
+    if (!editingDesc && pendingDescRef.current === null) {
+      setLocalDesc(activeStoryboard?.description ?? "");
+    }
+  }, [activeStoryboard?.description, editingDesc]);
 
   useEffect(() => {
     if (editingDesc && descRef.current) {
@@ -91,6 +109,30 @@ export function StoryboardView() {
       descRef.current.selectionStart = descRef.current.value.length;
     }
   }, [editingDesc]);
+
+  const flushDescription = useCallback(() => {
+    if (descSaveTimerRef.current) {
+      clearTimeout(descSaveTimerRef.current);
+      descSaveTimerRef.current = null;
+    }
+    const pending = pendingDescRef.current;
+    if (pending === null) return;
+    pendingDescRef.current = null;
+    if (storyboardLocked) return;
+    updateStoryboard({ description: pending });
+  }, [storyboardLocked, updateStoryboard]);
+
+  const handleDescriptionChange = useCallback((value: string) => {
+    if (storyboardLocked) return;
+    setLocalDesc(value);
+    pendingDescRef.current = value;
+    if (descSaveTimerRef.current) clearTimeout(descSaveTimerRef.current);
+    descSaveTimerRef.current = setTimeout(flushDescription, 800);
+  }, [flushDescription, storyboardLocked]);
+
+  useEffect(() => {
+    return () => flushDescription();
+  }, [flushDescription]);
 
   // Eagerly load all referenced sketches
   useEffect(() => {
@@ -181,6 +223,7 @@ export function StoryboardView() {
 
   const handleDragEnd = useCallback((event: DragEndEvent) => {
     const { active, over } = event;
+    if (storyboardLocked) return;
     if (!over || !activeStoryboard || active.id === over.id) return;
     const items = activeStoryboard.items;
     const oldIdx = Number(active.id);
@@ -190,11 +233,12 @@ export function StoryboardView() {
     const [moved] = reordered.splice(oldIdx, 1);
     reordered.splice(newIdx, 0, moved);
     reorderStoryboardItems(reordered);
-  }, [activeStoryboard, reorderStoryboardItems]);
+  }, [activeStoryboard, reorderStoryboardItems, storyboardLocked]);
 
   const handleAddNewSketch = useCallback(
     async (position?: number) => {
       const title = `Sketch ${sketches.length + 1}`;
+      if (storyboardLocked) return;
       await createSketch(title);
       // The created sketch is now active; get its path from the store
       const { activeSketchPath } = useAppStore.getState();
@@ -203,16 +247,17 @@ export function StoryboardView() {
         await loadSketches();
       }
     },
-    [sketches.length, createSketch, addSketchToStoryboard, loadSketches],
+    [sketches.length, createSketch, addSketchToStoryboard, loadSketches, storyboardLocked],
   );
 
   const handlePickExisting = useCallback(
     async (sketchPath: string, position?: number) => {
+      if (storyboardLocked) return;
       await addSketchToStoryboard(sketchPath, position);
       setShowPicker(null);
       setPickerSearch("");
     },
-    [addSketchToStoryboard],
+    [addSketchToStoryboard, storyboardLocked],
   );
 
   if (!activeStoryboard) return null;
@@ -229,19 +274,20 @@ export function StoryboardView() {
           <input
             type="text"
             defaultValue={activeStoryboard.title}
+            readOnly={storyboardLocked}
             onBlur={(e) => {
               const val = e.target.value.trim();
-              if (val && val !== activeStoryboard.title) {
+              if (!storyboardLocked && val && val !== activeStoryboard.title) {
                 updateStoryboard({ title: val });
               }
             }}
-            className="flex-1 text-2xl font-semibold bg-transparent text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/40 outline-none border-none"
+            className={`flex-1 text-2xl font-semibold bg-transparent text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/40 outline-none border-none ${storyboardLocked ? "cursor-default" : ""}`}
             placeholder="Storyboard title..."
           />
           {activeStoryboard.items.length > 0 && (
             <div className="relative flex items-center gap-2">
               <ExportWordButton
-                showLabel
+                className="p-1.5 rounded-md text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                 onExport={(orientation) => {
                   if (!activeStoryboard) return;
                   return exportStoryboardToWord(activeStoryboard, currentProject?.root ?? "", async (paths) => {
@@ -263,11 +309,10 @@ export function StoryboardView() {
               />
               <button
                 onClick={handlePreviewClick}
-                className="flex items-center gap-1.5 shrink-0 text-xs text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] px-3 py-1.5 rounded-lg border border-[rgb(var(--color-border))] hover:border-[rgb(var(--color-accent))]/40 hover:bg-[rgb(var(--color-accent))]/5 transition-colors"
+                className="p-1.5 rounded-md text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors"
                 title="Preview storyboard (presentation mode)"
               >
-                <Play className="w-3.5 h-3.5" />
-                Preview
+                <Monitor className="w-4 h-4" />
               </button>
 
               {/* Monitor picker dropdown */}
@@ -296,6 +341,17 @@ export function StoryboardView() {
               )}
             </div>
           )}
+          <button
+            onClick={() => setStoryboardLocked(!storyboardLocked)}
+            className={`p-1.5 rounded-md transition-colors ${
+              storyboardLocked
+                ? "text-[rgb(var(--color-warning))] bg-[rgb(var(--color-warning))]/10 hover:bg-[rgb(var(--color-warning))]/15"
+                : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))]"
+            }`}
+            title={storyboardLocked ? "Unlock storyboard" : "Lock storyboard"}
+          >
+            {storyboardLocked ? <Lock className="w-4 h-4" /> : <Unlock className="w-4 h-4" />}
+          </button>
         </div>
         {/* Description — markdown preview, click to edit */}
         <div className="relative group/desc mb-2">
@@ -303,25 +359,26 @@ export function StoryboardView() {
             <textarea
               ref={descRef}
               value={localDesc}
-              onChange={(e) => {
-                setLocalDesc(e.target.value);
-                updateStoryboard({ description: e.target.value });
+              onChange={(e) => handleDescriptionChange(e.target.value)}
+              onBlur={() => {
+                flushDescription();
+                setEditingDesc(false);
               }}
-              onBlur={() => setEditingDesc(false)}
               placeholder="Describe this storyboard..."
-              rows={3}
+              rows={4}
+              readOnly={storyboardLocked}
               className="w-full text-sm bg-transparent text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/40 outline-none border border-[rgb(var(--color-border))] rounded-lg px-3 py-2 resize-none focus:ring-1 focus:ring-[rgb(var(--color-accent))]/40 transition-colors"
               autoFocus
             />
           ) : (
             <div
-              tabIndex={0}
-              onClick={() => setEditingDesc(true)}
-              onFocus={() => setEditingDesc(true)}
-              className="min-h-[2rem] rounded-lg px-3 py-2 text-sm cursor-text border border-transparent hover:border-[rgb(var(--color-border))] transition-colors"
+               tabIndex={0}
+              onClick={() => { if (!storyboardLocked) setEditingDesc(true); }}
+              onFocus={() => { if (!storyboardLocked) setEditingDesc(true); }}
+              className={`min-h-[2rem] rounded-lg px-3 py-2 text-sm border border-transparent hover:border-[rgb(var(--color-border))] transition-colors ${!storyboardLocked ? "pr-24 cursor-text" : "cursor-default"}`}
             >
               {localDesc ? (
-                <div className="prose-desc text-[rgb(var(--color-text-secondary))] leading-relaxed">
+                <div className="prose-desc text-[rgb(var(--color-text))] leading-relaxed">
                   <SafeMarkdown>{localDesc}</SafeMarkdown>
                 </div>
               ) : (
@@ -332,21 +389,25 @@ export function StoryboardView() {
             </div>
           )}
           {/* Description sparkle */}
-          <button
-            onClick={() => sendChatPrompt(
-              localDesc
-                ? `Improve the description of the storyboard "${activeStoryboard.title}" (path: "${activeStoryboardPath}"). Current description: "${localDesc}". Write a clearer, more compelling description that summarizes the demo flow. Keep it concise (2-3 sentences). Use the write_storyboard tool to save the new description.`
-                : `Write a description for the storyboard "${activeStoryboard.title}" (path: "${activeStoryboardPath}"). Look at the sketches to understand the demo flow and write a concise (2-3 sentence) description. Use the write_storyboard tool to save the description.`,
-              { silent: true }
-            )}
-            className="absolute right-1 top-1 opacity-60 hover:opacity-100 p-1 rounded text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10 transition-all"
-            title={localDesc ? "Improve description with AI" : "Generate description with AI"}
-          >
-            <Sparkles className="w-3 h-3" />
-          </button>
+          {!editingDesc && !storyboardLocked && (
+            <button
+              onClick={() => sendChatPrompt(
+                localDesc
+                  ? `Improve the description of the storyboard "${activeStoryboard.title}" (path: "${activeStoryboardPath}"). Current description: "${localDesc}". Write a clearer, more compelling description that summarizes the demo flow. Keep it concise (2-3 sentences). Use the write_storyboard tool to save the new description.`
+                  : `Write a description for the storyboard "${activeStoryboard.title}" (path: "${activeStoryboardPath}"). Look at the sketches to understand the demo flow and write a concise (2-3 sentence) description. Use the write_storyboard tool to save the description.`,
+                { silent: true }
+              )}
+              className="absolute right-2 top-2 flex items-center gap-1 opacity-0 group-hover/desc:opacity-100 group-focus-within/desc:opacity-100 p-1 rounded text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10 transition-all"
+              title={localDesc ? "Improve description with AI" : "Generate description with AI"}
+            >
+              <Sparkles className="w-3 h-3" />
+              <span className="text-[10px]">{localDesc ? "Improve" : "Generate"}</span>
+            </button>
+          )}
         </div>
 
         {/* AI actions */}
+        {!storyboardLocked && (
         <div className="flex items-center gap-1.5 mb-8">
           <button
             onClick={() => sendChatPrompt(
@@ -371,12 +432,14 @@ export function StoryboardView() {
             Generate sketch
           </button>
         </div>
+        )}
 
         {/* Items */}
         {activeStoryboard.items.length === 0 ? (
           <EmptyState
             onAddNew={() => handleAddNewSketch()}
             onPickExisting={() => setShowPicker(0)}
+            locked={storyboardLocked}
           />
         ) : (
           <>
@@ -385,7 +448,7 @@ export function StoryboardView() {
               <div className="divide-y divide-[rgb(var(--color-border))]">
                 {activeStoryboard.items.map((item, idx) => (
                   <div key={idx} className="py-6 first:pt-0">
-                    <SortableStoryboardItem id={idx}>
+                    <SortableStoryboardItem id={idx} disabled={storyboardLocked}>
                       {(dragListeners) => item.type === "sketch_ref" ? (
                         <ExpandableSketchCard
                           sketch={sketchMap.get(item.path) ?? makePlaceholder(item.path)}
@@ -394,6 +457,7 @@ export function StoryboardView() {
                           onRemove={() => { if (confirm("Remove this sketch from the storyboard?")) removeFromStoryboard(idx); }}
                           projectRoot={currentProject?.root}
                           dragListeners={dragListeners}
+                          locked={storyboardLocked}
                           collapsed={collapsedItems.has(idx)}
                           onToggleCollapse={() => setCollapsedItems((prev) => {
                             const next = new Set(prev);
@@ -410,16 +474,18 @@ export function StoryboardView() {
                     </SortableStoryboardItem>
 
                     {/* Add button between items */}
-                    <AddItemButton
-                      position={idx + 1}
-                      onAddNew={handleAddNewSketch}
-                      showPicker={showPicker}
-                      setShowPicker={setShowPicker}
-                      filteredSketches={filteredSketches}
-                      pickerSearch={pickerSearch}
-                      setPickerSearch={setPickerSearch}
-                      onPickExisting={handlePickExisting}
-                    />
+                    {!storyboardLocked && (
+                      <AddItemButton
+                        position={idx + 1}
+                        onAddNew={handleAddNewSketch}
+                        showPicker={showPicker}
+                        setShowPicker={setShowPicker}
+                        filteredSketches={filteredSketches}
+                        pickerSearch={pickerSearch}
+                        setPickerSearch={setPickerSearch}
+                        onPickExisting={handlePickExisting}
+                      />
+                    )}
                   </div>
                 ))}
               </div>
@@ -427,13 +493,15 @@ export function StoryboardView() {
           </DndContext>
 
           {/* Always-visible add bar at end */}
-          <AddBar
-            onAddNew={() => handleAddNewSketch()}
-            onPickExisting={() => setShowPicker(-1)}
-          />
+          {!storyboardLocked && (
+            <AddBar
+              onAddNew={() => handleAddNewSketch()}
+              onPickExisting={() => setShowPicker(-1)}
+            />
+          )}
 
           {/* Picker/section input for the bottom bar */}
-          {showPicker === -1 && (
+          {showPicker === -1 && !storyboardLocked && (
             <SketchPicker
               sketches={filteredSketches}
               search={pickerSearch}
@@ -446,7 +514,7 @@ export function StoryboardView() {
         )}
 
         {/* Picker overlay (when shown at a position) */}
-        {showPicker !== null && activeStoryboard.items.length === 0 && (
+        {showPicker !== null && activeStoryboard.items.length === 0 && !storyboardLocked && (
           <SketchPicker
             sketches={filteredSketches}
             search={pickerSearch}
@@ -462,8 +530,8 @@ export function StoryboardView() {
 
 /* ── Sortable wrapper for storyboard items ─────────────── */
 
-function SortableStoryboardItem({ id, children }: { id: number; children: (dragListeners: Record<string, any>) => React.ReactNode }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+function SortableStoryboardItem({ id, disabled, children }: { id: number; disabled?: boolean; children: (dragListeners: Record<string, any>) => React.ReactNode }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id, disabled });
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
@@ -492,6 +560,7 @@ function ExpandableSketchCard({
   onRemove,
   projectRoot,
   dragListeners,
+  locked,
   collapsed,
   onToggleCollapse,
 }: {
@@ -501,6 +570,7 @@ function ExpandableSketchCard({
   onRemove: () => void;
   projectRoot?: string;
   dragListeners: Record<string, any>;
+  locked?: boolean;
   collapsed: boolean;
   onToggleCollapse: () => void;
 }) {
@@ -509,20 +579,22 @@ function ExpandableSketchCard({
       {/* Title row — document sub-heading style */}
       <div className="flex items-center gap-2 py-1">
         {/* Drag handle — grip dots before title */}
-        <div
-          {...dragListeners}
-          className="shrink-0 cursor-grab active:cursor-grabbing opacity-30 hover:opacity-100 transition-opacity"
-          title="Drag to reorder"
-        >
-          <svg width="8" height="14" viewBox="0 0 8 14" fill="currentColor" className="text-[rgb(var(--color-text-secondary))]">
-            <circle cx="2" cy="2" r="1.2" />
-            <circle cx="6" cy="2" r="1.2" />
-            <circle cx="2" cy="7" r="1.2" />
-            <circle cx="6" cy="7" r="1.2" />
-            <circle cx="2" cy="12" r="1.2" />
-            <circle cx="6" cy="12" r="1.2" />
-          </svg>
-        </div>
+        {!locked && (
+          <div
+            {...dragListeners}
+            className="shrink-0 cursor-grab active:cursor-grabbing opacity-30 hover:opacity-100 transition-opacity"
+            title="Drag to reorder"
+          >
+            <svg width="8" height="14" viewBox="0 0 8 14" fill="currentColor" className="text-[rgb(var(--color-text-secondary))]">
+              <circle cx="2" cy="2" r="1.2" />
+              <circle cx="6" cy="2" r="1.2" />
+              <circle cx="2" cy="7" r="1.2" />
+              <circle cx="6" cy="7" r="1.2" />
+              <circle cx="2" cy="12" r="1.2" />
+              <circle cx="6" cy="12" r="1.2" />
+            </svg>
+          </div>
+        )}
 
         {/* Collapse toggle */}
         <button
@@ -555,13 +627,15 @@ function ExpandableSketchCard({
         </button>
 
         {/* Remove */}
-        <button
-          onClick={onRemove}
-          className="shrink-0 p-1 rounded text-[rgb(var(--color-text-secondary))] opacity-0 group-hover/sketch:opacity-100 hover:text-error transition-all"
-          title="Remove from storyboard"
-        >
-          <X className="w-3 h-3" />
-        </button>
+        {!locked && (
+          <button
+            onClick={onRemove}
+            className="shrink-0 p-1 rounded text-[rgb(var(--color-text-secondary))] opacity-0 group-hover/sketch:opacity-100 hover:text-error transition-all"
+            title="Remove from storyboard"
+          >
+            <X className="w-3 h-3" />
+          </button>
+        )}
       </div>
 
       {/* Description (from full sketch if loaded) */}
@@ -596,9 +670,11 @@ function ExpandableSketchCard({
 function EmptyState({
   onAddNew,
   onPickExisting,
+  locked,
 }: {
   onAddNew: () => void;
   onPickExisting: () => void;
+  locked?: boolean;
 }) {
   return (
     <div className="flex flex-col items-center justify-center py-16 text-center">
@@ -609,21 +685,23 @@ function EmptyState({
       <p className="text-xs text-[rgb(var(--color-text-secondary))] max-w-[280px] leading-relaxed mb-6">
         A storyboard sequences your sketches into a complete demo flow. Add sketches to build your narrative.
       </p>
-      <div className="flex gap-3">
-        <button
-          onClick={onAddNew}
-          className="flex items-center gap-2 px-4 py-2.5 text-xs font-medium rounded-xl bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))] hover:bg-[rgb(var(--color-accent-hover))] transition-colors"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          New Sketch
-        </button>
-        <button
-          onClick={onPickExisting}
-          className="flex items-center gap-2 px-4 py-2.5 text-xs font-medium rounded-xl border border-[rgb(var(--color-border))] text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:border-[rgb(var(--color-accent))]/40 transition-colors"
-        >
-          Add Existing
-        </button>
-      </div>
+      {!locked && (
+        <div className="flex gap-3">
+          <button
+            onClick={onAddNew}
+            className="flex items-center gap-2 px-4 py-2.5 text-xs font-medium rounded-xl bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))] hover:bg-[rgb(var(--color-accent-hover))] transition-colors"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            New Sketch
+          </button>
+          <button
+            onClick={onPickExisting}
+            className="flex items-center gap-2 px-4 py-2.5 text-xs font-medium rounded-xl border border-[rgb(var(--color-border))] text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:border-[rgb(var(--color-accent))]/40 transition-colors"
+          >
+            Add Existing
+          </button>
+        </div>
+      )}
     </div>
   );
 }

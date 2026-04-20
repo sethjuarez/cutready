@@ -7,6 +7,7 @@ import { MarkdownEditor } from "./MarkdownEditor";
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import { exportNoteToWord } from "../utils/exportToWord";
 import { ExportWordButton } from "./ExportWordButton";
+import { agentChat } from "../services/agentChat";
 
 const AI_NOTE_CLEANUP_PROMPT = `You are a document editor. Clean up and improve the following Markdown note.
 
@@ -28,6 +29,7 @@ export function NoteEditor() {
   const activeNoteContent = useAppStore((s) => s.activeNoteContent);
   const activeNoteLocked = useAppStore((s) => s.activeNoteLocked);
   const updateNote = useAppStore((s) => s.updateNote);
+  const openNote = useAppStore((s) => s.openNote);
   const setNoteLocked = useAppStore((s) => s.setNoteLocked);
   const projectRoot = useAppStore((s) => s.currentProject?.root);
   const addActivityEntries = useAppStore((s) => s.addActivityEntries);
@@ -53,15 +55,29 @@ export function NoteEditor() {
   const [richPasteBusy, setRichPasteBusy] = useState(false);
   const [exporting, setExporting] = useState(false);
 
-  // Listen for AI note updates to show a brief flash indicator
+  // Listen for AI note updates and refresh the visible editor unless local edits are pending.
   useEffect(() => {
-    const handler = () => {
+    const handler = (event: Event) => {
+      const updatedPath = (event as CustomEvent<{ path?: string | null }>).detail?.path;
+      if (updatedPath && updatedPath !== activeNotePath) return;
       setAiUpdatedFlash(true);
       setTimeout(() => setAiUpdatedFlash(false), 3000);
+      if (!activeNotePath) return;
+      if (pendingContentRef.current !== null) {
+        addActivityEntries([{
+          id: `note-refresh-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          timestamp: new Date(),
+          source: "note",
+          content: "AI updated this note, but local unsaved edits were preserved. Reopen the note after saving to refresh.",
+          level: "warn",
+        }]);
+        return;
+      }
+      openNote(activeNotePath);
     };
     window.addEventListener("cutready:ai-note-updated", handler);
     return () => window.removeEventListener("cutready:ai-note-updated", handler);
-  }, []);
+  }, [activeNotePath, addActivityEntries, openNote]);
 
   // Listen for rich paste busy state
   useEffect(() => {
@@ -160,13 +176,13 @@ export function NoteEditor() {
     try {
       let cleaned: string | null = null;
 
-      const result = await invoke<{ role: string; content: string | null }>("agent_chat", {
+      const result = await agentChat(
         config,
-        messages: [
+        [
           { role: "system", content: AI_NOTE_CLEANUP_PROMPT },
           { role: "user", content: activeNoteContent },
         ],
-      });
+      );
       if (result.content && result.content.trim().length > 0) cleaned = result.content.trim();
 
       if (cleaned) {
