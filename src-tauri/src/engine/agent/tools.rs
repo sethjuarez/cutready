@@ -451,7 +451,7 @@ pub fn all_tools(web_search_enabled: bool) -> Vec<Tool> {
                 serde_json::json!({
                     "type": "object",
                     "properties": {
-                        "query": { "type": "string", "description": "Search query. Do not include private project content unless the user explicitly asked to search for it." },
+                        "query": { "type": "string", "description": "Public web search query." },
                         "max_results": { "type": "integer", "description": "Maximum results to return, 1-8. Default 5." }
                     },
                     "required": ["query"]

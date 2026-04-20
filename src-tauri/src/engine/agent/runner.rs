@@ -324,13 +324,6 @@ fn run_inner<'a>(
                         .unwrap_or(serde_json::json!({}));
                     tools::exec_search_web(&args).await.map(agentive::ToolOutput::from)
                 })
-            } else if tool_call.function.name == "search_web" {
-                let tc = tool_call;
-                Box::pin(async move {
-                    let args = agentive::parse_tool_args(&tc.function.arguments)
-                        .unwrap_or(serde_json::json!({}));
-                    tools::exec_search_web(&args).await.map(agentive::ToolOutput::from)
-                })
             } else {
                 let output =
                     tools::execute_tool(&tool_call, Path::new(&project_root), vision_enabled);
