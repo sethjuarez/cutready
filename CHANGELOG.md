@@ -9,6 +9,16 @@
 Covector manages this changelog. Do not edit manually.
 Each release section is generated from `.changes/*.md` files.
 
+## [1.1.2](https://github.com/sethjuarez/cutready/compare/v1.1.1...v1.1.2) (2026-04-20)
+
+
+### Bug Fixes
+
+* enable dev mocks for docs screenshots ([88d9366](https://github.com/sethjuarez/cutready/commit/88d93665e1c3858973fb6a8e031f9444915c358d))
+* keep reference context out of user bubbles ([d378cd4](https://github.com/sethjuarez/cutready/commit/d378cd4f8dc1250665002f2411bc30c231dd9c5e))
+* refresh sketches after agent edits ([ae6964c](https://github.com/sethjuarez/cutready/commit/ae6964c7b6b7871f358423cd873fff8282c1e412))
+* simplify web search tool schema ([99a35a7](https://github.com/sethjuarez/cutready/commit/99a35a7f158e944578948de4b6b111e7a51bef4f))
+
 ## [1.1.1](https://github.com/sethjuarez/cutready/compare/v1.1.0...v1.1.1) (2026-04-20)
 
 
