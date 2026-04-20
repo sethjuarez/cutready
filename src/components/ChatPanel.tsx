@@ -57,6 +57,43 @@ interface AgentChatResult {
   response: string;
 }
 
+const SKETCH_MUTATION_TOOLS = new Set(["write_sketch", "update_planning_row", "set_row_visual", "design_plan"]);
+
+function consumeQueuedToolArgs(queue: Record<string, string[]>, toolName: string): string {
+  const entries = queue[toolName];
+  if (!entries || entries.length === 0) return "{}";
+  const next = entries.shift() ?? "{}";
+  if (entries.length === 0) delete queue[toolName];
+  return next;
+}
+
+function sketchMutationInfo(toolName: string, argsJson: string, fallbackPath: string | null) {
+  if (!SKETCH_MUTATION_TOOLS.has(toolName)) return null;
+  try {
+    const args = JSON.parse(argsJson || "{}");
+    const path = typeof args.path === "string" ? args.path : fallbackPath;
+    const changedRows: number[] = [];
+    if (toolName === "update_planning_row" || toolName === "set_row_visual" || toolName === "design_plan") {
+      const idx = typeof args.index === "number" ? args.index : parseInt(String(args.index), 10);
+      if (!Number.isNaN(idx)) changedRows.push(idx);
+    }
+    return { path, rows: changedRows, toolName };
+  } catch {
+    return { path: fallbackPath, rows: [], toolName };
+  }
+}
+
+function extractSketchMutationsFromMessages(messages: ChatMessage[], fallbackPath: string | null) {
+  const mutations: Array<{ path: string | null; rows: number[]; toolName: string }> = [];
+  for (const message of messages) {
+    for (const toolCall of message.tool_calls ?? []) {
+      const info = sketchMutationInfo(toolCall.function.name, toolCall.function.arguments, fallbackPath);
+      if (info) mutations.push(info);
+    }
+  }
+  return mutations;
+}
+
 interface FileReference {
   type: "sketch" | "note" | "storyboard" | "web";
   path: string;
@@ -470,7 +507,14 @@ function ChatTab() {
   const streamingRef = useRef("");
   const thinkingRef = useRef("");
   const abortedRef = useRef(false);
-  const pendingToolArgsRef = useRef<Record<string, string>>({});
+  const pendingToolArgsRef = useRef<Record<string, string[]>>({});
+  const refreshSketchAfterMutation = useCallback((mutation: { path: string | null; rows: number[]; toolName: string }) => {
+    loadSketches();
+    window.dispatchEvent(new CustomEvent("cutready:ai-sketch-updated", { detail: mutation }));
+    if (mutation.path) {
+      void openSketch(mutation.path);
+    }
+  }, [loadSketches, openSketch]);
   useEffect(() => {
     const unlisten = listen<{ type: string; content?: string; message?: string; name?: string; arguments?: string; result?: string; response?: string; agent_id?: string; task?: string }>("agent-event", (event) => {
       const ev = event.payload;
@@ -503,7 +547,11 @@ function ChatTab() {
           break;
         case "tool_call":
           // Stash args so tool_result can use them (e.g. to extract path)
-          if (ev.name) pendingToolArgsRef.current[ev.name] = ev.arguments ?? "{}";
+          if (ev.name) {
+            const queue = pendingToolArgsRef.current[ev.name] ?? [];
+            queue.push(ev.arguments ?? "{}");
+            pendingToolArgsRef.current[ev.name] = queue;
+          }
           addActivityEntries([{
             id: crypto.randomUUID(),
             timestamp: new Date(),
@@ -524,35 +572,16 @@ function ChatTab() {
           const toolName = ev.name ?? "";
           const resultText = ev.result ?? "";
           const isSuccess = !resultText.startsWith("Error");
-          if (isSuccess && (toolName === "write_sketch" || toolName === "update_planning_row" || toolName === "set_row_visual" || toolName === "design_plan")) {
-            loadSketches();
-            try {
-              const args = JSON.parse(pendingToolArgsRef.current[toolName] ?? "{}");
-              const sketchPath = args.path ?? useAppStore.getState().activeSketchPath;
-              // Extract changed row indices for highlighting
-              const changedRows: number[] = [];
-              if (toolName === "update_planning_row" || toolName === "set_row_visual" || toolName === "design_plan") {
-                const idx = typeof args.index === "number" ? args.index : parseInt(args.index, 10);
-                if (!isNaN(idx)) changedRows.push(idx);
-              }
-              // write_sketch: leave changedRows empty → highlights all
-              const detail = { rows: changedRows, toolName };
-              if (sketchPath) {
-                // Dispatch BEFORE openSketch so SketchForm can snapshot current state
-                window.dispatchEvent(new CustomEvent("cutready:ai-sketch-updated", { detail }));
-                openSketch(sketchPath);
-              } else {
-                window.dispatchEvent(new CustomEvent("cutready:ai-sketch-updated", { detail }));
-              }
-            } catch {
-              window.dispatchEvent(new CustomEvent("cutready:ai-sketch-updated", { detail: { rows: [], toolName } }));
-            }
+          if (isSuccess && SKETCH_MUTATION_TOOLS.has(toolName)) {
+            const argsJson = consumeQueuedToolArgs(pendingToolArgsRef.current, toolName);
+            const mutation = sketchMutationInfo(toolName, argsJson, useAppStore.getState().activeSketchPath);
+            if (mutation) refreshSketchAfterMutation(mutation);
           }
           if (isSuccess && toolName === "write_note") {
             loadNotes();
             let notePath: string | null = null;
             try {
-              const args = JSON.parse(pendingToolArgsRef.current[toolName] ?? "{}");
+              const args = JSON.parse(consumeQueuedToolArgs(pendingToolArgsRef.current, toolName));
               notePath = typeof args.path === "string" ? args.path : null;
               if (notePath && notePath !== useAppStore.getState().activeNotePath) {
                 openNote(notePath);
@@ -563,7 +592,7 @@ function ChatTab() {
           if (isSuccess && toolName === "write_storyboard") {
             loadStoryboards();
             try {
-              const args = JSON.parse(pendingToolArgsRef.current[toolName] ?? "{}");
+              const args = JSON.parse(consumeQueuedToolArgs(pendingToolArgsRef.current, toolName));
               if (args.path) openStoryboard(args.path);
             } catch { /* ignore parse errors */ }
           }
@@ -603,7 +632,7 @@ function ChatTab() {
       }
     });
     return () => { unlisten.then((f) => f()); };
-  }, [addActivityEntries, loadSketches, loadNotes, loadStoryboards, openSketch, openNote, openStoryboard]);
+  }, [addActivityEntries, loadNotes, loadStoryboards, openNote, openStoryboard, refreshSketchAfterMutation]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -912,6 +941,16 @@ function ChatTab() {
       // If the user stopped generation, discard the result
       if (abortedRef.current) return;
 
+      // Tool-result events are used for immediate refresh, but they are best-effort
+      // UI events. Reconcile from the returned conversation as well so open sketches
+      // update even if an event was missed or multiple same-name tool calls raced.
+      for (const mutation of extractSketchMutationsFromMessages(
+        result.messages.slice(fullMessages.length),
+        useAppStore.getState().activeSketchPath,
+      )) {
+        refreshSketchAfterMutation(mutation);
+      }
+
       setChatMessages(backendMessages);
     } catch (err) {
       if (abortedRef.current) return;
@@ -935,7 +974,7 @@ function ChatTab() {
       streamingRef.current = "";
       thinkingRef.current = "";
     }
-  }, [input, loading, messages, references, systemPrompt, buildConfig, setChatMessages, setChatLoading, setChatError, addActivityEntries, settings.aiAgents]);
+  }, [input, loading, messages, references, systemPrompt, buildConfig, setChatMessages, setChatLoading, setChatError, addActivityEntries, settings.aiAgents, refreshSketchAfterMutation]);
 
   // Pick up prompts queued from outside the chat (e.g. sparkle buttons)
   const handleSendRef = useRef(handleSend);
