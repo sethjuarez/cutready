@@ -22,7 +22,7 @@ Each sketch contains a planning table with drag-and-drop reorderable rows.
 Every row has four columns:
 
 | Column | Description |
-|--------|-------------|
+| --- | --- |
 | **Time** | Target timing for this segment (e.g., `0:30`) |
 | **Narrative** | What you'll say — your voiceover script |
 | **Demo Actions** | What happens on screen — clicks, navigation, typing |
@@ -31,6 +31,7 @@ Every row has four columns:
 ### Inline Editing
 
 Click any cell to edit it directly. The table supports:
+
 - Rich text formatting in narrative and action cells
 - **Nested bullet lists** at any depth (sub-bullets render correctly)
 - Drag handles on the left to reorder rows
@@ -72,9 +73,9 @@ results appear directly in the field without opening the chat panel.
 Sketches progress through lifecycle states:
 
 1. **Draft** — Initial planning phase, freely editable
-2. **Recording Enriched** — After recording, actions are linked back to sketch rows
-3. **Refined** — After AI agent processing (coming soon)
-4. **Final** — Locked for production
+2. **Recording Enriched** — Browser interaction recording has been used as context
+3. **Refined** — AI and human edits have polished the sketch
+4. **Final** — Ready for review or export
 
 ## Versioning
 
@@ -88,7 +89,7 @@ you can:
 - See dirty/unsaved state indicators
 
 <Aside type="tip">
-  Versioning uses **gitoxide (gix)** — a pure-Rust git implementation. Your 
+  Versioning uses **gitoxide (gix)** — a pure-Rust git implementation. Your
   project folder becomes a lightweight git repository for document history,
   completely separate from your source code git repo.
 </Aside>
@@ -105,7 +106,7 @@ switch to the tab directly.
 ## Keyboard Shortcuts
 
 | Shortcut | Action |
-|----------|--------|
+| --- | --- |
 | `Ctrl+S` | Save version (opens label prompt) |
 | `Tab` / `Shift+Tab` | Navigate between cells |
 | Drag handle | Reorder rows |

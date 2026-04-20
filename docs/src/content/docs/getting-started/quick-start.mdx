@@ -8,7 +8,9 @@ sidebar:
 import { Steps, Aside } from '@astrojs/starlight/components';
 import Screenshot from '../../../components/Screenshot.astro';
 
-This guide walks you through creating your first CutReady project.
+This guide walks you through creating your first CutReady workspace and getting
+to a useful demo plan. The fastest path is: create a workspace, add a sketch,
+organize it in a storyboard, refine with AI, then save a named snapshot.
 
 ## Create a Project
 
@@ -18,9 +20,9 @@ This guide walks you through creating your first CutReady project.
 
 1. **Launch CutReady** — You'll land on the Home screen shown above.
 
-2. **Click "New Project"** — Choose a folder on your filesystem. CutReady creates
-   a project structure inside it with directories for sketches, storyboards,
-   notes, and recordings.
+2. **Click "New Workspace"** — Choose a folder on your filesystem. CutReady
+   initializes it as a portable workspace with a `project.json` manifest and
+   git-backed version history.
 
 3. **Name your project** — Give it a descriptive name like "Product Demo Q1".
 
@@ -33,14 +35,14 @@ structured table with your demo script.
 
 <Steps>
 
-1. **Click the Documents icon** in the sidebar to switch to Documents view.
+1. **Click the Project icon** in the sidebar to switch to the project document list.
 
 2. **Click "New Sketch"** in the storyboard list panel.
 
 3. **Fill in the planning table** — Each row has four columns:
 
    | Column | Purpose |
-   |--------|---------|
+   | --- | --- |
    | **Time** | Approximate timing for this step |
    | **Narrative** | What you'll say during this step |
    | **Demo Actions** | What happens on screen |
@@ -49,40 +51,57 @@ structured table with your demo script.
 4. **Add screenshots** — Click the capture button (📸) in any screenshot cell to
    take a reference screenshot directly from your screen.
 
-5. **Save a version** — Press `Ctrl+S` to create a snapshot. CutReady uses
-   git-based versioning, so you can always go back.
+5. **Save a version** — Press `Ctrl+S` to open the snapshot naming prompt.
+   CutReady uses git-based versioning, so you can always go back.
 
 </Steps>
 
-## Record a Demo
+## Build a Storyboard
 
 <Steps>
 
-1. **Switch to Record view** — Click the Record icon (🔴) in the sidebar.
+1. **Create a storyboard** — Use the **+** menu in the project document list and
+   choose **Storyboard**.
 
-2. **Select a browser profile** — CutReady auto-detects Chrome and Edge profiles.
-   Pick the one with your demo environment already set up.
+2. **Add sketches** — Add the sketch you just created, or create new sketches
+   directly from the storyboard editor.
 
-3. **Start recording** — CutReady launches the browser and captures every click,
-   keystroke, navigation, and scroll.
+3. **Organize the flow** — Drag sketches into order, add sections, and collapse
+   cards when you want to scan the structure.
 
-4. **Perform your demo** — Walk through the steps from your sketch.
-
-5. **Stop recording** — Click the stop button. Your captured actions appear as
-   cards in the recording panel.
+4. **Preview** — Use the storyboard preview to review the full sequence.
 
 </Steps>
 
 <Aside type="tip">
-  Use **step-by-step mode** to pause between sketch rows — great for complex demos
-  where you want to verify each step before moving on.
+  Browser interaction recording is in progress. The current production-ready
+  path is planning, AI refinement, snapshots, collaboration, and Word export;
+  automated replay, FFmpeg video capture, and FCPXML export are still planned.
 </Aside>
+
+## Refine with AI
+
+<Steps>
+
+1. **Configure a model** — Open **Settings → AI Provider**, choose a provider,
+   fetch models if supported, and select a chat-capable model.
+
+2. **Open Chat** — Use the chat panel to ask the Planner, Writer, Editor, or
+   Designer agent for help.
+
+3. **Use context** — Mention sketches, notes, storyboards, or URLs with `#`
+   references so the assistant knows what to read.
+
+4. **Review changes** — AI edits are highlighted in the sketch editor and logged
+   in the Activity panel.
+
+</Steps>
 
 ## Add Notes
 
 <Steps>
 
-1. **Switch to Sketch view** — Click the Sketch icon (✏️) in the sidebar.
+1. **Switch to Notes** — Click the Notes icon in the sidebar.
 
 2. **Click the + button** in the storyboard list panel.
 
@@ -117,8 +136,9 @@ narrative drafts before breaking them into planning table rows.
 ## What's Next?
 
 - **[Sketch Editor](/features/sketch-editor/)** — Deep dive into planning features
-- **[Browser Recording](/features/browser-recording/)** — Learn about recording modes
-- **[Version History](/features/version-history/)** — Understand the snapshot system
+- **[Storyboards](/features/storyboard-management/)** — Sequence sketches into a complete flow
+- **[Version History](/collaboration/version-history/)** — Understand the snapshot system
 - **[AI Assistant](/features/ai-assistant/)** — Chat with AI agents to refine your demos
+- **[Browser Recording](/features/browser-recording/)** — Capture browser interactions
 - **[Document Import](/features/document-import/)** — Import Word, PDF, and PowerPoint files
 - **[Notes & Markdown](/features/notes-markdown/)** — Markdown editor for project notes

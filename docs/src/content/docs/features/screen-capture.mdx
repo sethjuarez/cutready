@@ -33,11 +33,12 @@ or when you need to capture from a specific display.
 
 ## Region Selection
 
-The region selector uses a dedicated **capture window** — a transparent, 
+The region selector uses a dedicated **capture window** — a transparent,
 borderless overlay that covers the selected monitor. Draw a rectangle to
 select exactly the area you want to capture.
 
 Features:
+
 - Crosshair cursor for precise selection
 - Coordinates overlay showing the selected region
 - Escape to cancel the capture
@@ -47,16 +48,18 @@ Features:
 
 Click any screenshot thumbnail in the planning table to open a **lightbox**
 view — a full-size overlay with:
+
 - Zoomed view of the captured image
 - Click outside or press Escape to close
 
 ## Storage
 
-Screenshots are stored as part of the sketch document within the project
-folder. They are version-controlled alongside the sketch content, so
-previous versions of screenshots are always recoverable.
+Screenshots are stored as image files under `.cutready/screenshots/` in the
+project folder and referenced from sketch rows by relative path. They are
+version-controlled alongside the sketch content, so previous versions of
+screenshots are always recoverable.
 
 <Aside type="tip">
-  Screen capture works on all platforms (Windows, macOS, Linux) using the 
+  Screen capture works on all platforms (Windows, macOS, Linux) using the
   `xcap` Rust crate. On Linux, PipeWire is used for screen access.
 </Aside>

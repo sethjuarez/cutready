@@ -24,13 +24,13 @@ optional — solo users who don't need it see zero additional UI.
 ### Authentication Methods
 
 | Method | Description |
-|--------|------------|
+| --- | --- |
 | **GitHub CLI (gh)** | Recommended. Uses your existing `gh auth` credentials |
 | **Personal Access Token** | Enter a GitHub PAT with repo scope |
 | **SSH Key** | Uses your system SSH keys via `gix` |
 
 <Aside type="tip">
-  The GitHub CLI method is the easiest — if you have `gh` installed and 
+  The GitHub CLI method is the easiest — if you have `gh` installed and
   authenticated, CutReady picks up your credentials automatically.
 </Aside>
 
@@ -46,7 +46,7 @@ showing your connection status and sync state:
 ### Sync Actions
 
 | Button | When it appears | What it does |
-|--------|----------------|-------------|
+| --- | --- | --- |
 | **Sync** | Unpublished + incoming | Pushes local, then pulls remote |
 | **Push** | Only unpublished | Sends local snapshots to remote |
 | **Pull** | Only incoming | Fetches remote snapshots |
@@ -105,7 +105,7 @@ offline:
 CutReady uses **progressive disclosure** for remote features:
 
 | User Type | What They See |
-|-----------|--------------|
+| --- | --- |
 | **Solo** (no remote) | Just the Snapshots panel — Save, Discard, Navigate |
 | **Timelines** (no remote) | Timeline selector + graph, no sync UI |
 | **Collaborator** (remote configured) | Full Sync Bar + publishing + timeline sync |

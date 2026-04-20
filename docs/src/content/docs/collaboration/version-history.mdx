@@ -23,11 +23,12 @@ storyboards, and notes. Think of it as a checkpoint you can always return to.
 
 ### Saving a Snapshot
 
-- Press **Ctrl+S** for a quick save with an auto-generated name
-- Press **Ctrl+Shift+S** to save with a custom label
+- Press **Ctrl+S** to open the snapshot naming prompt
+- Press **Ctrl+Shift+S** to open the same prompt from the command palette shortcut
 - Click the **Save** button in the Snapshots panel header
 
-Each save records the exact state of every file in your project.
+The prompt starts with an auto-generated name, but you can edit it before
+saving. Each save records the exact state of every project document and asset.
 
 ### Navigating History
 
@@ -49,6 +50,20 @@ Click any snapshot in the graph, then:
   Restoring doesn't destroy history. The restore itself becomes a new snapshot,
   so you can always go back to any previous state.
 </Aside>
+
+### Squashing Local Snapshots
+
+Use **Squash recent snapshots** when you have several local checkpoint saves
+that should become one cleaner snapshot before sharing.
+
+1. Click the squash button in the Snapshots panel header.
+2. Select a contiguous range ending at the current HEAD snapshot.
+3. Enter the replacement snapshot name.
+4. Confirm the squash.
+
+Squashing rewrites only the selected local snapshots and leaves unsaved
+workspace changes untouched. Do this before publishing or syncing those
+snapshots to a remote.
 
 ## Timelines (Branching)
 
@@ -72,6 +87,7 @@ timeline. Click it to see all available timelines and switch between them.
 <Screenshot src="/images/timeline-selector.png" darkSrc="/images/timeline-selector-dark.png" alt="Timeline selector dropdown" caption="Switch between timelines, merge, promote, or delete from the dropdown" />
 
 Each timeline in the dropdown shows:
+
 - **Timeline name** and snapshot count
 - **Merge** — Combine this timeline into the active one
 - **Promote** — Make this timeline the new Main
@@ -103,8 +119,10 @@ See [History Graph](/collaboration/history-graph/) for details.
 
 ## Technical Details
 
-- Snapshots are git commits stored in a `.snapshots/` directory within the project
-- Each snapshot captures the full project tree (sketches, storyboards, notes)
+- Snapshots are git commits in the workspace's `.git/` repository
+- Each snapshot captures the project tree, including sketches, storyboards,
+  notes, screenshots, and visuals
 - The graph is computed from the commit DAG using **gix** (gitoxide, pure-Rust git)
 - No external git installation required — everything is built into the app
-- Editor state (scroll position, cursor, open tabs) is preserved separately
+- Editor state, open tabs, chat session selection, and sidebar order are stored
+  separately under `.git/cutready/` so they do not create document snapshots

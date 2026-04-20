@@ -43,7 +43,7 @@ its API calls accordingly.
    In the [AI Foundry portal](https://ai.azure.com), navigate to your project.
    Copy the endpoint URL — it looks like:
 
-   ```
+   ```text
    https://your-hub.services.ai.azure.com/api/projects/your-project
    ```
 
@@ -85,9 +85,10 @@ its API calls accordingly.
 
 6. **Select a model**
 
-   Click **Refresh** next to the model dropdown. CutReady will query your Foundry
-   project for available deployments. Select the model you want to use
-   (e.g., `gpt-4o`).
+   Click **Refresh** next to the model dropdown. CutReady queries your Foundry
+   project for available deployments and shows capability tags when the provider
+   returns them, such as context window, vision support, and Responses API
+   support. Select the model you want to use (e.g., `gpt-4o`).
 
 </Steps>
 
@@ -103,8 +104,9 @@ CutReady automatically detects Foundry endpoints by checking if the URL contains
 `.services.ai.azure.com`. When detected, it:
 
 - Uses the Foundry-compatible chat completions path
-- Queries the Foundry deployments API for available models
+- Queries the Foundry deployments API for available models and capability metadata
 - Filters to chat-capable models when populating the model dropdown
+- Stores context length and vision support for the selected model when available
 
 No special configuration is needed — just paste the Foundry endpoint and CutReady
 handles the rest.
@@ -163,6 +165,29 @@ For Anthropic Claude models:
   is how the AI assistant interacts with your project — reading sketches,
   updating notes, modifying planning rows, etc.
 </Aside>
+
+## Model Capability Tags
+
+After you fetch models, each result may show tags like:
+
+| Tag | Meaning |
+| --- | --- |
+| `128k ctx` | Reported context window for conversation and compaction planning |
+| `vision` | The model can receive image inputs from notes or sketch screenshots |
+| `responses` | CutReady can route the model through the Responses API |
+
+Capability metadata is provider-dependent. If a provider does not report a
+field, CutReady leaves it unknown rather than guessing.
+
+## Internet Search
+
+The **Internet Search** setting controls whether agents receive the `search_web`
+tool. Leave it disabled when the assistant should only use your project files,
+notes, screenshots, and explicitly provided URLs. Enable it when you want agents
+to look up current public information on request.
+
+Project content is not included in search queries unless you explicitly ask the
+assistant to search for that content.
 
 ## Encrypted Credential Storage
 

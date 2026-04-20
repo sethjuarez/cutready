@@ -11,7 +11,7 @@ import Screenshot from '../../../components/Screenshot.astro';
 Every demo in CutReady lives inside a **project**, which is part of a
 **workspace**. A workspace is a git repository directory that can contain one
 or more projects. Each project holds sketches, storyboards, notes, screenshots,
-and version history.
+and visuals; the workspace's `.git/` directory holds version history.
 
 <Screenshot src="/images/file-tree-view.png" darkSrc="/images/file-tree-view-dark.png" alt="Project file tree" caption="The Explorer shows all project files — sketches (.sk), storyboards (.sb), and notes (.md)" />
 
@@ -101,13 +101,15 @@ This is seamless — your existing files and version history are preserved.
 ```text
 my-workspace/
 ├── project.json              ← Project manifest (name, metadata)
-├── .cutready-order.json      ← Explorer ordering for documents
+├── .cutready/
+│   ├── screenshots/          ← Captured and pasted images
+│   ├── visuals/              ← Elucim DSL visual files
+│   └── settings.json         ← Workspace settings overrides
 ├── .git/                     ← Version history (managed by gix)
+│   └── cutready/             ← Local UI state such as ordering and open tabs
 ├── intro.sk                  ← Sketch file
 ├── demo-flow.sb              ← Storyboard file
-├── research-notes.md         ← Markdown note
-├── screenshot-001.png        ← Captured screenshot
-└── screenshot-002.png
+└── research-notes.md         ← Markdown note
 ```
 
 ### Multi-Project
@@ -119,12 +121,16 @@ my-workspace/
 ├── .git/                     ← Shared version history
 ├── project-alpha/
 │   ├── project.json
-│   ├── .cutready-order.json
+│   ├── .cutready/
+│   │   ├── screenshots/
+│   │   └── visuals/
 │   ├── intro.sk
 │   └── demo-flow.sb
 └── project-beta/
     ├── project.json
-    ├── .cutready-order.json
+    ├── .cutready/
+    │   ├── screenshots/
+    │   └── visuals/
     ├── overview.sk
     └── notes.md
 ```
@@ -136,7 +142,8 @@ my-workspace/
 | `.sk` | Sketch | Structured planning table with narrative, actions, and screenshots |
 | `.sb` | Storyboard | Ordered sequence of sketch references |
 | `.md` | Note | Free-form markdown document |
-| `.png` / `.jpg` | Screenshot | Reference images captured from screen |
+| `.png` / `.jpg` | Screenshot | Reference images under `.cutready/screenshots/` |
+| `.json` | Visual | Elucim DSL visuals under `.cutready/visuals/` |
 
 ## Project Manifest (`project.json`)
 
@@ -144,11 +151,13 @@ The `project.json` file at the root of every project stores the project name
 and metadata. CutReady reads this file to identify a directory as a valid
 project.
 
-## Explorer Ordering (`.cutready-order.json`)
+## Explorer Ordering (`.git/cutready/order.json`)
 
-The `.cutready-order.json` file persists the order of documents in the Explorer.
-When you drag-and-drop documents to rearrange them, CutReady writes the new
-order to this file so it's preserved across sessions.
+The `.git/cutready/order.json` file persists the order of documents in the
+Explorer. When you drag-and-drop documents to rearrange them, CutReady writes
+the new order to this local UI-state file so it is preserved across sessions
+without adding noise to snapshots. Older workspaces may still contain
+`.cutready-order.json`; CutReady migrates it automatically.
 
 ## Version History (`.git/`)
 
@@ -163,6 +172,6 @@ source code repositories — it's used solely for document version tracking.
 
 ## Screenshots
 
-Captured screenshots are stored directly in the project directory alongside
-your documents. When you use the screen capture feature from a sketch row, the
-image file is saved to the project folder and referenced by the sketch.
+Captured and pasted screenshots are stored in `.cutready/screenshots/` inside
+the project. When you use screen capture from a sketch row, the image file is
+saved there and referenced by relative path from the sketch.

@@ -37,8 +37,8 @@ Ask the AI to generate a complete demo plan:
 > _"Create a planning table for a 3-minute demo of our dashboard's analytics
 > features. Focus on the chart builder and export tools."_
 
-The AI uses the `set_planning_rows` tool to populate the planning table with
-time estimates, narrative text, and demo action descriptions. Review the
+The AI uses the `write_sketch` tool to populate the planning table with time
+estimates, narrative text, and demo action descriptions. Review the
 generated rows and iterate:
 
 > _"Make the intro shorter and add a step showing the filter panel."_
@@ -100,6 +100,7 @@ Select the agent that matches your current task:
 | **Planner** | Starting from scratch, building structure, organizing flow |
 | **Writer** | Polishing narrative text, making scripts engaging and natural |
 | **Editor** | Fixing specific cells, making precise surgical changes |
+| **Designer** | Creating row visuals with an English design plan and Elucim DSL |
 
 Switch agents mid-conversation using the agent selector. Each agent maintains
 the conversation context, so you don't lose history when switching.

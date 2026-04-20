@@ -9,11 +9,11 @@ import { Aside, Badge } from '@astrojs/starlight/components';
 import Screenshot from '../../components/Screenshot.astro';
 
 <Aside type="caution" title="Early Access">
-  CutReady is in active development. Multi-project workspaces, sketch planning,
-  storyboards, AI assistant with vision and change highlighting, version history with
-  timelines and merging, remote sync via GitHub, encrypted secret storage, Word export,
-  and a full collaboration workflow are all functional. Video production and export are
-  coming soon.
+  CutReady is in active development. Sketch planning, storyboards, AI assistance
+  with vision and change highlighting, version history, timelines, merging,
+  remote sync via GitHub, encrypted secret storage, and Word export are
+  functional. Browser interaction recording, automated replay, FFmpeg video
+  capture, and video-editor export are coming later.
 </Aside>
 
 <Screenshot src="/images/app-home.png" darkSrc="/images/app-home-dark.png" alt="CutReady home screen" caption="CutReady home screen — create or open a workspace to get started" />
@@ -21,13 +21,14 @@ import Screenshot from '../../components/Screenshot.astro';
 ## What is CutReady?
 
 **CutReady** is a desktop application for producing demo videos. It provides a
-structured workflow that takes you from initial planning sketches through AI-assisted
-editing and automated browser recording to polished video output — all in a single
-tool.
+structured workflow for planning demos as sketches, refining them with AI,
+capturing browser interactions when useful, and collaborating through
+git-backed snapshots.
 
-The core idea: instead of screen-recording a live demo (and hoping nothing goes
-wrong), you **plan** the demo as a storyboard, **record** the interactions once,
-then **replay** them perfectly every time for flawless video capture.
+The core idea: instead of treating a live screen recording as the source of
+truth, you **plan** the demo as sketches and storyboards first. CutReady then
+helps you record browser interactions, refine the material, and preserve each
+iteration as a named snapshot.
 
 ## Who is it for?
 
@@ -41,13 +42,13 @@ then **replay** them perfectly every time for flawless video capture.
 CutReady follows a phased approach:
 
 | Phase | Name | Status |
-|-------|------|--------|
+| --- | --- | --- |
 | 0 | **Sketch** — Plan your demo with structured tables | <Badge text="Available" variant="success" /> |
-| 1 | **Record** — Capture browser interactions | <Badge text="Experimental" variant="caution" /> |
-| 2 | **Refine** — AI cleans up and enhances | <Badge text="In Progress" variant="note" /> |
-| 3 | **Review** — Edit the captured script | <Badge text="In Progress" variant="note" /> |
-| 4 | **Produce** — Replay and record video | <Badge text="Planned" variant="caution" /> |
-| 5 | **Export** — Package for video editors | <Badge text="Planned" variant="caution" /> |
+| 1 | **Organize** — Sequence sketches into storyboards | <Badge text="Available" variant="success" /> |
+| 2 | **Refine** — Use AI chat, sparkle buttons, visuals, and imported notes | <Badge text="Available" variant="success" /> |
+| 3 | **Version** — Save snapshots, branch timelines, merge, and sync | <Badge text="Available" variant="success" /> |
+| 4 | **Record interactions** — Capture browser actions for review | <Badge text="In Development" variant="note" /> |
+| 5 | **Produce video** — Replay, FFmpeg capture, and FCPXML export | <Badge text="Planned" variant="caution" /> |
 
 ## Technology Stack
 

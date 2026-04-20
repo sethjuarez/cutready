@@ -20,16 +20,20 @@ workspaces have each project in its own subdirectory:
 ```text
 my-workspace/
 ├── project.json
-├── .cutready-order.json
+├── .cutready/
+│   ├── screenshots/
+│   ├── visuals/
+│   └── settings.json
 ├── .git/
+│   └── cutready/
+│       ├── order.json
+│       └── workspace.json
 ├── intro.sk
 ├── features/
 │   ├── dashboard.sk
 │   └── analytics.sk
 ├── demo-flow.sb
-├── research.md
-├── screenshot-001.png
-└── screenshot-002.png
+└── research.md
 ```
 
 ### Multi-Project
@@ -41,12 +45,16 @@ my-workspace/
 ├── .git/
 ├── project-alpha/
 │   ├── project.json
-│   ├── .cutready-order.json
+│   ├── .cutready/
+│   │   ├── screenshots/
+│   │   └── visuals/
 │   ├── intro.sk
 │   └── demo-flow.sb
 └── project-beta/
     ├── project.json
-    ├── .cutready-order.json
+    ├── .cutready/
+    │   ├── screenshots/
+    │   └── visuals/
     ├── overview.sk
     └── notes.md
 ```
@@ -60,28 +68,65 @@ Sketch files are JSON documents containing a structured planning table:
 
 ```json
 {
-  "id": "uuid-string",
   "title": "Dashboard Tour",
-  "description": "Walk through the main dashboard features",
-  "planningRows": [
+  "locked": false,
+  "description": {
+    "root": {
+      "children": [
+        {
+          "children": [
+            {
+              "detail": 0,
+              "format": 0,
+              "mode": "normal",
+              "style": "",
+              "text": "Walk through the main dashboard features",
+              "type": "text",
+              "version": 1
+            }
+          ],
+          "direction": null,
+          "format": "",
+          "indent": 0,
+          "type": "paragraph",
+          "version": 1
+        }
+      ],
+      "direction": null,
+      "format": "",
+      "indent": 0,
+      "type": "root",
+      "version": 1
+    }
+  },
+  "rows": [
     {
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
       "time": "0:00",
       "narrative": "Welcome to the dashboard overview",
-      "actions": "Navigate to /dashboard",
-      "screenshot": "screenshot-001.png"
+      "demo_actions": "Navigate to /dashboard",
+      "screenshot": ".cutready/screenshots/screenshot-001.png",
+      "visual": ".cutready/visuals/a1b2c3d4e5f6.json",
+      "design_plan": "Frame the dashboard metrics as three cards."
     },
     {
       "time": "0:30",
       "narrative": "Notice the real-time metrics panel",
-      "actions": "Hover over the metrics widget",
-      "screenshot": "screenshot-002.png"
+      "demo_actions": "Hover over the metrics widget",
+      "screenshot": ".cutready/screenshots/screenshot-002.png"
     }
   ],
-  "lifecycle": "draft",
-  "metadata": {
-    "createdAt": "2025-01-15T10:30:00Z",
-    "updatedAt": "2025-01-15T14:22:00Z"
-  }
+  "state": "draft",
+  "created_at": "2025-01-15T10:30:00Z",
+  "updated_at": "2025-01-15T14:22:00Z"
 }
 ```
 
@@ -89,12 +134,12 @@ Sketch files are JSON documents containing a structured planning table:
 
 | Field | Type | Description |
 | --- | --- | --- |
-| `id` | string | Unique identifier (UUID) |
 | `title` | string | Display name of the sketch |
-| `description` | string | Summary of what the sketch covers |
-| `planningRows` | array | Ordered list of planning row objects |
-| `lifecycle` | string | One of: `draft`, `recording-enriched`, `refined`, `final` |
-| `metadata` | object | Timestamps and other tracking data |
+| `locked` | boolean | Protects the whole sketch from edits when true |
+| `description` | object/null | Lexical rich-text editor state, or `null` when empty |
+| `rows` | array | Ordered list of planning row objects |
+| `state` | string | One of: `draft`, `recording_enriched`, `refined`, `final` |
+| `created_at` / `updated_at` | string | ISO timestamps |
 
 ### Planning Row Fields
 
@@ -102,8 +147,12 @@ Sketch files are JSON documents containing a structured planning table:
 | --- | --- | --- |
 | `time` | string | Target timing (e.g., `"0:30"`, `"1:15"`) |
 | `narrative` | string | Voiceover script text |
-| `actions` | string | Demo action descriptions |
-| `screenshot` | string | Filename of the reference screenshot (relative path) |
+| `demo_actions` | string | Demo action descriptions |
+| `screenshot` | string/null | Reference screenshot path relative to the project |
+| `locked` | boolean | Protects the whole row from edits |
+| `locks` | object | Per-cell locks for `time`, `narrative`, `demo_actions`, `screenshot`, `visual`, and `design_plan` |
+| `visual` | string/null | External Elucim DSL file in `.cutready/visuals/` |
+| `design_plan` | string/null | Plain-English visual brief saved by the Designer agent |
 
 ## Storyboard Files (`.sb`)
 
@@ -111,24 +160,30 @@ Storyboard files define an ordered sequence of sketch references:
 
 ```json
 {
-  "id": "uuid-string",
   "title": "Product Launch Demo",
   "description": "Complete demo flow for the product launch event",
+  "locked": false,
   "items": [
     { "type": "sketch_ref", "path": "intro.sk" },
-    { "type": "sketch_ref", "path": "features/dashboard.sk" },
-    { "type": "sketch_ref", "path": "features/analytics.sk" },
+    {
+      "type": "section",
+      "title": "Core workflow",
+      "sketches": [
+        "features/dashboard.sk",
+        "features/analytics.sk"
+      ]
+    },
     { "type": "sketch_ref", "path": "closing.sk" }
   ],
-  "metadata": {
-    "createdAt": "2025-01-15T10:30:00Z",
-    "updatedAt": "2025-01-15T16:00:00Z"
-  }
+  "created_at": "2025-01-15T10:30:00Z",
+  "updated_at": "2025-01-15T16:00:00Z"
 }
 ```
 
 Storyboards **reference** sketches by relative file path. Sketches can exist
-independently or be referenced by multiple storyboards.
+independently or be referenced by multiple storyboards. Storyboard items are
+either direct `sketch_ref` entries or named `section` groups containing sketch
+paths.
 
 ## Notes (`.md`)
 
@@ -136,24 +191,24 @@ Notes are **plain markdown files** with no special structure. They're stored
 alongside sketches and storyboards and can be edited with CutReady's built-in
 CodeMirror-based markdown editor.
 
-## Sidebar Ordering (`.cutready-order.json`)
+## Sidebar Ordering (`.git/cutready/order.json`)
 
-This file persists the user's preferred document order in the Explorer:
+This file persists the user's preferred document order in the Explorer. It lives
+under `.git/cutready/` so it is local UI state rather than versioned project
+content:
 
 ```json
 {
-  "order": [
-    "intro.sk",
-    "demo-flow.sb",
-    "features/dashboard.sk",
-    "features/analytics.sk",
-    "research.md"
-  ]
+  "storyboards": ["demo-flow.sb"],
+  "sketches": ["intro.sk", "features/dashboard.sk", "features/analytics.sk"],
+  "notes": ["research.md"]
 }
 ```
 
 When a user drag-and-drops documents in the Explorer, the new order is written
-to this file. Documents not listed in the order file appear at the end.
+to this file. Documents not listed in the order file appear at the end. Older
+workspaces may still have `.cutready-order.json`; CutReady migrates it to the
+new location when read.
 
 ## Version History (`.git/`)
 
@@ -206,6 +261,17 @@ projects within the workspace:
 
 This file is created automatically when a workspace is migrated from
 single-project to multi-project mode.
+
+## Assets (`.cutready/screenshots/` and `.cutready/visuals/`)
+
+Screenshots are stored as image files under `.cutready/screenshots/` and are
+referenced from sketch rows or markdown notes by relative path. Designer visuals
+are stored as Elucim DSL JSON under `.cutready/visuals/` and referenced by
+`PlanningRow.visual`.
+
+CutReady scans these folders to show referenced and orphaned assets in the
+Assets view. Legacy inline visual JSON in `.sk` files is migrated to an external
+visual file when the sketch is read with migration enabled.
 
 ## Encrypted Vault (`vault.hold`)
 

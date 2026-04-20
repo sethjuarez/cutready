@@ -22,7 +22,7 @@ a cohesive presentation.
 Think of it like a movie:
 
 | | **Sketch** | **Storyboard** |
-|---|---|---|
+| --- | --- | --- |
 | **What it is** | A single scene | A sequence of scenes |
 | **Contains** | Title + planning table (time, narrative, actions, screenshots) | Title + ordered list of sketch references |
 | **File** | `.sk` | `.sb` |
@@ -36,7 +36,7 @@ A sketch is the **building block**. A storyboard is the **assembly**.
 A storyboard contains an ordered list of **sketch references** — pointers to
 `.sk` files in your project.
 
-```
+```text
 Product Launch Demo (storyboard)
 ├── intro.sk
 ├── install-setup.sk
@@ -55,6 +55,18 @@ Deleting a sketch that's referenced by a storyboard will show a warning.
 2. Select **Storyboard**
 3. Give it a title (e.g., "Q1 Product Demo")
 4. The storyboard editor opens with an empty canvas
+
+## Description and Locking
+
+Storyboards include a title, Markdown-friendly description, and optional
+whole-storyboard lock:
+
+- **Description** — Use it for audience, setup, scope, or review notes for the
+  full flow.
+- **Lock** — Protects the storyboard from accidental manual or AI edits while
+  still allowing you to browse and export it.
+- **Sparkle** — The storyboard description can be improved with the same silent
+  AI workflow used by sketches and notes.
 
 ## Adding Sketches
 
@@ -79,28 +91,36 @@ Click **Preview** to launch a fullscreen presentation built from the storyboard:
 3. Navigate through the presentation to review the full demo flow
 
 <Aside type="tip">
-  Storyboards reference sketches by file path. You can reorganize your sketches 
+  Storyboards reference sketches by file path. You can reorganize your sketches
   freely — just keep them in the project folder so the references stay valid.
 </Aside>
+
+## Export to Word
+
+Storyboards can be exported to `.docx` for review outside CutReady. The export
+includes storyboard metadata, referenced sketch content, screenshots, and
+rendered visuals where available. Use this when you need a shareable script or
+stakeholder review document before producing video.
 
 ## The Sidebar
 
 The **Storyboard List** sidebar shows all project documents together:
 
-| Document Type | Icon | Description |
-|---|---|---|
-| **Sketch** | ✏️ | Individual planning scenes |
-| **Storyboard** | 📋 | Sequences of sketches |
-| **Note** | 📝 | Free-form markdown documents |
+| Document Type | Description |
+| --- | --- |
+| **Sketch** | Individual planning scenes |
+| **Storyboard** | Sequences of sketches |
+| **Note** | Free-form markdown documents |
 
 Sidebar features:
+
 - **Drag and drop** to reorder the list
 - **Search** to filter by name
 - **File tree view** as an alternate navigation mode
 - **Context menu** (right-click) for rename, delete, and other actions
 - **Move to / Copy to** — right-click any file to move or copy it to another project in the same workspace; referenced screenshots and visuals are transferred automatically. If a file with the same name already exists in the destination, a rename dialog appears.
 - **Open in Terminal** — right-click any file to open a terminal in the project directory
-- Order is persisted in a `.manifest` file
+- Order is persisted in `.git/cutready/order.json` with legacy fallback from `.cutready-order.json`
 
 ## Tabbed Editing
 

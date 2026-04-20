@@ -36,22 +36,26 @@ tree view, tabbed editors, resizable panels, and a command palette.
 
 The sidebar has navigation icons at the top and a gear icon pinned to the bottom:
 
-| Icon | View | Description |
-|------|------|-------------|
-| 🏠 | Home | Workspace selection and creation |
-| 🖥️ | Workspace Settings | Workspace-level configuration |
-| ✏️ | Sketch | Edit sketches and planning tables |
-| 🔴 | Record | Browser profile selection and recording |
-| 📄 | Script | Edit recorded scripts (coming soon) |
-| 💬 | Chat | AI chat panel (right sidebar) |
-| ⚙️ | Global Settings | Global preferences (pinned to bottom) |
+| View | Description |
+| --- | --- |
+| Home | Workspace selection and creation |
+| Project | Combined document list for sketches, storyboards, and notes |
+| Storyboards | Storyboard-focused document list |
+| Sketches | Sketch-focused document list |
+| Notes | Notes-focused document list |
+| Assets | Screenshots and visuals, including orphan detection |
+| Explorer | Tree view of project files |
+| Workspace | Workspace-level settings |
+| Feedback | Feedback popover, pinned above Settings |
+| Settings | Global preferences, pinned to the bottom |
 
 The **Explorer tree view** shows all files in the current project — sketches
 (`.sk`), storyboards (`.sb`), and notes (`.md`). The Explorer header includes
 a unified **Import** button for importing files into the project.
 
 - **Toggle visibility**: `Ctrl+B`
-- **Move sidebar**: Click the **LayoutGrid** button (leftmost panel toggle in the title bar) to flip the sidebar between left and right
+- **Move sidebar**: click the **LayoutGrid** button in the title bar, or
+  right-click the sidebar and choose the move action
 - The sidebar remembers its width across sessions
 - **Escape** cancels any in-progress creation or rename action
 
@@ -69,6 +73,7 @@ all available commands. Start typing to filter.
 ## Title Bar
 
 CutReady uses a **frameless window** with a custom title bar that includes:
+
 - **Workspace / project breadcrumb** — Shows the current workspace and project path
 - Window controls (minimize, maximize, close)
 - **Feedback button** — chat-bubble icon to submit feedback with optional debug log
@@ -103,7 +108,7 @@ CutReady has a built-in feedback system accessible from the title bar:
 ## Keyboard Shortcuts
 
 | Shortcut | Action |
-|----------|--------|
+| --- | --- |
 | `Ctrl+Shift+P` | Open Command Palette |
 | `Ctrl+B` | Toggle Sidebar |
 | `` Ctrl+` `` | Toggle Output Panel |
@@ -119,7 +124,7 @@ The **Chat Panel** is a right-side panel for interacting with the AI assistant:
   Sketch Improver) or custom agents
 - **Activity tab** — View color-coded logs of AI operations (sparkle button
   calls, agent responses, errors)
-- **Toggle** — Click the 💬 icon in the sidebar or press `Ctrl+Shift+I`
+- **Toggle** — Use the command palette or `Ctrl+Shift+I`
 
 The chat panel is independent of the main content area — you can keep it open
 while editing sketches, reviewing storyboards, or working on notes.

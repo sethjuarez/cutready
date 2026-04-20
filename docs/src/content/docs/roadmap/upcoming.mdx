@@ -8,7 +8,7 @@ sidebar:
 import { Aside, Badge } from '@astrojs/starlight/components';
 
 <Aside type="caution" title="Preview">
-  This roadmap reflects current development plans and may change. Features 
+  This roadmap reflects current development plans and may change. Features
   listed here are not yet available unless marked otherwise.
 </Aside>
 
@@ -62,31 +62,36 @@ multi-project workspaces, encrypted secret storage, and collaboration features:
 
 ## Upcoming: Browser Recording <Badge text="In Development" variant="note" />
 
-**Goal:** Capture real browser interactions to turn sketches into recorded demos.
+**Goal:** Capture browser interaction sessions and turn them into clean,
+editable scripts.
 
 Planned capabilities:
-- Playwright-based recording of Chrome and Edge with existing user profiles
-- Free-form and step-by-step (sketch-guided) recording modes
-- Real-time action stream with colour-coded cards and timestamps
-- Re-record individual steps without restarting
+
+- Launch Chrome, Edge, or fresh Chromium for recording
+- Capture clicks, typing, navigation, and scrolling as action cards
+- Review multiple takes without relaunching the browser
+- Align recorded actions back to sketch rows
+- Remove redundant or accidental actions
+- Stabilize selectors for future replay
+- Generate narration and timing suggestions from the trace
 
 ## Upcoming: AI Refinement <Badge text="Planned" variant="caution" />
 
-**Goal:** Automatically transform raw recordings into clean, reproducible scripts.
+**Goal:** Automatically transform rough scripts into clean, reproducible demo plans.
 
 Planned capabilities:
 
-- Redundant action removal (accidental clicks, navigation corrections)
-- CSS selector stabilization for replay reliability
-- Narration generation from demo flow
+- Accept/reject AI refinements per step
+- Selector review and repair suggestions
 - Timing optimization and animation suggestions
-- Sketch-to-recording alignment
+- Script/storyboard consistency checks
 
 ## Upcoming: Script Editor <Badge text="Planned" variant="caution" />
 
 **Goal:** Full editing interface for recorded/refined scripts.
 
 Planned capabilities:
+
 - Row-by-row script editing with accept/reject per step
 - Re-record individual steps without restarting the full recording
 - Selector modification and timing adjustment
@@ -98,6 +103,7 @@ Planned capabilities:
 **Goal:** Automated replay and lossless video capture.
 
 Planned capabilities:
+
 - Controlled browser replay of the finalized action sequence
 - FFmpeg integration for lossless recording (FFV1 in MKV)
 - Separate audio tracks (system audio, narration)
@@ -109,6 +115,7 @@ Planned capabilities:
 **Goal:** Professional video editor integration.
 
 Planned capabilities:
+
 - FCPXML 1.9 timeline export (DaVinci Resolve compatible)
 - Organized output folders with media, metadata, and project files
 - Multi-track assembly (video, narration, system audio)
@@ -120,6 +127,7 @@ Planned capabilities:
 **Goal:** Integrate motion graphics and educational animations.
 
 Planned capabilities:
+
 - ManimCE integration for mathematical/educational animations
 - Pre-built animation library with customizable parameters
 - Timeline merge for inserting animations into the video sequence

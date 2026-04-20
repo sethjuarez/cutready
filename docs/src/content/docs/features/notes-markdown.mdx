@@ -34,7 +34,7 @@ CutReady intelligently converts it to clean markdown:
 - **Simple content** — converted via Turndown with optional AI refinement
 - **Complex content** (tables, nested formatting, images) — uses AI-first
   conversion for better results
-- Falls back gracefully if AI is unavailable
+- Falls back to deterministic conversion if AI is unavailable or times out
 
 ## Use Cases
 
@@ -72,5 +72,6 @@ restructure, annotate, and use as reference material for your sketches.
 
 ## Storage
 
-Notes are stored as `.md` files in the project's `notes/` directory and are
-included in the project's version history.
+Notes are stored as `.md` files anywhere inside the project folder and are
+included in the project's version history. Images pasted into notes are stored
+under `.cutready/screenshots/` and referenced by relative path.

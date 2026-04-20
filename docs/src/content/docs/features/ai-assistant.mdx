@@ -49,14 +49,17 @@ it invokes backend tools:
 
 | Tool | What it does |
 | --- | --- |
-| `read_sketch` | Reads the current sketch contents (including screenshot paths) |
-| `set_planning_rows` | Replaces all planning rows in a sketch (supports screenshots) |
-| `update_planning_row` | Updates a single row by index (supports screenshots) |
-| `list_project_files` | Lists files in the project directory |
-| `list_project_images` | Discovers available screenshots in the project |
-| `read_note` | Reads a markdown note file |
-| `fetch_url_content` | Fetches content from a URL; appends a structured "Links on this page" section so the agent can follow links when instructed |
-| `save_feedback` | Saves user feedback to the app data directory |
+| `list_project_files` | Lists sketches, notes, storyboards, and optionally screenshots |
+| `read_note` / `write_note` | Reads or writes markdown notes |
+| `read_sketch` / `write_sketch` | Reads a sketch or replaces its planning rows |
+| `update_planning_row` | Updates a single row by index without rewriting the whole sketch |
+| `read_storyboard` / `write_storyboard` | Reads, creates, or updates storyboard metadata and sequence |
+| `design_plan` | Saves the Designer agent's plain-English visual brief for a row |
+| `set_row_visual` | Saves or removes an Elucim DSL visual for a row |
+| `delegate_to_agent` | Hands a focused subtask to another built-in or custom agent |
+| `fetch_url` | Fetches a URL and appends a structured links section for follow-up browsing |
+| `search_web` | Searches the public web when Internet Search is enabled |
+| `recall_memory` / `save_memory` | Reads or saves workspace memory for reusable project context |
 
 Tool calls happen automatically as part of the conversation. You'll see the
 results reflected in your editor in real-time.
@@ -83,6 +86,7 @@ references. This lets you mention specific sketches, notes, or storyboards
 inline so the AI knows exactly which document you're referring to.
 
 References appear as **color-coded chips** that match the file type:
+
 - **Sketches** — violet
 - **Notes** — rose/pink
 - **Storyboards** — emerald/green
@@ -91,12 +95,17 @@ References appear as **color-coded chips** that match the file type:
 Referenced files are shown as **footnotes** at the end of messages, making
 it easy to see what context the AI is working with.
 
-## Feedback via Chat
+## Web Context and Search
 
-You can submit app feedback directly through the chat by telling the AI
-about an issue or suggestion. The assistant uses the `save_feedback` tool
-to persist your feedback to the app data directory, where it appears in
-**Settings → Feedback** alongside feedback submitted through the title bar.
+The assistant can use public web context in two different ways:
+
+- **URL references** — Paste or reference a URL and the assistant can call
+  `fetch_url` to read that page. The result includes a "Links on this page"
+  section, so the agent can follow links when you ask it to.
+- **Internet Search** — Enable **Settings → AI Provider → Internet Search** to
+  expose the `search_web` tool for current public information. Search is
+  opt-in, and project content is not sent to a public search query unless you
+  explicitly ask for that.
 
 ## Custom Agents
 
@@ -143,12 +152,16 @@ per workspace. Vision requires a model that supports image inputs (e.g.,
 ## LLM Compaction
 
 Long conversations can exceed a model's context window. CutReady handles this
-with **smart conversation pruning** (compaction):
+with **smart conversation compaction**:
 
 - When the conversation approaches the context limit, older messages are
   summarized and condensed automatically
 - The AI retains key context and decisions from earlier in the conversation
 - Compaction is transparent — the conversation continues seamlessly
+
+CutReady uses model capability metadata when available, including the model's
+context length, so compaction can happen at the right point for the selected
+model.
 
 ## Responses API
 

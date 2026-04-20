@@ -11,27 +11,45 @@ sidebar:
 import { Aside } from '@astrojs/starlight/components';
 
 <Aside type="note" title="Coming Soon">
-  Browser recording is under active development and not yet ready for general
-  use. This page will be updated with full documentation once the feature has
-  been tested and stabilised.
+  Browser interaction recording is being wired into the product workflow. The
+  underlying recorder can capture browser actions, but the feature is not yet
+  documented as a general production workflow.
 </Aside>
 
-## What to Expect
+## What It Captures
 
-CutReady will record browser interactions by launching Chrome or Edge via
-Playwright and capturing every action you perform — clicks, typing, navigation,
-scrolling, and more. Recorded actions will appear as editable **ActionCards**
-inside your sketch timeline.
+The recorder is designed to capture actions in a browser session while you walk
+through a rough demo. The resulting actions are saved as a session for later
+review and script refinement.
 
-### Planned Capabilities
+## Workflow
+
+The planned product flow is:
+
+1. Open a workspace.
+2. Choose a detected Chrome or Edge profile, or use a fresh browser.
+3. Open the browser and navigate to your demo starting point.
+4. Start recording.
+5. Perform the walkthrough.
+6. Stop recording to save the session and review action cards.
+
+## Expected Capabilities
 
 - **Profile detection** — automatic discovery of Chrome and Edge profiles
+- **Fresh browser mode** — use Chromium without personal extensions or sessions
 - **Free-form recording** — capture a demo naturally, review afterwards
-- **Step-by-step recording** — guided by your sketch rows with pause points
-- **Action stream** — colour-coded cards with timestamps and thumbnails
-- **Session management** — start, stop, review, export
+- **Live action stream** — captured actions appear in real time
+- **Multiple takes** — record again without relaunching the browser
+- **Saved sessions** — stopped sessions are written into the project
+
+<Aside type="caution" title="Production video is separate">
+  FFmpeg screen/audio capture, deterministic replay automation, self-healing
+  selectors, and FCPXML timeline export are planned production features. Browser
+  recording today captures the interaction trace, not a finished video file.
+</Aside>
 
 <Aside type="tip" title="Want to help?">
-  If you'd like to beta-test browser recording, open an issue on GitHub and
-  we'll get you set up with the latest preview build.
+  Browser recording is easiest to validate with real demo sites and browser
+  profiles. If you find a page interaction that is not captured cleanly, open a
+  GitHub issue with the browser, page type, and action you expected to see.
 </Aside>

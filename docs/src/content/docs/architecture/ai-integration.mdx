@@ -57,20 +57,35 @@ them as needed during conversation.
 
 | Tool | Parameters | Purpose |
 | --- | --- | --- |
-| `read_sketch` | sketch path | Read the current sketch's content |
-| `set_planning_rows` | rows array | Replace all planning rows in a sketch |
+| `list_project_files` | optional image flag | List sketches, notes, storyboards, and optionally screenshots |
+| `read_note` / `write_note` | note path, content | Read or write markdown notes |
+| `read_sketch` / `write_sketch` | sketch path, rows | Read a sketch or replace all planning rows |
 | `update_planning_row` | index, row data | Update a single planning row |
-| `list_project_files` | — | List all files in the project directory |
-| `read_note` | note path | Read a markdown note's content |
-| `fetch_url_content` | URL | Fetch content from a web URL for reference |
+| `read_storyboard` / `write_storyboard` | storyboard path, items | Read or update storyboard metadata and sequence |
+| `design_plan` | sketch path, row index, plan | Save the Designer agent's plain-English visual brief |
+| `set_row_visual` | sketch path, row index, visual | Save or remove an Elucim DSL visual for a row |
+| `delegate_to_agent` | agent ID, message | Delegate a focused subtask to another agent |
+| `fetch_url` | URL | Fetch clean web page text plus a deduplicated links section |
+| `search_web` | query | Search public web results when Internet Search is enabled |
+| `recall_memory` / `save_memory` | memory query/content | Reuse workspace memory across sessions |
 
 ### Tool Execution Flow
 
 1. The model returns a `tool_call` in its response
-2. The frontend dispatches the tool call to the Rust backend via Tauri commands
-3. The backend executes the operation (file read, write, or HTTP fetch)
+2. The Rust runner dispatches the tool call to the project tool executor
+3. The backend executes the operation (file read, write, web fetch, search, or visual save)
 4. The result is returned to the model as a tool response message
 5. The model continues generating its response with the tool result
+
+The frontend receives streamed status, tool-call, tool-result, and delta events
+over Tauri channels so users can see what the agent is doing.
+
+### Model Capabilities
+
+When the provider exposes model metadata, CutReady records the model's context
+length and capability tags such as vision and Responses API support. The model
+picker shows these tags, vision mode can warn when the selected model lacks image
+support, and conversation compaction uses the configured context window.
 
 ## Prompt Design
 

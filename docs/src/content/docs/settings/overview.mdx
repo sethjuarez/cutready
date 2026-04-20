@@ -19,7 +19,7 @@ global defaults. Both open as full-width panels (no sidebar).
 Open global settings from the **gear icon** (⚙️) pinned to the bottom of the
 sidebar. Global settings apply across all workspaces.
 
-<Screenshot src="/images/settings-panel.png" darkSrc="/images/settings-panel-dark.png" alt="Global settings panel" caption="Global settings with Display, AI Provider, Agents, Feedback, and Updates tabs" />
+<Screenshot src="/images/settings-panel.png" darkSrc="/images/settings-panel-dark.png" alt="Global settings panel" caption="Global settings with Display, Themes, AI Provider, Agents, Feedback, and Updates tabs" />
 
 <Tabs>
 <TabItem label="Display">
@@ -32,6 +32,14 @@ Configure the visual appearance of CutReady:
 - **Row density** — Choose between compact and comfortable row spacing
 - **Color palette** — Select a color theme
 - **Editor width** — Set the preferred width for editing panels
+
+</TabItem>
+<TabItem label="Themes">
+
+### Theme Preferences
+
+Choose the app theme and palette. Theme settings apply immediately and can also
+be overridden per workspace.
 
 </TabItem>
 <TabItem label="AI Provider">
@@ -57,6 +65,10 @@ For Microsoft AI Foundry (recommended for Azure users):
   `https://your-hub.services.ai.azure.com/api/projects/your-project`)
 - **Authentication** — API Key or Azure OAuth sign-in
 - **Model** — Choose from deployed models (use **Refresh** to load them)
+- **Capability tags** — When available, fetched models show context window,
+  vision support, and Responses API support
+- **Internet Search** — Enable the public web search tool for agents when you
+  want current external information
 
 ### Azure OpenAI Setup
 
@@ -177,7 +189,8 @@ and prompts you to restart CutReady.
 
 Open workspace settings from the **monitor icon** (🖥️) in the sidebar
 navigation. Workspace settings apply to the current workspace only and can
-**override** global defaults for AI Provider, Agents, and Display.
+**override** global defaults for repository, memory, display, theme, AI provider,
+and agent settings.
 
 <Tabs>
 <TabItem label="Git Remote">
@@ -198,41 +211,27 @@ provide background knowledge to the AI assistant so it can give more relevant
 suggestions for this workspace.
 
 </TabItem>
-<TabItem label="Images">
+<TabItem label="Display">
 
-### Image & Visual Manager
-
-<Screenshot src="/images/settings-images.png" darkSrc="/images/settings-images-dark.png" alt="Image manager" caption="Browse project images and visuals with orphan detection for cleanup" />
-
-Browse and manage screenshots and visuals stored in your project. The asset
-manager scans both `.cutready/screenshots/` (images) and `.cutready/visuals/`
-(elucim DSL animations) and shows:
-
-- Thumbnail grid — screenshots render as images, visuals render as live
-  DslRenderer previews
-- Which assets are referenced by sketches and notes
-- **Orphan detection** — identifies unused assets that can be safely deleted
-- A **DSL** badge distinguishes visual files from screenshots
-- Summary bar with counts per type and total size
+Override global display preferences (text size, row density, color palette, and
+editor width) for this workspace.
 
 </TabItem>
-<TabItem label="AI Provider Override">
+<TabItem label="Themes">
+
+Override global theme preferences for this workspace.
+
+</TabItem>
+<TabItem label="AI Provider">
 
 Override the global AI provider settings for this workspace. Useful when
-different workspaces need different models or endpoints. When set, workspace
-overrides take priority over global settings.
+different workspaces need different models or endpoints.
 
 </TabItem>
-<TabItem label="Agents Override">
+<TabItem label="Agents">
 
 Override the global agent configuration for this workspace. Add workspace-specific
 custom agents or change the default agent selection.
-
-</TabItem>
-<TabItem label="Display Override">
-
-Override global display preferences (text size, row density, color palette, editor
-width) for this workspace.
 
 </TabItem>
 </Tabs>

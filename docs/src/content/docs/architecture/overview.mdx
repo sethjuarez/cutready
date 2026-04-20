@@ -14,7 +14,7 @@ import Screenshot from '../../../components/Screenshot.astro';
 
 CutReady is a **Tauri v2** desktop application with a split architecture:
 
-```
+```text
 ┌─────────────────────────────────────────────────────────┐
 │                    CutReady Desktop App                  │
 ├─────────────────────────┬───────────────────────────────┤
@@ -49,7 +49,7 @@ CutReady is a **Tauri v2** desktop application with a split architecture:
 The frontend is a **React 19** single-page application bundled with **Vite**:
 
 | Technology | Purpose |
-|-----------|---------|
+| --- | --- |
 | **React 19** | UI component framework |
 | **TypeScript** | Type-safe frontend code |
 | **Zustand** | Centralized state management |
@@ -61,10 +61,11 @@ The frontend is a **React 19** single-page application bundled with **Vite**:
 ### State Management
 
 All application state flows through a single **Zustand store** (`appStore.ts`):
+
 - Project state (current project, recent list)
 - Document state (sketches, storyboards, notes)
 - UI state (sidebar, tabs, panels, theme)
-- Recording state (profiles, active session)
+- Browser interaction recording state (profiles, active session)
 - Version history (snapshots, timeline, dirty flags)
 
 The store dispatches **Tauri commands** to the Rust backend for all
@@ -77,12 +78,12 @@ The Rust backend handles:
 ### Commands Layer (`src/commands/`)
 
 | Module | Responsibility |
-|--------|---------------|
+| --- | --- |
 | `project.rs` | Project CRUD, recent projects, sidebar persistence |
 | `sketch.rs` | Sketch document CRUD, list summaries |
 | `storyboard.rs` | Storyboard CRUD, sketch ordering |
 | `note.rs` | Markdown note CRUD |
-| `interaction.rs` | Browser profile detection, recording sessions |
+| `interaction.rs` | Browser profile detection and in-progress browser interaction recording |
 | `screenshot.rs` | Monitor detection, screen/region capture |
 | `import.rs` | Document import (docx, pdf, pptx conversion) |
 | `agent.rs` | AI chat and agent commands |
@@ -91,9 +92,12 @@ The Rust backend handles:
 ### Engine Layer (`src/engine/`)
 
 Lower-level implementations:
+
 - **interaction.rs** — CDP browser communication, Playwright sidecar management
 - **screenshot.rs** — Native screen capture via `xcap` crate
 - **versioning.rs** — Git operations via `gix` (gitoxide, pure-Rust git) — no external git needed
+- **recording.rs**, **automation.rs**, **export.rs** — placeholders for future
+  FFmpeg capture, replay automation, and FCPXML output
 
 ### AI Layer
 
@@ -107,11 +111,13 @@ CutReady uses the **[agentive](https://github.com/sethjuarez/agentive)** crate t
 
 Supported providers: **Microsoft Foundry**, **Azure OpenAI**, **OpenAI**, **Anthropic**.
 
-The AI layer supports 3 built-in agents (Planner, Writer, Editor) plus a Designer agent for visuals and user-defined custom agents.
+The AI layer supports four built-in agents (Planner, Writer, Editor, Designer)
+plus user-defined custom agents.
 
 ### Models Layer (`src/models/`)
 
 Shared data types:
+
 - **action.rs** — Tagged union of browser/native actions
 - **script.rs** — Script rows with metadata
 - **session.rs** — Recording session with captured actions
@@ -119,30 +125,33 @@ Shared data types:
 
 ## Playwright Sidecar
 
-Browser automation runs in a **Node.js sidecar process** managed by Tauri:
+Browser interaction recording is being built around a **Node.js sidecar process**
+managed by Tauri:
 
 1. The Rust backend spawns a Playwright Node.js process
 2. Communication happens over stdio (JSON messages)
 3. The sidecar connects to Chrome/Edge via CDP (Chrome DevTools Protocol)
-4. Actions are streamed back to the Rust backend in real-time
+4. Actions are streamed back to the Rust backend in real time
 
-This architecture isolates browser automation from the main process,
-preventing UI freezes during recording.
+This architecture isolates browser observation from the main process,
+preventing UI freezes during recording. The user-facing production workflow for
+recording, automated replay, and self-healing automation is still planned.
 
 ## Cross-Platform Support
 
 | Feature | Windows | macOS | Linux |
-|---------|---------|-------|-------|
-| UI & Navigation | ✅ | ✅ | ✅ |
-| Sketch Editor | ✅ | ✅ | ✅ |
-| Screen Capture | ✅ | ✅ | ✅ (PipeWire) |
-| Browser Recording | ⚠️ Experimental | 🚧 | 🚧 |
-| Version History | ✅ | ✅ | ✅ |
+| --- | --- | --- | --- |
+| UI & Navigation | Available | Available | Available |
+| Sketch Editor | Available | Available | Available |
+| Screen Capture | Available | Available | Available with PipeWire |
+| Browser Interaction Recording | In development | In development | In development |
+| Version History | Available | Available | Available |
 
 <Aside type="note">
-  Browser recording currently uses Windows-specific process management APIs.
-  Cross-platform support is being added with `#[cfg(target_os)]` guards 
-  and platform-specific implementations.
+  Browser interaction recording code exists, but the documented production path
+  remains planning, AI refinement, snapshots, collaboration, and Word export.
+  FFmpeg screen/audio recording, replay automation, and FCPXML export are still
+  future production phases.
 </Aside>
 
 ## Build & Release
