@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   DndContext,
   closestCenter,
@@ -33,8 +33,14 @@ import { SketchPickerItem } from "./SketchCard";
 import { ScriptTable } from "./ScriptTable";
 import { exportStoryboardToWord } from "../utils/exportToWord";
 import { ExportWordButton } from "./ExportWordButton";
+import { StoryboardReadinessPanel } from "./StoryboardReadinessPanel";
 import type { Sketch, SketchSummary } from "../types/sketch";
 import type { PreviewSlide } from "./SketchPreview";
+import {
+  buildStoryboardReadiness,
+  formatReadinessPrompt,
+  getStoryboardSketchPaths,
+} from "../utils/storyboardReadiness";
 
 interface MonitorInfo {
   id: number;
@@ -82,7 +88,7 @@ export function StoryboardView() {
   const pendingDescRef = useRef<string | null>(null);
   const [availableMonitors, setAvailableMonitors] = useState<MonitorInfo[]>([]);
 
-  const sketchMap = new Map(sketches.map((s) => [s.path, s]));
+  const sketchMap = useMemo(() => new Map(sketches.map((s) => [s.path, s])), [sketches]);
   const storyboardLocked = activeStoryboard?.locked ?? false;
 
   // Reset the local description when switching storyboards.
@@ -137,16 +143,29 @@ export function StoryboardView() {
   // Eagerly load all referenced sketches
   useEffect(() => {
     if (!activeStoryboard) return;
-    for (const item of activeStoryboard.items) {
-      if (item.type === "sketch_ref" && !sketchCache.has(item.path) && !loadingRef.current.has(item.path)) {
-        loadingRef.current.add(item.path);
-        invoke<Sketch>("get_sketch", { relativePath: item.path })
-          .then((sketch) => setSketchCache((prev) => new Map(prev).set(item.path, sketch)))
+    for (const path of getStoryboardSketchPaths(activeStoryboard)) {
+      if (!sketchCache.has(path) && !loadingRef.current.has(path)) {
+        loadingRef.current.add(path);
+        invoke<Sketch>("get_sketch", { relativePath: path })
+          .then((sketch) => setSketchCache((prev) => new Map(prev).set(path, sketch)))
           .catch((err) => console.error("Failed to load sketch:", err))
-          .finally(() => loadingRef.current.delete(item.path));
+          .finally(() => loadingRef.current.delete(path));
       }
     }
   }, [activeStoryboard, sketchCache]);
+
+  const readiness = useMemo(() => {
+    if (!activeStoryboard) return null;
+    return buildStoryboardReadiness(activeStoryboard, sketchCache, sketchMap);
+  }, [activeStoryboard, sketchCache, sketchMap]);
+
+  const handleFixReadinessWithAi = useCallback(() => {
+    if (!activeStoryboard || !readiness) return;
+    sendChatPrompt(
+      `${formatReadinessPrompt(activeStoryboard, readiness)}\n\nStoryboard path: "${activeStoryboardPath}".`,
+      { silent: true },
+    );
+  }, [activeStoryboard, activeStoryboardPath, readiness, sendChatPrompt]);
 
   /** Build typed slides for preview: storyboard title → (sketch title → sketch rows)... */
   const buildPreviewSlides = useCallback((): PreviewSlide[] => {
@@ -432,6 +451,15 @@ export function StoryboardView() {
             Generate sketch
           </button>
         </div>
+        )}
+
+        {readiness && (
+          <StoryboardReadinessPanel
+            storyboard={activeStoryboard}
+            readiness={readiness}
+            locked={storyboardLocked}
+            onFixWithAi={handleFixReadinessWithAi}
+          />
         )}
 
         {/* Items */}
