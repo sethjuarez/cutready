@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { StoryboardView } from "../components/StoryboardView";
 import { useAppStore } from "../stores/appStore";
-import type { Storyboard } from "../types/sketch";
+import type { Sketch, Storyboard } from "../types/sketch";
 
 const mockInvoke = vi.fn();
 
@@ -20,6 +20,32 @@ function activeStoryboard(description = "Original description", locked = false):
     description,
     locked,
     items: [],
+    created_at: "2026-01-01T00:00:00Z",
+    updated_at: "2026-01-01T00:00:00Z",
+  };
+}
+
+function activeStoryboardWithSketches(): Storyboard {
+  return {
+    ...activeStoryboard("Storyboard with gaps"),
+    items: [{ type: "sketch_ref", path: "setup.sk" }],
+  };
+}
+
+function incompleteSketch(): Sketch {
+  return {
+    title: "Setup",
+    description: "",
+    rows: [
+      {
+        time: "",
+        narrative: "",
+        demo_actions: "Open the dashboard.",
+        screenshot: null,
+        visual: null,
+      },
+    ],
+    state: "draft",
     created_at: "2026-01-01T00:00:00Z",
     updated_at: "2026-01-01T00:00:00Z",
   };
@@ -131,5 +157,77 @@ describe("StoryboardView", () => {
       relativePath: "demo.sb",
       locked: false,
     });
+  });
+
+  it("shows readiness gaps and queues an AI fix prompt", async () => {
+    mockInvoke.mockImplementation((command: string) => {
+      if (command === "get_sketch") return Promise.resolve(incompleteSketch());
+      return Promise.resolve([]);
+    });
+    useAppStore.setState({
+      activeStoryboard: activeStoryboardWithSketches(),
+      sketches: [{
+        path: "setup.sk",
+        title: "Setup",
+        state: "draft",
+        row_count: 1,
+        created_at: "2026-01-01T00:00:00Z",
+        updated_at: "2026-01-01T00:00:00Z",
+      }],
+      pendingChatPrompt: null,
+    });
+
+    render(<StoryboardView />);
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(screen.getByText("Readiness Check")).toBeInTheDocument();
+    expect(screen.getByText("Needs Work")).toBeInTheDocument();
+    expect(screen.getByText("Missing timing").previousElementSibling).toHaveTextContent("1");
+    expect(screen.getByText("Missing narration").previousElementSibling).toHaveTextContent("1");
+    expect(screen.getByText("Missing visuals").previousElementSibling).toHaveTextContent("1");
+
+    fireEvent.click(screen.getByTitle("Ask AI to fix readiness gaps without touching locked rows"));
+
+    const queued = useAppStore.getState().pendingChatPrompt;
+    expect(queued?.agent).toBe("editor");
+    expect(queued?.silent).toBe(true);
+    expect(queued?.text).toContain("Do not touch any locked sketch, locked row, or locked cell");
+    expect(queued?.text).toContain("setup.sk");
+  });
+
+  it("surfaces sketch load failures in the readiness check", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      mockInvoke.mockImplementation((command: string) => {
+        if (command === "get_sketch") return Promise.reject(new Error("missing sketch"));
+        return Promise.resolve([]);
+      });
+      useAppStore.setState({
+        activeStoryboard: activeStoryboardWithSketches(),
+        sketches: [{
+          path: "setup.sk",
+          title: "Setup",
+          state: "draft",
+          row_count: 1,
+          created_at: "2026-01-01T00:00:00Z",
+          updated_at: "2026-01-01T00:00:00Z",
+        }],
+        pendingChatPrompt: null,
+      });
+
+      render(<StoryboardView />);
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      fireEvent.click(screen.getByText("1 sketch looks incomplete"));
+
+      expect(screen.getByText(/Sketch could not be loaded: missing sketch/)).toBeInTheDocument();
+      expect(screen.getByText("Fix missing or unreadable sketch references.")).toBeInTheDocument();
+    } finally {
+      consoleError.mockRestore();
+    }
   });
 });

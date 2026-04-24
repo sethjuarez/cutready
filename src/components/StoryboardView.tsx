@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   DndContext,
   closestCenter,
@@ -26,6 +26,9 @@ import {
   FileText,
   Lock,
   Unlock,
+  ListChecks,
+  CheckCircle2,
+  AlertTriangle,
 } from "lucide-react";
 import { useAppStore } from "../stores/appStore";
 import { useToastStore } from "../stores/toastStore";
@@ -35,6 +38,12 @@ import { exportStoryboardToWord } from "../utils/exportToWord";
 import { ExportWordButton } from "./ExportWordButton";
 import type { Sketch, SketchSummary } from "../types/sketch";
 import type { PreviewSlide } from "./SketchPreview";
+import {
+  buildReadinessAiPrompt,
+  computeStoryboardReadiness,
+  storyboardSketchPaths,
+  type StoryboardReadiness,
+} from "../utils/storyboardReadiness";
 
 interface MonitorInfo {
   id: number;
@@ -72,6 +81,7 @@ export function StoryboardView() {
 
   // Cache of full sketch data keyed by path
   const [sketchCache, setSketchCache] = useState<Map<string, Sketch>>(new Map());
+  const [sketchLoadErrors, setSketchLoadErrors] = useState<Map<string, string>>(new Map());
   const loadingRef = useRef<Set<string>>(new Set());
   const [collapsedItems, setCollapsedItems] = useState<Set<number>>(new Set());
   const [showMonitorPicker, setShowMonitorPicker] = useState(false);
@@ -82,8 +92,24 @@ export function StoryboardView() {
   const pendingDescRef = useRef<string | null>(null);
   const [availableMonitors, setAvailableMonitors] = useState<MonitorInfo[]>([]);
 
-  const sketchMap = new Map(sketches.map((s) => [s.path, s]));
+  const sketchMap = useMemo(() => new Map(sketches.map((s) => [s.path, s])), [sketches]);
   const storyboardLocked = activeStoryboard?.locked ?? false;
+  const storyboardPaths = useMemo(
+    () => activeStoryboard ? storyboardSketchPaths(activeStoryboard.items) : [],
+    [activeStoryboard],
+  );
+  const readiness = useMemo(() => computeStoryboardReadiness(
+    storyboardPaths.map((path) => {
+      const summary = sketchMap.get(path);
+      const sketch = sketchCache.get(path);
+        return {
+          path,
+          title: sketch?.title || summary?.title || path,
+          sketch,
+          loadError: sketchLoadErrors.get(path),
+        };
+      }),
+  ), [sketchCache, sketchLoadErrors, sketchMap, storyboardPaths]);
 
   // Reset the local description when switching storyboards.
   useEffect(() => {
@@ -137,16 +163,27 @@ export function StoryboardView() {
   // Eagerly load all referenced sketches
   useEffect(() => {
     if (!activeStoryboard) return;
-    for (const item of activeStoryboard.items) {
-      if (item.type === "sketch_ref" && !sketchCache.has(item.path) && !loadingRef.current.has(item.path)) {
-        loadingRef.current.add(item.path);
-        invoke<Sketch>("get_sketch", { relativePath: item.path })
-          .then((sketch) => setSketchCache((prev) => new Map(prev).set(item.path, sketch)))
-          .catch((err) => console.error("Failed to load sketch:", err))
-          .finally(() => loadingRef.current.delete(item.path));
+    for (const path of storyboardPaths) {
+      if (!sketchCache.has(path) && !loadingRef.current.has(path)) {
+        loadingRef.current.add(path);
+        invoke<Sketch>("get_sketch", { relativePath: path })
+          .then((sketch) => {
+            setSketchLoadErrors((prev) => {
+              if (!prev.has(path)) return prev;
+              const next = new Map(prev);
+              next.delete(path);
+              return next;
+            });
+            setSketchCache((prev) => new Map(prev).set(path, sketch));
+          })
+          .catch((err) => {
+            console.error("Failed to load sketch:", err);
+            setSketchLoadErrors((prev) => new Map(prev).set(path, err instanceof Error ? err.message : String(err)));
+          })
+          .finally(() => loadingRef.current.delete(path));
       }
     }
-  }, [activeStoryboard, sketchCache]);
+  }, [activeStoryboard, sketchCache, storyboardPaths]);
 
   /** Build typed slides for preview: storyboard title → (sketch title → sketch rows)... */
   const buildPreviewSlides = useCallback((): PreviewSlide[] => {
@@ -217,6 +254,14 @@ export function StoryboardView() {
       console.error("[StoryboardView] Failed to list monitors:", e);
     }
   }, [launchPreviewOnMonitor]);
+
+  const handleFixReadinessWithAi = useCallback(() => {
+    if (!activeStoryboard || storyboardLocked) return;
+    sendChatPrompt(
+      buildReadinessAiPrompt(activeStoryboard, activeStoryboardPath, readiness),
+      { silent: true, agent: "editor" },
+    );
+  }, [activeStoryboard, activeStoryboardPath, readiness, sendChatPrompt, storyboardLocked]);
 
   // DnD
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
@@ -434,6 +479,12 @@ export function StoryboardView() {
         </div>
         )}
 
+        <ReadinessCheckCard
+          readiness={readiness}
+          canFix={!storyboardLocked && !readiness.ready && readiness.loadedSketches > 0}
+          onFixWithAi={handleFixReadinessWithAi}
+        />
+
         {/* Items */}
         {activeStoryboard.items.length === 0 ? (
           <EmptyState
@@ -552,6 +603,112 @@ const stateLabels: Record<string, string> = {
   refined: "Refined",
   final: "Final",
 };
+
+function ReadinessCheckCard({
+  readiness,
+  canFix,
+  onFixWithAi,
+}: {
+  readiness: StoryboardReadiness;
+  canFix: boolean;
+  onFixWithAi: () => void;
+}) {
+  const statusColor = readiness.ready ? "rgb(var(--color-success))" : "rgb(var(--color-warning))";
+  const statusBg = readiness.ready ? "rgb(var(--color-success) / 0.1)" : "rgb(var(--color-warning) / 0.1)";
+  const incompleteLabel = readiness.incompleteRows === 1 ? "incomplete row" : "incomplete rows";
+
+  return (
+    <section className="mb-8 rounded-2xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]/60 p-4">
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex items-start gap-3">
+          <div
+            className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl"
+            style={{ backgroundColor: statusBg, color: statusColor }}
+          >
+            {readiness.ready ? <CheckCircle2 className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h2 className="text-sm font-semibold text-[rgb(var(--color-text))]">Readiness Check</h2>
+              <span
+                className="rounded-full px-2 py-0.5 text-[10px] font-medium"
+                style={{ backgroundColor: statusBg, color: statusColor }}
+              >
+                {readiness.status}
+              </span>
+            </div>
+            <p className="mt-1 text-xs leading-relaxed text-[rgb(var(--color-text-secondary))]">
+              {readiness.totalRows} {readiness.totalRows === 1 ? "row" : "rows"} scanned across {readiness.loadedSketches}/{readiness.totalSketches} loaded sketches.
+              {!readiness.ready && ` ${readiness.incompleteRows} ${incompleteLabel} need attention before recording.`}
+            </p>
+          </div>
+        </div>
+
+        {canFix && (
+          <button
+            onClick={onFixWithAi}
+            className="shrink-0 flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10 transition-colors"
+            title="Ask AI to fix readiness gaps without touching locked rows"
+          >
+            <Sparkles className="h-3.5 w-3.5" />
+            Fix gaps
+          </button>
+        )}
+      </div>
+
+      <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <ReadinessMetric label="Missing timing" value={readiness.missingTiming} />
+        <ReadinessMetric label="Missing narration" value={readiness.missingNarration} />
+        <ReadinessMetric label="Missing actions" value={readiness.missingDemoActions} />
+        <ReadinessMetric label="Missing visuals" value={readiness.missingVisuals} />
+      </div>
+
+      {readiness.nextSteps.length > 0 && (
+        <div className="mt-4 rounded-xl border border-[rgb(var(--color-border))]/70 bg-[rgb(var(--color-surface))]/60 p-3">
+          <div className="mb-2 flex items-center gap-1.5 text-xs font-medium text-[rgb(var(--color-text))]">
+            <ListChecks className="h-3.5 w-3.5 text-[rgb(var(--color-accent))]" />
+            Next steps
+          </div>
+          <ul className="space-y-1 text-xs leading-relaxed text-[rgb(var(--color-text-secondary))]">
+            {readiness.nextSteps.map((step) => (
+              <li key={step}>{step}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {readiness.incompleteSketches.length > 0 && (
+        <details className="mt-3">
+          <summary className="cursor-pointer text-xs font-medium text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] transition-colors">
+            {readiness.incompleteSketches.length} {readiness.incompleteSketches.length === 1 ? "sketch looks" : "sketches look"} incomplete
+          </summary>
+          <div className="mt-2 space-y-2">
+            {readiness.incompleteSketches.map((sketch) => (
+              <div key={sketch.path} className="rounded-lg border border-[rgb(var(--color-border))]/70 bg-[rgb(var(--color-surface))]/50 px-3 py-2">
+                <div className="truncate text-xs font-medium text-[rgb(var(--color-text))]">{sketch.title}</div>
+                <div className="mt-1 text-[11px] leading-relaxed text-[rgb(var(--color-text-secondary))]">
+                  {sketch.issues.join(" - ")}
+                </div>
+              </div>
+            ))}
+          </div>
+        </details>
+      )}
+    </section>
+  );
+}
+
+function ReadinessMetric({ label, value }: { label: string; value: number }) {
+  const hasIssue = value > 0;
+  return (
+    <div className="rounded-xl border border-[rgb(var(--color-border))]/70 bg-[rgb(var(--color-surface))]/60 px-3 py-2">
+      <div className={`text-lg font-semibold ${hasIssue ? "text-[rgb(var(--color-warning))]" : "text-[rgb(var(--color-success))]"}`}>
+        {value}
+      </div>
+      <div className="text-[11px] text-[rgb(var(--color-text-secondary))]">{label}</div>
+    </div>
+  );
+}
 
 function ExpandableSketchCard({
   sketch,
