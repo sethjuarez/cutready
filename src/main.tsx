@@ -25,8 +25,11 @@ if (isViteDevelopment && !(window as any).__TAURI_INTERNALS__) {
   (window as any).__appStore = useAppStore;
 }
 
-// Dev-mode: pipe JS errors to Rust log plugin → writes to dev-trace log file
-if (isViteDevelopment && (window as any).__TAURI_INTERNALS__) {
+// Pipe JS errors and warnings to the Rust log plugin so they land in the
+// release log file under %LOCALAPPDATA%\com.cutready.app\logs (issue #64).
+// Noisy console.log/info forwarding stays dev-only to keep release logs
+// readable.
+if ((window as any).__TAURI_INTERNALS__) {
   import("@tauri-apps/plugin-log").then(({ error: logError, warn: logWarn, info: logInfo, debug: logDebug }) => {
     window.addEventListener("error", (e) => {
       logError(`[JS] ${e.message} at ${e.filename}:${e.lineno}:${e.colno}`);
@@ -44,16 +47,19 @@ if (isViteDevelopment && (window as any).__TAURI_INTERNALS__) {
       origConsoleWarn.apply(console, args);
       logWarn(`[console.warn] ${args.map(String).join(" ")}`);
     };
-    const origConsoleLog = console.log;
-    console.log = (...args: any[]) => {
-      origConsoleLog.apply(console, args);
-      logInfo(`[console.log] ${args.map(String).join(" ")}`);
-    };
-    const origConsoleInfo = console.info;
-    console.info = (...args: any[]) => {
-      origConsoleInfo.apply(console, args);
-      logDebug(`[console.info] ${args.map(String).join(" ")}`);
-    };
+
+    if (isViteDevelopment) {
+      const origConsoleLog = console.log;
+      console.log = (...args: any[]) => {
+        origConsoleLog.apply(console, args);
+        logInfo(`[console.log] ${args.map(String).join(" ")}`);
+      };
+      const origConsoleInfo = console.info;
+      console.info = (...args: any[]) => {
+        origConsoleInfo.apply(console, args);
+        logDebug(`[console.info] ${args.map(String).join(" ")}`);
+      };
+    }
   });
 }
 

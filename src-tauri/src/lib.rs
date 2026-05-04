@@ -109,6 +109,9 @@ pub fn run() {
                 builder = builder.targets([
                     tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Stdout),
                     tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Webview),
+                    tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::LogDir {
+                        file_name: Some("CutReady".into()),
+                    }),
                 ]);
             }
 
