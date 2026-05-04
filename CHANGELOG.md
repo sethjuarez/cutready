@@ -9,6 +9,27 @@
 Covector manages this changelog. Do not edit manually.
 Each release section is generated from `.changes/*.md` files.
 
+## [1.2.0](https://github.com/sethjuarez/cutready/compare/v1.1.1...v1.2.0) (2026-05-04)
+
+
+### Features
+
+* **preview:** add PresentationShell with slide-only mode and teleprompter polish ([602a953](https://github.com/sethjuarez/cutready/commit/602a953f892c2232a2f5883e02fc839e8de06f01)), closes [#62](https://github.com/sethjuarez/cutready/issues/62)
+* **preview:** add teleprompter mode for narration reading ([04f12d3](https://github.com/sethjuarez/cutready/commit/04f12d359eeb4592c907d0bd6a961bfe6fd8ef34)), closes [#62](https://github.com/sethjuarez/cutready/issues/62)
+* **tabs:** add Copy Path action to editor tab context menu ([3e24d5a](https://github.com/sethjuarez/cutready/commit/3e24d5ae0f71af8e5ffd56624abaddb819c41866)), closes [#61](https://github.com/sethjuarez/cutready/issues/61)
+
+
+### Bug Fixes
+
+* **agent:** sanitize control chars and warn on oversized requests ([ef17681](https://github.com/sethjuarez/cutready/commit/ef176811cb403021cc0574f8b8a1f6eefe7c72c1)), closes [#60](https://github.com/sethjuarez/cutready/issues/60)
+* enable dev mocks for docs screenshots ([88d9366](https://github.com/sethjuarez/cutready/commit/88d93665e1c3858973fb6a8e031f9444915c358d))
+* keep reference context out of user bubbles ([d378cd4](https://github.com/sethjuarez/cutready/commit/d378cd4f8dc1250665002f2411bc30c231dd9c5e))
+* **logs:** bound release log to 5MB x 3 rotations (~20MB max) ([76d5feb](https://github.com/sethjuarez/cutready/commit/76d5feba17401b9ad0b6d28be830a1277a61bcbf))
+* **logs:** persist diagnostic logs in installed app builds ([f718f7d](https://github.com/sethjuarez/cutready/commit/f718f7d8425e268cd092b1cbb68530d62fe70808)), closes [#64](https://github.com/sethjuarez/cutready/issues/64)
+* refresh sketches after agent edits ([ae6964c](https://github.com/sethjuarez/cutready/commit/ae6964c7b6b7871f358423cd873fff8282c1e412))
+* simplify web search tool schema ([99a35a7](https://github.com/sethjuarez/cutready/commit/99a35a7f158e944578948de4b6b111e7a51bef4f))
+* **theme:** apply persisted theme before first paint to remove FOUC ([4c75b25](https://github.com/sethjuarez/cutready/commit/4c75b255b8ff4c9bf9975ad07991398bee29e941))
+
 ## [1.1.1](https://github.com/sethjuarez/cutready/compare/v1.1.0...v1.1.1) (2026-04-20)
 
 
