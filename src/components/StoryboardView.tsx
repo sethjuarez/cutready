@@ -26,15 +26,18 @@ import {
   FileText,
   Lock,
   Unlock,
+  MonitorPlay,
+  Maximize2,
 } from "lucide-react";
 import { useAppStore } from "../stores/appStore";
 import { useToastStore } from "../stores/toastStore";
 import { SketchPickerItem } from "./SketchCard";
+import { SketchPreview } from "./SketchPreview";
 import { ScriptTable } from "./ScriptTable";
 import { exportStoryboardToWord } from "../utils/exportToWord";
 import { ExportWordButton } from "./ExportWordButton";
-import type { Sketch, SketchSummary } from "../types/sketch";
-import type { PreviewSlide } from "./SketchPreview";
+import type { Sketch, SketchSummary, Storyboard } from "../types/sketch";
+import type { PreviewSlide, PresentationMode } from "./presentation/types";
 
 interface MonitorInfo {
   id: number;
@@ -47,6 +50,18 @@ interface MonitorInfo {
 }
 
 const PREVIEW_DATA_KEY = "cutready:preview-data";
+
+function collectStoryboardSketchPaths(storyboard: Storyboard): string[] {
+  const paths: string[] = [];
+  for (const item of storyboard.items) {
+    if (item.type === "sketch_ref") {
+      paths.push(item.path);
+    } else {
+      paths.push(...item.sketches);
+    }
+  }
+  return paths;
+}
 
 /**
  * StoryboardView — displays the active storyboard's items
@@ -81,6 +96,9 @@ export function StoryboardView() {
   const descSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingDescRef = useRef<string | null>(null);
   const [availableMonitors, setAvailableMonitors] = useState<MonitorInfo[]>([]);
+  const [previewSlides, setPreviewSlides] = useState<PreviewSlide[]>([]);
+  const [showPreview, setShowPreview] = useState(false);
+  const [previewMode, setPreviewMode] = useState<PresentationMode>("slides");
 
   const sketchMap = new Map(sketches.map((s) => [s.path, s]));
   const storyboardLocked = activeStoryboard?.locked ?? false;
@@ -137,19 +155,18 @@ export function StoryboardView() {
   // Eagerly load all referenced sketches
   useEffect(() => {
     if (!activeStoryboard) return;
-    for (const item of activeStoryboard.items) {
-      if (item.type === "sketch_ref" && !sketchCache.has(item.path) && !loadingRef.current.has(item.path)) {
-        loadingRef.current.add(item.path);
-        invoke<Sketch>("get_sketch", { relativePath: item.path })
-          .then((sketch) => setSketchCache((prev) => new Map(prev).set(item.path, sketch)))
-          .catch((err) => console.error("Failed to load sketch:", err))
-          .finally(() => loadingRef.current.delete(item.path));
-      }
+    for (const path of collectStoryboardSketchPaths(activeStoryboard)) {
+      if (sketchCache.has(path) || loadingRef.current.has(path)) continue;
+      loadingRef.current.add(path);
+      invoke<Sketch>("get_sketch", { relativePath: path })
+        .then((sketch) => setSketchCache((prev) => new Map(prev).set(path, sketch)))
+        .catch((err) => console.error("Failed to load sketch:", err))
+        .finally(() => loadingRef.current.delete(path));
     }
   }, [activeStoryboard, sketchCache]);
 
   /** Build typed slides for preview: storyboard title → (sketch title → sketch rows)... */
-  const buildPreviewSlides = useCallback((): PreviewSlide[] => {
+  const buildPreviewSlides = useCallback((cache = sketchCache): PreviewSlide[] => {
     if (!activeStoryboard) return [];
     const slides: PreviewSlide[] = [];
     const sbTitle = activeStoryboard.title || "Untitled Storyboard";
@@ -160,13 +177,11 @@ export function StoryboardView() {
       subtitle: activeStoryboard.description || "",
       context: sbTitle,
     });
-    // Each sketch
-    for (const item of activeStoryboard.items) {
-      if (item.type !== "sketch_ref") continue;
-      const full = sketchCache.get(item.path);
-      if (!full) continue;
+    const addSketchSlides = (path: string, sectionTitle?: string) => {
+      const full = cache.get(path);
+      if (!full) return;
       const skTitle = full.title || "Untitled Sketch";
-      const context = `${sbTitle} › ${skTitle}`;
+      const context = sectionTitle ? `${sbTitle} › ${sectionTitle} › ${skTitle}` : `${sbTitle} › ${skTitle}`;
       const desc = typeof full.description === "string" ? full.description : "";
       // Sketch title slide
       slides.push({
@@ -179,13 +194,45 @@ export function StoryboardView() {
       for (const row of full.rows) {
         slides.push({ type: "row", row, context });
       }
+    };
+    // Each sketch
+    for (const item of activeStoryboard.items) {
+      if (item.type === "sketch_ref") {
+        addSketchSlides(item.path);
+      } else {
+        slides.push({
+          type: "title",
+          heading: item.title,
+          subtitle: "",
+          context: sbTitle,
+        });
+        for (const path of item.sketches) {
+          addSketchSlides(path, item.title);
+        }
+      }
     }
     return slides;
   }, [activeStoryboard, sketchCache]);
 
-  const launchPreviewOnMonitor = useCallback(async (monitor: MonitorInfo) => {
+  const resolvePreviewSketches = useCallback(async () => {
+    if (!activeStoryboard) return sketchCache;
+    const nextCache = new Map(sketchCache);
+    const missingPaths = collectStoryboardSketchPaths(activeStoryboard).filter((path) => !nextCache.has(path));
+    if (missingPaths.length === 0) return nextCache;
+
+    const loaded = await Promise.all(missingPaths.map(async (path) => {
+      const sketch = await invoke<Sketch>("get_sketch", { relativePath: path });
+      return [path, sketch] as const;
+    }));
+    for (const [path, sketch] of loaded) {
+      nextCache.set(path, sketch);
+    }
+    setSketchCache(nextCache);
+    return nextCache;
+  }, [activeStoryboard, sketchCache]);
+
+  const launchPreviewOnMonitor = useCallback(async (monitor: MonitorInfo, slides = previewSlides) => {
     setShowMonitorPicker(false);
-    const slides = buildPreviewSlides();
     localStorage.setItem(PREVIEW_DATA_KEY, JSON.stringify({
       rows: [],
       slides,
@@ -201,22 +248,49 @@ export function StoryboardView() {
       });
     } catch (e) {
       console.error("[StoryboardView] Failed to open preview window:", e);
+      setPreviewMode("slides");
+      setShowPreview(true);
     }
-  }, [buildPreviewSlides, currentProject, activeStoryboard]);
+  }, [currentProject, activeStoryboard, previewSlides]);
+
+  const openInMode = useCallback(async (mode: PresentationMode) => {
+    try {
+      const cache = await resolvePreviewSketches();
+      const slides = buildPreviewSlides(cache);
+      setPreviewSlides(slides);
+      setPreviewMode(mode);
+      setShowPreview(true);
+    } catch (e) {
+      console.error(`${mode} failed:`, e);
+      useToastStore.getState().show(`${mode} failed: ${e}`, 5000, "error");
+    }
+  }, [buildPreviewSlides, resolvePreviewSketches]);
+
+  const handleTeleprompterClick = useCallback(() => openInMode("teleprompter"), [openInMode]);
+  const handleSlideOnlyClick = useCallback(() => openInMode("slide-only"), [openInMode]);
 
   const handlePreviewClick = useCallback(async () => {
     try {
+      const cache = await resolvePreviewSketches();
+      const slides = buildPreviewSlides(cache);
+      setPreviewSlides(slides);
       const monitors: MonitorInfo[] = await invoke("list_monitors");
-      if (monitors.length === 1) {
-        await launchPreviewOnMonitor(monitors[0]);
+      if (monitors.length === 0) {
+        setPreviewMode("slides");
+        setShowPreview(true);
+      } else if (monitors.length === 1) {
+        await launchPreviewOnMonitor(monitors[0], slides);
       } else {
         setAvailableMonitors(monitors);
         setShowMonitorPicker(true);
       }
     } catch (e) {
       console.error("[StoryboardView] Failed to list monitors:", e);
+      useToastStore.getState().show(`Preview failed: ${e}`, 5000, "error");
+      setPreviewMode("slides");
+      setShowPreview(true);
     }
-  }, [launchPreviewOnMonitor]);
+  }, [buildPreviewSlides, launchPreviewOnMonitor, resolvePreviewSketches]);
 
   // DnD
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
@@ -308,6 +382,20 @@ export function StoryboardView() {
                 }}
               />
               <button
+                onClick={handleSlideOnlyClick}
+                className="p-1.5 rounded-md text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors"
+                title="Slide-only view"
+              >
+                <Maximize2 className="w-4 h-4" />
+              </button>
+              <button
+                onClick={handleTeleprompterClick}
+                className="p-1.5 rounded-md text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors"
+                title="Teleprompter"
+              >
+                <MonitorPlay className="w-4 h-4" />
+              </button>
+              <button
                 onClick={handlePreviewClick}
                 className="p-1.5 rounded-md text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors"
                 title="Preview storyboard (presentation mode)"
@@ -326,7 +414,7 @@ export function StoryboardView() {
                     {availableMonitors.map((m) => (
                       <button
                         key={m.id}
-                        onClick={() => launchPreviewOnMonitor(m)}
+                        onClick={() => launchPreviewOnMonitor(m, previewSlides)}
                         className="w-full px-3 py-2 text-left text-sm text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors flex items-center gap-2"
                       >
                         <Monitor className="w-3.5 h-3.5" />
@@ -521,6 +609,17 @@ export function StoryboardView() {
             onSearchChange={setPickerSearch}
             onSelect={(path) => handlePickExisting(path, showPicker)}
             onClose={() => { setShowPicker(null); setPickerSearch(""); }}
+          />
+        )}
+
+        {showPreview && (
+          <SketchPreview
+            rows={[]}
+            projectRoot={currentProject?.root ?? ""}
+            title={activeStoryboard.title || "Untitled Storyboard"}
+            slides={previewSlides}
+            initialMode={previewMode}
+            onClose={() => { setShowPreview(false); setPreviewMode("slides"); }}
           />
         )}
       </div>

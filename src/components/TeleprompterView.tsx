@@ -10,20 +10,21 @@ import {
   Image as ImageIcon,
 } from "lucide-react";
 import { SafeMarkdown } from "./SafeMarkdown";
-import type { PreviewSlide } from "./SketchPreview";
+import type { PreviewSlide } from "./presentation/types";
 
-const PREFS_KEY = "cutready:teleprompter";
+const PREFS_KEY = "cutready:teleprompter:v2";
 
-const TEXT_SIZE_MIN = 20;
-const TEXT_SIZE_MAX = 64;
-const TEXT_SIZE_STEP = 2;
-const TEXT_SIZE_DEFAULT = 36;
+const TEXT_SIZE_MIN = 24;
+const TEXT_SIZE_MAX = 96;
+const TEXT_SIZE_STEP = 4;
+const TEXT_SIZE_DEFAULT = 56;
 
-// Auto-scroll speed range (px/sec). 5 px/s ≈ leisurely; 80 px/s ≈ fast pace.
-const SPEED_MIN = 5;
-const SPEED_MAX = 100;
+// Auto-scroll speed range (px/sec). Calibrated for default 56px text:
+// 35 px/s ≈ ~150 WPM (typical narration pace).
+const SPEED_MIN = 10;
+const SPEED_MAX = 200;
 const SPEED_STEP = 5;
-const SPEED_DEFAULT = 18;
+const SPEED_DEFAULT = 35;
 
 interface TeleprompterPrefs {
   textSize: number;
@@ -78,7 +79,6 @@ export function TeleprompterView({ slides, projectRoot, initialIndex, onExit }: 
   const [textSize, setTextSize] = useState(() => loadPrefs().textSize);
   const [scrollSpeed, setScrollSpeed] = useState(() => loadPrefs().scrollSpeed);
   const [isAutoScrolling, setIsAutoScrolling] = useState(false);
-  const [contentOverflows, setContentOverflows] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const contentRef = useRef<HTMLDivElement | null>(null);
@@ -114,19 +114,14 @@ export function TeleprompterView({ slides, projectRoot, initialIndex, onExit }: 
     onExit(currentIdxRef.current);
   }, [onExit]);
 
-  // Reset scroll + auto-scroll state when slide changes; recompute overflow.
+  // Reset scroll when the slide changes (e.g. user pressed ←/→).
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = 0;
-    setIsAutoScrolling(false);
-    // Defer overflow check until after layout/paint.
-    const id = requestAnimationFrame(() => {
-      const el = scrollRef.current;
-      if (el) setContentOverflows(el.scrollHeight - el.clientHeight > 4);
-    });
-    return () => cancelAnimationFrame(id);
-  }, [currentIdx, textSize, slide]);
+  }, [currentIdx, textSize]);
 
-  // Auto-scroll loop.
+  // Auto-scroll loop. Scrolls the current slide at the configured speed and
+  // stops when the bottom is reached. The user advances slides manually with
+  // ←/→ — Play does not cross slide boundaries.
   useEffect(() => {
     if (!isAutoScrolling) {
       if (rafRef.current !== null) {
@@ -142,6 +137,7 @@ export function TeleprompterView({ slides, projectRoot, initialIndex, onExit }: 
       if (lastTickRef.current === 0) lastTickRef.current = now;
       const dt = (now - lastTickRef.current) / 1000;
       lastTickRef.current = now;
+
       const next = el.scrollTop + scrollSpeedRef.current * dt;
       const max = el.scrollHeight - el.clientHeight;
       if (next >= max) {
@@ -183,6 +179,10 @@ export function TeleprompterView({ slides, projectRoot, initialIndex, onExit }: 
     setTextSize((s) => clamp(s + delta, TEXT_SIZE_MIN, TEXT_SIZE_MAX));
   }, []);
 
+  const adjustSpeed = useCallback((delta: number) => {
+    setScrollSpeed((s) => clamp(s + delta, SPEED_MIN, SPEED_MAX));
+  }, []);
+
   // Mode-aware keyboard handler — capture phase + stopPropagation so the
   // outer SketchPreview handler (Esc=closePreview, Space=goNext, etc.) does
   // not also fire while teleprompter is active.
@@ -200,8 +200,7 @@ export function TeleprompterView({ slides, projectRoot, initialIndex, onExit }: 
       } else if (e.key === "ArrowLeft" || e.key === "PageUp") {
         goPrev();
       } else if (e.key === " ") {
-        if (contentOverflows) toggleAutoScroll();
-        else goNext();
+        toggleAutoScroll();
       } else if (e.key === "ArrowDown") {
         const el = scrollRef.current;
         if (el) el.scrollTop += textSize * 1.6;
@@ -218,6 +217,10 @@ export function TeleprompterView({ slides, projectRoot, initialIndex, onExit }: 
         adjustSize(TEXT_SIZE_STEP);
       } else if (e.key === "-" || e.key === "_") {
         adjustSize(-TEXT_SIZE_STEP);
+      } else if (e.key === "]" || e.key === "}") {
+        adjustSpeed(e.shiftKey ? SPEED_STEP * 4 : SPEED_STEP);
+      } else if (e.key === "[" || e.key === "{") {
+        adjustSpeed(e.shiftKey ? -SPEED_STEP * 4 : -SPEED_STEP);
       } else if (e.key === "t" || e.key === "T") {
         exit();
       } else {
@@ -231,7 +234,7 @@ export function TeleprompterView({ slides, projectRoot, initialIndex, onExit }: 
     // Capture phase to beat the outer SketchPreview handler.
     window.addEventListener("keydown", handler, true);
     return () => window.removeEventListener("keydown", handler, true);
-  }, [exit, goNext, goPrev, total, contentOverflows, toggleAutoScroll, adjustSize, textSize]);
+  }, [exit, goNext, goPrev, total, toggleAutoScroll, adjustSize, adjustSpeed, textSize]);
 
   // Build the displayable narrative for the current slide.
   const { primaryText, kind, heading, subtitle } = useMemo(() => {
@@ -336,11 +339,11 @@ export function TeleprompterView({ slides, projectRoot, initialIndex, onExit }: 
         >
           <div
             ref={contentRef}
-            className="mx-auto px-8 py-[30vh]"
+            className="mx-auto px-12 py-[18vh]"
             style={{
-              maxWidth: "min(48rem, 90vw)",
+              maxWidth: "min(72rem, 95vw)",
               fontSize: `${textSize}px`,
-              lineHeight: 1.45,
+              lineHeight: 1.4,
               fontWeight: 500,
             }}
           >
@@ -474,8 +477,7 @@ export function TeleprompterView({ slides, projectRoot, initialIndex, onExit }: 
         {/* Auto-scroll play/pause */}
         <button
           onClick={toggleAutoScroll}
-          disabled={!contentOverflows}
-          className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded-md transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+          className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded-md transition-colors"
           style={{
             color: isAutoScrolling
               ? "rgb(var(--color-media-control-bg))"
@@ -484,7 +486,7 @@ export function TeleprompterView({ slides, projectRoot, initialIndex, onExit }: 
               ? "rgb(var(--color-media-control-fg))"
               : "transparent",
           }}
-          title={contentOverflows ? "Toggle auto-scroll (Space)" : "Content fits — auto-scroll not needed"}
+          title="Toggle auto-scroll (Space)"
           aria-label={isAutoScrolling ? "Pause auto-scroll" : "Play auto-scroll"}
         >
           {isAutoScrolling ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
@@ -492,7 +494,7 @@ export function TeleprompterView({ slides, projectRoot, initialIndex, onExit }: 
         </button>
 
         {/* Speed slider */}
-        <div className="flex items-center gap-2 text-xs" style={{ color: "rgba(255,255,255,0.65)" }}>
+        <div className="flex items-center gap-2 text-xs" style={{ color: "rgba(255,255,255,0.65)" }} title="Scroll speed ([ slower / ] faster, hold Shift for big steps)">
           <span>Speed</span>
           <input
             type="range"
@@ -542,7 +544,7 @@ export function TeleprompterView({ slides, projectRoot, initialIndex, onExit }: 
         {/* Spacer + key hint */}
         <div className="flex-1" />
         <div className="text-xs hidden md:block" style={{ color: "rgba(255,255,255,0.35)" }}>
-          ←/→ navigate · Space {contentOverflows ? "play/pause" : "next"} · ↑/↓ scroll · Esc exit
+          ←/→ navigate · Space play/pause · ↑/↓ scroll · [ ] speed · +/− size · Esc exit
         </div>
       </div>
     </div>

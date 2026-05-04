@@ -2,12 +2,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { SafeMarkdown } from "./SafeMarkdown";
-import { ChevronLeft, Sparkles, Monitor, Plus, X, Folder, Lock, Unlock, FileText } from "lucide-react";
+import { ChevronLeft, Sparkles, Monitor, MonitorPlay, Maximize2, Plus, X, Folder, Lock, Unlock, FileText } from "lucide-react";
 import { useAppStore } from "../stores/appStore";
 import { useToastStore } from "../stores/toastStore";
 import { ScriptTable } from "./ScriptTable";
 import { ScreenCaptureOverlay } from "./ScreenCaptureOverlay";
 import { SketchPreview } from "./SketchPreview";
+import type { PresentationMode } from "./presentation/types";
 import VisualCell from "./VisualCell";
 import { exportSketchToWord } from "../utils/exportToWord";
 import type { PlanningRow, Sketch } from "../types/sketch";
@@ -41,6 +42,7 @@ export function SketchForm() {
   const [localRows, setLocalRows] = useState<PlanningRow[]>(activeSketch?.rows ?? []);
   const [captureRowIdx, setCaptureRowIdx] = useState<number | null>(null);
   const [showPreview, setShowPreview] = useState(false);
+  const [previewMode, setPreviewMode] = useState<PresentationMode>("slides");
   const [showMonitorPicker, setShowMonitorPicker] = useState(false);
   const [availableMonitors, setAvailableMonitors] = useState<MonitorInfo[]>([]);
   const [editingDesc, setEditingDesc] = useState(false);
@@ -386,6 +388,7 @@ The Actions describe what happens on screen — use them as visual design hints.
       });
     } catch (e) {
       console.error("[SketchForm] Failed to open preview window:", e);
+      setPreviewMode("slides");
       setShowPreview(true);
     }
   }, [localRows, projectRoot, localTitle]);
@@ -395,6 +398,7 @@ The Actions describe what happens on screen — use them as visual design hints.
     try {
       const monitors: MonitorInfo[] = await invoke("list_monitors");
       if (monitors.length === 0) {
+        setPreviewMode("slides");
         setShowPreview(true);
       } else if (monitors.length === 1) {
         await launchPreviewOnMonitor(monitors[0]);
@@ -405,6 +409,7 @@ The Actions describe what happens on screen — use them as visual design hints.
     } catch (e) {
       console.error("[SketchForm] Failed to list monitors:", e);
       // Fallback: open in-window preview
+      setPreviewMode("slides");
       setShowPreview(true);
     }
   }, [launchPreviewOnMonitor]);
@@ -480,6 +485,24 @@ The Actions describe what happens on screen — use them as visual design hints.
             </button>
           )}
           {localRows.length > 0 && (
+            <button
+              onClick={() => { setPreviewMode("slide-only"); setShowPreview(true); }}
+              className="p-1.5 rounded-md text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors"
+              title="Slide-only view"
+            >
+              <Maximize2 className="w-4 h-4" />
+            </button>
+          )}
+          {localRows.length > 0 && (
+            <button
+              onClick={() => { setPreviewMode("teleprompter"); setShowPreview(true); }}
+              className="p-1.5 rounded-md text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors"
+              title="Teleprompter"
+            >
+              <MonitorPlay className="w-4 h-4" />
+            </button>
+          )}
+          {localRows.length > 0 && (
             <div className="relative">
               <button
                 onClick={handlePreviewClick}
@@ -512,7 +535,7 @@ The Actions describe what happens on screen — use them as visual design hints.
                     ))}
                     <div className="border-t border-[rgb(var(--color-border))]">
                       <button
-                        onClick={() => { setShowMonitorPicker(false); setShowPreview(true); }}
+                        onClick={() => { setShowMonitorPicker(false); setPreviewMode("slides"); setShowPreview(true); }}
                         className="w-full px-3 py-2 text-left text-xs text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors"
                       >
                         Preview in window instead
@@ -795,7 +818,8 @@ The row already has a visual and design_plan. Read the sketch with read_sketch f
           rows={localRows}
           projectRoot={projectRoot}
           title={localTitle || "Untitled Sketch"}
-          onClose={() => setShowPreview(false)}
+          initialMode={previewMode}
+          onClose={() => { setShowPreview(false); setPreviewMode("slides"); }}
         />
       )}
     </div>
