@@ -5,6 +5,22 @@
     <link rel="icon" type="image/svg+xml" href="/cutready.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>CutReady</title>
+    <script>
+      // Apply persisted theme synchronously before first paint to avoid
+      // a flash from default (light) theme to the user's preferred theme.
+      (function () {
+        try {
+          var pref = localStorage.getItem("cutready-theme");
+          var theme = pref;
+          if (pref === "system" || pref === null || pref === undefined) {
+            theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+          }
+          if (theme === "dark") {
+            document.documentElement.classList.add("dark");
+          }
+        } catch (_) { /* localStorage unavailable — fall through to default */ }
+      })();
+    </script>
   </head>
   <body class="bg-[var(--color-surface)] text-[var(--color-text)]">
     <div id="root"></div>
