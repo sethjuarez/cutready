@@ -67,6 +67,14 @@ pub async fn agent_chat(
     timeout_ms: Option<u64>,
 ) -> Result<ChatMessage, String> {
     let started = Instant::now();
+    let mut messages = messages;
+    let stripped = crate::engine::agent::sanitize::sanitize_user_messages(&mut messages);
+    if stripped > 0 {
+        log::warn!(
+            "[agent_chat] stripped {} control character(s) from user messages before send",
+            stripped
+        );
+    }
     let message_chars = agentive::context::estimate_chars(&messages);
     let provider_name = config.provider.clone();
     let model = config.model.clone();
@@ -192,8 +200,27 @@ pub async fn agent_chat_with_tools(
     use tauri::Emitter;
 
     let started = Instant::now();
+    let mut messages = messages;
+    let stripped = crate::engine::agent::sanitize::sanitize_user_messages(&mut messages);
+    if stripped > 0 {
+        log::warn!(
+            "[agent_chat_with_tools] stripped {} control character(s) from user messages before send",
+            stripped
+        );
+    }
     let message_chars = agentive::context::estimate_chars(&messages);
     let message_count = messages.len();
+    // Heads-up log for unusually large request payloads. Azure OpenAI and other
+    // gateways have rejected ~80KB+ bodies in the past with confusing
+    // 'Unterminated string' parse errors (see issue #60); having a clear
+    // size-based warning makes future occurrences easier to triage.
+    if message_chars > 100_000 {
+        log::warn!(
+            "[agent_chat_with_tools] large request: messages={} chars={} (threshold=100000)",
+            message_count,
+            message_chars,
+        );
+    }
     let project_root = {
         let guard = state.current_project.lock().unwrap();
         guard.as_ref().ok_or("No project open")?.root.clone()
