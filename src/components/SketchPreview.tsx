@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useState, useRef, lazy, Suspense } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { SafeMarkdown } from "./SafeMarkdown";
-import { Clock, RefreshCw, LayoutGrid, X, ArrowLeft, ArrowRight, Image as ImageIcon, ChevronLeft, ChevronRight } from "lucide-react";
+import { Clock, RefreshCw, LayoutGrid, X, ArrowLeft, ArrowRight, Image as ImageIcon, ChevronLeft, ChevronRight, MonitorPlay } from "lucide-react";
 import { ResizeHandle } from "./ResizeHandle";
 import type { PlanningRow } from "../types/sketch";
 import type { VisualControlHandle } from "./VisualCell";
 
 const VisualCell = lazy(() => import("./VisualCell"));
+const TeleprompterView = lazy(() => import("./TeleprompterView").then((m) => ({ default: m.TeleprompterView })));
 
 const PREFS_KEY = "cutready:preview";
 
@@ -58,6 +59,7 @@ export function SketchPreview({ rows, projectRoot, title, onClose, slides: slide
   const [panelVisible, setPanelVisible] = useState(loadPrefs().panelVisible);
   const visualControlRef = useRef<VisualControlHandle | null>(null);
   const [visualPlaying, setVisualPlaying] = useState(false);
+  const [teleprompterActive, setTeleprompterActive] = useState(false);
   const total = slides.length;
   const slide = slides[currentIdx];
 
@@ -96,9 +98,12 @@ export function SketchPreview({ rows, projectRoot, title, onClose, slides: slide
     savePrefs({ panelSide, panelWidth, panelVisible });
   }, [panelSide, panelWidth, panelVisible]);
 
-  // Keyboard navigation
+  // Keyboard navigation. While teleprompter is active, it owns the keyboard
+  // (capture-phase listener with stopPropagation), so this handler effectively
+  // stays inert in that mode — but we still gate to be safe.
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      if (teleprompterActive) return;
       if (e.key === "Escape") onClose();
       else if (e.key === "ArrowRight" || e.key === "ArrowDown" || e.key === " ") {
         e.preventDefault();
@@ -110,11 +115,13 @@ export function SketchPreview({ rows, projectRoot, title, onClose, slides: slide
         setCurrentIdx(0);
       } else if (e.key === "End") {
         setCurrentIdx(total - 1);
+      } else if (e.key === "t" || e.key === "T") {
+        setTeleprompterActive(true);
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [onClose, goNext, goPrev, total]);
+  }, [onClose, goNext, goPrev, total, teleprompterActive]);
 
   // Reset visual playing state when slide changes
   useEffect(() => {
@@ -166,6 +173,16 @@ export function SketchPreview({ rows, projectRoot, title, onClose, slides: slide
           {hasVisual && !visualPlaying && (
             <div className="w-px h-4 bg-[rgb(var(--color-border))]" />
           )}
+          {/* Teleprompter mode */}
+          <button
+            onClick={() => setTeleprompterActive(true)}
+            className="flex items-center gap-1.5 text-xs text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] transition-colors px-2 py-1 rounded-md hover:bg-[rgb(var(--color-surface-alt))]"
+            title="Teleprompter mode (T)"
+          >
+            <MonitorPlay className="w-3.5 h-3.5" />
+            Teleprompter
+          </button>
+          <div className="w-px h-4 bg-[rgb(var(--color-border))]" />
           {/* Toggle panel side */}
           <button
             onClick={toggleSide}
@@ -336,6 +353,21 @@ export function SketchPreview({ rows, projectRoot, title, onClose, slides: slide
           <ChevronRight className="w-5 h-5" />
         </button>
       </div>
+
+      {/* Teleprompter overlay — distraction-free reading view (issue #62) */}
+      {teleprompterActive && (
+        <Suspense fallback={null}>
+          <TeleprompterView
+            slides={slides}
+            projectRoot={projectRoot}
+            initialIndex={currentIdx}
+            onExit={(finalIdx) => {
+              setCurrentIdx(finalIdx);
+              setTeleprompterActive(false);
+            }}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }

@@ -237,6 +237,88 @@ html {
   color: rgb(var(--color-accent));
 }
 
+/* Teleprompter markdown — inherits font-size/line-height from parent.
+   Forced light-on-dark color via the container's `color`; only spacing here. */
+.prose-teleprompter p { margin: 0 0 0.6em; }
+.prose-teleprompter p:last-child { margin-bottom: 0; }
+.prose-teleprompter ul,
+.prose-teleprompter ol { margin: 0.4em 0 0.6em; padding-left: 1.4em; }
+.prose-teleprompter ul { list-style-type: disc; }
+.prose-teleprompter ol { list-style-type: decimal; }
+.prose-teleprompter li { margin: 0.2em 0; }
+.prose-teleprompter strong, .prose-teleprompter b { font-weight: 700; }
+.prose-teleprompter em, .prose-teleprompter i { font-style: italic; }
+.prose-teleprompter code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85em;
+  background: rgba(255, 255, 255, 0.12);
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+}
+.prose-teleprompter pre {
+  margin: 0.6em 0;
+  padding: 0.75em 1em;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 0.5em;
+  overflow-x: auto;
+  font-size: 0.85em;
+  line-height: 1.4;
+}
+.prose-teleprompter pre code { background: none; padding: 0; }
+.prose-teleprompter a {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: rgba(255, 255, 255, 0.5);
+}
+.prose-teleprompter blockquote {
+  margin: 0.5em 0;
+  padding-left: 0.9em;
+  border-left: 3px solid rgba(255, 255, 255, 0.4);
+  color: rgba(255, 255, 255, 0.85);
+}
+.prose-teleprompter h1, .prose-teleprompter h2, .prose-teleprompter h3,
+.prose-teleprompter h4, .prose-teleprompter h5, .prose-teleprompter h6 {
+  font-weight: 700;
+  line-height: 1.2;
+  margin: 0.6em 0 0.4em;
+}
+.prose-teleprompter h1 { font-size: 1.25em; }
+.prose-teleprompter h2 { font-size: 1.15em; }
+.prose-teleprompter h3 { font-size: 1.05em; }
+.prose-teleprompter hr {
+  border: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.2);
+  margin: 0.8em 0;
+}
+
+/* Teleprompter range slider */
+.teleprompter-range {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 2px;
+  outline: none;
+}
+.teleprompter-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: rgb(var(--color-media-control-fg));
+  cursor: pointer;
+  border: none;
+}
+.teleprompter-range::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: rgb(var(--color-media-control-fg));
+  cursor: pointer;
+  border: none;
+}
+
 .md-cell-ul,
 .md-cell-ol {
   margin: 0;
