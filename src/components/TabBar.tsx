@@ -1,9 +1,44 @@
 import { useAppStore } from "../stores/appStore";
 import type { EditorTab } from "../stores/appStore";
+import { useToastStore } from "../stores/toastStore";
 import { SketchIcon, StoryboardIcon, NoteIcon, HistoryIcon, ImageIcon, VisualIcon } from "./Icons";
 import { usePopover } from "../hooks/usePopover";
 import React, { useCallback, useRef, useState } from "react";
-import { LayoutGrid, X } from "lucide-react";
+import { Copy, LayoutGrid, X } from "lucide-react";
+
+/**
+ * Return the project-relative path that should be copied for a tab, or null
+ * if the tab is not file-backed (e.g. the synthetic History tab).
+ */
+export function getTabCopyPath(tab: Pick<EditorTab, "type" | "path"> | undefined | null): string | null {
+  if (!tab) return null;
+  if (tab.type === "history") return null;
+  if (!tab.path) return null;
+  if (tab.path.startsWith("__")) return null;
+  return tab.path;
+}
+
+/** Copy the tab's project-relative path to the clipboard and show a toast. */
+export async function copyTabPath(
+  tab: Pick<EditorTab, "type" | "path"> | undefined | null,
+  deps: {
+    writeText?: (text: string) => Promise<void>;
+    showToast?: (message: string, durationMs?: number, type?: "success" | "error" | "warning" | "info") => void;
+  } = {},
+): Promise<boolean> {
+  const path = getTabCopyPath(tab);
+  if (!path) return false;
+  const writeText = deps.writeText ?? ((t: string) => navigator.clipboard.writeText(t));
+  const showToast = deps.showToast ?? useToastStore.getState().show;
+  try {
+    await writeText(path);
+    showToast(`Copied path: ${path}`, 2500, "success");
+    return true;
+  } catch {
+    showToast("Failed to copy path", 3000, "error");
+    return false;
+  }
+}
 
 /**
  * TabBar — horizontal row of open document tabs.
@@ -41,6 +76,7 @@ export function TabBar() {
 
   const contextTab = openTabs.find((t) => t.id === contextTabIdRef.current);
   const canSplit = contextTab && contextTab.type !== "history" && contextTab.type !== "asset";
+  const copyablePath = getTabCopyPath(contextTab);
   const isAlreadyInSplit = contextTab
     ? splitTabs.some((st) => st.path === contextTab.path && st.type === contextTab.type)
     : false;
@@ -124,6 +160,15 @@ export function TabBar() {
               {isAlreadyInSplit ? "Focus in Split" : "Open to the Side"}
             </button>
           )}
+          <button
+            disabled={!copyablePath}
+            className="flex items-center gap-2 w-full px-3 py-1.5 text-[12px] text-left text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))] disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-[rgb(var(--color-text))] disabled:cursor-not-allowed transition-colors"
+            onClick={() => { void copyTabPath(contextTab); closeContextMenu(); }}
+            title={copyablePath ? `Copy ${copyablePath}` : "Tab is not file-backed"}
+          >
+            <Copy className="w-3.5 h-3.5" />
+            Copy Path
+          </button>
           <div className="my-1 border-t border-[rgb(var(--color-border-subtle))]" />
           <button
             className="flex items-center gap-2 w-full px-3 py-1.5 text-[12px] text-left text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))] transition-colors"
