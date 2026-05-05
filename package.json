@@ -11,7 +11,8 @@
     "test:e2e": "playwright test",
     "test:watch": "vitest",
     "tauri": "tauri",
-    "visual:score": "node scripts/visual-eval/score-visuals.mjs"
+    "visual:score": "node scripts/visual-eval/score-visuals.mjs",
+    "visual:eval": "node scripts/visual-eval/run-eval.mjs"
   },
   "dependencies": {
     "@codemirror/lang-markdown": "^6.5.0",

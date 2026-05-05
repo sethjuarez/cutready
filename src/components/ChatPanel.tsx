@@ -310,6 +310,7 @@ Root: \`{ "version": "1.0", "root": { "type": "player", "width": 960, "height": 
 Nodes: \`text\` (content, x, y, fontSize, fill, fontWeight, textAnchor), \`rect\` (x, y, width, height, fill, stroke, rx), \`circle\` (cx, cy, r, fill, stroke), \`line\` (x1, y1, x2, y2, stroke), \`arrow\` (x1, y1, x2, y2, stroke, headSize), \`group\` (x, y, children), \`polygon\` (points, fill)
 
 Text uses \`content\` not \`text\`: \`{ "type": "text", "content": "Hello", ... }\`
+Text color uses \`fill\` not \`color\`. Rounded rectangles use \`rx\` not \`radius\`. Animation fields are frame numbers, not objects.
 
 **NEVER use em-dash (—) or en-dash (–) in text content strings.** Use -- or - instead. Non-ASCII dashes cause rendering issues.
 
@@ -319,13 +320,15 @@ Animations: \`fadeIn: <frame>\` (must be ≥ 1), \`draw: <frame>\`, \`fadeOut: <
 
 1. **Make each visual feel like a finished slide**, not a sketch of shapes. Use a clear title, subtitle, and one strong center composition.
 2. **Prefer fewer, stronger elements.** A great visual usually has 3-5 main objects or steps, not a dense field of boxes. Aim for ~20-40 total nodes; above ~45 usually feels crowded unless the extra nodes are essential data marks.
-3. **Use the full 960×540 canvas intentionally.** Do not add a full-slide inner card with margins; use panels/cards only for specific content groups.
-4. **Minimum font sizes:** titles ≥ 36px, section labels ≥ 20px, annotations ≥ 16px.
-5. **No overlapping.** Every element must have clear space.
-6. **Text safe area:** keep text ≥40px from edges. Shapes CAN extend to edges.
-7. **Spacing:** ≥24px between elements, ≥48px between groups.
-8. **One key concept per visual** — illustrated richly.
-9. **Text inside containers:** Approximate text width as \`chars × fontSize × 0.55\`.
+3. **Prefer a hero metaphor over literal micro-detail.** One dominant visual anchor plus 3-4 labeled stages usually scores better than token strips, tiny grids, repeated chips, or probability worksheets.
+4. **Use groups sparingly.** Groups are for transforms/positioning; they do not make a crowded visual simpler.
+5. **Use the full 960×540 canvas intentionally.** Do not add a full-slide inner card with margins; use panels/cards only for specific content groups.
+6. **Minimum font sizes:** titles ≥ 36px, section labels ≥ 20px, annotations ≥ 16px.
+7. **No overlapping.** Every element must have clear space.
+8. **Text safe area:** keep text ≥40px from edges. Shapes CAN extend to edges.
+9. **Spacing:** ≥24px between elements, ≥48px between groups.
+10. **One key concept per visual** — illustrated richly.
+11. **Text inside containers:** Approximate text width as \`chars × fontSize × 0.55\`.
 
 ## Color Rules — CutReady Semantic Tokens REQUIRED
 
@@ -378,6 +381,7 @@ Avoid hardcoded colors like \`#38bdf8\` for routine emphasis. They bypass CutRea
 - ❌ Overlap text — check y coordinates have enough spacing
 - ❌ Put long text in a small box — text will overflow
 - ❌ Forget \`$background\` on root
+- ❌ Use \`color\`, \`radius\`, or object-shaped \`fadeIn\` values — use \`fill\`, \`rx\`, and numeric animation frames
 - ❌ Use hardcoded cyan/purple for routine emphasis — use \`$accent\`, \`$secondary\`, \`$tertiary\`, \`$success\`, \`$warning\`
 - ❌ Use only hex for text — use \`$title\`/\`$subtitle\`/\`$foreground\`/\`$muted\` tokens
 - ❌ Stop after a saved visual if critique suggests \`ELEMENT_COUNT\` or \`TEXT_DENSITY\` — simplify and call \`set_row_visual\` again

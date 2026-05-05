@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import process from "node:process";
 
 const DEFAULT_TARGET = "D:\\cutready\\ndc-toronto-26\\session\\.cutready\\visuals";
@@ -46,7 +47,7 @@ Default target:
   ${DEFAULT_TARGET}`);
 }
 
-function collectFiles(target) {
+export function collectVisualFiles(target) {
   if (!existsSync(target)) {
     throw new Error(`Target does not exist: ${target}`);
   }
@@ -158,7 +159,7 @@ function repeatedChipRows(rects) {
   return largest >= 5 ? { count: largest } : null;
 }
 
-function scoreVisual(file) {
+export function scoreVisual(file) {
   const raw = readFileSync(file, "utf8");
   const visual = JSON.parse(raw);
   const root = visual.root ?? {};
@@ -175,6 +176,7 @@ function scoreVisual(file) {
   const maxShapeArea = Math.max(0, ...nodes.map(shapeArea));
   const repeatedMarks = repeatedSmallRects(rects);
   const chipRows = repeatedChipRows(rects);
+  const schemaIssues = findSchemaIssues(nodes);
 
   let score = 100;
   const strengths = [];
@@ -188,6 +190,14 @@ function scoreVisual(file) {
   const add = (code, message) => {
     strengths.push({ code, message });
   };
+
+  if (schemaIssues.length > 0) {
+    deduct(
+      Math.min(45, 15 + schemaIssues.length * 5),
+      "INVALID_DSL_SHAPE",
+      `${schemaIssues.length} unsupported or malformed DSL field(s): ${schemaIssues.slice(0, 4).join("; ")}`
+    );
+  }
 
   if (root.width === CANVAS_WIDTH && root.height === CANVAS_HEIGHT) {
     add("CANVAS", "uses 960x540 presentation canvas");
@@ -300,7 +310,36 @@ function scoreVisual(file) {
   };
 }
 
-function formatConsoleReport(results, target) {
+function findSchemaIssues(nodes) {
+  const issues = [];
+  for (const node of nodes) {
+    if ("color" in node) {
+      issues.push(`${node.type ?? "node"} uses color; use fill`);
+    }
+    if ("radius" in node) {
+      issues.push(`${node.type ?? "node"} uses radius; use rx`);
+    }
+    for (const key of ["fadeIn", "fadeOut", "draw"]) {
+      if (key in node && typeof node[key] !== "number") {
+        issues.push(`${node.type ?? "node"} has non-numeric ${key}`);
+      }
+    }
+    if (node.type === "text") {
+      if (typeof node.content !== "string") {
+        issues.push("text node missing string content");
+      }
+      if (!("fill" in node)) {
+        issues.push(`text '${node.content ?? ""}' missing fill`);
+      }
+      if (node.content === "$title" || node.content === "$subtitle") {
+        issues.push(`text content '${node.content}' should be real slide copy, not a token name`);
+      }
+    }
+  }
+  return issues;
+}
+
+export function formatConsoleReport(results, target) {
   const average = results.length > 0 ? results.reduce((sum, result) => sum + result.score, 0) / results.length : 0;
   const passRate = results.length > 0 ? results.filter((result) => result.rating === "pass").length / results.length : 0;
   const commonFindings = new Map();
@@ -344,7 +383,7 @@ function formatConsoleReport(results, target) {
 
 function main() {
   const options = parseArgs(process.argv.slice(2));
-  const files = collectFiles(options.target).slice(0, options.limit);
+  const files = collectVisualFiles(options.target).slice(0, options.limit);
   const results = files.map(scoreVisual).sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
   const report = {
     generatedAt: new Date().toISOString(),
@@ -371,9 +410,11 @@ function main() {
   }
 }
 
-try {
-  main();
-} catch (error) {
-  console.error(error instanceof Error ? error.message : String(error));
-  process.exit(1);
+if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+  try {
+    main();
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exit(1);
+  }
 }

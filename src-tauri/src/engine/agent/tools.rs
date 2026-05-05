@@ -317,7 +317,7 @@ pub fn all_tools(web_search_enabled: bool) -> Vec<Tool> {
         ),
         Tool::function(
             "set_row_visual",
-            "Set an animated framing visual on a planning row using the elucim DSL. Use CutReady semantic tokens for theme integration: $background, $title, $subtitle, $foreground, $muted, $surface, $border, $accent, $secondary, $tertiary, $success, $warning, $error. Avoid hardcoded cyan/purple for routine emphasis. Prefer polished slide density: roughly 20-40 flattened nodes, 3-5 main objects/steps, and minimal labels. Group nodes are useful for transforms but do not make a crowded slide simpler. Auto-validates structure and auto-critiques layout/readability before saving. Returns validation or critique errors if the visual has issues — fix them and call again. Pass null to remove a visual.",
+            "Set an animated framing visual on a planning row using the elucim DSL. Use CutReady semantic tokens for theme integration: $background, $title, $subtitle, $foreground, $muted, $surface, $border, $accent, $secondary, $tertiary, $success, $warning, $error. Avoid hardcoded cyan/purple for routine emphasis. Prefer polished slide density: roughly 20-40 flattened nodes, 3-5 main objects/steps, minimal labels, and one hero visual metaphor. Avoid token strips, tiny grids, repeated chips, and probability worksheets unless essential. Use valid Elucim fields: text fill (not color), rect rx (not radius), and numeric fadeIn/draw/fadeOut frames. Group nodes are useful for transforms but do not make a crowded slide simpler. Auto-validates structure and auto-critiques layout/readability before saving. Returns validation or critique errors if the visual has issues — fix them and call again. Pass null to remove a visual.",
             json!({
                 "type": "object",
                 "properties": {
@@ -346,7 +346,7 @@ pub fn all_tools(web_search_enabled: bool) -> Vec<Tool> {
         ),
         Tool::function(
             "design_plan",
-            "Save an English-language design brief for a planning row's visual. Call this before generating DSL JSON to think through the design. Describe a polished 16:9 slide-like composition: title/subtitle, 3-5 main objects/steps, spatial arrangement, CutReady semantic tokens, and animation sequence. Prefer fewer large elements over many small boxes or labels. IMPORTANT: You must provide 'path', 'index', and 'plan' — all three are required.",
+            "Save an English-language design brief for a planning row's visual. Call this before generating DSL JSON to think through the design. Describe a polished 16:9 slide-like composition: title/subtitle, one hero metaphor, 3-5 main objects/steps, spatial arrangement, CutReady semantic tokens, and animation sequence. Prefer fewer large elements over many small boxes or labels. IMPORTANT: You must provide 'path', 'index', and 'plan' — all three are required.",
             json!({
                 "type": "object",
                 "properties": {
