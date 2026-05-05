@@ -317,7 +317,7 @@ pub fn all_tools(web_search_enabled: bool) -> Vec<Tool> {
         ),
         Tool::function(
             "set_row_visual",
-            "Set an animated framing visual on a planning row using the elucim DSL. Use CutReady semantic tokens for theme integration: $background, $title, $subtitle, $foreground, $muted, $surface, $border, $accent, $secondary, $tertiary, $success, $warning, $error. Avoid hardcoded cyan/purple for routine emphasis. Auto-validates structure and auto-critiques layout/readability before saving. Returns validation or critique errors if the visual has issues — fix them and call again. On success, saves the visual and returns any optional suggestions. Pass null to remove a visual.",
+            "Set an animated framing visual on a planning row using the elucim DSL. Use CutReady semantic tokens for theme integration: $background, $title, $subtitle, $foreground, $muted, $surface, $border, $accent, $secondary, $tertiary, $success, $warning, $error. Avoid hardcoded cyan/purple for routine emphasis. Prefer polished slide density: roughly 20-40 nodes, 3-5 main objects/steps, and minimal labels. Auto-validates structure and auto-critiques layout/readability before saving. Returns validation or critique errors if the visual has issues — fix them and call again. On success, saves the visual and returns optional suggestions; revise once for density suggestions like ELEMENT_COUNT or TEXT_DENSITY. Pass null to remove a visual.",
             json!({
                 "type": "object",
                 "properties": {
@@ -346,7 +346,7 @@ pub fn all_tools(web_search_enabled: bool) -> Vec<Tool> {
         ),
         Tool::function(
             "design_plan",
-            "Save an English-language design brief for a planning row's visual. Call this before generating DSL JSON to think through the design. Describe a polished 16:9 slide-like composition: title/subtitle, main objects, spatial arrangement, CutReady semantic tokens, and animation sequence. IMPORTANT: You must provide 'path', 'index', and 'plan' — all three are required.",
+            "Save an English-language design brief for a planning row's visual. Call this before generating DSL JSON to think through the design. Describe a polished 16:9 slide-like composition: title/subtitle, 3-5 main objects/steps, spatial arrangement, CutReady semantic tokens, and animation sequence. Prefer fewer large elements over many small boxes or labels. IMPORTANT: You must provide 'path', 'index', and 'plan' — all three are required.",
             json!({
                 "type": "object",
                 "properties": {
@@ -354,7 +354,7 @@ pub fn all_tools(web_search_enabled: bool) -> Vec<Tool> {
                     "index": { "type": "integer", "description": "REQUIRED. 0-based row index (e.g. 0 for the first row, 5 for the sixth)" },
                     "plan": {
                         "type": "string",
-                        "description": "REQUIRED. English description of the visual design: what elements to show, where they go on the 960x540 canvas, which CutReady semantic tokens to use ($title/$subtitle/$foreground/$muted/$surface/$border/$accent/etc.), and animation sequence"
+                         "description": "REQUIRED. English description of the visual design: what 3-5 main elements or steps to show, where they go on the 960x540 canvas, which CutReady semantic tokens to use ($title/$subtitle/$foreground/$muted/$surface/$border/$accent/etc.), and animation sequence. Keep the design presentation-grade, not crowded."
                     }
                 },
                 "required": ["path", "index", "plan"]
@@ -776,7 +776,10 @@ fn strip_tags(value: &str) -> String {
             _ => {}
         }
     }
-    html_unescape(out.trim()).split_whitespace().collect::<Vec<_>>().join(" ")
+    html_unescape(out.trim())
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 fn html_unescape(value: &str) -> String {
@@ -799,7 +802,10 @@ pub(crate) fn format_storyboard_for_agent(
         if storyboard.locked { "yes" } else { "no" }
     ));
     if !storyboard.description.trim().is_empty() {
-        out.push_str(&format!("\n## Description\n{}\n", storyboard.description.trim()));
+        out.push_str(&format!(
+            "\n## Description\n{}\n",
+            storyboard.description.trim()
+        ));
     }
 
     out.push_str("\n## Ordered Sequence\n");
@@ -821,12 +827,7 @@ pub(crate) fn format_storyboard_for_agent(
                     sketches.len()
                 ));
                 for (j, sketch_path) in sketches.iter().enumerate() {
-                    append_storyboard_sketch_summary(
-                        &mut out,
-                        root,
-                        j + 1,
-                        sketch_path,
-                    );
+                    append_storyboard_sketch_summary(&mut out, root, j + 1, sketch_path);
                 }
             }
         }
@@ -835,7 +836,12 @@ pub(crate) fn format_storyboard_for_agent(
     out
 }
 
-fn append_storyboard_sketch_summary(out: &mut String, root: &Path, index: usize, sketch_path: &str) {
+fn append_storyboard_sketch_summary(
+    out: &mut String,
+    root: &Path,
+    index: usize,
+    sketch_path: &str,
+) {
     let sketch_abs = match project::safe_resolve(root, sketch_path) {
         Ok(path) => path,
         Err(e) => {
@@ -2002,7 +2008,7 @@ fn critique_visual_doc(visual: &Value) -> Result<(Vec<String>, Vec<String>), Str
         ));
     } else if all_nodes.len() > 45 {
         suggestions.push(format!(
-            "ELEMENT_COUNT: {} elements — consider trimming to ~40 for cleaner design.",
+            "ELEMENT_COUNT: {} elements — this may feel crowded as a slide. Trim to ~40 by merging repeated boxes, removing secondary labels, or showing fewer steps.",
             all_nodes.len()
         ));
     }
@@ -2065,6 +2071,11 @@ fn critique_visual_doc(visual: &Value) -> Result<(Vec<String>, Vec<String>), Str
         }
     }
     let total_texts = text_nodes.len();
+    if total_texts > 20 {
+        suggestions.push(format!(
+            "TEXT_DENSITY: {total_texts} text labels — reduce labels or combine copy so the visual reads like a presentation slide, not a dense worksheet."
+        ));
+    }
     if total_texts > 0 && text_fills_without_token == total_texts {
         issues.push(
             "NO_TEXT_TOKENS: ALL text uses hardcoded colors — use $title for titles, $subtitle for framing lines, $foreground for labels/body text, and $muted for annotations.".into()
@@ -2399,7 +2410,9 @@ mod tests {
         assert!(context.contains("# Launch Demo"));
         assert!(context.contains("Locked: no"));
         assert!(context.contains("Sketch: \"Intro\" (intro.sk)"));
-        assert!(context.contains("Row 1 [0:10]: narrative=\"Introduce the dashboard\" actions=\"Open the dashboard\""));
+        assert!(context.contains(
+            "Row 1 [0:10]: narrative=\"Introduce the dashboard\" actions=\"Open the dashboard\""
+        ));
         assert!(context.contains("missing.sk"));
         assert!(context.contains("missing or unreadable"));
     }
@@ -2945,6 +2958,35 @@ mod tests {
         assert!(
             output.contains("SEMANTIC_ACCENTS"),
             "Expected semantic accent suggestion, got:\n{output}"
+        );
+    }
+
+    #[test]
+    fn critique_suggests_text_density_for_label_heavy_slide() {
+        let labels: Vec<Value> = (0..21)
+            .map(|i| {
+                json!({
+                    "type": "text",
+                    "content": format!("Label {}", i + 1),
+                    "x": 80 + (i % 7) * 120,
+                    "y": 160 + (i / 7) * 64,
+                    "fontSize": 18,
+                    "fill": "$foreground"
+                })
+            })
+            .collect();
+        let visual = json!({
+            "version": "1.0",
+            "root": {
+                "type": "player", "width": 960, "height": 540, "fps": 30, "durationInFrames": 60,
+                "background": "$background",
+                "children": labels
+            }
+        });
+        let output = run_critique(&visual);
+        assert!(
+            output.contains("TEXT_DENSITY"),
+            "Expected text density suggestion, got:\n{output}"
         );
     }
 }

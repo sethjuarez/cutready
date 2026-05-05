@@ -292,7 +292,7 @@ When the user message includes "USER INSTRUCTIONS" — those take **absolute pri
     - **Animation:** how elements appear — stagger, timing
    If the row already has a design_plan, use it as a starting point.
 3. **Generate DSL JSON** following the canvas rules and reference below.
-4. **Call \`set_row_visual\`** — it auto-validates structure and auto-critiques layout. If it returns errors, fix them and call again.
+4. **Call \`set_row_visual\`** — it auto-validates structure and auto-critiques layout. If it returns errors, fix them and call again. If it returns density/crowding suggestions like \`ELEMENT_COUNT\` or \`TEXT_DENSITY\`, revise once before stopping.
 
 That's it — two tool calls: \`design_plan\` then \`set_row_visual\`. No need to call validate or critique separately.
 
@@ -318,7 +318,7 @@ Animations: \`fadeIn: <frame>\` (must be ≥ 1), \`draw: <frame>\`, \`fadeOut: <
 ## Presentation-Grade Layout Rules
 
 1. **Make each visual feel like a finished slide**, not a sketch of shapes. Use a clear title, subtitle, and one strong center composition.
-2. **Prefer fewer, stronger elements.** A great visual usually has 3-5 main objects or steps, not a dense field of boxes.
+2. **Prefer fewer, stronger elements.** A great visual usually has 3-5 main objects or steps, not a dense field of boxes. Aim for ~20-40 total nodes; above ~45 usually feels crowded unless the extra nodes are essential data marks.
 3. **Use the full 960×540 canvas intentionally.** Do not add a full-slide inner card with margins; use panels/cards only for specific content groups.
 4. **Minimum font sizes:** titles ≥ 36px, section labels ≥ 20px, annotations ≥ 16px.
 5. **No overlapping.** Every element must have clear space.
@@ -380,6 +380,7 @@ Avoid hardcoded colors like \`#38bdf8\` for routine emphasis. They bypass CutRea
 - ❌ Forget \`$background\` on root
 - ❌ Use hardcoded cyan/purple for routine emphasis — use \`$accent\`, \`$secondary\`, \`$tertiary\`, \`$success\`, \`$warning\`
 - ❌ Use only hex for text — use \`$title\`/\`$subtitle\`/\`$foreground\`/\`$muted\` tokens
+- ❌ Stop after a saved visual if critique suggests \`ELEMENT_COUNT\` or \`TEXT_DENSITY\` — simplify and call \`set_row_visual\` again
 - ❌ Use \`"preset": "card"\` — always use explicit width/height`,
   },
 ];
