@@ -99,6 +99,8 @@ interface AppStoreState {
   outputVisible: boolean;
   /** Height of the output panel in pixels. */
   outputHeight: number;
+  /** Width of the secondary chat/history panel in pixels. */
+  secondaryWidth: number;
   /** Sidebar position: left or right. */
   sidebarPosition: SidebarPosition;
 
@@ -262,6 +264,8 @@ interface AppStoreState {
   toggleOutput: () => void;
   /** Set output panel height. */
   setOutputHeight: (height: number) => void;
+  /** Set secondary chat/history panel width. */
+  setSecondaryWidth: (width: number | ((current: number) => number)) => void;
   /** Toggle sidebar position (left/right). */
   toggleSidebarPosition: () => void;
 
@@ -543,6 +547,7 @@ function loadLayout(): Partial<{
   sidebarPosition: "left" | "right";
   outputVisible: boolean;
   outputHeight: number;
+  secondaryWidth: number;
   showVersionHistory: boolean;
 }> {
   try {
@@ -574,6 +579,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   sidebarVisible: savedLayout.sidebarVisible ?? true,
   outputVisible: savedLayout.outputVisible ?? false,
   outputHeight: savedLayout.outputHeight ?? 200,
+  secondaryWidth: savedLayout.secondaryWidth ?? 420,
   sidebarPosition: savedLayout.sidebarPosition ?? "left",
 
   openTabs: [],
@@ -658,6 +664,12 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     const h = Math.min(500, Math.max(80, height));
     set({ outputHeight: h });
     saveLayout({ outputHeight: h });
+  },
+  setSecondaryWidth: (width) => {
+    const next = typeof width === "function" ? width(get().secondaryWidth) : width;
+    const w = Math.min(720, Math.max(320, next));
+    set({ secondaryWidth: w });
+    saveLayout({ secondaryWidth: w });
   },
   toggleSidebarPosition: () => set((s) => {
     const pos = s.sidebarPosition === "left" ? "right" : "left";

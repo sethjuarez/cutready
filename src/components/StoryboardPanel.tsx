@@ -27,22 +27,23 @@ export function StoryboardPanel() {
   const activeTabId = useAppStore((s) => s.activeTabId);
   const splitTabs = useAppStore((s) => s.splitTabs);
   const setActiveEditorGroup = useAppStore((s) => s.setActiveEditorGroup);
+  const secondaryWidth = useAppStore((s) => s.secondaryWidth);
+  const setSecondaryWidth = useAppStore((s) => s.setSecondaryWidth);
   const hasSplit = splitTabs.length > 0;
 
   const activeTab = openTabs.find((t) => t.id === activeTabId);
   const isHistoryTab = activeTab?.type === "history";
   const isAssetTab = activeTab?.type === "asset";
 
-  const [secondaryWidth, setSecondaryWidth] = useState(340);
   const [splitWidth, setSplitWidth] = useState<number | null>(null);
   const secondaryOnLeft = sidebarPosition === "right";
 
   const handleSecondaryResize = useCallback(
     (delta: number) => {
       const adjusted = secondaryOnLeft ? delta : -delta;
-      setSecondaryWidth((w) => Math.min(600, Math.max(260, w + adjusted)));
+      setSecondaryWidth((width) => width + adjusted);
     },
-    [secondaryOnLeft],
+    [secondaryOnLeft, setSecondaryWidth],
   );
 
   const handleSplitResize = useCallback(
