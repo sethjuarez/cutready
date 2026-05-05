@@ -130,6 +130,18 @@ const defaultGlobalSettings: GlobalSettings = {
   aiWebAccess: "disabled",
 };
 
+function getInitialGlobalSettings(): GlobalSettings {
+  try {
+    const cachedPalette = localStorage.getItem("cutready-theme-palette");
+    if (cachedPalette) {
+      return { ...defaultGlobalSettings, displayThemePalette: cachedPalette };
+    }
+  } catch {
+    // localStorage may be unavailable in tests or restricted webviews.
+  }
+  return defaultGlobalSettings;
+}
+
 export const defaultWorkspaceSettings: WorkspaceSettings = {
   repoRemoteUrl: "",
   repoAuthMethod: "gh_cli",
@@ -139,7 +151,7 @@ export const defaultWorkspaceSettings: WorkspaceSettings = {
 };
 
 const defaultSettings: AppSettings = {
-  ...defaultGlobalSettings,
+  ...getInitialGlobalSettings(),
   ...defaultWorkspaceSettings,
 };
 
@@ -285,6 +297,13 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
 
   updateSetting: async (key, value) => {
     set((state) => ({ settings: { ...state.settings, [key]: value } }));
+    if (key === "displayThemePalette") {
+      try {
+        localStorage.setItem("cutready-theme-palette", String(value));
+      } catch {
+        // The Tauri Store remains authoritative; this cache only prevents startup flashes.
+      }
+    }
 
     if (WORKSPACE_KEYS.includes(key as keyof WorkspaceSettings)) {
       // Workspace setting — special handling for repoToken (encrypted)

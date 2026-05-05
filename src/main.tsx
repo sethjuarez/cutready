@@ -78,6 +78,7 @@ console.log(`[main.tsx] isCaptureMode=${isCaptureMode} isPreviewMode=${isPreview
 
 async function renderApp() {
   if (isCaptureMode) {
+    document.documentElement.dataset.themeReady = "true";
     // No StrictMode for capture window — it uses events for IPC
     const { CaptureWindow } = await import("./components/CaptureWindow");
     ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(

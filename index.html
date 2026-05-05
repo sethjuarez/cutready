@@ -5,6 +5,11 @@
     <link rel="icon" type="image/svg+xml" href="/cutready.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>CutReady</title>
+    <style>
+      html:not([data-theme-ready]) body {
+        opacity: 0;
+      }
+    </style>
     <script>
       // Apply persisted theme synchronously before first paint to avoid
       // a flash from default (light) theme to the user's preferred theme.
@@ -18,11 +23,18 @@
           if (theme === "dark") {
             document.documentElement.classList.add("dark");
           }
+          var cache = JSON.parse(localStorage.getItem("cutready-theme-bootstrap") || "null");
+          var tokens = cache && cache.themes && cache.themes[theme === "dark" ? "dark" : "light"];
+          if (tokens) {
+            Object.keys(tokens).forEach(function (name) {
+              document.documentElement.style.setProperty(name, tokens[name]);
+            });
+          }
         } catch (_) { /* localStorage unavailable — fall through to default */ }
       })();
     </script>
   </head>
-  <body class="bg-[var(--color-surface)] text-[var(--color-text)]">
+  <body class="bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text))]">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

@@ -24,6 +24,7 @@ import { FeedbackDialog } from "./FeedbackDialog";
 import { commandRegistry, useCommands } from "../services/commandRegistry";
 import { useTheme } from "../hooks/useTheme";
 import { getThemePalette } from "../theme/appThemePalettes";
+import { applyThemeColorTokens, cacheThemePaletteForBootstrap } from "../theme/applyThemePalette";
 import {
   House,
   Layers,
@@ -307,32 +308,16 @@ export function AppLayout() {
   }, [toggleSidebar, toggleOutput, toggleVersionHistory, toggleTheme, commandPaletteOpen]);
 
   // Apply display settings as CSS variables
-  const { settings: displaySettings } = useSettings();
+  const { settings: displaySettings, loaded: displaySettingsLoaded } = useSettings();
   useEffect(() => {
+    if (!displaySettingsLoaded) return;
     const root = document.documentElement;
     const palette = getThemePalette(displaySettings.displayThemePalette);
     const colors = palette[resolvedTheme];
     localStorage.setItem("cutready-theme-palette", palette.id);
-    root.style.setProperty("--color-surface", colors.surface);
-    root.style.setProperty("--color-surface-alt", colors.surfaceAlt);
-    root.style.setProperty("--color-surface-inset", colors.surfaceInset);
-    root.style.setProperty("--color-surface-toolbar", colors.surfaceToolbar);
-    root.style.setProperty("--color-accent", colors.accent);
-    root.style.setProperty("--color-accent-hover", colors.accentHover);
-    root.style.setProperty("--color-border", colors.border);
-    root.style.setProperty("--color-border-subtle", colors.borderSubtle);
-    root.style.setProperty("--color-text", colors.text);
-    root.style.setProperty("--color-text-secondary", colors.textSecondary);
-    root.style.setProperty("--color-secondary", colors.secondary);
-    root.style.setProperty("--color-tertiary", colors.tertiary);
-    root.style.setProperty("--color-success", colors.success);
-    root.style.setProperty("--color-warning", colors.warning);
-    root.style.setProperty("--color-error", colors.error);
-    root.style.setProperty("--color-accent-fg", colors.accentFg);
-    root.style.setProperty("--color-overlay-scrim", colors.overlayScrim);
-    root.style.setProperty("--color-overlay-strong", colors.overlayStrong);
-    root.style.setProperty("--color-media-control-bg", colors.mediaControlBg);
-    root.style.setProperty("--color-media-control-fg", colors.mediaControlFg);
+    cacheThemePaletteForBootstrap(palette);
+    applyThemeColorTokens(root, colors);
+    root.dataset.themeReady = "true";
     root.style.setProperty("--editor-font-size", `${displaySettings.displayFontSize}px`);
     root.style.setProperty("--chat-font-size", `${displaySettings.displayChatFontSize}px`);
     const densityMap: Record<string, { padding: string; lineHeight: string }> = {
@@ -352,7 +337,7 @@ export function AppLayout() {
       mono: '"Geist Mono", "Cascadia Code", "Fira Code", ui-monospace, monospace',
     };
     root.style.setProperty("--app-font-family", fontMap[displaySettings.displayFontFamily] ?? fontMap.system);
-  }, [displaySettings, resolvedTheme]);
+  }, [displaySettings, displaySettingsLoaded, resolvedTheme]);
 
   const handleExecuteCommand= useCallback((commandId: string) => {
     commandRegistry.execute(commandId);

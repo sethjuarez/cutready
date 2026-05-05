@@ -7,30 +7,9 @@ import { invoke } from "@tauri-apps/api/core";
 import { SketchPreview, type PreviewSlide } from "./SketchPreview";
 import type { PlanningRow } from "../types/sketch";
 import { getThemePalette } from "../theme/appThemePalettes";
+import { applyThemeColorTokens, cacheThemePaletteForBootstrap } from "../theme/applyThemePalette";
 
 const DATA_KEY = "cutready:preview-data";
-const COLOR_TOKEN_MAP = {
-  surface: "--color-surface",
-  surfaceAlt: "--color-surface-alt",
-  surfaceInset: "--color-surface-inset",
-  surfaceToolbar: "--color-surface-toolbar",
-  accent: "--color-accent",
-  accentHover: "--color-accent-hover",
-  border: "--color-border",
-  borderSubtle: "--color-border-subtle",
-  text: "--color-text",
-  textSecondary: "--color-text-secondary",
-  secondary: "--color-secondary",
-  tertiary: "--color-tertiary",
-  success: "--color-success",
-  warning: "--color-warning",
-  error: "--color-error",
-  accentFg: "--color-accent-fg",
-  overlayScrim: "--color-overlay-scrim",
-  overlayStrong: "--color-overlay-strong",
-  mediaControlBg: "--color-media-control-bg",
-  mediaControlFg: "--color-media-control-fg",
-} as const;
 
 interface PreviewData {
   rows: PlanningRow[];
@@ -55,9 +34,9 @@ export function StandalonePreview() {
     }
     const palette = getThemePalette(localStorage.getItem("cutready-theme-palette") ?? "cutready");
     const colors = palette[theme === "dark" ? "dark" : "light"];
-    for (const [key, token] of Object.entries(COLOR_TOKEN_MAP)) {
-      document.documentElement.style.setProperty(token, colors[key as keyof typeof COLOR_TOKEN_MAP]);
-    }
+    cacheThemePaletteForBootstrap(palette);
+    applyThemeColorTokens(document.documentElement, colors);
+    document.documentElement.dataset.themeReady = "true";
 
     try {
       const raw = localStorage.getItem(DATA_KEY);
