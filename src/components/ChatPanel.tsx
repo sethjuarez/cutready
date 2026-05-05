@@ -377,7 +377,6 @@ Pattern: accent hex for strokes/labels, semi-transparent rgba for fills. Max 2-3
 - ❌ Forget \`$background\` on root
 - ❌ Use only hex for text — use \`$foreground\`/\`$muted\` tokens
 - ❌ Use \`"preset": "card"\` — always use explicit width/height`,
-    modelOverride: "gpt-5.1-codex",
   },
 ];
 
