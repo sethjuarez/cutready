@@ -317,7 +317,7 @@ pub fn all_tools(web_search_enabled: bool) -> Vec<Tool> {
         ),
         Tool::function(
             "set_row_visual",
-            "Set an animated framing visual on a planning row using the elucim DSL. Auto-validates structure and auto-critiques layout/readability before saving. Returns validation or critique errors if the visual has issues — fix them and call again. On success, saves the visual and returns any optional suggestions. Pass null to remove a visual.",
+            "Set an animated framing visual on a planning row using the elucim DSL. Use CutReady semantic tokens for theme integration: $background, $title, $subtitle, $foreground, $muted, $surface, $border, $accent, $secondary, $tertiary, $success, $warning, $error. Avoid hardcoded cyan/purple for routine emphasis. Auto-validates structure and auto-critiques layout/readability before saving. Returns validation or critique errors if the visual has issues — fix them and call again. On success, saves the visual and returns any optional suggestions. Pass null to remove a visual.",
             json!({
                 "type": "object",
                 "properties": {
@@ -332,7 +332,7 @@ pub fn all_tools(web_search_enabled: bool) -> Vec<Tool> {
                                     "version": { "type": "string", "enum": ["1.0"] },
                                     "root": {
                                         "type": "object",
-                                        "description": "Root node — a scene, player, or presentation node. Scene node: { type: 'scene', width, height, children: [...] }. Player node: { type: 'player', width, height, fps, durationInFrames, children: [...] }. Children can be: circle, rect, line, arrow, text, group, polygon, image, axes, latex, graph, matrix, barChart. Text nodes use 'content' (not 'text') for the string. Animations: fadeIn (≥1), fadeOut (≥1), draw, easing. Omit fadeIn for instant visibility."
+                                        "description": "Root node — a scene, player, or presentation node. Scene node: { type: 'scene', width, height, children: [...] }. Player node: { type: 'player', width, height, fps, durationInFrames, children: [...] }. Children can be: circle, rect, line, arrow, text, group, polygon, image, axes, latex, graph, matrix, barChart. Text nodes use 'content' (not 'text') for the string. Prefer $title for titles, $subtitle for subtitles, $foreground for labels/body text, $muted for annotations, $surface/$border for panels, and $accent/$secondary/$tertiary for emphasis. Animations: fadeIn (≥1), fadeOut (≥1), draw, easing. Omit fadeIn for instant visibility."
                                     }
                                 },
                                 "required": ["version", "root"]
@@ -346,7 +346,7 @@ pub fn all_tools(web_search_enabled: bool) -> Vec<Tool> {
         ),
         Tool::function(
             "design_plan",
-            "Save an English-language design brief for a planning row's visual. Call this before generating DSL JSON to think through the design. Describes layout, elements, spatial arrangement, color palette, and animation sequence in plain English. IMPORTANT: You must provide 'path', 'index', and 'plan' — all three are required.",
+            "Save an English-language design brief for a planning row's visual. Call this before generating DSL JSON to think through the design. Describe a polished 16:9 slide-like composition: title/subtitle, main objects, spatial arrangement, CutReady semantic tokens, and animation sequence. IMPORTANT: You must provide 'path', 'index', and 'plan' — all three are required.",
             json!({
                 "type": "object",
                 "properties": {
@@ -354,7 +354,7 @@ pub fn all_tools(web_search_enabled: bool) -> Vec<Tool> {
                     "index": { "type": "integer", "description": "REQUIRED. 0-based row index (e.g. 0 for the first row, 5 for the sixth)" },
                     "plan": {
                         "type": "string",
-                        "description": "REQUIRED. English description of the visual design: what elements to show, where they go on the 960x540 canvas, color choices, and animation sequence"
+                        "description": "REQUIRED. English description of the visual design: what elements to show, where they go on the 960x540 canvas, which CutReady semantic tokens to use ($title/$subtitle/$foreground/$muted/$surface/$border/$accent/etc.), and animation sequence"
                     }
                 },
                 "required": ["path", "index", "plan"]
@@ -2067,12 +2067,20 @@ fn critique_visual_doc(visual: &Value) -> Result<(Vec<String>, Vec<String>), Str
     let total_texts = text_nodes.len();
     if total_texts > 0 && text_fills_without_token == total_texts {
         issues.push(
-            "NO_TEXT_TOKENS: ALL text uses hardcoded colors — at least titles and annotations should use $foreground/$muted for theme compatibility.".into()
+            "NO_TEXT_TOKENS: ALL text uses hardcoded colors — use $title for titles, $subtitle for framing lines, $foreground for labels/body text, and $muted for annotations.".into()
         );
     } else if total_texts > 2 && text_fills_without_token as f64 / total_texts as f64 > 0.7 {
         suggestions.push(format!(
-            "LOW_TOKEN_USAGE: {text_fills_without_token}/{total_texts} text fills are hardcoded hex — use $foreground for titles and $muted for secondary text."
+            "LOW_TOKEN_USAGE: {text_fills_without_token}/{total_texts} text fills are hardcoded hex — use $title/$subtitle for slide hierarchy and $foreground/$muted for labels and annotations."
         ));
+    }
+    let uses_title_or_subtitle = text_nodes
+        .iter()
+        .any(|tn| tn.fill == "$title" || tn.fill == "$subtitle");
+    if total_texts >= 2 && !uses_title_or_subtitle {
+        suggestions.push(
+            "TITLE_TOKENS: use $title for the main slide title and $subtitle for the framing line so visuals match CutReady's presentation theme.".into()
+        );
     }
 
     // 4. Overlap detection (text-on-text only — non-blocking suggestion since
@@ -2211,14 +2219,28 @@ fn critique_visual_doc(visual: &Value) -> Result<(Vec<String>, Vec<String>), Str
 
     // 9. Color variety
     let mut accent_colors: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut hardcoded_brand_like_colors = 0usize;
     for node in &all_nodes {
         for key in &["fill", "stroke"] {
             if let Some(c) = node.get(*key).and_then(|v| v.as_str()) {
                 if c.starts_with('#') || c.starts_with("rgb") {
                     accent_colors.insert(c.to_string());
                 }
+                let lower = c.to_ascii_lowercase();
+                if lower.contains("#38bdf8")
+                    || lower.contains("56,189,248")
+                    || lower.contains("#a78bfa")
+                    || lower.contains("167,139,250")
+                {
+                    hardcoded_brand_like_colors += 1;
+                }
             }
         }
+    }
+    if hardcoded_brand_like_colors > 0 {
+        suggestions.push(format!(
+            "SEMANTIC_ACCENTS: {hardcoded_brand_like_colors} fill/stroke value(s) use hardcoded blue/purple accents. Prefer $accent, $secondary, or $tertiary so generated visuals inherit CutReady branding."
+        ));
     }
     if accent_colors.len() == 1 {
         suggestions.push(
@@ -2884,5 +2906,45 @@ mod tests {
         });
         let result = critique_visual_doc(&visual);
         assert!(result.is_ok(), "Critique should succeed on valid visual");
+    }
+
+    #[test]
+    fn critique_suggests_title_tokens_for_slide_text() {
+        let visual = json!({
+            "version": "1.0",
+            "root": {
+                "type": "player", "width": 960, "height": 540, "fps": 30, "durationInFrames": 60,
+                "background": "$background",
+                "children": [
+                    { "type": "text", "content": "Main Idea", "x": 480, "y": 70, "fontSize": 40, "fill": "$foreground", "textAnchor": "middle" },
+                    { "type": "text", "content": "supporting context", "x": 480, "y": 110, "fontSize": 20, "fill": "$muted", "textAnchor": "middle" }
+                ]
+            }
+        });
+        let output = run_critique(&visual);
+        assert!(
+            output.contains("TITLE_TOKENS"),
+            "Expected title/subtitle token suggestion, got:\n{output}"
+        );
+    }
+
+    #[test]
+    fn critique_suggests_semantic_accents_for_hardcoded_cyan() {
+        let visual = json!({
+            "version": "1.0",
+            "root": {
+                "type": "player", "width": 960, "height": 540, "fps": 30, "durationInFrames": 60,
+                "background": "$background",
+                "children": [
+                    { "type": "text", "content": "Main Idea", "x": 480, "y": 70, "fontSize": 40, "fill": "$title", "textAnchor": "middle" },
+                    { "type": "rect", "x": 360, "y": 190, "width": 240, "height": 120, "fill": "rgba(56,189,248,0.12)", "stroke": "#38bdf8", "rx": 16 }
+                ]
+            }
+        });
+        let output = run_critique(&visual);
+        assert!(
+            output.contains("SEMANTIC_ACCENTS"),
+            "Expected semantic accent suggestion, got:\n{output}"
+        );
     }
 }

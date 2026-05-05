@@ -247,7 +247,8 @@ You can create animated framing visuals for any row using \`set_row_visual\`. Th
 The visual uses the elucim DSL — a JSON document with \`version: "1.0"\` and a \`root\` node (scene or player).
 Available node types: circle, rect, line, arrow, text, group, polygon, image, axes, latex, graph, matrix, barChart.
 Animations: fadeIn, fadeOut, draw (for lines/arrows), easing, rotation, scale, translate.
-Example scene: \`{ "version": "1.0", "root": { "type": "scene", "width": 800, "height": 450, "background": "#1a1a2e", "children": [{ "type": "text", "text": "Hello", "x": 400, "y": 225, "fontSize": 48, "fill": "#e0e0e0", "textAnchor": "middle", "fadeIn": 30 }] } }\``,
+Use CutReady/Elucim semantic tokens whenever possible: \`$background\`, \`$title\`, \`$subtitle\`, \`$foreground\`, \`$muted\`, \`$surface\`, \`$border\`, \`$accent\`, \`$primary\`, \`$secondary\`, \`$tertiary\`, \`$success\`, \`$warning\`, \`$error\`.
+Example scene: \`{ "version": "1.0", "root": { "type": "scene", "width": 960, "height": 540, "background": "$background", "children": [{ "type": "text", "content": "Hello", "x": 480, "y": 86, "fontSize": 44, "fill": "$title", "fontWeight": "900", "textAnchor": "middle", "fadeIn": 4 }] } }\``,
   },
   {
     id: "editor",
@@ -285,10 +286,10 @@ When the user message includes "USER INSTRUCTIONS" — those take **absolute pri
 
 1. **Read** the full sketch with \`read_sketch\` to understand the overall flow.
 2. **Call \`design_plan\`** with a detailed English description covering:
-   - **Elements:** shapes, text, icons, groups
-   - **Layout:** where each element sits on the 960×540 canvas
-   - **Colors:** which accent family (blue/purple/green/rose/amber)
-   - **Animation:** how elements appear — stagger, timing
+    - **Elements:** shapes, text, icons, groups
+    - **Layout:** where each element sits on the 960×540 canvas
+    - **Colors:** which CutReady semantic tokens to use
+    - **Animation:** how elements appear — stagger, timing
    If the row already has a design_plan, use it as a starting point.
 3. **Generate DSL JSON** following the canvas rules and reference below.
 4. **Call \`set_row_visual\`** — it auto-validates structure and auto-critiques layout. If it returns errors, fix them and call again.
@@ -314,35 +315,37 @@ Text uses \`content\` not \`text\`: \`{ "type": "text", "content": "Hello", ... 
 
 Animations: \`fadeIn: <frame>\` (must be ≥ 1), \`draw: <frame>\`, \`fadeOut: <frame>\`. Duration: 60-120 frames at 30fps.
 
-## Layout & Readability Rules
+## Presentation-Grade Layout Rules
 
-1. **Fill the canvas edge-to-edge.** Use the FULL 960×540 area. No inner "card" rect with margins.
-2. **Minimum font sizes:** titles ≥ 32px, labels ≥ 18px, annotations ≥ 14px.
-3. **No overlapping.** Every element must have clear space.
-4. **Text safe area:** keep text ≥30px from edges. Shapes CAN extend to edges.
-5. **Spacing:** ≥20px between elements, ≥40px between groups.
-6. **One key concept per visual** — illustrated richly.
-7. **Text inside containers:** Approximate text width as \`chars × fontSize × 0.55\`.
+1. **Make each visual feel like a finished slide**, not a sketch of shapes. Use a clear title, subtitle, and one strong center composition.
+2. **Prefer fewer, stronger elements.** A great visual usually has 3-5 main objects or steps, not a dense field of boxes.
+3. **Use the full 960×540 canvas intentionally.** Do not add a full-slide inner card with margins; use panels/cards only for specific content groups.
+4. **Minimum font sizes:** titles ≥ 36px, section labels ≥ 20px, annotations ≥ 16px.
+5. **No overlapping.** Every element must have clear space.
+6. **Text safe area:** keep text ≥40px from edges. Shapes CAN extend to edges.
+7. **Spacing:** ≥24px between elements, ≥48px between groups.
+8. **One key concept per visual** — illustrated richly.
+9. **Text inside containers:** Approximate text width as \`chars × fontSize × 0.55\`.
 
-## Color Rules — Semantic Tokens REQUIRED
+## Color Rules — CutReady Semantic Tokens REQUIRED
 
 \`$token\` syntax resolves to CSS variables for dark/light theme support.
 
 **MANDATORY tokens:**
 - \`$background\` — root background only
-- \`$foreground\` — titles and primary text
-- \`$muted\` — subtitles, annotations
+- \`$title\` — slide titles
+- \`$subtitle\` — subtitles and framing context
+- \`$foreground\` — body text and labels
+- \`$muted\` — annotations
 - \`$surface\` — card/container fills
 - \`$border\` — outlines, dividers
 
-**Accent colors** (pick ONE family):
-- Blue: \`#38bdf8\`, \`rgba(56,189,248,0.12)\`
-- Purple: \`#a78bfa\`, \`rgba(167,139,250,0.12)\`
-- Green: \`#22c55e\`, \`rgba(34,197,94,0.08)\`
-- Rose: \`#fb7185\`, \`rgba(251,113,133,0.12)\`
-- Amber: \`#fbbf24\`, \`rgba(251,191,36,0.10)\`
+**Semantic accents:**
+- \`$accent\` / \`$primary\` — CutReady brand emphasis. Prefer this for the main highlight.
+- \`$secondary\`, \`$tertiary\` — supporting contrast.
+- \`$success\`, \`$warning\`, \`$error\` — only when the meaning is positive/caution/problem.
 
-Pattern: accent hex for strokes/labels, semi-transparent rgba for fills. Max 2-3 accents.
+Avoid hardcoded colors like \`#38bdf8\` for routine emphasis. They bypass CutReady branding and make visuals feel less integrated. Use hardcoded rgba only when you need a translucent wash and no semantic token can express it.
 
 ## Example
 \`\`\`json
@@ -352,15 +355,15 @@ Pattern: accent hex for strokes/labels, semi-transparent rgba for fills. Max 2-3
     "type": "player", "width": 960, "height": 540, "fps": 30, "durationInFrames": 90,
     "background": "$background",
     "children": [
-      { "type": "text", "content": "Microsoft Foundry", "x": 480, "y": 68, "fontSize": 38, "fill": "$foreground", "fontWeight": "900", "textAnchor": "middle", "fadeIn": 4 },
-      { "type": "text", "content": "from models to production agents", "x": 480, "y": 104, "fontSize": 18, "fill": "$muted", "fontWeight": "600", "textAnchor": "middle", "fadeIn": 8 },
+      { "type": "text", "content": "Microsoft Foundry", "x": 480, "y": 68, "fontSize": 40, "fill": "$title", "fontWeight": "900", "textAnchor": "middle", "fadeIn": 4 },
+      { "type": "text", "content": "from models to production agents", "x": 480, "y": 106, "fontSize": 20, "fill": "$subtitle", "fontWeight": "600", "textAnchor": "middle", "fadeIn": 8 },
       { "type": "line", "x1": 0, "y1": 130, "x2": 960, "y2": 130, "stroke": "$border", "strokeWidth": 1, "fadeIn": 10 },
-      { "type": "rect", "x": 40, "y": 170, "width": 240, "height": 120, "fill": "rgba(167,139,250,0.10)", "stroke": "#a78bfa", "strokeWidth": 2, "rx": 14, "fadeIn": 14 },
-      { "type": "text", "content": "Models", "x": 160, "y": 220, "fontSize": 22, "fill": "#a78bfa", "fontWeight": "700", "textAnchor": "middle", "fadeIn": 16 },
-      { "type": "arrow", "x1": 300, "y1": 230, "x2": 370, "y2": 230, "stroke": "#38bdf8", "strokeWidth": 2, "headSize": 10, "draw": 24 },
-      { "type": "rect", "x": 380, "y": 160, "width": 280, "height": 140, "fill": "rgba(34,197,94,0.08)", "stroke": "#22c55e", "strokeWidth": 2, "rx": 14, "fadeIn": 30 },
-      { "type": "text", "content": "Foundry", "x": 520, "y": 216, "fontSize": 26, "fill": "#22c55e", "fontWeight": "800", "textAnchor": "middle", "fadeIn": 32 },
-      { "type": "arrow", "x1": 680, "y1": 230, "x2": 740, "y2": 230, "stroke": "#38bdf8", "strokeWidth": 2, "headSize": 10, "draw": 42 },
+      { "type": "rect", "x": 56, "y": 178, "width": 240, "height": 124, "fill": "$surface", "stroke": "$border", "strokeWidth": 2, "rx": 16, "fadeIn": 14 },
+      { "type": "text", "content": "Models", "x": 176, "y": 230, "fontSize": 24, "fill": "$accent", "fontWeight": "800", "textAnchor": "middle", "fadeIn": 16 },
+      { "type": "arrow", "x1": 320, "y1": 240, "x2": 392, "y2": 240, "stroke": "$accent", "strokeWidth": 3, "headSize": 10, "draw": 24 },
+      { "type": "rect", "x": 410, "y": 164, "width": 260, "height": 152, "fill": "$surface", "stroke": "$accent", "strokeWidth": 2, "rx": 18, "fadeIn": 30 },
+      { "type": "text", "content": "Foundry", "x": 540, "y": 228, "fontSize": 28, "fill": "$title", "fontWeight": "900", "textAnchor": "middle", "fadeIn": 32 },
+      { "type": "arrow", "x1": 694, "y1": 240, "x2": 750, "y2": 240, "stroke": "$accent", "strokeWidth": 3, "headSize": 10, "draw": 42 },
       { "type": "rect", "x": 750, "y": 180, "width": 170, "height": 100, "fill": "$surface", "stroke": "$border", "rx": 14, "fadeIn": 48 },
       { "type": "text", "content": "Production Agent", "x": 835, "y": 235, "fontSize": 18, "fill": "$foreground", "fontWeight": "700", "textAnchor": "middle", "fadeIn": 50 }
     ]
@@ -375,7 +378,8 @@ Pattern: accent hex for strokes/labels, semi-transparent rgba for fills. Max 2-3
 - ❌ Overlap text — check y coordinates have enough spacing
 - ❌ Put long text in a small box — text will overflow
 - ❌ Forget \`$background\` on root
-- ❌ Use only hex for text — use \`$foreground\`/\`$muted\` tokens
+- ❌ Use hardcoded cyan/purple for routine emphasis — use \`$accent\`, \`$secondary\`, \`$tertiary\`, \`$success\`, \`$warning\`
+- ❌ Use only hex for text — use \`$title\`/\`$subtitle\`/\`$foreground\`/\`$muted\` tokens
 - ❌ Use \`"preset": "card"\` — always use explicit width/height`,
   },
 ];
