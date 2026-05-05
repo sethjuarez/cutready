@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Children, isValidElement, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { SafeMarkdown } from "./SafeMarkdown";
@@ -1291,6 +1291,7 @@ function ChatTab() {
           <MessageRow
             key={i}
             message={msg}
+            agentName={selectedAgent.name}
             projectRoot={currentProject?.root}
             onDelete={msg.role === "user" ? () => {
               const updated = messages.filter((_, idx) => idx !== i);
@@ -1312,9 +1313,17 @@ function ChatTab() {
               </details>
             )}
             {streamingText ? (
-              <div className="text-[13px] text-[rgb(var(--color-text))] leading-[1.6]">
-                <MarkdownContent content={streamingText} projectRoot={currentProject?.root} />
-                <span className="inline-block w-1.5 h-4 bg-[rgb(var(--color-accent))] animate-pulse ml-0.5 align-text-bottom rounded-sm" />
+              <div className="w-full max-w-[70ch] min-w-0 rounded-2xl border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))]/80 shadow-sm">
+                <div className="flex items-center gap-2 border-b border-[rgb(var(--color-border-subtle))] px-4 py-2 text-[10px] font-medium uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))]">
+                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))]">
+                    <IconSparkles size={11} />
+                  </span>
+                  {selectedAgent.name} is writing
+                </div>
+                <div className="px-5 py-4 text-[14px] leading-[1.78] text-[rgb(var(--color-text)/0.92)]">
+                  <MarkdownContent content={streamingText} projectRoot={currentProject?.root} />
+                  <span className="inline-block w-1.5 h-4 bg-[rgb(var(--color-accent))] animate-pulse ml-0.5 align-text-bottom rounded-sm" />
+                </div>
               </div>
             ) : (
               <span className="text-xs text-[rgb(var(--color-text-secondary))] italic">{streamingStatus || "Thinking…"}</span>
@@ -1790,31 +1799,49 @@ function WebRefChip({ url }: { url: string }) {
 
 // ── Message Row (VS Code Copilot chat style) ────────────────────
 
-function MessageRow({ message, projectRoot, onDelete }: { message: ChatMessage; projectRoot?: string; onDelete?: () => void }) {
+function MessageRow({
+  message,
+  agentName,
+  projectRoot,
+  onDelete,
+}: {
+  message: ChatMessage;
+  agentName: string;
+  projectRoot?: string;
+  onDelete?: () => void;
+}) {
   if (message.role === "user") {
     return (
-      <div className="group px-3.5 py-2 flex justify-end items-start gap-1.5">
+      <div className="group px-3.5 py-2.5 flex justify-end items-start gap-1.5">
         {onDelete && (
           <button
             onClick={onDelete}
-            className="shrink-0 mt-2 p-1 rounded opacity-0 group-hover:opacity-100 text-[rgb(var(--color-text-secondary))] hover:text-error hover:bg-error/10 transition-all"
+            className="shrink-0 mt-6 p-1 rounded opacity-0 group-hover:opacity-100 text-[rgb(var(--color-text-secondary))] hover:text-error hover:bg-error/10 transition-all"
             title="Remove message"
           >
             <X className="w-3 h-3" />
           </button>
         )}
-        <div className={`rounded-xl rounded-br-sm px-3 py-2 text-[13px] text-[rgb(var(--color-text))] break-words leading-[1.6] max-w-[85%] ${
+        <div className="flex max-w-[82%] flex-col items-end gap-1">
+          <div className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-[0.12em] text-[rgb(var(--color-text-secondary))]/80">
+            You
+            <span className="flex h-4 w-4 items-center justify-center rounded-full bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))]">
+              <IconUser size={9} />
+            </span>
+          </div>
+          <div className={`rounded-2xl rounded-tr-sm px-3.5 py-2.5 text-[13px] text-[rgb(var(--color-text))] break-words leading-[1.6] shadow-sm ${
           message.pending
             ? "bg-[rgb(var(--color-surface-alt))] border border-dashed border-[rgb(var(--color-border))] opacity-70"
-            : "bg-[rgb(var(--color-accent))]/[0.05] border border-[rgb(var(--color-accent))]/40"
+            : "bg-[rgb(var(--color-accent))]/[0.07] border border-[rgb(var(--color-accent))]/30"
         }`}>
-          {message.pending && (
-            <span className="inline-flex items-center gap-1 text-[10px] text-[rgb(var(--color-text-secondary))] mb-1">
-              <Clock className="w-2.5 h-2.5" />
-              Queued
-            </span>
-          )}
-          <UserContent content={textContent(message.content)} />
+            {message.pending && (
+              <span className="inline-flex items-center gap-1 text-[10px] text-[rgb(var(--color-text-secondary))] mb-1">
+                <Clock className="w-2.5 h-2.5" />
+                Queued
+              </span>
+            )}
+            <UserContent content={textContent(message.content)} />
+          </div>
         </div>
       </div>
     );
@@ -1822,7 +1849,7 @@ function MessageRow({ message, projectRoot, onDelete }: { message: ChatMessage; 
 
   if (message.role === "assistant" && message.tool_calls && message.tool_calls.length > 0) {
     return (
-      <div className="px-3.5 py-1">
+      <div className="px-4 py-1">
         <ToolCallsRow toolCalls={message.tool_calls} />
       </div>
     );
@@ -1835,8 +1862,8 @@ function MessageRow({ message, projectRoot, onDelete }: { message: ChatMessage; 
   // Compaction / system events — rendered like a tool-call pill
   if (message.role === "system" && message.content) {
     return (
-      <div className="px-3.5 py-1">
-        <div className="inline-flex items-center gap-1.5 px-2 py-0.5 text-[11px] rounded border transition-colors bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-text-secondary))] border-[rgb(var(--color-border))]">
+      <div className="px-4 py-1">
+        <div className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-alt))]/60 px-2.5 py-1 text-[11px] text-[rgb(var(--color-text-secondary))] transition-colors">
           <Menu className="w-3 h-3 opacity-70 shrink-0" />
           <span className="font-medium truncate">{textContent(message.content)}</span>
         </div>
@@ -1846,9 +1873,19 @@ function MessageRow({ message, projectRoot, onDelete }: { message: ChatMessage; 
 
   if (message.role === "assistant") {
     return (
-      <div className="px-3.5 py-2">
-        <div className="border-l-2 border-[rgb(var(--color-accent))]/30 pl-3 text-[13px] text-[rgb(var(--color-text))] leading-[1.6]">
-          <MarkdownContent content={textContent(message.content)} projectRoot={projectRoot} />
+      <div className="px-3.5 py-2.5">
+        <div className="w-full max-w-[70ch] min-w-0">
+          <div className="mb-1.5 flex items-center gap-2 text-[10px] font-medium uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))]/85">
+            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))]">
+              <IconSparkles size={11} />
+            </span>
+            {agentName}
+          </div>
+          <div className="rounded-2xl rounded-tl-sm border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))]/80 shadow-sm">
+            <div className="px-5 py-[1.125rem] text-[14px] leading-[1.78] text-[rgb(var(--color-text)_/_0.92)]">
+              <MarkdownContent content={textContent(message.content)} projectRoot={projectRoot} />
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -1889,7 +1926,7 @@ function ToolCallsRow({ toolCalls }: { toolCalls: ToolCall[] }) {
   return (
     <div>
       <button
-        className={`inline-flex items-center gap-1.5 px-2 py-0.5 text-[11px] rounded border transition-colors max-w-full ${c.bg} ${c.text} ${c.border} hover:brightness-110`}
+        className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] transition-colors max-w-full ${c.bg} ${c.text} ${c.border} opacity-85 hover:opacity-100 hover:brightness-110`}
         onClick={() => setExpanded(!expanded)}
       >
         <span className="opacity-70"><IconWrench size={11} /></span>
@@ -1897,7 +1934,7 @@ function ToolCallsRow({ toolCalls }: { toolCalls: ToolCall[] }) {
         <IconChevron size={9} expanded={expanded} />
       </button>
       {expanded && (
-        <div className="mt-1 space-y-1">
+        <div className="mt-1.5 space-y-1.5 pl-2">
           {toolCalls.map((tc) => {
             const name = tc.function.name.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
             let parsed = "{}";
@@ -1905,7 +1942,7 @@ function ToolCallsRow({ toolCalls }: { toolCalls: ToolCall[] }) {
             return (
               <div key={tc.id} className="text-[11px]">
                 <div className="font-medium text-[rgb(var(--color-text-secondary))]">{name}</div>
-                <pre className="p-2 rounded bg-[rgb(var(--color-surface-alt))] border border-[rgb(var(--color-border))] overflow-x-auto text-[rgb(var(--color-text-secondary))] leading-relaxed text-[10px]">
+                <pre className="mt-1 max-h-48 overflow-auto rounded-lg border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-alt))]/70 p-2.5 text-[10px] leading-relaxed text-[rgb(var(--color-text-secondary))]">
                   {parsed}
                 </pre>
               </div>
@@ -1919,21 +1956,121 @@ function ToolCallsRow({ toolCalls }: { toolCalls: ToolCall[] }) {
 
 // ── Simple Markdown Renderer ─────────────────────────────────────
 
+type CalloutKind = "note" | "tip" | "important" | "warning" | "next";
+
+const CALLOUT_PATTERN = /^(note|tip|important|warning|caution|recommendation|next steps?|action):\s*/i;
+
+function textFromNode(node: ReactNode): string {
+  if (typeof node === "string" || typeof node === "number") return String(node);
+  if (Array.isArray(node)) return node.map(textFromNode).join("");
+  if (isValidElement(node)) {
+    return textFromNode((node.props as { children?: ReactNode }).children);
+  }
+  return "";
+}
+
+function stripCalloutPrefix(node: ReactNode): ReactNode {
+  const parts = Children.toArray(node);
+  if (typeof parts[0] === "string") {
+    const stripped = parts[0].replace(CALLOUT_PATTERN, "");
+    return [stripped, ...parts.slice(1)];
+  }
+  return node;
+}
+
+function calloutKind(label: string): CalloutKind {
+  const normalized = label.toLowerCase();
+  if (normalized === "tip" || normalized === "recommendation") return "tip";
+  if (normalized === "important") return "important";
+  if (normalized === "warning" || normalized === "caution") return "warning";
+  if (normalized.startsWith("next") || normalized === "action") return "next";
+  return "note";
+}
+
+function MarkdownParagraph({ children }: { children: ReactNode }) {
+  const label = textFromNode(children).trim().match(CALLOUT_PATTERN)?.[1];
+  if (!label) {
+    return <div className="my-2.5 first:mt-0 last:mb-0">{children}</div>;
+  }
+
+  const kind = calloutKind(label);
+  const tone: Record<CalloutKind, string> = {
+    note: "border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-alt))]/70 text-[rgb(var(--color-text-secondary))]",
+    tip: "border-[rgb(var(--color-success))]/35 bg-[rgb(var(--color-success))]/10 text-[rgb(var(--color-text))]",
+    important: "border-[rgb(var(--color-accent))]/40 bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-text))]",
+    warning: "border-[rgb(var(--color-warning))]/45 bg-[rgb(var(--color-warning))]/10 text-[rgb(var(--color-text))]",
+    next: "border-[rgb(var(--color-accent))]/35 bg-[rgb(var(--color-accent))]/[0.07] text-[rgb(var(--color-text))]",
+  };
+  const title = kind === "next" ? "Next step" : label.replace(/\b\w/g, (c) => c.toUpperCase());
+
+  return (
+    <div className={`my-3 rounded-xl border px-3 py-2.5 ${tone[kind]}`}>
+      <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.14em] opacity-75">{title}</div>
+      <div className="leading-[1.65]">{stripCalloutPrefix(children)}</div>
+    </div>
+  );
+}
+
+function hasTaskCheckbox(node: ReactNode): boolean {
+  return Children.toArray(node).some((child) => {
+    if (!isValidElement(child)) return false;
+    if (child.type === "input" && (child.props as { type?: string }).type === "checkbox") return true;
+    return hasTaskCheckbox((child.props as { children?: ReactNode }).children);
+  });
+}
+
 function MarkdownContent({ content, projectRoot }: { content: string; projectRoot?: string }) {
   return (
     <SafeMarkdown
       components={{
-        h1: ({ children }) => <div className="font-bold text-[12px] mt-2 mb-1">{children}</div>,
-        h2: ({ children }) => <div className="font-semibold text-[11px] mt-2 mb-0.5">{children}</div>,
-        h3: ({ children }) => <div className="font-semibold text-[11px] mt-2 mb-0.5">{children}</div>,
-        p: ({ children }) => <div className="my-0.5">{children}</div>,
+        h1: ({ children }) => (
+          <div className="mt-6 mb-3 first:mt-0">
+            <div className="rounded-xl border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-alt))]/60 px-3 py-2.5 shadow-sm">
+              <div className="text-[17px] font-semibold leading-tight tracking-[-0.02em] text-[rgb(var(--color-text))]">
+                {children}
+              </div>
+            </div>
+          </div>
+        ),
+        h2: ({ children }) => (
+          <div className="mt-5 mb-2.5 max-w-full first:mt-0">
+            <div className="flex items-center gap-3">
+              <span className="h-5 w-1 rounded-full bg-[rgb(var(--color-accent))]/65" />
+              <span className="min-w-0 text-[14.5px] font-semibold leading-snug tracking-[-0.015em] text-[rgb(var(--color-text))]">
+                {children}
+              </span>
+              <span className="h-px min-w-8 flex-1 bg-gradient-to-r from-[rgb(var(--color-border-subtle))] to-transparent" />
+            </div>
+          </div>
+        ),
+        h3: ({ children }) => (
+          <div className="mt-4 mb-1.5 border-l-2 border-[rgb(var(--color-accent))]/45 pl-2.5 text-[13.75px] font-semibold leading-snug text-[rgb(var(--color-text))] first:mt-0">
+            {children}
+          </div>
+        ),
+        h4: ({ children }) => (
+          <div className="mt-3 mb-1 text-[12px] font-semibold uppercase leading-snug tracking-[0.12em] text-[rgb(var(--color-accent))] first:mt-0">
+            {children}
+          </div>
+        ),
+        h5: ({ children }) => (
+          <div className="mt-2.5 mb-1 inline-flex rounded-full border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-alt))]/70 px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.12em] text-[rgb(var(--color-text-secondary))] first:mt-0">
+            {children}
+          </div>
+        ),
+        h6: ({ children }) => (
+          <div className="mt-2 mb-0.5 text-[11px] font-medium uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))]/80 first:mt-0">
+            {children}
+          </div>
+        ),
+        p: ({ children }) => <MarkdownParagraph>{children}</MarkdownParagraph>,
         strong: ({ children }) => <strong className="font-bold text-[rgb(var(--color-text))]">{children}</strong>,
         em: ({ children }) => <em className="italic text-[rgb(var(--color-accent))]">{children}</em>,
         code: ({ className, children }) => {
           const isBlock = className?.includes("language-");
           if (isBlock) {
             return (
-              <pre className="my-1.5 p-2 rounded bg-[rgb(var(--color-surface-alt))] border border-[rgb(var(--color-border))] overflow-x-auto text-[10px] leading-relaxed">
+              <pre className="my-3 overflow-x-auto rounded-xl border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-inset))]/70 p-3 text-[11.5px] leading-relaxed">
                 <code>{children}</code>
               </pre>
             );
@@ -1944,50 +2081,82 @@ function MarkdownContent({ content, projectRoot }: { content: string; projectRoo
           if (fileType) {
             const c = typeColors(fileType);
             return (
-              <code className={`px-1 py-0.5 rounded text-[10px] border ${c.bg} ${c.text} ${c.border}`}>
+              <code className={`rounded-md border px-1.5 py-0.5 text-[11px] ${c.bg} ${c.text} ${c.border}`}>
                 {children}
               </code>
             );
           }
           return (
-            <code className="px-1 py-0.5 bg-[rgb(var(--color-surface-alt))] rounded text-[10px] border border-[rgb(var(--color-border))]">
+            <code className="rounded-md border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-alt))] px-1.5 py-0.5 text-[11px]">
               {children}
             </code>
           );
         },
         pre: ({ children }) => <>{children}</>,
-        ul: ({ children }) => <ul className="ml-3 my-0.5 list-disc list-outside">{children}</ul>,
-        ol: ({ children }) => <ol className="ml-3 my-0.5 list-decimal list-outside">{children}</ol>,
-        li: ({ children }) => (
-          <li className="my-0.5 pl-0.5">{children}</li>
-        ),
+        ul: ({ children }) => <ul className="ml-5 my-3 list-disc list-outside space-y-2">{children}</ul>,
+        ol: ({ children }) => <ol className="ml-5 my-3 list-decimal list-outside space-y-2">{children}</ol>,
+        li: ({ children }) => {
+          const isTask = hasTaskCheckbox(children);
+          return (
+            <li className={isTask ? "-ml-5 flex list-none items-start gap-2 rounded-lg bg-[rgb(var(--color-surface-alt))]/45 px-2 py-1.5" : "pl-1"}>
+              {children}
+            </li>
+          );
+        },
+        input: ({ checked, type }) => {
+          if (type !== "checkbox") return null;
+          return (
+            <span
+              className={`mt-[0.2em] flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
+                checked
+                  ? "border-[rgb(var(--color-accent))] bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))]"
+                  : "border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))]"
+              }`}
+              aria-hidden="true"
+            >
+              {checked && <Check className="h-3 w-3" />}
+            </span>
+          );
+        },
         table: ({ children }) => (
-          <div className="my-1.5 overflow-x-auto rounded border border-[rgb(var(--color-border))]">
-            <table className="w-full text-[10px] border-collapse">{children}</table>
+          <div className="my-3 max-w-full overflow-x-auto rounded-xl border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))] shadow-sm">
+            <table className="w-full border-separate border-spacing-0 text-[12px]">{children}</table>
           </div>
         ),
         thead: ({ children }) => (
           <thead className="bg-[rgb(var(--color-surface-alt))] text-[rgb(var(--color-text-secondary))]">{children}</thead>
         ),
+        tbody: ({ children }) => (
+          <tbody className="[&>tr:nth-child(even)]:bg-[rgb(var(--color-surface-alt))]/35">{children}</tbody>
+        ),
+        tr: ({ children }) => (
+          <tr className="transition-colors hover:bg-[rgb(var(--color-accent))]/[0.04]">{children}</tr>
+        ),
         th: ({ children }) => (
-          <th className="px-2 py-1 text-left font-medium border-b border-[rgb(var(--color-border))]">{children}</th>
+          <th className="border-b border-r border-[rgb(var(--color-border-subtle))] px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-[0.12em] last:border-r-0">{children}</th>
         ),
         td: ({ children }) => (
-          <td className="px-2 py-1 border-b border-[rgb(var(--color-border))]">{children}</td>
+          <td className="border-b border-r border-[rgb(var(--color-border-subtle))] px-3 py-2.5 align-top last:border-r-0">{children}</td>
         ),
         a: ({ href, children }) => (
           <a href={href} className="text-[rgb(var(--color-accent))] hover:underline" target="_blank" rel="noopener noreferrer">{children}</a>
         ),
         blockquote: ({ children }) => (
-          <div className="border-l-2 border-[rgb(var(--color-accent))] pl-2 my-1 text-[rgb(var(--color-text-secondary))]">{children}</div>
+          <div className="my-3 rounded-r-lg border-l-2 border-[rgb(var(--color-accent))]/70 bg-[rgb(var(--color-accent))]/5 px-3 py-2 text-[rgb(var(--color-text-secondary))]">{children}</div>
         ),
-        hr: () => <div className="border-t border-[rgb(var(--color-border))] my-2" />,
+        hr: () => (
+          <div className="my-5 flex items-center gap-3">
+            <span className="h-px flex-1 bg-gradient-to-r from-transparent via-[rgb(var(--color-border-subtle))] to-[rgb(var(--color-border-subtle))]" />
+            <span className="h-1.5 w-1.5 rounded-full bg-[rgb(var(--color-accent))]/50" />
+            <span className="h-px flex-1 bg-gradient-to-r from-[rgb(var(--color-border-subtle))] to-transparent" />
+          </div>
+        ),
         img: ({ src, alt, ...props }) => {
           let resolvedSrc = src ?? "";
           if (projectRoot && resolvedSrc.includes(".cutready/screenshots/")) {
             resolvedSrc = convertFileSrc(`${projectRoot}/${resolvedSrc}`);
           }
-          return <img src={resolvedSrc} alt={alt ?? ""} {...props} className="max-w-full rounded my-1" />;
+          return <img src={resolvedSrc} alt={alt ?? ""} {...props} className="my-3 max-w-full rounded-xl border border-[rgb(var(--color-border-subtle))]" />;
         },
       }}
     >
