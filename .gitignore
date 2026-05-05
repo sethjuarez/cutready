@@ -34,6 +34,7 @@ Thumbs.db
 # Test artifacts
 test-results/
 e2e/screenshots/
+.playwright-mcp/
 
 # Copilot CLI
 skills-lock.json
