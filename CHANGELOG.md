@@ -9,6 +9,24 @@
 Covector manages this changelog. Do not edit manually.
 Each release section is generated from `.changes/*.md` files.
 
+## [1.3.0](https://github.com/sethjuarez/cutready/compare/v1.2.0...v1.3.0) (2026-05-05)
+
+
+### Features
+
+* **chat:** improve response readability ([7b05249](https://github.com/sethjuarez/cutready/commit/7b05249bf01b0c70c05a6401da25afd279a31ac6))
+* **settings:** add per-agent model overrides ([24c71fd](https://github.com/sethjuarez/cutready/commit/24c71fd56fa792452b36af9d51eed4b9877deb02))
+
+
+### Bug Fixes
+
+* **agent:** stop forcing designer codex model ([811f653](https://github.com/sethjuarez/cutready/commit/811f653e4a9bd31204b0cad3189e3a20cc46ac28))
+* **agent:** update agentive compaction ([367e640](https://github.com/sethjuarez/cutready/commit/367e640df12cd9b36e173c0027adf0a4de7636b1))
+* **layout:** persist secondary panel width ([59e601b](https://github.com/sethjuarez/cutready/commit/59e601bdde6b8e3e84068f0b50a1dbae97a08bdc))
+* **presentation:** allow storyboard monitor picker clicks ([3018554](https://github.com/sethjuarez/cutready/commit/30185547209809dd14a695f26d1a92210e057789))
+* **presentation:** theme slide-only view ([8f03649](https://github.com/sethjuarez/cutready/commit/8f036495d2dbc652cc2f0e9d55f1e1ec7b5d4b9b))
+* **theme:** prevent palette flash on startup ([17b5121](https://github.com/sethjuarez/cutready/commit/17b5121e46498638ef902e4d8ce029cc5adaaa59))
+
 ## [1.2.0](https://github.com/sethjuarez/cutready/compare/v1.1.1...v1.2.0) (2026-05-04)
 
 
