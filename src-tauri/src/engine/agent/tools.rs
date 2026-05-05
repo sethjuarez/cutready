@@ -317,7 +317,7 @@ pub fn all_tools(web_search_enabled: bool) -> Vec<Tool> {
         ),
         Tool::function(
             "set_row_visual",
-            "Set an animated framing visual on a planning row using the elucim DSL. Use CutReady semantic tokens for theme integration: $background, $title, $subtitle, $foreground, $muted, $surface, $border, $accent, $secondary, $tertiary, $success, $warning, $error. Avoid hardcoded cyan/purple for routine emphasis. Prefer polished slide density: roughly 20-40 nodes, 3-5 main objects/steps, and minimal labels. Auto-validates structure and auto-critiques layout/readability before saving. Returns validation or critique errors if the visual has issues — fix them and call again. On success, saves the visual and returns optional suggestions; revise once for density suggestions like ELEMENT_COUNT or TEXT_DENSITY. Pass null to remove a visual.",
+            "Set an animated framing visual on a planning row using the elucim DSL. Use CutReady semantic tokens for theme integration: $background, $title, $subtitle, $foreground, $muted, $surface, $border, $accent, $secondary, $tertiary, $success, $warning, $error. Avoid hardcoded cyan/purple for routine emphasis. Prefer polished slide density: roughly 20-40 flattened nodes, 3-5 main objects/steps, and minimal labels. Group nodes are useful for transforms but do not make a crowded slide simpler. Auto-validates structure and auto-critiques layout/readability before saving. Returns validation or critique errors if the visual has issues — fix them and call again. Pass null to remove a visual.",
             json!({
                 "type": "object",
                 "properties": {
@@ -2000,10 +2000,11 @@ fn critique_visual_doc(visual: &Value) -> Result<(Vec<String>, Vec<String>), Str
 
     // ── Issue checks ──────────────────────────────────────────────────
 
-    // 1. Element count (relaxed — rich visuals are fine, 70+ is excessive)
-    if all_nodes.len() > 60 {
+    // 1. Element count. Count flattened nodes so group wrappers cannot hide
+    // crowded slides from critique.
+    if all_nodes.len() > 55 {
         issues.push(format!(
-            "TOO_MANY_ELEMENTS: {} elements total (max recommended: 60). Simplify — remove decorative elements or combine related items into groups.",
+            "TOO_MANY_ELEMENTS: {} flattened elements (max: 55). Simplify the slide by showing fewer steps, merging repeated token chips/bars, or replacing detailed internals with one stronger visual metaphor. Group wrappers do not reduce visual density.",
             all_nodes.len()
         ));
     } else if all_nodes.len() > 45 {
@@ -2071,7 +2072,11 @@ fn critique_visual_doc(visual: &Value) -> Result<(Vec<String>, Vec<String>), Str
         }
     }
     let total_texts = text_nodes.len();
-    if total_texts > 20 {
+    if total_texts > 22 {
+        issues.push(format!(
+            "TEXT_DENSITY: {total_texts} text labels (max: 22). Reduce labels or combine copy so the visual reads like a presentation slide, not a dense worksheet."
+        ));
+    } else if total_texts > 18 {
         suggestions.push(format!(
             "TEXT_DENSITY: {total_texts} text labels — reduce labels or combine copy so the visual reads like a presentation slide, not a dense worksheet."
         ));
@@ -2962,8 +2967,8 @@ mod tests {
     }
 
     #[test]
-    fn critique_suggests_text_density_for_label_heavy_slide() {
-        let labels: Vec<Value> = (0..21)
+    fn critique_blocks_text_density_for_label_heavy_slide() {
+        let labels: Vec<Value> = (0..23)
             .map(|i| {
                 json!({
                     "type": "text",
@@ -2986,7 +2991,55 @@ mod tests {
         let output = run_critique(&visual);
         assert!(
             output.contains("TEXT_DENSITY"),
-            "Expected text density suggestion, got:\n{output}"
+            "Expected text density issue, got:\n{output}"
+        );
+        assert!(
+            output.starts_with("✗ FAIL"),
+            "Text-heavy slides should be rejected, got:\n{output}"
+        );
+    }
+
+    #[test]
+    fn critique_blocks_grouped_element_density() {
+        let groups: Vec<Value> = (0..6)
+            .map(|group_index| {
+                let chips: Vec<Value> = (0..9)
+                    .map(|chip_index| {
+                        json!({
+                            "type": "rect",
+                            "x": chip_index * 18,
+                            "y": 0,
+                            "width": 12,
+                            "height": 28,
+                            "fill": "$surface",
+                            "stroke": "$border"
+                        })
+                    })
+                    .collect();
+                json!({
+                    "type": "group",
+                    "x": 80,
+                    "y": 120 + group_index * 44,
+                    "children": chips
+                })
+            })
+            .collect();
+        let visual = json!({
+            "version": "1.0",
+            "root": {
+                "type": "player", "width": 960, "height": 540, "fps": 30, "durationInFrames": 60,
+                "background": "$background",
+                "children": groups
+            }
+        });
+        let output = run_critique(&visual);
+        assert!(
+            output.contains("TOO_MANY_ELEMENTS"),
+            "Expected grouped density issue, got:\n{output}"
+        );
+        assert!(
+            output.starts_with("✗ FAIL"),
+            "Grouped dense slides should be rejected, got:\n{output}"
         );
     }
 }
