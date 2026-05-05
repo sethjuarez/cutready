@@ -35,6 +35,7 @@ Thumbs.db
 test-results/
 e2e/screenshots/
 .playwright-mcp/
+scripts/visual-eval/reports/
 
 # Copilot CLI
 skills-lock.json

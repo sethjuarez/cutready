@@ -1,0 +1,27 @@
+[
+  {
+    "id": "inference-pipeline",
+    "title": "Inference pipeline",
+    "brief": "Explain how a prompt becomes tokens, vectors, transformer activations, and a next-token prediction. Use one hero flow with 3-4 labeled stages."
+  },
+  {
+    "id": "architecture-flow",
+    "title": "Architecture flow",
+    "brief": "Show how a user request moves through app, orchestration, model, tools, and response. Prefer a simple left-to-right architecture flow."
+  },
+  {
+    "id": "before-after",
+    "title": "Before and after",
+    "brief": "Compare an unpolished manual workflow with a cleaner AI-assisted workflow. Use two large contrasting regions and one clear takeaway."
+  },
+  {
+    "id": "timeline-progression",
+    "title": "Timeline progression",
+    "brief": "Show a progression from idea to prototype to production. Use a clean timeline with 3 milestones and restrained labels."
+  },
+  {
+    "id": "concept-metaphor",
+    "title": "Concept metaphor",
+    "brief": "Explain a complex technical idea with one strong visual metaphor, minimal labels, and a clear title/subtitle hierarchy."
+  }
+]
