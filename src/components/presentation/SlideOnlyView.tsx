@@ -1,6 +1,6 @@
 /**
  * SlideOnlyView — full-bleed audience-style view. Just the screenshot/visual,
- * black backdrop, minimal chrome. Click anywhere to advance, ←/→ to navigate,
+ * themed backdrop, minimal chrome. Click anywhere to advance, ←/→ to navigate,
  * Esc to exit, T = teleprompter, P = full slide preview.
  *
  * Mouse cursor and the corner overlay auto-hide after a few seconds of
@@ -109,9 +109,8 @@ export function SlideOnlyView({
 
   return (
     <div
-      className="fixed inset-0 z-modal flex items-center justify-center select-none"
+      className="fixed inset-0 z-modal flex items-center justify-center select-none bg-[rgb(var(--color-surface))]"
       style={{
-        backgroundColor: "#000",
         cursor: chromeVisible ? "default" : "none",
       }}
       onMouseMove={showChrome}
@@ -121,9 +120,9 @@ export function SlideOnlyView({
       <div className="relative w-full h-full flex items-center justify-center p-8">
         {isTitle ? (
           <div className="flex flex-col items-center justify-center text-center gap-6 max-w-4xl px-8">
-            <h1 className="text-6xl font-bold text-white">{slide.heading}</h1>
+            <h1 className="text-6xl font-bold text-[rgb(var(--color-text))]">{slide.heading}</h1>
             {slide.subtitle && (
-              <p className="text-2xl text-white/70 whitespace-pre-wrap leading-relaxed">{slide.subtitle}</p>
+              <p className="text-2xl text-[rgb(var(--color-text-secondary))] whitespace-pre-wrap leading-relaxed">{slide.subtitle}</p>
             )}
           </div>
         ) : row?.visual ? (
@@ -137,7 +136,7 @@ export function SlideOnlyView({
             className="max-w-full max-h-full object-contain"
           />
         ) : (
-          <div className="flex flex-col items-center gap-3 text-white/40">
+          <div className="flex flex-col items-center gap-3 text-[rgb(var(--color-text-secondary))]">
             <ImageIcon className="w-16 h-16 opacity-50" />
             <span className="text-sm">No screenshot</span>
           </div>
@@ -150,26 +149,26 @@ export function SlideOnlyView({
         style={{ opacity: chromeVisible ? 1 : 0, pointerEvents: chromeVisible ? "auto" : "none" }}
         onClick={(e) => e.stopPropagation()}
       >
-        <span className="px-2.5 py-1 text-xs tabular-nums text-white/70 bg-white/10 rounded-md backdrop-blur">
+        <span className="px-2.5 py-1 text-xs tabular-nums text-[rgb(var(--color-text-secondary))] bg-[rgb(var(--color-surface-alt))]/80 border border-[rgb(var(--color-border-subtle))] rounded-md backdrop-blur">
           {currentIdx + 1} / {total}
         </span>
         <button
           onClick={() => onSwitchMode("slides")}
-          className="p-1.5 rounded-md text-white/70 hover:text-white hover:bg-white/10 transition-colors backdrop-blur"
+          className="p-1.5 rounded-md text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors backdrop-blur"
           title="Slide preview (P)"
         >
           <Layout className="w-4 h-4" />
         </button>
         <button
           onClick={() => onSwitchMode("teleprompter")}
-          className="p-1.5 rounded-md text-white/70 hover:text-white hover:bg-white/10 transition-colors backdrop-blur"
+          className="p-1.5 rounded-md text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors backdrop-blur"
           title="Teleprompter (T)"
         >
           <MonitorPlay className="w-4 h-4" />
         </button>
         <button
           onClick={onClose}
-          className="p-1.5 rounded-md text-white/70 hover:text-white hover:bg-white/10 transition-colors backdrop-blur"
+          className="p-1.5 rounded-md text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors backdrop-blur"
           title="Exit (Esc)"
         >
           <X className="w-4 h-4" />
@@ -178,7 +177,7 @@ export function SlideOnlyView({
 
       {/* Bottom hint (auto-hide) */}
       <div
-        className="absolute bottom-3 left-1/2 -translate-x-1/2 text-xs text-white/40 transition-opacity duration-300 pointer-events-none"
+        className="absolute bottom-3 left-1/2 -translate-x-1/2 text-xs text-[rgb(var(--color-text-secondary))] transition-opacity duration-300 pointer-events-none"
         style={{ opacity: chromeVisible ? 1 : 0 }}
       >
         ←/→ navigate · click to advance · T teleprompter · P preview · Esc exit
