@@ -446,6 +446,8 @@ test.describe("VisualCell — elucim DSL rendering", () => {
     // Verify key semantic token CSS vars are present
     expect(cssVars).toContain("--elucim-foreground");
     expect(cssVars).toContain("--elucim-background");
+    expect(cssVars).toContain("--elucim-title");
+    expect(cssVars).toContain("--elucim-subtitle");
     expect(cssVars).toContain("--elucim-muted");
     expect(cssVars).toContain("--elucim-surface");
     expect(cssVars).toContain("--elucim-accent");

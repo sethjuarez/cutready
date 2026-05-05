@@ -13,6 +13,8 @@ import type { ThemeColorTokens } from "./appThemePalettes";
 export const ELUCIM_THEME: ElucimTheme = {
   foreground: "rgb(var(--color-text))",
   background: "rgb(var(--color-surface))",
+  title: "rgb(var(--color-text))",
+  subtitle: "rgb(var(--color-text-secondary))",
   accent: "rgb(var(--color-accent))",
   muted: "rgb(var(--color-text-secondary))",
   surface: "rgb(var(--color-surface-alt))",
@@ -35,6 +37,8 @@ export const ELUCIM_THEME: ElucimTheme = {
 export const CUTREADY_DARK: ElucimTheme = {
   foreground: "#e8e4df",
   background: "#2b2926",
+  title: "#e8e4df",
+  subtitle: "#9b968e",
   accent: "#a49afa",
   muted: "#9b968e",
   surface: "#353230",
@@ -57,6 +61,8 @@ export const CUTREADY_DARK: ElucimTheme = {
 export const CUTREADY_LIGHT: ElucimTheme = {
   foreground: "#2c2925",
   background: "#faf9f7",
+  title: "#2c2925",
+  subtitle: "#8a857d",
   accent: "#6b5ce7",
   muted: "#8a857d",
   surface: "#f0eeeb",
@@ -73,6 +79,8 @@ export function elucimThemeFromTokens(tokens: ThemeColorTokens): ElucimTheme {
   return {
     foreground: `rgb(${tokens.text})`,
     background: `rgb(${tokens.surface})`,
+    title: `rgb(${tokens.text})`,
+    subtitle: `rgb(${tokens.textSecondary})`,
     accent: `rgb(${tokens.accent})`,
     muted: `rgb(${tokens.textSecondary})`,
     surface: `rgb(${tokens.surfaceAlt})`,
