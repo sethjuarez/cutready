@@ -72,6 +72,7 @@ const mockSettingsStore: Record<string, unknown> = {
   outputDirectory: "",
   aiSelectedAgent: "planner",
   aiAgents: [],
+  aiAgentModelOverrides: {},
 };
 
 /**

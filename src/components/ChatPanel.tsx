@@ -388,6 +388,13 @@ export function resolveAgentPrompt(agentId: string, customAgents: AgentPreset[])
   return builtin?.prompt ?? BUILT_IN_AGENTS[0].prompt;
 }
 
+function resolveAgentModelOverride(
+  agent: AgentPreset,
+  overrides: Record<string, string> | undefined,
+): string {
+  return (overrides?.[agent.id] || agent.modelOverride || "").trim();
+}
+
 // ── SVG Icons (using Heroicons) ──────────────────────────────────
 
 function IconSparkles({ size = 14 }: { size?: number }) {
@@ -955,11 +962,12 @@ function ChatTab() {
       const effectiveAgent = agentOverride
         ? [...BUILT_IN_AGENTS, ...(settings.aiAgents || [])].find(a => a.id === agentOverride) ?? selectedAgent
         : selectedAgent;
+      const modelOverride = resolveAgentModelOverride(effectiveAgent, settings.aiAgentModelOverrides);
       const config = {
         ...buildConfig(),
         bearer_token: freshBearerToken,
-        // Apply per-agent model override if the effective agent specifies one
-        ...(effectiveAgent.modelOverride ? { model: effectiveAgent.modelOverride } : {}),
+        // Apply per-agent model override when configured; otherwise use the global model.
+        ...(modelOverride ? { model: modelOverride } : {}),
       };
 
       // Build agent prompts map for sub-agent delegation
@@ -1038,7 +1046,7 @@ function ChatTab() {
       streamingRef.current = "";
       thinkingRef.current = "";
     }
-  }, [input, loading, messages, references, systemPrompt, buildConfig, setChatMessages, setChatLoading, setChatError, addActivityEntries, settings.aiAgents, refreshSketchAfterMutation]);
+  }, [input, loading, messages, references, systemPrompt, buildConfig, setChatMessages, setChatLoading, setChatError, addActivityEntries, settings.aiAgents, settings.aiAgentModelOverrides, refreshSketchAfterMutation]);
 
   // Pick up prompts queued from outside the chat (e.g. sparkle buttons)
   const handleSendRef = useRef(handleSend);
@@ -1494,7 +1502,9 @@ function ChatTab() {
                       <span className="text-[10px] font-medium text-[rgb(var(--color-text-secondary))] uppercase tracking-wider">Built-in</span>
                     </div>
                     <div className="py-0.5">
-                      {BUILT_IN_AGENTS.map((agent) => (
+                      {BUILT_IN_AGENTS.map((agent) => {
+                        const modelOverride = resolveAgentModelOverride(agent, settings.aiAgentModelOverrides);
+                        return (
                         <button
                           key={agent.id}
                           className={`w-full flex items-center gap-2 px-3 py-1.5 text-[11px] text-left transition-colors ${
@@ -1511,8 +1521,8 @@ function ChatTab() {
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-1">
                               <span>{agent.name}</span>
-                              {agent.modelOverride && (
-                                <span className="text-[9px] text-[rgb(var(--color-text-secondary))] opacity-60">{agent.modelOverride}</span>
+                              {modelOverride && (
+                                <span className="text-[9px] text-[rgb(var(--color-text-secondary))] opacity-60">{modelOverride}</span>
                               )}
                             </div>
                             {agent.description && (
@@ -1521,7 +1531,8 @@ function ChatTab() {
                           </div>
                           {selectedAgent.id === agent.id && <IconCheck size={11} />}
                         </button>
-                      ))}
+                        );
+                      })}
                     </div>
                   </>
                 )}
@@ -1531,7 +1542,9 @@ function ChatTab() {
                       <span className="text-[10px] font-medium text-[rgb(var(--color-text-secondary))] uppercase tracking-wider">Custom</span>
                     </div>
                     <div className="py-0.5 overflow-y-auto">
-                      {(settings.aiAgents || []).map((agent) => (
+                      {(settings.aiAgents || []).map((agent) => {
+                        const modelOverride = resolveAgentModelOverride(agent, settings.aiAgentModelOverrides);
+                        return (
                         <button
                           key={agent.id}
                           className={`w-full flex items-center gap-2 px-3 py-1.5 text-[11px] text-left transition-colors ${
@@ -1546,9 +1559,13 @@ function ChatTab() {
                         >
                           <IconUser size={11} />
                           <span className="truncate">{agent.name}</span>
+                          {modelOverride && (
+                            <span className="text-[9px] text-[rgb(var(--color-text-secondary))] opacity-60 truncate">{modelOverride}</span>
+                          )}
                           {selectedAgent.id === agent.id && <IconCheck size={11} />}
                         </button>
-                      ))}
+                        );
+                      })}
                     </div>
                   </>
                 )}

@@ -261,7 +261,15 @@ export function SettingsPanel({ mode = "global" }: { mode?: "global" | "workspac
         />
       )}
       {activeTab === "agents" && (
-        <AgentsTab settings={settings} updateSetting={updateSetting} />
+        <AgentsTab
+          settings={settings}
+          updateSetting={updateSetting}
+          models={models}
+          loadingModels={loadingModels}
+          canFetchModels={canFetchModels}
+          fetchModels={fetchModels}
+          modelError={modelError}
+        />
       )}
       {activeTab === "memory" && (
         <MemoryTab />
@@ -581,6 +589,12 @@ function AIProviderTab({ settings, updateSetting, isAzure, isFoundry, isAnthropi
           value={settings.aiProvider}
           onChange={(e) => {
             updateSetting("aiProvider", e.target.value);
+            updateSetting("aiAgentModelOverrides", {});
+            updateSetting("aiAgents", (settings.aiAgents || []).map((agent) => {
+              const next = { ...agent };
+              delete next.modelOverride;
+              return next;
+            }));
             setModels([]);
             if (
               e.target.value !== "azure_openai" &&
@@ -886,14 +900,89 @@ function AIProviderTab({ settings, updateSetting, isAzure, isFoundry, isAnthropi
 
 // ── Agents Tab ───────────────────────────────────────────────────
 
-function AgentsTab({ settings, updateSetting }: {
+function AgentsTab({ settings, updateSetting, models, loadingModels, canFetchModels, fetchModels, modelError }: {
   settings: ReturnType<typeof useSettings>["settings"];
   updateSetting: ReturnType<typeof useSettings>["updateSetting"];
+  models: ModelInfo[];
+  loadingModels: boolean;
+  canFetchModels: boolean;
+  fetchModels: () => void;
+  modelError: string;
 }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
   const [newPrompt, setNewPrompt] = useState("");
   const customAgents = settings.aiAgents || [];
+  const agentModelOverrides = settings.aiAgentModelOverrides || {};
+  const modelOptions = models.map((m) => m.id);
+
+  const modelLabel = (model: string) => {
+    const info = models.find((m) => m.id === model);
+    if (!info) return model;
+    const details = [
+      info.context_length ? `${Math.round(info.context_length / 1000)}k ctx` : "",
+      info.capabilities?.vision === "true" ? "vision" : "",
+      info.capabilities?.responses_api === "true" ? "responses" : "",
+    ].filter(Boolean).join(" · ");
+    return details ? `${model} (${details})` : model;
+  };
+
+  const optionValues = (current: string) => {
+    const values = [...modelOptions];
+    if (current && !values.includes(current)) values.unshift(current);
+    return values;
+  };
+
+  const updateBuiltInModel = (id: string, model: string) => {
+    const next = { ...agentModelOverrides };
+    if (model) {
+      next[id] = model;
+    } else {
+      delete next[id];
+    }
+    updateSetting("aiAgentModelOverrides", next);
+  };
+
+  const AgentModelSelect = ({
+    value,
+    onChange,
+  }: {
+    value: string;
+    onChange: (model: string) => void;
+  }) => (
+    <div className="flex flex-col gap-1.5">
+      <label className="text-[10px] font-semibold uppercase tracking-wider text-[rgb(var(--color-text-secondary))]">
+        Model
+      </label>
+      <div className="flex gap-2">
+        <select
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className={inputClass + " text-xs flex-1"}
+        >
+          <option value="">Use global model ({settings.aiModel || "not selected"})</option>
+          {optionValues(value).map((model) => (
+            <option key={model} value={model}>{modelLabel(model)}</option>
+          ))}
+        </select>
+        {models.length === 0 && (
+          <button
+            type="button"
+            onClick={fetchModels}
+            disabled={loadingModels || !canFetchModels}
+            className="px-2.5 py-1.5 rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] text-[11px] text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] disabled:opacity-40 transition-colors"
+          >
+            {loadingModels ? "Loading..." : "Fetch"}
+          </button>
+        )}
+      </div>
+      {value && models.length === 0 && (
+        <p className="text-[10px] text-[rgb(var(--color-text-secondary))]">
+          Saved override: <span className="font-medium">{value}</span>
+        </p>
+      )}
+    </div>
+  );
 
   const addAgent = () => {
     const name = newName.trim();
@@ -922,8 +1011,11 @@ function AgentsTab({ settings, updateSetting }: {
   return (
     <div className="flex flex-col gap-6">
       <p className="text-xs text-[rgb(var(--color-text-secondary))]">
-        Agents are AI personas with different system prompts. Select an agent in the chat toolbar to change how the AI responds. Built-in agents ship with CutReady; custom agents are yours to create.
+        Agents are AI personas with different system prompts. Each agent can inherit the global model or use a dedicated model for its task.
       </p>
+      {modelError && (
+        <p className="text-xs text-error">{modelError}</p>
+      )}
 
       {/* Built-in agents (read-only) */}
       <div>
@@ -940,6 +1032,12 @@ function AgentsTab({ settings, updateSetting }: {
               <p className="text-xs text-[rgb(var(--color-text-secondary))] line-clamp-2">
                 {agent.prompt.split("\n").find((l) => l.trim() && !l.startsWith("#") && !l.startsWith("You are")) || agent.prompt.slice(0, 120)}
               </p>
+              <div className="mt-3">
+                <AgentModelSelect
+                  value={agentModelOverrides[agent.id] || ""}
+                  onChange={(model) => updateBuiltInModel(agent.id, model)}
+                />
+              </div>
             </div>
           ))}
         </div>
@@ -968,6 +1066,10 @@ function AgentsTab({ settings, updateSetting }: {
                     onChange={(e) => updateAgent(agent.id, { prompt: e.target.value })}
                     className={inputClass + " text-xs min-h-[120px] resize-y font-mono"}
                     placeholder="System prompt..."
+                  />
+                  <AgentModelSelect
+                    value={agent.modelOverride || ""}
+                    onChange={(model) => updateAgent(agent.id, { modelOverride: model || undefined })}
                   />
                   <button
                     onClick={() => setEditingId(null)}
@@ -1000,6 +1102,12 @@ function AgentsTab({ settings, updateSetting }: {
                   <p className="text-xs text-[rgb(var(--color-text-secondary))] line-clamp-2">
                     {agent.prompt.slice(0, 150)}{agent.prompt.length > 150 ? "…" : ""}
                   </p>
+                  <div className="mt-3">
+                    <AgentModelSelect
+                      value={agent.modelOverride || ""}
+                      onChange={(model) => updateAgent(agent.id, { modelOverride: model || undefined })}
+                    />
+                  </div>
                 </>
               )}
             </div>

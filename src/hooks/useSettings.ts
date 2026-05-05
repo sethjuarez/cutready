@@ -49,6 +49,8 @@ export interface GlobalSettings {
   aiSelectedAgent: string;
   /** User-created custom agents (name + prompt). */
   aiAgents: AgentPreset[];
+  /** Per-agent model overrides for built-in agents. Empty/missing means use the global model. */
+  aiAgentModelOverrides: Record<string, string>;
   /* ── Display settings ────────────────────────── */
   /** Editor text size in px (13–18, default 14). */
   displayFontSize: number;
@@ -114,6 +116,7 @@ const defaultGlobalSettings: GlobalSettings = {
   audioDevice: "",
   aiSelectedAgent: "planner",
   aiAgents: [],
+  aiAgentModelOverrides: {},
   displayFontSize: 14,
   displayChatFontSize: 14,
   displayRowDensity: "comfortable",
