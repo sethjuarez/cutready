@@ -406,8 +406,8 @@ export function StoryboardView() {
               {/* Monitor picker dropdown */}
               {showMonitorPicker && (
                 <>
-                  <div className="fixed inset-0 z-overlay" onClick={() => setShowMonitorPicker(false)} />
-                  <div className="absolute right-0 top-full mt-2 z-dropdown bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-lg shadow-lg py-1 min-w-[200px]">
+                  <div className="fixed inset-0 z-dropdown" onClick={() => setShowMonitorPicker(false)} />
+                  <div className="absolute right-0 top-full mt-2 z-modal bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-lg shadow-lg py-1 min-w-[200px]">
                     <div className="px-3 py-2 text-xs font-medium text-[rgb(var(--color-text-secondary))] uppercase tracking-wider border-b border-[rgb(var(--color-border))]">
                       Present on
                     </div>
