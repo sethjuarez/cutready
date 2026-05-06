@@ -9,7 +9,7 @@ use serde_json::{json, Value};
 
 use crate::engine::agent::llm::{ContentPart, ImageUrl, Tool, ToolCall};
 use crate::engine::project;
-use crate::models::sketch::PlanningRow;
+use crate::models::sketch::{PlanningRow, Sketch};
 
 // ---------------------------------------------------------------------------
 // Image extraction and encoding for vision-capable models
@@ -317,31 +317,76 @@ pub fn all_tools(web_search_enabled: bool) -> Vec<Tool> {
         ),
         Tool::function(
             "set_row_visual",
-            "Set an animated framing visual on a planning row using the elucim DSL. Use CutReady semantic tokens for theme integration: $background, $title, $subtitle, $foreground, $muted, $surface, $border, $accent, $secondary, $tertiary, $success, $warning, $error. Avoid hardcoded cyan/purple for routine emphasis. Prefer polished slide density: roughly 20-40 flattened nodes, 3-5 main objects/steps, minimal labels, and one hero visual metaphor. Avoid token strips, tiny grids, repeated chips, and probability worksheets unless essential. Use valid Elucim fields: text fill (not color), rect rx (not radius), and numeric fadeIn/draw/fadeOut frames. Group nodes are useful for transforms but do not make a crowded slide simpler. Auto-validates structure and auto-critiques layout/readability before saving. Returns validation or critique errors if the visual has issues — fix them and call again. Pass null to remove a visual.",
+            "Set an animated framing visual on a planning row using the elucim DSL. Prefer canonical v2 documents with version \"2.0\", scene, and elements keyed by stable semantic IDs; legacy v1 is accepted and migrated. Add lightweight intent metadata to important elements, e.g. intent: { role: 'title'|'subtitle'|'hero'|'step'|'connector'|'label'|'container'|'decoration', importance: 'primary'|'secondary'|'supporting'|'decorative' }. Use CutReady semantic tokens for theme integration: $background, $title, $subtitle, $foreground, $muted, $surface, $border, $accent, $secondary, $tertiary, $success, $warning, $error. Avoid hardcoded cyan/purple for routine emphasis. Prefer polished slide density: roughly 20-40 flattened nodes, 3-5 main objects/steps, minimal labels, and one hero visual metaphor. Avoid token strips, tiny grids, repeated chips, and probability worksheets unless essential. Use valid Elucim fields in element props: text fill (not color), rect rx (not radius), and numeric fadeIn/draw/fadeOut frames. Group nodes are useful for transforms but do not make a crowded slide simpler. Auto-validates structure and auto-critiques layout/readability before saving. Returns validation or critique errors if the visual has issues — fix them and call again. Pass null to remove a visual.",
             json!({
                 "type": "object",
                 "properties": {
                     "path": { "type": "string", "description": "Relative path to the sketch" },
                     "index": { "type": "integer", "description": "0-based row index" },
                     "visual": {
-                        "description": "An elucim DSL document (JSON object with version and root), or null to remove",
+                        "description": "An elucim DSL v2 document (JSON object with version, scene, and elements), legacy v1 document, or null to remove",
                         "oneOf": [
                             {
                                 "type": "object",
                                 "properties": {
-                                    "version": { "type": "string", "enum": ["1.0"] },
-                                    "root": {
+                                    "version": { "type": "string", "enum": ["2.0"] },
+                                    "scene": {
                                         "type": "object",
-                                        "description": "Root node — a scene, player, or presentation node. Scene node: { type: 'scene', width, height, children: [...] }. Player node: { type: 'player', width, height, fps, durationInFrames, children: [...] }. Children can be: circle, rect, line, arrow, text, group, polygon, image, axes, latex, graph, matrix, barChart. Text nodes use 'content' (not 'text') for the string. Prefer $title for titles, $subtitle for subtitles, $foreground for labels/body text, $muted for annotations, $surface/$border for panels, and $accent/$secondary/$tertiary for emphasis. Animations: fadeIn (≥1), fadeOut (≥1), draw, easing. Omit fadeIn for instant visibility."
+                                        "description": "Scene metadata. Use { type: 'player', width: 960, height: 540, fps: 30, durationInFrames: 90, background: '$background', children: ['hero', ...] }. Children are top-level element IDs."
+                                    },
+                                    "elements": {
+                                        "type": "object",
+                                        "description": "Map of element IDs to { id, type, parentId?, children?, layout?, intent?, props }. props should contain render fields such as x/y/content/fill/rx/fadeIn. intent should describe role and importance for agent edits. Text nodes use props.content (not text). Prefer stable IDs like title, subtitle, hero, step-1."
                                     }
                                 },
-                                "required": ["version", "root"]
+                                "required": ["version", "scene", "elements"]
                             },
                             { "type": "null" }
                         ]
                     }
                 },
                 "required": ["path", "index", "visual"]
+            }),
+        ),
+        Tool::function(
+            "review_row_visual",
+            "Review an existing row visual with Elucim v2 agentic checks. Loads the row visual, normalizes it to v2, validates it, summarizes elements/timelines/state machines, lists deterministic nudge suggestions, verifies renderability, and includes layout critique feedback.",
+            json!({
+                "type": "object",
+                "properties": {
+                    "path": { "type": "string", "description": "Relative path to the sketch" },
+                    "index": { "type": "integer", "description": "0-based row index" }
+                },
+                "required": ["path", "index"]
+            }),
+        ),
+        Tool::function(
+            "apply_row_visual_nudge",
+            "Apply a deterministic CutReady/Elucim visual nudge to an existing row visual and save the updated v2 document. Call review_row_visual first to see available nudge IDs. Safe nudges can be applied directly; review nudges are allowed when the requested visual polish matches the user's intent.",
+            json!({
+                "type": "object",
+                "properties": {
+                    "path": { "type": "string", "description": "Relative path to the sketch" },
+                    "index": { "type": "integer", "description": "0-based row index" },
+                    "nudge_id": { "type": "string", "description": "Nudge ID returned by review_row_visual, e.g. mark-refined, normalize-root-layer-order, add-staggered-intro" }
+                },
+                "required": ["path", "index", "nudge_id"]
+            }),
+        ),
+        Tool::function(
+            "apply_row_visual_command",
+            "Apply a deterministic Elucim visual command to an existing row visual and save the updated v2 document. Use for precise machine edits such as metadata updates, element intent annotation, layer ordering, or intro timeline creation without regenerating the visual.",
+            json!({
+                "type": "object",
+                "properties": {
+                    "path": { "type": "string", "description": "Relative path to the sketch" },
+                    "index": { "type": "integer", "description": "0-based row index" },
+                    "command": {
+                        "type": "object",
+                        "description": "Command object. Supported ops: updateMetadata { metadata }, markRefined, annotateElementIntent, normalizeRootLayerOrder, addStaggeredIntro { timelineId?, staggerFrames?, durationFrames? }"
+                    }
+                },
+                "required": ["path", "index", "command"]
             }),
         ),
         Tool::function(
@@ -498,6 +543,15 @@ pub fn execute_tool(
             "set_row_visual" => {
                 agentive::ToolOutput::from(exec_set_row_visual(project_root, &args))
             }
+            "review_row_visual" => {
+                agentive::ToolOutput::from(exec_review_row_visual(project_root, &args))
+            }
+            "apply_row_visual_nudge" => {
+                agentive::ToolOutput::from(exec_apply_row_visual_nudge(project_root, &args))
+            }
+            "apply_row_visual_command" => {
+                agentive::ToolOutput::from(exec_apply_row_visual_command(project_root, &args))
+            }
             "design_plan" => agentive::ToolOutput::from(exec_design_plan(project_root, &args)),
             "read_storyboard" => {
                 agentive::ToolOutput::from(exec_read_storyboard(project_root, &args))
@@ -614,7 +668,8 @@ pub fn execute_tool(
 /// Extract a JSON object from a tool argument field. Handles three LLM behaviors:
 ///   1. `{"visual": { ... }}` → normal, returns the nested object
 ///   2. `{"visual": "{ ... }"}` → stringified, parses and returns
-///   3. `{"version": "1.0", "root": {...}}` → flattened (LLM passed DSL as args directly)
+///   3. `{"version": "1.0", "root": {...}}` or v2 document fields → flattened
+///      (LLM passed DSL as args directly)
 fn extract_json_object<'a>(
     args: &'a Value,
     key: &str,
@@ -634,8 +689,13 @@ fn extract_json_object<'a>(
         )),
         None => {
             // Fallback: LLM may have flattened the object into args directly.
-            // Detect DSL documents by checking for version+root fields.
-            if args.is_object() && (args.get("version").is_some() || args.get("root").is_some()) {
+            // Detect v1/v2 DSL documents by checking for document-shape fields.
+            if args.is_object()
+                && (args.get("version").is_some()
+                    || args.get("root").is_some()
+                    || args.get("scene").is_some()
+                    || args.get("elements").is_some())
+            {
                 Ok(std::borrow::Cow::Borrowed(args))
             } else {
                 Err(format!("Error: missing required '{key}' argument"))
@@ -1236,6 +1296,48 @@ fn exec_update_planning_row(root: &Path, args: &Value) -> String {
     }
 }
 
+fn format_row_summary(row: Option<&PlanningRow>) -> String {
+    match row {
+        Some(row) => format!(
+            "narrative=\"{}\" actions=\"{}\"",
+            truncate(&row.narrative, 120),
+            truncate(&row.demo_actions, 120)
+        ),
+        None => "none".into(),
+    }
+}
+
+fn format_visual_row_context(sketch: &Sketch, index: usize) -> String {
+    let row = &sketch.rows[index];
+    let flow = sketch
+        .rows
+        .iter()
+        .enumerate()
+        .map(|(i, r)| {
+            format!(
+                "{}. {} / {}",
+                i,
+                truncate(&r.narrative, 72),
+                truncate(&r.demo_actions, 72)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    format!(
+        "Row context:\n- Sketch title: {}\n- Target row index: {}\n- Target row narrative: {}\n- Target row demo actions: {}\n- Existing screenshot: {}\n- Existing design plan: {}\n- Previous row: {}\n- Next row: {}\n- Sketch high-level flow:\n{}",
+        sketch.title,
+        index,
+        row.narrative,
+        row.demo_actions,
+        row.screenshot.as_deref().unwrap_or("none"),
+        row.design_plan.as_deref().unwrap_or("none"),
+        format_row_summary(index.checked_sub(1).and_then(|i| sketch.rows.get(i))),
+        format_row_summary(sketch.rows.get(index + 1)),
+        flow
+    )
+}
+
 fn exec_set_row_visual(root: &Path, args: &Value) -> String {
     let path = match args.get("path").and_then(|v| v.as_str()) {
         Some(p) => resolve_path(root, p),
@@ -1292,6 +1394,7 @@ fn exec_set_row_visual(root: &Path, args: &Value) -> String {
         );
     }
 
+    let row_context = format_visual_row_context(&sketch, index);
     let row = &mut sketch.rows[index];
 
     // null → remove visual, object/string → set visual
@@ -1305,31 +1408,58 @@ fn exec_set_row_visual(root: &Path, args: &Value) -> String {
                 Ok(v) => v,
                 Err(e) => return e,
             };
-            // Auto-validate before writing
+            // Auto-normalize to v2 and validate before writing. CutReady stores
+            // v2 visuals canonically, while critique still runs through the
+            // renderable v1 compatibility shape used by the current renderer.
+            let visual = match normalize_visual_to_v2(&visual) {
+                Ok(v) => v,
+                Err(e) => return format!("Validation failed (1 error) — fix this and call set_row_visual again:\n  • {e}\n\n{row_context}"),
+            };
+            let renderable_visual = match visual_to_renderable_v1(&visual) {
+                Ok(v) => v,
+                Err(e) => return format!("Validation failed (1 error) — visual could not be made renderable:\n  • {e}\n\n{row_context}"),
+            };
             let mut errors = Vec::new();
             validate_dsl_doc(&visual, &mut errors);
             if !errors.is_empty() {
                 return format!(
-                    "Validation failed ({} error{}) — fix these and call set_row_visual again:\n{}",
+                    "Validation failed ({} error{}) — fix these and call set_row_visual again:\n{}\n\n{}",
                     errors.len(),
                     if errors.len() == 1 { "" } else { "s" },
                     errors
                         .iter()
                         .map(|e| format!("  • {e}"))
                         .collect::<Vec<_>>()
-                        .join("\n")
+                        .join("\n"),
+                    row_context
+                );
+            }
+            let mut render_errors = Vec::new();
+            validate_dsl_doc(&renderable_visual, &mut render_errors);
+            if !render_errors.is_empty() {
+                return format!(
+                    "Validation failed ({} renderability error{}) — fix these and call set_row_visual again:\n{}\n\n{}",
+                    render_errors.len(),
+                    if render_errors.len() == 1 { "" } else { "s" },
+                    render_errors
+                        .iter()
+                        .map(|e| format!("  • {e}"))
+                        .collect::<Vec<_>>()
+                        .join("\n"),
+                    row_context
                 );
             }
             // Auto-critique for layout/readability issues
-            if let Ok((issues, suggestions)) = critique_visual_doc(&visual) {
+            if let Ok((issues, suggestions)) = critique_visual_doc(&renderable_visual) {
                 if !issues.is_empty() {
                     return format!(
-                        "Critique failed ({} issue{}) — fix these and call set_row_visual again:\n{}",
+                        "Critique failed ({} issue{}) — fix these and call set_row_visual again:\n{}\n\n{}",
                         issues.len(),
                         if issues.len() == 1 { "" } else { "s" },
                         issues.iter().enumerate()
                             .map(|(i, e)| format!("  ISSUE {}: {e}", i + 1))
-                            .collect::<Vec<_>>().join("\n")
+                            .collect::<Vec<_>>().join("\n"),
+                        row_context
                     );
                 }
                 if !suggestions.is_empty() {
@@ -1351,6 +1481,17 @@ fn exec_set_row_visual(root: &Path, args: &Value) -> String {
                 }
                 Err(e) => return format!("Error writing visual file: {e}"),
             }
+            let nudges = suggest_visual_nudges(&visual);
+            if !nudges.is_empty() {
+                let nudge_note = nudges
+                    .iter()
+                    .map(|n| format!("  • {} [{}]: {}", n.id, n.confidence, n.description))
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                critique_note.push_str(&format!(
+                    "\n\nDeterministic polish available via apply_row_visual_nudge:\n{nudge_note}"
+                ));
+            }
             // Clear screenshot since visual replaces it
             row.screenshot = None;
         }
@@ -1360,9 +1501,10 @@ fn exec_set_row_visual(root: &Path, args: &Value) -> String {
         Ok(()) => {
             if sketch.rows[index].visual.is_some() {
                 format!(
-                    "✓ Visual saved on row {} in {}{}",
+                    "✓ Visual saved on row {} in {}\n\n{}{}",
                     index,
                     path.display(),
+                    row_context,
                     critique_note
                 )
             } else {
@@ -1370,6 +1512,157 @@ fn exec_set_row_visual(root: &Path, args: &Value) -> String {
             }
         }
         Err(e) => format!("Error writing sketch: {e}"),
+    }
+}
+
+fn exec_review_row_visual(root: &Path, args: &Value) -> String {
+    let (_path, sketch, index, visual) = match load_row_visual(root, args) {
+        Ok(loaded) => loaded,
+        Err(e) => return e,
+    };
+
+    let normalized = match normalize_visual_to_v2(&visual) {
+        Ok(v) => v,
+        Err(e) => return format!("Visual validation failed:\n  • {e}"),
+    };
+    let mut errors = Vec::new();
+    validate_dsl_doc(&normalized, &mut errors);
+    let renderable = match visual_to_renderable_v1(&normalized) {
+        Ok(v) => v,
+        Err(e) => return format!("Visual renderability failed:\n  • {e}"),
+    };
+    let (issues, suggestions) = critique_visual_doc(&renderable).unwrap_or_default();
+    let summary = summarize_v2_visual(&normalized);
+    let nudges = suggest_visual_nudges(&normalized);
+    let row_context = format_visual_row_context(&sketch, index);
+
+    let mut parts = vec![
+        "Elucim visual review".to_string(),
+        format!("- Valid: {}", if errors.is_empty() { "yes" } else { "no" }),
+        "- Renderable: yes".to_string(),
+        format!("- Elements: {}", summary.element_count),
+        format!("- Timelines: {}", summary.timeline_count),
+        format!("- State machines: {}", summary.state_machine_count),
+    ];
+
+    if !errors.is_empty() {
+        parts.push(format!(
+            "\nValidation errors:\n{}",
+            errors
+                .iter()
+                .map(|e| format!("  • {e}"))
+                .collect::<Vec<_>>()
+                .join("\n")
+        ));
+    }
+    if !issues.is_empty() {
+        parts.push(format!(
+            "\nCritique issues:\n{}",
+            issues
+                .iter()
+                .map(|e| format!("  • {e}"))
+                .collect::<Vec<_>>()
+                .join("\n")
+        ));
+    }
+    if !suggestions.is_empty() {
+        parts.push(format!(
+            "\nCritique suggestions:\n{}",
+            suggestions
+                .iter()
+                .map(|e| format!("  • {e}"))
+                .collect::<Vec<_>>()
+                .join("\n")
+        ));
+    }
+    if nudges.is_empty() {
+        parts.push("\nNudges: none".into());
+    } else {
+        parts.push(format!(
+            "\nAvailable nudges:\n{}",
+            nudges
+                .iter()
+                .map(|n| format!("  • {} [{}]: {}", n.id, n.confidence, n.description))
+                .collect::<Vec<_>>()
+                .join("\n")
+        ));
+    }
+    if !summary.element_ids.is_empty() {
+        parts.push(format!("\nElement IDs: {}", summary.element_ids.join(", ")));
+    }
+    parts.push(format!("\n{row_context}"));
+    parts.join("\n")
+}
+
+fn exec_apply_row_visual_nudge(root: &Path, args: &Value) -> String {
+    let nudge_id = match args.get("nudge_id").and_then(|v| v.as_str()) {
+        Some(id) if !id.trim().is_empty() => id.trim(),
+        _ => return "Error: missing 'nudge_id' argument".into(),
+    };
+    let (path, mut sketch, index, visual) = match load_row_visual(root, args) {
+        Ok(loaded) => loaded,
+        Err(e) => return e,
+    };
+    if let Err(e) = ensure_row_visual_editable(&sketch, index) {
+        return e;
+    }
+
+    let normalized = match normalize_visual_to_v2(&visual) {
+        Ok(v) => v,
+        Err(e) => return format!("Visual validation failed:\n  • {e}"),
+    };
+    let before = normalized.clone();
+    let updated = match apply_visual_nudge(&normalized, nudge_id) {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+    let changed = count_changed_paths(&before, &updated);
+    if let Err(e) = validate_agentic_visual(&updated) {
+        return format!("Nudge produced an invalid visual; nothing saved:\n  • {e}");
+    }
+    match save_row_visual(root, &path, &mut sketch, index, &updated) {
+        Ok(rel_path) => format!(
+            "Applied visual nudge '{nudge_id}' to row {index}. Changed paths: {changed}. Saved: {rel_path}"
+        ),
+        Err(e) => e,
+    }
+}
+
+fn exec_apply_row_visual_command(root: &Path, args: &Value) -> String {
+    let command = match args.get("command") {
+        Some(v) if v.is_object() => v,
+        _ => return "Error: missing 'command' object".into(),
+    };
+    let (path, mut sketch, index, visual) = match load_row_visual(root, args) {
+        Ok(loaded) => loaded,
+        Err(e) => return e,
+    };
+    if let Err(e) = ensure_row_visual_editable(&sketch, index) {
+        return e;
+    }
+
+    let normalized = match normalize_visual_to_v2(&visual) {
+        Ok(v) => v,
+        Err(e) => return format!("Visual validation failed:\n  • {e}"),
+    };
+    let before = normalized.clone();
+    let updated = match apply_visual_command(&normalized, command) {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+    let changed = count_changed_paths(&before, &updated);
+    if let Err(e) = validate_agentic_visual(&updated) {
+        return format!("Command produced an invalid visual; nothing saved:\n  • {e}");
+    }
+    let op = command
+        .get("op")
+        .and_then(|v| v.as_str())
+        .unwrap_or("unknown");
+    match save_row_visual(root, &path, &mut sketch, index, &updated) {
+        Ok(rel_path) => format!(
+            "Applied visual command '{op}' to row {index}. Changed paths: {changed}. Saved: {rel_path}"
+        ),
+        Err(e) => e,
     }
 }
 
@@ -1433,12 +1726,13 @@ fn exec_design_plan(root: &Path, args: &Value) -> String {
     }
 
     sketch.rows[index].design_plan = Some(plan.clone());
+    let row_context = format_visual_row_context(&sketch, index);
 
     match project::write_sketch(&sketch, &path, root) {
         Ok(()) => {
             format!(
-                "Design plan saved for row {}. Now generate the DSL JSON based on this plan:\n\n{}",
-                index, plan
+                "Design plan saved for row {}.\n\n{}\n\nSaved design plan:\n{}\n\nNow generate DSL JSON based on this plan and row context.",
+                index, row_context, plan
             )
         }
         Err(e) => format!("Error writing sketch: {e}"),
@@ -1467,6 +1761,1191 @@ const VALID_NODE_TYPES: &[&str] = &[
     "bezierCurve",
     "codeBlock",
 ];
+
+const V2_LAYOUT_KEYS: &[&str] = &[
+    "x",
+    "y",
+    "width",
+    "height",
+    "cx",
+    "cy",
+    "r",
+    "x1",
+    "y1",
+    "x2",
+    "y2",
+    "rotation",
+    "rotationOrigin",
+    "scale",
+    "translate",
+    "zIndex",
+];
+
+pub(crate) fn normalize_visual_document_for_save(visual: &Value) -> Result<Value, String> {
+    let normalized = normalize_visual_to_v2(visual)?;
+    validate_agentic_visual(&normalized)?;
+    Ok(normalized)
+}
+
+fn normalize_visual_to_v2(visual: &Value) -> Result<Value, String> {
+    match visual.get("version") {
+        Some(Value::String(version)) if version == "2.0" => {
+            validate_v2_doc(visual)?;
+            Ok(visual.clone())
+        }
+        Some(Value::String(version)) if version == "1.0" => migrate_v1_visual_to_v2(visual),
+        Some(Value::Number(version))
+            if version.as_i64() == Some(1) && visual.get("root").is_some() =>
+        {
+            let mut coerced = visual.clone();
+            if let Some(obj) = coerced.as_object_mut() {
+                obj.insert("version".into(), Value::String("1.0".into()));
+            }
+            migrate_v1_visual_to_v2(&coerced)
+        }
+        Some(Value::String(version)) if version == "1" && visual.get("root").is_some() => {
+            let mut coerced = visual.clone();
+            if let Some(obj) = coerced.as_object_mut() {
+                obj.insert("version".into(), Value::String("1.0".into()));
+            }
+            migrate_v1_visual_to_v2(&coerced)
+        }
+        Some(Value::Number(version)) if version.as_i64() == Some(1) => {
+            migrate_legacy_rootless_to_v2(visual)
+        }
+        Some(Value::String(version)) if version == "1" => migrate_legacy_rootless_to_v2(visual),
+        Some(v) => Err(format!("version: expected \"2.0\" or \"1.0\", got {v}")),
+        None if visual.get("root").is_some() => {
+            let mut coerced = visual.clone();
+            if let Some(obj) = coerced.as_object_mut() {
+                obj.insert("version".into(), Value::String("1.0".into()));
+            }
+            migrate_v1_visual_to_v2(&coerced)
+        }
+        None if visual.get("scene").is_some() && visual.get("elements").is_some() => {
+            let mut coerced = visual.clone();
+            if let Some(obj) = coerced.as_object_mut() {
+                obj.insert("version".into(), Value::String("2.0".into()));
+            }
+            validate_v2_doc(&coerced)?;
+            Ok(coerced)
+        }
+        None => Err("missing required field \"version\"".into()),
+    }
+}
+
+fn visual_to_renderable_v1(visual: &Value) -> Result<Value, String> {
+    match visual.get("version").and_then(|v| v.as_str()) {
+        Some("1.0") => Ok(visual.clone()),
+        Some("2.0") => migrate_v2_visual_to_v1(visual),
+        _ => {
+            let normalized = normalize_visual_to_v2(visual)?;
+            migrate_v2_visual_to_v1(&normalized)
+        }
+    }
+}
+
+fn migrate_v1_visual_to_v2(visual: &Value) -> Result<Value, String> {
+    let root = visual
+        .get("root")
+        .and_then(|v| v.as_object())
+        .ok_or_else(|| "root: missing or invalid object".to_string())?;
+    if root.get("type").and_then(|v| v.as_str()) == Some("presentation") {
+        return Err("v1 presentation migration to v2 is not supported for row visuals".into());
+    }
+    let children = root
+        .get("children")
+        .and_then(|v| v.as_array())
+        .ok_or_else(|| "root.children: missing array".to_string())?;
+
+    let mut used_ids = std::collections::HashSet::new();
+    let mut elements = serde_json::Map::new();
+    let child_ids = children
+        .iter()
+        .enumerate()
+        .map(|(index, child)| {
+            migrate_v1_element_to_v2(
+                child,
+                &format!(
+                    "root.{}[{index}]",
+                    child
+                        .get("type")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("element")
+                ),
+                None,
+                &mut used_ids,
+                &mut elements,
+            )
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+
+    let mut scene = serde_json::Map::new();
+    for key in [
+        "type",
+        "preset",
+        "width",
+        "height",
+        "fps",
+        "durationInFrames",
+        "background",
+        "controls",
+        "loop",
+        "autoPlay",
+    ] {
+        if let Some(value) = root.get(key) {
+            scene.insert(key.into(), value.clone());
+        }
+    }
+    if !scene.contains_key("durationInFrames") {
+        scene.insert("durationInFrames".into(), Value::Number(120.into()));
+    }
+    scene.insert(
+        "children".into(),
+        Value::Array(child_ids.into_iter().map(Value::String).collect()),
+    );
+
+    let mut doc = serde_json::Map::new();
+    doc.insert("version".into(), Value::String("2.0".into()));
+    doc.insert("scene".into(), Value::Object(scene));
+    doc.insert("elements".into(), Value::Object(elements));
+    doc.insert(
+        "metadata".into(),
+        json!({
+            "polishLevel": "draft",
+            "notes": ["Migrated from Elucim v1 by CutReady."]
+        }),
+    );
+    let doc = Value::Object(doc);
+    validate_v2_doc(&doc)?;
+    Ok(doc)
+}
+
+fn migrate_v1_element_to_v2(
+    element: &Value,
+    fallback_id: &str,
+    parent_id: Option<&str>,
+    used_ids: &mut std::collections::HashSet<String>,
+    elements: &mut serde_json::Map<String, Value>,
+) -> Result<String, String> {
+    let obj = element
+        .as_object()
+        .ok_or_else(|| format!("{fallback_id}: element must be an object"))?;
+    let element_type = obj
+        .get("type")
+        .and_then(|v| v.as_str())
+        .unwrap_or("group")
+        .to_string();
+    let base_id = obj
+        .get("id")
+        .and_then(|v| v.as_str())
+        .filter(|id| !id.trim().is_empty())
+        .unwrap_or(fallback_id);
+    let id = reserve_v2_id(base_id, used_ids);
+
+    let child_ids = obj
+        .get("children")
+        .and_then(|v| v.as_array())
+        .map(|children| {
+            children
+                .iter()
+                .enumerate()
+                .map(|(index, child)| {
+                    migrate_v1_element_to_v2(
+                        child,
+                        &format!(
+                            "{id}.{}[{index}]",
+                            child
+                                .get("type")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("element")
+                        ),
+                        Some(&id),
+                        used_ids,
+                        elements,
+                    )
+                })
+                .collect::<Result<Vec<_>, _>>()
+        })
+        .transpose()?;
+
+    let mut props = serde_json::Map::new();
+    let mut layout = serde_json::Map::new();
+    for (key, value) in obj {
+        if key == "id" || key == "children" {
+            continue;
+        }
+        props.insert(key.clone(), value.clone());
+        if V2_LAYOUT_KEYS.contains(&key.as_str()) {
+            layout.insert(key.clone(), value.clone());
+        }
+    }
+
+    let mut v2 = serde_json::Map::new();
+    v2.insert("id".into(), Value::String(id.clone()));
+    v2.insert("type".into(), Value::String(element_type));
+    if let Some(parent_id) = parent_id {
+        v2.insert("parentId".into(), Value::String(parent_id.to_string()));
+    }
+    if let Some(child_ids) = child_ids {
+        v2.insert(
+            "children".into(),
+            Value::Array(child_ids.into_iter().map(Value::String).collect()),
+        );
+    }
+    if !layout.is_empty() {
+        v2.insert("layout".into(), Value::Object(layout));
+    }
+    v2.insert("props".into(), Value::Object(props));
+    elements.insert(id.clone(), Value::Object(v2));
+    Ok(id)
+}
+
+fn reserve_v2_id(base_id: &str, used_ids: &mut std::collections::HashSet<String>) -> String {
+    let mut id = base_id.trim().replace([' ', '/', '\\'], "-");
+    if id.is_empty() {
+        id = "element".into();
+    }
+    let original = id.clone();
+    let mut suffix = 2;
+    while used_ids.contains(&id) {
+        id = format!("{original}-{suffix}");
+        suffix += 1;
+    }
+    used_ids.insert(id.clone());
+    id
+}
+
+fn migrate_legacy_rootless_to_v2(visual: &Value) -> Result<Value, String> {
+    let elements = visual
+        .get("elements")
+        .and_then(|v| v.as_array())
+        .ok_or_else(|| "legacy rootless visual: expected elements array".to_string())?;
+    let mut children = Vec::new();
+    if let Some(title) = visual.get("title").and_then(|v| v.as_str()) {
+        children.push(json!({
+            "type": "text",
+            "id": "title",
+            "content": title,
+            "x": 96,
+            "y": 96,
+            "fontSize": 48,
+            "fill": "$title"
+        }));
+    }
+    children.extend(elements.iter().cloned());
+    let v1 = json!({
+        "version": "1.0",
+        "root": {
+            "type": "player",
+            "width": visual.get("width").and_then(|v| v.as_u64()).unwrap_or(1920),
+            "height": visual.get("height").and_then(|v| v.as_u64()).unwrap_or(1080),
+            "fps": visual.get("fps").and_then(|v| v.as_u64()).unwrap_or(30),
+            "durationInFrames": visual.get("durationInFrames").and_then(|v| v.as_u64()).or_else(|| visual.get("duration").and_then(|v| v.as_u64())).unwrap_or(120),
+            "background": visual.get("background").cloned().unwrap_or_else(|| Value::String("$background".into())),
+            "children": children
+        }
+    });
+    migrate_v1_visual_to_v2(&v1)
+}
+
+fn migrate_v2_visual_to_v1(visual: &Value) -> Result<Value, String> {
+    validate_v2_doc(visual)?;
+    let scene = visual
+        .get("scene")
+        .and_then(|v| v.as_object())
+        .ok_or_else(|| "scene: missing or invalid object".to_string())?;
+    let children = scene
+        .get("children")
+        .and_then(|v| v.as_array())
+        .ok_or_else(|| "scene.children: missing array".to_string())?;
+    let restored_children = children
+        .iter()
+        .map(|id| {
+            id.as_str()
+                .ok_or_else(|| "scene.children: child IDs must be strings".to_string())
+                .and_then(|id| restore_v2_element_to_v1(visual, id))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+
+    let mut root = serde_json::Map::new();
+    for key in [
+        "type",
+        "preset",
+        "width",
+        "height",
+        "fps",
+        "durationInFrames",
+        "background",
+        "controls",
+        "loop",
+        "autoPlay",
+    ] {
+        if let Some(value) = scene.get(key) {
+            root.insert(key.into(), value.clone());
+        }
+    }
+    root.insert("children".into(), Value::Array(restored_children));
+    Ok(json!({ "version": "1.0", "root": Value::Object(root) }))
+}
+
+fn restore_v2_element_to_v1(visual: &Value, id: &str) -> Result<Value, String> {
+    let elements = visual
+        .get("elements")
+        .and_then(|v| v.as_object())
+        .ok_or_else(|| "elements: missing or invalid object".to_string())?;
+    let element = elements
+        .get(id)
+        .and_then(|v| v.as_object())
+        .ok_or_else(|| format!("elements.{id}: missing element"))?;
+    let mut restored = element
+        .get("layout")
+        .and_then(|v| v.as_object())
+        .cloned()
+        .unwrap_or_default();
+    let props = element
+        .get("props")
+        .and_then(|v| v.as_object())
+        .cloned()
+        .ok_or_else(|| format!("elements.{id}.props: missing object"))?;
+    for (key, value) in props {
+        restored.insert(key, value);
+    }
+    restored.insert("id".into(), Value::String(id.to_string()));
+    restored.insert(
+        "type".into(),
+        Value::String(
+            element
+                .get("type")
+                .and_then(|v| v.as_str())
+                .unwrap_or("group")
+                .to_string(),
+        ),
+    );
+    if let Some(children) = element.get("children").and_then(|v| v.as_array()) {
+        let restored_children = children
+            .iter()
+            .map(|child| {
+                child
+                    .as_str()
+                    .ok_or_else(|| format!("elements.{id}.children: child IDs must be strings"))
+                    .and_then(|child_id| restore_v2_element_to_v1(visual, child_id))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        restored.insert("children".into(), Value::Array(restored_children));
+    }
+    Ok(Value::Object(restored))
+}
+
+fn validate_v2_doc(visual: &Value) -> Result<(), String> {
+    let obj = visual
+        .as_object()
+        .ok_or_else(|| "document: must be an object".to_string())?;
+    if obj.get("version").and_then(|v| v.as_str()) != Some("2.0") {
+        return Err("version: expected \"2.0\"".into());
+    }
+    let scene = obj
+        .get("scene")
+        .and_then(|v| v.as_object())
+        .ok_or_else(|| "scene: missing or invalid object".to_string())?;
+    match scene.get("type").and_then(|v| v.as_str()) {
+        Some("scene" | "player") => {}
+        Some(t) => {
+            return Err(format!(
+                "scene.type: expected \"scene\" or \"player\", got \"{t}\""
+            ))
+        }
+        None => return Err("scene.type: missing".into()),
+    }
+    if !scene
+        .get("durationInFrames")
+        .and_then(|v| v.as_i64())
+        .is_some_and(|n| n > 0)
+    {
+        return Err("scene.durationInFrames: must be a positive integer".into());
+    }
+    let scene_children = scene
+        .get("children")
+        .and_then(|v| v.as_array())
+        .ok_or_else(|| "scene.children: must be an array of element IDs".to_string())?;
+    let elements = obj
+        .get("elements")
+        .and_then(|v| v.as_object())
+        .ok_or_else(|| "elements: missing or invalid object".to_string())?;
+
+    for (index, child) in scene_children.iter().enumerate() {
+        let id = child
+            .as_str()
+            .ok_or_else(|| format!("scene.children[{index}]: must be an element ID string"))?;
+        if !elements.contains_key(id) {
+            return Err(format!(
+                "scene.children[{index}]: unknown element ID \"{id}\""
+            ));
+        }
+    }
+    for (id, element) in elements {
+        let element = element
+            .as_object()
+            .ok_or_else(|| format!("elements.{id}: must be an object"))?;
+        if element.get("id").and_then(|v| v.as_str()) != Some(id.as_str()) {
+            return Err(format!("elements.{id}.id: must match map key \"{id}\""));
+        }
+        if element.get("type").and_then(|v| v.as_str()).is_none() {
+            return Err(format!("elements.{id}.type: missing"));
+        }
+        if !element.get("props").is_some_and(|v| v.is_object()) {
+            return Err(format!("elements.{id}.props: must be an object"));
+        }
+        if let Some(parent_id) = element.get("parentId").and_then(|v| v.as_str()) {
+            if !elements.contains_key(parent_id) {
+                return Err(format!(
+                    "elements.{id}.parentId: unknown parent ID \"{parent_id}\""
+                ));
+            }
+        }
+        if let Some(children) = element.get("children").and_then(|v| v.as_array()) {
+            for (index, child) in children.iter().enumerate() {
+                let child_id = child.as_str().ok_or_else(|| {
+                    format!("elements.{id}.children[{index}]: must be an element ID string")
+                })?;
+                if !elements.contains_key(child_id) {
+                    return Err(format!(
+                        "elements.{id}.children[{index}]: unknown element ID \"{child_id}\""
+                    ));
+                }
+                if elements
+                    .get(child_id)
+                    .and_then(|v| v.get("parentId"))
+                    .and_then(|v| v.as_str())
+                    != Some(id.as_str())
+                {
+                    return Err(format!("elements.{id}.children[{index}]: child \"{child_id}\" must have parentId \"{id}\""));
+                }
+            }
+        }
+    }
+    validate_v2_timelines(obj, elements)?;
+    validate_v2_state_machines(obj)?;
+    Ok(())
+}
+
+fn validate_v2_timelines(
+    doc: &serde_json::Map<String, Value>,
+    elements: &serde_json::Map<String, Value>,
+) -> Result<(), String> {
+    let Some(timelines) = doc.get("timelines") else {
+        return Ok(());
+    };
+    let timelines = timelines
+        .as_object()
+        .ok_or_else(|| "timelines: must be an object".to_string())?;
+    const VALID_PROPERTIES: &[&str] =
+        &["opacity", "translate", "scale", "rotate", "fill", "stroke"];
+    for (timeline_id, timeline) in timelines {
+        let timeline = timeline
+            .as_object()
+            .ok_or_else(|| format!("timelines.{timeline_id}: must be an object"))?;
+        if timeline.get("id").and_then(|v| v.as_str()) != Some(timeline_id.as_str()) {
+            return Err(format!(
+                "timelines.{timeline_id}.id: must match key \"{timeline_id}\""
+            ));
+        }
+        let duration = timeline
+            .get("duration")
+            .and_then(|v| v.as_f64())
+            .ok_or_else(|| format!("timelines.{timeline_id}.duration: must be positive"))?;
+        if duration <= 0.0 || !duration.is_finite() {
+            return Err(format!(
+                "timelines.{timeline_id}.duration: must be positive"
+            ));
+        }
+        let Some(tracks) = timeline.get("tracks") else {
+            continue;
+        };
+        let tracks = tracks
+            .as_array()
+            .ok_or_else(|| format!("timelines.{timeline_id}.tracks: must be an array"))?;
+        for (track_index, track) in tracks.iter().enumerate() {
+            let track = track.as_object().ok_or_else(|| {
+                format!("timelines.{timeline_id}.tracks[{track_index}]: must be an object")
+            })?;
+            let target = track
+                .get("target")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| {
+                    format!("timelines.{timeline_id}.tracks[{track_index}].target: missing")
+                })?;
+            if !elements.contains_key(target) {
+                return Err(format!(
+                    "timelines.{timeline_id}.tracks[{track_index}].target: unknown target \"{target}\""
+                ));
+            }
+            let property = track
+                .get("property")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| {
+                    format!("timelines.{timeline_id}.tracks[{track_index}].property: missing")
+                })?;
+            if !VALID_PROPERTIES.contains(&property) {
+                return Err(format!(
+                    "timelines.{timeline_id}.tracks[{track_index}].property: unsupported animatable property \"{property}\""
+                ));
+            }
+            let keyframes = track
+                .get("keyframes")
+                .and_then(|v| v.as_array())
+                .ok_or_else(|| {
+                    format!("timelines.{timeline_id}.tracks[{track_index}].keyframes: must be a non-empty array")
+                })?;
+            if keyframes.is_empty() {
+                return Err(format!(
+                    "timelines.{timeline_id}.tracks[{track_index}].keyframes: must be a non-empty array"
+                ));
+            }
+            let mut previous_frame = -1_i64;
+            for (keyframe_index, keyframe) in keyframes.iter().enumerate() {
+                let keyframe = keyframe.as_object().ok_or_else(|| {
+                    format!("timelines.{timeline_id}.tracks[{track_index}].keyframes[{keyframe_index}]: must be an object")
+                })?;
+                let frame = keyframe
+                    .get("frame")
+                    .and_then(|v| v.as_i64())
+                    .ok_or_else(|| {
+                        format!("timelines.{timeline_id}.tracks[{track_index}].keyframes[{keyframe_index}].frame: must be a non-negative integer")
+                    })?;
+                if frame < 0 {
+                    return Err(format!("timelines.{timeline_id}.tracks[{track_index}].keyframes[{keyframe_index}].frame: must be a non-negative integer"));
+                }
+                if frame as f64 > duration {
+                    return Err(format!("timelines.{timeline_id}.tracks[{track_index}].keyframes[{keyframe_index}].frame: cannot exceed timeline duration"));
+                }
+                if frame <= previous_frame {
+                    return Err(format!("timelines.{timeline_id}.tracks[{track_index}].keyframes[{keyframe_index}].frame: frames must be strictly increasing"));
+                }
+                previous_frame = frame;
+                if !keyframe.contains_key("value") {
+                    return Err(format!("timelines.{timeline_id}.tracks[{track_index}].keyframes[{keyframe_index}].value: required"));
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+fn validate_v2_state_machines(doc: &serde_json::Map<String, Value>) -> Result<(), String> {
+    let timeline_ids = doc
+        .get("timelines")
+        .and_then(|v| v.as_object())
+        .map(|timelines| {
+            timelines
+                .keys()
+                .cloned()
+                .collect::<std::collections::HashSet<_>>()
+        })
+        .unwrap_or_default();
+    let Some(state_machines) = doc.get("stateMachines") else {
+        return Ok(());
+    };
+    let state_machines = state_machines
+        .as_object()
+        .ok_or_else(|| "stateMachines: must be an object".to_string())?;
+    for (machine_id, machine) in state_machines {
+        let machine = machine
+            .as_object()
+            .ok_or_else(|| format!("stateMachines.{machine_id}: must be an object"))?;
+        if machine.get("id").and_then(|v| v.as_str()) != Some(machine_id.as_str()) {
+            return Err(format!(
+                "stateMachines.{machine_id}.id: must match key \"{machine_id}\""
+            ));
+        }
+        let initial = machine
+            .get("initial")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| format!("stateMachines.{machine_id}.initial: missing"))?;
+        let states = machine
+            .get("states")
+            .and_then(|v| v.as_object())
+            .ok_or_else(|| format!("stateMachines.{machine_id}.states: must be an object"))?;
+        if !states.contains_key(initial) {
+            return Err(format!(
+                "stateMachines.{machine_id}.initial: initial state \"{initial}\" does not exist"
+            ));
+        }
+        for (state_id, state) in states {
+            let state = state.as_object().ok_or_else(|| {
+                format!("stateMachines.{machine_id}.states.{state_id}: must be an object")
+            })?;
+            if let Some(timeline) = state.get("timeline").and_then(|v| v.as_str()) {
+                if !timeline_ids.contains(timeline) {
+                    return Err(format!(
+                        "stateMachines.{machine_id}.states.{state_id}.timeline: unknown timeline \"{timeline}\""
+                    ));
+                }
+            }
+            if let Some(on) = state.get("on").and_then(|v| v.as_object()) {
+                for (event, transition) in on {
+                    validate_v2_transition(
+                        machine_id,
+                        state_id,
+                        &format!("on.{event}"),
+                        transition,
+                        states,
+                        &timeline_ids,
+                    )?;
+                }
+            }
+            if let Some(transition) = state.get("onComplete") {
+                validate_v2_transition(
+                    machine_id,
+                    state_id,
+                    "onComplete",
+                    transition,
+                    states,
+                    &timeline_ids,
+                )?;
+            }
+        }
+    }
+    Ok(())
+}
+
+fn validate_v2_transition(
+    machine_id: &str,
+    state_id: &str,
+    path: &str,
+    transition: &Value,
+    states: &serde_json::Map<String, Value>,
+    timeline_ids: &std::collections::HashSet<String>,
+) -> Result<(), String> {
+    let (target, timeline) = if let Some(target) = transition.as_str() {
+        (target, None)
+    } else {
+        let transition = transition.as_object().ok_or_else(|| {
+            format!("stateMachines.{machine_id}.states.{state_id}.{path}: transition must be a state ID or object")
+        })?;
+        let target = transition
+            .get("target")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| {
+                format!("stateMachines.{machine_id}.states.{state_id}.{path}.target: missing")
+            })?;
+        let timeline = transition.get("timeline").and_then(|v| v.as_str());
+        (target, timeline)
+    };
+    if !states.contains_key(target) {
+        return Err(format!(
+            "stateMachines.{machine_id}.states.{state_id}.{path}: unknown target state \"{target}\""
+        ));
+    }
+    if let Some(timeline) = timeline {
+        if !timeline_ids.contains(timeline) {
+            return Err(format!(
+                "stateMachines.{machine_id}.states.{state_id}.{path}.timeline: unknown timeline \"{timeline}\""
+            ));
+        }
+    }
+    Ok(())
+}
+
+struct VisualSummary {
+    element_count: usize,
+    timeline_count: usize,
+    state_machine_count: usize,
+    element_ids: Vec<String>,
+}
+
+struct VisualNudge {
+    id: &'static str,
+    confidence: &'static str,
+    description: &'static str,
+}
+
+fn load_row_visual(root: &Path, args: &Value) -> Result<(PathBuf, Sketch, usize, Value), String> {
+    let path = match args.get("path").and_then(|v| v.as_str()) {
+        Some(p) => resolve_path(root, p),
+        None => {
+            let listing = exec_list_project_files(root, &Value::Null);
+            return Err(format!(
+                "Error: missing 'path' argument. Use a sketch path from the list below.\n\n{listing}"
+            ));
+        }
+    };
+    let index = match args.get("index").and_then(|v| v.as_u64()) {
+        Some(i) => i as usize,
+        None => {
+            let hint = match project::read_sketch(&path) {
+                Ok(s) => format!(
+                    " Sketch has {} rows (valid indices: 0–{}).",
+                    s.rows.len(),
+                    s.rows.len().saturating_sub(1)
+                ),
+                Err(_) => String::new(),
+            };
+            return Err(format!("Error: missing 'index' (0-based row index).{hint}"));
+        }
+    };
+    let sketch = project::read_sketch(&path).map_err(|e| format!("Error reading sketch: {e}"))?;
+    if index >= sketch.rows.len() {
+        return Err(format!(
+            "Error: index {} out of range (sketch has {} rows)",
+            index,
+            sketch.rows.len()
+        ));
+    }
+    let row = &sketch.rows[index];
+    let Some(visual_ref) = &row.visual else {
+        return Err(format!("Error: row {index} does not have a visual"));
+    };
+    let visual = if let Some(rel_path) = visual_ref.as_str() {
+        project::read_visual(root, rel_path).map_err(|e| format!("Error reading visual: {e}"))?
+    } else if visual_ref.is_object() {
+        visual_ref.clone()
+    } else {
+        return Err(format!(
+            "Error: row {index} visual reference must be a path string or visual document"
+        ));
+    };
+    Ok((path, sketch, index, visual))
+}
+
+fn ensure_row_visual_editable(sketch: &Sketch, index: usize) -> Result<(), String> {
+    if sketch.locked {
+        return Err("Error: This sketch is locked. Unlock it before editing with AI.".into());
+    }
+    if sketch.rows[index].locked {
+        return Err(format!(
+            "Error: Planning row {} is locked. Unlock it before editing with AI.",
+            index + 1
+        ));
+    }
+    if sketch.rows[index].locks.is_locked("visual")
+        || sketch.rows[index].locks.is_locked("screenshot")
+    {
+        return Err(format!(
+            "Error: Planning row {} media cell is locked. Unlock it before editing with AI.",
+            index + 1
+        ));
+    }
+    Ok(())
+}
+
+fn save_row_visual(
+    root: &Path,
+    path: &Path,
+    sketch: &mut Sketch,
+    index: usize,
+    visual: &Value,
+) -> Result<String, String> {
+    let rel_path = project::write_visual(root, visual)
+        .map_err(|e| format!("Error writing visual file: {e}"))?;
+    sketch.rows[index].visual = Some(Value::String(rel_path.clone()));
+    sketch.rows[index].screenshot = None;
+    project::write_sketch(sketch, path, root).map_err(|e| format!("Error writing sketch: {e}"))?;
+    Ok(rel_path)
+}
+
+fn validate_agentic_visual(visual: &Value) -> Result<(), String> {
+    let mut errors = Vec::new();
+    validate_dsl_doc(visual, &mut errors);
+    if !errors.is_empty() {
+        return Err(errors.join("; "));
+    }
+    visual_to_renderable_v1(visual).map(|_| ())
+}
+
+fn summarize_v2_visual(visual: &Value) -> VisualSummary {
+    let mut element_ids = visual
+        .get("elements")
+        .and_then(|v| v.as_object())
+        .map(|elements| elements.keys().cloned().collect::<Vec<_>>())
+        .unwrap_or_default();
+    element_ids.sort();
+    VisualSummary {
+        element_count: element_ids.len(),
+        timeline_count: visual
+            .get("timelines")
+            .and_then(|v| v.as_object())
+            .map(|v| v.len())
+            .unwrap_or(0),
+        state_machine_count: visual
+            .get("stateMachines")
+            .and_then(|v| v.as_object())
+            .map(|v| v.len())
+            .unwrap_or(0),
+        element_ids,
+    }
+}
+
+fn suggest_visual_nudges(visual: &Value) -> Vec<VisualNudge> {
+    let mut nudges = Vec::new();
+    if visual
+        .pointer("/metadata/polishLevel")
+        .and_then(|v| v.as_str())
+        != Some("refined")
+    {
+        nudges.push(VisualNudge {
+            id: "mark-refined",
+            confidence: "safe",
+            description: "Mark the document metadata as refined for downstream agents.",
+        });
+    }
+    if elements_need_intent(visual) {
+        nudges.push(VisualNudge {
+            id: "annotate-element-intent",
+            confidence: "safe",
+            description: "Add non-rendering intent.role and Elucim-compatible intent.importance metadata to important elements.",
+        });
+    }
+    if scene_children_need_layer_order(visual) {
+        nudges.push(VisualNudge {
+            id: "normalize-root-layer-order",
+            confidence: "safe",
+            description:
+                "Assign top-level zIndex values that match scene order for stable agent edits.",
+        });
+    }
+    if visual
+        .get("timelines")
+        .and_then(|v| v.as_object())
+        .is_none_or(|timelines| timelines.is_empty())
+        && visual
+            .pointer("/scene/children")
+            .and_then(|v| v.as_array())
+            .is_some_and(|children| children.len() > 1)
+    {
+        nudges.push(VisualNudge {
+            id: "add-staggered-intro",
+            confidence: "review",
+            description: "Add a simple intro timeline and render-compatible fadeIn values for top-level elements.",
+        });
+    }
+    nudges
+}
+
+fn apply_visual_nudge(visual: &Value, nudge_id: &str) -> Result<Value, String> {
+    match nudge_id {
+        "mark-refined" => apply_visual_command(visual, &json!({ "op": "markRefined" })),
+        "annotate-element-intent" => {
+            apply_visual_command(visual, &json!({ "op": "annotateElementIntent" }))
+        }
+        "normalize-root-layer-order" => {
+            apply_visual_command(visual, &json!({ "op": "normalizeRootLayerOrder" }))
+        }
+        "add-staggered-intro" => {
+            apply_visual_command(visual, &json!({ "op": "addStaggeredIntro" }))
+        }
+        other => Err(format!("Error: unknown visual nudge '{other}'")),
+    }
+}
+
+fn apply_visual_command(visual: &Value, command: &Value) -> Result<Value, String> {
+    let op = command
+        .get("op")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| "Error: command.op is required".to_string())?;
+    let mut updated = visual.clone();
+    match op {
+        "updateMetadata" | "update_metadata" => {
+            let metadata = command
+                .get("metadata")
+                .and_then(|v| v.as_object())
+                .ok_or_else(|| "Error: updateMetadata requires a metadata object".to_string())?;
+            let doc = updated
+                .as_object_mut()
+                .ok_or_else(|| "Error: visual document must be an object".to_string())?;
+            let entry = doc
+                .entry("metadata")
+                .or_insert_with(|| Value::Object(serde_json::Map::new()));
+            let Some(target) = entry.as_object_mut() else {
+                return Err("Error: document metadata must be an object".into());
+            };
+            for (key, value) in metadata {
+                target.insert(key.clone(), value.clone());
+            }
+        }
+        "markRefined" | "mark-refined" | "mark_refined" => {
+            let doc = updated
+                .as_object_mut()
+                .ok_or_else(|| "Error: visual document must be an object".to_string())?;
+            let entry = doc
+                .entry("metadata")
+                .or_insert_with(|| Value::Object(serde_json::Map::new()));
+            let Some(target) = entry.as_object_mut() else {
+                return Err("Error: document metadata must be an object".into());
+            };
+            target.insert("polishLevel".into(), Value::String("refined".into()));
+        }
+        "annotateElementIntent" | "annotate-element-intent" | "annotate_element_intent" => {
+            annotate_element_intent(&mut updated)?;
+        }
+        "normalizeRootLayerOrder" | "normalize-root-layer-order" | "normalize_root_layer_order" => {
+            normalize_scene_children_order(&mut updated)?;
+        }
+        "addStaggeredIntro" | "add-staggered-intro" | "add_staggered_intro" => {
+            add_staggered_intro_timeline(&mut updated, command)?;
+        }
+        other => return Err(format!("Error: unsupported visual command op '{other}'")),
+    }
+    Ok(updated)
+}
+
+fn elements_need_intent(visual: &Value) -> bool {
+    visual
+        .get("elements")
+        .and_then(|v| v.as_object())
+        .is_some_and(|elements| {
+            elements.values().any(|element| {
+                let id = element.get("id").and_then(|v| v.as_str()).unwrap_or("");
+                let role = element.pointer("/intent/role").and_then(|v| v.as_str());
+                is_important_element_id(id) && role.is_none()
+            })
+        })
+}
+
+fn annotate_element_intent(visual: &mut Value) -> Result<(), String> {
+    let elements = visual
+        .get_mut("elements")
+        .and_then(|v| v.as_object_mut())
+        .ok_or_else(|| "Error: elements must be an object".to_string())?;
+    for (key, element) in elements {
+        let Some(element) = element.as_object_mut() else {
+            return Err(format!("Error: elements.{key} must be an object"));
+        };
+        let id = element
+            .get("id")
+            .and_then(|v| v.as_str())
+            .unwrap_or(key)
+            .to_string();
+        let element_type = element
+            .get("type")
+            .and_then(|v| v.as_str())
+            .unwrap_or("element")
+            .to_string();
+        let (role, importance) = infer_element_intent(&id, &element_type);
+        let entry = element
+            .entry("intent")
+            .or_insert_with(|| Value::Object(serde_json::Map::new()));
+        let Some(intent) = entry.as_object_mut() else {
+            return Err(format!("Error: elements.{key}.intent must be an object"));
+        };
+        intent
+            .entry("role")
+            .or_insert_with(|| Value::String(role.into()));
+        intent
+            .entry("importance")
+            .or_insert_with(|| Value::String(importance.into()));
+    }
+    Ok(())
+}
+
+fn is_important_element_id(id: &str) -> bool {
+    let id = id.to_ascii_lowercase();
+    id == "title"
+        || id == "subtitle"
+        || id.contains("hero")
+        || id.contains("step")
+        || id.contains("stage")
+        || id.contains("label")
+        || id.contains("card")
+}
+
+fn infer_element_intent(id: &str, element_type: &str) -> (&'static str, &'static str) {
+    let id = id.to_ascii_lowercase();
+    if id == "title" || id.ends_with("-title") {
+        ("title", "primary")
+    } else if id == "subtitle" || id.contains("subtitle") {
+        ("subtitle", "secondary")
+    } else if id.contains("hero") || id.contains("focus") || id.contains("center") {
+        ("hero", "primary")
+    } else if id.contains("step") || id.contains("stage") {
+        ("step", "secondary")
+    } else if id.contains("arrow")
+        || id.contains("connector")
+        || element_type == "arrow"
+        || element_type == "line"
+    {
+        ("connector", "supporting")
+    } else if id.contains("label") || element_type == "text" {
+        ("label", "supporting")
+    } else if id.contains("card") || id.contains("panel") || element_type == "rect" {
+        ("container", "secondary")
+    } else {
+        ("decoration", "decorative")
+    }
+}
+
+fn scene_children_need_layer_order(visual: &Value) -> bool {
+    let Some(children) = visual.pointer("/scene/children").and_then(|v| v.as_array()) else {
+        return false;
+    };
+    children.iter().enumerate().any(|(index, child)| {
+        child
+            .as_str()
+            .is_some_and(|id| v2_element_z_index(visual, id) != Some(index as i64))
+    })
+}
+
+fn normalize_scene_children_order(visual: &mut Value) -> Result<(), String> {
+    let root_children = visual
+        .pointer("/scene/children")
+        .and_then(|v| v.as_array())
+        .ok_or_else(|| "Error: scene.children must be an array".to_string())?
+        .iter()
+        .enumerate()
+        .filter_map(|(index, child)| child.as_str().map(|id| (index, id.to_string())))
+        .collect::<Vec<_>>();
+    let elements = visual
+        .get_mut("elements")
+        .and_then(|v| v.as_object_mut())
+        .ok_or_else(|| "Error: elements must be an object".to_string())?;
+    for (index, id) in root_children {
+        let Some(element) = elements.get_mut(&id).and_then(|v| v.as_object_mut()) else {
+            continue;
+        };
+        let layout = element
+            .entry("layout")
+            .or_insert_with(|| Value::Object(serde_json::Map::new()));
+        let Some(layout) = layout.as_object_mut() else {
+            return Err(format!("Error: elements.{id}.layout must be an object"));
+        };
+        layout.insert("zIndex".into(), Value::Number((index as i64).into()));
+    }
+    Ok(())
+}
+
+fn v2_element_z_index(visual: &Value, id: &str) -> Option<i64> {
+    visual
+        .pointer(&format!("/elements/{id}/layout/zIndex"))
+        .and_then(|v| v.as_i64())
+}
+
+fn add_staggered_intro_timeline(visual: &mut Value, command: &Value) -> Result<(), String> {
+    let targets = visual
+        .pointer("/scene/children")
+        .and_then(|v| v.as_array())
+        .ok_or_else(|| "Error: scene.children must be an array".to_string())?
+        .iter()
+        .filter_map(|v| v.as_str())
+        .filter(|id| visual.pointer(&format!("/elements/{id}")).is_some())
+        .take(8)
+        .map(str::to_string)
+        .collect::<Vec<_>>();
+    if targets.is_empty() {
+        return Err("Error: addStaggeredIntro requires at least one scene child".into());
+    }
+    let timeline_id = command
+        .get("timelineId")
+        .or_else(|| command.get("timeline_id"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("auto-intro");
+    let stagger = command
+        .get("staggerFrames")
+        .or_else(|| command.get("stagger_frames"))
+        .and_then(|v| v.as_i64())
+        .unwrap_or(6)
+        .max(1);
+    let duration = command
+        .get("durationFrames")
+        .or_else(|| command.get("duration_frames"))
+        .and_then(|v| v.as_i64())
+        .unwrap_or(18)
+        .max(2);
+    let scene_duration = visual
+        .pointer("/scene/durationInFrames")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(120)
+        .max(1);
+    let timeline_duration = scene_duration
+        .min(duration.max((targets.len().saturating_sub(1) as i64) * stagger + duration));
+    let tracks = targets
+        .iter()
+        .enumerate()
+        .map(|(index, id)| {
+            let start = ((index as i64) * stagger).min((timeline_duration - duration).max(0));
+            let end = timeline_duration.min(start + duration);
+            json!({
+                "target": id,
+                "property": "opacity",
+                "keyframes": [
+                    { "frame": start, "value": 0 },
+                    { "frame": end, "value": 1, "easing": "easeOutCubic" }
+                ]
+            })
+        })
+        .collect::<Vec<_>>();
+    let doc = visual
+        .as_object_mut()
+        .ok_or_else(|| "Error: visual document must be an object".to_string())?;
+    let timelines = doc
+        .entry("timelines")
+        .or_insert_with(|| Value::Object(serde_json::Map::new()));
+    let Some(timelines) = timelines.as_object_mut() else {
+        return Err("Error: document timelines must be an object".into());
+    };
+    timelines.insert(
+        timeline_id.into(),
+        json!({
+            "id": timeline_id,
+            "duration": timeline_duration,
+            "tracks": tracks
+        }),
+    );
+    let elements = doc
+        .get_mut("elements")
+        .and_then(|v| v.as_object_mut())
+        .ok_or_else(|| "Error: elements must be an object".to_string())?;
+    for (index, id) in targets.iter().enumerate() {
+        let Some(element) = elements.get_mut(id).and_then(|v| v.as_object_mut()) else {
+            continue;
+        };
+        let props = element
+            .entry("props")
+            .or_insert_with(|| Value::Object(serde_json::Map::new()));
+        let Some(props) = props.as_object_mut() else {
+            return Err(format!("Error: elements.{id}.props must be an object"));
+        };
+        let fade_in = (index as i64) * stagger;
+        if fade_in > 0 {
+            props
+                .entry("fadeIn")
+                .or_insert_with(|| Value::Number(fade_in.into()));
+        }
+    }
+    Ok(())
+}
+
+fn count_changed_paths(before: &Value, after: &Value) -> usize {
+    match (before, after) {
+        (Value::Object(left), Value::Object(right)) => {
+            let keys = left
+                .keys()
+                .chain(right.keys())
+                .cloned()
+                .collect::<std::collections::HashSet<_>>();
+            keys.into_iter()
+                .map(|key| {
+                    count_changed_paths(
+                        left.get(&key).unwrap_or(&Value::Null),
+                        right.get(&key).unwrap_or(&Value::Null),
+                    )
+                })
+                .sum()
+        }
+        (Value::Array(left), Value::Array(right)) => {
+            let max_len = left.len().max(right.len());
+            (0..max_len)
+                .map(|index| {
+                    count_changed_paths(
+                        left.get(index).unwrap_or(&Value::Null),
+                        right.get(index).unwrap_or(&Value::Null),
+                    )
+                })
+                .sum()
+        }
+        _ if before == after => 0,
+        _ => 1,
+    }
+}
 
 fn validate_dsl_node(node: &Value, path: &str, errors: &mut Vec<String>) {
     let obj = match node.as_object() {
@@ -1616,6 +3095,18 @@ fn node_type_name(v: &Value) -> &'static str {
 
 /// Validate a DSL document object, collecting errors into the provided Vec.
 fn validate_dsl_doc(visual: &Value, errors: &mut Vec<String>) {
+    if visual.get("version").and_then(|v| v.as_str()) == Some("2.0") {
+        if let Err(e) = validate_v2_doc(visual) {
+            errors.push(e);
+            return;
+        }
+        match visual_to_renderable_v1(visual) {
+            Ok(renderable) => validate_dsl_doc(&renderable, errors),
+            Err(e) => errors.push(e),
+        }
+        return;
+    }
+
     // Check version
     match visual.get("version") {
         Some(v) if v.as_str() == Some("1.0") => {}
@@ -1997,11 +3488,29 @@ fn critique_visual_doc(visual: &Value) -> Result<(Vec<String>, Vec<String>), Str
     let all_nodes = flatten_nodes(children);
     let text_nodes = collect_text_nodes(children, 0.0, 0.0);
     let bboxes = extract_bboxes(children, 0.0, 0.0);
+    let mut type_counts: std::collections::HashMap<String, usize> =
+        std::collections::HashMap::new();
+    for node in &all_nodes {
+        if let Some(t) = node.get("type").and_then(|v| v.as_str()) {
+            *type_counts.entry(t.to_string()).or_insert(0) += 1;
+        }
+    }
 
     // ── Issue checks ──────────────────────────────────────────────────
 
     // 1. Element count. Count flattened nodes so group wrappers cannot hide
     // crowded slides from critique.
+    let nested_node_count = all_nodes.len().saturating_sub(children.len());
+    if nested_node_count > 30 {
+        issues.push(format!(
+            "GROUPED_COMPLEXITY: {nested_node_count} nested elements. Groups should only move 2-5 related children; flatten decorative wrappers and remove hidden micro-detail."
+        ));
+    } else if nested_node_count > 20 {
+        suggestions.push(format!(
+            "GROUPED_COMPLEXITY: {nested_node_count} nested elements. Keep groups small and flatten simple shapes directly into the scene."
+        ));
+    }
+
     if all_nodes.len() > 55 {
         issues.push(format!(
             "TOO_MANY_ELEMENTS: {} flattened elements (max: 55). Simplify the slide by showing fewer steps, merging repeated token chips/bars, or replacing detailed internals with one stronger visual metaphor. Group wrappers do not reduce visual density.",
@@ -2076,9 +3585,9 @@ fn critique_visual_doc(visual: &Value) -> Result<(Vec<String>, Vec<String>), Str
         issues.push(format!(
             "TEXT_DENSITY: {total_texts} text labels (max: 22). Reduce labels or combine copy so the visual reads like a presentation slide, not a dense worksheet."
         ));
-    } else if total_texts > 18 {
+    } else if total_texts > 14 {
         suggestions.push(format!(
-            "TEXT_DENSITY: {total_texts} text labels — reduce labels or combine copy so the visual reads like a presentation slide, not a dense worksheet."
+            "TEXT_DENSITY: {total_texts} text labels — target 10-14. Keep title, subtitle, and 3-4 short labels; remove captions, duplicate labels, legends, and worksheet-like microcopy."
         ));
     }
     if total_texts > 0 && text_fills_without_token == total_texts {
@@ -2096,6 +3605,81 @@ fn critique_visual_doc(visual: &Value) -> Result<(Vec<String>, Vec<String>), Str
     if total_texts >= 2 && !uses_title_or_subtitle {
         suggestions.push(
             "TITLE_TOKENS: use $title for the main slide title and $subtitle for the framing line so visuals match CutReady's presentation theme.".into()
+        );
+    }
+
+    // 3b. Repeated-mark anti-patterns. Keep blockers conservative so real charts
+    // survive, but reject obvious token strips and chip rows.
+    let arrow_count = *type_counts.get("arrow").unwrap_or(&0);
+    if arrow_count > 8 {
+        issues.push(format!(
+            "TOO_MANY_ARROWS: {arrow_count} arrows (max: 8). Use fewer directional connectors or replace the detailed flow with one hero metaphor plus 3-4 labeled stages."
+        ));
+    } else if arrow_count > 5 {
+        suggestions.push(format!(
+            "TOO_MANY_ARROWS: {arrow_count} arrows may feel busy. Prefer fewer connectors and a clearer hero composition."
+        ));
+    }
+
+    let mut small_marks = 0usize;
+    let mut chip_rows: std::collections::HashMap<i64, usize> = std::collections::HashMap::new();
+    let mut max_hero_area = 0.0f64;
+    for node in &all_nodes {
+        let t = node.get("type").and_then(|v| v.as_str()).unwrap_or("");
+        match t {
+            "rect" => {
+                let w = node.get("width").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                let h = node.get("height").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                let y = node.get("y").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                max_hero_area = max_hero_area.max(w * h);
+                if w <= 36.0 && h <= 36.0 {
+                    small_marks += 1;
+                }
+                if (20.0..=96.0).contains(&w) && (10.0..=36.0).contains(&h) {
+                    *chip_rows.entry((y / 12.0).round() as i64).or_insert(0) += 1;
+                }
+            }
+            "circle" => {
+                let r = node.get("r").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                max_hero_area = max_hero_area.max(std::f64::consts::PI * r * r);
+                if r <= 16.0 {
+                    small_marks += 1;
+                }
+            }
+            "image" => {
+                let w = node.get("width").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                let h = node.get("height").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                max_hero_area = max_hero_area.max(w * h);
+            }
+            _ => {}
+        }
+    }
+    let has_chart_like_node = ["axes", "graph", "matrix", "barChart"]
+        .iter()
+        .any(|t| type_counts.contains_key(*t));
+    if small_marks >= 30 && !has_chart_like_node {
+        issues.push(format!(
+            "REPEATED_SMALL_MARKS: {small_marks} tiny repeated marks. Replace token strips, mini grids, or dot fields with one larger visual metaphor and a few labeled stages."
+        ));
+    } else if small_marks >= 12 {
+        suggestions.push(format!(
+            "REPEATED_SMALL_MARKS: {small_marks} tiny marks may read as clutter. Consider merging them into larger grouped shapes."
+        ));
+    }
+    if let Some(max_chip_row) = chip_rows.values().max() {
+        if *max_chip_row >= 12 && !has_chart_like_node {
+            issues.push(format!(
+                "REPEATED_CHIP_ROW: {max_chip_row} small chip-like rectangles share one row. Avoid token-strip layouts unless this row is specifically about tokenization."
+            ));
+        } else if *max_chip_row >= 8 {
+            suggestions.push(format!(
+                "REPEATED_CHIP_ROW: {max_chip_row} small chip-like rectangles share one row. Avoid token-strip layouts unless this row is specifically about tokenization."
+            ));
+        }
+    }
+    if all_nodes.len() > 18 && max_hero_area > 0.0 && max_hero_area < canvas_w * canvas_h * 0.08 {
+        suggestions.push(
+            "NO_HERO_OBJECT: no dominant object covers at least 8% of the canvas. Prefer one large hero metaphor plus 3-4 labeled stages over literal micro-detail.".into()
         );
     }
 
@@ -2178,13 +3762,6 @@ fn critique_visual_doc(visual: &Value) -> Result<(Vec<String>, Vec<String>), Str
     // ── Creative suggestions ──────────────────────────────────────────
 
     // 6. Shape variety
-    let mut type_counts: std::collections::HashMap<String, usize> =
-        std::collections::HashMap::new();
-    for node in &all_nodes {
-        if let Some(t) = node.get("type").and_then(|v| v.as_str()) {
-            *type_counts.entry(t.to_string()).or_insert(0) += 1;
-        }
-    }
     let shape_types: Vec<&str> = ["rect", "circle", "arrow", "line", "polygon"]
         .iter()
         .filter(|t| type_counts.contains_key(**t))
@@ -2526,6 +4103,353 @@ mod tests {
 
         assert!(result.starts_with("Error:"), "{result}");
         assert!(result.contains("media cell is locked"), "{result}");
+    }
+
+    #[test]
+    fn set_row_visual_tool_persists_v2_visuals() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        let rel = "demo.sk";
+        write_test_sketch(root, rel, PlanningRow::new());
+
+        let result = exec_set_row_visual(
+            root,
+            &json!({
+                "path": rel,
+                "index": 0,
+                "visual": {
+                    "version": "2.0",
+                    "scene": {
+                        "type": "player",
+                        "width": 960,
+                        "height": 540,
+                        "fps": 30,
+                        "durationInFrames": 90,
+                        "background": "$background",
+                        "children": ["title"]
+                    },
+                    "elements": {
+                        "title": {
+                            "id": "title",
+                            "type": "text",
+                            "props": {
+                                "type": "text",
+                                "content": "Hello",
+                                "x": 480,
+                                "y": 120,
+                                "fontSize": 44,
+                                "fill": "$title",
+                                "textAnchor": "middle"
+                            }
+                        }
+                    }
+                }
+            }),
+        );
+
+        assert!(result.contains("Visual saved"), "{result}");
+        let saved = project::read_sketch(&root.join(rel)).unwrap();
+        let visual_path = saved.rows[0].visual.as_ref().unwrap().as_str().unwrap();
+        let visual = project::read_visual(root, visual_path).unwrap();
+        assert_eq!(visual.get("version").and_then(|v| v.as_str()), Some("2.0"));
+        assert!(visual.get("scene").is_some());
+        assert!(visual.get("elements").is_some());
+    }
+
+    #[test]
+    fn set_row_visual_tool_migrates_v1_visuals_to_v2() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        let rel = "demo.sk";
+        write_test_sketch(root, rel, PlanningRow::new());
+
+        let result = exec_set_row_visual(
+            root,
+            &json!({
+                "path": rel,
+                "index": 0,
+                "visual": {
+                    "version": "1.0",
+                    "root": {
+                        "type": "player",
+                        "width": 960,
+                        "height": 540,
+                        "fps": 30,
+                        "durationInFrames": 90,
+                        "background": "$background",
+                        "children": [
+                            {
+                                "type": "text",
+                                "id": "title",
+                                "content": "Hello",
+                                "x": 480,
+                                "y": 120,
+                                "fontSize": 44,
+                                "fill": "$title",
+                                "textAnchor": "middle"
+                            }
+                        ]
+                    }
+                }
+            }),
+        );
+
+        assert!(result.contains("Visual saved"), "{result}");
+        let saved = project::read_sketch(&root.join(rel)).unwrap();
+        let visual_path = saved.rows[0].visual.as_ref().unwrap().as_str().unwrap();
+        let visual = project::read_visual(root, visual_path).unwrap();
+        assert_eq!(visual.get("version").and_then(|v| v.as_str()), Some("2.0"));
+        assert!(visual.pointer("/elements/title/props/content").is_some());
+    }
+
+    #[test]
+    fn review_row_visual_reports_agentic_nudges() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        let visual_path =
+            project::write_visual(root, &sample_v2_visual_for_agentic_tools()).unwrap();
+        let mut row = PlanningRow::new();
+        row.visual = Some(Value::String(visual_path));
+        write_test_sketch(root, "demo.sk", row);
+
+        let result = exec_review_row_visual(root, &json!({ "path": "demo.sk", "index": 0 }));
+
+        assert!(result.contains("Elucim visual review"), "{result}");
+        assert!(result.contains("Valid: yes"), "{result}");
+        assert!(result.contains("mark-refined"), "{result}");
+        assert!(result.contains("annotate-element-intent"), "{result}");
+        assert!(result.contains("normalize-root-layer-order"), "{result}");
+        assert!(result.contains("add-staggered-intro"), "{result}");
+    }
+
+    #[test]
+    fn apply_row_visual_nudge_updates_and_saves_v2() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        let visual_path =
+            project::write_visual(root, &sample_v2_visual_for_agentic_tools()).unwrap();
+        let mut row = PlanningRow::new();
+        row.visual = Some(Value::String(visual_path));
+        write_test_sketch(root, "demo.sk", row);
+
+        let result = exec_apply_row_visual_nudge(
+            root,
+            &json!({
+                "path": "demo.sk",
+                "index": 0,
+                "nudge_id": "mark-refined"
+            }),
+        );
+
+        assert!(result.contains("Applied visual nudge"), "{result}");
+        let saved = project::read_sketch(&root.join("demo.sk")).unwrap();
+        let visual_path = saved.rows[0].visual.as_ref().unwrap().as_str().unwrap();
+        let visual = project::read_visual(root, visual_path).unwrap();
+        assert_eq!(
+            visual
+                .pointer("/metadata/polishLevel")
+                .and_then(|v| v.as_str()),
+            Some("refined")
+        );
+    }
+
+    #[test]
+    fn apply_row_visual_command_adds_intro_timeline() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        let visual_path =
+            project::write_visual(root, &sample_v2_visual_for_agentic_tools()).unwrap();
+        let mut row = PlanningRow::new();
+        row.visual = Some(Value::String(visual_path));
+        write_test_sketch(root, "demo.sk", row);
+
+        let result = exec_apply_row_visual_command(
+            root,
+            &json!({
+                "path": "demo.sk",
+                "index": 0,
+                "command": {
+                    "op": "addStaggeredIntro",
+                    "timelineId": "intro",
+                    "staggerFrames": 4,
+                    "durationFrames": 20
+                }
+            }),
+        );
+
+        assert!(result.contains("Applied visual command"), "{result}");
+        let saved = project::read_sketch(&root.join("demo.sk")).unwrap();
+        let visual_path = saved.rows[0].visual.as_ref().unwrap().as_str().unwrap();
+        let visual = project::read_visual(root, visual_path).unwrap();
+        assert!(visual.pointer("/timelines/intro/tracks").is_some());
+        assert_eq!(
+            visual
+                .pointer("/elements/title/props/fadeIn")
+                .and_then(|v| v.as_i64()),
+            Some(4)
+        );
+    }
+
+    #[test]
+    fn apply_row_visual_nudge_annotates_element_intent() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        let visual_path =
+            project::write_visual(root, &sample_v2_visual_for_agentic_tools()).unwrap();
+        let mut row = PlanningRow::new();
+        row.visual = Some(Value::String(visual_path));
+        write_test_sketch(root, "demo.sk", row);
+
+        let result = exec_apply_row_visual_nudge(
+            root,
+            &json!({
+                "path": "demo.sk",
+                "index": 0,
+                "nudge_id": "annotate-element-intent"
+            }),
+        );
+
+        assert!(result.contains("Applied visual nudge"), "{result}");
+        let saved = project::read_sketch(&root.join("demo.sk")).unwrap();
+        let visual_path = saved.rows[0].visual.as_ref().unwrap().as_str().unwrap();
+        let visual = project::read_visual(root, visual_path).unwrap();
+        assert_eq!(
+            visual
+                .pointer("/elements/title/intent/role")
+                .and_then(|v| v.as_str()),
+            Some("title")
+        );
+        assert_eq!(
+            visual
+                .pointer("/elements/title/intent/importance")
+                .and_then(|v| v.as_str()),
+            Some("primary")
+        );
+    }
+
+    #[test]
+    fn validate_v2_rejects_bad_timeline_target() {
+        let mut visual = sample_v2_visual_for_agentic_tools();
+        visual["timelines"] = json!({
+            "intro": {
+                "id": "intro",
+                "duration": 20,
+                "tracks": [{
+                    "target": "missing",
+                    "property": "opacity",
+                    "keyframes": [{ "frame": 0, "value": 0 }, { "frame": 20, "value": 1 }]
+                }]
+            }
+        });
+
+        let mut errors = Vec::new();
+        validate_dsl_doc(&visual, &mut errors);
+
+        assert!(
+            errors.iter().any(|error| error.contains("unknown target")),
+            "Expected timeline target validation error: {errors:?}"
+        );
+    }
+
+    #[test]
+    fn validate_v2_rejects_bad_state_machine_reference() {
+        let mut visual = sample_v2_visual_for_agentic_tools();
+        visual["stateMachines"] = json!({
+            "deck": {
+                "id": "deck",
+                "initial": "idle",
+                "states": {
+                    "idle": { "on": { "start": "missing" } }
+                }
+            }
+        });
+
+        let mut errors = Vec::new();
+        validate_dsl_doc(&visual, &mut errors);
+
+        assert!(
+            errors
+                .iter()
+                .any(|error| error.contains("unknown target state")),
+            "Expected state machine validation error: {errors:?}"
+        );
+    }
+
+    #[test]
+    fn migrate_v1_scene_defaults_duration_for_v2() {
+        let visual = json!({
+            "version": "1.0",
+            "root": {
+                "type": "scene",
+                "width": 960,
+                "height": 540,
+                "background": "$background",
+                "children": [{
+                    "type": "text",
+                    "id": "title",
+                    "content": "Scene",
+                    "x": 480,
+                    "y": 100,
+                    "fontSize": 40,
+                    "fill": "$title"
+                }]
+            }
+        });
+
+        let migrated = normalize_visual_to_v2(&visual).unwrap();
+
+        assert_eq!(
+            migrated
+                .pointer("/scene/durationInFrames")
+                .and_then(|v| v.as_i64()),
+            Some(120)
+        );
+    }
+
+    fn sample_v2_visual_for_agentic_tools() -> Value {
+        json!({
+            "version": "2.0",
+            "scene": {
+                "type": "player",
+                "width": 960,
+                "height": 540,
+                "fps": 30,
+                "durationInFrames": 90,
+                "background": "$background",
+                "children": ["foreground", "title"]
+            },
+            "elements": {
+                "title": {
+                    "id": "title",
+                    "type": "text",
+                    "layout": { "zIndex": 0 },
+                    "props": {
+                        "type": "text",
+                        "content": "Hello",
+                        "x": 480,
+                        "y": 100,
+                        "fontSize": 40,
+                        "fill": "$title",
+                        "textAnchor": "middle"
+                    }
+                },
+                "foreground": {
+                    "id": "foreground",
+                    "type": "rect",
+                    "layout": { "zIndex": 10 },
+                    "props": {
+                        "type": "rect",
+                        "x": 300,
+                        "y": 210,
+                        "width": 360,
+                        "height": 160,
+                        "fill": "$surface",
+                        "stroke": "$border",
+                        "rx": 18
+                    }
+                }
+            }
+        })
     }
 
     #[test]
@@ -2911,6 +4835,45 @@ mod tests {
     }
 
     #[test]
+    fn extract_json_object_detects_flattened_v2_dsl() {
+        let args = json!({
+            "version": "2.0",
+            "scene": {
+                "type": "player",
+                "width": 960,
+                "height": 540,
+                "fps": 30,
+                "durationInFrames": 90,
+                "background": "$background",
+                "children": ["title"]
+            },
+            "elements": {
+                "title": {
+                    "id": "title",
+                    "type": "text",
+                    "props": {
+                        "type": "text",
+                        "content": "Hello",
+                        "x": 480,
+                        "y": 120,
+                        "fontSize": 44,
+                        "fill": "$title"
+                    }
+                }
+            }
+        });
+        let result = extract_json_object(&args, "visual");
+        assert!(result.is_ok(), "Should auto-detect flattened v2 DSL");
+        let visual = result.unwrap();
+        let mut errors = Vec::new();
+        validate_dsl_doc(&visual, &mut errors);
+        assert!(
+            errors.is_empty(),
+            "Flattened v2 DSL should be valid: {errors:?}"
+        );
+    }
+
+    #[test]
     fn critique_accepts_stringified_visual() {
         let visual = json!({
             "version": "1.0",
@@ -3000,6 +4963,123 @@ mod tests {
     }
 
     #[test]
+    fn critique_suggests_repeated_chip_rows() {
+        let chips: Vec<Value> = (0..8)
+            .map(|i| {
+                json!({
+                    "type": "rect",
+                    "x": 80 + i * 92,
+                    "y": 250,
+                    "width": 72,
+                    "height": 24,
+                    "fill": "$surface",
+                    "stroke": "$border",
+                    "rx": 12
+                })
+            })
+            .collect();
+        let visual = json!({
+            "version": "1.0",
+            "root": {
+                "type": "player", "width": 960, "height": 540, "fps": 30, "durationInFrames": 60,
+                "background": "$background",
+                "children": chips
+            }
+        });
+        let output = run_critique(&visual);
+        assert!(
+            output.contains("REPEATED_CHIP_ROW"),
+            "Expected repeated chip row suggestion, got:\n{output}"
+        );
+        assert!(
+            output.starts_with("✓ PASS"),
+            "Moderate chip rows should warn without blocking, got:\n{output}"
+        );
+    }
+
+    #[test]
+    fn critique_blocks_extreme_repeated_chip_rows() {
+        let chips: Vec<Value> = (0..12)
+            .map(|i| {
+                json!({
+                    "type": "rect",
+                    "x": 40 + i * 74,
+                    "y": 250,
+                    "width": 58,
+                    "height": 24,
+                    "fill": "$surface",
+                    "stroke": "$border",
+                    "rx": 12
+                })
+            })
+            .collect();
+        let visual = json!({
+            "version": "1.0",
+            "root": {
+                "type": "player", "width": 960, "height": 540, "fps": 30, "durationInFrames": 60,
+                "background": "$background",
+                "children": chips
+            }
+        });
+        let output = run_critique(&visual);
+        assert!(
+            output.contains("REPEATED_CHIP_ROW"),
+            "Expected repeated chip row issue, got:\n{output}"
+        );
+        assert!(
+            output.starts_with("✗ FAIL"),
+            "Extreme chip-strip slides should be rejected, got:\n{output}"
+        );
+    }
+
+    #[test]
+    fn design_plan_response_includes_row_context() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        let rel = "demo.sk";
+        let mut previous = PlanningRow::new();
+        previous.narrative = "Open with the big idea".into();
+        previous.demo_actions = "Show the landing page".into();
+        let mut target = PlanningRow::new();
+        target.narrative = "Explain the agent handoff".into();
+        target.demo_actions = "Highlight the planner and designer rows".into();
+        target.screenshot = Some(".cutready/screenshots/handoff.png".into());
+        let mut next = PlanningRow::new();
+        next.narrative = "Show the final output".into();
+        next.demo_actions = "Open the generated timeline".into();
+        let mut sketch = Sketch::new("Agent Story");
+        sketch.rows = vec![previous, target, next];
+        project::write_sketch(&sketch, &root.join(rel), root).unwrap();
+
+        let result = exec_design_plan(
+            root,
+            &json!({
+                "path": rel,
+                "index": 1,
+                "plan": "Use one hero handoff metaphor with three labeled stages."
+            }),
+        );
+
+        assert!(result.contains("Row context:"), "{result}");
+        assert!(
+            result.contains("Target row narrative: Explain the agent handoff"),
+            "{result}"
+        );
+        assert!(
+            result.contains("Existing screenshot: .cutready/screenshots/handoff.png"),
+            "{result}"
+        );
+        assert!(
+            result.contains("Previous row: narrative=\"Open with the big idea\""),
+            "{result}"
+        );
+        assert!(
+            result.contains("Next row: narrative=\"Show the final output\""),
+            "{result}"
+        );
+    }
+
+    #[test]
     fn critique_blocks_grouped_element_density() {
         let groups: Vec<Value> = (0..6)
             .map(|group_index| {
@@ -3040,6 +5120,39 @@ mod tests {
         assert!(
             output.starts_with("✗ FAIL"),
             "Grouped dense slides should be rejected, got:\n{output}"
+        );
+    }
+
+    #[test]
+    fn critique_suggests_grouped_complexity() {
+        let group_children: Vec<Value> = (0..21)
+            .map(|i| {
+                json!({
+                    "type": "circle",
+                    "cx": 80 + (i % 7) * 24,
+                    "cy": 170 + (i / 7) * 28,
+                    "r": 8,
+                    "fill": "$accent"
+                })
+            })
+            .collect();
+        let visual = json!({
+            "version": "1.0",
+            "root": {
+                "type": "player", "width": 960, "height": 540, "fps": 30, "durationInFrames": 60,
+                "background": "$background",
+                "children": [
+                    { "type": "text", "content": "Grouped idea", "x": 480, "y": 70, "fontSize": 40, "fill": "$title", "textAnchor": "middle" },
+                    { "type": "text", "content": "keep groups small", "x": 480, "y": 108, "fontSize": 20, "fill": "$subtitle", "textAnchor": "middle" },
+                    { "type": "group", "x": 280, "y": 140, "children": group_children },
+                    { "type": "rect", "x": 620, "y": 210, "width": 160, "height": 120, "fill": "$surface", "stroke": "$border", "rx": 16 }
+                ]
+            }
+        });
+        let output = run_critique(&visual);
+        assert!(
+            output.contains("GROUPED_COMPLEXITY"),
+            "Expected grouped complexity suggestion, got:\n{output}"
         );
     }
 }

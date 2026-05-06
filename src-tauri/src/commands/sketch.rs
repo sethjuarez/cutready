@@ -4,7 +4,7 @@
 
 use tauri::State;
 
-use crate::engine::project;
+use crate::engine::{agent::tools::normalize_visual_document_for_save, project};
 use crate::models::sketch::{PlanningCellLocks, Sketch, SketchSummary};
 use crate::AppState;
 
@@ -200,6 +200,7 @@ pub async fn write_visual_doc(
 ) -> Result<(), String> {
     let root = project_root(&state)?;
     let abs = project::safe_resolve(&root, &relative_path).map_err(|e| e.to_string())?;
+    let document = normalize_visual_document_for_save(&document)?;
     let json = serde_json::to_string_pretty(&document)
         .map_err(|e| format!("Failed to serialize visual: {e}"))?;
     std::fs::write(&abs, json).map_err(|e| format!("Failed to write visual: {e}"))
