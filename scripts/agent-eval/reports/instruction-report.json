@@ -1,0 +1,184 @@
+{
+  "generatedAt": "2026-05-05T22:49:37.641Z",
+  "cases": "D:\\projects\\cutready\\scripts\\agent-eval\\instruction-cases.json",
+  "summary": {
+    "caseCount": 6,
+    "passCount": 3,
+    "passRate": 50,
+    "averageScore": 77
+  },
+  "results": [
+    {
+      "id": "bullets-required-pass",
+      "agent": "writer",
+      "instruction": "Rewrite this as exactly three bullets instead of a narrative paragraph.",
+      "score": 100,
+      "pass": true,
+      "expected": {
+        "format": "bullets",
+        "minBullets": 3,
+        "maxBullets": 3,
+        "maxWordsRatio": 0.8
+      },
+      "metrics": {
+        "wordCount": 20,
+        "bulletCount": 3,
+        "numberedCount": 0,
+        "paragraphCount": 1,
+        "longestSentenceWords": 9
+      },
+      "findings": []
+    },
+    {
+      "id": "bullets-required-fail",
+      "agent": "writer",
+      "instruction": "Rewrite this as bullets instead of narrative.",
+      "score": 60,
+      "pass": false,
+      "expected": {
+        "format": "bullets",
+        "minBullets": 2
+      },
+      "metrics": {
+        "wordCount": 24,
+        "bulletCount": 0,
+        "numberedCount": 0,
+        "paragraphCount": 1,
+        "longestSentenceWords": 14
+      },
+      "findings": [
+        {
+          "code": "MISSING_BULLETS",
+          "points": 30,
+          "message": "instruction asked for bullets but output is not a bullet list"
+        },
+        {
+          "code": "TOO_FEW_BULLETS",
+          "points": 10,
+          "message": "expected at least 2 bullets, got 0"
+        }
+      ]
+    },
+    {
+      "id": "concise-conversational-pass",
+      "agent": "writer",
+      "instruction": "Make this more concise but still conversational.",
+      "score": 100,
+      "pass": true,
+      "expected": {
+        "conversational": true,
+        "maxWordsRatio": 0.65
+      },
+      "metrics": {
+        "wordCount": 10,
+        "bulletCount": 0,
+        "numberedCount": 0,
+        "paragraphCount": 1,
+        "longestSentenceWords": 10
+      },
+      "findings": []
+    },
+    {
+      "id": "concise-conversational-fail",
+      "agent": "writer",
+      "instruction": "Make this more concise but still conversational.",
+      "score": 41,
+      "pass": false,
+      "expected": {
+        "conversational": true,
+        "maxWordsRatio": 0.8
+      },
+      "metrics": {
+        "wordCount": 22,
+        "bulletCount": 0,
+        "numberedCount": 0,
+        "paragraphCount": 1,
+        "longestSentenceWords": 22
+      },
+      "findings": [
+        {
+          "code": "HYPE_WORD",
+          "points": 24,
+          "message": "uses synthetic marketing language: powerful, seamless, leverage, robust"
+        },
+        {
+          "code": "TOO_LONG",
+          "points": 18,
+          "message": "expected 18 words or fewer, got 22"
+        },
+        {
+          "code": "AI_CLICHE",
+          "points": 12,
+          "message": "uses a common AI-style phrase: in today's fast-paced world"
+        },
+        {
+          "code": "VAGUE_EASE_CLAIM",
+          "points": 5,
+          "message": "uses a vague speed/ease claim: with ease"
+        }
+      ]
+    },
+    {
+      "id": "table-required-pass",
+      "agent": "planner",
+      "instruction": "Give me the plan as a markdown table with Time, Narrative, and Demo Actions.",
+      "score": 100,
+      "pass": true,
+      "expected": {
+        "format": "table",
+        "required": [
+          "Time",
+          "Narrative",
+          "Demo Actions"
+        ]
+      },
+      "metrics": {
+        "wordCount": 38,
+        "bulletCount": 0,
+        "numberedCount": 0,
+        "paragraphCount": 1,
+        "longestSentenceWords": 22
+      },
+      "findings": []
+    },
+    {
+      "id": "forbidden-process-preface-fail",
+      "agent": "editor",
+      "instruction": "Only rewrite the narrative. Do not explain the change.",
+      "score": 60,
+      "pass": false,
+      "expected": {
+        "forbidden": [
+          "Updated the narrative",
+          "more concise:"
+        ],
+        "maxWords": 12,
+        "format": "narrative"
+      },
+      "metrics": {
+        "wordCount": 15,
+        "bulletCount": 0,
+        "numberedCount": 0,
+        "paragraphCount": 2,
+        "longestSentenceWords": 15
+      },
+      "findings": [
+        {
+          "code": "TOO_LONG",
+          "points": 16,
+          "message": "expected 12 words or fewer, got 15"
+        },
+        {
+          "code": "FORBIDDEN_PHRASE",
+          "points": 12,
+          "message": "contains forbidden phrase: Updated the narrative"
+        },
+        {
+          "code": "FORBIDDEN_PHRASE",
+          "points": 12,
+          "message": "contains forbidden phrase: more concise:"
+        }
+      ]
+    }
+  ]
+}

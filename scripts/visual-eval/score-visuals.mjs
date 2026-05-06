@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSy
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import process from "node:process";
+import { toRenderableV1 } from "@elucim/dsl";
 
 const DEFAULT_TARGET = "D:\\cutready\\ndc-toronto-26\\session\\.cutready\\visuals";
 const REPORT_DIR = path.join(process.cwd(), "scripts", "visual-eval", "reports");
@@ -162,7 +163,8 @@ function repeatedChipRows(rects) {
 export function scoreVisual(file) {
   const raw = readFileSync(file, "utf8");
   const visual = JSON.parse(raw);
-  const root = visual.root ?? {};
+  const renderable = toRenderableV1(visual);
+  const root = renderable.root ?? {};
   const topLevel = Array.isArray(root.children) ? root.children : [];
   const nodes = flattenNodes(topLevel);
   const texts = nodes.filter((node) => node.type === "text");

@@ -1,0 +1,68 @@
+[
+  {
+    "id": "bullets-required-pass",
+    "agent": "writer",
+    "instruction": "Rewrite this as exactly three bullets instead of a narrative paragraph.",
+    "source": "Open the app, show the project dashboard, explain why the storyboard helps the audience understand the demo flow, and then transition into the first sketch.",
+    "output": "- Open the project dashboard.\n- Show how the storyboard frames the demo flow.\n- Move into the first sketch.",
+    "expected": {
+      "format": "bullets",
+      "minBullets": 3,
+      "maxBullets": 3,
+      "maxWordsRatio": 0.8
+    }
+  },
+  {
+    "id": "bullets-required-fail",
+    "agent": "writer",
+    "instruction": "Rewrite this as bullets instead of narrative.",
+    "source": "Open the dashboard, point out the review queue, and explain how the next step turns raw feedback into a practical task list.",
+    "output": "First, open the dashboard and point out the review queue. Then explain how the next step turns raw feedback into a practical task list.",
+    "expected": {
+      "format": "bullets",
+      "minBullets": 2
+    }
+  },
+  {
+    "id": "concise-conversational-pass",
+    "agent": "writer",
+    "instruction": "Make this more concise but still conversational.",
+    "source": "At this point in the demo, we want to take a moment to explain that the system is not just collecting traces, but transforming them into something the team can actually use during review.",
+    "output": "Now the trace turns into something the team can review.",
+    "expected": {
+      "conversational": true,
+      "maxWordsRatio": 0.65
+    }
+  },
+  {
+    "id": "concise-conversational-fail",
+    "agent": "writer",
+    "instruction": "Make this more concise but still conversational.",
+    "source": "Show how the import step reads the file, pulls out the important details, and creates a clean first draft for the demo plan.",
+    "output": "In today's fast-paced world, this powerful import experience unlocks a seamless workflow that enables users to leverage robust productivity insights with ease.",
+    "expected": {
+      "conversational": true,
+      "maxWordsRatio": 0.8
+    }
+  },
+  {
+    "id": "table-required-pass",
+    "agent": "planner",
+    "instruction": "Give me the plan as a markdown table with Time, Narrative, and Demo Actions.",
+    "output": "| Time | Narrative | Demo Actions |\n| --- | --- | --- |\n| 30s | Set up the problem. | Open the dashboard. |\n| 45s | Show the fix. | Run the workflow. |",
+    "expected": {
+      "format": "table",
+      "required": ["Time", "Narrative", "Demo Actions"]
+    }
+  },
+  {
+    "id": "forbidden-process-preface-fail",
+    "agent": "editor",
+    "instruction": "Only rewrite the narrative. Do not explain the change.",
+    "output": "Updated the narrative to be more concise:\n\nNow the review queue shows the next task.",
+    "expected": {
+      "forbidden": ["Updated the narrative", "more concise:"],
+      "maxWords": 12
+    }
+  }
+]
