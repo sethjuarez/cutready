@@ -1,7 +1,8 @@
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { RefreshCw, Pencil, Check, X } from "lucide-react";
-import type { ElucimDocument } from "@elucim/dsl";
+import { normalizeToV2 } from "@elucim/dsl";
+import type { CutReadyElucimDocument } from "../types/elucim";
 import VisualCell, { type VisualControlHandle } from "./VisualCell";
 import type { AssetInfo } from "../stores/appStore";
 import { useAppStore } from "../stores/appStore";
@@ -73,7 +74,7 @@ function VisualAssetViewer({
 
   // Lightbox editor state
   const [editorOpen, setEditorOpen] = useState(false);
-  const [editorDsl, setEditorDsl] = useState<ElucimDocument | null>(null);
+  const [editorDsl, setEditorDsl] = useState<CutReadyElucimDocument | null>(null);
   const [editorDirty, setEditorDirty] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -85,7 +86,7 @@ function VisualAssetViewer({
       return;
     }
     invoke<Record<string, unknown>>("get_visual", { relativePath: assetPath })
-      .then((data) => setEditorDsl(data as unknown as ElucimDocument))
+      .then((data) => setEditorDsl(normalizeToV2(data).document))
       .catch(console.error);
   }, [editorOpen, assetPath]);
 
@@ -93,10 +94,10 @@ function VisualAssetViewer({
     controlRef.current?.replay();
   }, []);
 
-  const saveEditorChanges = useCallback(async (doc: ElucimDocument) => {
+  const saveEditorChanges = useCallback(async (doc: CutReadyElucimDocument) => {
     setSaving(true);
     try {
-      await invoke("write_visual_doc", { relativePath: assetPath, document: doc });
+      await invoke("write_visual_doc", { relativePath: assetPath, document: normalizeToV2(doc).document });
       setEditorDirty(false);
       setVisualVersion((v) => v + 1);
     } catch (err) {
@@ -192,10 +193,11 @@ function VisualAssetViewer({
             <div className="flex-1 min-h-0 relative overflow-hidden">
               <Suspense fallback={<div className="w-full h-full flex items-center justify-center text-[rgb(var(--color-text-secondary))]">Loading editor…</div>}>
                 {editorDsl ? (
-                  <EditorWrapper
-                    dsl={editorDsl}
-                    onDocumentChange={(doc) => { setEditorDsl(doc); setEditorDirty(true); }}
-                  />
+                      <EditorWrapper
+                        dsl={editorDsl}
+                        onDocumentChange={() => { setEditorDirty(true); }}
+                        onV2DocumentChange={(doc) => { setEditorDsl(doc); setEditorDirty(true); }}
+                      />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center text-[rgb(var(--color-text-secondary))]">Loading…</div>
                 )}

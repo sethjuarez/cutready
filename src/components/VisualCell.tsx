@@ -5,6 +5,7 @@ import { Play } from "lucide-react";
 import { ELUCIM_THEME } from "../theme/elucimTheme";
 import { useElucimImageResolver } from "../hooks/useElucimImageResolver";
 import { ErrorBoundary } from "./ErrorBoundary";
+import type { CutReadyElucimDocument } from "../types/elucim";
 
 interface VisualCellProps {
   /** Path to the visual file (e.g., ".cutready/visuals/abc123.json"). */
@@ -85,7 +86,7 @@ export default function VisualCell({ visualPath, mode, onClick, className, contr
     setHasError(true);
   }, []);
 
-  const dsl = visual as unknown as ElucimDocument | null;
+  const dsl = visual as unknown as CutReadyElucimDocument | null;
 
   const replay = useCallback(() => {
     rendererRef.current?.seekToFrame(0);
@@ -162,7 +163,7 @@ export default function VisualCell({ visualPath, mode, onClick, className, contr
       >
         <ErrorBoundary fallback={ERROR_FALLBACK} resetKey={visualPath} onError={() => setHasError(true)}>
           <DslRenderer
-            dsl={dsl}
+            dsl={dsl as ElucimDocument}
             poster="last"
             colorScheme={isDark ? "dark" : "light"}
             theme={THEME}
@@ -190,7 +191,7 @@ export default function VisualCell({ visualPath, mode, onClick, className, contr
           <ErrorBoundary fallback={ERROR_FALLBACK} resetKey={visualPath} onError={() => setHasError(true)}>
             <DslRenderer
               ref={rendererRef}
-              dsl={dsl}
+              dsl={dsl as ElucimDocument}
               controls={false}
               autoPlay
               loop={false}

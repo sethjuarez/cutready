@@ -7,7 +7,8 @@
  * CutReady theme palette so the canvas can generate proper --elucim-* vars.
  */
 import { memo, lazy, Suspense, useState, useCallback, useRef } from "react";
-import type { ElucimDocument } from "@elucim/dsl";
+import type { ElucimDocument, ElucimV2Document } from "@elucim/dsl";
+import type { CutReadyElucimDocument } from "../types/elucim";
 import { elucimThemeFromTokens } from "../theme/elucimTheme";
 import { getThemePalette } from "../theme/appThemePalettes";
 import { useElucimImageResolver } from "../hooks/useElucimImageResolver";
@@ -18,8 +19,9 @@ import { ErrorBoundary } from "./ErrorBoundary";
 import { ProjectImagePicker } from "./ProjectImagePicker";
 
 export interface EditorWrapperProps {
-  dsl: ElucimDocument;
+  dsl: CutReadyElucimDocument;
   onDocumentChange: (doc: ElucimDocument) => void;
+  onV2DocumentChange?: (doc: ElucimV2Document) => void;
 }
 
 const LazyElucimEditor = lazy(() =>
@@ -29,6 +31,7 @@ const LazyElucimEditor = lazy(() =>
 export default memo(function EditorWrapper({
   dsl,
   onDocumentChange,
+  onV2DocumentChange,
 }: EditorWrapperProps) {
   const imageResolver = useElucimImageResolver();
   const projectRoot = useAppStore((s) => s.currentProject?.root ?? null);
@@ -88,6 +91,7 @@ export default memo(function EditorWrapper({
             "--elucim-editor-bg": `rgb(${colors.surfaceInset})`,
           }}
           onDocumentChange={onDocumentChange}
+          onV2DocumentChange={onV2DocumentChange}
           onBrowseImage={projectRoot ? handleBrowseImage : undefined}
           imageResolver={imageResolver}
           className="w-full h-full"

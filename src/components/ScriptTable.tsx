@@ -32,7 +32,8 @@ import {
   Unlock,
 } from "lucide-react";
 import type { PlanningCellField, PlanningRow } from "../types/sketch";
-import type { ElucimDocument } from "@elucim/dsl";
+import { normalizeToV2 } from "@elucim/dsl";
+import type { CutReadyElucimDocument } from "../types/elucim";
 
 
 const VisualCell = lazy(() => import("./VisualCell"));
@@ -102,7 +103,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
   const [visualLightbox, setVisualLightbox] = useState<{ visualPath: string; rowIndex: number } | null>(null);
   const [nudgeInput, setNudgeInput] = useState("");
   const [lightboxMode, setLightboxMode] = useState<"preview" | "edit">("preview");
-  const [editorDsl, setEditorDsl] = useState<ElucimDocument | null>(null);
+  const [editorDsl, setEditorDsl] = useState<CutReadyElucimDocument | null>(null);
   const [editorDirty, setEditorDirty] = useState(false);
   const [visualVersion, setVisualVersion] = useState(0);
   const focusCellAfterRender = useRef<number | null>(null);
@@ -181,7 +182,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
       return;
     }
     invoke<Record<string, unknown>>("get_visual", { relativePath: visualLightbox.visualPath })
-      .then((data) => setEditorDsl(data as unknown as ElucimDocument))
+      .then((data) => setEditorDsl(normalizeToV2(data).document))
       .catch((err) => console.error("[ScriptTable] Failed to load visual for editor:", err));
   }, [visualLightbox?.visualPath, lightboxMode]);
 
@@ -193,12 +194,12 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
     setEditorDirty(false);
   }, []);
 
-  const saveEditorChanges = useCallback(async (doc: ElucimDocument) => {
+  const saveEditorChanges = useCallback(async (doc: CutReadyElucimDocument) => {
     if (!visualLightbox) return;
     try {
       await invoke("write_visual_doc", {
         relativePath: visualLightbox.visualPath,
-        document: doc,
+        document: normalizeToV2(doc).document,
       });
       setEditorDirty(false);
       setVisualVersion((v) => v + 1);
@@ -534,7 +535,8 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
                   {editorDsl ? (
                     <EditorWrapper
                       dsl={editorDsl}
-                      onDocumentChange={(doc) => { setEditorDsl(doc); setEditorDirty(true); }}
+                      onDocumentChange={() => { setEditorDirty(true); }}
+                      onV2DocumentChange={(doc) => { setEditorDsl(doc); setEditorDirty(true); }}
                     />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center text-[rgb(var(--color-text-secondary))]">Loading…</div>
