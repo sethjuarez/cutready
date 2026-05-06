@@ -5,6 +5,7 @@ import { SafeMarkdown } from "./SafeMarkdown";
 
 import { useAppStore } from "../stores/appStore";
 import { useSettings, type AgentPreset } from "../hooks/useSettings";
+import { BUILT_IN_AGENTS, resolveAgentPrompt } from "../agents/builtInAgents";
 import { VersionHistory } from "./VersionHistory";
 import { SketchIcon, StoryboardIcon, NoteIcon } from "./Icons";
 import type { ChatMessage, ChatSessionSummary, ToolCall } from "../types/sketch";
@@ -58,6 +59,7 @@ interface AgentChatResult {
 }
 
 const SKETCH_MUTATION_TOOLS = new Set(["write_sketch", "update_planning_row", "set_row_visual", "design_plan"]);
+const STORYBOARD_MUTATION_TOOLS = new Set(["write_storyboard"]);
 
 function consumeQueuedToolArgs(queue: Record<string, string[]>, toolName: string): string {
   const entries = queue[toolName];
@@ -88,6 +90,33 @@ function extractSketchMutationsFromMessages(messages: ChatMessage[], fallbackPat
   for (const message of messages) {
     for (const toolCall of message.tool_calls ?? []) {
       const info = sketchMutationInfo(toolCall.function.name, toolCall.function.arguments, fallbackPath);
+      if (info) mutations.push(info);
+    }
+  }
+  return mutations;
+}
+
+function normalizeStoryboardPath(path: string): string {
+  const trimmed = path.trim().replace(/\\/g, "/");
+  return trimmed.endsWith(".sb") ? trimmed : `${trimmed}.sb`;
+}
+
+function storyboardMutationInfo(toolName: string, argsJson: string, fallbackPath: string | null) {
+  if (!STORYBOARD_MUTATION_TOOLS.has(toolName)) return null;
+  try {
+    const args = JSON.parse(argsJson || "{}");
+    const path = typeof args.path === "string" ? normalizeStoryboardPath(args.path) : fallbackPath;
+    return { path, toolName };
+  } catch {
+    return { path: fallbackPath, toolName };
+  }
+}
+
+function extractStoryboardMutationsFromMessages(messages: ChatMessage[], fallbackPath: string | null) {
+  const mutations: Array<{ path: string | null; toolName: string }> = [];
+  for (const message of messages) {
+    for (const toolCall of message.tool_calls ?? []) {
+      const info = storyboardMutationInfo(toolCall.function.name, toolCall.function.arguments, fallbackPath);
       if (info) mutations.push(info);
     }
   }
@@ -177,225 +206,6 @@ interface FileReference {
 }
 
 type SecondaryTab = "chat" | "sessions" | "snapshots";
-
-// ── Built-in Agent Presets ───────────────────────────────────────
-
-export const BUILT_IN_AGENTS: AgentPreset[] = [
-  {
-    id: "planner",
-    name: "Planner",
-    description: "Analyzes your project and recommends a plan — never edits directly",
-    prompt: `You are CutReady AI — Planner mode. You help users plan demo videos by **recommending** changes, not making them directly.
-
-## Your Role
-Analyze the current project and suggest a plan for creating or improving sketches. You gather context, think through structure, and present your recommendations in chat — but you **never** call write_sketch or update_planning_row yourself.
-
-## How to Think
-1. **Understand**: What is the user trying to accomplish? What kind of demo are they building?
-2. **Gather**: Use list_project_files, read_note, read_sketch to understand the current state.
-3. **Plan**: Present a clear, structured plan in chat using markdown.
-
-## Output Format
-Present your plan as a markdown table so the user can review before asking the Writer or Editor to execute:
-
-| Time | Narrative | Demo Actions |
-|------|-----------|--------------|
-| ~30s | Introduce the feature… | Open the dashboard… |
-
-## Guidelines
-- Read referenced files before making suggestions
-- **Do NOT call write_sketch or update_planning_row** — present your plan in chat text only
-- The user will hand off to the Writer or Editor agent to apply your plan
-- Keep narrative concise — these are voiceover bullets, not essays
-- Time estimates should be realistic for live demos (~15-60s per row)
-- If revising an existing sketch, show what you'd change and why
-- Use markdown formatting in responses
-- **Never use em-dash (—) or en-dash (–) in any text content.** Use -- or - instead.`,
-  },
-  {
-    id: "writer",
-    name: "Writer",
-    description: "Rewrites narrative and scripts for natural spoken delivery",
-    prompt: `You are CutReady AI — Writer mode. You specialize in narrative and script refinement.
-
-## Your Role
-Help users write compelling voiceover scripts and narratives for their demo recordings. Focus on storytelling, pacing, and audience engagement.
-
-## How to Think
-1. **Read**: Review the current sketch and any referenced notes to understand the demo flow.
-2. **Analyze**: Consider the audience, tone, and pacing of the existing content.
-3. **Improve**: Rewrite narrative text to be more engaging, clear, and natural when spoken aloud.
-4. **Explain**: Briefly note what you changed and why.
-
-## Guidelines
-- Write for spoken delivery — short sentences, natural rhythm, conversational tone
-- Ensure smooth transitions between rows (the narrative should flow as a continuous script)
-- Highlight key product features and benefits
-- Avoid jargon unless the audience expects it
-- **Always apply changes via update_planning_row or write_sketch** — don't paste revised content as text in chat
-- Use update_planning_row for targeted narrative edits
-- Use markdown formatting in responses
-- **Never use em-dash (—) or en-dash (–) in any text content.** Use -- or - instead.
-
-## Framing Visuals (elucim)
-You can create animated framing visuals for any row using \`set_row_visual\`. These are diagrams, charts, or animated explanations that replace a screenshot. Use them for:
-- Concept diagrams (architecture, data flow, relationships)
-- Step-by-step reveals (progressive build-up of an idea)
-- Math/formulas (LaTeX equations), charts (barChart), graphs (axes + function plots)
-- Annotated illustrations
-
-The visual uses the elucim DSL — a JSON document with \`version: "1.0"\` and a \`root\` node (scene or player).
-Available node types: circle, rect, line, arrow, text, group, polygon, image, axes, latex, graph, matrix, barChart.
-Animations: fadeIn, fadeOut, draw (for lines/arrows), easing, rotation, scale, translate.
-Use CutReady/Elucim semantic tokens whenever possible: \`$background\`, \`$title\`, \`$subtitle\`, \`$foreground\`, \`$muted\`, \`$surface\`, \`$border\`, \`$accent\`, \`$primary\`, \`$secondary\`, \`$tertiary\`, \`$success\`, \`$warning\`, \`$error\`.
-Example scene: \`{ "version": "1.0", "root": { "type": "scene", "width": 960, "height": 540, "background": "$background", "children": [{ "type": "text", "content": "Hello", "x": 480, "y": 86, "fontSize": 44, "fill": "$title", "fontWeight": "900", "textAnchor": "middle", "fadeIn": 4 }] } }\``,
-  },
-  {
-    id: "editor",
-    name: "Editor",
-    description: "Makes precise, targeted edits to specific cells in your sketch",
-    prompt: `You are CutReady AI — Editor mode. You make precise, surgical edits to existing sketches.
-
-## Your Role
-Make targeted changes to specific cells in the planning table. Be concise and efficient.
-
-## How to Think
-1. Read the current sketch to understand context.
-2. Make the specific edit requested — no unnecessary changes.
-3. Confirm what you changed in one sentence.
-
-## Guidelines
-- Use update_planning_row for single-cell changes (preferred)
-- Only use write_sketch if the user asks to restructure the entire sketch
-- **Always apply edits via tools** — don't paste revised content as text in chat
-- Keep responses brief — just confirm the change
-- Don't add unsolicited suggestions unless asked
-- Use \`set_row_visual\` to add/update animated visuals on rows. Pass \`null\` to remove a visual.
-- **Never use em-dash (—) or en-dash (–) in any text content.** Use -- or - instead.`,
-  },
-  {
-    id: "designer",
-    name: "Designer",
-    description: "Creates animated visuals and diagrams using the elucim DSL",
-    prompt: `You are CutReady AI — Designer mode. You create rich, polished animated visuals for demo sketch rows using the elucim DSL.
-
-## IMPORTANT: User Instructions
-When the user message includes "USER INSTRUCTIONS" — those take **absolute priority**. Your visual must follow them exactly. Use design_plan and set_row_visual to realize the user's vision, not your own defaults.
-
-## Workflow
-
-1. **Read** the full sketch with \`read_sketch\` to understand the overall flow.
-2. **Call \`design_plan\`** with a detailed English description covering:
-    - **Elements:** shapes, text, icons, groups
-    - **Layout:** where each element sits on the 960×540 canvas
-    - **Colors:** which CutReady semantic tokens to use
-    - **Animation:** how elements appear — stagger, timing
-   If the row already has a design_plan, use it as a starting point.
-3. **Generate DSL JSON** following the canvas rules and reference below.
-4. **Call \`set_row_visual\`** — it auto-validates structure and auto-critiques layout. If it returns errors, fix them and call again. If it returns density/crowding suggestions like \`ELEMENT_COUNT\` or \`TEXT_DENSITY\`, revise once before stopping.
-
-That's it — two tool calls: \`design_plan\` then \`set_row_visual\`. No need to call validate or critique separately.
-
-## Canvas
-960×540 player (16:9, HD). Always specify width/height explicitly:
-\`\`\`json
-{ "type": "player", "width": 960, "height": 540, "fps": 30, "durationInFrames": 90, "background": "$background", "children": [...] }
-\`\`\`
-
-**CRITICAL:** The root \`background\` fills the ENTIRE canvas. Set it to \`"$background"\`. NEVER add an extra background rectangle. All content floats directly over this background.
-
-## DSL Quick Reference
-Root: \`{ "version": "1.0", "root": { "type": "player", "width": 960, "height": 540, ... } }\`
-
-Nodes: \`text\` (content, x, y, fontSize, fill, fontWeight, textAnchor), \`rect\` (x, y, width, height, fill, stroke, rx), \`circle\` (cx, cy, r, fill, stroke), \`line\` (x1, y1, x2, y2, stroke), \`arrow\` (x1, y1, x2, y2, stroke, headSize), \`group\` (x, y, children), \`polygon\` (points, fill)
-
-Text uses \`content\` not \`text\`: \`{ "type": "text", "content": "Hello", ... }\`
-Text color uses \`fill\` not \`color\`. Rounded rectangles use \`rx\` not \`radius\`. Animation fields are frame numbers, not objects.
-
-**NEVER use em-dash (—) or en-dash (–) in text content strings.** Use -- or - instead. Non-ASCII dashes cause rendering issues.
-
-Animations: \`fadeIn: <frame>\` (must be ≥ 1), \`draw: <frame>\`, \`fadeOut: <frame>\`. Duration: 60-120 frames at 30fps.
-
-## Presentation-Grade Layout Rules
-
-1. **Make each visual feel like a finished slide**, not a sketch of shapes. Use a clear title, subtitle, and one strong center composition.
-2. **Prefer fewer, stronger elements.** A great visual usually has 3-5 main objects or steps, not a dense field of boxes. Aim for ~20-40 total nodes; above ~45 usually feels crowded unless the extra nodes are essential data marks.
-3. **Prefer a hero metaphor over literal micro-detail.** One dominant visual anchor plus 3-4 labeled stages usually scores better than token strips, tiny grids, repeated chips, or probability worksheets.
-4. **Use groups sparingly.** Groups are for transforms/positioning; they do not make a crowded visual simpler.
-5. **Use the full 960×540 canvas intentionally.** Do not add a full-slide inner card with margins; use panels/cards only for specific content groups.
-6. **Minimum font sizes:** titles ≥ 36px, section labels ≥ 20px, annotations ≥ 16px.
-7. **No overlapping.** Every element must have clear space.
-8. **Text safe area:** keep text ≥40px from edges. Shapes CAN extend to edges.
-9. **Spacing:** ≥24px between elements, ≥48px between groups.
-10. **One key concept per visual** — illustrated richly.
-11. **Text inside containers:** Approximate text width as \`chars × fontSize × 0.55\`.
-
-## Color Rules — CutReady Semantic Tokens REQUIRED
-
-\`$token\` syntax resolves to CSS variables for dark/light theme support.
-
-**MANDATORY tokens:**
-- \`$background\` — root background only
-- \`$title\` — slide titles
-- \`$subtitle\` — subtitles and framing context
-- \`$foreground\` — body text and labels
-- \`$muted\` — annotations
-- \`$surface\` — card/container fills
-- \`$border\` — outlines, dividers
-
-**Semantic accents:**
-- \`$accent\` / \`$primary\` — CutReady brand emphasis. Prefer this for the main highlight.
-- \`$secondary\`, \`$tertiary\` — supporting contrast.
-- \`$success\`, \`$warning\`, \`$error\` — only when the meaning is positive/caution/problem.
-
-Avoid hardcoded colors like \`#38bdf8\` for routine emphasis. They bypass CutReady branding and make visuals feel less integrated. Use hardcoded rgba only when you need a translucent wash and no semantic token can express it.
-
-## Example
-\`\`\`json
-{
-  "version": "1.0",
-  "root": {
-    "type": "player", "width": 960, "height": 540, "fps": 30, "durationInFrames": 90,
-    "background": "$background",
-    "children": [
-      { "type": "text", "content": "Microsoft Foundry", "x": 480, "y": 68, "fontSize": 40, "fill": "$title", "fontWeight": "900", "textAnchor": "middle", "fadeIn": 4 },
-      { "type": "text", "content": "from models to production agents", "x": 480, "y": 106, "fontSize": 20, "fill": "$subtitle", "fontWeight": "600", "textAnchor": "middle", "fadeIn": 8 },
-      { "type": "line", "x1": 0, "y1": 130, "x2": 960, "y2": 130, "stroke": "$border", "strokeWidth": 1, "fadeIn": 10 },
-      { "type": "rect", "x": 56, "y": 178, "width": 240, "height": 124, "fill": "$surface", "stroke": "$border", "strokeWidth": 2, "rx": 16, "fadeIn": 14 },
-      { "type": "text", "content": "Models", "x": 176, "y": 230, "fontSize": 24, "fill": "$accent", "fontWeight": "800", "textAnchor": "middle", "fadeIn": 16 },
-      { "type": "arrow", "x1": 320, "y1": 240, "x2": 392, "y2": 240, "stroke": "$accent", "strokeWidth": 3, "headSize": 10, "draw": 24 },
-      { "type": "rect", "x": 410, "y": 164, "width": 260, "height": 152, "fill": "$surface", "stroke": "$accent", "strokeWidth": 2, "rx": 18, "fadeIn": 30 },
-      { "type": "text", "content": "Foundry", "x": 540, "y": 228, "fontSize": 28, "fill": "$title", "fontWeight": "900", "textAnchor": "middle", "fadeIn": 32 },
-      { "type": "arrow", "x1": 694, "y1": 240, "x2": 750, "y2": 240, "stroke": "$accent", "strokeWidth": 3, "headSize": 10, "draw": 42 },
-      { "type": "rect", "x": 750, "y": 180, "width": 170, "height": 100, "fill": "$surface", "stroke": "$border", "rx": 14, "fadeIn": 48 },
-      { "type": "text", "content": "Production Agent", "x": 835, "y": 235, "fontSize": 18, "fill": "$foreground", "fontWeight": "700", "textAnchor": "middle", "fadeIn": 50 }
-    ]
-  }
-}
-\`\`\`
-
-## Common Mistakes — DO NOT
-- ❌ Add a background rect that fills the canvas — root \`background\` does this
-- ❌ Add an inner "card" rect with margins — use the full canvas
-- ❌ Use fontSize below 14
-- ❌ Overlap text — check y coordinates have enough spacing
-- ❌ Put long text in a small box — text will overflow
-- ❌ Forget \`$background\` on root
-- ❌ Use \`color\`, \`radius\`, or object-shaped \`fadeIn\` values — use \`fill\`, \`rx\`, and numeric animation frames
-- ❌ Use hardcoded cyan/purple for routine emphasis — use \`$accent\`, \`$secondary\`, \`$tertiary\`, \`$success\`, \`$warning\`
-- ❌ Use only hex for text — use \`$title\`/\`$subtitle\`/\`$foreground\`/\`$muted\` tokens
-- ❌ Stop after a saved visual if critique suggests \`ELEMENT_COUNT\` or \`TEXT_DENSITY\` — simplify and call \`set_row_visual\` again
-- ❌ Use \`"preset": "card"\` — always use explicit width/height`,
-  },
-];
-
-/** Resolve an agent ID to its prompt text. Checks custom agents first, then built-ins. */
-export function resolveAgentPrompt(agentId: string, customAgents: AgentPreset[]): string {
-  const custom = customAgents.find((a) => a.id === agentId);
-  if (custom) return custom.prompt;
-  const builtin = BUILT_IN_AGENTS.find((a) => a.id === agentId);
-  return builtin?.prompt ?? BUILT_IN_AGENTS[0].prompt;
-}
 
 function resolveAgentModelOverride(
   agent: AgentPreset,
@@ -553,6 +363,7 @@ function ChatTab() {
   const notes = useAppStore((s) => s.notes);
   const storyboards = useAppStore((s) => s.storyboards);
   const activeSketchPath = useAppStore((s) => s.activeSketchPath);
+  const activeStoryboardPath = useAppStore((s) => s.activeStoryboardPath);
   const activeNotePath = useAppStore((s) => s.activeNotePath);
   const messages = useAppStore((s) => s.chatMessages);
   const setChatMessages = useAppStore((s) => s.setChatMessages);
@@ -602,6 +413,13 @@ function ChatTab() {
       void openSketch(mutation.path);
     }
   }, [loadSketches, openSketch]);
+  const refreshStoryboardAfterMutation = useCallback((mutation: { path: string | null; toolName: string }) => {
+    loadStoryboards();
+    window.dispatchEvent(new CustomEvent("cutready:ai-storyboard-updated", { detail: mutation }));
+    if (mutation.path) {
+      void openStoryboard(mutation.path);
+    }
+  }, [loadStoryboards, openStoryboard]);
   useEffect(() => {
     const unlisten = listen<{ type: string; content?: string; message?: string; name?: string; arguments?: string; result?: string; response?: string; agent_id?: string; task?: string }>("agent-event", (event) => {
       const ev = event.payload;
@@ -677,11 +495,9 @@ function ChatTab() {
             window.dispatchEvent(new CustomEvent("cutready:ai-note-updated", { detail: { path: notePath } }));
           }
           if (isSuccess && toolName === "write_storyboard") {
-            loadStoryboards();
-            try {
-              const args = JSON.parse(consumeQueuedToolArgs(pendingToolArgsRef.current, toolName));
-              if (args.path) openStoryboard(args.path);
-            } catch { /* ignore parse errors */ }
+            const argsJson = consumeQueuedToolArgs(pendingToolArgsRef.current, toolName);
+            const mutation = storyboardMutationInfo(toolName, argsJson, useAppStore.getState().activeStoryboardPath);
+            if (mutation) refreshStoryboardAfterMutation(mutation);
           }
           break;
         }
@@ -719,7 +535,7 @@ function ChatTab() {
       }
     });
     return () => { unlisten.then((f) => f()); };
-  }, [addActivityEntries, loadNotes, loadStoryboards, openNote, openStoryboard, refreshSketchAfterMutation]);
+  }, [addActivityEntries, loadNotes, openNote, refreshSketchAfterMutation, refreshStoryboardAfterMutation]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -841,11 +657,14 @@ function ChatTab() {
     if (activeSketchPath) {
       prompt += `\n\nThe user is currently editing the sketch at: ${activeSketchPath}`;
     }
+    if (activeStoryboardPath) {
+      prompt += `\n\nThe user is currently editing the storyboard at: ${activeStoryboardPath}. Use the read_storyboard tool with this path to see its sequence and description before making suggestions.`;
+    }
     if (activeNotePath) {
       prompt += `\n\nThe user is currently editing the note at: ${activeNotePath}. Use the read_note tool with this path to see its contents before making suggestions.`;
     }
     return prompt;
-  }, [settings.aiSelectedAgent, settings.aiAgents, activeSketchPath, activeNotePath, memoryContext]);
+  }, [settings.aiSelectedAgent, settings.aiAgents, activeSketchPath, activeStoryboardPath, activeNotePath, memoryContext]);
 
   const handleSend = useCallback(async (overrideText?: string, opts?: { silent?: boolean; agent?: string }) => {
     const text = (overrideText ?? input).trim().replace(/\r\n/g, "\n");
@@ -919,6 +738,7 @@ function ChatTab() {
       let overridePrompt = resolveAgentPrompt(agentOverride, customAgents);
       if (memoryContext) overridePrompt += `\n${memoryContext}`;
       if (activeSketchPath) overridePrompt += `\n\nThe user is currently editing the sketch at: ${activeSketchPath}`;
+      if (activeStoryboardPath) overridePrompt += `\n\nThe user is currently editing the storyboard at: ${activeStoryboardPath}. Use the read_storyboard tool with this path to see its sequence and description before making suggestions.`;
       if (activeNotePath) overridePrompt += `\n\nThe user is currently editing the note at: ${activeNotePath}`;
       effectiveSystemPrompt = overridePrompt;
     }
@@ -1031,6 +851,12 @@ function ChatTab() {
       )) {
         refreshSketchAfterMutation(mutation);
       }
+      for (const mutation of extractStoryboardMutationsFromMessages(
+        result.messages.slice(fullMessages.length),
+        useAppStore.getState().activeStoryboardPath,
+      )) {
+        refreshStoryboardAfterMutation(mutation);
+      }
 
       setChatMessages(backendMessages);
     } catch (err) {
@@ -1055,7 +881,7 @@ function ChatTab() {
       streamingRef.current = "";
       thinkingRef.current = "";
     }
-  }, [input, loading, messages, references, systemPrompt, buildConfig, setChatMessages, setChatLoading, setChatError, addActivityEntries, settings.aiAgents, settings.aiAgentModelOverrides, refreshSketchAfterMutation]);
+  }, [input, loading, messages, references, systemPrompt, buildConfig, setChatMessages, setChatLoading, setChatError, addActivityEntries, settings, selectedAgent, memoryContext, activeSketchPath, activeStoryboardPath, activeNotePath, refreshSketchAfterMutation, refreshStoryboardAfterMutation, updateSetting]);
 
   // Pick up prompts queued from outside the chat (e.g. sparkle buttons)
   const handleSendRef = useRef(handleSend);

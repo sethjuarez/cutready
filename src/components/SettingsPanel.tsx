@@ -5,7 +5,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { getVersion } from "@tauri-apps/api/app";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
 import { relaunch } from "@tauri-apps/plugin-process";
-import { BUILT_IN_AGENTS } from "./ChatPanel";
+import { BUILT_IN_AGENTS } from "../agents/builtInAgents";
 import { useToastStore } from "../stores/toastStore";
 import { useUpdateStore } from "../stores/updateStore";
 import { SafeMarkdown } from "./SafeMarkdown";

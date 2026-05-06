@@ -239,7 +239,13 @@ fn run_inner<'a>(
                     );
                     emit_events(AgentEvent::ToolCall { name, arguments });
                 }
-                agentive::RunnerEvent::ToolResult { name, result, elapsed_ms, iteration, .. } => {
+                agentive::RunnerEvent::ToolResult {
+                    name,
+                    result,
+                    elapsed_ms,
+                    iteration,
+                    ..
+                } => {
                     crate::util::trace::emit(
                         "agent_tool_result",
                         "agent",
@@ -322,7 +328,9 @@ fn run_inner<'a>(
                 Box::pin(async move {
                     let args = agentive::parse_tool_args(&tc.function.arguments)
                         .unwrap_or(serde_json::json!({}));
-                    tools::exec_search_web(&args).await.map(agentive::ToolOutput::from)
+                    tools::exec_search_web(&args)
+                        .await
+                        .map(agentive::ToolOutput::from)
                 })
             } else {
                 let output =
@@ -348,9 +356,16 @@ fn run_inner<'a>(
 
         let result = match result {
             Ok(result) => result,
-            Err(err) if is_probable_context_failure(&err, starting_chars, provider.context_budget_chars()) => {
+            Err(err)
+                if is_probable_context_failure(
+                    &err,
+                    starting_chars,
+                    provider.context_budget_chars(),
+                ) =>
+            {
                 emit(AgentEvent::Status {
-                    message: "Context limit likely hit; compacting conversation before retry…".into(),
+                    message: "Context limit likely hit; compacting conversation before retry…"
+                        .into(),
                 });
                 log::warn!(
                     "[agent] provider error looked like context overflow; retrying after forced compaction: {}",
@@ -358,7 +373,8 @@ fn run_inner<'a>(
                 );
 
                 let mut retry_messages = messages;
-                let retry_budget = forced_retry_budget(starting_chars, provider.context_budget_chars());
+                let retry_budget =
+                    forced_retry_budget(starting_chars, provider.context_budget_chars());
                 let (dropped_count, _) =
                     agentive::context::trim_to_context_window(&mut retry_messages, retry_budget);
 
@@ -370,7 +386,9 @@ fn run_inner<'a>(
                 }
 
                 emit(AgentEvent::Status {
-                    message: format!("Compacted context — summarized {dropped_count} earlier messages"),
+                    message: format!(
+                        "Compacted context — summarized {dropped_count} earlier messages"
+                    ),
                 });
 
                 let retry_config = agentive::RunnerConfig {
@@ -393,7 +411,10 @@ fn run_inner<'a>(
                 let steering_for_tools = steering.clone();
 
                 let retry_tool_executor = move |tool_call: agentive::ToolCall| -> std::pin::Pin<
-                    Box<dyn std::future::Future<Output = Result<agentive::ToolOutput, String>> + Send>,
+                    Box<
+                        dyn std::future::Future<Output = Result<agentive::ToolOutput, String>>
+                            + Send,
+                    >,
                 > {
                     let project_root = project_root_str.clone();
                     let agent_prompts = agent_prompts_owned.clone();
@@ -429,11 +450,16 @@ fn run_inner<'a>(
                         Box::pin(async move {
                             let args = agentive::parse_tool_args(&tc.function.arguments)
                                 .unwrap_or(serde_json::json!({}));
-                            tools::exec_search_web(&args).await.map(agentive::ToolOutput::from)
+                            tools::exec_search_web(&args)
+                                .await
+                                .map(agentive::ToolOutput::from)
                         })
                     } else {
-                        let output =
-                            tools::execute_tool(&tool_call, Path::new(&project_root), vision_enabled);
+                        let output = tools::execute_tool(
+                            &tool_call,
+                            Path::new(&project_root),
+                            vision_enabled,
+                        );
                         Box::pin(std::future::ready(Ok(output)))
                     }
                 };
@@ -476,10 +502,10 @@ fn run_inner<'a>(
 }
 
 fn forced_retry_budget(estimated_chars: usize, provider_budget: usize) -> usize {
-    let reduced_provider_budget =
-        provider_budget * CONTEXT_FAILURE_RETRY_FRACTION_NUMERATOR / CONTEXT_FAILURE_RETRY_FRACTION_DENOMINATOR;
-    let reduced_current =
-        estimated_chars * CONTEXT_FAILURE_RETRY_FRACTION_NUMERATOR / CONTEXT_FAILURE_RETRY_FRACTION_DENOMINATOR;
+    let reduced_provider_budget = provider_budget * CONTEXT_FAILURE_RETRY_FRACTION_NUMERATOR
+        / CONTEXT_FAILURE_RETRY_FRACTION_DENOMINATOR;
+    let reduced_current = estimated_chars * CONTEXT_FAILURE_RETRY_FRACTION_NUMERATOR
+        / CONTEXT_FAILURE_RETRY_FRACTION_DENOMINATOR;
     reduced_provider_budget.min(reduced_current).max(1)
 }
 
@@ -490,12 +516,14 @@ fn is_probable_context_failure(
 ) -> bool {
     match err {
         agentive::AgentError::Api { status: 413, .. } => true,
-        agentive::AgentError::Api { status: 400, message } => {
-            is_context_error_text(message) || estimated_chars > provider_budget * 4 / 5
-        }
+        agentive::AgentError::Api {
+            status: 400,
+            message,
+        } => is_context_error_text(message) || estimated_chars > provider_budget * 4 / 5,
         agentive::AgentError::Stream(message) => {
             is_context_error_text(message)
-                || (message.contains("API error (400)") && estimated_chars > provider_budget * 4 / 5)
+                || (message.contains("API error (400)")
+                    && estimated_chars > provider_budget * 4 / 5)
         }
         _ => false,
     }
@@ -620,7 +648,7 @@ fn resolve_project_reference(
 
 /// Check if a user-typed reference name matches a project file by path, title, or stem.
 fn matches_ref(name: &str, path: &str, title: &str) -> bool {
-    let name_lower = name.to_lowercase();
+    let name_lower = normalize_ref_name(name);
     // Exact path match
     if path.to_lowercase() == name_lower {
         return true;
@@ -636,6 +664,20 @@ fn matches_ref(name: &str, path: &str, title: &str) -> bool {
         }
     }
     false
+}
+
+fn normalize_ref_name(name: &str) -> String {
+    let trimmed = name.trim().trim_matches('"').trim_matches('\'');
+    let without_type = trimmed
+        .strip_prefix("sketch:")
+        .or_else(|| trimmed.strip_prefix("note:"))
+        .or_else(|| trimmed.strip_prefix("storyboard:"))
+        .unwrap_or(trimmed);
+    without_type
+        .trim()
+        .trim_matches('"')
+        .trim_matches('\'')
+        .to_lowercase()
 }
 
 /// Format a sketch as readable text for reference injection.
@@ -847,6 +889,24 @@ mod tests {
     }
 
     #[test]
+    fn matches_ref_typed_storyboard_path() {
+        assert!(matches_ref(
+            "storyboard:storyboards/full-demo.sb",
+            "storyboards/full-demo.sb",
+            "Full Demo Flow"
+        ));
+    }
+
+    #[test]
+    fn matches_ref_quoted_title() {
+        assert!(matches_ref(
+            "\"Full Demo Flow\"",
+            "storyboards/full-demo.sb",
+            "Full Demo Flow"
+        ));
+    }
+
+    #[test]
     fn matches_ref_no_match() {
         assert!(!matches_ref("setup", "intro.sk", "Introduction"));
     }
@@ -883,9 +943,8 @@ mod tests {
 
     #[test]
     fn context_error_classifier_accepts_stream_context_error() {
-        let err = agentive::AgentError::Stream(
-            "API error (400): maximum context length exceeded".into(),
-        );
+        let err =
+            agentive::AgentError::Stream("API error (400): maximum context length exceeded".into());
 
         assert!(is_probable_context_failure(&err, 1_000, 100_000));
     }
@@ -938,8 +997,14 @@ mod tests {
     fn forced_retry_budget_drives_actual_message_trimming() {
         let mut messages = vec![ChatMessage::system("system prompt")];
         for i in 0..10 {
-            messages.push(ChatMessage::user(&format!("request {i} {}", "x".repeat(2_000))));
-            messages.push(ChatMessage::assistant(&format!("response {i} {}", "y".repeat(2_000))));
+            messages.push(ChatMessage::user(&format!(
+                "request {i} {}",
+                "x".repeat(2_000)
+            )));
+            messages.push(ChatMessage::assistant(&format!(
+                "response {i} {}",
+                "y".repeat(2_000)
+            )));
         }
         let before = agentive::context::estimate_chars(&messages);
         let retry_budget = forced_retry_budget(before, before + 10_000);
