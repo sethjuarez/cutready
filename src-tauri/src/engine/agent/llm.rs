@@ -145,13 +145,16 @@ fn normalize_model_info(mut model: ModelInfo) -> ModelInfo {
     let vision = supports_vision(&model_name);
     let responses_api = needs_responses_api(&model_name);
 
-    caps.entry("vision".into()).or_insert_with(|| vision.to_string());
+    caps.entry("vision".into())
+        .or_insert_with(|| vision.to_string());
     caps.entry("responses_api".into())
         .or_insert_with(|| responses_api.to_string());
     caps.entry("chat_completion".into())
         .or_insert_with(|| (!responses_api).to_string());
-    caps.entry("streaming".into()).or_insert_with(|| "true".into());
-    caps.entry("tool_calling".into()).or_insert_with(|| "true".into());
+    caps.entry("streaming".into())
+        .or_insert_with(|| "true".into());
+    caps.entry("tool_calling".into())
+        .or_insert_with(|| "true".into());
 
     if model.context_length.is_none() {
         model.context_length = Some(context_budget(&model_name, None));
@@ -348,7 +351,10 @@ mod tests {
         assert_eq!(model.context_length, Some(context_budget("gpt-4o", None)));
         let caps = model.capabilities.unwrap();
         assert_eq!(caps.get("vision").map(String::as_str), Some("true"));
-        assert_eq!(caps.get("chat_completion").map(String::as_str), Some("true"));
+        assert_eq!(
+            caps.get("chat_completion").map(String::as_str),
+            Some("true")
+        );
         assert_eq!(caps.get("responses_api").map(String::as_str), Some("false"));
         assert_eq!(caps.get("tool_calling").map(String::as_str), Some("true"));
     }
@@ -364,7 +370,10 @@ mod tests {
 
         let caps = model.capabilities.unwrap();
         assert_eq!(caps.get("responses_api").map(String::as_str), Some("true"));
-        assert_eq!(caps.get("chat_completion").map(String::as_str), Some("false"));
+        assert_eq!(
+            caps.get("chat_completion").map(String::as_str),
+            Some("false")
+        );
     }
 
     // ── list_models ──────────────────────────────────────────────

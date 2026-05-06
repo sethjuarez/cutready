@@ -238,15 +238,13 @@ pub async fn agent_chat_with_tools(
     let llm_config: LlmConfig = config.into();
 
     // Determine effective vision: user setting AND discovered/static model capability.
-    let model_supports_vision = discovered_vision_support
-        .unwrap_or_else(|| llm::supports_vision(&llm_config.model));
+    let model_supports_vision =
+        discovered_vision_support.unwrap_or_else(|| llm::supports_vision(&llm_config.model));
     let vision_enabled = vision_mode != "off" && model_supports_vision;
     let vision = runner::VisionConfig {
         enabled: vision_enabled,
     };
-    let web_access = runner::WebAccessConfig {
-        search_enabled,
-    };
+    let web_access = runner::WebAccessConfig { search_enabled };
 
     let provider = llm::build_provider(&llm_config, reported_context);
     let budget_chars = provider.context_budget_chars();
@@ -291,7 +289,8 @@ pub async fn agent_chat_with_tools(
             let _ = emit_handle.emit("agent-event", &event);
         },
     )
-    .await {
+    .await
+    {
         Ok(result) => {
             let elapsed_ms = started.elapsed().as_millis();
             log::info!(

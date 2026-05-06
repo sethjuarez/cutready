@@ -131,9 +131,18 @@ mod tests {
         ];
         let removed = sanitize_user_messages(&mut messages);
         assert_eq!(removed, 1);
-        assert_eq!(messages[0].content.as_ref().unwrap().text(), Some("system\x00prompt"));
-        assert_eq!(messages[1].content.as_ref().unwrap().text(), Some("userquestion"));
-        assert_eq!(messages[2].content.as_ref().unwrap().text(), Some("assistant\x00reply"));
+        assert_eq!(
+            messages[0].content.as_ref().unwrap().text(),
+            Some("system\x00prompt")
+        );
+        assert_eq!(
+            messages[1].content.as_ref().unwrap().text(),
+            Some("userquestion")
+        );
+        assert_eq!(
+            messages[2].content.as_ref().unwrap().text(),
+            Some("assistant\x00reply")
+        );
     }
 
     #[test]
@@ -141,9 +150,18 @@ mod tests {
         let mut messages = vec![ChatMessage {
             role: "user".into(),
             content: Some(MessageContent::Parts(vec![
-                ContentPart::Text { text: "look at\x00this".into() },
-                ContentPart::ImageUrl { image_url: ImageUrl { url: "data:image/png;base64,AAA".into(), detail: None } },
-                ContentPart::Text { text: "and\x01that".into() },
+                ContentPart::Text {
+                    text: "look at\x00this".into(),
+                },
+                ContentPart::ImageUrl {
+                    image_url: ImageUrl {
+                        url: "data:image/png;base64,AAA".into(),
+                        detail: None,
+                    },
+                },
+                ContentPart::Text {
+                    text: "and\x01that".into(),
+                },
             ])),
             tool_calls: None,
             tool_call_id: None,

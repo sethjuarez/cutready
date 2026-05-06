@@ -191,8 +191,8 @@ pub fn squash_head_snapshots(
     }
 
     let (author_name, author_email) = resolve_committer(project_dir);
-    let g2_repo = git2::Repository::open(project_dir)
-        .map_err(|e| VersioningError::Git(e.to_string()))?;
+    let g2_repo =
+        git2::Repository::open(project_dir).map_err(|e| VersioningError::Git(e.to_string()))?;
     let newest_git_oid = git2::Oid::from_str(&newest_oid.to_string())
         .map_err(|e| VersioningError::Git(e.to_string()))?;
     let newest_git_commit = g2_repo
@@ -218,14 +218,7 @@ pub fn squash_head_snapshots(
     let parent_refs: Vec<&git2::Commit<'_>> = parent_commits.iter().collect();
 
     let new_commit_id = g2_repo
-        .commit(
-            None,
-            &signature,
-            &signature,
-            message,
-            &tree,
-            &parent_refs,
-        )
+        .commit(None, &signature, &signature, message, &tree, &parent_refs)
         .map_err(|e| VersioningError::Git(e.to_string()))?;
     let head_ref_name = g2_repo
         .head()
@@ -1891,7 +1884,11 @@ mod tests {
         let id3 = commit_snapshot(tmp.path(), "three", None).unwrap();
 
         std::fs::create_dir_all(tmp.path().join(".chats")).unwrap();
-        std::fs::write(tmp.path().join(".chats").join("session.json"), r#"{"dirty":true}"#).unwrap();
+        std::fs::write(
+            tmp.path().join(".chats").join("session.json"),
+            r#"{"dirty":true}"#,
+        )
+        .unwrap();
         std::fs::write(tmp.path().join("draft.md"), "unsaved notes").unwrap();
         assert!(has_unsaved_changes(tmp.path()).unwrap());
 
