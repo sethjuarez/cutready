@@ -20,3 +20,13 @@ pub async fn initialize_recording_storage(state: State<'_, AppState>) -> Result<
         .map(|p| p.to_string_lossy().replace('\\', "/"))
         .map_err(|e| e.to_string())
 }
+
+#[tauri::command]
+pub async fn create_recording_take(
+    scope: recording::RecordingScope,
+    settings: recording::RecorderSettings,
+    state: State<'_, AppState>,
+) -> Result<recording::RecordingTake, String> {
+    let root = project_root(&state)?;
+    recording::create_recording_take(&root, scope, settings).map_err(|e| e.to_string())
+}

@@ -63,3 +63,51 @@ export interface BrowserRunningStatus {
   msedge: boolean;
   chrome: boolean;
 }
+
+export type RecordingScope =
+  | { kind: "sketch"; path: string }
+  | { kind: "storyboard"; path: string };
+
+export type CaptureSource = "full_screen" | "region" | "window";
+
+export type OutputQuality = "lossless" | "high" | "compact";
+
+export interface RecorderSettings {
+  capture_source: CaptureSource;
+  mic_device_id: string | null;
+  countdown_seconds: number;
+  include_cursor: boolean;
+  output_quality: OutputQuality;
+}
+
+export type RecordingAssetKind = "screen" | "mic" | "camera" | "system_audio";
+export type RecordingAssetStatus = "planned" | "local_only" | "missing" | "exported" | "uploaded";
+
+export interface RecordingAssetRef {
+  kind: RecordingAssetKind;
+  /** Path relative to the take directory. */
+  path: string;
+  status: RecordingAssetStatus;
+}
+
+export interface RecordingMarker {
+  /** Recording-relative timestamp. */
+  time_ms: number;
+  label: string;
+}
+
+export type RecordingTakeStatus = "prepared" | "recording" | "finalized" | "failed";
+
+export interface RecordingTake {
+  schema_version: number;
+  id: string;
+  scope: RecordingScope;
+  settings: RecorderSettings;
+  status: RecordingTakeStatus;
+  created_at: string;
+  updated_at: string;
+  /** Path to take.json relative to the project root. */
+  metadata_path: string;
+  assets: RecordingAssetRef[];
+  markers: RecordingMarker[];
+}

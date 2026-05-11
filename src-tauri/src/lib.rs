@@ -289,6 +289,7 @@ pub fn run() {
             commands::interaction::stop_recording_session,
             commands::interaction::get_session_actions,
             commands::recording::initialize_recording_storage,
+            commands::recording::create_recording_take,
             commands::screenshot::list_monitors,
             commands::screenshot::capture_region,
             commands::screenshot::capture_fullscreen,
