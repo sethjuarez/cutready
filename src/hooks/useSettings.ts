@@ -74,6 +74,20 @@ export interface GlobalSettings {
   aiModelSupportsVision: string;
   /** Web search access for chat agents: "disabled" or "enabled". */
   aiWebAccess: "disabled" | "enabled";
+  /** Default recording source: "full_screen", "region", or "window". */
+  recorderCaptureSource: "full_screen" | "region" | "window";
+  /** Default microphone device id; empty means system default. */
+  recorderMicDeviceId: string;
+  /** Default countdown before recording starts. */
+  recorderCountdownSeconds: number;
+  /** Whether the cursor should be included in screen recordings by default. */
+  recorderIncludeCursor: boolean;
+  /** Default recording quality: "lossless", "high", or "compact". */
+  recorderOutputQuality: "lossless" | "high" | "compact";
+  /** Future default: capture camera as a separate asset. */
+  recorderCameraEnabled: boolean;
+  /** Future default: capture system audio as a separate asset. */
+  recorderSystemAudioEnabled: boolean;
   // Legacy fields (migrated on load)
   llmApiKey?: string;
   llmEndpoint?: string;
@@ -128,6 +142,13 @@ const defaultGlobalSettings: GlobalSettings = {
   aiVisionMode: "notes_and_sketches",
   aiModelSupportsVision: "",
   aiWebAccess: "disabled",
+  recorderCaptureSource: "full_screen",
+  recorderMicDeviceId: "",
+  recorderCountdownSeconds: 3,
+  recorderIncludeCursor: true,
+  recorderOutputQuality: "lossless",
+  recorderCameraEnabled: false,
+  recorderSystemAudioEnabled: false,
 };
 
 function getInitialGlobalSettings(): GlobalSettings {

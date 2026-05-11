@@ -45,7 +45,7 @@ interface AuthCodeFlowInit {
   port: number;
 }
 
-type SettingsTab = "ai" | "agents" | "memory" | "display" | "themes" | "feedback" | "repository" | "updates";
+type SettingsTab = "ai" | "agents" | "memory" | "display" | "themes" | "recording" | "feedback" | "repository" | "updates";
 
 import { inputClass, tabBtnClass } from "../styles";
 import { FoundryResourcePicker } from "./FoundryResourcePicker";
@@ -189,12 +189,13 @@ export function SettingsPanel({ mode = "global" }: { mode?: "global" | "workspac
   const canFetchModels = canFetchModelsFor(settings);
 
   // Tabs depend on mode
-  const globalTabs = ["display", "themes", "ai", "agents", "feedback", "updates"] as const;
+  const globalTabs = ["display", "themes", "recording", "ai", "agents", "feedback", "updates"] as const;
   const workspaceTabs = ["repository", "memory", "display", "themes", "ai", "agents"] as const;
   const tabs = mode === "workspace" ? workspaceTabs : globalTabs;
   const tabLabels: Record<string, string> = {
     display: "Display",
     themes: "Themes",
+    recording: "Recording",
     ai: "AI Provider",
     agents: "Agents",
     memory: "Memory",
@@ -236,6 +237,9 @@ export function SettingsPanel({ mode = "global" }: { mode?: "global" | "workspac
       )}
       {activeTab === "themes" && (
         <ThemesTab settings={settings} updateSetting={updateSetting} />
+      )}
+      {activeTab === "recording" && (
+        <RecordingTab settings={settings} updateSetting={updateSetting} />
       )}
       {activeTab === "ai" && (
         <AIProviderTab
@@ -298,6 +302,120 @@ const fontSizes = [
 
 function tokenRgb(value: string): string {
   return `rgb(${value})`;
+}
+
+// ── Recording Tab ─────────────────────────────────────────────────
+
+function RecordingTab({
+  settings,
+  updateSetting,
+}: {
+  settings: ReturnType<typeof useSettings>["settings"];
+  updateSetting: ReturnType<typeof useSettings>["updateSetting"];
+}) {
+  return (
+    <div className="flex flex-col gap-6">
+      <p className="text-xs text-[rgb(var(--color-text-secondary))]">
+        These defaults apply to new sketch and storyboard recording takes. Each take stores a snapshot of the effective settings used for that recording.
+      </p>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <label className="block space-y-1.5">
+          <span className="text-xs font-medium text-[rgb(var(--color-text-secondary))]">Default source</span>
+          <select
+            value={settings.recorderCaptureSource}
+            onChange={(e) => updateSetting("recorderCaptureSource", e.target.value as typeof settings.recorderCaptureSource)}
+            className={`${inputClass} w-full`}
+          >
+            <option value="full_screen">Full screen</option>
+            <option value="region">Region</option>
+            <option value="window">Window</option>
+          </select>
+          <p className="text-[10px] text-[rgb(var(--color-text-secondary))]">
+            Region and window choices will reuse CutReady's existing capture picker when recording starts.
+          </p>
+        </label>
+
+        <label className="block space-y-1.5">
+          <span className="text-xs font-medium text-[rgb(var(--color-text-secondary))]">Default microphone</span>
+          <select
+            value={settings.recorderMicDeviceId || "default"}
+            onChange={(e) => updateSetting("recorderMicDeviceId", e.target.value === "default" ? "" : e.target.value)}
+            className={`${inputClass} w-full`}
+          >
+            <option value="default">System default microphone</option>
+          </select>
+        </label>
+
+        <label className="block space-y-1.5">
+          <span className="text-xs font-medium text-[rgb(var(--color-text-secondary))]">Countdown</span>
+          <select
+            value={settings.recorderCountdownSeconds}
+            onChange={(e) => updateSetting("recorderCountdownSeconds", Number(e.target.value))}
+            className={`${inputClass} w-full`}
+          >
+            <option value={0}>None</option>
+            <option value={3}>3 seconds</option>
+            <option value={5}>5 seconds</option>
+          </select>
+        </label>
+
+        <label className="block space-y-1.5">
+          <span className="text-xs font-medium text-[rgb(var(--color-text-secondary))]">Output quality</span>
+          <select
+            value={settings.recorderOutputQuality}
+            onChange={(e) => updateSetting("recorderOutputQuality", e.target.value as typeof settings.recorderOutputQuality)}
+            className={`${inputClass} w-full`}
+          >
+            <option value="lossless">Lossless</option>
+            <option value="high">High</option>
+            <option value="compact">Compact</option>
+          </select>
+        </label>
+      </div>
+
+      <div className="rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]/50 p-4">
+        <div className="mb-3 text-sm font-medium text-[rgb(var(--color-text))]">Tracks</div>
+        <div className="grid gap-3 md:grid-cols-3">
+          <label className="flex items-center justify-between gap-3 rounded-lg bg-[rgb(var(--color-surface))] px-3 py-2">
+            <span className="text-xs text-[rgb(var(--color-text))]">Include cursor</span>
+            <input
+              type="checkbox"
+              checked={settings.recorderIncludeCursor}
+              onChange={(e) => updateSetting("recorderIncludeCursor", e.target.checked)}
+              className="h-4 w-4 accent-[rgb(var(--color-accent))]"
+            />
+          </label>
+          <label className="flex items-center justify-between gap-3 rounded-lg bg-[rgb(var(--color-surface))] px-3 py-2 opacity-60">
+            <span>
+              <span className="block text-xs text-[rgb(var(--color-text))]">Camera asset</span>
+              <span className="text-[10px] text-[rgb(var(--color-text-secondary))]">Coming soon</span>
+            </span>
+            <input
+              type="checkbox"
+              checked={settings.recorderCameraEnabled}
+              disabled
+              className="h-4 w-4"
+              aria-label="Camera asset default"
+            />
+          </label>
+          <label className="flex items-center justify-between gap-3 rounded-lg bg-[rgb(var(--color-surface))] px-3 py-2 opacity-60">
+            <span>
+              <span className="block text-xs text-[rgb(var(--color-text))]">System audio asset</span>
+              <span className="text-[10px] text-[rgb(var(--color-text-secondary))]">Coming soon</span>
+            </span>
+            <input
+              type="checkbox"
+              checked={settings.recorderSystemAudioEnabled}
+              disabled
+              className="h-4 w-4"
+              aria-label="System audio asset default"
+            />
+          </label>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function ThemePaletteCard({

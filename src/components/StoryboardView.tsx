@@ -32,6 +32,7 @@ import { SketchPreview } from "./SketchPreview";
 import { ScriptTable } from "./ScriptTable";
 import { exportStoryboardToWord, type WordOrientation } from "../utils/exportToWord";
 import { DocumentToolbar, documentToolbarIcons, type DocumentToolbarAction } from "./DocumentToolbar";
+import { RecorderSettingsDialog } from "./RecorderSettingsDialog";
 import type { Sketch, SketchSummary, Storyboard } from "../types/sketch";
 import type { PreviewSlide, PresentationMode } from "./presentation/types";
 
@@ -95,6 +96,7 @@ export function StoryboardView() {
   const [previewSlides, setPreviewSlides] = useState<PreviewSlide[]>([]);
   const [showPreview, setShowPreview] = useState(false);
   const [previewMode, setPreviewMode] = useState<PresentationMode>("slides");
+  const [showRecorderSettings, setShowRecorderSettings] = useState(false);
 
   const sketchMap = new Map(sketches.map((s) => [s.path, s]));
   const storyboardLocked = activeStoryboard?.locked ?? false;
@@ -349,15 +351,8 @@ export function StoryboardView() {
     }).catch(err => console.error("Word export failed:", err));
   }, [activeStoryboard, currentProject, sketchCache]);
 
-  const handleRecord = useCallback(async () => {
-    try {
-      const path = await invoke<string>("initialize_recording_storage");
-      useToastStore.getState().show("Recording storage ready");
-      useAppStore.getState().addActivityEntries([{ id: crypto.randomUUID(), timestamp: new Date(), source: "recording", content: `Prepared local recording storage at ${path}`, level: "info" }]);
-    } catch (err) {
-      console.error("Failed to initialize recording storage:", err);
-      useToastStore.getState().show(`Could not prepare recording storage: ${err}`);
-    }
+  const handleRecord = useCallback(() => {
+    setShowRecorderSettings(true);
   }, []);
 
   if (!activeStoryboard) return null;
@@ -366,6 +361,7 @@ export function StoryboardView() {
     s.title.toLowerCase().includes(pickerSearch.toLowerCase()),
   );
   const hasStoryboardItems = activeStoryboard.items.length > 0;
+  const canRecord = hasStoryboardItems && !!activeStoryboardPath;
   const presentActions: DocumentToolbarAction[] = hasStoryboardItems ? [
     {
       id: "slide-only",
@@ -441,7 +437,7 @@ export function StoryboardView() {
           />
           <div className="relative">
             <DocumentToolbar
-              canRecord={hasStoryboardItems}
+              canRecord={canRecord}
               onRecord={handleRecord}
               presentActions={presentActions}
               aiActions={aiActions}
@@ -629,6 +625,17 @@ export function StoryboardView() {
             slides={previewSlides}
             initialMode={previewMode}
             onClose={() => { setShowPreview(false); setPreviewMode("slides"); }}
+          />
+        )}
+        {showRecorderSettings && activeStoryboardPath && (
+          <RecorderSettingsDialog
+            isOpen={showRecorderSettings}
+            onClose={() => setShowRecorderSettings(false)}
+            scope={{ kind: "storyboard", path: activeStoryboardPath }}
+            documentTitle={activeStoryboard.title || "Untitled storyboard"}
+            onPrepared={(take) => {
+              useAppStore.getState().addActivityEntries([{ id: crypto.randomUUID(), timestamp: new Date(), source: "recording", content: `Prepared recording take ${take.id} for "${activeStoryboard.title || "Untitled storyboard"}"`, level: "info" }]);
+            }}
           />
         )}
       </div>

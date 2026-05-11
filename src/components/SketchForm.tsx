@@ -14,6 +14,7 @@ import { exportSketchToWord, type WordOrientation } from "../utils/exportToWord"
 import type { PlanningRow, Sketch } from "../types/sketch";
 import { diffRow, type RowDiff } from "../utils/textDiff";
 import { DocumentToolbar, documentToolbarIcons, type DocumentToolbarAction } from "./DocumentToolbar";
+import { RecorderSettingsDialog } from "./RecorderSettingsDialog";
 
 interface MonitorInfo {
   id: number;
@@ -45,6 +46,7 @@ export function SketchForm() {
   const [showPreview, setShowPreview] = useState(false);
   const [previewMode, setPreviewMode] = useState<PresentationMode>("slides");
   const [showMonitorPicker, setShowMonitorPicker] = useState(false);
+  const [showRecorderSettings, setShowRecorderSettings] = useState(false);
   const [availableMonitors, setAvailableMonitors] = useState<MonitorInfo[]>([]);
   const [editingDesc, setEditingDesc] = useState(false);
   const [aiUpdatedFlash, setAiUpdatedFlash] = useState(false);
@@ -424,20 +426,14 @@ The Actions describe what happens on screen — use them as visual design hints.
     }).catch(err => console.error("Word export failed:", err));
   }, [activeSketch, projectRoot]);
 
-  const handleRecord = useCallback(async () => {
-    try {
-      const path = await invoke<string>("initialize_recording_storage");
-      useToastStore.getState().show("Recording storage ready");
-      useAppStore.getState().addActivityEntries([{ id: crypto.randomUUID(), timestamp: new Date(), source: "recording", content: `Prepared local recording storage at ${path}`, level: "info" }]);
-    } catch (err) {
-      console.error("Failed to initialize recording storage:", err);
-      useToastStore.getState().show(`Could not prepare recording storage: ${err}`);
-    }
+  const handleRecord = useCallback(() => {
+    setShowRecorderSettings(true);
   }, []);
 
   if (!activeSketch) return null;
 
   const hasRows = localRows.length > 0;
+  const canRecord = hasRows && !!activeSketchPath;
   const presentActions: DocumentToolbarAction[] = hasRows ? [
     {
       id: "slide-only",
@@ -535,7 +531,7 @@ The Actions describe what happens on screen — use them as visual design hints.
           </div>
           <div className="relative">
             <DocumentToolbar
-              canRecord={hasRows}
+              canRecord={canRecord}
               onRecord={handleRecord}
               presentActions={presentActions}
               aiActions={aiActions}
@@ -703,6 +699,18 @@ The row already has a visual and design_plan. Read the sketch with read_sketch f
         <ScreenCaptureOverlay
           onCapture={handleCaptureComplete}
           onCancel={handleCaptureCancel}
+        />
+      )}
+
+      {showRecorderSettings && activeSketchPath && (
+        <RecorderSettingsDialog
+          isOpen={showRecorderSettings}
+          onClose={() => setShowRecorderSettings(false)}
+          scope={{ kind: "sketch", path: activeSketchPath }}
+          documentTitle={localTitle || "Untitled sketch"}
+          onPrepared={(take) => {
+            useAppStore.getState().addActivityEntries([{ id: crypto.randomUUID(), timestamp: new Date(), source: "recording", content: `Prepared recording take ${take.id} for "${localTitle || "Untitled sketch"}"`, level: "info" }]);
+          }}
         />
       )}
 
