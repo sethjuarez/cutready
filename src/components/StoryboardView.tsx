@@ -24,18 +24,14 @@ import {
   X,
   Plus,
   FileText,
-  Lock,
-  Unlock,
-  MonitorPlay,
-  Maximize2,
 } from "lucide-react";
 import { useAppStore } from "../stores/appStore";
 import { useToastStore } from "../stores/toastStore";
 import { SketchPickerItem } from "./SketchCard";
 import { SketchPreview } from "./SketchPreview";
 import { ScriptTable } from "./ScriptTable";
-import { exportStoryboardToWord } from "../utils/exportToWord";
-import { ExportWordButton } from "./ExportWordButton";
+import { exportStoryboardToWord, type WordOrientation } from "../utils/exportToWord";
+import { DocumentToolbar, documentToolbarIcons, type DocumentToolbarAction } from "./DocumentToolbar";
 import type { Sketch, SketchSummary, Storyboard } from "../types/sketch";
 import type { PreviewSlide, PresentationMode } from "./presentation/types";
 
@@ -334,11 +330,96 @@ export function StoryboardView() {
     [addSketchToStoryboard, storyboardLocked],
   );
 
+  const handleExportWord = useCallback((orientation: WordOrientation) => {
+    if (!activeStoryboard) return;
+    return exportStoryboardToWord(activeStoryboard, currentProject?.root ?? "", async (paths) => {
+      const map = new Map<string, Sketch>();
+      await Promise.all(paths.map(async (p) => {
+        const cached = sketchCache.get(p);
+        if (cached) { map.set(p, cached); return; }
+        try {
+          const sk = await invoke<Sketch>("get_sketch", { relativePath: p });
+          map.set(p, sk);
+        } catch { /* skip missing */ }
+      }));
+      return map;
+    }, orientation).then(() => {
+      useToastStore.getState().show("Export complete");
+      useAppStore.getState().addActivityEntries([{ id: crypto.randomUUID(), timestamp: new Date(), source: "export", content: `Exported "${activeStoryboard.title}" to Word`, level: "success" }]);
+    }).catch(err => console.error("Word export failed:", err));
+  }, [activeStoryboard, currentProject, sketchCache]);
+
+  const handleRecord = useCallback(async () => {
+    try {
+      const path = await invoke<string>("initialize_recording_storage");
+      useToastStore.getState().show("Recording storage ready");
+      useAppStore.getState().addActivityEntries([{ id: crypto.randomUUID(), timestamp: new Date(), source: "recording", content: `Prepared local recording storage at ${path}`, level: "info" }]);
+    } catch (err) {
+      console.error("Failed to initialize recording storage:", err);
+      useToastStore.getState().show(`Could not prepare recording storage: ${err}`);
+    }
+  }, []);
+
   if (!activeStoryboard) return null;
 
   const filteredSketches = sketches.filter((s) =>
     s.title.toLowerCase().includes(pickerSearch.toLowerCase()),
   );
+  const hasStoryboardItems = activeStoryboard.items.length > 0;
+  const presentActions: DocumentToolbarAction[] = hasStoryboardItems ? [
+    {
+      id: "slide-only",
+      label: "Slide-only view",
+      icon: documentToolbarIcons.playCircle,
+      onSelect: handleSlideOnlyClick,
+    },
+    {
+      id: "teleprompter",
+      label: "Teleprompter",
+      icon: documentToolbarIcons.monitorPlay,
+      onSelect: handleTeleprompterClick,
+    },
+    {
+      id: "preview",
+      label: "Preview",
+      icon: documentToolbarIcons.monitor,
+      onSelect: handlePreviewClick,
+    },
+  ] : [];
+  const aiActions: DocumentToolbarAction[] = !storyboardLocked ? [
+    {
+      id: "review-flow",
+      label: "Review flow",
+      icon: documentToolbarIcons.sparkles,
+      onSelect: () => sendChatPrompt(
+        `Review the storyboard "${activeStoryboard.title}" and suggest improvements. List the current sketches, then recommend any changes to ordering, pacing, or suggest new sketches that would strengthen the demo flow. Read each sketch first to understand the content.`,
+        { silent: true },
+      ),
+    },
+    {
+      id: "generate-sketch",
+      label: "Generate sketch",
+      icon: documentToolbarIcons.sparkles,
+      onSelect: () => sendChatPrompt(
+        `Generate a new sketch for the storyboard "${activeStoryboard.title}". Look at the existing sketches to understand the demo flow, then create a new sketch that would complement them. Pick an appropriate name and generate 3-5 planning rows.`,
+        { silent: true },
+      ),
+    },
+  ] : [];
+  const exportActions: DocumentToolbarAction[] = hasStoryboardItems ? [
+    {
+      id: "word-landscape",
+      label: "Word - Landscape",
+      icon: documentToolbarIcons.fileText,
+      onSelect: () => handleExportWord("landscape"),
+    },
+    {
+      id: "word-portrait",
+      label: "Word - Portrait",
+      icon: documentToolbarIcons.fileText,
+      onSelect: () => handleExportWord("portrait"),
+    },
+  ] : [];
 
   return (
     <div className="flex-1 overflow-y-auto">
@@ -358,88 +439,42 @@ export function StoryboardView() {
             className={`flex-1 text-2xl font-semibold bg-transparent text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/40 outline-none border-none ${storyboardLocked ? "cursor-default" : ""}`}
             placeholder="Storyboard title..."
           />
-          {activeStoryboard.items.length > 0 && (
-            <div className="relative flex items-center gap-2">
-              <ExportWordButton
-                className="p-1.5 rounded-md text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                onExport={(orientation) => {
-                  if (!activeStoryboard) return;
-                  return exportStoryboardToWord(activeStoryboard, currentProject?.root ?? "", async (paths) => {
-                    const map = new Map<string, Sketch>();
-                    await Promise.all(paths.map(async (p) => {
-                      const cached = sketchCache.get(p);
-                      if (cached) { map.set(p, cached); return; }
-                      try {
-                        const sk = await invoke<Sketch>("get_sketch", { relativePath: p });
-                        map.set(p, sk);
-                      } catch { /* skip missing */ }
-                    }));
-                    return map;
-                  }, orientation).then(() => {
-                    useToastStore.getState().show("Export complete");
-                    useAppStore.getState().addActivityEntries([{ id: crypto.randomUUID(), timestamp: new Date(), source: "export", content: `Exported "${activeStoryboard.title}" to Word`, level: "success" }]);
-                  }).catch(err => console.error("Word export failed:", err));
-                }}
-              />
-              <button
-                onClick={handleSlideOnlyClick}
-                className="p-1.5 rounded-md text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors"
-                title="Slide-only view"
-              >
-                <Maximize2 className="w-4 h-4" />
-              </button>
-              <button
-                onClick={handleTeleprompterClick}
-                className="p-1.5 rounded-md text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors"
-                title="Teleprompter"
-              >
-                <MonitorPlay className="w-4 h-4" />
-              </button>
-              <button
-                onClick={handlePreviewClick}
-                className="p-1.5 rounded-md text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors"
-                title="Preview storyboard (presentation mode)"
-              >
-                <Monitor className="w-4 h-4" />
-              </button>
-
-              {/* Monitor picker dropdown */}
-              {showMonitorPicker && (
-                <>
-                  <div className="fixed inset-0 z-dropdown" onClick={() => setShowMonitorPicker(false)} />
-                  <div className="absolute right-0 top-full mt-2 z-modal bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-lg shadow-lg py-1 min-w-[200px]">
-                    <div className="px-3 py-2 text-xs font-medium text-[rgb(var(--color-text-secondary))] uppercase tracking-wider border-b border-[rgb(var(--color-border))]">
-                      Present on
-                    </div>
-                    {availableMonitors.map((m) => (
-                      <button
-                        key={m.id}
-                        onClick={() => launchPreviewOnMonitor(m, previewSlides)}
-                        className="w-full px-3 py-2 text-left text-sm text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors flex items-center gap-2"
-                      >
-                        <Monitor className="w-3.5 h-3.5" />
-                        <span>{m.name || `Monitor ${m.id}`}</span>
-                        {m.is_primary && (
-                          <span className="text-[10px] text-[rgb(var(--color-accent))] font-medium ml-auto">Primary</span>
-                        )}
-                      </button>
-                    ))}
+          <div className="relative">
+            <DocumentToolbar
+              canRecord={hasStoryboardItems}
+              onRecord={handleRecord}
+              presentActions={presentActions}
+              aiActions={aiActions}
+              exportActions={exportActions}
+              locked={storyboardLocked}
+              onToggleLock={() => setStoryboardLocked(!storyboardLocked)}
+              lockLabel="Lock storyboard"
+              unlockLabel="Unlock storyboard"
+            />
+            {showMonitorPicker && (
+              <>
+                <div className="fixed inset-0 z-dropdown" onClick={() => setShowMonitorPicker(false)} />
+                <div className="absolute right-0 top-full mt-2 z-modal bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-lg shadow-lg py-1 min-w-[200px]">
+                  <div className="px-3 py-2 text-xs font-medium text-[rgb(var(--color-text-secondary))] uppercase tracking-wider border-b border-[rgb(var(--color-border))]">
+                    Present on
                   </div>
-                </>
-              )}
-            </div>
-          )}
-          <button
-            onClick={() => setStoryboardLocked(!storyboardLocked)}
-            className={`p-1.5 rounded-md transition-colors ${
-              storyboardLocked
-                ? "text-[rgb(var(--color-warning))] bg-[rgb(var(--color-warning))]/10 hover:bg-[rgb(var(--color-warning))]/15"
-                : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))]"
-            }`}
-            title={storyboardLocked ? "Unlock storyboard" : "Lock storyboard"}
-          >
-            {storyboardLocked ? <Lock className="w-4 h-4" /> : <Unlock className="w-4 h-4" />}
-          </button>
+                  {availableMonitors.map((m) => (
+                    <button
+                      key={m.id}
+                      onClick={() => launchPreviewOnMonitor(m, previewSlides)}
+                      className="w-full px-3 py-2 text-left text-sm text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors flex items-center gap-2"
+                    >
+                      <Monitor className="w-3.5 h-3.5" />
+                      <span>{m.name || `Monitor ${m.id}`}</span>
+                      {m.is_primary && (
+                        <span className="text-[10px] text-[rgb(var(--color-accent))] font-medium ml-auto">Primary</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
         </div>
         {/* Description — markdown preview, click to edit */}
         <div className="relative group/desc mb-2">
@@ -494,33 +529,7 @@ export function StoryboardView() {
           )}
         </div>
 
-        {/* AI actions */}
-        {!storyboardLocked && (
-        <div className="flex items-center gap-1.5 mb-8">
-          <button
-            onClick={() => sendChatPrompt(
-              `Review the storyboard "${activeStoryboard.title}" and suggest improvements. List the current sketches, then recommend any changes to ordering, pacing, or suggest new sketches that would strengthen the demo flow. Read each sketch first to understand the content.`,
-              { silent: true }
-            )}
-            className="flex items-center gap-1 text-xs text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] px-2 py-1 rounded-md hover:bg-[rgb(var(--color-accent))]/10 transition-colors"
-            title="Review storyboard with AI"
-          >
-            <Sparkles className="w-3 h-3" />
-            Review flow
-          </button>
-          <button
-            onClick={() => sendChatPrompt(
-              `Generate a new sketch for the storyboard "${activeStoryboard.title}". Look at the existing sketches to understand the demo flow, then create a new sketch that would complement them. Pick an appropriate name and generate 3-5 planning rows.`,
-              { silent: true }
-            )}
-            className="flex items-center gap-1 text-xs text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] px-2 py-1 rounded-md hover:bg-[rgb(var(--color-accent))]/10 transition-colors"
-            title="Generate a new sketch with AI"
-          >
-            <Sparkles className="w-3 h-3" />
-            Generate sketch
-          </button>
-        </div>
-        )}
+        <div className="mb-8" />
 
         {/* Items */}
         {activeStoryboard.items.length === 0 ? (

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { SafeMarkdown } from "./SafeMarkdown";
-import { ChevronLeft, Sparkles, Monitor, MonitorPlay, Maximize2, Plus, X, Folder, Lock, Unlock, FileText } from "lucide-react";
+import { ChevronLeft, Sparkles, Monitor, Plus, X, Folder } from "lucide-react";
 import { useAppStore } from "../stores/appStore";
 import { useToastStore } from "../stores/toastStore";
 import { ScriptTable } from "./ScriptTable";
@@ -10,9 +10,10 @@ import { ScreenCaptureOverlay } from "./ScreenCaptureOverlay";
 import { SketchPreview } from "./SketchPreview";
 import type { PresentationMode } from "./presentation/types";
 import VisualCell from "./VisualCell";
-import { exportSketchToWord } from "../utils/exportToWord";
+import { exportSketchToWord, type WordOrientation } from "../utils/exportToWord";
 import type { PlanningRow, Sketch } from "../types/sketch";
 import { diffRow, type RowDiff } from "../utils/textDiff";
+import { DocumentToolbar, documentToolbarIcons, type DocumentToolbarAction } from "./DocumentToolbar";
 
 interface MonitorInfo {
   id: number;
@@ -414,16 +415,76 @@ The Actions describe what happens on screen — use them as visual design hints.
     }
   }, [launchPreviewOnMonitor]);
 
-  const handleExportWord = useCallback(() => {
+  const handleExportWord = useCallback((orientation: WordOrientation = "landscape") => {
     if (!activeSketch) return;
-    exportSketchToWord(activeSketch, projectRoot, "landscape").then((exported) => {
+    exportSketchToWord(activeSketch, projectRoot, orientation).then((exported) => {
       if (!exported) return;
       useToastStore.getState().show("Export complete");
       useAppStore.getState().addActivityEntries([{ id: crypto.randomUUID(), timestamp: new Date(), source: "export", content: `Exported "${activeSketch.title}" to Word`, level: "success" }]);
     }).catch(err => console.error("Word export failed:", err));
   }, [activeSketch, projectRoot]);
 
+  const handleRecord = useCallback(async () => {
+    try {
+      const path = await invoke<string>("initialize_recording_storage");
+      useToastStore.getState().show("Recording storage ready");
+      useAppStore.getState().addActivityEntries([{ id: crypto.randomUUID(), timestamp: new Date(), source: "recording", content: `Prepared local recording storage at ${path}`, level: "info" }]);
+    } catch (err) {
+      console.error("Failed to initialize recording storage:", err);
+      useToastStore.getState().show(`Could not prepare recording storage: ${err}`);
+    }
+  }, []);
+
   if (!activeSketch) return null;
+
+  const hasRows = localRows.length > 0;
+  const presentActions: DocumentToolbarAction[] = hasRows ? [
+    {
+      id: "slide-only",
+      label: "Slide-only view",
+      icon: documentToolbarIcons.playCircle,
+      onSelect: () => { setPreviewMode("slide-only"); setShowPreview(true); },
+    },
+    {
+      id: "teleprompter",
+      label: "Teleprompter",
+      icon: documentToolbarIcons.monitorPlay,
+      onSelect: () => { setPreviewMode("teleprompter"); setShowPreview(true); },
+    },
+    {
+      id: "preview",
+      label: "Preview",
+      icon: documentToolbarIcons.monitor,
+      onSelect: handlePreviewClick,
+    },
+  ] : [];
+  const aiActions: DocumentToolbarAction[] = !sketchLocked ? [
+    {
+      id: "improve-sketch",
+      label: localRows.length === 0 ? "Generate plan" : "Improve sketch",
+      icon: documentToolbarIcons.sparkles,
+      onSelect: () => sendChatPrompt(
+        localRows.length === 0
+          ? `Generate a complete sketch plan for "${activeSketch?.title ?? "this sketch"}". ${activeSketch?.description && typeof activeSketch.description === "string" ? `Description: ${activeSketch.description}. ` : ""}Create well-structured planning rows with time, narrative, and demo_actions.`
+          : `Review and improve the entire sketch "${activeSketchPath ?? "current"}". Refine the narrative flow, tighten timing, and make demo actions more specific. Use write_sketch to apply changes.`,
+        { silent: true },
+      ),
+    },
+  ] : [];
+  const exportActions: DocumentToolbarAction[] = hasRows ? [
+    {
+      id: "word-landscape",
+      label: "Word - Landscape",
+      icon: documentToolbarIcons.fileText,
+      onSelect: () => handleExportWord("landscape"),
+    },
+    {
+      id: "word-portrait",
+      label: "Word - Portrait",
+      icon: documentToolbarIcons.fileText,
+      onSelect: () => handleExportWord("portrait"),
+    },
+  ] : [];
 
   return (
     <div className="flex-1 overflow-y-auto">
@@ -472,91 +533,50 @@ The Actions describe what happens on screen — use them as visual design hints.
               </button>
             )}
           </div>
-          {localRows.length > 0 && (
-            <button
-              onClick={handleExportWord}
-              className="p-1.5 rounded-md text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors"
-              title="Export to Word"
-            >
-              <span className="relative inline-flex h-4 w-4 items-center justify-center">
-                <FileText className="w-4 h-4" />
-                <span className="absolute -bottom-0.5 -right-0.5 rounded-[2px] bg-[rgb(var(--color-surface))] px-[1px] text-[7px] font-semibold leading-none text-[rgb(var(--color-accent))]">W</span>
-              </span>
-            </button>
-          )}
-          {localRows.length > 0 && (
-            <button
-              onClick={() => { setPreviewMode("slide-only"); setShowPreview(true); }}
-              className="p-1.5 rounded-md text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors"
-              title="Slide-only view"
-            >
-              <Maximize2 className="w-4 h-4" />
-            </button>
-          )}
-          {localRows.length > 0 && (
-            <button
-              onClick={() => { setPreviewMode("teleprompter"); setShowPreview(true); }}
-              className="p-1.5 rounded-md text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors"
-              title="Teleprompter"
-            >
-              <MonitorPlay className="w-4 h-4" />
-            </button>
-          )}
-          {localRows.length > 0 && (
-            <div className="relative">
-              <button
-                onClick={handlePreviewClick}
-                className="p-1.5 rounded-md text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors"
-                title="Preview"
-              >
-                <Monitor className="w-4 h-4" />
-              </button>
-
-              {/* Monitor picker dropdown */}
-              {showMonitorPicker && (
-                <>
-                  <div className="fixed inset-0 z-dropdown" onClick={() => setShowMonitorPicker(false)} />
-                  <div className="absolute right-0 top-full mt-2 z-modal bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-lg shadow-lg py-1 min-w-[200px]">
-                    <div className="px-3 py-2 text-xs font-medium text-[rgb(var(--color-text-secondary))] uppercase tracking-wider border-b border-[rgb(var(--color-border))]">
-                      Present on
-                    </div>
-                    {availableMonitors.map((m) => (
-                      <button
-                        key={m.id}
-                        onClick={() => launchPreviewOnMonitor(m)}
-                        className="w-full px-3 py-2 text-left text-sm text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors flex items-center gap-2"
-                      >
-                        <Monitor className="w-3.5 h-3.5" />
-                        <span>{m.name || `Monitor ${m.id}`}</span>
-                        {m.is_primary && (
-                          <span className="text-[10px] text-[rgb(var(--color-accent))] font-medium ml-auto">Primary</span>
-                        )}
-                      </button>
-                    ))}
-                    <div className="border-t border-[rgb(var(--color-border))]">
-                      <button
-                        onClick={() => { setShowMonitorPicker(false); setPreviewMode("slides"); setShowPreview(true); }}
-                        className="w-full px-3 py-2 text-left text-xs text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors"
-                      >
-                        Preview in window instead
-                      </button>
-                    </div>
+          <div className="relative">
+            <DocumentToolbar
+              canRecord={hasRows}
+              onRecord={handleRecord}
+              presentActions={presentActions}
+              aiActions={aiActions}
+              exportActions={exportActions}
+              locked={sketchLocked}
+              onToggleLock={() => handleSketchLockChange(!sketchLocked)}
+              lockLabel="Lock sketch"
+              unlockLabel="Unlock sketch"
+            />
+            {showMonitorPicker && (
+              <>
+                <div className="fixed inset-0 z-dropdown" onClick={() => setShowMonitorPicker(false)} />
+                <div className="absolute right-0 top-full mt-2 z-modal bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-lg shadow-lg py-1 min-w-[200px]">
+                  <div className="px-3 py-2 text-xs font-medium text-[rgb(var(--color-text-secondary))] uppercase tracking-wider border-b border-[rgb(var(--color-border))]">
+                    Present on
                   </div>
-                </>
-              )}
-            </div>
-          )}
-          <button
-            onClick={() => handleSketchLockChange(!sketchLocked)}
-            className={`p-1.5 rounded-md transition-colors ${
-              sketchLocked
-                ? "text-[rgb(var(--color-warning))] bg-[rgb(var(--color-warning))]/10 hover:bg-[rgb(var(--color-warning))]/15"
-                : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))]"
-            }`}
-            title={sketchLocked ? "Unlock sketch" : "Lock sketch"}
-          >
-            {sketchLocked ? <Lock className="w-4 h-4" /> : <Unlock className="w-4 h-4" />}
-          </button>
+                  {availableMonitors.map((m) => (
+                    <button
+                      key={m.id}
+                      onClick={() => launchPreviewOnMonitor(m)}
+                      className="w-full px-3 py-2 text-left text-sm text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors flex items-center gap-2"
+                    >
+                      <Monitor className="w-3.5 h-3.5" />
+                      <span>{m.name || `Monitor ${m.id}`}</span>
+                      {m.is_primary && (
+                        <span className="text-[10px] text-[rgb(var(--color-accent))] font-medium ml-auto">Primary</span>
+                      )}
+                    </button>
+                  ))}
+                  <div className="border-t border-[rgb(var(--color-border))]">
+                    <button
+                      onClick={() => { setShowMonitorPicker(false); setPreviewMode("slides"); setShowPreview(true); }}
+                      className="w-full px-3 py-2 text-left text-xs text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors"
+                    >
+                      Preview in window instead
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
         </div>
 
         {/* Description — markdown preview, click to edit */}
@@ -613,23 +633,7 @@ The Actions describe what happens on screen — use them as visual design hints.
 
         {/* Planning Table */}
         <div>
-          <div className="flex items-center justify-end mb-3">
-            {!sketchLocked && (
-            <button
-              onClick={() => sendChatPrompt(
-                localRows.length === 0
-                  ? `Generate a complete sketch plan for "${activeSketch?.title ?? "this sketch"}". ${activeSketch?.description && typeof activeSketch.description === "string" ? `Description: ${activeSketch.description}. ` : ""}Create well-structured planning rows with time, narrative, and demo_actions.`
-                  : `Review and improve the entire sketch "${activeSketchPath ?? "current"}". Refine the narrative flow, tighten timing, and make demo actions more specific. Use write_sketch to apply changes.`,
-                { silent: true }
-              )}
-              className="flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10 transition-colors"
-              title={localRows.length === 0 ? "Generate plan with AI" : "Improve entire sketch with AI"}
-            >
-              <Sparkles className="w-3 h-3" />
-              {localRows.length === 0 ? "Generate" : "Improve"}
-            </button>
-            )}
-          </div>
+          <div className="mb-3" />
           <ScriptTable
             rows={localRows}
             onChange={handleRowsChange}
