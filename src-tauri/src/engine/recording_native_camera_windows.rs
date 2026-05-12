@@ -12,10 +12,11 @@ use std::thread::{self, JoinHandle};
 use windows::core::{GUID, PCWSTR, PWSTR};
 use windows::Win32::Media::MediaFoundation::{
     eAVEncH264VProfile_High, IMFActivate, IMFAttributes, IMFMediaSource, IMFSample,
-    MFCreateAttributes, MFCreateMediaType, MFCreateSinkWriterFromURL,
-    MFCreateSourceReaderFromMediaSource, MFEnumDeviceSources, MFMediaType_Video, MFShutdown,
-    MFStartup, MFVideoFormat_H264, MFVideoFormat_MJPG, MFVideoFormat_NV12, MFVideoFormat_RGB32,
-    MFVideoFormat_YUY2, MFVideoInterlace_Progressive, MF_DEVSOURCE_ATTRIBUTE_FRIENDLY_NAME,
+    MFCreateAttributes, MFCreateMediaType, MFCreateMemoryBuffer, MFCreateSample,
+    MFCreateSinkWriterFromURL, MFCreateSourceReaderFromMediaSource, MFEnumDeviceSources,
+    MFMediaType_Video, MFShutdown, MFStartup, MFVideoFormat_H264, MFVideoFormat_MJPG,
+    MFVideoFormat_NV12, MFVideoFormat_RGB32, MFVideoFormat_UYVY, MFVideoFormat_YUY2,
+    MFVideoInterlace_Progressive, MF_DEVSOURCE_ATTRIBUTE_FRIENDLY_NAME,
     MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE, MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_GUID,
     MF_E_NO_MORE_TYPES, MF_LOW_LATENCY, MF_MT_ALL_SAMPLES_INDEPENDENT, MF_MT_AVG_BITRATE,
     MF_MT_FRAME_RATE, MF_MT_FRAME_SIZE, MF_MT_INTERLACE_MODE, MF_MT_MAJOR_TYPE,
@@ -31,6 +32,22 @@ use crate::engine::recording::CameraFormatInfo;
 
 const HNS_PER_SECOND: i64 = 10_000_000;
 const CAMERA_BITRATE: u32 = 15_000_000;
+
+#[derive(Clone, Copy, Debug)]
+enum SourceFormat {
+    Nv12,
+    Uyvy,
+    Yuy2,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct SourceFormatConfig {
+    format: SourceFormat,
+    width: u32,
+    height: u32,
+    fps_num: u32,
+    fps_den: u32,
+}
 
 pub struct NativeCameraRecording {
     stop_requested: Arc<AtomicBool>,
@@ -164,22 +181,15 @@ fn run_native_camera_capture(
             reader.SetStreamSelection(MF_SOURCE_READER_FIRST_VIDEO_STREAM.0 as u32, true)?;
         }
 
-        let (fps_num, fps_den) = parse_fps_ratio(selected_format.fps.as_deref()).unwrap_or((30, 1));
+        let source_config = configure_reader_source_format(&reader, &selected_format, log_path)?;
         let input_type = create_video_type(
             MFVideoFormat_NV12,
-            selected_format.width,
-            selected_format.height,
-            fps_num,
-            fps_den,
+            source_config.width,
+            source_config.height,
+            source_config.fps_num,
+            source_config.fps_den,
             None,
         )?;
-        unsafe {
-            reader.SetCurrentMediaType(
-                MF_SOURCE_READER_FIRST_VIDEO_STREAM.0 as u32,
-                None,
-                &input_type,
-            )?;
-        }
 
         let sink_attributes = create_sink_writer_attributes()?;
         let output_url = wide_path(output_path);
@@ -188,10 +198,10 @@ fn run_native_camera_capture(
         };
         let output_type = create_video_type(
             MFVideoFormat_H264,
-            selected_format.width,
-            selected_format.height,
-            fps_num,
-            fps_den,
+            source_config.width,
+            source_config.height,
+            source_config.fps_num,
+            source_config.fps_den,
             Some(CAMERA_BITRATE),
         )?;
         let stream_index = unsafe { writer.AddStream(&output_type)? };
@@ -203,8 +213,13 @@ fn run_native_camera_capture(
         append_log(
             log_path,
             &format!(
-                "native_camera format={}x{} fps={}/{} bitrate={}",
-                selected_format.width, selected_format.height, fps_num, fps_den, CAMERA_BITRATE
+                "native_camera format={}x{} fps={}/{} source={:?} bitrate={}",
+                source_config.width,
+                source_config.height,
+                source_config.fps_num,
+                source_config.fps_den,
+                source_config.format,
+                CAMERA_BITRATE
             ),
         )?;
 
@@ -215,8 +230,7 @@ fn run_native_camera_capture(
             reader,
             writer,
             stream_index,
-            fps_num,
-            fps_den,
+            source_config,
         })
     })();
 
@@ -249,14 +263,14 @@ struct NativeCameraPipeline {
     reader: windows::Win32::Media::MediaFoundation::IMFSourceReader,
     writer: windows::Win32::Media::MediaFoundation::IMFSinkWriter,
     stream_index: u32,
-    fps_num: u32,
-    fps_den: u32,
+    source_config: SourceFormatConfig,
 }
 
 impl NativeCameraPipeline {
     fn capture_loop(&mut self, stop_requested: Arc<AtomicBool>) -> anyhow::Result<()> {
         let mut first_sample_time: Option<i64> = None;
-        let frame_duration = HNS_PER_SECOND * self.fps_den as i64 / self.fps_num.max(1) as i64;
+        let frame_duration = HNS_PER_SECOND * self.source_config.fps_den as i64
+            / self.source_config.fps_num.max(1) as i64;
 
         while !stop_requested.load(Ordering::SeqCst) {
             let mut flags = 0u32;
@@ -280,6 +294,12 @@ impl NativeCameraPipeline {
             };
             let first = *first_sample_time.get_or_insert(timestamp);
             let rebased_time = timestamp.saturating_sub(first);
+            let sample = match self.source_config.format {
+                SourceFormat::Nv12 => sample,
+                SourceFormat::Uyvy | SourceFormat::Yuy2 => {
+                    convert_packed_yuv_sample_to_nv12(&sample, &self.source_config)?
+                }
+            };
             unsafe {
                 sample.SetSampleTime(rebased_time)?;
                 sample.SetSampleDuration(frame_duration)?;
@@ -398,6 +418,274 @@ fn native_formats_for_device(device: &IMFActivate) -> anyhow::Result<Vec<CameraF
         });
         formats.dedup();
         Ok(formats)
+    }
+}
+
+fn configure_reader_source_format(
+    reader: &windows::Win32::Media::MediaFoundation::IMFSourceReader,
+    selected_format: &CameraFormatInfo,
+    log_path: &Path,
+) -> anyhow::Result<SourceFormatConfig> {
+    let (fps_num, fps_den) = parse_fps_ratio(selected_format.fps.as_deref()).unwrap_or((30, 1));
+    let nv12_type = create_video_type(
+        MFVideoFormat_NV12,
+        selected_format.width,
+        selected_format.height,
+        fps_num,
+        fps_den,
+        None,
+    )?;
+
+    unsafe {
+        match reader.SetCurrentMediaType(
+            MF_SOURCE_READER_FIRST_VIDEO_STREAM.0 as u32,
+            None,
+            &nv12_type,
+        ) {
+            Ok(()) => {
+                append_log(log_path, "native_camera source reader using NV12 output")?;
+                return Ok(SourceFormatConfig {
+                    format: SourceFormat::Nv12,
+                    width: selected_format.width,
+                    height: selected_format.height,
+                    fps_num,
+                    fps_den,
+                });
+            }
+            Err(err) => {
+                append_log(
+                    log_path,
+                    &format!(
+                        "native_camera NV12 source reader setup failed; trying native packed YUV: {err}"
+                    ),
+                )?;
+            }
+        }
+    }
+
+    let (native_type, config) =
+        select_native_packed_yuv_type(reader, selected_format).ok_or_else(|| {
+            anyhow::anyhow!("Camera does not expose NV12, UYVY, or YUY2 Media Foundation output")
+        })?;
+    unsafe {
+        reader.SetCurrentMediaType(
+            MF_SOURCE_READER_FIRST_VIDEO_STREAM.0 as u32,
+            None,
+            &native_type,
+        )?;
+    }
+    append_log(
+        log_path,
+        &format!(
+            "native_camera source reader using native {:?} output with app-side NV12 conversion",
+            config.format
+        ),
+    )?;
+    Ok(config)
+}
+
+fn select_native_packed_yuv_type(
+    reader: &windows::Win32::Media::MediaFoundation::IMFSourceReader,
+    selected_format: &CameraFormatInfo,
+) -> Option<(
+    windows::Win32::Media::MediaFoundation::IMFMediaType,
+    SourceFormatConfig,
+)> {
+    let selected_fps = selected_format
+        .fps
+        .as_deref()
+        .and_then(parse_fps_score)
+        .unwrap_or(0);
+    let mut best: Option<(
+        (u8, u8, u64, u32),
+        windows::Win32::Media::MediaFoundation::IMFMediaType,
+        SourceFormatConfig,
+    )> = None;
+    let mut index = 0u32;
+
+    loop {
+        let media_type = unsafe {
+            match reader.GetNativeMediaType(MF_SOURCE_READER_FIRST_VIDEO_STREAM.0 as u32, index) {
+                Ok(media_type) => media_type,
+                Err(err) if err.code() == MF_E_NO_MORE_TYPES => break,
+                Err(_) => break,
+            }
+        };
+        index += 1;
+
+        let Some(subtype) = (unsafe { media_type.GetGUID(&MF_MT_SUBTYPE).ok() }) else {
+            continue;
+        };
+        let format = if subtype == MFVideoFormat_UYVY {
+            SourceFormat::Uyvy
+        } else if subtype == MFVideoFormat_YUY2 {
+            SourceFormat::Yuy2
+        } else {
+            continue;
+        };
+        let Some((width, height)) = attribute_size(&media_type, &MF_MT_FRAME_SIZE) else {
+            continue;
+        };
+        let (fps_num, fps_den) = attribute_ratio(&media_type, &MF_MT_FRAME_RATE).unwrap_or((30, 1));
+        let fps = if fps_num == 0 || fps_den == 0 {
+            0
+        } else {
+            ((fps_num as f64 / fps_den as f64) * 1000.0).round() as u32
+        };
+        let score = (
+            u8::from(width == selected_format.width && height == selected_format.height),
+            u8::from(selected_fps == 0 || selected_fps == fps),
+            width as u64 * height as u64,
+            fps,
+        );
+        let config = SourceFormatConfig {
+            format,
+            width,
+            height,
+            fps_num: fps_num.max(1),
+            fps_den: fps_den.max(1),
+        };
+        if best
+            .as_ref()
+            .is_none_or(|(best_score, _, _)| score > *best_score)
+        {
+            best = Some((score, media_type, config));
+        }
+    }
+
+    best.map(|(_, media_type, config)| (media_type, config))
+}
+
+fn convert_packed_yuv_sample_to_nv12(
+    sample: &IMFSample,
+    config: &SourceFormatConfig,
+) -> anyhow::Result<IMFSample> {
+    let width = config.width as usize;
+    let height = config.height as usize;
+    if width % 2 != 0 || height % 2 != 0 {
+        return Err(anyhow::anyhow!(
+            "Packed-YUV camera frames must have even dimensions for NV12 conversion: {}x{}",
+            width,
+            height
+        ));
+    }
+    let source_stride = width
+        .checked_mul(2)
+        .ok_or_else(|| anyhow::anyhow!("Camera frame width is too large"))?;
+    let y_plane_len = width
+        .checked_mul(height)
+        .ok_or_else(|| anyhow::anyhow!("Camera frame dimensions are too large"))?;
+    let nv12_len = y_plane_len
+        .checked_add(y_plane_len / 2)
+        .ok_or_else(|| anyhow::anyhow!("Camera NV12 frame size is too large"))?;
+
+    unsafe {
+        let source_buffer = sample.ConvertToContiguousBuffer()?;
+        let mut source_ptr = ptr::null_mut();
+        let mut source_max_len = 0u32;
+        let mut source_current_len = 0u32;
+        source_buffer.Lock(
+            &mut source_ptr,
+            Some(&mut source_max_len),
+            Some(&mut source_current_len),
+        )?;
+        let source = std::slice::from_raw_parts(source_ptr, source_current_len as usize);
+
+        let required_source_len = source_stride
+            .checked_mul(height)
+            .ok_or_else(|| anyhow::anyhow!("Camera source frame size is too large"))?;
+        if source.len() < required_source_len {
+            source_buffer.Unlock()?;
+            return Err(anyhow::anyhow!(
+                "Camera source frame is shorter than expected: {} < {}",
+                source.len(),
+                required_source_len
+            ));
+        }
+
+        let dest_buffer = MFCreateMemoryBuffer(nv12_len as u32)?;
+        let mut dest_ptr = ptr::null_mut();
+        let mut dest_max_len = 0u32;
+        let mut dest_current_len = 0u32;
+        dest_buffer.Lock(
+            &mut dest_ptr,
+            Some(&mut dest_max_len),
+            Some(&mut dest_current_len),
+        )?;
+        let dest = std::slice::from_raw_parts_mut(dest_ptr, nv12_len);
+        packed_yuv_to_nv12(source, dest, width, height, config.format);
+        dest_buffer.Unlock()?;
+        dest_buffer.SetCurrentLength(nv12_len as u32)?;
+        source_buffer.Unlock()?;
+
+        let converted = MFCreateSample()?;
+        converted.AddBuffer(&dest_buffer)?;
+        Ok(converted)
+    }
+}
+
+fn packed_yuv_to_nv12(
+    source: &[u8],
+    dest: &mut [u8],
+    width: usize,
+    height: usize,
+    format: SourceFormat,
+) {
+    let source_stride = width * 2;
+    let (y_plane, uv_plane) = dest.split_at_mut(width * height);
+
+    for row in 0..height {
+        let source_row = &source[row * source_stride..(row + 1) * source_stride];
+        let y_row = &mut y_plane[row * width..(row + 1) * width];
+        for x in (0..width).step_by(2) {
+            let pair = &source_row[x * 2..];
+            match format {
+                SourceFormat::Uyvy => {
+                    y_row[x] = pair[1];
+                    if x + 1 < width {
+                        y_row[x + 1] = pair[3];
+                    }
+                }
+                SourceFormat::Yuy2 => {
+                    y_row[x] = pair[0];
+                    if x + 1 < width {
+                        y_row[x + 1] = pair[2];
+                    }
+                }
+                SourceFormat::Nv12 => {
+                    unreachable!("NV12 samples do not need packed-YUV conversion")
+                }
+            }
+        }
+    }
+
+    for row in (0..height).step_by(2) {
+        let next_row = (row + 1).min(height - 1);
+        let uv_row = (row / 2) * width;
+        for x in (0..width).step_by(2) {
+            let (u0, v0) = packed_yuv_chroma(source, width, row, x, format);
+            let (u1, v1) = packed_yuv_chroma(source, width, next_row, x, format);
+            uv_plane[uv_row + x] = ((u0 as u16 + u1 as u16) / 2) as u8;
+            if x + 1 < width {
+                uv_plane[uv_row + x + 1] = ((v0 as u16 + v1 as u16) / 2) as u8;
+            }
+        }
+    }
+}
+
+fn packed_yuv_chroma(
+    source: &[u8],
+    width: usize,
+    row: usize,
+    x: usize,
+    format: SourceFormat,
+) -> (u8, u8) {
+    let source_stride = width * 2;
+    let pair_offset = row * source_stride + x * 2;
+    match format {
+        SourceFormat::Uyvy => (source[pair_offset], source[pair_offset + 2]),
+        SourceFormat::Yuy2 => (source[pair_offset + 1], source[pair_offset + 3]),
+        SourceFormat::Nv12 => unreachable!("NV12 samples do not need packed-YUV conversion"),
     }
 }
 
@@ -524,6 +812,7 @@ fn subtype_to_format(subtype: Option<GUID>) -> (Option<String>, Option<String>) 
     match subtype {
         Some(value) if value == MFVideoFormat_MJPG => (Some("mjpeg".to_string()), None),
         Some(value) if value == MFVideoFormat_NV12 => (None, Some("nv12".to_string())),
+        Some(value) if value == MFVideoFormat_UYVY => (None, Some("uyvy422".to_string())),
         Some(value) if value == MFVideoFormat_YUY2 => (None, Some("yuy2".to_string())),
         Some(value) if value == MFVideoFormat_RGB32 => (None, Some("rgb32".to_string())),
         _ => (None, None),
@@ -547,4 +836,35 @@ fn parse_fps_score(fps: &str) -> Option<u32> {
         return Some((numerator / denominator * 1000.0).round() as u32);
     }
     Some((fps.parse::<f64>().ok()? * 1000.0).round() as u32)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn converts_uyvy_to_nv12() {
+        let source = vec![
+            10, 1, 20, 2, //
+            30, 3, 50, 4,
+        ];
+        let mut dest = vec![0; 6];
+
+        packed_yuv_to_nv12(&source, &mut dest, 2, 2, SourceFormat::Uyvy);
+
+        assert_eq!(dest, vec![1, 2, 3, 4, 20, 35]);
+    }
+
+    #[test]
+    fn converts_yuy2_to_nv12() {
+        let source = vec![
+            1, 10, 2, 20, //
+            3, 30, 4, 50,
+        ];
+        let mut dest = vec![0; 6];
+
+        packed_yuv_to_nv12(&source, &mut dest, 2, 2, SourceFormat::Yuy2);
+
+        assert_eq!(dest, vec![1, 2, 3, 4, 20, 35]);
+    }
 }
