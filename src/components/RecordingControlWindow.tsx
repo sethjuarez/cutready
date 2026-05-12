@@ -2,11 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { emit, listen } from "@tauri-apps/api/event";
 import { getCurrentWindow, LogicalSize, type PhysicalPosition } from "@tauri-apps/api/window";
-import { Eye, Keyboard, Mic, Monitor, Square, Video, Volume2, X } from "lucide-react";
+import { Eye, FileText, Keyboard, Mic, Monitor, Square, Video, Volume2, X } from "lucide-react";
 import { useRecordingDevices } from "../hooks/useRecordingDevices";
 import { useSettings } from "../hooks/useSettings";
 import type { ProjectView } from "../types/project";
-import type { CameraFormatInfo, CaptureArea, RecorderSettings, RecordingDeviceInfo, RecordingScope, RecordingTake } from "../types/recording";
+import type { CameraFormatInfo, CaptureArea, PrompterScript, RecorderSettings, RecordingDeviceInfo, RecordingPlatformCapabilities, RecordingScope, RecordingTake } from "../types/recording";
 
 interface RecordingControlParams {
   take_id?: string | null;
@@ -40,8 +40,19 @@ type SourcePreview =
   | { kind: "camera"; title: string; stream: MediaStream };
 
 const WAVE_BARS = [0.24, 0.5, 0.34, 0.72, 0.42, 0.88, 0.48, 0.65, 0.3, 0.58, 0.38, 0.76];
-const SETUP_SIZE = new LogicalSize(890, 230);
+const SETUP_SIZE = new LogicalSize(890, 260);
 const HUD_SIZE = new LogicalSize(420, 220);
+
+function defaultPlatformCapabilities(): RecordingPlatformCapabilities {
+  return {
+    platform: "unknown",
+    supports_system_audio: false,
+    supports_native_monitor_capture: false,
+    supports_window_capture_exclusion: false,
+    supports_click_through_prompter: true,
+    supports_camera_format_discovery: false,
+  };
+}
 
 export function RecordingControlWindow() {
   const [params, setParams] = useState<RecordingControlParams | null>(null);
@@ -61,6 +72,10 @@ export function RecordingControlWindow() {
   const [projectRoot, setProjectRoot] = useState("");
   const [cameraFormatsById, setCameraFormatsById] = useState<Record<string, CameraFormatInfo[]>>({});
   const [cameraFormatsLoading, setCameraFormatsLoading] = useState(false);
+  const [prompterEnabled, setPrompterEnabled] = useState(true);
+  const [prompterScript, setPrompterScript] = useState<PrompterScript | null>(null);
+  const [prompterLoading, setPrompterLoading] = useState(false);
+  const [platformCapabilities, setPlatformCapabilities] = useState<RecordingPlatformCapabilities>(() => defaultPlatformCapabilities());
   const [sourcePreview, setSourcePreview] = useState<SourcePreview | null>(null);
   const [audioLevel, setAudioLevel] = useState<RecordingAudioLevel>({
     available: false,
@@ -81,8 +96,10 @@ export function RecordingControlWindow() {
   const selectedCameraFormat = bestCameraFormat(selectedCameraFormats);
   const scope = params?.scope ?? null;
   const documentTitle = params?.document_title ?? "CutReady";
+  const prompterAvailable = (prompterScript?.steps.length ?? 0) > 0;
   const canStart = !!scope && !!selectedMonitor && phase === "setup";
-  const isWindows = navigator.userAgent.includes("Windows");
+  const supportsSystemAudio = platformCapabilities.supports_system_audio;
+  const supportsPrompterClickThrough = platformCapabilities.supports_click_through_prompter;
 
   const clearCountdownTimer = useCallback(() => {
     if (countdownTimerRef.current !== null) {
@@ -91,12 +108,18 @@ export function RecordingControlWindow() {
     }
   }, []);
 
+  const closePrompter = useCallback(async () => {
+    await emit("recording-prompter-close", {}).catch(() => undefined);
+    await invoke("close_recording_prompter_window").catch(() => undefined);
+  }, []);
+
   const stopRecording = useCallback(async () => {
     if (phase === "stopping" || phase === "discarding") return;
     setPhase("stopping");
     setError(null);
     clearCountdownTimer();
     await invoke("close_recording_countdown_window").catch(() => undefined);
+    await closePrompter();
     try {
       const take = await invoke<RecordingTake>("stop_recording_take");
       setRecordingTake(take);
@@ -109,7 +132,7 @@ export function RecordingControlWindow() {
       setError(message);
       setPhase("recording");
     }
-  }, [clearCountdownTimer, phase]);
+  }, [clearCountdownTimer, closePrompter, phase]);
 
   const discardRecording = useCallback(async (confirmFirst = true) => {
     if (phase === "stopping" || phase === "discarding") return;
@@ -118,6 +141,7 @@ export function RecordingControlWindow() {
     setError(null);
     clearCountdownTimer();
     await invoke("close_recording_countdown_window").catch(() => undefined);
+    await closePrompter();
     try {
       const take = await invoke<RecordingTake>("discard_recording_take");
       setRecordingTake(take);
@@ -129,7 +153,7 @@ export function RecordingControlWindow() {
       setError(err instanceof Error ? err.message : String(err));
       setPhase("recording");
     }
-  }, [clearCountdownTimer, phase]);
+  }, [clearCountdownTimer, closePrompter, phase]);
 
   const requestClose = useCallback(async () => {
     if (phase === "recording") {
@@ -140,10 +164,11 @@ export function RecordingControlWindow() {
       clearCountdownTimer();
       await invoke("close_recording_countdown_window").catch(() => undefined);
     }
+    await closePrompter();
     if (phase !== "stopping" && phase !== "discarding") {
       await invoke("close_recording_control_window");
     }
-  }, [clearCountdownTimer, discardRecording, phase]);
+  }, [clearCountdownTimer, closePrompter, discardRecording, phase]);
 
   const stopSourcePreview = useCallback(async () => {
     let stoppedCameraPreview = false;
@@ -158,6 +183,19 @@ export function RecordingControlWindow() {
       await new Promise((resolve) => window.setTimeout(resolve, 750));
     }
   }, []);
+
+  const openPrompter = useCallback(async (readMode: boolean) => {
+    if (!scope || !selectedMonitor) return;
+    await invoke("open_recording_prompter_window", {
+      scope,
+      documentTitle,
+      physX: selectedMonitor.x,
+      physY: selectedMonitor.y,
+      physW: selectedMonitor.width,
+      physH: selectedMonitor.height,
+      readMode,
+    });
+  }, [documentTitle, scope, selectedMonitor]);
 
   const startTake = useCallback(async () => {
     if (!scope || !selectedMonitor) return;
@@ -175,7 +213,7 @@ export function RecordingControlWindow() {
       countdown_seconds: countdownSeconds,
       frame_rate: frameRate,
       include_cursor: includeCursor,
-      include_system_audio: includeSystemAudio && isWindows,
+      include_system_audio: includeSystemAudio && supportsSystemAudio,
       mic_volume: micVolume,
       system_audio_volume: systemAudioVolume,
       output_quality: settings.recorderOutputQuality,
@@ -189,7 +227,7 @@ export function RecordingControlWindow() {
         updateSetting("recorderCameraDeviceId", cameraDeviceId),
         updateSetting("recorderCameraEnabled", !!cameraDeviceId),
         updateSetting("recorderMonitorPreference", monitorPreference(selectedMonitor)),
-        updateSetting("recorderSystemAudioEnabled", includeSystemAudio && isWindows),
+        updateSetting("recorderSystemAudioEnabled", includeSystemAudio && supportsSystemAudio),
         updateSetting("recorderSystemAudioVolume", systemAudioVolume),
         updateSetting("recorderFrameRate", frameRate),
         updateSetting("recorderCountdownSeconds", countdownSeconds),
@@ -202,6 +240,9 @@ export function RecordingControlWindow() {
       setRecordingTake(take);
       setPhase("recording");
       await currentWindow.setSize(HUD_SIZE).catch(() => undefined);
+      if (prompterEnabled && prompterAvailable && supportsPrompterClickThrough) {
+        await emit("recording-prompter-read", {}).catch(() => undefined);
+      }
       await emit("recording-control-started", take).catch((err) => {
         console.warn("Failed to notify main window that recording started:", err);
       });
@@ -216,22 +257,35 @@ export function RecordingControlWindow() {
     frameRate,
     includeCursor,
     includeSystemAudio,
-    isWindows,
     micDeviceId,
     micVolume,
     monitors,
+    prompterAvailable,
+    prompterEnabled,
     scope,
     selectedCameraFormat,
     selectedMonitor,
     settings.recorderOutputQuality,
     stopSourcePreview,
     systemAudioVolume,
+    supportsPrompterClickThrough,
+    supportsSystemAudio,
     updateSetting,
   ]);
 
   const startRecording = useCallback(async () => {
     if (!selectedMonitor || !canStart) return;
     await stopSourcePreview();
+    if (prompterEnabled && prompterAvailable) {
+      try {
+        await openPrompter(supportsPrompterClickThrough);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+        return;
+      }
+    } else {
+      await closePrompter();
+    }
     if (countdownSeconds <= 0) {
       await startTake();
       return;
@@ -258,7 +312,7 @@ export function RecordingControlWindow() {
       setError(err instanceof Error ? err.message : String(err));
       setPhase("setup");
     }
-  }, [canStart, clearCountdownTimer, countdownSeconds, documentTitle, selectedMonitor, startTake, stopSourcePreview]);
+  }, [canStart, clearCountdownTimer, closePrompter, countdownSeconds, documentTitle, openPrompter, prompterAvailable, prompterEnabled, selectedMonitor, startTake, stopSourcePreview, supportsPrompterClickThrough]);
 
   const previewScreen = useCallback(async () => {
     if (!selectedMonitor) return;
@@ -301,6 +355,16 @@ export function RecordingControlWindow() {
     }
   }, [selectedCamera, selectedCameraFormats, stopSourcePreview]);
 
+  const previewPrompter = useCallback(async () => {
+    if (!prompterAvailable) return;
+    setError(null);
+    try {
+      await openPrompter(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }, [openPrompter, prompterAvailable]);
+
   useEffect(() => {
     void currentWindow.setSize(phase === "setup" || phase === "countdown" || phase === "starting" ? SETUP_SIZE : HUD_SIZE).catch(() => undefined);
   }, [currentWindow, phase]);
@@ -309,6 +373,22 @@ export function RecordingControlWindow() {
     invoke<ProjectView | null>("get_current_project")
       .then((project) => setProjectRoot(project?.root ?? ""))
       .catch(() => setProjectRoot(""));
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    invoke<RecordingPlatformCapabilities>("get_recording_platform_capabilities")
+      .then((capabilities) => {
+        if (!cancelled && isRecordingPlatformCapabilities(capabilities)) {
+          setPlatformCapabilities(capabilities);
+        }
+      })
+      .catch((err) => {
+        console.warn("Failed to load recording platform capabilities:", err);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -325,6 +405,35 @@ export function RecordingControlWindow() {
       }
     })();
   }, []);
+
+  useEffect(() => {
+    if (!scope) {
+      setPrompterScript(null);
+      return;
+    }
+    let cancelled = false;
+    setPrompterLoading(true);
+    invoke<PrompterScript>("get_recording_prompter_script", { scope })
+      .then((script) => {
+        if (cancelled) return;
+        const steps = Array.isArray(script?.steps) ? script.steps : [];
+        const safeScript = { title: script?.title ?? documentTitle, steps };
+        setPrompterScript(safeScript);
+        setPrompterEnabled(steps.length > 0);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        console.warn("Failed to load prompter script:", err);
+        setPrompterScript(null);
+        setPrompterEnabled(false);
+      })
+      .finally(() => {
+        if (!cancelled) setPrompterLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [documentTitle, scope]);
 
   useEffect(() => {
     if (!loaded || settingsHydratedRef.current) return;
@@ -348,7 +457,7 @@ export function RecordingControlWindow() {
         updateSetting("recorderCameraDeviceId", cameraDeviceId),
         updateSetting("recorderCameraEnabled", !!cameraDeviceId),
         updateSetting("recorderMonitorPreference", monitorPreference(selectedMonitor)),
-        updateSetting("recorderSystemAudioEnabled", includeSystemAudio && isWindows),
+        updateSetting("recorderSystemAudioEnabled", includeSystemAudio && supportsSystemAudio),
         updateSetting("recorderSystemAudioVolume", systemAudioVolume),
         updateSetting("recorderFrameRate", frameRate),
         updateSetting("recorderCountdownSeconds", countdownSeconds),
@@ -362,12 +471,12 @@ export function RecordingControlWindow() {
     cameraDeviceId,
     includeCursor,
     includeSystemAudio,
-    isWindows,
     loaded,
     micDeviceId,
     micVolume,
     selectedMonitor,
     systemAudioVolume,
+    supportsSystemAudio,
     updateSetting,
   ]);
 
@@ -567,7 +676,7 @@ export function RecordingControlWindow() {
       {sourcePreview && <SourcePreviewPanel preview={sourcePreview} onClose={() => void stopSourcePreview()} />}
 
       <div className="grid flex-1 grid-cols-[1fr_74px] gap-1.5 px-2 pb-0.5">
-        <div className="grid min-h-0 grid-cols-2 grid-rows-2 gap-1.5">
+        <div className="grid min-h-0 grid-cols-2 grid-rows-[1fr_1fr_auto] gap-1.5">
           <SourceTile
             icon={<Monitor className="h-4 w-4" />}
             label="Screen"
@@ -650,22 +759,43 @@ export function RecordingControlWindow() {
           <SourceTile
             icon={<Volume2 className="h-4 w-4" />}
             label="System Audio"
-            enabled={includeSystemAudio && isWindows}
-            disabled={!isWindows}
+            enabled={includeSystemAudio && supportsSystemAudio}
+            disabled={!supportsSystemAudio}
             onEnabledChange={setIncludeSystemAudio}
             control={
               <span className="block truncate text-[11px] font-medium text-[rgb(var(--color-text))]">
-                {isWindows ? "System Audio" : "Windows-only"}
+                {supportsSystemAudio ? "System Audio" : "Unavailable on this platform"}
               </span>
             }
           >
             <AudioVolumeControl
               label="System audio volume"
-              active={includeSystemAudio && isWindows}
+              active={includeSystemAudio && supportsSystemAudio}
               value={systemAudioVolume}
               onChange={setSystemAudioVolume}
             />
           </SourceTile>
+
+          <SourceTile
+            className="col-span-2"
+            icon={<FileText className="h-4 w-4" />}
+            label="Prompter"
+            enabled={prompterEnabled && prompterAvailable}
+            disabled={!prompterAvailable}
+            onEnabledChange={setPrompterEnabled}
+            onPreview={previewPrompter}
+            previewDisabled={!prompterAvailable || prompterLoading || !selectedMonitor}
+            previewTitle={prompterLoading ? "Loading script..." : "Preview Prompter"}
+            control={
+              <span className="block truncate text-[11px] font-medium text-[rgb(var(--color-text))]">
+                {prompterLoading
+                  ? "Loading script..."
+                  : prompterAvailable
+                    ? `${prompterScript?.steps.length ?? 0} manual steps`
+                    : "No narrative rows"}
+              </span>
+            }
+          />
         </div>
 
         <div className="flex flex-col items-center justify-center gap-1 rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]">
@@ -794,6 +924,7 @@ function RecorderHeader({
 }
 
 function SourceTile({
+  className,
   icon,
   label,
   enabled,
@@ -805,6 +936,7 @@ function SourceTile({
   previewDisabled,
   previewTitle,
 }: {
+  className?: string;
   icon: React.ReactNode;
   label: string;
   enabled: boolean;
@@ -820,6 +952,7 @@ function SourceTile({
     <section
       className={[
         "flex min-h-0 flex-col gap-0.5",
+        className ?? "",
         disabled ? "opacity-60" : "",
       ].join(" ")}
     >
@@ -997,6 +1130,21 @@ function AudioWaveMeter({ level, enabled }: { level: RecordingAudioLevel; enable
       </div>
     </div>
   );
+}
+
+function isRecordingPlatformCapabilities(value: unknown): value is RecordingPlatformCapabilities {
+  if (!value || typeof value !== "object") return false;
+  const maybe = value as Partial<RecordingPlatformCapabilities>;
+  return isKnownRecordingPlatform(maybe.platform)
+    && typeof maybe.supports_system_audio === "boolean"
+    && typeof maybe.supports_native_monitor_capture === "boolean"
+    && typeof maybe.supports_window_capture_exclusion === "boolean"
+    && typeof maybe.supports_click_through_prompter === "boolean"
+    && typeof maybe.supports_camera_format_discovery === "boolean";
+}
+
+function isKnownRecordingPlatform(value: unknown): value is RecordingPlatformCapabilities["platform"] {
+  return value === "windows" || value === "macos" || value === "linux" || value === "unknown";
 }
 
 function monitorToCaptureArea(monitor: MonitorInfo, displayIndex: number): CaptureArea {

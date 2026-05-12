@@ -68,6 +68,20 @@ export type RecordingScope =
   | { kind: "sketch"; path: string }
   | { kind: "storyboard"; path: string };
 
+export interface PrompterStep {
+  title: string;
+  section: string | null;
+  narrative: string;
+  cue: string | null;
+  source_path: string;
+  row_index: number;
+}
+
+export interface PrompterScript {
+  title: string;
+  steps: PrompterStep[];
+}
+
 export type CaptureSource = "full_screen" | "region" | "window";
 
 export type OutputQuality = "lossless" | "high" | "compact";
@@ -109,6 +123,15 @@ export interface FfmpegStatus {
   version: string | null;
   path: string | null;
   error: string | null;
+}
+
+export interface RecordingPlatformCapabilities {
+  platform: "windows" | "macos" | "linux" | "unknown";
+  supports_system_audio: boolean;
+  supports_native_monitor_capture: boolean;
+  supports_window_capture_exclusion: boolean;
+  supports_click_through_prompter: boolean;
+  supports_camera_format_discovery: boolean;
 }
 
 export type RecordingDeviceKind = "microphone" | "camera" | "system_audio";

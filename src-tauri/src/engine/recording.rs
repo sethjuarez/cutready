@@ -13,6 +13,7 @@ use std::time::{Duration, Instant};
 use uuid::Uuid;
 
 use crate::engine::project;
+use crate::models::sketch::{PlanningRow, Sketch, StoryboardItem};
 
 const RECORDINGS_DIR: &str = ".cutready/recordings";
 const RECORDINGS_GITIGNORE: &str = "*\n!.gitignore\n";
@@ -485,11 +486,142 @@ fn quoted_value(line: &str) -> Option<String> {
     Some(rest[..end].to_string())
 }
 
+pub fn build_prompter_script(
+    project_root: &Path,
+    scope: &RecordingScope,
+) -> anyhow::Result<PrompterScript> {
+    match scope {
+        RecordingScope::Sketch { path } => {
+            let script = prompter_script_for_sketch_path(project_root, path, None)?;
+            Ok(PrompterScript {
+                title: script.title.clone(),
+                steps: script.steps,
+            })
+        }
+        RecordingScope::Storyboard { path } => {
+            let storyboard_path = project::safe_resolve(project_root, path)?;
+            let storyboard = project::read_storyboard(&storyboard_path)?;
+            let mut steps = Vec::new();
+            for item in &storyboard.items {
+                match item {
+                    StoryboardItem::SketchRef { path } => {
+                        steps.extend(
+                            prompter_script_for_sketch_path(project_root, path, None)?.steps,
+                        );
+                    }
+                    StoryboardItem::Section { title, sketches } => {
+                        for sketch_path in sketches {
+                            steps.extend(
+                                prompter_script_for_sketch_path(
+                                    project_root,
+                                    sketch_path,
+                                    Some(title.clone()),
+                                )?
+                                .steps,
+                            );
+                        }
+                    }
+                }
+            }
+            Ok(PrompterScript {
+                title: storyboard.title,
+                steps,
+            })
+        }
+    }
+}
+
+fn prompter_script_for_sketch_path(
+    project_root: &Path,
+    path: &str,
+    section: Option<String>,
+) -> anyhow::Result<PrompterScript> {
+    let sketch_path = project::safe_resolve(project_root, path)?;
+    let sketch = project::read_sketch_with_migration(&sketch_path, project_root)?;
+    Ok(prompter_script_for_sketch(&sketch, path, section))
+}
+
+fn prompter_script_for_sketch(
+    sketch: &Sketch,
+    source_path: &str,
+    section: Option<String>,
+) -> PrompterScript {
+    let steps = sketch
+        .rows
+        .iter()
+        .enumerate()
+        .filter_map(|(index, row)| {
+            prompter_step_for_row(sketch, source_path, section.as_ref(), index, row)
+        })
+        .collect();
+
+    PrompterScript {
+        title: sketch.title.clone(),
+        steps,
+    }
+}
+
+fn prompter_step_for_row(
+    sketch: &Sketch,
+    source_path: &str,
+    section: Option<&String>,
+    row_index: usize,
+    row: &PlanningRow,
+) -> Option<PrompterStep> {
+    let narrative = normalize_prompter_text(&row.narrative);
+    let cue = normalize_prompter_text(&row.demo_actions);
+    if narrative.is_empty() && cue.is_empty() {
+        return None;
+    }
+    Some(PrompterStep {
+        title: sketch.title.clone(),
+        section: section.cloned(),
+        narrative: if narrative.is_empty() {
+            cue.clone()
+        } else {
+            narrative
+        },
+        cue: (!cue.is_empty()).then_some(cue),
+        source_path: source_path.to_string(),
+        row_index,
+    })
+}
+
+fn normalize_prompter_text(value: &str) -> String {
+    value
+        .lines()
+        .map(|line| {
+            line.trim()
+                .trim_start_matches(|c: char| c == '-' || c == '*' || c == '•')
+                .trim()
+                .to_string()
+        })
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum RecordingScope {
     Sketch { path: String },
     Storyboard { path: String },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct PrompterStep {
+    pub title: String,
+    pub section: Option<String>,
+    pub narrative: String,
+    pub cue: Option<String>,
+    pub source_path: String,
+    pub row_index: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct PrompterScript {
+    pub title: String,
+    pub steps: Vec<PrompterStep>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -1708,6 +1840,40 @@ mod tests {
             output_quality: OutputQuality::Lossless,
             capture_backend: CaptureBackend::Auto,
         }
+    }
+
+    #[test]
+    fn prompter_script_uses_narrative_and_action_cues() {
+        let mut sketch = Sketch::new("Intro");
+        sketch.rows.push(PlanningRow {
+            narrative: "- Say hello\n- Explain the goal".into(),
+            demo_actions: "* Open the app".into(),
+            ..PlanningRow::new()
+        });
+
+        let script = prompter_script_for_sketch(&sketch, "intro.sk", None);
+
+        assert_eq!(script.title, "Intro");
+        assert_eq!(script.steps.len(), 1);
+        assert_eq!(script.steps[0].narrative, "Say hello\nExplain the goal");
+        assert_eq!(script.steps[0].cue.as_deref(), Some("Open the app"));
+    }
+
+    #[test]
+    fn prompter_script_skips_empty_rows() {
+        let mut sketch = Sketch::new("Empty");
+        sketch.rows.push(PlanningRow::new());
+        sketch.rows.push(PlanningRow {
+            narrative: String::new(),
+            demo_actions: "Click Save".into(),
+            ..PlanningRow::new()
+        });
+
+        let script = prompter_script_for_sketch(&sketch, "empty.sk", Some("Section".into()));
+
+        assert_eq!(script.steps.len(), 1);
+        assert_eq!(script.steps[0].narrative, "Click Save");
+        assert_eq!(script.steps[0].section.as_deref(), Some("Section"));
     }
 
     #[test]

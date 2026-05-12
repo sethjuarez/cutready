@@ -412,6 +412,57 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
     case "close_recording_countdown_window":
     case "get_recording_countdown_params":
       return null;
+    case "get_recording_prompter_script":
+      return {
+        title: "Dev Mock Recording",
+        steps: [
+          {
+            title: "Intro",
+            section: null,
+            narrative: "Show how the recorder follows a sketch while you click through the demo.",
+            cue: "Open the app and point out the recorder controls.",
+            source_path: "dev.sk",
+            row_index: 0,
+          },
+          {
+            title: "Intro",
+            section: null,
+            narrative: "Move to the next step with a hotkey or Stream Deck button.",
+            cue: "Press Ctrl+Alt+Right.",
+            source_path: "dev.sk",
+            row_index: 1,
+          },
+        ],
+      };
+    case "get_recording_prompter_params":
+      return {
+        document_title: "Dev Mock Recording",
+        read_mode: false,
+        script: {
+          title: "Dev Mock Recording",
+          steps: [
+            {
+              title: "Intro",
+              section: null,
+              narrative: "Show how the recorder follows a sketch while you click through the demo.",
+              cue: "Open the app and point out the recorder controls.",
+              source_path: "dev.sk",
+              row_index: 0,
+            },
+            {
+              title: "Intro",
+              section: null,
+              narrative: "Move to the next step with a hotkey or Stream Deck button.",
+              cue: "Press Ctrl+Alt+Right.",
+              source_path: "dev.sk",
+              row_index: 1,
+            },
+          ],
+        },
+      };
+    case "open_recording_prompter_window":
+    case "close_recording_prompter_window":
+      return null;
     case "open_recording_control_window":
     case "open_recorder_window":
     case "close_recording_control_window":
@@ -450,6 +501,15 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
             camera_formats: [{ width: 3840, height: 2160, fps: "30", codec: "mjpeg", pixel_format: null }],
           },
         ],
+      };
+    case "get_recording_platform_capabilities":
+      return {
+        platform: "windows",
+        supports_system_audio: true,
+        supports_native_monitor_capture: true,
+        supports_window_capture_exclusion: true,
+        supports_click_through_prompter: true,
+        supports_camera_format_discovery: true,
       };
     case "discover_camera_formats":
       return [{ width: 3840, height: 2160, fps: "30", codec: "mjpeg", pixel_format: null }];

@@ -161,8 +161,15 @@ impl NativeWindowsRecording {
             ) {
                 Ok(recording) => audio_recordings.push(recording),
                 Err(err) => {
-                    let _ = control.stop();
-                    return Err(err);
+                    append_log(
+                        log_path,
+                        &format!(
+                            "native_windows_audio mic unavailable; continuing without microphone: {err}"
+                        ),
+                    )?;
+                    log::warn!(
+                        "[recording] native microphone capture unavailable; continuing without microphone: {err}"
+                    );
                 }
             }
         }
@@ -174,8 +181,15 @@ impl NativeWindowsRecording {
             ) {
                 Ok(recording) => audio_recordings.push(recording),
                 Err(err) => {
-                    let _ = control.stop();
-                    return Err(err);
+                    append_log(
+                        log_path,
+                        &format!(
+                            "native_windows_audio system_audio unavailable; continuing without system audio: {err}"
+                        ),
+                    )?;
+                    log::warn!(
+                        "[recording] native system audio capture unavailable; continuing without system audio: {err}"
+                    );
                 }
             }
         }

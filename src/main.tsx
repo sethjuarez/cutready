@@ -70,6 +70,7 @@ declare global {
     __IS_CAPTURE?: boolean;
     __IS_RECORDING_COUNTDOWN?: boolean;
     __IS_RECORDING_CONTROL?: boolean;
+    __IS_RECORDING_PROMPTER?: boolean;
     __IS_PREVIEW?: boolean;
   }
 }
@@ -77,8 +78,31 @@ declare global {
 const isCaptureMode = !!window.__IS_CAPTURE;
 const isRecordingCountdownMode = !!window.__IS_RECORDING_COUNTDOWN;
 const isRecordingControlMode = !!window.__IS_RECORDING_CONTROL;
+const isRecordingPrompterMode = !!window.__IS_RECORDING_PROMPTER;
 const isPreviewMode = !!window.__IS_PREVIEW;
-console.log(`[main.tsx] isCaptureMode=${isCaptureMode} isRecordingCountdownMode=${isRecordingCountdownMode} isRecordingControlMode=${isRecordingControlMode} isPreviewMode=${isPreviewMode} href=${window.location.href}`);
+console.log(`[main.tsx] isCaptureMode=${isCaptureMode} isRecordingCountdownMode=${isRecordingCountdownMode} isRecordingControlMode=${isRecordingControlMode} isRecordingPrompterMode=${isRecordingPrompterMode} isPreviewMode=${isPreviewMode} href=${window.location.href}`);
+
+function renderStartupFailure(err: unknown) {
+  const message = err instanceof Error ? err.message : String(err);
+  const stack = err instanceof Error ? err.stack : null;
+  console.error("[startup] failed to render CutReady", err);
+  document.documentElement.dataset.themeReady = "true";
+  const root = document.getElementById("root");
+  if (!root) return;
+  ReactDOM.createRoot(root).render(
+    <div className="flex min-h-screen items-center justify-center p-6" style={{ background: "#2b2926", color: "#f4f0ea" }}>
+      <div className="max-w-xl rounded-2xl border p-5 shadow-2xl" style={{ background: "#353230", borderColor: "#4b4641" }}>
+        <div className="mb-2 text-sm font-semibold">CutReady could not finish starting</div>
+        <p className="text-sm leading-relaxed" style={{ color: "#c8c0b8" }}>
+          A startup error was caught before the app UI could render. This prevents a blank window and should be reported with the app logs.
+        </p>
+        <pre className="mt-4 max-h-56 overflow-auto rounded-xl p-3 text-xs leading-relaxed" style={{ background: "#252320", color: "#d8d0c8" }}>
+          {stack ?? message}
+        </pre>
+      </div>
+    </div>,
+  );
+}
 
 async function renderApp() {
   if (isCaptureMode) {
@@ -100,6 +124,14 @@ async function renderApp() {
     ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
       <RecordingControlWindow />,
     );
+  } else if (isRecordingPrompterMode) {
+    document.documentElement.dataset.themeReady = "true";
+    document.documentElement.classList.add("recording-prompter-root");
+    document.body.classList.add("recording-prompter-root");
+    const { RecordingPrompterWindow } = await import("./components/RecordingPrompterWindow");
+    ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
+      <RecordingPrompterWindow />,
+    );
   } else if (isPreviewMode) {
     const { StandalonePreview } = await import("./components/StandalonePreview");
     ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
@@ -115,4 +147,4 @@ async function renderApp() {
   }
 }
 
-renderApp();
+renderApp().catch(renderStartupFailure);

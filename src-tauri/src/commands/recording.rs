@@ -20,6 +20,16 @@ pub struct RecordingAudioLevel {
     pub bytes: u64,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct RecordingPlatformCapabilities {
+    pub platform: &'static str,
+    pub supports_system_audio: bool,
+    pub supports_native_monitor_capture: bool,
+    pub supports_window_capture_exclusion: bool,
+    pub supports_click_through_prompter: bool,
+    pub supports_camera_format_discovery: bool,
+}
+
 fn project_root(state: &AppState) -> Result<std::path::PathBuf, String> {
     let current = state.current_project.lock().map_err(|e| e.to_string())?;
     current
@@ -54,10 +64,25 @@ pub async fn discover_recording_devices() -> Result<recording::RecordingDeviceDi
 }
 
 #[tauri::command]
+pub async fn get_recording_platform_capabilities() -> Result<RecordingPlatformCapabilities, String>
+{
+    Ok(recording_platform_capabilities())
+}
+
+#[tauri::command]
 pub async fn discover_camera_formats(
     camera_device_id: String,
 ) -> Result<Vec<recording::CameraFormatInfo>, String> {
     recording::discover_camera_formats(&camera_device_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn get_recording_prompter_script(
+    scope: recording::RecordingScope,
+    state: State<'_, AppState>,
+) -> Result<recording::PrompterScript, String> {
+    let root = project_root(&state)?;
+    recording::build_prompter_script(&root, &scope).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -222,6 +247,29 @@ fn read_recent_wav_level(path: &Path) -> std::io::Result<RecordingAudioLevel> {
     })
 }
 
+fn recording_platform_capabilities() -> RecordingPlatformCapabilities {
+    RecordingPlatformCapabilities {
+        platform: current_platform(),
+        supports_system_audio: cfg!(target_os = "windows"),
+        supports_native_monitor_capture: cfg!(target_os = "windows"),
+        supports_window_capture_exclusion: cfg!(target_os = "windows"),
+        supports_click_through_prompter: cfg!(target_os = "windows"),
+        supports_camera_format_discovery: cfg!(target_os = "windows"),
+    }
+}
+
+fn current_platform() -> &'static str {
+    if cfg!(target_os = "windows") {
+        "windows"
+    } else if cfg!(target_os = "macos") {
+        "macos"
+    } else if cfg!(target_os = "linux") {
+        "linux"
+    } else {
+        "unknown"
+    }
+}
+
 fn open_folder_path(take_dir: &Path) -> Result<(), String> {
     if !take_dir.is_dir() {
         return Err(format!(
@@ -282,6 +330,33 @@ fn windows_shell_path(path: &Path) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn platform_capabilities_are_consistent_with_current_os() {
+        let capabilities = super::recording_platform_capabilities();
+
+        #[cfg(target_os = "windows")]
+        {
+            assert_eq!(capabilities.platform, "windows");
+            assert!(capabilities.supports_system_audio);
+            assert!(capabilities.supports_native_monitor_capture);
+            assert!(capabilities.supports_window_capture_exclusion);
+            assert!(capabilities.supports_camera_format_discovery);
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            assert!(!capabilities.supports_system_audio);
+            assert!(!capabilities.supports_native_monitor_capture);
+            assert!(!capabilities.supports_window_capture_exclusion);
+            assert!(!capabilities.supports_camera_format_discovery);
+        }
+
+        assert_eq!(
+            capabilities.supports_click_through_prompter,
+            cfg!(target_os = "windows")
+        );
+    }
+
     #[cfg(target_os = "windows")]
     #[test]
     fn windows_shell_path_strips_verbatim_drive_prefix_for_explorer() {

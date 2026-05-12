@@ -80,6 +80,9 @@ pub fn run() {
         .manage(commands::screenshot::RecordingControlState(Mutex::new(
             None,
         )))
+        .manage(commands::screenshot::RecordingPrompterState(Mutex::new(
+            None,
+        )))
         .manage(commands::recording::RecordingCaptureState(
             tokio::sync::Mutex::new(None),
         ))
@@ -198,6 +201,36 @@ pub fn run() {
                     }
                 })?;
 
+            let prompter_shortcuts = [
+                (
+                    Shortcut::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::ArrowRight),
+                    "recording-prompter-next",
+                ),
+                (
+                    Shortcut::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::ArrowLeft),
+                    "recording-prompter-previous",
+                ),
+                (
+                    Shortcut::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::KeyH),
+                    "recording-prompter-toggle-visibility",
+                ),
+                (
+                    Shortcut::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::KeyT),
+                    "recording-prompter-toggle-mode",
+                ),
+            ];
+
+            for (shortcut, event_name) in prompter_shortcuts {
+                app.global_shortcut().on_shortcut(
+                    shortcut,
+                    move |app_handle, _shortcut, event| {
+                        if event.state == ShortcutState::Pressed {
+                            let _ = app_handle.emit(event_name, ());
+                        }
+                    },
+                )?;
+            }
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -301,7 +334,9 @@ pub fn run() {
             commands::recording::clear_local_recordings,
             commands::recording::check_ffmpeg_status,
             commands::recording::discover_recording_devices,
+            commands::recording::get_recording_platform_capabilities,
             commands::recording::discover_camera_formats,
+            commands::recording::get_recording_prompter_script,
             commands::recording::create_recording_take,
             commands::recording::start_recording_take,
             commands::recording::stop_recording_take,
@@ -323,6 +358,9 @@ pub fn run() {
             commands::screenshot::open_recorder_window,
             commands::screenshot::open_recording_control_window,
             commands::screenshot::close_recording_control_window,
+            commands::screenshot::get_recording_prompter_params,
+            commands::screenshot::open_recording_prompter_window,
+            commands::screenshot::close_recording_prompter_window,
             commands::screenshot::save_recording_control_position,
             commands::screenshot::open_preview_window,
             commands::screenshot::close_preview_window,

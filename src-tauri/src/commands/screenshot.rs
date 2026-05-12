@@ -17,7 +17,7 @@ const RECORDING_CONTROL_POSITION_KEY: &str = "recording_control_position";
 const RECORDING_CONTROL_WIDTH: f64 = 420.0;
 const RECORDING_CONTROL_HEIGHT: f64 = 220.0;
 const RECORDER_SETUP_WIDTH: f64 = 890.0;
-const RECORDER_SETUP_HEIGHT: f64 = 230.0;
+const RECORDER_SETUP_HEIGHT: f64 = 260.0;
 
 /// Capture params shared between main window and capture window via managed state.
 #[derive(Default, Clone, Serialize, Deserialize)]
@@ -57,6 +57,24 @@ pub struct RecordingControlParams {
 }
 
 pub struct RecordingControlState(pub Mutex<Option<RecordingControlParams>>);
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct RecordingPrompterParams {
+    pub document_title: String,
+    pub script: recording::PrompterScript,
+    #[serde(default)]
+    pub read_mode: bool,
+    #[serde(default)]
+    pub monitor_x: i32,
+    #[serde(default)]
+    pub monitor_y: i32,
+    #[serde(default)]
+    pub monitor_w: u32,
+    #[serde(default)]
+    pub monitor_h: u32,
+}
+
+pub struct RecordingPrompterState(pub Mutex<Option<RecordingPrompterParams>>);
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct RecordingControlPosition {
@@ -193,7 +211,7 @@ pub async fn open_capture_window(
     if let Some(existing) = app.get_webview_window("capture") {
         eprintln!("[CAPTURE] destroying existing capture window");
         let _ = existing.destroy();
-        std::thread::sleep(std::time::Duration::from_millis(100));
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     }
 
     // Find matching Tauri monitor by physical position to get scale factor
@@ -284,7 +302,7 @@ pub async fn open_recording_countdown_window(
 
     if let Some(existing) = app.get_webview_window("recording-countdown") {
         let _ = existing.destroy();
-        std::thread::sleep(std::time::Duration::from_millis(100));
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     }
 
     let monitors = app.available_monitors().map_err(|e| e.to_string())?;
@@ -302,7 +320,7 @@ pub async fn open_recording_countdown_window(
     let logical_x = phys_x as f64 / scale;
     let logical_y = phys_y as f64 / scale;
 
-    let win = WebviewWindowBuilder::new(
+    let mut builder = WebviewWindowBuilder::new(
         &app,
         "recording-countdown",
         WebviewUrl::App("index.html".into()),
@@ -315,9 +333,12 @@ pub async fn open_recording_countdown_window(
     .always_on_top(true)
     .resizable(false)
     .focused(true)
-    .skip_taskbar(true)
-    .build()
-    .map_err(|e| e.to_string())?;
+    .skip_taskbar(true);
+    #[cfg(target_os = "windows")]
+    {
+        builder = builder.transparent(true);
+    }
+    let win = builder.build().map_err(|e| e.to_string())?;
     let _ = win.set_position(Position::Physical(PhysicalPosition {
         x: phys_x,
         y: phys_y,
@@ -359,7 +380,7 @@ pub async fn open_recording_control_window(
 
     if let Some(existing) = app.get_webview_window("recording-control") {
         let _ = existing.destroy();
-        std::thread::sleep(std::time::Duration::from_millis(100));
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     }
 
     let (logical_x, logical_y) = app
@@ -439,7 +460,7 @@ pub async fn open_recorder_window(
 
     if let Some(existing) = app.get_webview_window("recording-control") {
         let _ = existing.destroy();
-        std::thread::sleep(std::time::Duration::from_millis(100));
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     }
 
     let (logical_x, logical_y) = app
@@ -467,7 +488,7 @@ pub async fn open_recorder_window(
     .initialization_script("window.__IS_RECORDING_CONTROL = true;")
     .title("CutReady Recorder")
     .inner_size(RECORDER_SETUP_WIDTH, RECORDER_SETUP_HEIGHT)
-    .min_inner_size(870.0, 220.0)
+    .min_inner_size(870.0, 250.0)
     .position(logical_x, logical_y)
     .decorations(false)
     .always_on_top(true)
@@ -496,6 +517,122 @@ pub async fn open_recorder_window(
         }
     });
 
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn get_recording_prompter_params(
+    state: State<'_, RecordingPrompterState>,
+) -> Result<RecordingPrompterParams, String> {
+    state
+        .0
+        .lock()
+        .map_err(|e| e.to_string())?
+        .clone()
+        .ok_or_else(|| "No recording prompter params set".to_string())
+}
+
+#[tauri::command]
+pub async fn open_recording_prompter_window(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    scope: recording::RecordingScope,
+    document_title: String,
+    phys_x: i32,
+    phys_y: i32,
+    phys_w: u32,
+    phys_h: u32,
+    read_mode: bool,
+) -> Result<(), String> {
+    let root = project_root(&state)?;
+    let script = recording::build_prompter_script(&root, &scope).map_err(|e| e.to_string())?;
+    if script.steps.is_empty() {
+        return Err("No narrative or action text found for the prompter".to_string());
+    }
+
+    if let Some(existing) = app.get_webview_window("recording-prompter") {
+        let _ = existing.destroy();
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+
+    {
+        let prompter_state = app.state::<RecordingPrompterState>();
+        let mut params = prompter_state.0.lock().map_err(|e| e.to_string())?;
+        *params = Some(RecordingPrompterParams {
+            document_title,
+            script,
+            read_mode,
+            monitor_x: phys_x,
+            monitor_y: phys_y,
+            monitor_w: phys_w,
+            monitor_h: phys_h,
+        });
+    }
+
+    let monitors = app.available_monitors().map_err(|e| e.to_string())?;
+    let scale = monitors
+        .iter()
+        .find(|m| {
+            let pos = m.position();
+            (pos.x - phys_x).abs() < 100 && (pos.y - phys_y).abs() < 100
+        })
+        .map(|m| m.scale_factor())
+        .unwrap_or(1.0);
+
+    let monitor_w = phys_w as f64 / scale;
+    let monitor_h = phys_h as f64 / scale;
+    let logical_w = (monitor_w * 0.22).clamp(280.0, 380.0);
+    let logical_h = monitor_h;
+    let logical_x = phys_x as f64 / scale + monitor_w - logical_w;
+    let logical_y = phys_y as f64 / scale;
+
+    let mut builder = WebviewWindowBuilder::new(
+        &app,
+        "recording-prompter",
+        WebviewUrl::App("index.html".into()),
+    )
+    .initialization_script("window.__IS_RECORDING_PROMPTER = true;")
+    .title("CutReady Prompter")
+    .inner_size(logical_w, logical_h)
+    .min_inner_size(240.0, 280.0)
+    .position(logical_x, logical_y)
+    .decorations(false)
+    .always_on_top(true)
+    .resizable(true)
+    .focused(!read_mode)
+    .skip_taskbar(true);
+    #[cfg(target_os = "windows")]
+    {
+        builder = builder.transparent(true);
+    }
+    let win = builder.build().map_err(|e| e.to_string())?;
+    exclude_window_from_capture(&win);
+    if read_mode {
+        let _ = win.set_ignore_cursor_events(true);
+    }
+
+    let app_handle = app.clone();
+    win.on_window_event(move |event| {
+        if matches!(event, tauri::WindowEvent::Destroyed) {
+            let state = app_handle.state::<RecordingPrompterState>();
+            let lock_result = state.0.lock();
+            if let Ok(mut params) = lock_result {
+                *params = None;
+            }
+        }
+    });
+
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn close_recording_prompter_window(app: tauri::AppHandle) -> Result<(), String> {
+    if let Some(win) = app.get_webview_window("recording-prompter") {
+        win.destroy().map_err(|e| e.to_string())?;
+    }
+    if let Ok(mut params) = app.state::<RecordingPrompterState>().0.lock() {
+        *params = None;
+    }
     Ok(())
 }
 
@@ -556,7 +693,7 @@ pub async fn open_preview_window(
     if let Some(existing) = app.get_webview_window("preview") {
         eprintln!("[PREVIEW] destroying existing preview window");
         let _ = existing.destroy();
-        std::thread::sleep(std::time::Duration::from_millis(100));
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     }
 
     // Find matching Tauri monitor by physical position to get scale factor

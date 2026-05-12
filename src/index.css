@@ -95,6 +95,12 @@ html {
     color 0.2s ease;
 }
 
+html.recording-prompter-root,
+body.recording-prompter-root,
+body.recording-prompter-root #root {
+  background: transparent !important;
+}
+
 /* Scrollbar styling */
 ::-webkit-scrollbar {
   width: 6px;

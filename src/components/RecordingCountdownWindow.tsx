@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { emit } from "@tauri-apps/api/event";
-import { Circle, Keyboard, Video } from "lucide-react";
+import { Keyboard } from "lucide-react";
 
 interface RecordingCountdownParams {
   monitor_id: number;
@@ -57,44 +57,36 @@ export function RecordingCountdownWindow() {
 
   if (!params || remaining === null) {
     return (
-      <div className="fixed inset-0 flex items-center justify-center bg-[rgb(var(--color-overlay-strong)/0.75)] text-[rgb(var(--color-media-control-fg))]">
-        <div className="text-sm animate-pulse">Preparing recorder...</div>
+      <div className="fixed inset-0 flex items-center justify-center bg-transparent text-[rgb(var(--color-media-control-fg))]">
+        <div className="rounded-full border border-[rgb(var(--color-media-control-fg)/0.14)] bg-[rgb(var(--color-media-control-bg)/0.52)] px-4 py-2 text-sm shadow-2xl backdrop-blur-xl animate-pulse">
+          Preparing recorder...
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="fixed inset-0 overflow-hidden bg-[rgb(var(--color-overlay-strong)/0.58)] text-[rgb(var(--color-media-control-fg))]">
-      <div className="absolute inset-5 rounded-[2rem] border-2 border-[rgb(var(--color-accent))]/80 shadow-[inset_0_0_0_1px_rgb(var(--color-media-control-fg)/0.15),0_0_80px_rgb(var(--color-accent)/0.28)]" />
-      <div className="absolute left-8 top-8 flex items-center gap-2 rounded-full border border-[rgb(var(--color-media-control-fg)/0.14)] bg-[rgb(var(--color-media-control-bg)/0.72)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] backdrop-blur-md">
-        <Circle className="h-3 w-3 fill-[rgb(var(--color-accent))] text-[rgb(var(--color-accent))]" />
-        Recording starts
-      </div>
-      <div className="absolute right-8 top-8 max-w-[34rem] rounded-2xl border border-[rgb(var(--color-media-control-fg)/0.14)] bg-[rgb(var(--color-media-control-bg)/0.72)] px-4 py-3 text-right backdrop-blur-md">
-        <div className="flex items-center justify-end gap-2 text-xs font-medium text-[rgb(var(--color-media-control-fg)/0.72)]">
-          <Video className="h-3.5 w-3.5" />
-          {params.document_title}
-        </div>
-        <div className="mt-1 text-[10px] text-[rgb(var(--color-media-control-fg)/0.48)]">
-          {params.monitor_w}x{params.monitor_h}
-        </div>
-      </div>
+    <div className="fixed inset-0 overflow-hidden bg-transparent text-[rgb(var(--color-media-control-fg))]">
+      <div className="absolute inset-5 rounded-[2rem] border-2 border-[rgb(var(--color-accent))]/75 shadow-[inset_0_0_0_1px_rgb(var(--color-media-control-fg)/0.12),0_0_60px_rgb(var(--color-accent)/0.24)]" />
       <div className="absolute inset-0 flex items-center justify-center">
-        <div className="relative flex h-56 w-56 items-center justify-center rounded-full border border-[rgb(var(--color-media-control-fg)/0.16)] bg-[rgb(var(--color-media-control-bg)/0.74)] shadow-2xl backdrop-blur-xl">
-          <div className="absolute inset-4 rounded-full border border-[rgb(var(--color-accent))]/35" />
-          <div className="text-[8rem] font-semibold leading-none tabular-nums tracking-[-0.08em] text-[rgb(var(--color-media-control-fg))]">
-            {Math.max(remaining, 1)}
+        <div className="flex flex-col items-center gap-4">
+          <div className="relative flex h-56 w-56 items-center justify-center rounded-full border border-[rgb(var(--color-media-control-fg)/0.18)] bg-[rgb(var(--color-media-control-bg)/0.62)] shadow-[0_24px_80px_rgb(0_0_0/0.36),0_0_70px_rgb(var(--color-accent)/0.2)] backdrop-blur-xl">
+            <div className="absolute inset-4 rounded-full border border-[rgb(var(--color-accent))]/40" />
+            <div className="absolute inset-0 rounded-full bg-[radial-gradient(circle_at_50%_32%,rgb(var(--color-media-control-fg)/0.16),transparent_48%)]" />
+            <div className="relative text-[8rem] font-semibold leading-none tabular-nums tracking-[-0.08em] text-[rgb(var(--color-media-control-fg))]">
+              {Math.max(remaining, 1)}
+            </div>
           </div>
+          <button
+            type="button"
+            onClick={cancel}
+            className="flex items-center gap-2 rounded-full border border-[rgb(var(--color-media-control-fg)/0.12)] bg-[rgb(var(--color-media-control-bg)/0.34)] px-3 py-1.5 text-[11px] text-[rgb(var(--color-media-control-fg)/0.6)] backdrop-blur-sm transition-colors hover:bg-[rgb(var(--color-media-control-bg)/0.5)] hover:text-[rgb(var(--color-media-control-fg))]"
+          >
+            <Keyboard className="h-3 w-3" />
+            Esc to cancel
+          </button>
         </div>
       </div>
-      <button
-        type="button"
-        onClick={cancel}
-        className="absolute bottom-8 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full border border-[rgb(var(--color-media-control-fg)/0.14)] bg-[rgb(var(--color-media-control-bg)/0.72)] px-4 py-2 text-xs text-[rgb(var(--color-media-control-fg)/0.72)] backdrop-blur-md transition-colors hover:text-[rgb(var(--color-media-control-fg))]"
-      >
-        <Keyboard className="h-3.5 w-3.5" />
-        Esc to cancel
-      </button>
     </div>
   );
 }
