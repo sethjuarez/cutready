@@ -1,19 +1,23 @@
-//! Recording engine — FFmpeg process management for screen + audio capture.
+//! Recording engine — screen capture lifecycle and edit-ready take assets.
 //!
-//! The capture pipeline will manage FFmpeg lifecycle, command construction,
-//! progress parsing, and multi-track recording. This module currently owns the
-//! project storage foundation for local-only recording media.
+//! The capture pipeline manages native Windows capture where available, FFmpeg
+//! fallback command construction, and local-only recording media storage.
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::process::{Child, Command, Stdio};
+use std::time::{Duration, Instant};
 use uuid::Uuid;
 
 use crate::engine::project;
 
 const RECORDINGS_DIR: &str = ".cutready/recordings";
 const RECORDINGS_GITIGNORE: &str = "*\n!.gitignore\n";
+const FFMPEG_TIMEOUT: Duration = Duration::from_secs(5);
+const RECORDING_STOP_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Return the local-only recordings directory for a project.
 pub fn recordings_dir(project_root: &Path) -> PathBuf {
@@ -32,6 +36,439 @@ pub fn initialize_recording_storage(project_root: &Path) -> anyhow::Result<PathB
     Ok(dir)
 }
 
+pub fn clear_local_recordings(project_root: &Path) -> anyhow::Result<u64> {
+    let dir = initialize_recording_storage(project_root)?;
+    let mut removed = 0;
+
+    for entry in std::fs::read_dir(&dir)? {
+        let entry = entry?;
+        let path = entry.path();
+        let name = entry.file_name();
+        if name == ".gitignore" {
+            continue;
+        }
+
+        if path.is_dir() {
+            std::fs::remove_dir_all(&path)?;
+            removed += 1;
+        } else if path.is_file() {
+            std::fs::remove_file(&path)?;
+            removed += 1;
+        }
+    }
+
+    ensure_recordings_gitignore(&dir)?;
+    Ok(removed)
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct FfmpegStatus {
+    pub available: bool,
+    pub version: Option<String>,
+    pub path: Option<String>,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum RecordingDeviceKind {
+    Microphone,
+    Camera,
+    SystemAudio,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct RecordingDeviceInfo {
+    /// Capture-time identifier. For DirectShow, this is the exact device name.
+    pub id: String,
+    pub label: String,
+    pub kind: RecordingDeviceKind,
+    pub is_default: bool,
+    #[serde(default)]
+    pub camera_formats: Vec<CameraFormatInfo>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CameraFormatInfo {
+    pub width: u32,
+    pub height: u32,
+    #[serde(default)]
+    pub fps: Option<String>,
+    #[serde(default)]
+    pub codec: Option<String>,
+    #[serde(default)]
+    pub pixel_format: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct RecordingDeviceDiscovery {
+    pub ffmpeg: FfmpegStatus,
+    pub devices: Vec<RecordingDeviceInfo>,
+}
+
+pub struct ActiveRecording {
+    process: ActiveRecordingProcess,
+    camera_process: Option<Child>,
+    take: RecordingTake,
+    take_dir: PathBuf,
+    output_path: PathBuf,
+    output_asset_path: String,
+    camera_output_path: Option<PathBuf>,
+}
+
+enum ActiveRecordingProcess {
+    Ffmpeg(Child),
+    #[cfg(target_os = "windows")]
+    NativeWindows(crate::engine::recording_native_windows::NativeWindowsRecording),
+}
+
+impl ActiveRecordingProcess {
+    fn is_finished(&mut self) -> anyhow::Result<bool> {
+        match self {
+            Self::Ffmpeg(child) => Ok(child.try_wait()?.is_some()),
+            #[cfg(target_os = "windows")]
+            Self::NativeWindows(recording) => Ok(recording.is_finished()),
+        }
+    }
+
+    fn stop(self) -> anyhow::Result<()> {
+        match self {
+            Self::Ffmpeg(mut child) => stop_ffmpeg_child(&mut child),
+            #[cfg(target_os = "windows")]
+            Self::NativeWindows(recording) => recording.stop(),
+        }
+    }
+}
+
+pub fn check_ffmpeg_status() -> FfmpegStatus {
+    match run_ffmpeg(["-version"]) {
+        Ok(output) if output.success => FfmpegStatus {
+            available: true,
+            version: first_non_empty_line(&output.stdout),
+            path: Some("ffmpeg".to_string()),
+            error: None,
+        },
+        Ok(output) => FfmpegStatus {
+            available: false,
+            version: first_non_empty_line(&output.stdout),
+            path: Some("ffmpeg".to_string()),
+            error: Some(first_non_empty_line(&output.stderr).unwrap_or_else(|| {
+                "FFmpeg did not return a successful version response".to_string()
+            })),
+        },
+        Err(err) => FfmpegStatus {
+            available: false,
+            version: None,
+            path: Some("ffmpeg".to_string()),
+            error: Some(err.to_string()),
+        },
+    }
+}
+
+pub fn discover_recording_devices() -> RecordingDeviceDiscovery {
+    #[cfg(target_os = "windows")]
+    {
+        match crate::engine::recording_native_audio_windows::discover_native_audio_devices() {
+            Ok(mut devices) => {
+                match discover_recording_devices_with_ffmpeg() {
+                    Ok(dshow_devices) => devices.extend(
+                        dshow_devices
+                            .into_iter()
+                            .filter(|device| device.kind == RecordingDeviceKind::Camera),
+                    ),
+                    Err(err) => log::warn!("[recording] DirectShow camera discovery failed: {err}"),
+                }
+                return RecordingDeviceDiscovery {
+                    ffmpeg: check_ffmpeg_status(),
+                    devices,
+                };
+            }
+            Err(err) => {
+                log::warn!("[recording] native Windows audio discovery failed: {err}");
+            }
+        }
+    }
+
+    let mut ffmpeg = check_ffmpeg_status();
+    if !ffmpeg.available {
+        return RecordingDeviceDiscovery {
+            ffmpeg,
+            devices: Vec::new(),
+        };
+    }
+
+    match discover_recording_devices_with_ffmpeg() {
+        Ok(devices) => RecordingDeviceDiscovery { ffmpeg, devices },
+        Err(err) => {
+            ffmpeg.error = Some(err.to_string());
+            RecordingDeviceDiscovery {
+                ffmpeg,
+                devices: Vec::new(),
+            }
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn discover_recording_devices_with_ffmpeg() -> anyhow::Result<Vec<RecordingDeviceInfo>> {
+    let output = run_ffmpeg([
+        "-hide_banner",
+        "-list_devices",
+        "true",
+        "-f",
+        "dshow",
+        "-i",
+        "dummy",
+    ])?;
+    Ok(parse_dshow_devices(&output.stderr))
+}
+
+#[cfg(not(target_os = "windows"))]
+fn discover_recording_devices_with_ffmpeg() -> anyhow::Result<Vec<RecordingDeviceInfo>> {
+    Ok(Vec::new())
+}
+
+#[cfg(target_os = "windows")]
+pub fn discover_camera_formats(device: &str) -> anyhow::Result<Vec<CameraFormatInfo>> {
+    match crate::engine::recording_native_camera_windows::discover_camera_formats_by_name(device) {
+        Ok(formats) if !formats.is_empty() => return Ok(formats),
+        Ok(_) => {}
+        Err(err) => log::warn!("[recording] native camera format discovery failed: {err}"),
+    }
+
+    let args = vec![
+        "-hide_banner".to_string(),
+        "-list_options".to_string(),
+        "true".to_string(),
+        "-f".to_string(),
+        "dshow".to_string(),
+        "-i".to_string(),
+        format!("video={device}"),
+    ];
+    let output = run_ffmpeg_vec(args)?;
+    Ok(parse_dshow_camera_formats(&output.stderr))
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn discover_camera_formats(_device: &str) -> anyhow::Result<Vec<CameraFormatInfo>> {
+    Ok(Vec::new())
+}
+
+struct FfmpegCommandOutput {
+    success: bool,
+    stdout: String,
+    stderr: String,
+}
+
+fn run_ffmpeg<const N: usize>(args: [&str; N]) -> anyhow::Result<FfmpegCommandOutput> {
+    let mut command = Command::new("ffmpeg");
+    command
+        .args(args)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x08000000);
+    }
+
+    let mut child = command.spawn()?;
+    let started = Instant::now();
+    loop {
+        if child.try_wait()?.is_some() {
+            let output = child.wait_with_output()?;
+            return Ok(FfmpegCommandOutput {
+                success: output.status.success(),
+                stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+                stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+            });
+        }
+
+        if started.elapsed() >= FFMPEG_TIMEOUT {
+            let _ = child.kill();
+            let _ = child.wait();
+            anyhow::bail!(
+                "FFmpeg command timed out after {} seconds",
+                FFMPEG_TIMEOUT.as_secs()
+            );
+        }
+
+        std::thread::sleep(Duration::from_millis(25));
+    }
+}
+
+fn first_non_empty_line(text: &str) -> Option<String> {
+    text.lines()
+        .map(str::trim)
+        .find(|line| !line.is_empty())
+        .map(ToOwned::to_owned)
+}
+
+fn parse_dshow_devices(stderr: &str) -> Vec<RecordingDeviceInfo> {
+    #[derive(Copy, Clone)]
+    enum Section {
+        Video,
+        Audio,
+    }
+
+    let mut section: Option<Section> = None;
+    let mut devices = Vec::new();
+
+    for line in stderr.lines() {
+        if line.contains("DirectShow video devices") {
+            section = Some(Section::Video);
+            continue;
+        }
+        if line.contains("DirectShow audio devices") {
+            section = Some(Section::Audio);
+            continue;
+        }
+
+        if line.contains("Alternative name") {
+            continue;
+        }
+
+        let Some(label) = quoted_value(line) else {
+            continue;
+        };
+
+        if let Some(current_section) = section {
+            let kind = match current_section {
+                Section::Video => RecordingDeviceKind::Camera,
+                Section::Audio => RecordingDeviceKind::Microphone,
+            };
+            devices.push(RecordingDeviceInfo {
+                id: label.clone(),
+                label,
+                kind,
+                is_default: false,
+                camera_formats: Vec::new(),
+            });
+            continue;
+        }
+
+        let normalized_line = line.to_ascii_lowercase();
+        if normalized_line.contains("(audio") {
+            devices.push(RecordingDeviceInfo {
+                id: label.clone(),
+                label: label.clone(),
+                kind: RecordingDeviceKind::Microphone,
+                is_default: false,
+                camera_formats: Vec::new(),
+            });
+        }
+        if normalized_line.contains("(video") || normalized_line.contains(", video") {
+            devices.push(RecordingDeviceInfo {
+                id: label.clone(),
+                label,
+                kind: RecordingDeviceKind::Camera,
+                is_default: false,
+                camera_formats: Vec::new(),
+            });
+        }
+    }
+
+    devices
+}
+
+fn parse_dshow_camera_formats(stderr: &str) -> Vec<CameraFormatInfo> {
+    let mut formats = Vec::new();
+    for line in stderr.lines() {
+        let Some((codec, pixel_format)) = parse_camera_format_kind(line) else {
+            continue;
+        };
+        let Some((width, height)) = parse_dshow_resolution(line) else {
+            continue;
+        };
+        formats.push(CameraFormatInfo {
+            width,
+            height,
+            fps: parse_dshow_fps(line),
+            codec,
+            pixel_format,
+        });
+    }
+    formats.sort_by(|a, b| {
+        let a_score = camera_format_score(a);
+        let b_score = camera_format_score(b);
+        b_score.cmp(&a_score)
+    });
+    formats.dedup();
+    formats
+}
+
+fn parse_camera_format_kind(line: &str) -> Option<(Option<String>, Option<String>)> {
+    if let Some(codec) = token_after(line, "vcodec=") {
+        return Some((Some(codec), None));
+    }
+    if let Some(pixel_format) = token_after(line, "pixel_format=") {
+        return Some((None, Some(pixel_format)));
+    }
+    None
+}
+
+fn parse_dshow_resolution(line: &str) -> Option<(u32, u32)> {
+    let index = line
+        .find("max s=")
+        .or_else(|| line.find("min s="))
+        .or_else(|| line.find(" s="))?;
+    let size_start = line[index..].find("s=")? + index + 2;
+    let size = line[size_start..]
+        .split_whitespace()
+        .next()
+        .unwrap_or_default();
+    let (width, height) = size.split_once('x')?;
+    Some((width.parse().ok()?, height.parse().ok()?))
+}
+
+fn parse_dshow_fps(line: &str) -> Option<String> {
+    let search_from = line
+        .find("max s=")
+        .or_else(|| line.find("min s="))
+        .unwrap_or(0);
+    let fps = token_after(&line[search_from..], "fps=")?;
+    Some(fps)
+}
+
+fn token_after(line: &str, marker: &str) -> Option<String> {
+    let start = line.find(marker)? + marker.len();
+    line[start..]
+        .split_whitespace()
+        .next()
+        .map(|token| token.trim_matches(',').to_string())
+        .filter(|token| !token.is_empty())
+}
+
+fn camera_format_score(format: &CameraFormatInfo) -> (u64, u32, u8) {
+    let area = format.width as u64 * format.height as u64;
+    let fps = format.fps.as_deref().and_then(parse_fps_score).unwrap_or(0);
+    let raw_bonus = u8::from(format.pixel_format.is_some());
+    (area, fps, raw_bonus)
+}
+
+fn parse_fps_score(fps: &str) -> Option<u32> {
+    if let Some((num, den)) = fps.split_once('/') {
+        let numerator = num.parse::<f64>().ok()?;
+        let denominator = den.parse::<f64>().ok()?;
+        if denominator <= 0.0 {
+            return None;
+        }
+        return Some((numerator / denominator * 1000.0).round() as u32);
+    }
+    Some((fps.parse::<f64>().ok()? * 1000.0).round() as u32)
+}
+
+fn best_camera_format(formats: &[CameraFormatInfo]) -> Option<CameraFormatInfo> {
+    formats.iter().cloned().max_by_key(camera_format_score)
+}
+
+fn quoted_value(line: &str) -> Option<String> {
+    let start = line.find('"')?;
+    let rest = &line[start + 1..];
+    let end = rest.find('"')?;
+    Some(rest[..end].to_string())
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum RecordingScope {
@@ -47,7 +484,21 @@ pub enum CaptureSource {
     Window,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum CaptureBackend {
+    Auto,
+    NativeWindowsGraphicsCapture,
+    WindowsGraphicsCapture,
+    DesktopDuplication,
+    GdiGrab,
+}
+
+fn default_capture_backend() -> CaptureBackend {
+    CaptureBackend::Auto
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum OutputQuality {
     Lossless,
@@ -58,16 +509,55 @@ pub enum OutputQuality {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct RecorderSettings {
     pub capture_source: CaptureSource,
+    #[serde(default)]
+    pub capture_area: Option<CaptureArea>,
     pub mic_device_id: Option<String>,
+    #[serde(default)]
+    pub camera_device_id: Option<String>,
+    #[serde(default)]
+    pub camera_format: Option<CameraFormatInfo>,
     pub countdown_seconds: u8,
+    #[serde(default = "default_frame_rate")]
+    pub frame_rate: u16,
     pub include_cursor: bool,
+    #[serde(default)]
+    pub include_system_audio: bool,
+    #[serde(default = "default_audio_volume")]
+    pub mic_volume: u8,
+    #[serde(default = "default_audio_volume")]
+    pub system_audio_volume: u8,
     pub output_quality: OutputQuality,
+    #[serde(default = "default_capture_backend")]
+    pub capture_backend: CaptureBackend,
+}
+
+fn default_frame_rate() -> u16 {
+    30
+}
+
+fn default_audio_volume() -> u8 {
+    100
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CaptureArea {
+    pub x: i32,
+    pub y: i32,
+    pub width: u32,
+    pub height: u32,
+    #[serde(default)]
+    pub display_index: Option<u32>,
+    #[serde(default)]
+    pub hmonitor: Option<String>,
+    #[serde(default)]
+    pub dxgi_output_index: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum RecordingAssetKind {
     Screen,
+    ScreenProxy,
     Mic,
     Camera,
     SystemAudio,
@@ -174,6 +664,874 @@ fn try_create_recording_take(
     Ok(Some(take))
 }
 
+pub fn start_recording_capture(
+    project_root: &Path,
+    scope: RecordingScope,
+    settings: RecorderSettings,
+) -> anyhow::Result<ActiveRecording> {
+    if settings.capture_source != CaptureSource::FullScreen {
+        anyhow::bail!("Only full-screen recording is available in this build");
+    }
+
+    let mut take = create_recording_take(project_root, scope, settings)?;
+    let take_sidecar = project_root.join(&take.metadata_path);
+    let take_dir = take_sidecar
+        .parent()
+        .ok_or_else(|| anyhow::anyhow!("Recording take metadata path has no parent"))?
+        .to_path_buf();
+    let output_asset_path = recording_output_asset_path(take.settings.output_quality);
+    let output_path = take_dir.join(output_asset_path);
+    let ffmpeg_log_path = take_dir.join("ffmpeg.log");
+    let camera_output_path = take
+        .settings
+        .camera_device_id
+        .as_ref()
+        .filter(|device| !device.trim().is_empty())
+        .map(|_| take_dir.join("camera.mp4"));
+    let process = match spawn_capture_process(&take.settings, &output_path, &ffmpeg_log_path) {
+        Ok(process) => process,
+        Err(err) => {
+            take.status = RecordingTakeStatus::Failed;
+            take.updated_at = Utc::now();
+            write_take_sidecar(&take_dir.join("take.json"), &take)?;
+            log::warn!(
+                "[recording] failed to start capture take={}: {err}",
+                take.id
+            );
+            return Err(err);
+        }
+    };
+
+    take.status = RecordingTakeStatus::Recording;
+    take.updated_at = Utc::now();
+    take.assets = vec![RecordingAssetRef {
+        kind: RecordingAssetKind::Screen,
+        path: output_asset_path.to_string(),
+        status: RecordingAssetStatus::Planned,
+    }];
+    let camera_process = match camera_output_path.as_ref() {
+        Some(camera_path) => match spawn_camera_process(
+            &take.settings,
+            camera_path,
+            &take_dir.join("ffmpeg-camera.log"),
+        ) {
+            Ok(process) => {
+                take.assets.push(RecordingAssetRef {
+                    kind: RecordingAssetKind::Camera,
+                    path: "camera.mp4".to_string(),
+                    status: RecordingAssetStatus::Planned,
+                });
+                Some(process)
+            }
+            Err(err) => {
+                log::warn!(
+                    "[recording] camera capture unavailable for take={}: {err}",
+                    take.id
+                );
+                take.assets.push(RecordingAssetRef {
+                    kind: RecordingAssetKind::Camera,
+                    path: "camera.mp4".to_string(),
+                    status: RecordingAssetStatus::Missing,
+                });
+                None
+            }
+        },
+        None => None,
+    };
+    write_take_sidecar(&take_dir.join("take.json"), &take)?;
+
+    Ok(ActiveRecording {
+        process,
+        camera_process,
+        take,
+        take_dir,
+        output_path,
+        output_asset_path: output_asset_path.to_string(),
+        camera_output_path,
+    })
+}
+
+pub fn stop_recording_capture(mut active: ActiveRecording) -> anyhow::Result<RecordingTake> {
+    if let Some(mut camera) = active.camera_process.take() {
+        if let Err(err) = stop_ffmpeg_child(&mut camera) {
+            log::warn!("[recording] failed to stop camera capture: {err}");
+        }
+    }
+    active.process.stop()?;
+    let output_ready =
+        is_recording_output_ready(&active.output_path, active.take.settings.output_quality);
+    active.take.status = if output_ready {
+        RecordingTakeStatus::Finalized
+    } else {
+        RecordingTakeStatus::Failed
+    };
+    active.take.updated_at = Utc::now();
+    let mut assets = vec![RecordingAssetRef {
+        kind: RecordingAssetKind::Screen,
+        path: active.output_asset_path.clone(),
+        status: if output_ready {
+            RecordingAssetStatus::LocalOnly
+        } else {
+            RecordingAssetStatus::Missing
+        },
+    }];
+
+    let mic_path = active.take_dir.join("mic.wav");
+    let explicit_mic = active
+        .take
+        .settings
+        .mic_device_id
+        .as_ref()
+        .map(|device| !device.trim().is_empty())
+        .unwrap_or(false);
+    if explicit_mic || recording_asset_ready(&mic_path) {
+        assets.push(RecordingAssetRef {
+            kind: RecordingAssetKind::Mic,
+            path: "mic.wav".to_string(),
+            status: if recording_asset_ready(&mic_path) {
+                RecordingAssetStatus::LocalOnly
+            } else {
+                RecordingAssetStatus::Missing
+            },
+        });
+    }
+
+    if active.take.settings.include_system_audio {
+        assets.push(RecordingAssetRef {
+            kind: RecordingAssetKind::SystemAudio,
+            path: "system-audio.wav".to_string(),
+            status: if recording_asset_ready(&active.take_dir.join("system-audio.wav")) {
+                RecordingAssetStatus::LocalOnly
+            } else {
+                RecordingAssetStatus::Missing
+            },
+        });
+    }
+
+    if active
+        .take
+        .settings
+        .camera_device_id
+        .as_ref()
+        .map(|device| !device.trim().is_empty())
+        .unwrap_or(false)
+    {
+        let camera_path = active
+            .camera_output_path
+            .clone()
+            .unwrap_or_else(|| active.take_dir.join("camera.mp4"));
+        assets.push(RecordingAssetRef {
+            kind: RecordingAssetKind::Camera,
+            path: "camera.mp4".to_string(),
+            status: if is_recording_output_ready(&camera_path, OutputQuality::High) {
+                RecordingAssetStatus::LocalOnly
+            } else {
+                RecordingAssetStatus::Missing
+            },
+        });
+    }
+
+    if output_ready && active.take.settings.output_quality == OutputQuality::Lossless {
+        let proxy_path = active.take_dir.join("screen-proxy.mp4");
+        match generate_review_proxy(&active.output_path, &proxy_path, &active.take.settings) {
+            Ok(()) => {
+                log::info!(
+                    "[recording] generated proxy take={} output={}",
+                    active.take.id,
+                    proxy_path.display()
+                );
+                assets.push(RecordingAssetRef {
+                    kind: RecordingAssetKind::ScreenProxy,
+                    path: "screen-proxy.mp4".to_string(),
+                    status: RecordingAssetStatus::LocalOnly,
+                });
+            }
+            Err(err) => {
+                log::warn!(
+                    "[recording] proxy generation failed take={}: {}",
+                    active.take.id,
+                    err
+                );
+                assets.push(RecordingAssetRef {
+                    kind: RecordingAssetKind::ScreenProxy,
+                    path: "screen-proxy.mp4".to_string(),
+                    status: RecordingAssetStatus::Missing,
+                });
+            }
+        }
+    }
+
+    active.take.assets = assets;
+    write_take_sidecar(&active.take_dir.join("take.json"), &active.take)?;
+    log::info!(
+        "[recording] stopped take={} status={:?} output_ready={}",
+        active.take.id,
+        active.take.status,
+        output_ready
+    );
+    Ok(active.take)
+}
+
+pub fn discard_recording_capture(mut active: ActiveRecording) -> anyhow::Result<RecordingTake> {
+    if let Some(mut camera) = active.camera_process.take() {
+        if let Err(err) = stop_ffmpeg_child(&mut camera) {
+            log::warn!("[recording] failed to stop camera capture before discard: {err}");
+        }
+    }
+    if let Err(err) = active.process.stop() {
+        log::warn!("[recording] failed to stop screen capture before discard: {err}");
+    }
+    active.take.status = RecordingTakeStatus::Failed;
+    active.take.updated_at = Utc::now();
+    active.take.assets = Vec::new();
+    let take_dir = active.take_dir.clone();
+    if take_dir.exists() {
+        std::fs::remove_dir_all(&take_dir)?;
+    }
+    log::info!(
+        "[recording] discarded take={} folder={}",
+        active.take.id,
+        take_dir.display()
+    );
+    Ok(active.take)
+}
+
+pub fn active_recording_take(active: &ActiveRecording) -> RecordingTake {
+    active.take.clone()
+}
+
+pub fn active_recording_take_dir(active: &ActiveRecording) -> &Path {
+    &active.take_dir
+}
+
+pub fn finalize_finished_recording(
+    active: &mut Option<ActiveRecording>,
+) -> anyhow::Result<Option<RecordingTake>> {
+    let finished = match active.as_mut() {
+        Some(recording) => recording.process.is_finished()?,
+        None => false,
+    };
+    if !finished {
+        return Ok(None);
+    }
+
+    let recording = active
+        .take()
+        .ok_or_else(|| anyhow::anyhow!("Recording state changed while finalizing"))?;
+    stop_recording_capture(recording).map(Some)
+}
+
+fn spawn_capture_process(
+    settings: &RecorderSettings,
+    output_path: &Path,
+    log_path: &Path,
+) -> anyhow::Result<ActiveRecordingProcess> {
+    #[cfg(target_os = "windows")]
+    if should_use_native_windows_capture(settings) {
+        match crate::engine::recording_native_windows::NativeWindowsRecording::start(
+            settings,
+            output_path,
+            log_path,
+        ) {
+            Ok(recording) => {
+                log::info!(
+                    "[recording] started native Windows capture capture_area={:?} frame_rate={} output={}",
+                    settings.capture_area,
+                    settings.frame_rate,
+                    output_path.display()
+                );
+                return Ok(ActiveRecordingProcess::NativeWindows(recording));
+            }
+            Err(err)
+                if settings.capture_backend == CaptureBackend::Auto
+                    && !settings.include_system_audio =>
+            {
+                log::warn!(
+                    "[recording] native Windows capture unavailable, falling back to FFmpeg: {err}"
+                );
+            }
+            Err(err) => return Err(err),
+        }
+    }
+
+    let args = build_ffmpeg_capture_args(settings, output_path)?;
+    write_ffmpeg_log_header(log_path, &args)?;
+    log::info!(
+        "[recording] starting FFmpeg capture capture_area={:?} frame_rate={} output={}",
+        settings.capture_area,
+        settings.frame_rate,
+        output_path.display()
+    );
+    log::debug!("[recording] ffmpeg args: {}", args.join(" "));
+    spawn_ffmpeg_capture(args, log_path).map(ActiveRecordingProcess::Ffmpeg)
+}
+
+#[cfg(target_os = "windows")]
+fn should_use_native_windows_capture(settings: &RecorderSettings) -> bool {
+    matches!(
+        settings.capture_backend,
+        CaptureBackend::Auto | CaptureBackend::NativeWindowsGraphicsCapture
+    ) && settings.output_quality != OutputQuality::Lossless
+        && settings
+            .capture_area
+            .as_ref()
+            .and_then(|area| area.hmonitor.as_deref())
+            .map(|hmonitor| !hmonitor.trim().is_empty())
+            .unwrap_or(false)
+}
+
+fn stop_ffmpeg_child(child: &mut Child) -> anyhow::Result<()> {
+    if let Some(stdin) = child.stdin.as_mut() {
+        let _ = stdin.write_all(b"q\n");
+        let _ = stdin.flush();
+    }
+
+    let started = Instant::now();
+    loop {
+        if child.try_wait()?.is_some() {
+            break;
+        }
+        if started.elapsed() >= RECORDING_STOP_TIMEOUT {
+            let _ = child.kill();
+            let _ = child.wait();
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    }
+
+    Ok(())
+}
+
+fn spawn_ffmpeg_capture(args: Vec<String>, log_path: &Path) -> anyhow::Result<Child> {
+    let stderr = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(log_path)?;
+    let mut command = Command::new("ffmpeg");
+    command
+        .args(args)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::from(stderr));
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x08000000);
+    }
+    Ok(command.spawn()?)
+}
+
+fn spawn_camera_process(
+    settings: &RecorderSettings,
+    output_path: &Path,
+    log_path: &Path,
+) -> anyhow::Result<Child> {
+    let Some(args) = build_ffmpeg_camera_args(settings, output_path)? else {
+        anyhow::bail!("No camera selected");
+    };
+    let _ = std::fs::remove_file(output_path);
+    log::info!(
+        "[recording] starting camera capture device={:?} output={}",
+        settings.camera_device_id,
+        output_path.display()
+    );
+    let used_explicit_input_options = camera_args_use_explicit_input_options(&args);
+    match spawn_ffmpeg_camera_with_startup_check(args, log_path) {
+        Ok(child) => return Ok(child),
+        Err(first_err) if used_explicit_input_options => {
+            log::warn!(
+                "[recording] camera capture failed with explicit device mode; retrying negotiated mode: {first_err}"
+            );
+            append_ffmpeg_log(
+                log_path,
+                &format!(
+                    "camera explicit-mode startup failed; retrying without -vcodec/-pixel_format/-video_size/-framerate: {first_err}"
+                ),
+            )?;
+            let _ = std::fs::remove_file(output_path);
+            let Some(fallback_args) =
+                build_ffmpeg_camera_args_with_mode(settings, output_path, false)?
+            else {
+                anyhow::bail!("No camera selected");
+            };
+            spawn_ffmpeg_camera_with_startup_check(fallback_args, log_path).map_err(|fallback_err| {
+                anyhow::anyhow!(
+                    "Camera capture failed with explicit mode ({first_err}) and negotiated mode ({fallback_err})"
+                )
+            })
+        }
+        Err(err) => Err(err),
+    }
+}
+
+fn spawn_ffmpeg_camera_with_startup_check(
+    args: Vec<String>,
+    log_path: &Path,
+) -> anyhow::Result<Child> {
+    write_ffmpeg_log_header(log_path, &args)?;
+    let mut child = spawn_ffmpeg_capture(args, log_path)?;
+    std::thread::sleep(Duration::from_millis(500));
+    if let Some(status) = child.try_wait()? {
+        let log_summary = std::fs::read_to_string(log_path)
+            .ok()
+            .and_then(|text| {
+                text.lines()
+                    .rev()
+                    .find(|line| !line.trim().is_empty())
+                    .map(str::to_string)
+            })
+            .unwrap_or_else(|| "no camera log output".to_string());
+        anyhow::bail!("Camera capture exited during startup ({status}): {log_summary}");
+    }
+    Ok(child)
+}
+
+fn camera_args_use_explicit_input_options(args: &[String]) -> bool {
+    args.iter().any(|arg| {
+        matches!(
+            arg.as_str(),
+            "-vcodec" | "-pixel_format" | "-video_size" | "-framerate"
+        )
+    })
+}
+
+fn write_ffmpeg_log_header(path: &Path, args: &[String]) -> anyhow::Result<()> {
+    let mut file = OpenOptions::new().create(true).append(true).open(path)?;
+    writeln!(file, "ffmpeg {}", args.join(" "))?;
+    Ok(())
+}
+
+fn append_ffmpeg_log(path: &Path, message: &str) -> anyhow::Result<()> {
+    let mut file = OpenOptions::new().create(true).append(true).open(path)?;
+    writeln!(file, "{message}")?;
+    Ok(())
+}
+
+fn is_recording_output_ready(path: &Path, output_quality: OutputQuality) -> bool {
+    if !path
+        .metadata()
+        .map(|metadata| metadata.len() > 0)
+        .unwrap_or(false)
+    {
+        return false;
+    }
+
+    if output_quality == OutputQuality::Lossless {
+        return true;
+    }
+
+    let mut command = Command::new("ffprobe");
+    command
+        .args([
+            "-hide_banner",
+            "-v",
+            "error",
+            "-show_format",
+            "-show_streams",
+        ])
+        .arg(path)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x08000000);
+    }
+    command
+        .status()
+        .map(|status| status.success())
+        .unwrap_or(false)
+}
+
+fn recording_asset_ready(path: &Path) -> bool {
+    path.metadata()
+        .map(|metadata| metadata.is_file() && metadata.len() > 0)
+        .unwrap_or(false)
+}
+
+fn generate_review_proxy(
+    master_path: &Path,
+    proxy_path: &Path,
+    settings: &RecorderSettings,
+) -> anyhow::Result<()> {
+    let args = build_ffmpeg_proxy_args(master_path, proxy_path, settings);
+    log::debug!("[recording] ffmpeg proxy args: {}", args.join(" "));
+    let output = run_ffmpeg_vec(args)?;
+    if output.success {
+        return Ok(());
+    }
+
+    let message = first_non_empty_line(&output.stderr)
+        .or_else(|| first_non_empty_line(&output.stdout))
+        .unwrap_or_else(|| "FFmpeg proxy generation failed".to_string());
+    anyhow::bail!("{message}");
+}
+
+fn run_ffmpeg_vec(args: Vec<String>) -> anyhow::Result<FfmpegCommandOutput> {
+    let mut command = Command::new("ffmpeg");
+    command
+        .args(args)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x08000000);
+    }
+    let output = command.output()?;
+    Ok(FfmpegCommandOutput {
+        success: output.status.success(),
+        stdout: String::from_utf8_lossy(&output.stdout).to_string(),
+        stderr: String::from_utf8_lossy(&output.stderr).to_string(),
+    })
+}
+
+fn build_ffmpeg_capture_args(
+    settings: &RecorderSettings,
+    output_path: &Path,
+) -> anyhow::Result<Vec<String>> {
+    if settings.capture_source != CaptureSource::FullScreen {
+        anyhow::bail!("Only full-screen recording is available in this build");
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = output_path;
+        return Err(anyhow::anyhow!(
+            "Recording capture is not implemented for this platform yet"
+        ));
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        let use_desktop_duplication = matches!(
+            settings.capture_backend,
+            CaptureBackend::Auto | CaptureBackend::DesktopDuplication
+        ) && settings.output_quality != OutputQuality::Lossless
+            && settings
+                .capture_area
+                .as_ref()
+                .and_then(|area| area.dxgi_output_index)
+                .is_some();
+        let use_windows_graphics_capture = matches!(
+            settings.capture_backend,
+            CaptureBackend::WindowsGraphicsCapture
+        ) && settings.output_quality != OutputQuality::Lossless
+            && settings
+                .capture_area
+                .as_ref()
+                .and_then(|area| area.hmonitor.as_deref())
+                .map(|hmonitor| !hmonitor.trim().is_empty())
+                .unwrap_or(false);
+
+        let mut args = vec![
+            "-y".to_string(),
+            "-hide_banner".to_string(),
+            "-loglevel".to_string(),
+            "warning".to_string(),
+        ];
+
+        if use_desktop_duplication {
+            let area = settings.capture_area.as_ref().expect("checked above");
+            let output_index = area.dxgi_output_index.expect("checked above");
+            args.extend([
+                "-f".to_string(),
+                "lavfi".to_string(),
+                "-i".to_string(),
+                format!(
+                    "ddagrab=output_idx={output_index}:framerate={}:draw_mouse={}:dup_frames=1,hwdownload,format=bgra",
+                    settings.frame_rate,
+                    if settings.include_cursor { 1 } else { 0 }
+                ),
+            ]);
+        } else if use_windows_graphics_capture {
+            let area = settings.capture_area.as_ref().expect("checked above");
+            let hmonitor = area.hmonitor.as_deref().expect("checked above").trim();
+            args.extend([
+                "-f".to_string(),
+                "lavfi".to_string(),
+                "-i".to_string(),
+                format!(
+                    "gfxcapture=hmonitor={hmonitor}:capture_cursor={}:max_framerate={}",
+                    if settings.include_cursor { 1 } else { 0 },
+                    settings.frame_rate
+                ),
+            ]);
+        } else {
+            args.extend([
+                "-f".to_string(),
+                "gdigrab".to_string(),
+                "-framerate".to_string(),
+                settings.frame_rate.to_string(),
+                "-draw_mouse".to_string(),
+                if settings.include_cursor { "1" } else { "0" }.to_string(),
+            ]);
+            if let Some(area) = &settings.capture_area {
+                args.extend([
+                    "-offset_x".to_string(),
+                    area.x.to_string(),
+                    "-offset_y".to_string(),
+                    area.y.to_string(),
+                    "-video_size".to_string(),
+                    format!("{}x{}", area.width, area.height),
+                ]);
+            }
+            args.extend(["-i".to_string(), "desktop".to_string()]);
+        }
+
+        let has_mic = settings
+            .mic_device_id
+            .as_ref()
+            .map(|device| !device.trim().is_empty())
+            .unwrap_or(false);
+        if let Some(device) = settings
+            .mic_device_id
+            .as_ref()
+            .filter(|device| !device.trim().is_empty())
+        {
+            args.extend([
+                "-f".to_string(),
+                "dshow".to_string(),
+                "-i".to_string(),
+                format!("audio={device}"),
+            ]);
+        }
+
+        args.extend(["-map".to_string(), "0:v:0".to_string()]);
+
+        match settings.output_quality {
+            OutputQuality::Lossless => args.extend([
+                "-r".to_string(),
+                settings.frame_rate.to_string(),
+                "-c:v".to_string(),
+                "ffv1".to_string(),
+                "-level".to_string(),
+                "3".to_string(),
+                "-g".to_string(),
+                "1".to_string(),
+            ]),
+            OutputQuality::High | OutputQuality::Compact => {
+                let crf = match settings.output_quality {
+                    OutputQuality::High => "20",
+                    OutputQuality::Compact => "28",
+                    OutputQuality::Lossless => unreachable!(),
+                };
+                let video_filter = if use_windows_graphics_capture {
+                    format!(
+                        "hwdownload,format=bgra,fps={},format=yuv420p",
+                        settings.frame_rate
+                    )
+                } else if use_desktop_duplication {
+                    format!("fps={},format=yuv420p", settings.frame_rate)
+                } else {
+                    format!("fps={},format=yuv420p", settings.frame_rate)
+                };
+                args.extend([
+                    "-vf".to_string(),
+                    video_filter,
+                    "-c:v".to_string(),
+                    "libx264".to_string(),
+                    "-preset".to_string(),
+                    "ultrafast".to_string(),
+                    "-tune".to_string(),
+                    "zerolatency".to_string(),
+                    "-crf".to_string(),
+                    crf.to_string(),
+                ]);
+                if settings.output_quality == OutputQuality::Compact {
+                    args.extend([
+                        "-maxrate".to_string(),
+                        "8M".to_string(),
+                        "-bufsize".to_string(),
+                        "16M".to_string(),
+                    ]);
+                }
+            }
+        }
+
+        if has_mic {
+            let audio_codec = match settings.output_quality {
+                OutputQuality::Lossless => "pcm_s16le",
+                OutputQuality::High | OutputQuality::Compact => "aac",
+            };
+            args.extend([
+                "-map".to_string(),
+                "1:a:0".to_string(),
+                "-c:a".to_string(),
+                audio_codec.to_string(),
+            ]);
+            if settings.mic_volume != default_audio_volume() {
+                args.extend([
+                    "-af".to_string(),
+                    format!("volume={:.2}", settings.mic_volume.min(200) as f32 / 100.0),
+                ]);
+            }
+            if settings.output_quality != OutputQuality::Lossless {
+                args.extend(["-b:a".to_string(), "192k".to_string()]);
+            }
+        }
+
+        if settings.output_quality != OutputQuality::Lossless {
+            args.extend(["-movflags".to_string(), "+faststart".to_string()]);
+        }
+
+        args.push(output_path.to_string_lossy().to_string());
+        Ok(args)
+    }
+}
+
+fn build_ffmpeg_camera_args(
+    settings: &RecorderSettings,
+    output_path: &Path,
+) -> anyhow::Result<Option<Vec<String>>> {
+    build_ffmpeg_camera_args_with_mode(settings, output_path, true)
+}
+
+fn build_ffmpeg_camera_args_with_mode(
+    settings: &RecorderSettings,
+    output_path: &Path,
+    use_explicit_input_options: bool,
+) -> anyhow::Result<Option<Vec<String>>> {
+    let Some(device) = settings
+        .camera_device_id
+        .as_ref()
+        .map(|device| device.trim())
+        .filter(|device| !device.is_empty())
+    else {
+        return Ok(None);
+    };
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = output_path;
+        let _ = device;
+        let _ = use_explicit_input_options;
+        return Err(anyhow::anyhow!(
+            "Camera recording is not implemented for this platform yet"
+        ));
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        let camera_format = settings.camera_format.clone().or_else(|| {
+            discover_camera_formats(device)
+                .ok()
+                .and_then(|formats| best_camera_format(&formats))
+        });
+        let mut args = vec![
+            "-y".to_string(),
+            "-hide_banner".to_string(),
+            "-loglevel".to_string(),
+            "warning".to_string(),
+            "-f".to_string(),
+            "dshow".to_string(),
+            "-rtbufsize".to_string(),
+            "256M".to_string(),
+        ];
+        if use_explicit_input_options {
+            if let Some(format) = camera_format.as_ref() {
+                if let Some(codec) = format.codec.as_deref() {
+                    args.extend(["-vcodec".to_string(), codec.to_string()]);
+                }
+                if let Some(pixel_format) = format.pixel_format.as_deref() {
+                    args.extend(["-pixel_format".to_string(), pixel_format.to_string()]);
+                }
+                args.extend([
+                    "-video_size".to_string(),
+                    format!("{}x{}", format.width, format.height),
+                ]);
+                if let Some(fps) = format.fps.as_deref() {
+                    args.extend(["-framerate".to_string(), fps.to_string()]);
+                }
+            }
+        }
+        args.extend([
+            "-i".to_string(),
+            format!("video={device}"),
+            "-map".to_string(),
+            "0:v:0".to_string(),
+            "-an".to_string(),
+            "-vf".to_string(),
+            "fps=30,format=yuv420p".to_string(),
+            "-c:v".to_string(),
+            "libx264".to_string(),
+            "-preset".to_string(),
+            "ultrafast".to_string(),
+            "-tune".to_string(),
+            "zerolatency".to_string(),
+            "-crf".to_string(),
+            "23".to_string(),
+            "-movflags".to_string(),
+            "+faststart".to_string(),
+            output_path.to_string_lossy().to_string(),
+        ]);
+        Ok(Some(args))
+    }
+}
+
+fn recording_output_asset_path(output_quality: OutputQuality) -> &'static str {
+    match output_quality {
+        OutputQuality::Lossless => "screen.mkv",
+        OutputQuality::High | OutputQuality::Compact => "screen.mp4",
+    }
+}
+
+fn build_ffmpeg_proxy_args(
+    master_path: &Path,
+    proxy_path: &Path,
+    settings: &RecorderSettings,
+) -> Vec<String> {
+    let crf = match settings.output_quality {
+        OutputQuality::Lossless => "20",
+        OutputQuality::High => "22",
+        OutputQuality::Compact => "28",
+    };
+
+    let mut args = vec![
+        "-y".to_string(),
+        "-hide_banner".to_string(),
+        "-loglevel".to_string(),
+        "warning".to_string(),
+        "-i".to_string(),
+        master_path.to_string_lossy().to_string(),
+        "-map".to_string(),
+        "0:v:0".to_string(),
+        "-map".to_string(),
+        "0:a?".to_string(),
+        "-r".to_string(),
+        settings.frame_rate.to_string(),
+        "-vf".to_string(),
+        format!("fps={},format=yuv420p", settings.frame_rate),
+        "-c:v".to_string(),
+        "libx264".to_string(),
+        "-preset".to_string(),
+        "veryfast".to_string(),
+        "-crf".to_string(),
+        crf.to_string(),
+    ];
+
+    if settings.output_quality == OutputQuality::Compact {
+        args.extend([
+            "-maxrate".to_string(),
+            "8M".to_string(),
+            "-bufsize".to_string(),
+            "16M".to_string(),
+        ]);
+    }
+
+    args.extend([
+        "-c:a".to_string(),
+        "aac".to_string(),
+        "-b:a".to_string(),
+        "192k".to_string(),
+        "-movflags".to_string(),
+        "+faststart".to_string(),
+        proxy_path.to_string_lossy().to_string(),
+    ]);
+
+    args
+}
+
 fn validate_scope(project_root: &Path, scope: RecordingScope) -> anyhow::Result<RecordingScope> {
     let (path, expected_ext) = match &scope {
         RecordingScope::Sketch { path } => (path, "sk"),
@@ -269,10 +1627,18 @@ mod tests {
     fn default_settings() -> RecorderSettings {
         RecorderSettings {
             capture_source: CaptureSource::FullScreen,
+            capture_area: None,
             mic_device_id: None,
+            camera_device_id: None,
+            camera_format: None,
             countdown_seconds: 3,
+            frame_rate: 30,
             include_cursor: true,
+            include_system_audio: false,
+            mic_volume: 100,
+            system_audio_volume: 100,
             output_quality: OutputQuality::Lossless,
+            capture_backend: CaptureBackend::Auto,
         }
     }
 
@@ -331,6 +1697,22 @@ mod tests {
         assert!(content.contains("*.tmp"));
         assert!(content.lines().any(|line| line == "*"));
         assert!(content.lines().any(|line| line == "!.gitignore"));
+    }
+
+    #[test]
+    fn clears_local_recordings_but_preserves_gitignore() {
+        let temp = tempfile::tempdir().unwrap();
+        let dir = initialize_recording_storage(temp.path()).unwrap();
+        std::fs::create_dir(dir.join("take_one")).unwrap();
+        std::fs::write(dir.join("take_one").join("screen.mkv"), "video").unwrap();
+        std::fs::write(dir.join("orphan.tmp"), "tmp").unwrap();
+
+        let removed = clear_local_recordings(temp.path()).unwrap();
+
+        assert_eq!(removed, 2);
+        assert!(dir.join(".gitignore").exists());
+        assert!(!dir.join("take_one").exists());
+        assert!(!dir.join("orphan.tmp").exists());
     }
 
     #[test]
@@ -436,5 +1818,497 @@ mod tests {
             std::fs::read_to_string(recordings.join("take_duplicate").join("take.json")).unwrap(),
             "existing"
         );
+    }
+
+    #[test]
+    fn parses_directshow_microphones_and_cameras() {
+        let stderr = r#"
+[dshow @ 000001d8f7a1eac0] DirectShow video devices (some may be both video and audio devices)
+[dshow @ 000001d8f7a1eac0]  "Integrated Camera"
+[dshow @ 000001d8f7a1eac0]     Alternative name "@device_pnp_\\?\usb#vid_0000"
+[dshow @ 000001d8f7a1eac0]  "OBS Virtual Camera"
+[dshow @ 000001d8f7a1eac0] DirectShow audio devices
+[dshow @ 000001d8f7a1eac0]  "Microphone Array (Intel Smart Sound Technology)"
+[dshow @ 000001d8f7a1eac0]     Alternative name "@device_cm_{33d9a762-90c8-11d0-bd43-00a0c911ce86}"
+[dshow @ 000001d8f7a1eac0]  "Headset Microphone (USB Audio)"
+dummy: Immediate exit requested
+"#;
+
+        let devices = parse_dshow_devices(stderr);
+
+        assert_eq!(
+            devices,
+            vec![
+                RecordingDeviceInfo {
+                    id: "Integrated Camera".into(),
+                    label: "Integrated Camera".into(),
+                    kind: RecordingDeviceKind::Camera,
+                    is_default: false,
+                    camera_formats: Vec::new(),
+                },
+                RecordingDeviceInfo {
+                    id: "OBS Virtual Camera".into(),
+                    label: "OBS Virtual Camera".into(),
+                    kind: RecordingDeviceKind::Camera,
+                    is_default: false,
+                    camera_formats: Vec::new(),
+                },
+                RecordingDeviceInfo {
+                    id: "Microphone Array (Intel Smart Sound Technology)".into(),
+                    label: "Microphone Array (Intel Smart Sound Technology)".into(),
+                    kind: RecordingDeviceKind::Microphone,
+                    is_default: false,
+                    camera_formats: Vec::new(),
+                },
+                RecordingDeviceInfo {
+                    id: "Headset Microphone (USB Audio)".into(),
+                    label: "Headset Microphone (USB Audio)".into(),
+                    kind: RecordingDeviceKind::Microphone,
+                    is_default: false,
+                    camera_formats: Vec::new(),
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn directshow_parser_ignores_alternative_device_names() {
+        let stderr = r#"
+[dshow @ 000001d8f7a1eac0] DirectShow audio devices
+[dshow @ 000001d8f7a1eac0]  "Primary Microphone"
+[dshow @ 000001d8f7a1eac0]     Alternative name "Long internal id"
+"#;
+
+        let devices = parse_dshow_devices(stderr);
+
+        assert_eq!(devices.len(), 1);
+        assert_eq!(devices[0].id, "Primary Microphone");
+    }
+
+    #[test]
+    fn parses_modern_directshow_source_lines() {
+        let stderr = r#"
+[in#0 @ 0000024d6dfb0a00] "OBS Virtual Camera" (video)
+[in#0 @ 0000024d6dfb0a00]   Alternative name "@device_sw_{860BB310-5D01-11D0-BD3B-00A0C911CE86}\{A3FCE0F5-3493-419F-958A-ABA1250EC20B}"
+[in#0 @ 0000024d6dfb0a00] "Blackmagic WDM Capture" (audio, video)
+[in#0 @ 0000024d6dfb0a00] "Microphone (RODECaster Pro II Main Stereo)" (audio)
+Error opening input file dummy.
+"#;
+
+        let devices = parse_dshow_devices(stderr);
+
+        assert!(devices.contains(&RecordingDeviceInfo {
+            id: "OBS Virtual Camera".into(),
+            label: "OBS Virtual Camera".into(),
+            kind: RecordingDeviceKind::Camera,
+            is_default: false,
+            camera_formats: Vec::new(),
+        }));
+        assert!(devices.contains(&RecordingDeviceInfo {
+            id: "Blackmagic WDM Capture".into(),
+            label: "Blackmagic WDM Capture".into(),
+            kind: RecordingDeviceKind::Microphone,
+            is_default: false,
+            camera_formats: Vec::new(),
+        }));
+        assert!(devices.contains(&RecordingDeviceInfo {
+            id: "Blackmagic WDM Capture".into(),
+            label: "Blackmagic WDM Capture".into(),
+            kind: RecordingDeviceKind::Camera,
+            is_default: false,
+            camera_formats: Vec::new(),
+        }));
+        assert!(devices.contains(&RecordingDeviceInfo {
+            id: "Microphone (RODECaster Pro II Main Stereo)".into(),
+            label: "Microphone (RODECaster Pro II Main Stereo)".into(),
+            kind: RecordingDeviceKind::Microphone,
+            is_default: false,
+            camera_formats: Vec::new(),
+        }));
+    }
+
+    #[test]
+    fn parses_directshow_camera_format_options_best_first() {
+        let stderr = r#"
+[dshow @ 0000020d0fd25a40] DirectShow video device options (from video devices)
+[dshow @ 0000020d0fd25a40]  Pin "Capture" (alternative pin name "0")
+[dshow @ 0000020d0fd25a40]   vcodec=mjpeg  min s=1920x1080 fps=5 max s=3840x2160 fps=30
+[dshow @ 0000020d0fd25a40]   pixel_format=uyvy422  min s=1280x720 fps=5 max s=1920x1080 fps=60
+[dshow @ 0000020d0fd25a40]   pixel_format=yuyv422  min s=640x480 fps=5 max s=640x480 fps=30
+"#;
+
+        let formats = parse_dshow_camera_formats(stderr);
+
+        assert_eq!(
+            formats[0],
+            CameraFormatInfo {
+                width: 3840,
+                height: 2160,
+                fps: Some("30".into()),
+                codec: Some("mjpeg".into()),
+                pixel_format: None,
+            }
+        );
+        assert!(formats.contains(&CameraFormatInfo {
+            width: 1920,
+            height: 1080,
+            fps: Some("60".into()),
+            codec: None,
+            pixel_format: Some("uyvy422".into()),
+        }));
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn builds_full_screen_ffmpeg_capture_args_with_microphone() {
+        let mut settings = default_settings();
+        settings.mic_device_id = Some("Microphone (RODECaster Pro II Main Stereo)".into());
+
+        let args =
+            build_ffmpeg_capture_args(&settings, Path::new("C:\\takes\\screen.mkv")).unwrap();
+
+        assert!(args.windows(2).any(|pair| pair == ["-f", "gdigrab"]));
+        assert!(args.windows(2).any(|pair| pair == ["-i", "desktop"]));
+        assert!(args.windows(2).any(|pair| pair == ["-framerate", "30"]));
+        assert!(args.windows(2).any(|pair| pair == ["-r", "30"]));
+        assert!(args.windows(2).any(|pair| pair == ["-f", "dshow"]));
+        assert!(args
+            .windows(2)
+            .any(|pair| pair == ["-i", "audio=Microphone (RODECaster Pro II Main Stereo)"]));
+        assert!(args.windows(2).any(|pair| pair == ["-c:v", "ffv1"]));
+        assert!(args.windows(2).any(|pair| pair == ["-c:a", "pcm_s16le"]));
+        assert_eq!(
+            args.last().map(String::as_str),
+            Some("C:\\takes\\screen.mkv")
+        );
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn builds_ffmpeg_capture_args_with_selected_frame_rate() {
+        let mut settings = default_settings();
+        settings.frame_rate = 60;
+
+        let args = build_ffmpeg_capture_args(&settings, Path::new("screen.mkv")).unwrap();
+
+        assert!(args.windows(2).any(|pair| pair == ["-framerate", "60"]));
+        assert!(args.windows(2).any(|pair| pair == ["-r", "60"]));
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn builds_high_quality_capture_args_for_direct_mp4_recording() {
+        let mut settings = default_settings();
+        settings.output_quality = OutputQuality::High;
+        settings.frame_rate = 60;
+        settings.mic_device_id = Some("Studio Microphone".into());
+
+        let args = build_ffmpeg_capture_args(&settings, Path::new("screen.mp4")).unwrap();
+
+        assert!(args.windows(2).any(|pair| pair == ["-framerate", "60"]));
+        assert!(!args.windows(2).any(|pair| pair == ["-r", "60"]));
+        assert!(args.windows(2).any(|pair| pair == ["-c:v", "libx264"]));
+        assert!(args.windows(2).any(|pair| pair == ["-preset", "ultrafast"]));
+        assert!(args.windows(2).any(|pair| pair == ["-tune", "zerolatency"]));
+        assert!(args.windows(2).any(|pair| pair == ["-crf", "20"]));
+        assert!(args.windows(2).any(|pair| pair == ["-c:a", "aac"]));
+        assert!(args
+            .windows(2)
+            .any(|pair| pair == ["-movflags", "+faststart"]));
+        assert_eq!(args.last().map(String::as_str), Some("screen.mp4"));
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn builds_camera_args_as_video_only_mp4_stem() {
+        let mut settings = default_settings();
+        settings.frame_rate = 60;
+        settings.camera_device_id = Some("Integrated Camera".into());
+        settings.camera_format = Some(CameraFormatInfo {
+            width: 3840,
+            height: 2160,
+            fps: Some("30".into()),
+            codec: Some("mjpeg".into()),
+            pixel_format: None,
+        });
+
+        let args = build_ffmpeg_camera_args(&settings, Path::new("camera.mp4"))
+            .unwrap()
+            .unwrap();
+
+        assert!(args.windows(2).any(|pair| pair == ["-f", "dshow"]));
+        assert!(args.windows(2).any(|pair| pair == ["-vcodec", "mjpeg"]));
+        assert!(args
+            .windows(2)
+            .any(|pair| pair == ["-video_size", "3840x2160"]));
+        assert!(args.windows(2).any(|pair| pair == ["-framerate", "30"]));
+        assert!(args
+            .windows(2)
+            .any(|pair| pair == ["-i", "video=Integrated Camera"]));
+        assert!(args.iter().any(|arg| arg == "-an"));
+        assert!(args.windows(2).any(|pair| pair == ["-c:v", "libx264"]));
+        assert!(args
+            .windows(2)
+            .any(|pair| pair == ["-movflags", "+faststart"]));
+        assert_eq!(args.last().map(String::as_str), Some("camera.mp4"));
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn builds_camera_args_without_explicit_mode_for_fallback() {
+        let mut settings = default_settings();
+        settings.camera_device_id = Some("Blackmagic WDM Capture".into());
+        settings.camera_format = Some(CameraFormatInfo {
+            width: 1920,
+            height: 1080,
+            fps: Some("59.9402".into()),
+            codec: None,
+            pixel_format: Some("uyvy422".into()),
+        });
+
+        let args = build_ffmpeg_camera_args_with_mode(&settings, Path::new("camera.mp4"), false)
+            .unwrap()
+            .unwrap();
+
+        assert!(args.windows(2).any(|pair| pair == ["-f", "dshow"]));
+        assert!(!args.iter().any(|arg| arg == "-pixel_format"));
+        assert!(!args.iter().any(|arg| arg == "-video_size"));
+        assert!(!args.iter().any(|arg| arg == "-framerate"));
+        assert!(args
+            .windows(2)
+            .any(|pair| pair == ["-i", "video=Blackmagic WDM Capture"]));
+    }
+
+    #[test]
+    fn recorder_settings_defaults_missing_optional_recorder_fields() {
+        let json = r#"{
+            "capture_source": "full_screen",
+            "capture_area": null,
+            "mic_device_id": null,
+            "countdown_seconds": 3,
+            "frame_rate": 30,
+            "include_cursor": true,
+            "include_system_audio": false,
+            "output_quality": "high",
+            "capture_backend": "auto"
+        }"#;
+
+        let settings: RecorderSettings = serde_json::from_str(json).unwrap();
+
+        assert_eq!(settings.camera_device_id, None);
+        assert_eq!(settings.mic_volume, 100);
+        assert_eq!(settings.system_audio_volume, 100);
+    }
+
+    #[test]
+    fn builds_review_proxy_args_for_smooth_playback() {
+        let mut settings = default_settings();
+        settings.frame_rate = 60;
+        settings.output_quality = OutputQuality::High;
+
+        let args = build_ffmpeg_proxy_args(
+            Path::new("screen.mkv"),
+            Path::new("screen-proxy.mp4"),
+            &settings,
+        );
+
+        assert!(args.windows(2).any(|pair| pair == ["-i", "screen.mkv"]));
+        assert!(args.windows(2).any(|pair| pair == ["-map", "0:v:0"]));
+        assert!(args.windows(2).any(|pair| pair == ["-map", "0:a?"]));
+        assert!(args.windows(2).any(|pair| pair == ["-r", "60"]));
+        assert!(args.windows(2).any(|pair| pair == ["-c:v", "libx264"]));
+        assert!(args.windows(2).any(|pair| pair == ["-crf", "22"]));
+        assert!(args.windows(2).any(|pair| pair == ["-c:a", "aac"]));
+        assert_eq!(args.last().map(String::as_str), Some("screen-proxy.mp4"));
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn builds_full_screen_ffmpeg_capture_args_for_selected_area() {
+        let mut settings = default_settings();
+        settings.capture_area = Some(CaptureArea {
+            x: 1920,
+            y: 0,
+            width: 2560,
+            height: 1440,
+            display_index: None,
+            hmonitor: None,
+            dxgi_output_index: None,
+        });
+
+        let args = build_ffmpeg_capture_args(&settings, Path::new("screen.mkv")).unwrap();
+
+        assert!(args.windows(2).any(|pair| pair == ["-offset_x", "1920"]));
+        assert!(args.windows(2).any(|pair| pair == ["-offset_y", "0"]));
+        assert!(args
+            .windows(2)
+            .any(|pair| pair == ["-video_size", "2560x1440"]));
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn display_index_does_not_override_selected_monitor_coordinates() {
+        let mut settings = default_settings();
+        settings.output_quality = OutputQuality::High;
+        settings.frame_rate = 60;
+        settings.include_cursor = false;
+        settings.capture_area = Some(CaptureArea {
+            x: -1920,
+            y: 604,
+            width: 1920,
+            height: 1080,
+            display_index: Some(1),
+            hmonitor: None,
+            dxgi_output_index: None,
+        });
+
+        let args = build_ffmpeg_capture_args(&settings, Path::new("screen.mp4")).unwrap();
+
+        assert!(args.windows(2).any(|pair| pair == ["-f", "gdigrab"]));
+        assert!(args.windows(2).any(|pair| pair == ["-offset_x", "-1920"]));
+        assert!(args.windows(2).any(|pair| pair == ["-offset_y", "604"]));
+        assert!(args
+            .windows(2)
+            .any(|pair| pair == ["-video_size", "1920x1080"]));
+        assert!(!args.windows(2).any(|pair| pair == ["-f", "lavfi"]));
+        assert!(args.windows(2).any(|pair| pair == ["-c:v", "libx264"]));
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn builds_windows_graphics_capture_args_for_selected_monitor_handle() {
+        let mut settings = default_settings();
+        settings.output_quality = OutputQuality::High;
+        settings.capture_backend = CaptureBackend::WindowsGraphicsCapture;
+        settings.frame_rate = 60;
+        settings.include_cursor = true;
+        settings.capture_area = Some(CaptureArea {
+            x: -1920,
+            y: 604,
+            width: 1920,
+            height: 1080,
+            display_index: Some(1),
+            hmonitor: Some("123456".to_string()),
+            dxgi_output_index: None,
+        });
+
+        let args = build_ffmpeg_capture_args(&settings, Path::new("screen.mp4")).unwrap();
+
+        assert!(args.windows(2).any(|pair| pair == ["-f", "lavfi"]));
+        assert!(args.windows(2).any(|pair| {
+            pair[0] == "-i"
+                && pair[1].contains("gfxcapture=hmonitor=123456")
+                && pair[1].contains("capture_cursor=1")
+                && pair[1].contains("max_framerate=60")
+        }));
+        assert!(!args.windows(2).any(|pair| pair == ["-f", "gdigrab"]));
+        assert!(!args.windows(2).any(|pair| pair == ["-offset_x", "-1920"]));
+        assert!(!args.windows(2).any(|pair| pair == ["-r", "60"]));
+        let filter = args
+            .windows(2)
+            .find_map(|pair| (pair[0] == "-vf").then_some(pair[1].as_str()))
+            .unwrap();
+        assert!(filter.contains("hwdownload,format=bgra,fps=60,format=yuv420p"));
+        assert!(args.windows(2).any(|pair| pair == ["-c:v", "libx264"]));
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn auto_backend_uses_desktop_duplication_when_dxgi_output_index_is_available() {
+        let mut settings = default_settings();
+        settings.output_quality = OutputQuality::High;
+        settings.capture_backend = CaptureBackend::Auto;
+        settings.capture_area = Some(CaptureArea {
+            x: 0,
+            y: 0,
+            width: 1920,
+            height: 1080,
+            display_index: None,
+            hmonitor: Some("123456".to_string()),
+            dxgi_output_index: Some(1),
+        });
+
+        let args = build_ffmpeg_capture_args(&settings, Path::new("screen.mp4")).unwrap();
+
+        assert!(args.windows(2).any(|pair| pair == ["-f", "lavfi"]));
+        assert!(args.windows(2).any(|pair| {
+            pair[0] == "-i"
+                && pair[1].contains("ddagrab=output_idx=1")
+                && pair[1].contains("framerate=30")
+                && pair[1].contains("draw_mouse=1")
+        }));
+        assert!(!args.windows(2).any(|pair| pair == ["-f", "gdigrab"]));
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn auto_backend_prefers_native_windows_capture_when_monitor_handle_is_available() {
+        let mut settings = default_settings();
+        settings.output_quality = OutputQuality::High;
+        settings.capture_backend = CaptureBackend::Auto;
+        settings.capture_area = Some(CaptureArea {
+            x: 0,
+            y: 0,
+            width: 1920,
+            height: 1080,
+            display_index: None,
+            hmonitor: Some("123456".to_string()),
+            dxgi_output_index: Some(1),
+        });
+
+        assert!(should_use_native_windows_capture(&settings));
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn lossless_auto_backend_stays_on_ffmpeg_capture() {
+        let mut settings = default_settings();
+        settings.output_quality = OutputQuality::Lossless;
+        settings.capture_backend = CaptureBackend::Auto;
+        settings.capture_area = Some(CaptureArea {
+            x: 0,
+            y: 0,
+            width: 1920,
+            height: 1080,
+            display_index: None,
+            hmonitor: Some("123456".to_string()),
+            dxgi_output_index: Some(1),
+        });
+
+        assert!(!should_use_native_windows_capture(&settings));
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn forced_gdi_grab_ignores_monitor_handle() {
+        let mut settings = default_settings();
+        settings.output_quality = OutputQuality::High;
+        settings.capture_backend = CaptureBackend::GdiGrab;
+        settings.capture_area = Some(CaptureArea {
+            x: 10,
+            y: 20,
+            width: 640,
+            height: 480,
+            display_index: None,
+            hmonitor: Some("123456".to_string()),
+            dxgi_output_index: Some(1),
+        });
+
+        let args = build_ffmpeg_capture_args(&settings, Path::new("screen.mp4")).unwrap();
+
+        assert!(args.windows(2).any(|pair| pair == ["-f", "gdigrab"]));
+        assert!(args.windows(2).any(|pair| pair == ["-offset_x", "10"]));
+        assert!(args.windows(2).any(|pair| pair == ["-offset_y", "20"]));
+        assert!(!args.windows(2).any(|pair| pair == ["-f", "lavfi"]));
+    }
+
+    #[test]
+    fn rejects_non_full_screen_capture_args_for_now() {
+        let mut settings = default_settings();
+        settings.capture_source = CaptureSource::Region;
+
+        let err = build_ffmpeg_capture_args(&settings, Path::new("screen.mkv")).unwrap_err();
+
+        assert!(err.to_string().contains("Only full-screen recording"));
     }
 }

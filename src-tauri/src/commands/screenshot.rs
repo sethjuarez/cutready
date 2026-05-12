@@ -2,10 +2,22 @@
 
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
-use tauri::{Manager, State, WebviewUrl, WebviewWindowBuilder};
+use tauri::{
+    Manager, PhysicalPosition, PhysicalSize, Position, Size, State, WebviewUrl,
+    WebviewWindowBuilder,
+};
+use tauri_plugin_store::StoreExt;
 
+use crate::engine::recording;
 use crate::util::screenshot;
 use crate::AppState;
+
+const UI_STORE_FILE: &str = "ui-settings.json";
+const RECORDING_CONTROL_POSITION_KEY: &str = "recording_control_position";
+const RECORDING_CONTROL_WIDTH: f64 = 420.0;
+const RECORDING_CONTROL_HEIGHT: f64 = 220.0;
+const RECORDER_SETUP_WIDTH: f64 = 890.0;
+const RECORDER_SETUP_HEIGHT: f64 = 230.0;
 
 /// Capture params shared between main window and capture window via managed state.
 #[derive(Default, Clone, Serialize, Deserialize)]
@@ -21,6 +33,36 @@ pub struct CaptureParams {
 
 /// Thread-safe wrapper for capture parameters.
 pub struct CaptureState(pub Mutex<Option<CaptureParams>>);
+
+#[derive(Default, Clone, Serialize, Deserialize)]
+pub struct RecordingCountdownParams {
+    pub monitor_id: u32,
+    pub monitor_w: u32,
+    pub monitor_h: u32,
+    pub monitor_x: i32,
+    pub monitor_y: i32,
+    pub countdown_seconds: u8,
+    pub document_title: String,
+}
+
+pub struct RecordingCountdownState(pub Mutex<Option<RecordingCountdownParams>>);
+
+#[derive(Default, Clone, Serialize, Deserialize)]
+pub struct RecordingControlParams {
+    #[serde(default)]
+    pub take_id: Option<String>,
+    pub document_title: String,
+    #[serde(default)]
+    pub scope: Option<recording::RecordingScope>,
+}
+
+pub struct RecordingControlState(pub Mutex<Option<RecordingControlParams>>);
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct RecordingControlPosition {
+    pub x: i32,
+    pub y: i32,
+}
 
 fn project_root(state: &AppState) -> Result<std::path::PathBuf, String> {
     let current = state.current_project.lock().map_err(|e| e.to_string())?;
@@ -92,6 +134,26 @@ pub async fn get_capture_params(state: State<'_, CaptureState>) -> Result<Captur
     params
         .clone()
         .ok_or_else(|| "No capture params set".to_string())
+}
+
+#[tauri::command]
+pub async fn get_recording_countdown_params(
+    state: State<'_, RecordingCountdownState>,
+) -> Result<RecordingCountdownParams, String> {
+    let params = state.0.lock().map_err(|e| e.to_string())?;
+    params
+        .clone()
+        .ok_or_else(|| "No recording countdown params set".to_string())
+}
+
+#[tauri::command]
+pub async fn get_recording_control_params(
+    state: State<'_, RecordingControlState>,
+) -> Result<RecordingControlParams, String> {
+    let params = state.0.lock().map_err(|e| e.to_string())?;
+    params
+        .clone()
+        .ok_or_else(|| "No recording control params set".to_string())
 }
 
 /// Open a borderless, always-on-top capture window covering the target monitor.
@@ -171,9 +233,309 @@ pub async fn open_capture_window(
             eprintln!("[CAPTURE] build FAILED: {}", e);
             e.to_string()
         })?;
+    let _ = win.set_position(Position::Physical(PhysicalPosition {
+        x: phys_x,
+        y: phys_y,
+    }));
+    let _ = win.set_size(Size::Physical(PhysicalSize {
+        width: phys_w,
+        height: phys_h,
+    }));
 
     eprintln!("[CAPTURE] window created OK, label={}", win.label());
     Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+#[tauri::command]
+pub async fn open_recording_countdown_window(
+    app: tauri::AppHandle,
+    monitor_id: u32,
+    phys_x: i32,
+    phys_y: i32,
+    phys_w: u32,
+    phys_h: u32,
+    countdown_seconds: u8,
+    document_title: String,
+) -> Result<(), String> {
+    log::info!(
+        "[recording] open countdown window: monitor={} pos=({},{}) size={}x{} countdown={}",
+        monitor_id,
+        phys_x,
+        phys_y,
+        phys_w,
+        phys_h,
+        countdown_seconds
+    );
+
+    {
+        let countdown_state = app.state::<RecordingCountdownState>();
+        let mut params = countdown_state.0.lock().map_err(|e| e.to_string())?;
+        *params = Some(RecordingCountdownParams {
+            monitor_id,
+            monitor_w: phys_w,
+            monitor_h: phys_h,
+            monitor_x: phys_x,
+            monitor_y: phys_y,
+            countdown_seconds,
+            document_title,
+        });
+    }
+
+    if let Some(existing) = app.get_webview_window("recording-countdown") {
+        let _ = existing.destroy();
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+
+    let monitors = app.available_monitors().map_err(|e| e.to_string())?;
+    let scale = monitors
+        .iter()
+        .find(|m| {
+            let pos = m.position();
+            (pos.x - phys_x).abs() < 100 && (pos.y - phys_y).abs() < 100
+        })
+        .map(|m| m.scale_factor())
+        .unwrap_or(1.0);
+
+    let logical_w = phys_w as f64 / scale;
+    let logical_h = phys_h as f64 / scale;
+    let logical_x = phys_x as f64 / scale;
+    let logical_y = phys_y as f64 / scale;
+
+    let win = WebviewWindowBuilder::new(
+        &app,
+        "recording-countdown",
+        WebviewUrl::App("index.html".into()),
+    )
+    .initialization_script("window.__IS_RECORDING_COUNTDOWN = true;")
+    .title("CutReady Recording Countdown")
+    .inner_size(logical_w, logical_h)
+    .position(logical_x, logical_y)
+    .decorations(false)
+    .always_on_top(true)
+    .resizable(false)
+    .focused(true)
+    .skip_taskbar(true)
+    .build()
+    .map_err(|e| e.to_string())?;
+    let _ = win.set_position(Position::Physical(PhysicalPosition {
+        x: phys_x,
+        y: phys_y,
+    }));
+    let _ = win.set_size(Size::Physical(PhysicalSize {
+        width: phys_w,
+        height: phys_h,
+    }));
+
+    let app_handle = app.clone();
+    win.on_window_event(move |event| {
+        if matches!(event, tauri::WindowEvent::Destroyed) {
+            let state = app_handle.state::<RecordingCountdownState>();
+            let lock_result = state.0.lock();
+            if let Ok(mut params) = lock_result {
+                *params = None;
+            }
+        }
+    });
+
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn open_recording_control_window(
+    app: tauri::AppHandle,
+    take_id: String,
+    document_title: String,
+) -> Result<(), String> {
+    {
+        let control_state = app.state::<RecordingControlState>();
+        let mut params = control_state.0.lock().map_err(|e| e.to_string())?;
+        *params = Some(RecordingControlParams {
+            take_id: Some(take_id),
+            document_title,
+            scope: None,
+        });
+    }
+
+    if let Some(existing) = app.get_webview_window("recording-control") {
+        let _ = existing.destroy();
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+
+    let (logical_x, logical_y) = app
+        .primary_monitor()
+        .map_err(|e| e.to_string())?
+        .map(|monitor| {
+            let position = monitor.position();
+            let size = monitor.size();
+            let scale = monitor.scale_factor();
+            (
+                (position.x as f64 + size.width as f64
+                    - RECORDING_CONTROL_WIDTH * scale
+                    - 24.0 * scale)
+                    / scale,
+                (position.y as f64 + size.height as f64
+                    - RECORDING_CONTROL_HEIGHT * scale
+                    - 48.0 * scale)
+                    / scale,
+            )
+        })
+        .unwrap_or((80.0, 80.0));
+
+    let win = WebviewWindowBuilder::new(
+        &app,
+        "recording-control",
+        WebviewUrl::App("index.html".into()),
+    )
+    .initialization_script("window.__IS_RECORDING_CONTROL = true;")
+    .title("CutReady Recording")
+    .inner_size(RECORDING_CONTROL_WIDTH, RECORDING_CONTROL_HEIGHT)
+    .position(logical_x, logical_y)
+    .decorations(false)
+    .always_on_top(true)
+    .resizable(false)
+    .focused(false)
+    .skip_taskbar(false)
+    .build()
+    .map_err(|e| e.to_string())?;
+    exclude_window_from_capture(&win);
+
+    if let Some(position) = get_saved_recording_control_position(&app) {
+        let _ = win.set_position(Position::Physical(PhysicalPosition {
+            x: position.x,
+            y: position.y,
+        }));
+    }
+
+    let app_handle = app.clone();
+    win.on_window_event(move |event| {
+        if matches!(event, tauri::WindowEvent::Destroyed) {
+            let state = app_handle.state::<RecordingControlState>();
+            let lock_result = state.0.lock();
+            if let Ok(mut params) = lock_result {
+                *params = None;
+            }
+        }
+    });
+
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn open_recorder_window(
+    app: tauri::AppHandle,
+    scope: recording::RecordingScope,
+    document_title: String,
+) -> Result<(), String> {
+    {
+        let control_state = app.state::<RecordingControlState>();
+        let mut params = control_state.0.lock().map_err(|e| e.to_string())?;
+        *params = Some(RecordingControlParams {
+            take_id: None,
+            document_title,
+            scope: Some(scope),
+        });
+    }
+
+    if let Some(existing) = app.get_webview_window("recording-control") {
+        let _ = existing.destroy();
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+
+    let (logical_x, logical_y) = app
+        .primary_monitor()
+        .map_err(|e| e.to_string())?
+        .map(|monitor| {
+            let position = monitor.position();
+            let size = monitor.size();
+            let scale = monitor.scale_factor();
+            (
+                (position.x as f64 + size.width as f64
+                    - RECORDER_SETUP_WIDTH * scale
+                    - 24.0 * scale)
+                    / scale,
+                (position.y as f64 + 64.0 * scale) / scale,
+            )
+        })
+        .unwrap_or((80.0, 80.0));
+
+    let win = WebviewWindowBuilder::new(
+        &app,
+        "recording-control",
+        WebviewUrl::App("index.html".into()),
+    )
+    .initialization_script("window.__IS_RECORDING_CONTROL = true;")
+    .title("CutReady Recorder")
+    .inner_size(RECORDER_SETUP_WIDTH, RECORDER_SETUP_HEIGHT)
+    .min_inner_size(870.0, 220.0)
+    .position(logical_x, logical_y)
+    .decorations(false)
+    .always_on_top(true)
+    .resizable(true)
+    .focused(true)
+    .skip_taskbar(false)
+    .build()
+    .map_err(|e| e.to_string())?;
+    exclude_window_from_capture(&win);
+
+    if let Some(position) = get_saved_recording_control_position(&app) {
+        let _ = win.set_position(Position::Physical(PhysicalPosition {
+            x: position.x,
+            y: position.y,
+        }));
+    }
+
+    let app_handle = app.clone();
+    win.on_window_event(move |event| {
+        if matches!(event, tauri::WindowEvent::Destroyed) {
+            let state = app_handle.state::<RecordingControlState>();
+            let lock_result = state.0.lock();
+            if let Ok(mut params) = lock_result {
+                *params = None;
+            }
+        }
+    });
+
+    Ok(())
+}
+
+#[cfg(target_os = "windows")]
+fn exclude_window_from_capture(win: &tauri::WebviewWindow) {
+    use windows::Win32::UI::WindowsAndMessaging::{
+        SetWindowDisplayAffinity, WDA_EXCLUDEFROMCAPTURE,
+    };
+
+    if let Ok(hwnd) = win.hwnd() {
+        unsafe {
+            let _ = SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE);
+        }
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn exclude_window_from_capture(_win: &tauri::WebviewWindow) {}
+
+#[tauri::command]
+pub async fn save_recording_control_position(
+    app: tauri::AppHandle,
+    position: RecordingControlPosition,
+) -> Result<(), String> {
+    let store = app.store(UI_STORE_FILE).map_err(|e| e.to_string())?;
+    store.set(
+        RECORDING_CONTROL_POSITION_KEY,
+        serde_json::to_value(position).map_err(|e| e.to_string())?,
+    );
+    store.save().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+fn get_saved_recording_control_position(
+    app: &tauri::AppHandle,
+) -> Option<RecordingControlPosition> {
+    let store = app.store(UI_STORE_FILE).ok()?;
+    store
+        .get(RECORDING_CONTROL_POSITION_KEY)
+        .and_then(|value| serde_json::from_value(value).ok())
 }
 
 /// Open a fullscreen, borderless preview window on the target monitor.
@@ -256,6 +618,28 @@ pub async fn close_capture_window(app: tauri::AppHandle) -> Result<(), String> {
         win.destroy().map_err(|e| e.to_string())?;
     } else {
         eprintln!("[CAPTURE] close_capture_window: no window found");
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn close_recording_countdown_window(app: tauri::AppHandle) -> Result<(), String> {
+    if let Some(win) = app.get_webview_window("recording-countdown") {
+        win.destroy().map_err(|e| e.to_string())?;
+    }
+    if let Ok(mut params) = app.state::<RecordingCountdownState>().0.lock() {
+        *params = None;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn close_recording_control_window(app: tauri::AppHandle) -> Result<(), String> {
+    if let Some(win) = app.get_webview_window("recording-control") {
+        win.destroy().map_err(|e| e.to_string())?;
+    }
+    if let Ok(mut params) = app.state::<RecordingControlState>().0.lock() {
+        *params = None;
     }
     Ok(())
 }

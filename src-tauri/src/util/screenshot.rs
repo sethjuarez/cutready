@@ -10,6 +10,9 @@ use xcap::Monitor;
 pub struct MonitorInfo {
     pub id: u32,
     pub name: String,
+    pub device_name: Option<String>,
+    pub hmonitor: Option<String>,
+    pub dxgi_output_index: Option<u32>,
     pub x: i32,
     pub y: i32,
     pub width: u32,
@@ -20,21 +23,157 @@ pub struct MonitorInfo {
 /// List all available monitors.
 pub fn list_monitors() -> Result<Vec<MonitorInfo>, String> {
     let monitors = Monitor::all().map_err(|e| format!("Failed to enumerate monitors: {e}"))?;
+    let native_monitors = native_monitor_infos();
     let mut result = Vec::new();
     for m in &monitors {
+        let x = m.x().map_err(|e| format!("Monitor x error: {e}"))?;
+        let y = m.y().map_err(|e| format!("Monitor y error: {e}"))?;
+        let width = m.width().map_err(|e| format!("Monitor width error: {e}"))?;
+        let height = m
+            .height()
+            .map_err(|e| format!("Monitor height error: {e}"))?;
+        let native = native_monitors.iter().find(|monitor| {
+            monitor.x == x && monitor.y == y && monitor.width == width && monitor.height == height
+        });
         result.push(MonitorInfo {
             id: m.id().map_err(|e| format!("Monitor id error: {e}"))?,
             name: m.name().map_err(|e| format!("Monitor name error: {e}"))?,
-            x: m.x().map_err(|e| format!("Monitor x error: {e}"))?,
-            y: m.y().map_err(|e| format!("Monitor y error: {e}"))?,
-            width: m.width().map_err(|e| format!("Monitor width error: {e}"))?,
-            height: m
-                .height()
-                .map_err(|e| format!("Monitor height error: {e}"))?,
+            device_name: native.map(|monitor| monitor.device_name.clone()),
+            hmonitor: native.map(|monitor| monitor.hmonitor.clone()),
+            dxgi_output_index: native.and_then(|monitor| monitor.dxgi_output_index),
+            x,
+            y,
+            width,
+            height,
             is_primary: m.is_primary().unwrap_or(false),
         });
     }
     Ok(result)
+}
+
+#[derive(Clone, Debug)]
+struct NativeMonitorInfo {
+    device_name: String,
+    hmonitor: String,
+    dxgi_output_index: Option<u32>,
+    x: i32,
+    y: i32,
+    width: u32,
+    height: u32,
+}
+
+#[cfg(target_os = "windows")]
+fn native_monitor_infos() -> Vec<NativeMonitorInfo> {
+    use windows::Win32::Foundation::{LPARAM, RECT};
+    use windows::Win32::Graphics::Gdi::{
+        EnumDisplayMonitors, GetMonitorInfoW, HDC, HMONITOR, MONITORINFOEXW,
+    };
+
+    struct EnumState {
+        monitors: Vec<NativeMonitorInfo>,
+        dxgi_outputs: Vec<DxgiOutputInfo>,
+    }
+
+    unsafe extern "system" fn enum_monitor(
+        hmonitor: HMONITOR,
+        _hdc: HDC,
+        rect: *mut RECT,
+        param: LPARAM,
+    ) -> windows::core::BOOL {
+        let state = &mut *(param.0 as *mut EnumState);
+        let mut info = MONITORINFOEXW::default();
+        info.monitorInfo.cbSize = std::mem::size_of::<MONITORINFOEXW>() as u32;
+
+        if GetMonitorInfoW(hmonitor, &mut info as *mut MONITORINFOEXW as *mut _).as_bool() {
+            let device_name = String::from_utf16_lossy(&info.szDevice)
+                .trim_end_matches('\0')
+                .to_string();
+            let rect = *rect;
+            let hmonitor_string = (hmonitor.0 as usize).to_string();
+            state.monitors.push(NativeMonitorInfo {
+                device_name,
+                dxgi_output_index: state
+                    .dxgi_outputs
+                    .iter()
+                    .find(|output| output.hmonitor == hmonitor_string)
+                    .map(|output| output.index),
+                hmonitor: hmonitor_string,
+                x: rect.left,
+                y: rect.top,
+                width: (rect.right - rect.left).max(0) as u32,
+                height: (rect.bottom - rect.top).max(0) as u32,
+            });
+        }
+
+        true.into()
+    }
+
+    let mut state = EnumState {
+        monitors: Vec::new(),
+        dxgi_outputs: dxgi_output_infos(),
+    };
+    unsafe {
+        let _ = EnumDisplayMonitors(
+            None,
+            None,
+            Some(enum_monitor),
+            LPARAM(&mut state as *mut EnumState as isize),
+        );
+    }
+    state.monitors
+}
+
+#[cfg(target_os = "windows")]
+#[derive(Clone, Debug)]
+struct DxgiOutputInfo {
+    index: u32,
+    hmonitor: String,
+}
+
+#[cfg(target_os = "windows")]
+fn dxgi_output_infos() -> Vec<DxgiOutputInfo> {
+    use windows::Win32::Graphics::Dxgi::{CreateDXGIFactory1, IDXGIFactory1, DXGI_ERROR_NOT_FOUND};
+
+    let mut outputs = Vec::new();
+    unsafe {
+        let factory = match CreateDXGIFactory1::<IDXGIFactory1>() {
+            Ok(factory) => factory,
+            Err(_) => return outputs,
+        };
+        let mut adapter_index = 0;
+        let mut output_index = 0;
+        loop {
+            let adapter = match factory.EnumAdapters1(adapter_index) {
+                Ok(adapter) => adapter,
+                Err(err) if err.code() == DXGI_ERROR_NOT_FOUND => break,
+                Err(_) => break,
+            };
+
+            let mut adapter_output_index = 0;
+            loop {
+                let output = match adapter.EnumOutputs(adapter_output_index) {
+                    Ok(output) => output,
+                    Err(err) if err.code() == DXGI_ERROR_NOT_FOUND => break,
+                    Err(_) => break,
+                };
+                if let Ok(desc) = output.GetDesc() {
+                    outputs.push(DxgiOutputInfo {
+                        index: output_index,
+                        hmonitor: (desc.Monitor.0 as usize).to_string(),
+                    });
+                    output_index += 1;
+                }
+                adapter_output_index += 1;
+            }
+            adapter_index += 1;
+        }
+    }
+    outputs
+}
+
+#[cfg(not(target_os = "windows"))]
+fn native_monitor_infos() -> Vec<NativeMonitorInfo> {
+    Vec::new()
 }
 
 fn find_monitor(monitor_id: u32) -> Result<Monitor, String> {

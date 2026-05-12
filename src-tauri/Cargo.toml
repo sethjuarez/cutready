@@ -37,6 +37,7 @@ urlencoding = "2"
 zip = "2"
 quick-xml = "0.37"
 pdf-extract = "0.8"
+windows = { version = "0.61.3", features = ["Win32_Foundation", "Win32_Graphics_Dxgi", "Win32_Graphics_Dxgi_Common", "Win32_Graphics_Gdi", "Win32_Media_MediaFoundation", "Win32_System_Com", "Win32_UI_WindowsAndMessaging"] }
 
 # Tauri plugins
 tauri-plugin-shell = "2"
@@ -59,6 +60,10 @@ agentive = { git = "https://github.com/sethjuarez/agentive.git" }
 # Vendor OpenSSL on macOS to support cross-compilation (ARM → Intel)
 [target.'cfg(target_os = "macos")'.dependencies]
 openssl-sys = { version = "0.9", features = ["vendored"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+wasapi = "0.23.0"
+windows-capture = "2.0.0"
 
 # Stronghold's scrypt dependency needs opt-level 3 even in dev mode
 # https://github.com/tauri-apps/plugins-workspace/issues/2048

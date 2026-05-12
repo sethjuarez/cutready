@@ -4,7 +4,10 @@
   "description": "Default permissions for CutReady",
   "windows": [
     "main",
-    "capture"
+    "capture",
+    "preview",
+    "recording-countdown",
+    "recording-control"
   ],
   "permissions": [
     "core:default",

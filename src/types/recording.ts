@@ -71,16 +71,71 @@ export type RecordingScope =
 export type CaptureSource = "full_screen" | "region" | "window";
 
 export type OutputQuality = "lossless" | "high" | "compact";
+export type CaptureBackend =
+  | "auto"
+  | "native_windows_graphics_capture"
+  | "windows_graphics_capture"
+  | "desktop_duplication"
+  | "gdi_grab";
+
+export interface CaptureArea {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  display_index?: number | null;
+  hmonitor?: string | null;
+  dxgi_output_index?: number | null;
+}
 
 export interface RecorderSettings {
   capture_source: CaptureSource;
+  capture_area: CaptureArea | null;
   mic_device_id: string | null;
+  camera_device_id: string | null;
+  camera_format?: CameraFormatInfo | null;
   countdown_seconds: number;
+  frame_rate: number;
   include_cursor: boolean;
+  include_system_audio: boolean;
+  mic_volume: number;
+  system_audio_volume: number;
   output_quality: OutputQuality;
+  capture_backend?: CaptureBackend;
 }
 
-export type RecordingAssetKind = "screen" | "mic" | "camera" | "system_audio";
+export interface FfmpegStatus {
+  available: boolean;
+  version: string | null;
+  path: string | null;
+  error: string | null;
+}
+
+export type RecordingDeviceKind = "microphone" | "camera" | "system_audio";
+
+export interface RecordingDeviceInfo {
+  /** Capture-time identifier. For DirectShow, this is the exact device name. */
+  id: string;
+  label: string;
+  kind: RecordingDeviceKind;
+  is_default: boolean;
+  camera_formats?: CameraFormatInfo[];
+}
+
+export interface CameraFormatInfo {
+  width: number;
+  height: number;
+  fps?: string | null;
+  codec?: string | null;
+  pixel_format?: string | null;
+}
+
+export interface RecordingDeviceDiscovery {
+  ffmpeg: FfmpegStatus;
+  devices: RecordingDeviceInfo[];
+}
+
+export type RecordingAssetKind = "screen" | "screen_proxy" | "mic" | "camera" | "system_audio";
 export type RecordingAssetStatus = "planned" | "local_only" | "missing" | "exported" | "uploaded";
 
 export interface RecordingAssetRef {

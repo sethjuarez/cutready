@@ -7,6 +7,12 @@ pub mod interaction;
 pub mod memory;
 pub mod project;
 pub mod recording;
+#[cfg(target_os = "windows")]
+pub(crate) mod recording_native_audio_windows;
+#[cfg(target_os = "windows")]
+pub(crate) mod recording_native_camera_windows;
+#[cfg(target_os = "windows")]
+pub(crate) mod recording_native_windows;
 pub mod versioning;
 pub mod versioning_merge;
 pub mod versioning_remote;

@@ -74,6 +74,15 @@ pub fn run() {
     tauri::Builder::default()
         .manage(app_state)
         .manage(commands::screenshot::CaptureState(Mutex::new(None)))
+        .manage(commands::screenshot::RecordingCountdownState(Mutex::new(
+            None,
+        )))
+        .manage(commands::screenshot::RecordingControlState(Mutex::new(
+            None,
+        )))
+        .manage(commands::recording::RecordingCaptureState(
+            tokio::sync::Mutex::new(None),
+        ))
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_fs::init())
@@ -289,7 +298,16 @@ pub fn run() {
             commands::interaction::stop_recording_session,
             commands::interaction::get_session_actions,
             commands::recording::initialize_recording_storage,
+            commands::recording::clear_local_recordings,
+            commands::recording::check_ffmpeg_status,
+            commands::recording::discover_recording_devices,
+            commands::recording::discover_camera_formats,
             commands::recording::create_recording_take,
+            commands::recording::start_recording_take,
+            commands::recording::stop_recording_take,
+            commands::recording::discard_recording_take,
+            commands::recording::get_recording_audio_level,
+            commands::recording::open_recording_take_folder,
             commands::screenshot::list_monitors,
             commands::screenshot::capture_region,
             commands::screenshot::capture_fullscreen,
@@ -298,6 +316,14 @@ pub fn run() {
             commands::screenshot::close_capture_window,
             commands::screenshot::crop_screenshot,
             commands::screenshot::get_capture_params,
+            commands::screenshot::get_recording_countdown_params,
+            commands::screenshot::open_recording_countdown_window,
+            commands::screenshot::close_recording_countdown_window,
+            commands::screenshot::get_recording_control_params,
+            commands::screenshot::open_recorder_window,
+            commands::screenshot::open_recording_control_window,
+            commands::screenshot::close_recording_control_window,
+            commands::screenshot::save_recording_control_position,
             commands::screenshot::open_preview_window,
             commands::screenshot::close_preview_window,
             commands::note::create_note,
