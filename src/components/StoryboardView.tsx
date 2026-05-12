@@ -14,6 +14,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { SafeMarkdown } from "./SafeMarkdown";
 import {
   Play,
@@ -32,8 +33,8 @@ import { SketchPreview } from "./SketchPreview";
 import { ScriptTable } from "./ScriptTable";
 import { exportStoryboardToWord, type WordOrientation } from "../utils/exportToWord";
 import { DocumentToolbar, documentToolbarIcons, type DocumentToolbarAction } from "./DocumentToolbar";
-import { RecorderSettingsDialog } from "./RecorderSettingsDialog";
 import type { Sketch, SketchSummary, Storyboard } from "../types/sketch";
+import type { RecordingTake } from "../types/recording";
 import type { PreviewSlide, PresentationMode } from "./presentation/types";
 
 interface MonitorInfo {
@@ -96,7 +97,6 @@ export function StoryboardView() {
   const [previewSlides, setPreviewSlides] = useState<PreviewSlide[]>([]);
   const [showPreview, setShowPreview] = useState(false);
   const [previewMode, setPreviewMode] = useState<PresentationMode>("slides");
-  const [showRecorderSettings, setShowRecorderSettings] = useState(false);
 
   const sketchMap = new Map(sketches.map((s) => [s.path, s]));
   const storyboardLocked = activeStoryboard?.locked ?? false;
@@ -351,9 +351,38 @@ export function StoryboardView() {
     }).catch(err => console.error("Word export failed:", err));
   }, [activeStoryboard, currentProject, sketchCache]);
 
-  const handleRecord = useCallback(() => {
-    setShowRecorderSettings(true);
-  }, []);
+  const handleRecord = useCallback(async () => {
+    if (!activeStoryboardPath) return;
+    try {
+      await invoke("open_recorder_window", {
+        scope: { kind: "storyboard", path: activeStoryboardPath },
+        documentTitle: activeStoryboard?.title || "Untitled storyboard",
+      });
+    } catch (err) {
+      useToastStore.getState().show(`Could not open recorder: ${err}`, 5000, "error");
+    }
+  }, [activeStoryboard?.title, activeStoryboardPath]);
+
+  useEffect(() => {
+    if (!activeStoryboardPath || !activeStoryboard) return;
+    const unlistenStarted = listen<RecordingTake>("recording-control-started", (event) => {
+      if (event.payload.scope.kind !== "storyboard" || event.payload.scope.path !== activeStoryboardPath) return;
+      useAppStore.getState().addActivityEntries([{ id: crypto.randomUUID(), timestamp: new Date(), source: "recording", content: `Started recording take ${event.payload.id} for "${activeStoryboard.title || "Untitled storyboard"}"`, level: "info" }]);
+    });
+    const unlistenStopped = listen<RecordingTake>("recording-control-stopped", (event) => {
+      if (event.payload.scope.kind !== "storyboard" || event.payload.scope.path !== activeStoryboardPath) return;
+      useAppStore.getState().addActivityEntries([{ id: crypto.randomUUID(), timestamp: new Date(), source: "recording", content: `Saved recording take ${event.payload.id} for "${activeStoryboard.title || "Untitled storyboard"}"`, level: event.payload.status === "finalized" ? "success" : "error" }]);
+    });
+    const unlistenDiscarded = listen<RecordingTake>("recording-control-discarded", (event) => {
+      if (event.payload.scope.kind !== "storyboard" || event.payload.scope.path !== activeStoryboardPath) return;
+      useAppStore.getState().addActivityEntries([{ id: crypto.randomUUID(), timestamp: new Date(), source: "recording", content: `Discarded recording take ${event.payload.id} for "${activeStoryboard.title || "Untitled storyboard"}"`, level: "info" }]);
+    });
+    return () => {
+      unlistenStarted.then((fn) => fn());
+      unlistenStopped.then((fn) => fn());
+      unlistenDiscarded.then((fn) => fn());
+    };
+  }, [activeStoryboard, activeStoryboardPath]);
 
   if (!activeStoryboard) return null;
 
@@ -625,17 +654,6 @@ export function StoryboardView() {
             slides={previewSlides}
             initialMode={previewMode}
             onClose={() => { setShowPreview(false); setPreviewMode("slides"); }}
-          />
-        )}
-        {showRecorderSettings && activeStoryboardPath && (
-          <RecorderSettingsDialog
-            isOpen={showRecorderSettings}
-            onClose={() => setShowRecorderSettings(false)}
-            scope={{ kind: "storyboard", path: activeStoryboardPath }}
-            documentTitle={activeStoryboard.title || "Untitled storyboard"}
-            onPrepared={(take) => {
-              useAppStore.getState().addActivityEntries([{ id: crypto.randomUUID(), timestamp: new Date(), source: "recording", content: `Prepared recording take ${take.id} for "${activeStoryboard.title || "Untitled storyboard"}"`, level: "info" }]);
-            }}
           />
         )}
       </div>

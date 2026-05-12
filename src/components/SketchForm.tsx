@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import { SafeMarkdown } from "./SafeMarkdown";
 import { ChevronLeft, Sparkles, Monitor, Plus, X, Folder } from "lucide-react";
@@ -14,7 +15,7 @@ import { exportSketchToWord, type WordOrientation } from "../utils/exportToWord"
 import type { PlanningRow, Sketch } from "../types/sketch";
 import { diffRow, type RowDiff } from "../utils/textDiff";
 import { DocumentToolbar, documentToolbarIcons, type DocumentToolbarAction } from "./DocumentToolbar";
-import { RecorderSettingsDialog } from "./RecorderSettingsDialog";
+import type { RecordingTake } from "../types/recording";
 
 interface MonitorInfo {
   id: number;
@@ -46,7 +47,6 @@ export function SketchForm() {
   const [showPreview, setShowPreview] = useState(false);
   const [previewMode, setPreviewMode] = useState<PresentationMode>("slides");
   const [showMonitorPicker, setShowMonitorPicker] = useState(false);
-  const [showRecorderSettings, setShowRecorderSettings] = useState(false);
   const [availableMonitors, setAvailableMonitors] = useState<MonitorInfo[]>([]);
   const [editingDesc, setEditingDesc] = useState(false);
   const [aiUpdatedFlash, setAiUpdatedFlash] = useState(false);
@@ -426,9 +426,38 @@ The Actions describe what happens on screen — use them as visual design hints.
     }).catch(err => console.error("Word export failed:", err));
   }, [activeSketch, projectRoot]);
 
-  const handleRecord = useCallback(() => {
-    setShowRecorderSettings(true);
-  }, []);
+  const handleRecord = useCallback(async () => {
+    if (!activeSketchPath) return;
+    try {
+      await invoke("open_recorder_window", {
+        scope: { kind: "sketch", path: activeSketchPath },
+        documentTitle: localTitle || "Untitled sketch",
+      });
+    } catch (err) {
+      useToastStore.getState().show(`Could not open recorder: ${err}`, 5000, "error");
+    }
+  }, [activeSketchPath, localTitle]);
+
+  useEffect(() => {
+    if (!activeSketchPath) return;
+    const unlistenStarted = listen<RecordingTake>("recording-control-started", (event) => {
+      if (event.payload.scope.kind !== "sketch" || event.payload.scope.path !== activeSketchPath) return;
+      useAppStore.getState().addActivityEntries([{ id: crypto.randomUUID(), timestamp: new Date(), source: "recording", content: `Started recording take ${event.payload.id} for "${localTitle || "Untitled sketch"}"`, level: "info" }]);
+    });
+    const unlistenStopped = listen<RecordingTake>("recording-control-stopped", (event) => {
+      if (event.payload.scope.kind !== "sketch" || event.payload.scope.path !== activeSketchPath) return;
+      useAppStore.getState().addActivityEntries([{ id: crypto.randomUUID(), timestamp: new Date(), source: "recording", content: `Saved recording take ${event.payload.id} for "${localTitle || "Untitled sketch"}"`, level: event.payload.status === "finalized" ? "success" : "error" }]);
+    });
+    const unlistenDiscarded = listen<RecordingTake>("recording-control-discarded", (event) => {
+      if (event.payload.scope.kind !== "sketch" || event.payload.scope.path !== activeSketchPath) return;
+      useAppStore.getState().addActivityEntries([{ id: crypto.randomUUID(), timestamp: new Date(), source: "recording", content: `Discarded recording take ${event.payload.id} for "${localTitle || "Untitled sketch"}"`, level: "info" }]);
+    });
+    return () => {
+      unlistenStarted.then((fn) => fn());
+      unlistenStopped.then((fn) => fn());
+      unlistenDiscarded.then((fn) => fn());
+    };
+  }, [activeSketchPath, localTitle]);
 
   if (!activeSketch) return null;
 
@@ -699,18 +728,6 @@ The row already has a visual and design_plan. Read the sketch with read_sketch f
         <ScreenCaptureOverlay
           onCapture={handleCaptureComplete}
           onCancel={handleCaptureCancel}
-        />
-      )}
-
-      {showRecorderSettings && activeSketchPath && (
-        <RecorderSettingsDialog
-          isOpen={showRecorderSettings}
-          onClose={() => setShowRecorderSettings(false)}
-          scope={{ kind: "sketch", path: activeSketchPath }}
-          documentTitle={localTitle || "Untitled sketch"}
-          onPrepared={(take) => {
-            useAppStore.getState().addActivityEntries([{ id: crypto.randomUUID(), timestamp: new Date(), source: "recording", content: `Prepared recording take ${take.id} for "${localTitle || "Untitled sketch"}"`, level: "info" }]);
-          }}
         />
       )}
 

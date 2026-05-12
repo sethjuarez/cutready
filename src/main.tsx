@@ -68,13 +68,17 @@ if ((window as any).__TAURI_INTERNALS__) {
 declare global {
   interface Window {
     __IS_CAPTURE?: boolean;
+    __IS_RECORDING_COUNTDOWN?: boolean;
+    __IS_RECORDING_CONTROL?: boolean;
     __IS_PREVIEW?: boolean;
   }
 }
 
 const isCaptureMode = !!window.__IS_CAPTURE;
+const isRecordingCountdownMode = !!window.__IS_RECORDING_COUNTDOWN;
+const isRecordingControlMode = !!window.__IS_RECORDING_CONTROL;
 const isPreviewMode = !!window.__IS_PREVIEW;
-console.log(`[main.tsx] isCaptureMode=${isCaptureMode} isPreviewMode=${isPreviewMode} href=${window.location.href}`);
+console.log(`[main.tsx] isCaptureMode=${isCaptureMode} isRecordingCountdownMode=${isRecordingCountdownMode} isRecordingControlMode=${isRecordingControlMode} isPreviewMode=${isPreviewMode} href=${window.location.href}`);
 
 async function renderApp() {
   if (isCaptureMode) {
@@ -83,6 +87,18 @@ async function renderApp() {
     const { CaptureWindow } = await import("./components/CaptureWindow");
     ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
       <CaptureWindow />,
+    );
+  } else if (isRecordingCountdownMode) {
+    document.documentElement.dataset.themeReady = "true";
+    const { RecordingCountdownWindow } = await import("./components/RecordingCountdownWindow");
+    ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
+      <RecordingCountdownWindow />,
+    );
+  } else if (isRecordingControlMode) {
+    document.documentElement.dataset.themeReady = "true";
+    const { RecordingControlWindow } = await import("./components/RecordingControlWindow");
+    ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
+      <RecordingControlWindow />,
     );
   } else if (isPreviewMode) {
     const { StandalonePreview } = await import("./components/StandalonePreview");

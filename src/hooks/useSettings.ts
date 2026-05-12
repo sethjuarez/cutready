@@ -78,16 +78,26 @@ export interface GlobalSettings {
   recorderCaptureSource: "full_screen" | "region" | "window";
   /** Default microphone device id; empty means system default. */
   recorderMicDeviceId: string;
+  /** Software gain for microphone recording, 0-200 where 100 is unity. */
+  recorderMicVolume: number;
+  /** Last selected recorder monitor preference. */
+  recorderMonitorPreference: string;
   /** Default countdown before recording starts. */
   recorderCountdownSeconds: number;
+  /** Default recording frame rate. */
+  recorderFrameRate: number;
   /** Whether the cursor should be included in screen recordings by default. */
   recorderIncludeCursor: boolean;
   /** Default recording quality: "lossless", "high", or "compact". */
   recorderOutputQuality: "lossless" | "high" | "compact";
   /** Future default: capture camera as a separate asset. */
   recorderCameraEnabled: boolean;
+  /** Last selected camera device id for separate camera.mp4 capture. */
+  recorderCameraDeviceId: string;
   /** Future default: capture system audio as a separate asset. */
   recorderSystemAudioEnabled: boolean;
+  /** Software gain for system audio recording, 0-200 where 100 is unity. */
+  recorderSystemAudioVolume: number;
   // Legacy fields (migrated on load)
   llmApiKey?: string;
   llmEndpoint?: string;
@@ -144,11 +154,16 @@ const defaultGlobalSettings: GlobalSettings = {
   aiWebAccess: "disabled",
   recorderCaptureSource: "full_screen",
   recorderMicDeviceId: "",
+  recorderMicVolume: 100,
+  recorderMonitorPreference: "",
   recorderCountdownSeconds: 3,
+  recorderFrameRate: 30,
   recorderIncludeCursor: true,
-  recorderOutputQuality: "lossless",
+  recorderOutputQuality: "high",
   recorderCameraEnabled: false,
+  recorderCameraDeviceId: "",
   recorderSystemAudioEnabled: false,
+  recorderSystemAudioVolume: 100,
 };
 
 function getInitialGlobalSettings(): GlobalSettings {

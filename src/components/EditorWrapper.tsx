@@ -7,7 +7,8 @@
  * CutReady theme palette so the canvas can generate proper --elucim-* vars.
  */
 import { memo, lazy, Suspense, useState, useCallback, useRef } from "react";
-import type { ElucimDocument, ElucimV2Document } from "@elucim/dsl";
+import type { ComponentType } from "react";
+import type { ElucimEditorProps } from "@elucim/editor";
 import type { CutReadyElucimDocument } from "../types/elucim";
 import { elucimThemeFromTokens } from "../theme/elucimTheme";
 import { getThemePalette } from "../theme/appThemePalettes";
@@ -20,12 +21,23 @@ import { ProjectImagePicker } from "./ProjectImagePicker";
 
 export interface EditorWrapperProps {
   dsl: CutReadyElucimDocument;
-  onDocumentChange: (doc: ElucimDocument) => void;
-  onV2DocumentChange?: (doc: ElucimV2Document) => void;
+  onDocumentChange: (doc: CutReadyElucimDocument) => void;
+  onV2DocumentChange?: (doc: CutReadyElucimDocument) => void;
 }
 
+type ElucimEditorCompatProps = Omit<
+  ElucimEditorProps,
+  "initialDocument" | "onDocumentChange" | "onV2DocumentChange"
+> & {
+  initialDocument?: CutReadyElucimDocument;
+  onDocumentChange?: (document: CutReadyElucimDocument, details?: unknown) => void;
+  onV2DocumentChange?: (document: CutReadyElucimDocument, details?: unknown) => void;
+};
+
 const LazyElucimEditor = lazy(() =>
-  import("@elucim/editor").then((mod) => ({ default: mod.ElucimEditor }))
+  import("@elucim/editor").then((mod) => ({
+    default: mod.ElucimEditor as ComponentType<ElucimEditorCompatProps>,
+  }))
 );
 
 export default memo(function EditorWrapper({
@@ -66,6 +78,10 @@ export default memo(function EditorWrapper({
   const palette = getThemePalette(settings.displayThemePalette);
   const colors = palette[resolvedTheme];
   const theme = elucimThemeFromTokens(colors);
+  const handleEditorDocumentChange = useCallback((doc: CutReadyElucimDocument) => {
+    onDocumentChange(doc);
+    onV2DocumentChange?.(doc);
+  }, [onDocumentChange, onV2DocumentChange]);
 
   return (
     <ErrorBoundary
@@ -90,8 +106,8 @@ export default memo(function EditorWrapper({
             "color-scheme": resolvedTheme,
             "--elucim-editor-bg": `rgb(${colors.surfaceInset})`,
           }}
-          onDocumentChange={onDocumentChange}
-          onV2DocumentChange={onV2DocumentChange}
+          onDocumentChange={handleEditorDocumentChange}
+          onV2DocumentChange={handleEditorDocumentChange}
           onBrowseImage={projectRoot ? handleBrowseImage : undefined}
           imageResolver={imageResolver}
           className="w-full h-full"

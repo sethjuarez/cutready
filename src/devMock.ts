@@ -95,6 +95,7 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
   switch (cmd) {
     case "open_project":
     case "get_project":
+    case "get_current_project":
       return MOCK_PROJECT;
     case "list_recent_projects":
       return [{ path: "C:/mock-project", last_opened: new Date().toISOString() }];
@@ -377,7 +378,167 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
     case "create_github_issue":
       return "https://github.com/sethjuarez/cutready/issues/999";
     case "list_monitors":
-      return [{ id: 0, name: "Primary Monitor", width: 1920, height: 1080, x: 0, y: 0, is_primary: true }];
+      return [{
+        id: 0,
+        name: "Primary Monitor",
+        device_name: "\\\\.\\DISPLAY1",
+        hmonitor: "1",
+        dxgi_output_index: 0,
+        width: 1920,
+        height: 1080,
+        x: 0,
+        y: 0,
+        is_primary: true,
+      }];
+    case "capture_all_monitors":
+      return { 0: ".cutready/screenshots/mock-monitor.png" };
+    case "capture_fullscreen":
+      return ".cutready/screenshots/mock-monitor.png";
+    case "open_recording_countdown_window":
+      window.setTimeout(() => {
+        (window as any).__TAURI_INTERNALS__?.emit?.("recording-countdown-complete", {
+          monitor_id: args?.monitorId ?? 0,
+          capture_area: {
+            x: args?.physX ?? 0,
+            y: args?.physY ?? 0,
+            width: args?.physW ?? 1920,
+            height: args?.physH ?? 1080,
+            hmonitor: "1",
+            dxgi_output_index: 0,
+          },
+        });
+      }, 250);
+      return null;
+    case "close_recording_countdown_window":
+    case "get_recording_countdown_params":
+      return null;
+    case "open_recording_control_window":
+    case "open_recorder_window":
+    case "close_recording_control_window":
+    case "save_recording_control_position":
+    case "open_recording_take_folder":
+      return null;
+    case "get_recording_control_params":
+      return {
+        take_id: null,
+        document_title: "Dev Mock Recording",
+        scope: { kind: "sketch", path: "dev.sk" },
+      };
+    case "check_ffmpeg_status":
+      return {
+        available: true,
+        version: "ffmpeg version dev-mock",
+        path: "ffmpeg",
+        error: null,
+      };
+    case "discover_recording_devices":
+      return {
+        ffmpeg: {
+          available: true,
+          version: "ffmpeg version dev-mock",
+          path: "ffmpeg",
+          error: null,
+        },
+        devices: [
+          { id: "Studio Microphone", label: "Studio Microphone", kind: "microphone", is_default: false },
+          { id: "default-output", label: "Studio Speakers", kind: "system_audio", is_default: true },
+          {
+            id: "Integrated Camera",
+            label: "Integrated Camera",
+            kind: "camera",
+            is_default: false,
+            camera_formats: [{ width: 3840, height: 2160, fps: "30", codec: "mjpeg", pixel_format: null }],
+          },
+        ],
+      };
+    case "discover_camera_formats":
+      return [{ width: 3840, height: 2160, fps: "30", codec: "mjpeg", pixel_format: null }];
+    case "start_recording_take":
+      return {
+        schema_version: 1,
+        id: "take_dev_mock",
+        scope: args?.scope ?? { kind: "sketch", path: "dev.sk" },
+        settings: args?.settings ?? {
+          capture_source: "full_screen",
+          capture_area: null,
+          mic_device_id: null,
+          camera_device_id: null,
+          countdown_seconds: 3,
+          frame_rate: 30,
+          include_cursor: true,
+          include_system_audio: false,
+          mic_volume: 100,
+          system_audio_volume: 100,
+          output_quality: "high",
+        },
+        status: "recording",
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        metadata_path: ".cutready/recordings/take_dev_mock/take.json",
+        assets: [{ kind: "screen", path: "screen.mp4", status: "planned" }],
+        markers: [],
+      };
+    case "get_recording_audio_level":
+      return {
+        available: true,
+        rms: 0.035 + Math.random() * 0.045,
+        peak: 0.08 + Math.random() * 0.18,
+        bytes: 65536,
+      };
+    case "stop_recording_take":
+      return {
+        schema_version: 1,
+        id: "take_dev_mock",
+        scope: { kind: "sketch", path: "dev.sk" },
+        settings: {
+          capture_source: "full_screen",
+          capture_area: null,
+          mic_device_id: null,
+          camera_device_id: null,
+          countdown_seconds: 3,
+          frame_rate: 30,
+          include_cursor: true,
+          include_system_audio: false,
+          mic_volume: 100,
+          system_audio_volume: 100,
+          output_quality: "high",
+        },
+        status: "finalized",
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        metadata_path: ".cutready/recordings/take_dev_mock/take.json",
+        assets: [
+          { kind: "screen", path: "screen.mp4", status: "local_only" },
+        ],
+        markers: [],
+      };
+    case "discard_recording_take":
+      return {
+        schema_version: 1,
+        id: "take_dev_mock",
+        scope: { kind: "sketch", path: "dev.sk" },
+        settings: {
+          capture_source: "full_screen",
+          capture_area: null,
+          mic_device_id: null,
+          camera_device_id: null,
+          countdown_seconds: 3,
+          frame_rate: 30,
+          include_cursor: true,
+          include_system_audio: false,
+          mic_volume: 100,
+          system_audio_volume: 100,
+          output_quality: "high",
+        },
+        status: "failed",
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        metadata_path: ".cutready/recordings/take_dev_mock/take.json",
+        assets: [],
+        markers: [],
+      };
+    case "clear_local_recordings":
+      return 0;
     case "capture_screenshot":
       return null;
     case "list_project_images":
