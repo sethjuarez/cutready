@@ -1042,6 +1042,8 @@ fn spawn_camera_process(
     output_path: &Path,
     log_path: &Path,
 ) -> anyhow::Result<ActiveCameraProcess> {
+    let mut prefer_negotiated_camera_fallback = false;
+
     #[cfg(target_os = "windows")]
     if let Some(device) = settings
         .camera_device_id
@@ -1067,13 +1069,26 @@ fn spawn_camera_process(
                 log::warn!(
                     "[recording] native camera capture unavailable, falling back to FFmpeg DirectShow: {err}"
                 );
+                prefer_negotiated_camera_fallback =
+                    native_camera_failure_prefers_negotiated_fallback(&err);
             }
         }
     }
 
-    let Some(args) = build_ffmpeg_camera_args(settings, output_path)? else {
+    let Some(args) = build_ffmpeg_camera_args_with_mode(
+        settings,
+        output_path,
+        !prefer_negotiated_camera_fallback,
+    )?
+    else {
         anyhow::bail!("No camera selected");
     };
+    if prefer_negotiated_camera_fallback {
+        append_ffmpeg_log(
+            log_path,
+            "native camera activation failed; starting FFmpeg camera capture in negotiated mode",
+        )?;
+    }
     let _ = std::fs::remove_file(output_path);
     log::info!(
         "[recording] starting camera capture device={:?} output={}",
@@ -1109,6 +1124,11 @@ fn spawn_camera_process(
         }
         Err(err) => Err(err),
     }
+}
+
+#[cfg(target_os = "windows")]
+fn native_camera_failure_prefers_negotiated_fallback(err: &anyhow::Error) -> bool {
+    format!("{err:#}").contains("Media Foundation camera device activation failed")
 }
 
 fn spawn_ffmpeg_camera_with_startup_check(
@@ -1427,6 +1447,7 @@ fn build_ffmpeg_capture_args(
     }
 }
 
+#[cfg(test)]
 fn build_ffmpeg_camera_args(
     settings: &RecorderSettings,
     output_path: &Path,

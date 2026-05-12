@@ -146,13 +146,17 @@ export function RecordingControlWindow() {
   }, [clearCountdownTimer, discardRecording, phase]);
 
   const stopSourcePreview = useCallback(async () => {
+    let stoppedCameraPreview = false;
     setSourcePreview((current) => {
       if (current?.kind === "camera") {
         current.stream.getTracks().forEach((track) => track.stop());
+        stoppedCameraPreview = true;
       }
       return null;
     });
-    await new Promise((resolve) => window.setTimeout(resolve, 180));
+    if (stoppedCameraPreview) {
+      await new Promise((resolve) => window.setTimeout(resolve, 750));
+    }
   }, []);
 
   const startTake = useCallback(async () => {
@@ -227,6 +231,7 @@ export function RecordingControlWindow() {
 
   const startRecording = useCallback(async () => {
     if (!selectedMonitor || !canStart) return;
+    await stopSourcePreview();
     if (countdownSeconds <= 0) {
       await startTake();
       return;
@@ -253,7 +258,7 @@ export function RecordingControlWindow() {
       setError(err instanceof Error ? err.message : String(err));
       setPhase("setup");
     }
-  }, [canStart, clearCountdownTimer, countdownSeconds, documentTitle, selectedMonitor, startTake]);
+  }, [canStart, clearCountdownTimer, countdownSeconds, documentTitle, selectedMonitor, startTake, stopSourcePreview]);
 
   const previewScreen = useCallback(async () => {
     if (!selectedMonitor) return;

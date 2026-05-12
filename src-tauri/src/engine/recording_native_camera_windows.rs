@@ -9,6 +9,7 @@ use std::sync::{
 };
 use std::thread::{self, JoinHandle};
 
+use anyhow::Context;
 use windows::core::{GUID, PCWSTR, PWSTR};
 use windows::Win32::Media::MediaFoundation::{
     eAVEncH264VProfile_High, IMFActivate, IMFAttributes, IMFMediaSource, IMFSample,
@@ -79,7 +80,7 @@ impl NativeCameraRecording {
                 started_tx,
             );
             if let Err(err) = &result {
-                let _ = append_log(&log_path, &format!("native_camera error {err}"));
+                let _ = append_log(&log_path, &format!("native_camera error {err:#}"));
             }
             result
         });
@@ -161,6 +162,7 @@ fn run_native_camera_capture(
 
         let device = find_video_device_by_name(friendly_name)?
             .ok_or_else(|| anyhow::anyhow!("Native camera device not found: {friendly_name}"))?;
+        append_log(log_path, "native_camera device found")?;
         let selected_format = requested_format
             .or_else(|| {
                 native_formats_for_device(&device)
@@ -174,11 +176,29 @@ fn run_native_camera_capture(
                 codec: None,
                 pixel_format: None,
             });
+        append_log(
+            log_path,
+            &format!(
+                "native_camera selected requested format {}x{} fps={:?} codec={:?} pixel={:?}",
+                selected_format.width,
+                selected_format.height,
+                selected_format.fps,
+                selected_format.codec,
+                selected_format.pixel_format
+            ),
+        )?;
 
-        let source: IMFMediaSource = unsafe { device.ActivateObject()? };
-        let reader = unsafe { MFCreateSourceReaderFromMediaSource(&source, None)? };
+        append_log(log_path, "native_camera activating Media Foundation source")?;
+        let source: IMFMediaSource = unsafe { device.ActivateObject() }
+            .context("Media Foundation camera device activation failed")?;
+        append_log(log_path, "native_camera creating source reader")?;
+        let reader = unsafe { MFCreateSourceReaderFromMediaSource(&source, None) }
+            .context("Media Foundation source reader creation failed")?;
+        append_log(log_path, "native_camera selecting first video stream")?;
         unsafe {
-            reader.SetStreamSelection(MF_SOURCE_READER_FIRST_VIDEO_STREAM.0 as u32, true)?;
+            reader
+                .SetStreamSelection(MF_SOURCE_READER_FIRST_VIDEO_STREAM.0 as u32, true)
+                .context("Media Foundation source reader stream selection failed")?;
         }
 
         let source_config = configure_reader_source_format(&reader, &selected_format, log_path)?;
@@ -240,7 +260,7 @@ fn run_native_camera_capture(
             pipeline
         }
         Err(err) => {
-            let message = err.to_string();
+            let message = format!("{err:#}");
             let _ = started_tx.send(Err(anyhow::anyhow!(message.clone())));
             return Err(anyhow::anyhow!(message));
         }
