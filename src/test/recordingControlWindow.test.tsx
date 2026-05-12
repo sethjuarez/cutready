@@ -136,6 +136,14 @@ describe("RecordingControlWindow", () => {
     Object.defineProperty(window.navigator, "userAgent", { value: "Windows", configurable: true });
     mocks.invoke.mockImplementation((command: string) => {
       if (command === "get_recording_control_params") return Promise.resolve({ document_title: "Intro sketch", scope });
+      if (command === "get_recording_platform_capabilities") return Promise.resolve({
+        platform: "windows",
+        supports_system_audio: true,
+        supports_native_monitor_capture: true,
+        supports_window_capture_exclusion: true,
+        supports_click_through_prompter: true,
+        supports_camera_format_discovery: true,
+      });
       if (command === "list_monitors") return Promise.resolve(monitors);
       if (command === "get_recording_audio_level") return Promise.resolve({ available: false, rms: 0, peak: 0, bytes: 0 });
       if (command === "close_recording_countdown_window") return Promise.resolve();
@@ -147,6 +155,7 @@ describe("RecordingControlWindow", () => {
 
     await screen.findByText("Intro sketch");
     const [, cameraSelect, microphoneSelect, frameRateSelect] = screen.getAllByRole("combobox");
+    await waitFor(() => expect(screen.getByRole("checkbox", { name: /system audio/i })).toBeEnabled());
     fireEvent.change(microphoneSelect, { target: { value: "mic-1" } });
     fireEvent.change(cameraSelect, { target: { value: "camera-1" } });
     fireEvent.change(frameRateSelect, { target: { value: "60" } });
@@ -205,6 +214,29 @@ describe("RecordingControlWindow", () => {
     await waitFor(() => expect(screen.getAllByRole("combobox")[0]).toHaveValue("1"));
   });
 
+  it("disables system audio when platform capabilities do not support it", async () => {
+    mocks.settings.recorderSystemAudioEnabled = true;
+    mocks.invoke.mockImplementation((command: string) => {
+      if (command === "get_recording_control_params") return Promise.resolve({ document_title: "Intro sketch", scope });
+      if (command === "get_recording_platform_capabilities") return Promise.resolve({
+        platform: "macos",
+        supports_system_audio: false,
+        supports_native_monitor_capture: false,
+        supports_window_capture_exclusion: false,
+        supports_click_through_prompter: true,
+        supports_camera_format_discovery: false,
+      });
+      if (command === "list_monitors") return Promise.resolve(monitors);
+      return Promise.resolve();
+    });
+
+    render(<RecordingControlWindow />);
+
+    await screen.findByText("Intro sketch");
+    await waitFor(() => expect(screen.getByText("Unavailable on this platform")).toBeInTheDocument());
+    expect(screen.getByRole("checkbox", { name: /system audio/i })).toBeDisabled();
+  });
+
   it("captures a one-frame screen preview from the selected monitor", async () => {
     mocks.invoke.mockImplementation((command: string, args?: unknown) => {
       if (command === "get_current_project") return Promise.resolve({ root: "D:\\demo", name: "Demo", repo_root: "D:\\demo" });
@@ -221,6 +253,63 @@ describe("RecordingControlWindow", () => {
 
     await waitFor(() => expect(mocks.invoke).toHaveBeenCalledWith("capture_fullscreen", { monitorId: 0 }));
     expect(await screen.findByRole("button", { name: /close preview/i })).toBeInTheDocument();
+  });
+
+  it("opens prompter preview in adjust mode and recording prompter in read mode", async () => {
+    const prompterScript = {
+      title: "Intro sketch",
+      steps: [{
+        title: "Intro",
+        section: null,
+        narrative: "Read this line while recording.",
+        cue: "Click the first button.",
+        source_path: "intro.sk",
+        row_index: 0,
+      }],
+    };
+    mocks.invoke.mockImplementation((command: string) => {
+      if (command === "get_recording_control_params") return Promise.resolve({ document_title: "Intro sketch", scope });
+      if (command === "get_recording_platform_capabilities") return Promise.resolve({
+        platform: "windows",
+        supports_system_audio: true,
+        supports_native_monitor_capture: true,
+        supports_window_capture_exclusion: true,
+        supports_click_through_prompter: true,
+        supports_camera_format_discovery: true,
+      });
+      if (command === "list_monitors") return Promise.resolve(monitors);
+      if (command === "get_recording_prompter_script") return Promise.resolve(prompterScript);
+      if (command === "open_recording_prompter_window") return Promise.resolve();
+      if (command === "close_recording_countdown_window") return Promise.resolve();
+      if (command === "get_recording_audio_level") return Promise.resolve({ available: false, rms: 0, peak: 0, bytes: 0 });
+      if (command === "start_recording_take") return Promise.resolve({ id: "take_1", status: "recording", scope });
+      return Promise.resolve();
+    });
+
+    render(<RecordingControlWindow />);
+
+    await screen.findByText("Intro sketch");
+    await waitFor(() => expect(screen.getByText("1 manual steps")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: /preview prompter/i }));
+
+    await waitFor(() => expect(mocks.invoke).toHaveBeenCalledWith("open_recording_prompter_window", expect.objectContaining({
+      readMode: false,
+      physX: 0,
+      physY: 0,
+      physW: 1920,
+      physH: 1080,
+    })));
+
+    fireEvent.click(screen.getByRole("button", { name: /start recording/i }));
+
+    await waitFor(() => expect(mocks.invoke).toHaveBeenCalledWith("open_recording_prompter_window", expect.objectContaining({
+      readMode: true,
+      physX: 0,
+      physY: 0,
+      physW: 1920,
+      physH: 1080,
+    })));
+    expect(mocks.emit).toHaveBeenCalledWith("recording-prompter-read", {});
   });
 
   it("uses the header strip to drag the recorder window", async () => {
