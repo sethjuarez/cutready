@@ -108,7 +108,7 @@ pub struct RecordingDeviceDiscovery {
 
 pub struct ActiveRecording {
     process: ActiveRecordingProcess,
-    camera_process: Option<Child>,
+    camera_process: Option<ActiveCameraProcess>,
     take: RecordingTake,
     take_dir: PathBuf,
     output_path: PathBuf,
@@ -120,6 +120,22 @@ enum ActiveRecordingProcess {
     Ffmpeg(Child),
     #[cfg(target_os = "windows")]
     NativeWindows(crate::engine::recording_native_windows::NativeWindowsRecording),
+}
+
+enum ActiveCameraProcess {
+    Ffmpeg(Child),
+    #[cfg(target_os = "windows")]
+    NativeWindows(crate::engine::recording_native_camera_windows::NativeCameraRecording),
+}
+
+impl ActiveCameraProcess {
+    fn stop(self) -> anyhow::Result<()> {
+        match self {
+            Self::Ffmpeg(mut child) => stop_ffmpeg_child(&mut child),
+            #[cfg(target_os = "windows")]
+            Self::NativeWindows(recording) => recording.stop(),
+        }
+    }
 }
 
 impl ActiveRecordingProcess {
@@ -752,8 +768,8 @@ pub fn start_recording_capture(
 }
 
 pub fn stop_recording_capture(mut active: ActiveRecording) -> anyhow::Result<RecordingTake> {
-    if let Some(mut camera) = active.camera_process.take() {
-        if let Err(err) = stop_ffmpeg_child(&mut camera) {
+    if let Some(camera) = active.camera_process.take() {
+        if let Err(err) = camera.stop() {
             log::warn!("[recording] failed to stop camera capture: {err}");
         }
     }
@@ -873,8 +889,8 @@ pub fn stop_recording_capture(mut active: ActiveRecording) -> anyhow::Result<Rec
 }
 
 pub fn discard_recording_capture(mut active: ActiveRecording) -> anyhow::Result<RecordingTake> {
-    if let Some(mut camera) = active.camera_process.take() {
-        if let Err(err) = stop_ffmpeg_child(&mut camera) {
+    if let Some(camera) = active.camera_process.take() {
+        if let Err(err) = camera.stop() {
             log::warn!("[recording] failed to stop camera capture before discard: {err}");
         }
     }
@@ -1025,7 +1041,36 @@ fn spawn_camera_process(
     settings: &RecorderSettings,
     output_path: &Path,
     log_path: &Path,
-) -> anyhow::Result<Child> {
+) -> anyhow::Result<ActiveCameraProcess> {
+    #[cfg(target_os = "windows")]
+    if let Some(device) = settings
+        .camera_device_id
+        .as_ref()
+        .map(|device| device.trim())
+        .filter(|device| !device.is_empty())
+    {
+        match crate::engine::recording_native_camera_windows::NativeCameraRecording::start(
+            device.to_string(),
+            settings.camera_format.clone(),
+            output_path,
+            log_path,
+        ) {
+            Ok(recording) => {
+                log::info!(
+                    "[recording] started native camera capture device={:?} output={}",
+                    settings.camera_device_id,
+                    output_path.display()
+                );
+                return Ok(ActiveCameraProcess::NativeWindows(recording));
+            }
+            Err(err) => {
+                log::warn!(
+                    "[recording] native camera capture unavailable, falling back to FFmpeg DirectShow: {err}"
+                );
+            }
+        }
+    }
+
     let Some(args) = build_ffmpeg_camera_args(settings, output_path)? else {
         anyhow::bail!("No camera selected");
     };
@@ -1037,7 +1082,7 @@ fn spawn_camera_process(
     );
     let used_explicit_input_options = camera_args_use_explicit_input_options(&args);
     match spawn_ffmpeg_camera_with_startup_check(args, log_path) {
-        Ok(child) => return Ok(child),
+        Ok(child) => return Ok(ActiveCameraProcess::Ffmpeg(child)),
         Err(first_err) if used_explicit_input_options => {
             log::warn!(
                 "[recording] camera capture failed with explicit device mode; retrying negotiated mode: {first_err}"
@@ -1054,11 +1099,13 @@ fn spawn_camera_process(
             else {
                 anyhow::bail!("No camera selected");
             };
-            spawn_ffmpeg_camera_with_startup_check(fallback_args, log_path).map_err(|fallback_err| {
-                anyhow::anyhow!(
-                    "Camera capture failed with explicit mode ({first_err}) and negotiated mode ({fallback_err})"
-                )
-            })
+            spawn_ffmpeg_camera_with_startup_check(fallback_args, log_path)
+                .map(ActiveCameraProcess::Ffmpeg)
+                .map_err(|fallback_err| {
+                    anyhow::anyhow!(
+                        "Camera capture failed with explicit mode ({first_err}) and negotiated mode ({fallback_err})"
+                    )
+                })
         }
         Err(err) => Err(err),
     }
