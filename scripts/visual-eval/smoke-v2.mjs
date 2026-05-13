@@ -7,26 +7,26 @@ import {
   applyCommand,
   applyNudge,
   diffDocuments,
-  normalizeToV2,
+  normalizeDocument,
   summarizeDocument,
   suggestDocumentNudges,
-  toRenderableV1,
+  toRenderableDocument,
   validate,
   validateForAgent,
-  validateV2,
+  validateDocument,
 } from "@elucim/dsl";
+import { evaluateSceneForAgent } from "@elucim/dsl/agent";
 
 const DEFAULT_TARGET = "D:\\cutready";
 const REPORT_DIR = path.join(process.cwd(), "scripts", "visual-eval", "reports");
-const DEFAULT_OUT = path.join(REPORT_DIR, "v2-smoke-report.json");
+const DEFAULT_OUT = path.join(REPORT_DIR, "elucim-smoke-report.json");
 
-const MINIMAL_V2_DOC = {
+const MINIMAL_ELUCIM_DOC = {
   version: "2.0",
   scene: {
     type: "player",
     width: 1920,
     height: 1080,
-    durationInFrames: 90,
     children: ["title", "metric"],
   },
   elements: {
@@ -34,7 +34,7 @@ const MINIMAL_V2_DOC = {
       id: "title",
       type: "text",
       layout: { x: 120, y: 120, zIndex: 0 },
-      props: { type: "text", content: "CutReady + Elucim v2", x: 120, y: 120, fontSize: 52, fill: "$title" },
+      props: { type: "text", content: "CutReady + Elucim", x: 120, y: 120, fontSize: 52, fill: "$title" },
     },
     metric: {
       id: "metric",
@@ -56,13 +56,14 @@ const MINIMAL_V2_DOC = {
   stateMachines: {
     deck: {
       id: "deck",
-      initial: "idle",
+      entry: "intro",
       states: {
-        idle: { on: { start: { target: "intro", timeline: "intro" } } },
         intro: { timeline: "intro" },
       },
+      transitions: [{ id: "entry-start", from: "entry", to: "intro", trigger: "onStart" }],
     },
   },
+  defaultStateMachine: "deck",
 };
 
 function parseArgs(argv) {
@@ -100,14 +101,14 @@ function parseArgs(argv) {
 function printHelp() {
   console.log(`Usage: npm run visual:smoke-v2 -- [project-or-visual-path] [--limit n] [--out report.json] [--apply-review-nudges] [--json]
 
-Smoke-tests Elucim v2 internals against CutReady visuals:
-  - load v1/v2 visual JSON
-  - migrate v1 -> v2 when needed
+Smoke-tests Elucim document internals against CutReady visuals:
+  - load legacy/current visual JSON
+  - migrate legacy visuals when needed
   - validate/summarize/validateForAgent
   - apply deterministic metadata command
   - apply safe nudges, optionally review nudges
   - validate after nudges
-  - convert v2 -> v1 and validate current renderer/editor compatibility
+  - convert to renderable document and validate current renderer/editor compatibility
 
 Default target: ${DEFAULT_TARGET}`);
 }
@@ -155,6 +156,9 @@ function smokeDocument(file, doc, options) {
     timelineCount: 0,
     stateMachineCount: 0,
     nudgeCount: 0,
+    agentScore: null,
+    agentIssueCount: 0,
+    agentNudgeCount: 0,
     appliedNudges: [],
     diffCount: 0,
     warnings: [],
@@ -162,16 +166,16 @@ function smokeDocument(file, doc, options) {
   };
 
   try {
-    const normalized = normalizeToV2(doc);
+    const normalized = normalizeDocument(doc);
     result.inputVersion = normalized.inputFormat;
     result.migrated = normalized.migrated;
     result.warnings.push(...normalized.warnings);
     let current = normalized.document;
 
-    const initialValidation = validateV2(current);
+    const initialValidation = validateDocument(current);
     if (!initialValidation.valid) {
       result.errors.push({
-        stage: "validateV2.initial",
+        stage: "validateDocument.initial",
         errors: initialValidation.errors,
         repairHints: validateForAgent(current).repairHints,
       });
@@ -182,11 +186,15 @@ function smokeDocument(file, doc, options) {
     result.elementCount = summary.elementCount;
     result.timelineCount = summary.timelines.length;
     result.stateMachineCount = summary.stateMachines.length;
+    const agentReview = evaluateSceneForAgent(current);
+    result.agentScore = agentReview.score ?? null;
+    result.agentIssueCount = agentReview.issues?.length ?? 0;
+    result.agentNudgeCount = agentReview.nudges?.length ?? 0;
 
     const metadataResult = applyCommand(current, {
       op: "updateMetadata",
       metadata: {
-        generatedBy: "cutready-v2-smoke",
+        generatedBy: "cutready-elucim-smoke",
       },
     });
     current = metadataResult.document;
@@ -218,11 +226,11 @@ function smokeDocument(file, doc, options) {
       return result;
     }
 
-    const renderableV1 = toRenderableV1(current);
+    const renderableV1 = toRenderableDocument(current);
     const rendererValidation = validate(renderableV1);
     if (!rendererValidation.valid) {
       result.errors.push({
-        stage: "migrateV2ToV1.validate",
+        stage: "toRenderableDocument.validate",
         errors: rendererValidation.errors,
       });
       return result;
@@ -239,8 +247,8 @@ function smokeDocument(file, doc, options) {
   }
 }
 
-function smokeMinimalV2(options) {
-  return smokeDocument("(minimal-v2-fixture)", MINIMAL_V2_DOC, options);
+function smokeMinimalElucimDocument(options) {
+  return smokeDocument("(minimal-elucim-fixture)", MINIMAL_ELUCIM_DOC, options);
 }
 
 function summarize(results) {
@@ -257,9 +265,14 @@ function summarize(results) {
     passed: results.length - failures.length,
     failed: failures.length,
     passRate: results.length > 0 ? Math.round(((results.length - failures.length) / results.length) * 100) : 100,
+    averageAgentScore: average(results.map((result) => result.agentScore).filter(Number.isFinite)),
     inputVersions: countBy(results, (result) => result.inputVersion ?? "unknown"),
     appliedNudges: Object.fromEntries([...nudgeCounts.entries()].sort((a, b) => b[1] - a[1])),
   };
+}
+
+function average(values) {
+  return values.length > 0 ? Math.round(values.reduce((sum, value) => sum + value, 0) / values.length) : null;
 }
 
 function countBy(items, keyFn) {
@@ -273,10 +286,11 @@ function countBy(items, keyFn) {
 
 function formatConsoleReport(report) {
   const lines = [];
-  lines.push("Elucim v2 smoke report");
+  lines.push("Elucim document smoke report");
   lines.push(`Target: ${report.target}`);
   lines.push(`Visuals: ${report.summary.visualCount}`);
   lines.push(`Pass rate: ${report.summary.passRate}% (${report.summary.passed}/${report.summary.visualCount})`);
+  lines.push(`Average agent score: ${report.summary.averageAgentScore ?? "n/a"}`);
   lines.push(`Input versions: ${Object.entries(report.summary.inputVersions).map(([version, count]) => `${version}: ${count}`).join(", ") || "none"}`);
   lines.push(`Applied nudges: ${Object.entries(report.summary.appliedNudges).map(([id, count]) => `${id}: ${count}`).join(", ") || "none"}`);
   lines.push("");
@@ -300,7 +314,7 @@ function formatConsoleReport(report) {
 function main() {
   const options = parseArgs(process.argv.slice(2));
   const files = collectVisualFiles(options.target).slice(0, options.limit);
-  const results = [smokeMinimalV2(options)];
+  const results = [smokeMinimalElucimDocument(options)];
 
   for (const file of files) {
     results.push(smokeDocument(file, loadJson(file), options));

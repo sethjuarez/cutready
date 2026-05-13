@@ -250,11 +250,10 @@ async function captureVisualLastFrame(visualPath: string): Promise<ImageRun | nu
     const visual = await invoke<Record<string, unknown>>("get_visual", { relativePath: visualPath });
     if (!visual) return null;
 
-    const { renderToPng, toRenderableV1 } = await import("@elucim/dsl");
+    const { renderToPng, toRenderableDocument } = await import("@elucim/dsl");
 
     // Convert to light-mode colors for print-friendly Word output
-    type ElucimDocument = Parameters<typeof renderToPng>[0];
-    const dsl = toRenderableV1(toLightMode(visual)) as unknown as ElucimDocument;
+    const dsl = toRenderableDocument(toLightMode(visual));
     const root = dsl.root as unknown as Record<string, unknown>;
     const totalFrames = (root.durationInFrames as number) || 60;
     const lastFrame = Math.max(0, totalFrames - 1);

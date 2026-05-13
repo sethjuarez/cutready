@@ -3,7 +3,9 @@
 //! Each tool maps to a project operation (read notes, read/update sketches, etc.)
 //! and is exposed to the LLM via function calling.
 
+use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
 
 use serde_json::{json, Value};
 
@@ -317,14 +319,14 @@ pub fn all_tools(web_search_enabled: bool) -> Vec<Tool> {
         ),
         Tool::function(
             "set_row_visual",
-            "Set an animated framing visual on a planning row using the elucim DSL. Prefer canonical v2 documents with version \"2.0\", scene, and elements keyed by stable semantic IDs; legacy v1 is accepted and migrated. Add lightweight intent metadata to important elements, e.g. intent: { role: 'title'|'subtitle'|'hero'|'step'|'connector'|'label'|'container'|'decoration', importance: 'primary'|'secondary'|'supporting'|'decorative' }. Use CutReady semantic tokens for theme integration: $background, $title, $subtitle, $foreground, $muted, $surface, $border, $accent, $secondary, $tertiary, $success, $warning, $error. Avoid hardcoded cyan/purple for routine emphasis. Prefer polished slide density: roughly 20-40 flattened nodes, 3-5 main objects/steps, minimal labels, and one hero visual metaphor. Avoid token strips, tiny grids, repeated chips, and probability worksheets unless essential. Use valid Elucim fields in element props: text fill (not color), rect rx (not radius), and numeric fadeIn/draw/fadeOut frames. Group nodes are useful for transforms but do not make a crowded slide simpler. Auto-validates structure and auto-critiques layout/readability before saving. Returns validation or critique errors if the visual has issues — fix them and call again. Pass null to remove a visual.",
+            "Set an animated framing visual on a planning row using the Elucim document format. Prefer canonical documents with version \"2.0\", scene, and elements keyed by stable semantic IDs; legacy v1 is accepted and migrated. Add lightweight intent metadata to important elements, e.g. intent: { role: 'title'|'subtitle'|'hero'|'step'|'connector'|'label'|'container'|'decoration', importance: 'primary'|'secondary'|'supporting'|'decorative' }. Use CutReady semantic tokens for theme integration: $background, $title, $subtitle, $foreground, $muted, $surface, $border, $accent, $secondary, $tertiary, $success, $warning, $error. Avoid hardcoded cyan/purple for routine emphasis. Prefer polished slide density: roughly 20-40 flattened nodes, 3-5 main objects/steps, minimal labels, and one hero visual metaphor. Avoid token strips, tiny grids, repeated chips, and probability worksheets unless essential. Use valid Elucim fields in element props: text fill (not color) and rect rx (not radius). Put animation in timelines with keyframes, not legacy fadeIn/draw/fadeOut props. Group nodes are useful for transforms but do not make a crowded slide simpler. Auto-validates structure and auto-critiques layout/readability before saving. Returns validation or critique errors if the visual has issues — fix them and call again. Pass null to remove a visual.",
             json!({
                 "type": "object",
                 "properties": {
                     "path": { "type": "string", "description": "Relative path to the sketch" },
                     "index": { "type": "integer", "description": "0-based row index" },
                     "visual": {
-                        "description": "An elucim DSL v2 document (JSON object with version, scene, and elements), legacy v1 document, or null to remove",
+                        "description": "An Elucim document (JSON object with version, scene, and elements), legacy v1 document, or null to remove",
                         "oneOf": [
                             {
                                 "type": "object",
@@ -332,11 +334,11 @@ pub fn all_tools(web_search_enabled: bool) -> Vec<Tool> {
                                     "version": { "type": "string", "enum": ["2.0"] },
                                     "scene": {
                                         "type": "object",
-                                        "description": "Scene metadata. Use { type: 'player', width: 960, height: 540, fps: 30, durationInFrames: 90, background: '$background', children: ['hero', ...] }. Children are top-level element IDs."
+                                        "description": "Scene metadata. Use { type: 'player', width: 960, height: 540, fps: 30, background: '$background', children: ['hero', ...] }. Children are top-level element IDs. Do not use scene.durationInFrames; timelines own duration."
                                     },
                                     "elements": {
                                         "type": "object",
-                                        "description": "Map of element IDs to { id, type, parentId?, children?, layout?, intent?, props }. props should contain render fields such as x/y/content/fill/rx/fadeIn. intent should describe role and importance for agent edits. Text nodes use props.content (not text). Prefer stable IDs like title, subtitle, hero, step-1."
+                                        "description": "Map of element IDs to { id, type, parentId?, children?, layout?, intent?, props }. props should contain render fields such as x/y/content/fill/rx. Put animation in timelines, not props. Text nodes use props.content (not text). Prefer stable IDs like title, subtitle, hero, step-1."
                                     }
                                 },
                                 "required": ["version", "scene", "elements"]
@@ -350,7 +352,7 @@ pub fn all_tools(web_search_enabled: bool) -> Vec<Tool> {
         ),
         Tool::function(
             "review_row_visual",
-            "Review an existing row visual with Elucim v2 agentic checks. Loads the row visual, normalizes it to v2, validates it, summarizes elements/timelines/state machines, lists deterministic nudge suggestions, verifies renderability, and includes layout critique feedback.",
+            "Review an existing row visual with Elucim agentic checks. Loads the row visual, normalizes it to the current document format, validates it, summarizes elements/timelines/state machines, lists deterministic nudge suggestions, verifies renderability, and includes layout critique feedback.",
             json!({
                 "type": "object",
                 "properties": {
@@ -362,7 +364,7 @@ pub fn all_tools(web_search_enabled: bool) -> Vec<Tool> {
         ),
         Tool::function(
             "apply_row_visual_nudge",
-            "Apply a deterministic CutReady/Elucim visual nudge to an existing row visual and save the updated v2 document. Call review_row_visual first to see available nudge IDs. Safe nudges can be applied directly; review nudges are allowed when the requested visual polish matches the user's intent.",
+            "Apply a deterministic CutReady/Elucim visual nudge to an existing row visual and save the updated Elucim document. Call review_row_visual first to see available nudge IDs. Safe nudges can be applied directly; review nudges are allowed when the requested visual polish matches the user's intent.",
             json!({
                 "type": "object",
                 "properties": {
@@ -375,7 +377,7 @@ pub fn all_tools(web_search_enabled: bool) -> Vec<Tool> {
         ),
         Tool::function(
             "apply_row_visual_command",
-            "Apply a deterministic Elucim visual command to an existing row visual and save the updated v2 document. Use for precise machine edits such as metadata updates, element intent annotation, layer ordering, or intro timeline creation without regenerating the visual.",
+            "Apply a deterministic Elucim visual command to an existing row visual and save the updated Elucim document. Use for precise machine edits such as metadata updates, element intent annotation, layer ordering, or intro timeline creation without regenerating the visual.",
             json!({
                 "type": "object",
                 "properties": {
@@ -487,6 +489,33 @@ pub fn all_tools(web_search_enabled: bool) -> Vec<Tool> {
         agentive::memory::save_memory_tool(),
     ];
 
+    if elucim_bridge_enabled() {
+        tools.insert(
+            tools.len().saturating_sub(2),
+            Tool::function(
+                "elucim_agent_operation",
+                "Run an Elucim agent helper operation through the optional local bridge. Available only when CUTREADY_ELUCIM_BRIDGE=1. Useful for catalog, evaluate, inspect, repair, summarize, validate, suggestNudges, applyNudge, applyCommands, createDocument, and createComposite. This is an advisory authoring helper; use set_row_visual to save visuals.",
+                json!({
+                    "type": "object",
+                    "properties": {
+                        "op": {
+                            "type": "string",
+                            "enum": ["catalog", "normalize", "summarize", "validate", "renderable", "evaluate", "inspect", "repair", "suggestNudges", "applyNudge", "applyCommands", "createDocument", "createComposite"],
+                            "description": "Bridge operation to run"
+                        },
+                        "document": { "type": "object", "description": "Elucim document for document-based operations" },
+                        "commands": { "type": "array", "description": "Commands for applyCommands" },
+                        "nudgeId": { "type": "string", "description": "Nudge ID for applyNudge" },
+                        "kind": { "type": "string", "description": "Composite kind for createComposite, e.g. stepCard, cardGrid, connector" },
+                        "spec": { "type": "object", "description": "Spec for createDocument or createComposite" },
+                        "options": { "type": "object", "description": "Options for inspect" }
+                    },
+                    "required": ["op"]
+                }),
+            ),
+        );
+    }
+
     if web_search_enabled {
         tools.insert(
             tools.len().saturating_sub(2),
@@ -511,6 +540,143 @@ pub fn all_tools(web_search_enabled: bool) -> Vec<Tool> {
 // ---------------------------------------------------------------------------
 // Tool execution
 // ---------------------------------------------------------------------------
+
+fn elucim_bridge_enabled() -> bool {
+    std::env::var("CUTREADY_ELUCIM_BRIDGE")
+        .map(|value| {
+            matches!(
+                value.to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "on"
+            )
+        })
+        .unwrap_or(false)
+}
+
+fn elucim_bridge_script_path() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .join("scripts")
+        .join("elucim-agent-bridge.mjs")
+}
+
+fn run_elucim_bridge(payload: &Value) -> Result<Value, String> {
+    let script = elucim_bridge_script_path();
+    if !script.exists() {
+        return Err(format!(
+            "Elucim bridge script not found: {}",
+            script.display()
+        ));
+    }
+    let repo_root = script
+        .parent()
+        .and_then(Path::parent)
+        .unwrap_or_else(|| Path::new("."));
+    let mut command = Command::new("node");
+    command
+        .arg(&script)
+        .current_dir(repo_root)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x08000000);
+    }
+
+    let mut child = command
+        .spawn()
+        .map_err(|e| format!("Failed to start Elucim bridge: {e}"))?;
+    if let Some(stdin) = child.stdin.as_mut() {
+        stdin
+            .write_all(payload.to_string().as_bytes())
+            .map_err(|e| format!("Failed to write Elucim bridge input: {e}"))?;
+    }
+    drop(child.stdin.take());
+
+    let output = child
+        .wait_with_output()
+        .map_err(|e| format!("Failed to read Elucim bridge output: {e}"))?;
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    let response: Value = serde_json::from_str(&stdout).map_err(|e| {
+        format!("Elucim bridge returned invalid JSON: {e}. stdout: {stdout}. stderr: {stderr}")
+    })?;
+    if !output.status.success() || response.get("ok").and_then(|v| v.as_bool()) == Some(false) {
+        let message = response
+            .get("error")
+            .and_then(|v| v.as_str())
+            .unwrap_or("Elucim bridge operation failed");
+        return Err(if stderr.is_empty() {
+            message.to_string()
+        } else {
+            format!("{message}. stderr: {stderr}")
+        });
+    }
+    Ok(response)
+}
+
+fn exec_elucim_agent_operation(args: &Value) -> String {
+    if !elucim_bridge_enabled() {
+        return "Elucim agent bridge is disabled. Set CUTREADY_ELUCIM_BRIDGE=1 to enable local authoring helpers.".into();
+    }
+    match run_elucim_bridge(args) {
+        Ok(response) => {
+            serde_json::to_string_pretty(&response).unwrap_or_else(|_| response.to_string())
+        }
+        Err(e) => format!("Elucim bridge error: {e}"),
+    }
+}
+
+fn format_elucim_bridge_evaluation(response: &Value) -> Option<String> {
+    let result = response.get("result")?;
+    let mut lines = Vec::new();
+    lines.push("Elucim agent evaluation".to_string());
+    if let Some(valid) = result.get("valid").and_then(|v| v.as_bool()) {
+        lines.push(format!(
+            "- Agent-valid: {}",
+            if valid { "yes" } else { "no" }
+        ));
+    }
+    if let Some(score) = result.get("score").and_then(|v| v.as_i64()) {
+        lines.push(format!("- Agent score: {score}"));
+    }
+    if let Some(issues) = result.get("issues").and_then(|v| v.as_array()) {
+        if issues.is_empty() {
+            lines.push("- Agent issues: none".into());
+        } else {
+            lines.push("- Agent issues:".into());
+            for issue in issues.iter().take(5) {
+                let code = issue
+                    .get("code")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("issue");
+                let path = issue.get("path").and_then(|v| v.as_str()).unwrap_or("");
+                let message = issue.get("message").and_then(|v| v.as_str()).unwrap_or("");
+                lines.push(format!("  - {code} {path}: {message}"));
+            }
+        }
+    }
+    if let Some(nudges) = result.get("nudges").and_then(|v| v.as_array()) {
+        if !nudges.is_empty() {
+            lines.push("- Elucim nudges:".into());
+            for nudge in nudges.iter().take(5) {
+                let id = nudge.get("id").and_then(|v| v.as_str()).unwrap_or("nudge");
+                let confidence = nudge
+                    .get("confidence")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("unknown");
+                let description = nudge
+                    .get("description")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+                lines.push(format!("  - {id} [{confidence}]: {description}"));
+            }
+        }
+    }
+    Some(lines.join("\n"))
+}
 
 /// Execute a single tool call and return the result as a ToolOutput.
 pub fn execute_tool(
@@ -553,6 +719,9 @@ pub fn execute_tool(
                 agentive::ToolOutput::from(exec_apply_row_visual_command(project_root, &args))
             }
             "design_plan" => agentive::ToolOutput::from(exec_design_plan(project_root, &args)),
+            "elucim_agent_operation" => {
+                agentive::ToolOutput::from(exec_elucim_agent_operation(&args))
+            }
             "read_storyboard" => {
                 agentive::ToolOutput::from(exec_read_storyboard(project_root, &args))
             }
@@ -668,7 +837,7 @@ pub fn execute_tool(
 /// Extract a JSON object from a tool argument field. Handles three LLM behaviors:
 ///   1. `{"visual": { ... }}` → normal, returns the nested object
 ///   2. `{"visual": "{ ... }"}` → stringified, parses and returns
-///   3. `{"version": "1.0", "root": {...}}` or v2 document fields → flattened
+///   3. `{"version": "1.0", "root": {...}}` or current document fields → flattened
 ///      (LLM passed DSL as args directly)
 fn extract_json_object<'a>(
     args: &'a Value,
@@ -1409,7 +1578,7 @@ fn exec_set_row_visual(root: &Path, args: &Value) -> String {
                 Err(e) => return e,
             };
             // Auto-normalize to v2 and validate before writing. CutReady stores
-            // v2 visuals canonically, while critique still runs through the
+            // Elucim visuals canonically, while critique still runs through the
             // renderable v1 compatibility shape used by the current renderer.
             let visual = match normalize_visual_to_v2(&visual) {
                 Ok(v) => v,
@@ -1589,6 +1758,16 @@ fn exec_review_row_visual(root: &Path, args: &Value) -> String {
     }
     if !summary.element_ids.is_empty() {
         parts.push(format!("\nElement IDs: {}", summary.element_ids.join(", ")));
+    }
+    if elucim_bridge_enabled() {
+        match run_elucim_bridge(&json!({ "op": "evaluate", "document": normalized })) {
+            Ok(response) => {
+                if let Some(report) = format_elucim_bridge_evaluation(&response) {
+                    parts.push(format!("\n{report}"));
+                }
+            }
+            Err(e) => parts.push(format!("\nElucim agent evaluation unavailable: {e}")),
+        }
     }
     parts.push(format!("\n{row_context}"));
     parts.join("\n")
@@ -1790,8 +1969,10 @@ pub(crate) fn normalize_visual_document_for_save(visual: &Value) -> Result<Value
 fn normalize_visual_to_v2(visual: &Value) -> Result<Value, String> {
     match visual.get("version") {
         Some(Value::String(version)) if version == "2.0" => {
-            validate_v2_doc(visual)?;
-            Ok(visual.clone())
+            let mut normalized = visual.clone();
+            sanitize_v2_scene_duration(&mut normalized);
+            validate_v2_doc(&normalized)?;
+            Ok(normalized)
         }
         Some(Value::String(version)) if version == "1.0" => migrate_v1_visual_to_v2(visual),
         Some(Value::Number(version))
@@ -1831,6 +2012,12 @@ fn normalize_visual_to_v2(visual: &Value) -> Result<Value, String> {
             Ok(coerced)
         }
         None => Err("missing required field \"version\"".into()),
+    }
+}
+
+fn sanitize_v2_scene_duration(visual: &mut Value) {
+    if let Some(scene) = visual.get_mut("scene").and_then(|v| v.as_object_mut()) {
+        scene.remove("durationInFrames");
     }
 }
 
@@ -1887,7 +2074,6 @@ fn migrate_v1_visual_to_v2(visual: &Value) -> Result<Value, String> {
         "width",
         "height",
         "fps",
-        "durationInFrames",
         "background",
         "controls",
         "loop",
@@ -1896,9 +2082,6 @@ fn migrate_v1_visual_to_v2(visual: &Value) -> Result<Value, String> {
         if let Some(value) = root.get(key) {
             scene.insert(key.into(), value.clone());
         }
-    }
-    if !scene.contains_key("durationInFrames") {
-        scene.insert("durationInFrames".into(), Value::Number(120.into()));
     }
     scene.insert(
         "children".into(),
@@ -2075,7 +2258,6 @@ fn migrate_v2_visual_to_v1(visual: &Value) -> Result<Value, String> {
         "width",
         "height",
         "fps",
-        "durationInFrames",
         "background",
         "controls",
         "loop",
@@ -2085,8 +2267,33 @@ fn migrate_v2_visual_to_v1(visual: &Value) -> Result<Value, String> {
             root.insert(key.into(), value.clone());
         }
     }
+    root.insert(
+        "durationInFrames".into(),
+        Value::Number(v2_visual_duration_in_frames(visual).into()),
+    );
     root.insert("children".into(), Value::Array(restored_children));
     Ok(json!({ "version": "1.0", "root": Value::Object(root) }))
+}
+
+fn v2_visual_duration_in_frames(visual: &Value) -> i64 {
+    let timeline_max = visual
+        .get("timelines")
+        .and_then(|v| v.as_object())
+        .and_then(|timelines| {
+            timelines
+                .values()
+                .filter_map(|timeline| timeline.get("duration").and_then(|v| v.as_i64()))
+                .filter(|duration| *duration > 0)
+                .max()
+        });
+    timeline_max
+        .or_else(|| {
+            visual
+                .pointer("/scene/durationInFrames")
+                .and_then(|v| v.as_i64())
+                .filter(|duration| *duration > 0)
+        })
+        .unwrap_or(120)
 }
 
 fn restore_v2_element_to_v1(visual: &Value, id: &str) -> Result<Value, String> {
@@ -2156,13 +2363,6 @@ fn validate_v2_doc(visual: &Value) -> Result<(), String> {
             ))
         }
         None => return Err("scene.type: missing".into()),
-    }
-    if !scene
-        .get("durationInFrames")
-        .and_then(|v| v.as_i64())
-        .is_some_and(|n| n > 0)
-    {
-        return Err("scene.durationInFrames: must be a positive integer".into());
     }
     let scene_children = scene
         .get("children")
@@ -2616,7 +2816,7 @@ fn suggest_visual_nudges(visual: &Value) -> Vec<VisualNudge> {
         nudges.push(VisualNudge {
             id: "add-staggered-intro",
             confidence: "review",
-            description: "Add a simple intro timeline and render-compatible fadeIn values for top-level elements.",
+            description: "Add a simple intro timeline for top-level elements.",
         });
     }
     nudges
@@ -2890,27 +3090,6 @@ fn add_staggered_intro_timeline(visual: &mut Value, command: &Value) -> Result<(
             "tracks": tracks
         }),
     );
-    let elements = doc
-        .get_mut("elements")
-        .and_then(|v| v.as_object_mut())
-        .ok_or_else(|| "Error: elements must be an object".to_string())?;
-    for (index, id) in targets.iter().enumerate() {
-        let Some(element) = elements.get_mut(id).and_then(|v| v.as_object_mut()) else {
-            continue;
-        };
-        let props = element
-            .entry("props")
-            .or_insert_with(|| Value::Object(serde_json::Map::new()));
-        let Some(props) = props.as_object_mut() else {
-            return Err(format!("Error: elements.{id}.props must be an object"));
-        };
-        let fade_in = (index as i64) * stagger;
-        if fade_in > 0 {
-            props
-                .entry("fadeIn")
-                .or_insert_with(|| Value::Number(fade_in.into()));
-        }
-    }
     Ok(())
 }
 
@@ -3780,7 +3959,7 @@ fn critique_visual_doc(visual: &Value) -> Result<(Vec<String>, Vec<String>), Str
     });
     if !has_animation {
         suggestions.push(
-            "NO_ANIMATION: no fadeIn/draw/fadeOut found — add staggered fadeIn for progressive reveal (e.g., fadeIn: 5, 15, 25…).".into()
+            "NO_ANIMATION: no timelines found - add a staggered intro timeline for progressive reveal.".into()
         );
     }
 
@@ -4282,12 +4461,7 @@ mod tests {
         let visual_path = saved.rows[0].visual.as_ref().unwrap().as_str().unwrap();
         let visual = project::read_visual(root, visual_path).unwrap();
         assert!(visual.pointer("/timelines/intro/tracks").is_some());
-        assert_eq!(
-            visual
-                .pointer("/elements/title/props/fadeIn")
-                .and_then(|v| v.as_i64()),
-            Some(4)
-        );
+        assert!(visual.pointer("/elements/title/props/fadeIn").is_none());
     }
 
     #[test]
@@ -4376,7 +4550,7 @@ mod tests {
     }
 
     #[test]
-    fn migrate_v1_scene_defaults_duration_for_v2() {
+    fn migrate_v1_scene_omits_duration_for_canonical_v2() {
         let visual = json!({
             "version": "1.0",
             "root": {
@@ -4398,12 +4572,7 @@ mod tests {
 
         let migrated = normalize_visual_to_v2(&visual).unwrap();
 
-        assert_eq!(
-            migrated
-                .pointer("/scene/durationInFrames")
-                .and_then(|v| v.as_i64()),
-            Some(120)
-        );
+        assert!(migrated.pointer("/scene/durationInFrames").is_none());
     }
 
     fn sample_v2_visual_for_agentic_tools() -> Value {
@@ -4414,8 +4583,7 @@ mod tests {
                 "width": 960,
                 "height": 540,
                 "fps": 30,
-                "durationInFrames": 90,
-                "background": "$background",
+            "background": "$background",
                 "children": ["foreground", "title"]
             },
             "elements": {

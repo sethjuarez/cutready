@@ -22,16 +22,14 @@ import { ProjectImagePicker } from "./ProjectImagePicker";
 export interface EditorWrapperProps {
   dsl: CutReadyElucimDocument;
   onDocumentChange: (doc: CutReadyElucimDocument) => void;
-  onV2DocumentChange?: (doc: CutReadyElucimDocument) => void;
 }
 
 type ElucimEditorCompatProps = Omit<
   ElucimEditorProps,
-  "initialDocument" | "onDocumentChange" | "onV2DocumentChange"
+  "initialDocument" | "onDocumentChange"
 > & {
   initialDocument?: CutReadyElucimDocument;
   onDocumentChange?: (document: CutReadyElucimDocument, details?: unknown) => void;
-  onV2DocumentChange?: (document: CutReadyElucimDocument, details?: unknown) => void;
 };
 
 const LazyElucimEditor = lazy(() =>
@@ -43,7 +41,6 @@ const LazyElucimEditor = lazy(() =>
 export default memo(function EditorWrapper({
   dsl,
   onDocumentChange,
-  onV2DocumentChange,
 }: EditorWrapperProps) {
   const imageResolver = useElucimImageResolver();
   const projectRoot = useAppStore((s) => s.currentProject?.root ?? null);
@@ -80,8 +77,7 @@ export default memo(function EditorWrapper({
   const theme = elucimThemeFromTokens(colors);
   const handleEditorDocumentChange = useCallback((doc: CutReadyElucimDocument) => {
     onDocumentChange(doc);
-    onV2DocumentChange?.(doc);
-  }, [onDocumentChange, onV2DocumentChange]);
+  }, [onDocumentChange]);
 
   return (
     <ErrorBoundary
@@ -107,7 +103,6 @@ export default memo(function EditorWrapper({
             "--elucim-editor-bg": `rgb(${colors.surfaceInset})`,
           }}
           onDocumentChange={handleEditorDocumentChange}
-          onV2DocumentChange={handleEditorDocumentChange}
           onBrowseImage={projectRoot ? handleBrowseImage : undefined}
           imageResolver={imageResolver}
           className="w-full h-full"

@@ -5,12 +5,13 @@ import process from "node:process";
 import {
   applyNudge,
   diffDocuments,
-  normalizeToV2,
+  normalizeDocument,
   summarizeDocument,
   suggestDocumentNudges,
-  toRenderableV1,
+  toRenderableDocument,
   validateForAgent,
 } from "@elucim/dsl";
+import { evaluateSceneForAgent } from "@elucim/dsl/agent";
 import { formatConsoleReport, scoreVisual } from "./score-visuals.mjs";
 
 const SCRIPT_DIR = path.dirname(new URL(import.meta.url).pathname).replace(/^\/([A-Za-z]:)/, "$1");
@@ -397,15 +398,15 @@ function slugify(value) {
 
 function buildMessages(brief, variantName) {
   const variant = PROMPT_VARIANTS[variantName];
-  const system = `You are evaluating CutReady Designer prompt quality. Generate exactly one valid Elucim DSL v2 JSON document and no markdown.
+  const system = `You are evaluating CutReady Designer prompt quality. Generate exactly one valid Elucim JSON document and no markdown.
 
 Canvas and schema:
-- Root document: { "version": "2.0", "scene": { "type": "player", "width": 960, "height": 540, "fps": 30, "durationInFrames": 90, "background": "$background", "children": ["title", "hero"] }, "elements": { "title": { "id": "title", "type": "text", "props": { ... } } } }
+- Root document: { "version": "2.0", "scene": { "type": "player", "width": 960, "height": 540, "fps": 30, "background": "$background", "children": ["title", "hero"] }, "elements": { "title": { "id": "title", "type": "text", "props": { ... } } }, "timelines": { ... } }
 - Scene children are top-level element IDs. Elements are keyed by stable semantic IDs like title, subtitle, hero, step-1, and step-2.
 - Each element is { "id": "...", "type": "...", "parentId"?: "...", "children"?: ["..."], "layout"?: {}, "props": { ...render fields... } }.
 - Put render fields in props. Text elements use props.content for real visible copy and props.fill for color. Never use text or color.
 - Rect elements use props.rx for rounded corners. Never use radius.
-- Animation fields in props are numbers only: "fadeIn": 4, "draw": 20, or "fadeOut": 80. Never use animation objects.
+- Put animation in timelines with keyframes. Do not use legacy props like "fadeIn", "draw", or "fadeOut".
 
 Presentation polish rules:
 - Use $background for scene background, "$title" as the fill color for the main title, and "$subtitle" as the fill color for the subtitle.
@@ -467,7 +468,7 @@ function buildRepairMessages(brief, variantName, visual, score, round) {
     },
     {
       role: "user",
-    content: `Repair round ${round}: improve this visual using the scorer feedback below. Keep the same row-specific meaning and CutReady DSL v2 schema. Return only the full replacement JSON document.
+    content: `Repair round ${round}: improve this visual using the scorer feedback below. Keep the same row-specific meaning and current Elucim document schema. Return only the full replacement JSON document.
 
 Current score: ${score.score}
 Current metrics: ${metrics}
@@ -528,20 +529,20 @@ function redact(value) {
 function parseVisual(content) {
   const trimmed = content.trim().replace(/^```(?:json)?/i, "").replace(/```$/i, "").trim();
   const parsed = JSON.parse(trimmed);
-  const normalized = normalizeToV2(parsed);
+  const normalized = normalizeDocument(parsed);
   const validation = validateForAgent(normalized.document);
   if (!validation.valid) {
     const hints = validation.repairHints?.length > 0
       ? ` Repair hints: ${validation.repairHints.join("; ")}`
       : "";
-    throw new Error(`Generated JSON is not a valid Elucim v2 agent document: ${validation.errors.join("; ")}.${hints}`);
+    throw new Error(`Generated JSON is not a valid Elucim agent document: ${validation.errors.join("; ")}.${hints}`);
   }
-  toRenderableV1(normalized.document);
+  toRenderableDocument(normalized.document);
   return normalized.document;
 }
 
 function evaluateAgenticDocument(visual, options) {
-  const normalized = normalizeToV2(visual);
+  const normalized = normalizeDocument(visual);
   let current = normalized.document;
   const initialValidation = validateForAgent(current);
   const result = {
@@ -559,6 +560,9 @@ function evaluateAgenticDocument(visual, options) {
     timelineCount: 0,
     stateMachineCount: 0,
     renderable: false,
+    agentScore: null,
+    agentIssues: [],
+    agentNudges: [],
   };
 
   if (!initialValidation.valid) {
@@ -588,10 +592,14 @@ function evaluateAgenticDocument(visual, options) {
   result.repairHints = finalValidation.repairHints ?? [];
   if (finalValidation.valid) {
     const summary = summarizeDocument(current);
+    const agentReview = evaluateSceneForAgent(current);
     result.elementCount = summary.elementCount;
     result.timelineCount = summary.timelines.length;
     result.stateMachineCount = summary.stateMachines.length;
-    toRenderableV1(current);
+    result.agentScore = agentReview.score ?? null;
+    result.agentIssues = agentReview.issues ?? [];
+    result.agentNudges = agentReview.nudges ?? [];
+    toRenderableDocument(current);
     result.renderable = true;
   }
   return result;
@@ -687,7 +695,7 @@ async function main() {
             agentic: bestAgentic,
             attempts,
           });
-          console.log(`score ${bestScore.score}, nudges ${bestAgentic.nudgeCount}, renderable ${bestAgentic.renderable ? "yes" : "no"}`);
+          console.log(`score ${bestScore.score}, agent ${bestAgentic.agentScore ?? "n/a"}, nudges ${bestAgentic.nudgeCount}, renderable ${bestAgentic.renderable ? "yes" : "no"}`);
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           errors.push({ id, briefId: brief.id, variant, message });

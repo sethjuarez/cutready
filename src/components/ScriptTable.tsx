@@ -32,7 +32,7 @@ import {
   Unlock,
 } from "lucide-react";
 import type { PlanningCellField, PlanningRow } from "../types/sketch";
-import { normalizeToV2 } from "@elucim/dsl";
+import { normalizeDocument } from "@elucim/dsl";
 import type { CutReadyElucimDocument } from "../types/elucim";
 
 
@@ -182,7 +182,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
       return;
     }
     invoke<Record<string, unknown>>("get_visual", { relativePath: visualLightbox.visualPath })
-      .then((data) => setEditorDsl(normalizeToV2(data).document))
+      .then((data) => setEditorDsl(normalizeDocument(data).document))
       .catch((err) => console.error("[ScriptTable] Failed to load visual for editor:", err));
   }, [visualLightbox?.visualPath, lightboxMode]);
 
@@ -199,7 +199,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
     try {
       await invoke("write_visual_doc", {
         relativePath: visualLightbox.visualPath,
-        document: normalizeToV2(doc).document,
+        document: normalizeDocument(doc).document,
       });
       setEditorDirty(false);
       setVisualVersion((v) => v + 1);
@@ -535,8 +535,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
                   {editorDsl ? (
                     <EditorWrapper
                       dsl={editorDsl}
-                      onDocumentChange={() => { setEditorDirty(true); }}
-                      onV2DocumentChange={(doc) => { setEditorDsl(doc); setEditorDirty(true); }}
+                      onDocumentChange={(doc) => { setEditorDsl(doc); setEditorDirty(true); }}
                     />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center text-[rgb(var(--color-text-secondary))]">Loading…</div>

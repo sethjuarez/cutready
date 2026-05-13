@@ -1,7 +1,7 @@
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { RefreshCw, Pencil, Check, X } from "lucide-react";
-import { normalizeToV2 } from "@elucim/dsl";
+import { normalizeDocument } from "@elucim/dsl";
 import type { CutReadyElucimDocument } from "../types/elucim";
 import VisualCell, { type VisualControlHandle } from "./VisualCell";
 import type { AssetInfo } from "../stores/appStore";
@@ -86,7 +86,7 @@ function VisualAssetViewer({
       return;
     }
     invoke<Record<string, unknown>>("get_visual", { relativePath: assetPath })
-      .then((data) => setEditorDsl(normalizeToV2(data).document))
+      .then((data) => setEditorDsl(normalizeDocument(data).document))
       .catch(console.error);
   }, [editorOpen, assetPath]);
 
@@ -97,7 +97,7 @@ function VisualAssetViewer({
   const saveEditorChanges = useCallback(async (doc: CutReadyElucimDocument) => {
     setSaving(true);
     try {
-      await invoke("write_visual_doc", { relativePath: assetPath, document: normalizeToV2(doc).document });
+      await invoke("write_visual_doc", { relativePath: assetPath, document: normalizeDocument(doc).document });
       setEditorDirty(false);
       setVisualVersion((v) => v + 1);
     } catch (err) {
@@ -195,8 +195,7 @@ function VisualAssetViewer({
                 {editorDsl ? (
                       <EditorWrapper
                         dsl={editorDsl}
-                        onDocumentChange={() => { setEditorDirty(true); }}
-                        onV2DocumentChange={(doc) => { setEditorDsl(doc); setEditorDirty(true); }}
+                        onDocumentChange={(doc) => { setEditorDsl(doc); setEditorDirty(true); }}
                       />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center text-[rgb(var(--color-text-secondary))]">Loading…</div>

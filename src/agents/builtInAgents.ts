@@ -73,11 +73,11 @@ You can create animated framing visuals for any row using \`set_row_visual\`. Th
 - Math/formulas (LaTeX equations), charts (barChart), graphs (axes + function plots)
 - Annotated illustrations
 
-The visual uses the elucim DSL v2 — a JSON document with \`version: "2.0"\`, a \`scene\`, and \`elements\` keyed by stable semantic IDs.
+The visual uses the current Elucim document format — a JSON document with \`version: "2.0"\`, a \`scene\`, and \`elements\` keyed by stable semantic IDs.
 Available node types: circle, rect, line, arrow, text, group, polygon, image, axes, latex, graph, matrix, barChart.
-Animations: fadeIn, fadeOut, draw (for lines/arrows), easing, rotation, scale, translate.
+Animations belong in \`timelines\` with keyframe tracks, not legacy element props like \`fadeIn\`, \`fadeOut\`, or \`draw\`.
 Use CutReady/Elucim semantic tokens whenever possible: \`$background\`, \`$title\`, \`$subtitle\`, \`$foreground\`, \`$muted\`, \`$surface\`, \`$border\`, \`$accent\`, \`$primary\`, \`$secondary\`, \`$tertiary\`, \`$success\`, \`$warning\`, \`$error\`.
-Example scene: \`{ "version": "2.0", "scene": { "type": "player", "width": 960, "height": 540, "fps": 30, "durationInFrames": 90, "background": "$background", "children": ["title"] }, "elements": { "title": { "id": "title", "type": "text", "props": { "type": "text", "content": "Hello", "x": 480, "y": 86, "fontSize": 44, "fill": "$title", "fontWeight": "900", "textAnchor": "middle", "fadeIn": 4 } } } }\``,
+Example scene: \`{ "version": "2.0", "scene": { "type": "player", "width": 960, "height": 540, "fps": 30, "background": "$background", "children": ["title"] }, "elements": { "title": { "id": "title", "type": "text", "props": { "type": "text", "content": "Hello", "x": 480, "y": 86, "fontSize": 44, "fill": "$title", "fontWeight": "900", "textAnchor": "middle" } } }, "timelines": { "intro": { "id": "intro", "duration": 45, "tracks": [{ "target": "title", "property": "opacity", "keyframes": [{ "frame": 0, "value": 0 }, { "frame": 12, "value": 1, "easing": "easeOutCubic" }] }] } } }\``,
   },
   {
     id: "editor",
@@ -120,23 +120,24 @@ When the user message includes "USER INSTRUCTIONS" — those take **absolute pri
     - **Colors:** which CutReady semantic tokens to use
     - **Animation:** how elements appear — stagger, timing
    It returns the saved plan plus target-row, previous-row, next-row, screenshot, and sketch-flow context. Use that response to correct any mismatch before generating JSON.
-3. **Generate DSL v2 JSON** following the canvas rules and reference below.
+3. **Generate Elucim JSON** following the canvas rules and reference below.
 4. **Call \`set_row_visual\`** — it auto-validates structure and auto-critiques layout. If it returns errors, fix them and call again. If it returns density/crowding suggestions like \`ELEMENT_COUNT\` or \`TEXT_DENSITY\`, revise once before stopping.
-5. **Call \`review_row_visual\`** when you need confidence or after editing an existing visual. It summarizes the v2 document, validates agent-readiness, checks renderability, and lists available deterministic nudges.
+5. **Call \`review_row_visual\`** when you need confidence or after editing an existing visual. It summarizes the Elucim document, validates agent-readiness, checks renderability, and lists available deterministic nudges.
 6. **Use \`apply_row_visual_nudge\` or \`apply_row_visual_command\`** for safe deterministic polish instead of regenerating JSON when the requested change is metadata, layer order, or simple intro timing.
+7. When available, use \`elucim_agent_operation\` for deeper Elucim authoring help: inspect the operation catalog, evaluate scene quality, create composite elements, repair timeline duration issues, or apply high-level agent commands before saving with \`set_row_visual\`.
 
 For a new visual, the default path is still two tool calls: \`design_plan\` then \`set_row_visual\`. Use the review/nudge/command tools when iterating on an existing visual or when the user asks for refinement.
 
 ## Canvas
-960×540 player (16:9, HD). Always specify width/height explicitly:
+960×540 player (16:9, HD). Always specify width/height explicitly. Do not put durationInFrames on the scene; timelines, state machines, and export policies own time:
 \`\`\`json
-{ "type": "player", "width": 960, "height": 540, "fps": 30, "durationInFrames": 90, "background": "$background", "children": ["title", "hero"] }
+{ "type": "player", "width": 960, "height": 540, "fps": 30, "background": "$background", "children": ["title", "hero"] }
 \`\`\`
 
 **CRITICAL:** The scene \`background\` fills the ENTIRE canvas. Set it to \`"$background"\`. NEVER add an extra background rectangle. All content floats directly over this background.
 
 ## DSL Quick Reference
-Root: \`{ "version": "2.0", "scene": { "type": "player", "width": 960, "height": 540, "fps": 30, "durationInFrames": 90, "children": ["title", "hero"] }, "elements": { "title": { "id": "title", "type": "text", "props": { ... } } } }\`
+Root: \`{ "version": "2.0", "scene": { "type": "player", "width": 960, "height": 540, "fps": 30, "children": ["title", "hero"] }, "elements": { "title": { "id": "title", "type": "text", "props": { ... } } }, "timelines": { ... } }\`
 
 Elements are keyed by stable IDs like \`title\`, \`subtitle\`, \`hero\`, \`step-1\`, and \`step-2\`. Each element is \`{ "id": "...", "type": "...", "parentId"?: "...", "children"?: ["..."], "layout"?: {}, "props": { ...render fields... } }\`. Put render fields in \`props\`; use \`layout\` only as optional metadata for host/editor nudges.
 
@@ -145,11 +146,11 @@ For agent-editable diagrams, add lightweight \`intent\` metadata to important el
 Nodes: \`text\` (content, x, y, fontSize, fill, fontWeight, textAnchor), \`rect\` (x, y, width, height, fill, stroke, rx), \`circle\` (cx, cy, r, fill, stroke), \`line\` (x1, y1, x2, y2, stroke), \`arrow\` (x1, y1, x2, y2, stroke, headSize), \`group\` (x, y, children), \`polygon\` (points, fill)
 
 Text uses \`content\` not \`text\`: \`{ "type": "text", "content": "Hello", ... }\`
-Text color uses \`fill\` not \`color\`. Rounded rectangles use \`rx\` not \`radius\`. Animation fields are frame numbers, not objects.
+Text color uses \`fill\` not \`color\`. Rounded rectangles use \`rx\` not \`radius\`. Animation uses timeline tracks and keyframes.
 
 **NEVER use em-dash (—) or en-dash (–) in text content strings.** Use -- or - instead. Non-ASCII dashes cause rendering issues.
 
-Animations: \`fadeIn: <frame>\` (must be ≥ 1), \`draw: <frame>\`, \`fadeOut: <frame>\`. Duration: 60-120 frames at 30fps.
+Animations: use \`timelines\` with tracks like \`{ "target": "title", "property": "opacity", "keyframes": [{ "frame": 0, "value": 0 }, { "frame": 12, "value": 1, "easing": "easeOutCubic" }] }\`. Use 60-120 frames at 30fps for most visuals.
 
 ## Presentation-Grade Layout Rules
 
@@ -193,22 +194,33 @@ Avoid hardcoded colors like \`#38bdf8\` for routine emphasis. They bypass CutRea
 {
   "version": "2.0",
   "scene": {
-    "type": "player", "width": 960, "height": 540, "fps": 30, "durationInFrames": 90,
+    "type": "player", "width": 960, "height": 540, "fps": 30,
     "background": "$background",
     "children": ["title", "subtitle", "divider", "models-card", "models-label", "to-foundry", "foundry-card", "foundry-label", "to-agent", "agent-card", "agent-label"]
   },
   "elements": {
-    "title": { "id": "title", "type": "text", "intent": { "role": "title", "importance": "primary" }, "props": { "type": "text", "content": "Microsoft Foundry", "x": 480, "y": 68, "fontSize": 40, "fill": "$title", "fontWeight": "900", "textAnchor": "middle", "fadeIn": 4 } },
-    "subtitle": { "id": "subtitle", "type": "text", "intent": { "role": "subtitle", "importance": "secondary" }, "props": { "type": "text", "content": "from models to production agents", "x": 480, "y": 106, "fontSize": 20, "fill": "$subtitle", "fontWeight": "600", "textAnchor": "middle", "fadeIn": 8 } },
-    "divider": { "id": "divider", "type": "line", "props": { "type": "line", "x1": 0, "y1": 130, "x2": 960, "y2": 130, "stroke": "$border", "strokeWidth": 1, "fadeIn": 10 } },
-    "models-card": { "id": "models-card", "type": "rect", "props": { "type": "rect", "x": 56, "y": 178, "width": 240, "height": 124, "fill": "$surface", "stroke": "$border", "strokeWidth": 2, "rx": 16, "fadeIn": 14 } },
-    "models-label": { "id": "models-label", "type": "text", "props": { "type": "text", "content": "Models", "x": 176, "y": 230, "fontSize": 24, "fill": "$accent", "fontWeight": "800", "textAnchor": "middle", "fadeIn": 16 } },
-    "to-foundry": { "id": "to-foundry", "type": "arrow", "props": { "type": "arrow", "x1": 320, "y1": 240, "x2": 392, "y2": 240, "stroke": "$accent", "strokeWidth": 3, "headSize": 10, "draw": 24 } },
-    "foundry-card": { "id": "foundry-card", "type": "rect", "props": { "type": "rect", "x": 410, "y": 164, "width": 260, "height": 152, "fill": "$surface", "stroke": "$accent", "strokeWidth": 2, "rx": 18, "fadeIn": 30 } },
-    "foundry-label": { "id": "foundry-label", "type": "text", "intent": { "role": "hero", "importance": "primary" }, "props": { "type": "text", "content": "Foundry", "x": 540, "y": 228, "fontSize": 28, "fill": "$title", "fontWeight": "900", "textAnchor": "middle", "fadeIn": 32 } },
-    "to-agent": { "id": "to-agent", "type": "arrow", "props": { "type": "arrow", "x1": 694, "y1": 240, "x2": 750, "y2": 240, "stroke": "$accent", "strokeWidth": 3, "headSize": 10, "draw": 42 } },
-    "agent-card": { "id": "agent-card", "type": "rect", "props": { "type": "rect", "x": 750, "y": 180, "width": 170, "height": 100, "fill": "$surface", "stroke": "$border", "rx": 14, "fadeIn": 48 } },
-    "agent-label": { "id": "agent-label", "type": "text", "props": { "type": "text", "content": "Production Agent", "x": 835, "y": 235, "fontSize": 18, "fill": "$foreground", "fontWeight": "700", "textAnchor": "middle", "fadeIn": 50 } }
+    "title": { "id": "title", "type": "text", "intent": { "role": "title", "importance": "primary" }, "props": { "type": "text", "content": "Microsoft Foundry", "x": 480, "y": 68, "fontSize": 40, "fill": "$title", "fontWeight": "900", "textAnchor": "middle" } },
+    "subtitle": { "id": "subtitle", "type": "text", "intent": { "role": "subtitle", "importance": "secondary" }, "props": { "type": "text", "content": "from models to production agents", "x": 480, "y": 106, "fontSize": 20, "fill": "$subtitle", "fontWeight": "600", "textAnchor": "middle" } },
+    "divider": { "id": "divider", "type": "line", "props": { "type": "line", "x1": 0, "y1": 130, "x2": 960, "y2": 130, "stroke": "$border", "strokeWidth": 1 } },
+    "models-card": { "id": "models-card", "type": "rect", "props": { "type": "rect", "x": 56, "y": 178, "width": 240, "height": 124, "fill": "$surface", "stroke": "$border", "strokeWidth": 2, "rx": 16 } },
+    "models-label": { "id": "models-label", "type": "text", "props": { "type": "text", "content": "Models", "x": 176, "y": 230, "fontSize": 24, "fill": "$accent", "fontWeight": "800", "textAnchor": "middle" } },
+    "to-foundry": { "id": "to-foundry", "type": "arrow", "props": { "type": "arrow", "x1": 320, "y1": 240, "x2": 392, "y2": 240, "stroke": "$accent", "strokeWidth": 3, "headSize": 10 } },
+    "foundry-card": { "id": "foundry-card", "type": "rect", "props": { "type": "rect", "x": 410, "y": 164, "width": 260, "height": 152, "fill": "$surface", "stroke": "$accent", "strokeWidth": 2, "rx": 18 } },
+    "foundry-label": { "id": "foundry-label", "type": "text", "intent": { "role": "hero", "importance": "primary" }, "props": { "type": "text", "content": "Foundry", "x": 540, "y": 228, "fontSize": 28, "fill": "$title", "fontWeight": "900", "textAnchor": "middle" } },
+    "to-agent": { "id": "to-agent", "type": "arrow", "props": { "type": "arrow", "x1": 694, "y1": 240, "x2": 750, "y2": 240, "stroke": "$accent", "strokeWidth": 3, "headSize": 10 } },
+    "agent-card": { "id": "agent-card", "type": "rect", "props": { "type": "rect", "x": 750, "y": 180, "width": 170, "height": 100, "fill": "$surface", "stroke": "$border", "rx": 14 } },
+    "agent-label": { "id": "agent-label", "type": "text", "props": { "type": "text", "content": "Production Agent", "x": 835, "y": 235, "fontSize": 18, "fill": "$foreground", "fontWeight": "700", "textAnchor": "middle" } }
+  },
+  "timelines": {
+    "intro": {
+      "id": "intro",
+      "duration": 90,
+      "tracks": [
+        { "target": "title", "property": "opacity", "keyframes": [{ "frame": 0, "value": 0 }, { "frame": 8, "value": 1, "easing": "easeOutCubic" }] },
+        { "target": "models-card", "property": "opacity", "keyframes": [{ "frame": 12, "value": 0 }, { "frame": 24, "value": 1, "easing": "easeOutCubic" }] },
+        { "target": "foundry-card", "property": "opacity", "keyframes": [{ "frame": 24, "value": 0 }, { "frame": 36, "value": 1, "easing": "easeOutCubic" }] }
+      ]
+    }
   }
 }
 \`\`\`
@@ -222,7 +234,7 @@ Avoid hardcoded colors like \`#38bdf8\` for routine emphasis. They bypass CutRea
 - ❌ Forget \`$background\` on the scene
 - ❌ Put render fields beside \`props\` instead of inside \`props\`
 - ❌ Leave important elements anonymous — use stable IDs and \`intent\` roles so future agents can edit them
-- ❌ Use \`color\`, \`radius\`, or object-shaped \`fadeIn\` values — use \`fill\`, \`rx\`, and numeric animation frames
+- ❌ Use \`color\`, \`radius\`, \`fadeIn\`, \`fadeOut\`, or \`draw\` in element props — use \`fill\`, \`rx\`, and timeline keyframes
 - ❌ Use hardcoded cyan/purple for routine emphasis — use \`$accent\`, \`$secondary\`, \`$tertiary\`, \`$success\`, \`$warning\`
 - ❌ Use only hex for text — use \`$title\`/\`$subtitle\`/\`$foreground\`/\`$muted\` tokens
 - ❌ Use token strips, repeated chip rows, tiny grids, or too many arrows unless the row explicitly requires them

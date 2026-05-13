@@ -1,3 +1,3 @@
-import type { ElucimDocument, ElucimV2Document } from "@elucim/dsl";
+import type { ElucimDocument, RenderableDocument } from "@elucim/dsl";
 
-export type CutReadyElucimDocument = ElucimDocument | ElucimV2Document;
+export type CutReadyElucimDocument = ElucimDocument | RenderableDocument;
