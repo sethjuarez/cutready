@@ -9,6 +9,36 @@
 Covector manages this changelog. Do not edit manually.
 Each release section is generated from `.changes/*.md` files.
 
+## [1.4.0](https://github.com/sethjuarez/cutready/compare/v1.3.0...v1.4.0) (2026-05-13)
+
+
+### Features
+
+* **agent:** add Elucim v2 visual tools ([819d04b](https://github.com/sethjuarez/cutready/commit/819d04b2382edce6b9599a73960829692a61843f))
+* **agent:** integrate elucim agent tooling ([f480fc0](https://github.com/sethjuarez/cutready/commit/f480fc092fb2f9b5b164c31748bad5cab8feab24))
+* **editor:** add document toolbar ([01b1600](https://github.com/sethjuarez/cutready/commit/01b1600233c647488fbf97651d403867545cf8ef))
+* **eval:** add agent and Elucim visual eval loops ([994b98e](https://github.com/sethjuarez/cutready/commit/994b98ee21cc24ae9459e40301297c2b74d8a19e))
+* **recording:** add native cut-ready capture backend ([6ee0e74](https://github.com/sethjuarez/cutready/commit/6ee0e74a8d7a3c409503485ab3567e624a6d0077))
+* **recording:** add prompter overlay and platform hardening ([55660f8](https://github.com/sethjuarez/cutready/commit/55660f828ffee313bc3a377a6a9fe25ec239865c))
+* **recording:** add standalone recorder control ([46991ae](https://github.com/sethjuarez/cutready/commit/46991ae33d9e3f8f87d9908a5f85f7874d926295))
+* **recording:** add take metadata sidecars ([4798e80](https://github.com/sethjuarez/cutready/commit/4798e80d7cbbcf1acd9d7f9068fdb0b1e0e8f0d8))
+* **recording:** capture camera with media foundation ([cb1de43](https://github.com/sethjuarez/cutready/commit/cb1de431b506600ee8a01bb1e6bc768810b8fd52))
+* **recording:** convert packed yuv camera frames ([a4cdfc2](https://github.com/sethjuarez/cutready/commit/a4cdfc2161417aeec7b111cbcbc4679872a7c34b))
+* **recording:** initialize local recording storage ([29f8c7b](https://github.com/sethjuarez/cutready/commit/29f8c7bac8df2e997172376c98f6c8a83d6c429e))
+* **settings:** add recorder defaults ([8ced62f](https://github.com/sethjuarez/cutready/commit/8ced62f51a9c1d56686ff82619c1cce29405175a))
+* **visuals:** persist Elucim v2 documents ([c2b519d](https://github.com/sethjuarez/cutready/commit/c2b519dd0e491cf94442ef6b7145514c7b21699e))
+
+
+### Bug Fixes
+
+* **agent:** harden LLM and process handling ([7bc5b48](https://github.com/sethjuarez/cutready/commit/7bc5b48a12299e418f01f2f68001e69cf44cbf8c))
+* **agent:** refresh storyboard edits in chat ([9b5497b](https://github.com/sethjuarez/cutready/commit/9b5497b9e33965301a4fcb2b04b43b808fc7c40d))
+* align Elucim title tokens with CutReady theme ([27d2adc](https://github.com/sethjuarez/cutready/commit/27d2adc7941a7ed1ea534b8a6e66bb7f670b856d))
+* guide Designer agent toward branded Elucim visuals ([308e65e](https://github.com/sethjuarez/cutready/commit/308e65e956bf18a10a1c52e46c02cf18ca37bf5c))
+* nudge Designer toward cleaner slide density ([42a9b75](https://github.com/sethjuarez/cutready/commit/42a9b751f5179988543a692132d318215567a1a1))
+* **recording:** prefer negotiated camera fallback ([43a0547](https://github.com/sethjuarez/cutready/commit/43a05473189552277916eca7a2405e1d4e1bc40e))
+* reject crowded Designer visuals ([20894c2](https://github.com/sethjuarez/cutready/commit/20894c2b73cb1d1bf60763a9b6434a423283fa84))
+
 ## [1.3.0](https://github.com/sethjuarez/cutready/compare/v1.2.0...v1.3.0) (2026-05-05)
 
 
