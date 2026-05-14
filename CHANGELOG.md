@@ -9,6 +9,19 @@
 Covector manages this changelog. Do not edit manually.
 Each release section is generated from `.changes/*.md` files.
 
+## [1.5.0](https://github.com/sethjuarez/cutready/compare/v1.4.0...v1.5.0) (2026-05-14)
+
+
+### Features
+
+* **agent:** expand Elucim visual bridge workflow ([d73cac9](https://github.com/sethjuarez/cutready/commit/d73cac92e6bac8e668284c357599bf457be17e16))
+* **diagnostics:** add gated development diagnostics ([337976b](https://github.com/sethjuarez/cutready/commit/337976b624ed259c01802e6d73508275d95e945b))
+
+
+### Bug Fixes
+
+* **editor:** harden embedded Elucim editor ([018bf17](https://github.com/sethjuarez/cutready/commit/018bf17063ef799fcbd08acae5ca3ca79d95f30e))
+
 ## [1.4.0](https://github.com/sethjuarez/cutready/compare/v1.3.0...v1.4.0) (2026-05-13)
 
 
