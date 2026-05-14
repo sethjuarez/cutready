@@ -92,16 +92,17 @@ export function ProjectSwitcher() {
     const name = migrateName.trim();
     if (!name) return;
     try {
-      await invoke<ProjectEntry>("migrate_to_multi_project", { existingName: name });
+      const migrated = await invoke<ProjectEntry>("migrate_to_multi_project", { existingName: name });
       setMigrateName("");
       setIsMigrating(false);
       await loadProjects();
+      await switchProject(migrated.path);
       // Now show the "new project" flow
       setIsCreating(true);
     } catch (err) {
       console.error("Migration failed:", err);
     }
-  }, [migrateName, loadProjects]);
+  }, [migrateName, loadProjects, switchProject]);
 
   const handleRename = useCallback(async () => {
     const name = renameValue.trim();
