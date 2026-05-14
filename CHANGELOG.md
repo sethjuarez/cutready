@@ -9,6 +9,13 @@
 Covector manages this changelog. Do not edit manually.
 Each release section is generated from `.changes/*.md` files.
 
+## [1.5.1](https://github.com/sethjuarez/cutready/compare/v1.5.0...v1.5.1) (2026-05-14)
+
+
+### Bug Fixes
+
+* **build:** gate Windows API dependency by target ([e7cff5d](https://github.com/sethjuarez/cutready/commit/e7cff5d4f033c2e1363b4b22877dbb2bc9462ff5))
+
 ## [1.5.0](https://github.com/sethjuarez/cutready/compare/v1.4.0...v1.5.0) (2026-05-14)
 
 
