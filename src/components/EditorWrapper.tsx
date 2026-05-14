@@ -8,6 +8,7 @@
  */
 import { memo, lazy, Suspense, useState, useCallback, useRef } from "react";
 import type { ComponentType } from "react";
+import "@elucim/editor/style.css";
 import type { ElucimEditorProps } from "@elucim/editor";
 import type { CutReadyElucimDocument } from "../types/elucim";
 import { elucimThemeFromTokens } from "../theme/elucimTheme";
@@ -98,6 +99,7 @@ export default memo(function EditorWrapper({
           initialDocument={dsl}
           initialFrame="last"
           theme={theme}
+          showHeader={false}
           editorTheme={{
             "color-scheme": resolvedTheme,
             "--elucim-editor-bg": `rgb(${colors.surfaceInset})`,

@@ -34,6 +34,7 @@ import {
 import type { PlanningCellField, PlanningRow } from "../types/sketch";
 import { normalizeDocument } from "@elucim/dsl";
 import type { CutReadyElucimDocument } from "../types/elucim";
+import { ErrorBoundary } from "./ErrorBoundary";
 
 
 const VisualCell = lazy(() => import("./VisualCell"));
@@ -531,16 +532,25 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
                 </div>
               ) : (
                 /* Edit mode — ElucimEditor */
-                <Suspense fallback={<div className="w-full h-full flex items-center justify-center text-[rgb(var(--color-text-secondary))]">Loading editor…</div>}>
-                  {editorDsl ? (
-                    <EditorWrapper
-                      dsl={editorDsl}
-                      onDocumentChange={(doc) => { setEditorDsl(doc); setEditorDirty(true); }}
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-[rgb(var(--color-text-secondary))]">Loading…</div>
-                  )}
-                </Suspense>
+                <ErrorBoundary
+                  resetKey={`${visualLightbox.visualPath}-${lightboxMode}`}
+                  fallback={
+                    <div className="w-full h-full flex items-center justify-center p-6 text-sm text-[rgb(var(--color-error))] text-center">
+                      Editor failed to load. Close this panel and try again.
+                    </div>
+                  }
+                >
+                  <Suspense fallback={<div className="w-full h-full flex items-center justify-center text-[rgb(var(--color-text-secondary))]">Loading editor…</div>}>
+                    {editorDsl ? (
+                      <EditorWrapper
+                        dsl={editorDsl}
+                        onDocumentChange={(doc) => { setEditorDsl(doc); setEditorDirty(true); }}
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-[rgb(var(--color-text-secondary))]">Loading…</div>
+                    )}
+                  </Suspense>
+                </ErrorBoundary>
               )}
             </div>
 
