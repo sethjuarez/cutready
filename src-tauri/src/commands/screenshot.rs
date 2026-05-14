@@ -242,6 +242,7 @@ pub async fn open_capture_window(
         .inner_size(logical_w, logical_h)
         .position(logical_x, logical_y)
         .decorations(false)
+        .shadow(false)
         .always_on_top(true)
         .resizable(false)
         .focused(true)
@@ -251,14 +252,7 @@ pub async fn open_capture_window(
             eprintln!("[CAPTURE] build FAILED: {}", e);
             e.to_string()
         })?;
-    let _ = win.set_position(Position::Physical(PhysicalPosition {
-        x: phys_x,
-        y: phys_y,
-    }));
-    let _ = win.set_size(Size::Physical(PhysicalSize {
-        width: phys_w,
-        height: phys_h,
-    }));
+    fit_window_extended_frame_to_physical_bounds(&win, phys_x, phys_y, phys_w, phys_h);
 
     eprintln!("[CAPTURE] window created OK, label={}", win.label());
     Ok(())
@@ -330,6 +324,7 @@ pub async fn open_recording_countdown_window(
     .inner_size(logical_w, logical_h)
     .position(logical_x, logical_y)
     .decorations(false)
+    .shadow(false)
     .always_on_top(true)
     .resizable(false)
     .focused(true)
@@ -339,14 +334,7 @@ pub async fn open_recording_countdown_window(
         builder = builder.transparent(true);
     }
     let win = builder.build().map_err(|e| e.to_string())?;
-    let _ = win.set_position(Position::Physical(PhysicalPosition {
-        x: phys_x,
-        y: phys_y,
-    }));
-    let _ = win.set_size(Size::Physical(PhysicalSize {
-        width: phys_w,
-        height: phys_h,
-    }));
+    fit_window_extended_frame_to_physical_bounds(&win, phys_x, phys_y, phys_w, phys_h);
 
     let app_handle = app.clone();
     win.on_window_event(move |event| {
@@ -597,6 +585,7 @@ pub async fn open_recording_prompter_window(
     .min_inner_size(240.0, 280.0)
     .position(logical_x, logical_y)
     .decorations(false)
+    .shadow(false)
     .always_on_top(true)
     .resizable(true)
     .focused(!read_mode)
@@ -651,6 +640,77 @@ fn exclude_window_from_capture(win: &tauri::WebviewWindow) {
 
 #[cfg(not(target_os = "windows"))]
 fn exclude_window_from_capture(_win: &tauri::WebviewWindow) {}
+
+fn set_physical_bounds(win: &tauri::WebviewWindow, x: i32, y: i32, width: u32, height: u32) {
+    let _ = win.set_position(Position::Physical(PhysicalPosition { x, y }));
+    let _ = win.set_size(Size::Physical(PhysicalSize { width, height }));
+}
+
+#[cfg(target_os = "windows")]
+fn fit_window_extended_frame_to_physical_bounds(
+    win: &tauri::WebviewWindow,
+    x: i32,
+    y: i32,
+    width: u32,
+    height: u32,
+) {
+    use windows::Win32::Foundation::RECT;
+    use windows::Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_EXTENDED_FRAME_BOUNDS};
+    use windows::Win32::UI::WindowsAndMessaging::GetWindowRect;
+
+    set_physical_bounds(win, x, y, width, height);
+
+    let Ok(hwnd) = win.hwnd() else {
+        return;
+    };
+
+    let mut window_rect = RECT::default();
+    let mut frame_rect = RECT::default();
+    let got_bounds = unsafe {
+        GetWindowRect(hwnd, &mut window_rect).is_ok()
+            && DwmGetWindowAttribute(
+                hwnd,
+                DWMWA_EXTENDED_FRAME_BOUNDS,
+                &mut frame_rect as *mut _ as *mut _,
+                std::mem::size_of::<RECT>() as u32,
+            )
+            .is_ok()
+    };
+
+    if !got_bounds {
+        return;
+    }
+
+    let left_inset = frame_rect.left - window_rect.left;
+    let top_inset = frame_rect.top - window_rect.top;
+    let right_inset = window_rect.right - frame_rect.right;
+    let bottom_inset = window_rect.bottom - frame_rect.bottom;
+
+    if left_inset == 0 && top_inset == 0 && right_inset == 0 && bottom_inset == 0 {
+        return;
+    }
+
+    let outer_width = (width as i32 + left_inset + right_inset).max(1) as u32;
+    let outer_height = (height as i32 + top_inset + bottom_inset).max(1) as u32;
+    set_physical_bounds(
+        win,
+        x - left_inset,
+        y - top_inset,
+        outer_width,
+        outer_height,
+    );
+}
+
+#[cfg(not(target_os = "windows"))]
+fn fit_window_extended_frame_to_physical_bounds(
+    win: &tauri::WebviewWindow,
+    x: i32,
+    y: i32,
+    width: u32,
+    height: u32,
+) {
+    set_physical_bounds(win, x, y, width, height);
+}
 
 #[tauri::command]
 pub async fn save_recording_control_position(
@@ -722,6 +782,7 @@ pub async fn open_preview_window(
         .inner_size(logical_w, logical_h)
         .position(logical_x, logical_y)
         .decorations(false)
+        .shadow(false)
         .resizable(false)
         .focused(true)
         .skip_taskbar(true)
@@ -730,6 +791,7 @@ pub async fn open_preview_window(
             eprintln!("[PREVIEW] build FAILED: {}", e);
             e.to_string()
         })?;
+    fit_window_extended_frame_to_physical_bounds(&win, phys_x, phys_y, phys_w, phys_h);
 
     eprintln!("[PREVIEW] window created OK, label={}", win.label());
     Ok(())
