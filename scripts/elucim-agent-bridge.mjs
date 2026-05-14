@@ -53,7 +53,7 @@ function fail(op, error) {
   };
 }
 
-function run(payload) {
+async function run(payload) {
   const op = payload.op ?? process.argv[2] ?? "catalog";
   switch (op) {
     case "catalog":
@@ -93,6 +93,10 @@ function run(payload) {
       const normalized = normalizeInput(payload);
       return ok(op, agent.inspectSceneForAgent(normalized.document, payload.options ?? {}));
     }
+    case "inspectPolishHeuristics": {
+      const normalized = normalizeInput(payload);
+      return ok(op, agent.inspectPolishHeuristics(normalized.document));
+    }
     case "repair": {
       const normalized = normalizeInput(payload);
       return ok(op, agent.repairDocumentForAgent(normalized.document));
@@ -116,6 +120,38 @@ function run(payload) {
       }
       return ok(op, agent.applyAgentCommands(normalized.document, payload.commands));
     }
+    case "planMotionBeats":
+      return ok(op, agent.planMotionBeats(payload.spec ?? {}));
+    case "createSemanticMotionTimeline": {
+      const normalized = normalizeInput(payload);
+      return ok(op, agent.createSemanticMotionTimeline(normalized.document, payload.spec ?? {}));
+    }
+    case "createAutoStaggerTimeline": {
+      const normalized = normalizeInput(payload);
+      return ok(op, agent.createAutoStaggerTimeline(normalized.document, payload.spec ?? {}));
+    }
+    case "createStateSnapshotMotion":
+      return ok(op, agent.createStateSnapshotMotion(payload.spec ?? {}));
+    case "lintMotion": {
+      const normalized = normalizeInput(payload);
+      return ok(op, agent.lintMotion(normalized.document, payload.options ?? {}));
+    }
+    case "previewBeatDiffs": {
+      const normalized = normalizeInput(payload);
+      return ok(op, agent.previewBeatDiffs(normalized.document, payload.options ?? {}));
+    }
+    case "createReducedMotionDocument": {
+      const normalized = normalizeInput(payload);
+      return ok(op, agent.createReducedMotionDocument(normalized.document, payload.options ?? {}));
+    }
+    case "holdFinalFrame": {
+      const normalized = normalizeInput(payload);
+      return ok(op, agent.holdFinalFrame(normalized.document, payload.timelineId ?? payload.timeline_id));
+    }
+    case "suggestSemanticLayoutNudges": {
+      const normalized = normalizeInput(payload);
+      return ok(op, await agent.suggestSemanticLayoutNudges(normalized.document, payload.options ?? {}));
+    }
     case "createDocument":
       return ok(op, agent.createDocument(payload.spec ?? {}));
     case "createComposite": {
@@ -135,9 +171,9 @@ async function main() {
   const raw = process.argv[2] ? "" : await readStdin();
   const payload = raw.trim() ? JSON.parse(raw) : { op: process.argv[2] ?? "catalog" };
   const op = payload.op ?? process.argv[2] ?? "catalog";
-  const response = (() => {
+  const response = await (async () => {
     try {
-      return run({ ...payload, op });
+      return await run({ ...payload, op });
     } catch (error) {
       return fail(op, error);
     }

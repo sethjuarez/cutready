@@ -188,7 +188,8 @@ pub async fn get_visual(
     state: State<'_, AppState>,
 ) -> Result<serde_json::Value, String> {
     let root = project_root(&state)?;
-    project::read_visual(&root, &relative_path).map_err(|e| e.to_string())
+    let visual = project::read_visual(&root, &relative_path).map_err(|e| e.to_string())?;
+    normalize_visual_document_for_save(&visual)
 }
 
 /// Write an updated visual document back to its existing path.

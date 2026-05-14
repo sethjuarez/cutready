@@ -494,21 +494,22 @@ pub fn all_tools(web_search_enabled: bool) -> Vec<Tool> {
             tools.len().saturating_sub(2),
             Tool::function(
                 "elucim_agent_operation",
-                "Run an Elucim agent helper operation through the optional local bridge. Available only when CUTREADY_ELUCIM_BRIDGE=1. Useful for catalog, evaluate, inspect, repair, summarize, validate, suggestNudges, applyNudge, applyCommands, createDocument, and createComposite. This is an advisory authoring helper; use set_row_visual to save visuals.",
+                "Run an Elucim agent helper operation through the optional local bridge. Available only when CUTREADY_ELUCIM_BRIDGE=1. Useful for catalog, authoring presets, validation, evaluation, inspection, repair, deterministic nudges, semantic layout, and motion planning/linting. This is an advisory authoring helper; use set_row_visual to save visuals.",
                 json!({
                     "type": "object",
                     "properties": {
                         "op": {
                             "type": "string",
-                            "enum": ["catalog", "normalize", "summarize", "validate", "renderable", "evaluate", "inspect", "repair", "suggestNudges", "applyNudge", "applyCommands", "createDocument", "createComposite"],
+                            "enum": ["catalog", "normalize", "summarize", "validate", "renderable", "evaluate", "inspect", "inspectPolishHeuristics", "repair", "suggestNudges", "applyNudge", "applyCommands", "createDocument", "createComposite", "planMotionBeats", "createSemanticMotionTimeline", "createAutoStaggerTimeline", "createStateSnapshotMotion", "lintMotion", "previewBeatDiffs", "createReducedMotionDocument", "holdFinalFrame", "suggestSemanticLayoutNudges"],
                             "description": "Bridge operation to run"
                         },
                         "document": { "type": "object", "description": "Elucim document for document-based operations" },
                         "commands": { "type": "array", "description": "Commands for applyCommands" },
                         "nudgeId": { "type": "string", "description": "Nudge ID for applyNudge" },
+                        "timelineId": { "type": "string", "description": "Timeline ID for timeline-specific motion operations such as holdFinalFrame" },
                         "kind": { "type": "string", "description": "Composite kind for createComposite, e.g. stepCard, cardGrid, connector" },
-                        "spec": { "type": "object", "description": "Spec for createDocument or createComposite" },
-                        "options": { "type": "object", "description": "Options for inspect" }
+                        "spec": { "type": "object", "description": "Spec for createDocument, createComposite, motion helpers, or timeline generation" },
+                        "options": { "type": "object", "description": "Options for inspect, motion linting, beat previews, reduced motion, or semantic layout" }
                     },
                     "required": ["op"]
                 }),
@@ -1580,7 +1581,7 @@ fn exec_set_row_visual(root: &Path, args: &Value) -> String {
             // Auto-normalize to v2 and validate before writing. CutReady stores
             // Elucim visuals canonically, while critique still runs through the
             // renderable v1 compatibility shape used by the current renderer.
-            let visual = match normalize_visual_to_v2(&visual) {
+            let visual = match normalize_visual_document_for_save(&visual) {
                 Ok(v) => v,
                 Err(e) => return format!("Validation failed (1 error) — fix this and call set_row_visual again:\n  • {e}\n\n{row_context}"),
             };
@@ -1961,7 +1962,8 @@ const V2_LAYOUT_KEYS: &[&str] = &[
 ];
 
 pub(crate) fn normalize_visual_document_for_save(visual: &Value) -> Result<Value, String> {
-    let normalized = normalize_visual_to_v2(visual)?;
+    let mut normalized = normalize_visual_to_v2(visual)?;
+    ensure_default_state_machine_for_timelines(&mut normalized)?;
     validate_agentic_visual(&normalized)?;
     Ok(normalized)
 }
@@ -2018,6 +2020,120 @@ fn normalize_visual_to_v2(visual: &Value) -> Result<Value, String> {
 fn sanitize_v2_scene_duration(visual: &mut Value) {
     if let Some(scene) = visual.get_mut("scene").and_then(|v| v.as_object_mut()) {
         scene.remove("durationInFrames");
+    }
+}
+
+fn ensure_default_state_machine_for_timelines(visual: &mut Value) -> Result<(), String> {
+    let mut timeline_ids = visual
+        .get("timelines")
+        .and_then(|v| v.as_object())
+        .map(|timelines| timelines.keys().cloned().collect::<Vec<_>>())
+        .unwrap_or_default();
+    timeline_ids.sort();
+    if timeline_ids.is_empty() {
+        return Ok(());
+    }
+
+    let doc = visual
+        .as_object_mut()
+        .ok_or_else(|| "document: must be an object".to_string())?;
+    let default_is_valid = doc
+        .get("defaultStateMachine")
+        .and_then(|v| v.as_str())
+        .is_some_and(|id| {
+            doc.get("stateMachines")
+                .and_then(|v| v.as_object())
+                .is_some_and(|machines| machines.contains_key(id))
+        });
+    if default_is_valid {
+        return Ok(());
+    }
+
+    let existing_machine_ids = doc
+        .get("stateMachines")
+        .and_then(|v| v.as_object())
+        .map(|machines| {
+            machines
+                .keys()
+                .cloned()
+                .collect::<std::collections::HashSet<_>>()
+        })
+        .unwrap_or_default();
+    let machine_id = reserve_unique_id("main", &existing_machine_ids);
+    let machines = doc
+        .entry("stateMachines")
+        .or_insert_with(|| Value::Object(serde_json::Map::new()))
+        .as_object_mut()
+        .ok_or_else(|| "stateMachines: must be an object".to_string())?;
+    let mut states = serde_json::Map::new();
+    let mut transitions = Vec::new();
+    let mut state_ids = Vec::new();
+    for timeline_id in timeline_ids {
+        let state_id = reserve_unique_id(
+            &reserve_state_id(&timeline_id),
+            &state_ids.iter().cloned().collect(),
+        );
+        states.insert(state_id.clone(), json!({ "timeline": timeline_id }));
+        state_ids.push(state_id);
+    }
+    let entry_state_id = state_ids
+        .first()
+        .cloned()
+        .ok_or_else(|| "timelines: missing timeline ids".to_string())?;
+    transitions.push(json!({
+        "id": "entry-start",
+        "from": "entry",
+        "to": entry_state_id,
+        "trigger": "onStart"
+    }));
+    for pair in state_ids.windows(2) {
+        transitions.push(json!({
+            "id": format!("{}-next", pair[0]),
+            "from": pair[0],
+            "to": pair[1],
+            "exitTime": 1
+        }));
+    }
+    machines.insert(
+        machine_id.clone(),
+        json!({
+            "id": machine_id,
+            "entry": entry_state_id,
+            "states": states,
+            "transitions": transitions
+        }),
+    );
+    doc.insert("defaultStateMachine".into(), Value::String(machine_id));
+    Ok(())
+}
+
+fn reserve_state_id(timeline_id: &str) -> String {
+    let id = timeline_id
+        .trim()
+        .to_ascii_lowercase()
+        .replace(
+            |ch: char| !ch.is_ascii_alphanumeric() && ch != '-' && ch != '_',
+            "-",
+        )
+        .trim_matches('-')
+        .to_string();
+    match id.as_str() {
+        "" | "entry" | "any" | "exit" => "idle".into(),
+        _ => id,
+    }
+}
+
+fn reserve_unique_id(base: &str, existing: &std::collections::HashSet<String>) -> String {
+    if !existing.contains(base) {
+        return base.to_string();
+    }
+    let mut index = 2;
+    loop {
+        let candidate = format!("{base}-{index}");
+        if !existing.contains(&candidate) {
+            return candidate;
+        }
+        index += 1;
     }
 }
 
@@ -2558,19 +2674,23 @@ fn validate_v2_state_machines(doc: &serde_json::Map<String, Value>) -> Result<()
                 "stateMachines.{machine_id}.id: must match key \"{machine_id}\""
             ));
         }
-        let initial = machine
-            .get("initial")
+        let entry = machine
+            .get("entry")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| format!("stateMachines.{machine_id}.initial: missing"))?;
+            .ok_or_else(|| format!("stateMachines.{machine_id}.entry: missing"))?;
         let states = machine
             .get("states")
             .and_then(|v| v.as_object())
             .ok_or_else(|| format!("stateMachines.{machine_id}.states: must be an object"))?;
-        if !states.contains_key(initial) {
+        if !states.contains_key(entry) {
             return Err(format!(
-                "stateMachines.{machine_id}.initial: initial state \"{initial}\" does not exist"
+                "stateMachines.{machine_id}.entry: entry state \"{entry}\" does not exist"
             ));
         }
+        let transitions = machine
+            .get("transitions")
+            .and_then(|v| v.as_array())
+            .ok_or_else(|| format!("stateMachines.{machine_id}.transitions: must be an array"))?;
         for (state_id, state) in states {
             let state = state.as_object().ok_or_else(|| {
                 format!("stateMachines.{machine_id}.states.{state_id}: must be an object")
@@ -2582,27 +2702,101 @@ fn validate_v2_state_machines(doc: &serde_json::Map<String, Value>) -> Result<()
                     ));
                 }
             }
-            if let Some(on) = state.get("on").and_then(|v| v.as_object()) {
-                for (event, transition) in on {
-                    validate_v2_transition(
-                        machine_id,
-                        state_id,
-                        &format!("on.{event}"),
-                        transition,
-                        states,
-                        &timeline_ids,
-                    )?;
+        }
+        let entry_transitions = transitions
+            .iter()
+            .filter(|transition| transition.get("from").and_then(|v| v.as_str()) == Some("entry"))
+            .collect::<Vec<_>>();
+        if entry_transitions.len() != 1 {
+            return Err(format!(
+                "stateMachines.{machine_id}.transitions: Entry must have exactly one outgoing transition"
+            ));
+        }
+        if entry_transitions[0].get("to").and_then(|v| v.as_str()) != Some(entry) {
+            return Err(format!(
+                "stateMachines.{machine_id}.entry: Machine entry must match the explicit Entry transition target"
+            ));
+        }
+
+        let mut next_sources = std::collections::HashSet::new();
+        let mut event_sources = std::collections::HashSet::new();
+        for (index, transition) in transitions.iter().enumerate() {
+            validate_v2_transition(machine_id, index, transition, states)?;
+            let path = format!("stateMachines.{machine_id}.transitions[{index}]");
+            let transition = transition
+                .as_object()
+                .ok_or_else(|| format!("{path}: must be an object"))?;
+            let from = transition
+                .get("from")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            let to = transition.get("to").and_then(|v| v.as_str()).unwrap_or("");
+            let trigger = transition.get("trigger").and_then(|v| v.as_str());
+            let exit_time = transition.get("exitTime");
+
+            if from == "entry" {
+                if to == "entry" || to == "exit" {
+                    return Err(format!(
+                        "{path}.to: Entry transition must target a real state"
+                    ));
                 }
+                if exit_time.is_some() {
+                    return Err(format!(
+                        "{path}.exitTime: Entry transitions cannot be Next transitions"
+                    ));
+                }
+                match trigger {
+                    Some("onStart" | "onClick" | "onKey") => {}
+                    Some(value) => {
+                        return Err(format!("{path}.trigger: unsupported entry trigger \"{value}\""))
+                    }
+                    None => {
+                        return Err(format!(
+                            "{path}.trigger: Entry transitions require a start event such as onStart or onClick"
+                        ))
+                    }
+                }
+                if trigger == Some("onKey")
+                    && transition
+                        .get("key")
+                        .and_then(|v| v.as_str())
+                        .is_none_or(|key| key.trim().is_empty())
+                {
+                    return Err(format!("{path}.key: onKey transitions require a key"));
+                }
+                continue;
             }
-            if let Some(transition) = state.get("onComplete") {
-                validate_v2_transition(
-                    machine_id,
-                    state_id,
-                    "onComplete",
-                    transition,
-                    states,
-                    &timeline_ids,
-                )?;
+
+            if exit_time.is_some() {
+                if trigger.is_some() {
+                    return Err(format!(
+                        "{path}.trigger: Next transitions must not have event names"
+                    ));
+                }
+                if !next_sources.insert(from.to_string()) {
+                    return Err(format!(
+                        "{path}.from: State \"{from}\" can only have one Next transition"
+                    ));
+                }
+                continue;
+            }
+
+            let trigger = trigger.ok_or_else(|| {
+                format!("{path}.trigger: Event transitions require an event name")
+            })?;
+            let scoped_event_key = if trigger == "onKey" {
+                let key = transition
+                    .get("key")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| format!("{path}.key: onKey transitions require a key"))?;
+                format!("{from}:{trigger}:{}", key.to_ascii_lowercase())
+            } else {
+                format!("{from}:{trigger}")
+            };
+            if !event_sources.insert(scoped_event_key) {
+                return Err(format!(
+                    "{path}.trigger: Duplicate event \"{trigger}\" from \"{from}\""
+                ));
             }
         }
     }
@@ -2611,36 +2805,42 @@ fn validate_v2_state_machines(doc: &serde_json::Map<String, Value>) -> Result<()
 
 fn validate_v2_transition(
     machine_id: &str,
-    state_id: &str,
-    path: &str,
+    transition_index: usize,
     transition: &Value,
     states: &serde_json::Map<String, Value>,
-    timeline_ids: &std::collections::HashSet<String>,
 ) -> Result<(), String> {
-    let (target, timeline) = if let Some(target) = transition.as_str() {
-        (target, None)
-    } else {
-        let transition = transition.as_object().ok_or_else(|| {
-            format!("stateMachines.{machine_id}.states.{state_id}.{path}: transition must be a state ID or object")
-        })?;
-        let target = transition
-            .get("target")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| {
-                format!("stateMachines.{machine_id}.states.{state_id}.{path}.target: missing")
-            })?;
-        let timeline = transition.get("timeline").and_then(|v| v.as_str());
-        (target, timeline)
-    };
-    if !states.contains_key(target) {
-        return Err(format!(
-            "stateMachines.{machine_id}.states.{state_id}.{path}: unknown target state \"{target}\""
-        ));
+    let path = format!("stateMachines.{machine_id}.transitions[{transition_index}]");
+    let transition = transition
+        .as_object()
+        .ok_or_else(|| format!("{path}: must be an object"))?;
+    if transition
+        .get("id")
+        .and_then(|v| v.as_str())
+        .is_none_or(|id| id.trim().is_empty())
+    {
+        return Err(format!("{path}.id: Transition id is required"));
     }
-    if let Some(timeline) = timeline {
-        if !timeline_ids.contains(timeline) {
+    let source = transition
+        .get("from")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| format!("{path}.from: missing"))?;
+    if source != "entry" && source != "any" && !states.contains_key(source) {
+        return Err(format!("{path}.from: unknown source state \"{source}\""));
+    }
+    let target = transition
+        .get("to")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| format!("{path}.to: missing"))?;
+    if target != "entry" && target != "exit" && !states.contains_key(target) {
+        return Err(format!("{path}.to: unknown target state \"{target}\""));
+    }
+    if let Some(exit_time) = transition.get("exitTime") {
+        if !exit_time
+            .as_f64()
+            .is_some_and(|value| value.is_finite() && value >= 0.0)
+        {
             return Err(format!(
-                "stateMachines.{machine_id}.states.{state_id}.{path}.timeline: unknown timeline \"{timeline}\""
+                "{path}.exitTime: Exit time must be a non-negative number"
             ));
         }
     }
@@ -2736,7 +2936,9 @@ fn save_row_visual(
     index: usize,
     visual: &Value,
 ) -> Result<String, String> {
-    let rel_path = project::write_visual(root, visual)
+    let visual = normalize_visual_document_for_save(visual)
+        .map_err(|e| format!("Validation failed: {e}"))?;
+    let rel_path = project::write_visual(root, &visual)
         .map_err(|e| format!("Error writing visual file: {e}"))?;
     sketch.rows[index].visual = Some(Value::String(rel_path.clone()));
     sketch.rows[index].screenshot = None;
@@ -4461,7 +4663,108 @@ mod tests {
         let visual_path = saved.rows[0].visual.as_ref().unwrap().as_str().unwrap();
         let visual = project::read_visual(root, visual_path).unwrap();
         assert!(visual.pointer("/timelines/intro/tracks").is_some());
+        assert_eq!(
+            visual
+                .get("defaultStateMachine")
+                .and_then(|value| value.as_str()),
+            Some("main")
+        );
+        assert_eq!(
+            visual
+                .pointer("/stateMachines/main/states/intro/timeline")
+                .and_then(|value| value.as_str()),
+            Some("intro")
+        );
         assert!(visual.pointer("/elements/title/props/fadeIn").is_none());
+    }
+
+    #[test]
+    fn normalize_visual_adds_default_state_machine_for_timelines() {
+        let mut visual = sample_v2_visual_for_agentic_tools();
+        visual["timelines"] = json!({
+            "intro": {
+                "id": "intro",
+                "duration": 20,
+                "tracks": [{
+                    "target": "title",
+                    "property": "opacity",
+                    "keyframes": [{ "frame": 0, "value": 0 }, { "frame": 20, "value": 1 }]
+                }]
+            }
+        });
+
+        let normalized = normalize_visual_document_for_save(&visual).unwrap();
+
+        assert_eq!(
+            normalized
+                .get("defaultStateMachine")
+                .and_then(|value| value.as_str()),
+            Some("main")
+        );
+        assert_eq!(
+            normalized
+                .pointer("/stateMachines/main/entry")
+                .and_then(|value| value.as_str()),
+            Some("intro")
+        );
+        assert_eq!(
+            normalized
+                .pointer("/stateMachines/main/transitions/0/from")
+                .and_then(|value| value.as_str()),
+            Some("entry")
+        );
+    }
+
+    #[test]
+    fn normalize_visual_builds_sequential_state_machine_for_multiple_timelines() {
+        let mut visual = sample_v2_visual_for_agentic_tools();
+        visual["timelines"] = json!({
+            "reveal": {
+                "id": "reveal",
+                "duration": 20,
+                "tracks": [{
+                    "target": "title",
+                    "property": "opacity",
+                    "keyframes": [{ "frame": 0, "value": 0 }, { "frame": 20, "value": 1 }]
+                }]
+            },
+            "settle": {
+                "id": "settle",
+                "duration": 16,
+                "tracks": [{
+                    "target": "foreground",
+                    "property": "opacity",
+                    "keyframes": [{ "frame": 0, "value": 0 }, { "frame": 16, "value": 1 }]
+                }]
+            }
+        });
+
+        let normalized = normalize_visual_document_for_save(&visual).unwrap();
+
+        assert_eq!(
+            normalized
+                .pointer("/stateMachines/main/entry")
+                .and_then(|value| value.as_str()),
+            Some("reveal")
+        );
+        assert_eq!(
+            normalized
+                .pointer("/stateMachines/main/states/reveal/timeline")
+                .and_then(|value| value.as_str()),
+            Some("reveal")
+        );
+        assert_eq!(
+            normalized
+                .pointer("/stateMachines/main/states/settle/timeline")
+                .and_then(|value| value.as_str()),
+            Some("settle")
+        );
+        assert_eq!(
+            normalized
+                .pointer("/stateMachines/main/transitions/1/to")
+                .and_then(|value| value.as_str()),
+            Some("settle")
+        );
     }
 
     #[test]
@@ -4531,10 +4834,13 @@ mod tests {
         visual["stateMachines"] = json!({
             "deck": {
                 "id": "deck",
-                "initial": "idle",
+                "entry": "idle",
                 "states": {
-                    "idle": { "on": { "start": "missing" } }
-                }
+                    "idle": {}
+                },
+                "transitions": [
+                    { "id": "entry-start", "from": "entry", "to": "missing", "trigger": "onStart" }
+                ]
             }
         });
 
@@ -4544,8 +4850,46 @@ mod tests {
         assert!(
             errors
                 .iter()
-                .any(|error| error.contains("unknown target state")),
+                .any(|error| error.contains("Machine entry must match")
+                    || error.contains("unknown target")),
             "Expected state machine validation error: {errors:?}"
+        );
+    }
+
+    #[test]
+    fn validate_v2_accepts_canonical_state_machine() {
+        let mut visual = sample_v2_visual_for_agentic_tools();
+        visual["timelines"] = json!({
+            "intro": {
+                "id": "intro",
+                "duration": 20,
+                "tracks": [{
+                    "target": "title",
+                    "property": "opacity",
+                    "keyframes": [{ "frame": 0, "value": 0 }, { "frame": 20, "value": 1 }]
+                }]
+            }
+        });
+        visual["stateMachines"] = json!({
+            "main": {
+                "id": "main",
+                "entry": "intro",
+                "states": {
+                    "intro": { "timeline": "intro" }
+                },
+                "transitions": [
+                    { "id": "entry-start", "from": "entry", "to": "intro", "trigger": "onStart" }
+                ]
+            }
+        });
+        visual["defaultStateMachine"] = json!("main");
+
+        let mut errors = Vec::new();
+        validate_dsl_doc(&visual, &mut errors);
+
+        assert!(
+            errors.is_empty(),
+            "Expected valid state machine: {errors:?}"
         );
     }
 
