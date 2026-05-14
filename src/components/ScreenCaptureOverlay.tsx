@@ -32,18 +32,38 @@ export function ScreenCaptureOverlay({ onCapture, onCancel }: ScreenCaptureOverl
   const [loading, setLoading] = useState(true);
   const [waitingForCapture, setWaitingForCapture] = useState(false);
   const mountedRef = useRef(false);
+  const previewPathsRef = useRef<Map<number, string>>(new Map());
   const callbacksRef = useRef({ onCapture, onCancel });
   callbacksRef.current = { onCapture, onCancel };
+
+  const cleanupPreviewCaptures = useCallback(async (keepPaths: Set<string>) => {
+    const paths = Array.from(new Set(previewPathsRef.current.values()));
+    await Promise.all(paths.map(async (path) => {
+      if (keepPaths.has(path)) return;
+      try {
+        await invoke("delete_project_image", { relativePath: path });
+      } catch (err) {
+        logError(`[Overlay] Failed to delete unused monitor preview ${path}: ${err}`);
+      }
+    }));
+    const remaining = new Map(
+      Array.from(previewPathsRef.current.entries()).filter(([, path]) => keepPaths.has(path)),
+    );
+    previewPathsRef.current = remaining;
+    setPreviewPaths(remaining);
+  }, []);
 
   // Listen for capture events from the capture window (stable — no deps on callbacks)
   useEffect(() => {
     logInfo("[Overlay] Setting up event listeners");
     const unlistenComplete = listen<{ path: string }>("capture-complete", (event) => {
       logInfo(`[Overlay] capture-complete event: ${event.payload.path}`);
+      cleanupPreviewCaptures(new Set([event.payload.path]));
       callbacksRef.current.onCapture(event.payload.path);
     });
     const unlistenCancel = listen("capture-cancel", () => {
       logInfo("[Overlay] capture-cancel event received");
+      cleanupPreviewCaptures(new Set());
       callbacksRef.current.onCancel();
     });
     return () => {
@@ -87,6 +107,7 @@ export function ScreenCaptureOverlay({ onCapture, onCancel }: ScreenCaptureOverl
             paths.set(m.id, relPath);
           }
         }
+        previewPathsRef.current = paths;
         setMonitorPreviews(previews);
         setPreviewPaths(paths);
         setLoading(false);
@@ -122,6 +143,10 @@ export function ScreenCaptureOverlay({ onCapture, onCancel }: ScreenCaptureOverl
         logInfo("[Overlay] No preview — capturing fullscreen...");
         bgRelPath = await invoke<string>("capture_fullscreen", { monitorId: monitor.id });
         logInfo(`[Overlay] Captured: ${bgRelPath}`);
+        const nextPaths = new Map(previewPathsRef.current);
+        nextPaths.set(monitor.id, bgRelPath);
+        previewPathsRef.current = nextPaths;
+        setPreviewPaths(nextPaths);
       }
       const project = await invoke<{ root: string }>("get_current_project");
       logInfo(`[Overlay] Project root: ${project.root}`);
