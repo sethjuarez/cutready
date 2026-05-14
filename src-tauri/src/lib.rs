@@ -259,6 +259,7 @@ pub fn run() {
             commands::project::get_workspace_settings,
             commands::project::set_workspace_settings,
             commands::project::resolve_deep_link,
+            commands::diagnostics::dump_diagnostics,
             commands::sketch::create_sketch,
             commands::sketch::update_sketch,
             commands::sketch::update_sketch_title,
