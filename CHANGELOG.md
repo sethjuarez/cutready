@@ -9,6 +9,20 @@
 Covector manages this changelog. Do not edit manually.
 Each release section is generated from `.changes/*.md` files.
 
+## [1.6.0](https://github.com/sethjuarez/cutready/compare/v1.5.1...v1.6.0) (2026-05-15)
+
+
+### Features
+
+* **installer:** brand Windows installers ([5507ba1](https://github.com/sethjuarez/cutready/commit/5507ba177b0633c81fdbe5fdff3e489ba02a288e))
+
+
+### Bug Fixes
+
+* **capture:** remove unused monitor preview screenshots ([d22a2d4](https://github.com/sethjuarez/cutready/commit/d22a2d4790bc64cb185021ab097592f53c9e62cd))
+* **windows:** align fullscreen utility windows ([04c05fa](https://github.com/sethjuarez/cutready/commit/04c05fae78a3c56a59e07e76a45637f8450de53f))
+* **workspace:** refresh active project after migration ([c258524](https://github.com/sethjuarez/cutready/commit/c2585243c0eaaa7cad9e3d3b4adf5620b6638771))
+
 ## [1.5.1](https://github.com/sethjuarez/cutready/compare/v1.5.0...v1.5.1) (2026-05-14)
 
 
