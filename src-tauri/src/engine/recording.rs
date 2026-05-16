@@ -2033,7 +2033,7 @@ fn build_ffmpeg_capture_args(
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, target_os = "windows"))]
 fn build_ffmpeg_camera_args(
     settings: &RecorderSettings,
     output_path: &Path,
