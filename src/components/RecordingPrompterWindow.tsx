@@ -4,6 +4,7 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow, PhysicalPosition } from "@tauri-apps/api/window";
 import { ChevronLeft, ChevronRight, GripVertical, Lock, PanelLeft, PanelRight, X } from "lucide-react";
 import { SafeMarkdown } from "./SafeMarkdown";
+import { isMac } from "../utils/platform";
 import type { PrompterScript } from "../types/recording";
 
 interface RecordingPrompterParams {
@@ -45,11 +46,44 @@ export function RecordingPrompterWindow() {
   const [error, setError] = useState<string | null>(null);
   const currentWindow = useMemo(() => getCurrentWindow(), []);
   const stepsLengthRef = useRef(0);
+  const dragRef = useRef<{ startX: number; startY: number; winX: number; winY: number } | null>(null);
 
   const steps = params?.script.steps ?? [];
   const current = steps[index] ?? null;
   const progress = steps.length > 0 ? `${index + 1}/${steps.length}` : "0/0";
   stepsLengthRef.current = steps.length;
+
+  // Manual window drag for macOS (startDragging() fails on WKWebView with decorations:false)
+  const handleDragStart = useCallback(async (e: React.MouseEvent) => {
+    if (!isMac) {
+      void currentWindow.startDragging();
+      return;
+    }
+    e.preventDefault();
+    const pos = await currentWindow.outerPosition();
+    dragRef.current = { startX: e.screenX, startY: e.screenY, winX: pos.x, winY: pos.y };
+
+    const onMouseMove = (ev: MouseEvent) => {
+      const drag = dragRef.current;
+      if (!drag) return;
+      const dx = ev.screenX - drag.startX;
+      const dy = ev.screenY - drag.startY;
+      const scale = window.devicePixelRatio || 1;
+      void currentWindow.setPosition(
+        new PhysicalPosition(
+          Math.round(drag.winX + dx * scale),
+          Math.round(drag.winY + dy * scale),
+        ),
+      );
+    };
+    const onMouseUp = () => {
+      dragRef.current = null;
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup", onMouseUp);
+    };
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup", onMouseUp);
+  }, [currentWindow]);
 
   const move = useCallback((delta: number) => {
     setIndex((value) => {
@@ -187,8 +221,8 @@ export function RecordingPrompterWindow() {
           <div className="flex shrink-0 items-center gap-1 bg-black/25 px-2 py-1.5 text-white/72">
             <button
               type="button"
-              onMouseDown={() => void currentWindow.startDragging()}
-              className="mr-auto inline-flex items-center gap-1.5 rounded-lg px-1.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] transition-colors hover:bg-white/10"
+              onMouseDown={(e) => void handleDragStart(e)}
+              className="mr-auto inline-flex cursor-grab items-center gap-1.5 rounded-lg px-1.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] transition-colors hover:bg-white/10 active:cursor-grabbing"
             >
               <GripVertical className="h-3.5 w-3.5" />
               Prompter

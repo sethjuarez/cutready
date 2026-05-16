@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { emit, listen } from "@tauri-apps/api/event";
-import { getCurrentWindow, LogicalSize, type PhysicalPosition } from "@tauri-apps/api/window";
+import { getCurrentWindow, LogicalSize, PhysicalPosition } from "@tauri-apps/api/window";
 import { Eye, FileText, Keyboard, Mic, Monitor, Square, Video, Volume2, X } from "lucide-react";
 import { useRecordingDevices } from "../hooks/useRecordingDevices";
 import { useSettings } from "../hooks/useSettings";
+import { isMac } from "../utils/platform";
 import type { ProjectView } from "../types/project";
 import type { CameraFormatInfo, CaptureArea, PrompterScript, RecorderSettings, RecordingDeviceInfo, RecordingPlatformCapabilities, RecordingScope, RecordingTake } from "../types/recording";
 
@@ -600,8 +601,37 @@ export function RecordingControlWindow() {
     clearCountdownTimer();
   }, [clearCountdownTimer]);
 
-  const startDrag = useCallback(() => {
-    void currentWindow.startDragging();
+  const dragRef = useRef<{ startX: number; startY: number; winX: number; winY: number } | null>(null);
+
+  const startDrag = useCallback(async (e: React.MouseEvent) => {
+    if (!isMac) {
+      void currentWindow.startDragging();
+      return;
+    }
+    e.preventDefault();
+    const pos = await currentWindow.outerPosition();
+    dragRef.current = { startX: e.screenX, startY: e.screenY, winX: pos.x, winY: pos.y };
+
+    const onMouseMove = (ev: MouseEvent) => {
+      const drag = dragRef.current;
+      if (!drag) return;
+      const dx = ev.screenX - drag.startX;
+      const dy = ev.screenY - drag.startY;
+      const scale = window.devicePixelRatio || 1;
+      void currentWindow.setPosition(
+        new PhysicalPosition(
+          Math.round(drag.winX + dx * scale),
+          Math.round(drag.winY + dy * scale),
+        ),
+      );
+    };
+    const onMouseUp = () => {
+      dragRef.current = null;
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup", onMouseUp);
+    };
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup", onMouseUp);
   }, [currentWindow]);
 
   const toggleMicrophone = useCallback((enabled: boolean) => {
@@ -886,14 +916,14 @@ function RecorderHeader({
   meta?: string;
   status: string;
   recording?: boolean;
-  onDrag: () => void;
+  onDrag: (e: React.MouseEvent) => void;
   onClose: () => void;
 }) {
   return (
     <div
       aria-label="Drag recorder window"
       role="banner"
-      className="flex items-center justify-between gap-2 border-b border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]/80 px-2.5 py-1"
+      className="flex cursor-grab items-center justify-between gap-2 border-b border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]/80 px-2.5 py-1 active:cursor-grabbing"
       onMouseDown={onDrag}
       onDoubleClick={onDrag}
     >
