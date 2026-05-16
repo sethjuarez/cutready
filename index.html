@@ -36,6 +36,21 @@
         // but this ensures the app is never permanently invisible if
         // downstream initialization (Stronghold, IPC) hangs or fails.
         document.documentElement.dataset.themeReady = "true";
+
+        // Suppress Tauri WKWebView event-listener race condition on macOS.
+        // During startup, Rust may deliver events before the JS listener
+        // registry is fully populated, causing a benign TypeError. This
+        // handler silences that specific error to keep the console clean.
+        window.addEventListener("error", function (e) {
+          if (e.message && e.message.indexOf("listeners[eventId]") !== -1) {
+            e.preventDefault();
+          }
+        });
+        window.addEventListener("unhandledrejection", function (e) {
+          if (e.reason && String(e.reason).indexOf("listeners[eventId]") !== -1) {
+            e.preventDefault();
+          }
+        });
       })();
     </script>
   </head>
