@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { emit, listen } from "@tauri-apps/api/event";
-import { getCurrentWindow, LogicalSize, PhysicalPosition } from "@tauri-apps/api/window";
+import { getCurrentWindow, LogicalPosition, LogicalSize, PhysicalPosition } from "@tauri-apps/api/window";
 import { Eye, FileText, Keyboard, Mic, Monitor, Square, Video, Volume2, X } from "lucide-react";
 import { useRecordingDevices } from "../hooks/useRecordingDevices";
 import { useSettings } from "../hooks/useSettings";
@@ -610,18 +610,18 @@ export function RecordingControlWindow() {
     }
     e.preventDefault();
     const pos = await currentWindow.outerPosition();
-    dragRef.current = { startX: e.screenX, startY: e.screenY, winX: pos.x, winY: pos.y };
+    const scale = window.devicePixelRatio || 1;
+    dragRef.current = { startX: e.screenX, startY: e.screenY, winX: pos.x / scale, winY: pos.y / scale };
 
     const onMouseMove = (ev: MouseEvent) => {
       const drag = dragRef.current;
       if (!drag) return;
       const dx = ev.screenX - drag.startX;
       const dy = ev.screenY - drag.startY;
-      const scale = window.devicePixelRatio || 1;
       void currentWindow.setPosition(
-        new PhysicalPosition(
-          Math.round(drag.winX + dx * scale),
-          Math.round(drag.winY + dy * scale),
+        new LogicalPosition(
+          Math.round(drag.winX + dx),
+          Math.round(drag.winY + dy),
         ),
       );
     };

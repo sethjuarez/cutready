@@ -623,6 +623,52 @@ fn parse_avfoundation_devices(stderr: &str) -> Vec<RecordingDeviceInfo> {
     devices
 }
 
+/// Find the avfoundation video device index for a given screen/display.
+///
+/// avfoundation lists cameras first (e.g., [0] FaceTime, [1] iPhone Camera),
+/// then screen capture devices (e.g., [4] Capture screen 0, [5] Capture screen 1).
+/// This function runs `ffmpeg -list_devices` and finds the correct index for
+/// "Capture screen {display_index}".
+#[cfg(target_os = "macos")]
+fn find_avfoundation_screen_index(display_index: usize) -> Option<u32> {
+    let output = std::process::Command::new("ffmpeg")
+        .args(["-hide_banner", "-f", "avfoundation", "-list_devices", "true", "-i", ""])
+        .output()
+        .ok()?;
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    let target = format!("capture screen {display_index}");
+    let mut in_video_section = false;
+
+    for line in stderr.lines() {
+        let lower = line.to_ascii_lowercase();
+        if lower.contains("avfoundation video devices") {
+            in_video_section = true;
+            continue;
+        }
+        if lower.contains("avfoundation audio devices") {
+            break;
+        }
+        if !in_video_section {
+            continue;
+        }
+
+        // Match lines like "[4] Capture screen 0"
+        if lower.contains(&target) {
+            let bracket_start = line.rfind('[')?;
+            let after = &line[bracket_start + 1..];
+            let bracket_end = after.find(']')?;
+            let index: u32 = after[..bracket_end].parse().ok()?;
+            log::info!(
+                "[recording] avfoundation screen device for display {display_index} → index {index}"
+            );
+            return Some(index);
+        }
+    }
+
+    None
+}
+
 /// Known virtual audio loopback device names on macOS.
 const MACOS_LOOPBACK_DEVICE_NAMES: &[&str] = &[
     "blackhole",
@@ -1739,12 +1785,22 @@ fn build_ffmpeg_capture_args(
             "warning".to_string(),
         ];
 
-        // Screen capture via avfoundation — device "0" is typically first screen
-        let screen_index = settings
+        // Screen capture via avfoundation — find "Capture screen N" device index
+        // Cameras come first in avfoundation device list, so screen index is NOT 0
+        let display_index = settings
             .capture_area
             .as_ref()
-            .and_then(|area| area.dxgi_output_index) // reuse as screen index on macOS
-            .unwrap_or(0);
+            .and_then(|area| area.display_index)
+            .unwrap_or(0) as usize;
+
+        let screen_avf_index = find_avfoundation_screen_index(display_index)
+            .unwrap_or_else(|| {
+                log::warn!(
+                    "[recording] could not discover avfoundation screen device for display {display_index}, \
+                     falling back to avfoundation index {display_index}"
+                );
+                display_index as u32
+            });
 
         args.extend([
             "-f".to_string(),
@@ -1768,9 +1824,9 @@ fn build_ffmpeg_capture_args(
                 .as_ref()
                 .and_then(|d| d.parse::<u32>().ok())
                 .unwrap_or(0);
-            args.extend(["-i".to_string(), format!("{screen_index}:{mic_index}")]);
+            args.extend(["-i".to_string(), format!("{screen_avf_index}:{mic_index}")]);
         } else {
-            args.extend(["-i".to_string(), format!("{screen_index}:none")]);
+            args.extend(["-i".to_string(), format!("{screen_avf_index}:none")]);
         }
 
         // Video encoding

@@ -333,10 +333,6 @@ pub async fn open_recording_countdown_window(
     .transparent(true);
     let win = builder.build().map_err(|e| e.to_string())?;
     fit_window_extended_frame_to_physical_bounds(&win, phys_x, phys_y, phys_w, phys_h);
-    #[cfg(target_os = "macos")]
-    {
-        let _ = win.set_fullscreen(true);
-    }
 
     let app_handle = app.clone();
     win.on_window_event(move |event| {

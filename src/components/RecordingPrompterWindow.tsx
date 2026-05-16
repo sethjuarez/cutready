@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { getCurrentWindow, PhysicalPosition } from "@tauri-apps/api/window";
+import { getCurrentWindow, LogicalPosition, PhysicalPosition } from "@tauri-apps/api/window";
 import { ChevronLeft, ChevronRight, GripVertical, Lock, PanelLeft, PanelRight, X } from "lucide-react";
 import { SafeMarkdown } from "./SafeMarkdown";
 import { isMac } from "../utils/platform";
@@ -61,18 +61,19 @@ export function RecordingPrompterWindow() {
     }
     e.preventDefault();
     const pos = await currentWindow.outerPosition();
-    dragRef.current = { startX: e.screenX, startY: e.screenY, winX: pos.x, winY: pos.y };
+    const scale = window.devicePixelRatio || 1;
+    // Convert physical position to logical (CSS points) to match screenX/screenY
+    dragRef.current = { startX: e.screenX, startY: e.screenY, winX: pos.x / scale, winY: pos.y / scale };
 
     const onMouseMove = (ev: MouseEvent) => {
       const drag = dragRef.current;
       if (!drag) return;
       const dx = ev.screenX - drag.startX;
       const dy = ev.screenY - drag.startY;
-      const scale = window.devicePixelRatio || 1;
       void currentWindow.setPosition(
-        new PhysicalPosition(
-          Math.round(drag.winX + dx * scale),
-          Math.round(drag.winY + dy * scale),
+        new LogicalPosition(
+          Math.round(drag.winX + dx),
+          Math.round(drag.winY + dy),
         ),
       );
     };

@@ -104,6 +104,17 @@ pub async fn start_recording_take(
     state: State<'_, AppState>,
     capture: State<'_, RecordingCaptureState>,
 ) -> Result<recording::RecordingTake, String> {
+    // On macOS, request screen recording permission before starting
+    #[cfg(target_os = "macos")]
+    {
+        if !request_macos_screen_recording_permission() {
+            return Err(
+                "Screen Recording permission is required. Please grant it in System Settings → Privacy & Security → Screen & System Audio Recording, then restart CutReady."
+                    .to_string(),
+            );
+        }
+    }
+
     let root = project_root(&state)?;
     let mut active = capture.0.lock().await;
     let _ = recording::finalize_finished_recording(&mut active).map_err(|e| e.to_string())?;
@@ -282,7 +293,7 @@ fn recording_platform_capabilities() -> RecordingPlatformCapabilities {
         supports_system_audio,
         supports_native_monitor_capture: cfg!(target_os = "windows"),
         supports_window_capture_exclusion: cfg!(target_os = "windows"),
-        supports_click_through_prompter: cfg!(target_os = "windows"),
+        supports_click_through_prompter: true,
         supports_camera_format_discovery: cfg!(target_os = "windows"),
         system_audio_hint,
     }
@@ -355,6 +366,26 @@ fn windows_shell_path(path: &Path) -> String {
         rest.to_string()
     } else {
         raw
+    }
+}
+
+/// Request Screen Recording permission on macOS.
+/// Returns true if permission is granted, false if denied.
+/// On first call, this triggers the system permission dialog.
+#[cfg(target_os = "macos")]
+fn request_macos_screen_recording_permission() -> bool {
+    // CGPreflightScreenCaptureAccess checks without prompting,
+    // CGRequestScreenCaptureAccess prompts if not yet decided.
+    extern "C" {
+        fn CGPreflightScreenCaptureAccess() -> bool;
+        fn CGRequestScreenCaptureAccess() -> bool;
+    }
+    unsafe {
+        if CGPreflightScreenCaptureAccess() {
+            return true;
+        }
+        // Triggers the system dialog if user hasn't decided yet
+        CGRequestScreenCaptureAccess()
     }
 }
 
