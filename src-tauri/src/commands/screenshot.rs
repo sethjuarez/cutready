@@ -329,13 +329,14 @@ pub async fn open_recording_countdown_window(
     .always_on_top(true)
     .resizable(false)
     .focused(true)
-    .skip_taskbar(true);
-    #[cfg(target_os = "windows")]
-    {
-        builder = builder.transparent(true);
-    }
+    .skip_taskbar(true)
+    .transparent(true);
     let win = builder.build().map_err(|e| e.to_string())?;
     fit_window_extended_frame_to_physical_bounds(&win, phys_x, phys_y, phys_w, phys_h);
+    #[cfg(target_os = "macos")]
+    {
+        let _ = win.set_fullscreen(true);
+    }
 
     let app_handle = app.clone();
     win.on_window_event(move |event| {
@@ -591,11 +592,8 @@ pub async fn open_recording_prompter_window(
     .always_on_top(true)
     .resizable(true)
     .focused(!read_mode)
-    .skip_taskbar(true);
-    #[cfg(target_os = "windows")]
-    {
-        builder = builder.transparent(true);
-    }
+    .skip_taskbar(true)
+    .transparent(true);
     let win = builder.build().map_err(|e| e.to_string())?;
     exclude_window_from_capture(&win);
     if read_mode {

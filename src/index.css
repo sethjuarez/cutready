@@ -106,6 +106,12 @@ body {
   height: 100%;
 }
 
+html.recording-overlay-root,
+body.recording-overlay-root,
+body.recording-overlay-root #root {
+  background: transparent !important;
+}
+
 html.recording-prompter-root,
 body.recording-prompter-root,
 body.recording-prompter-root #root {

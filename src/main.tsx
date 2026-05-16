@@ -114,6 +114,8 @@ async function renderApp() {
     );
   } else if (isRecordingCountdownMode) {
     document.documentElement.dataset.themeReady = "true";
+    document.documentElement.classList.add("recording-overlay-root");
+    document.body.classList.add("recording-overlay-root");
     const { RecordingCountdownWindow } = await import("./components/RecordingCountdownWindow");
     ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
       <RecordingCountdownWindow />,
