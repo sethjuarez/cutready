@@ -157,13 +157,20 @@ pub fn run() {
                 let _ = app.deep_link().register_all();
             }
 
-            // Deep link: check if app was launched via a deep link URL
+            // Deep link: check if app was launched via a deep link URL.
+            // Defer the emit so the webview JS event system is initialized first.
             {
                 let handle = app.handle().clone();
                 if let Ok(Some(urls)) = app.deep_link().get_current() {
-                    for url in urls {
-                        let url_str: String = url.to_string();
-                        let _ = handle.emit("deep-link-received", url_str);
+                    let url_strings: Vec<String> = urls.iter().map(|u| u.to_string()).collect();
+                    if !url_strings.is_empty() {
+                        tauri::async_runtime::spawn(async move {
+                            // Give the webview time to initialize its event listeners
+                            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                            for url_str in url_strings {
+                                let _ = handle.emit("deep-link-received", url_str);
+                            }
+                        });
                     }
                 }
             }
@@ -229,6 +236,15 @@ pub fn run() {
                         }
                     },
                 )?;
+            }
+
+            // Windows: Remove native decorations for our custom frameless titlebar.
+            // macOS keeps native decorations for native drag, resize, and traffic lights.
+            #[cfg(target_os = "windows")]
+            {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.set_decorations(false);
+                }
             }
 
             Ok(())

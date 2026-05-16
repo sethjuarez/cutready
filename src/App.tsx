@@ -8,6 +8,7 @@ import { StatusBar } from "./components/StatusBar";
 import { AppLayout } from "./components/AppLayout";
 import { ToastContainer } from "./components/ToastContainer";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+
 import { useAppStore } from "./stores/appStore";
 import { useUpdateStore } from "./stores/updateStore";
 
@@ -48,7 +49,7 @@ function App() {
     <ErrorBoundary
       resetKey={resetKey}
       fallback={
-        <div className="min-h-screen bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text))] flex items-center justify-center">
+        <div className="h-full bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text))] flex items-center justify-center">
           <div className="text-center space-y-4">
             <p className="text-lg font-medium text-[rgb(var(--color-text))]">Something went wrong</p>
             <p className="text-sm text-[rgb(var(--color-text-secondary))]">An unexpected error crashed the interface.</p>
@@ -62,7 +63,7 @@ function App() {
         </div>
       }
     >
-      <div className="min-h-screen bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text))]">
+      <div className="h-full bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text))]">
         <AppLayout />
         <StatusBar />
         <ToastContainer />

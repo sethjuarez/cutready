@@ -93,6 +93,17 @@ html {
   transition:
     background-color 0.2s ease,
     color 0.2s ease;
+  height: 100%;
+}
+
+body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+#root {
+  height: 100%;
 }
 
 html.recording-prompter-root,

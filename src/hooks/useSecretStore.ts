@@ -36,23 +36,46 @@ const VAULT_FILE = "vault.hold";
 const VAULT_PASS = "com.cutready.app";
 const CLIENT_NAME = "cutready";
 
+/** Race a promise against a timeout. Rejects if the timeout fires first. */
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+    promise.then(
+      (v) => { clearTimeout(timer); resolve(v); },
+      (e) => { clearTimeout(timer); reject(e); },
+    );
+  });
+}
+
+const STRONGHOLD_TIMEOUT_MS = 5000;
+
 async function ensureInit(): Promise<void> {
   if (_store) return;
   if (!isTauri) return; // Browser mode — use memStore
 
   if (!_initPromise) {
     _initPromise = (async () => {
-      const { Stronghold } = await import("@tauri-apps/plugin-stronghold");
-      const { appDataDir } = await import("@tauri-apps/api/path");
-      const dir = await appDataDir();
-      const vaultPath = `${dir}${VAULT_FILE}`;
-      _stronghold = await Stronghold.load(vaultPath, VAULT_PASS);
       try {
-        const client = await _stronghold.loadClient(CLIENT_NAME);
-        _store = client.getStore();
-      } catch {
-        const client = await _stronghold.createClient(CLIENT_NAME);
-        _store = client.getStore();
+        const { Stronghold } = await import("@tauri-apps/plugin-stronghold");
+        const { appDataDir } = await import("@tauri-apps/api/path");
+        const dir = await appDataDir();
+        const vaultPath = `${dir}${VAULT_FILE}`;
+        _stronghold = await withTimeout(
+          Stronghold.load(vaultPath, VAULT_PASS),
+          STRONGHOLD_TIMEOUT_MS,
+          "Stronghold.load",
+        );
+        try {
+          const client = await _stronghold.loadClient(CLIENT_NAME);
+          _store = client.getStore();
+        } catch {
+          const client = await _stronghold.createClient(CLIENT_NAME);
+          _store = client.getStore();
+        }
+      } catch (err) {
+        console.warn("[secrets] Stronghold initialization failed, using in-memory fallback:", err);
+        // Leave _store null — all operations fall back to memStore
+        _stronghold = null;
       }
     })();
   }

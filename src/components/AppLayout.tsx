@@ -23,6 +23,7 @@ import { ChatPanel } from "./ChatPanel";
 import { FeedbackDialog } from "./FeedbackDialog";
 import { commandRegistry, useCommands } from "../services/commandRegistry";
 import { useTheme } from "../hooks/useTheme";
+import { isMac } from "../utils/platform";
 import { getThemePalette } from "../theme/appThemePalettes";
 import { applyThemeColorTokens, cacheThemePaletteForBootstrap } from "../theme/applyThemePalette";
 import {
@@ -252,8 +253,11 @@ export function AppLayout() {
   // Global keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Always allow Ctrl+Shift+P to toggle the command palette
-      if (e.ctrlKey && e.shiftKey && (e.key === "P" || e.key === "p")) {
+      // Use metaKey on macOS, ctrlKey on Windows/Linux
+      const mod = e.metaKey || e.ctrlKey;
+
+      // Always allow Mod+Shift+P to toggle the command palette
+      if (mod && e.shiftKey && (e.key === "P" || e.key === "p")) {
         e.preventDefault();
         setCommandPaletteOpen((prev) => !prev);
         return;
@@ -261,35 +265,35 @@ export function AppLayout() {
       // Skip all other shortcuts when command palette is open
       if (commandPaletteOpen) return;
 
-      if ((e.ctrlKey || e.metaKey) && e.key === "/") {
+      if (mod && e.key === "/") {
         e.preventDefault();
         setShortcutsOpen((prev) => !prev);
         return;
       }
-      if (e.ctrlKey && e.shiftKey && (e.key === "T" || e.key === "t")) {
+      if (mod && e.shiftKey && (e.key === "T" || e.key === "t")) {
         e.preventDefault();
         toggleTheme();
         return;
       }
-      if (e.ctrlKey && e.shiftKey && (e.key === "B" || e.key === "b")) {
+      if (mod && e.shiftKey && (e.key === "B" || e.key === "b")) {
         e.preventDefault();
         toggleVersionHistory();
         return;
       }
-      if (e.ctrlKey && e.shiftKey && (e.key === "C" || e.key === "c")) {
+      if (mod && e.shiftKey && (e.key === "C" || e.key === "c")) {
         e.preventDefault();
         setView("chat");
         return;
       }
-      if ((e.ctrlKey || e.metaKey) && e.key === "b") {
+      if (mod && e.key === "b") {
         e.preventDefault();
         toggleSidebar();
       }
-      if ((e.ctrlKey || e.metaKey) && e.key === "`") {
+      if (mod && e.key === "`") {
         e.preventDefault();
         toggleOutput();
       }
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === "S" || e.key === "s")) {
+      if (mod && e.shiftKey && (e.key === "S" || e.key === "s")) {
         e.preventDefault();
         const { currentProject, promptSnapshot } = useAppStore.getState();
         if (currentProject) {
@@ -368,9 +372,9 @@ export function AppLayout() {
       <div
         className="flex flex-col w-full"
         style={{
-          paddingTop: "var(--titlebar-height)",
+          paddingTop: isMac ? "0" : "var(--titlebar-height)",
           paddingBottom: "var(--statusbar-height)",
-          height: "100vh",
+          height: "100%",
         }}
       >
         <div className="flex flex-1 overflow-hidden" ref={mainRef}>

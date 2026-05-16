@@ -31,6 +31,11 @@
             });
           }
         } catch (_) { /* localStorage unavailable — fall through to default */ }
+        // Always reveal the body after applying the cached theme.
+        // AppLayout will re-apply the full palette once settings load,
+        // but this ensures the app is never permanently invisible if
+        // downstream initialization (Stronghold, IPC) hangs or fails.
+        document.documentElement.dataset.themeReady = "true";
       })();
     </script>
   </head>

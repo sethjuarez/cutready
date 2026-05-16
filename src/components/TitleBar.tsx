@@ -5,6 +5,7 @@ import { useUpdateStore } from "../stores/updateStore";
 import { useAppStore } from "../stores/appStore";
 import { usePopover } from "../hooks/usePopover";
 import { relaunch } from "@tauri-apps/plugin-process";
+import { isMac, formatKeybinding } from "../utils/platform";
 
 interface TitleBarProps {
   onCommandPaletteOpen?: () => void;
@@ -65,14 +66,104 @@ export function TitleBar({
   );
   const handleClose = useCallback(() => appWindow?.close(), [appWindow]);
 
+  // macOS uses native window chrome — render only the toolbar controls
+  if (isMac) {
+    return (
+      <div className="flex items-center justify-between bg-[rgb(var(--color-surface))] px-3 h-10 shrink-0 mb-1">
+        {/* Left: workspace name */}
+        <div className="flex items-center gap-2 shrink-0">
+          {workspaceName && (
+            <span className="text-xs text-[rgb(var(--color-text-secondary))] font-medium truncate max-w-[200px]">
+              {workspaceName}
+              {isMultiProject && projectName && (
+                <span className="text-[rgb(var(--color-text-secondary))]/60"> / {projectName}</span>
+              )}
+            </span>
+          )}
+        </div>
+
+        {/* Center: Command palette */}
+        <div className="flex-1 flex items-center justify-center min-w-0 px-4">
+          <button
+            className="flex items-center gap-1.5 w-full max-w-[380px] h-[22px] px-2.5 bg-[rgb(var(--color-surface-alt))] border border-[rgb(var(--color-border))] rounded-md text-[rgb(var(--color-text-secondary))] text-[12px] cursor-pointer hover:border-[rgb(var(--color-text-secondary))] transition-colors"
+            onClick={onCommandPaletteOpen}
+            title={`Command Palette (${formatKeybinding("Ctrl+Shift+P")})`}
+          >
+            <Search className="w-3.5 h-3.5" />
+            <span className="flex-1 text-left truncate">Search commands…</span>
+            <kbd className="text-[10px] px-1 py-px rounded bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] text-[rgb(var(--color-text-secondary))] font-[inherit]">
+              {formatKeybinding("Ctrl+Shift+P")}
+            </kbd>
+          </button>
+        </div>
+
+        {/* Right: Panel toggles + update indicator */}
+        <div className="flex items-center gap-0.5">
+          <button
+            className="flex items-center justify-center w-6 h-5 rounded transition-colors text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))]"
+            onClick={onToggleSidebarPosition}
+            title={`Move Sidebar to the ${sidebarPosition === "left" ? "Right" : "Left"}`}
+          >
+            <LayoutGrid className="w-3.5 h-3.5" />
+          </button>
+          <div className="w-px h-3 bg-[rgb(var(--color-border))] mx-0.5 shrink-0" />
+          <button
+            className={`flex items-center justify-center w-6 h-5 rounded transition-colors ${
+              (sidebarPosition === "left" ? sidebarVisible : secondaryVisible)
+                ? "text-[rgb(var(--color-accent))]"
+                : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))]"
+            } hover:bg-[rgb(var(--color-surface-alt))]`}
+            onClick={sidebarPosition === "left" ? onToggleSidebar : onToggleSecondary}
+            title={sidebarPosition === "left" ? formatKeybinding("Toggle Sidebar (Ctrl+B)") : formatKeybinding("Toggle Secondary Panel (Ctrl+Shift+B)")}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="2" />
+              <line x1="9" y1="3" x2="9" y2="21" />
+            </svg>
+          </button>
+          <button
+            className={`flex items-center justify-center w-6 h-5 rounded transition-colors ${
+              outputVisible
+                ? "text-[rgb(var(--color-accent))]"
+                : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))]"
+            } hover:bg-[rgb(var(--color-surface-alt))]`}
+            onClick={onToggleOutput}
+            title={formatKeybinding("Toggle Activity Panel (Ctrl+`)")}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="2" />
+              <line x1="3" y1="15" x2="21" y2="15" />
+            </svg>
+          </button>
+          <button
+            className={`flex items-center justify-center w-6 h-5 rounded transition-colors ${
+              (sidebarPosition === "right" ? sidebarVisible : secondaryVisible)
+                ? "text-[rgb(var(--color-accent))]"
+                : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))]"
+            } hover:bg-[rgb(var(--color-surface-alt))]`}
+            onClick={sidebarPosition === "right" ? onToggleSidebar : onToggleSecondary}
+            title={sidebarPosition === "right" ? formatKeybinding("Toggle Sidebar (Ctrl+B)") : formatKeybinding("Toggle Secondary Panel (Ctrl+Shift+B)")}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="2" />
+              <line x1="15" y1="3" x2="15" y2="21" />
+            </svg>
+          </button>
+          <div className="w-px h-3 bg-[rgb(var(--color-border))] mx-0.5 shrink-0" />
+          <UpdateIndicator />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
-      data-tauri-drag-region
       className="no-select fixed top-0 left-0 right-0 z-chrome flex items-center justify-between bg-[rgb(var(--color-surface))] border-b border-[rgb(var(--color-border))]"
       style={{ height: "var(--titlebar-height)" }}
+      data-tauri-drag-region
     >
-      {/* Left: App branding */}
-      <div data-tauri-drag-region className="flex items-center gap-2 pl-3 shrink-0">
+      {/* Left side */}
+      <div className="flex items-center gap-2 shrink-0 pl-3">
         <svg
           width="18"
           height="18"
@@ -94,14 +185,12 @@ export function TitleBar({
           <path d="M48 68 L88 84 L48 100Z" fill="rgb(var(--color-accent))" />
         </svg>
         <span
-          data-tauri-drag-region
           className="text-sm font-semibold tracking-tight"
         >
           CutReady
         </span>
         {workspaceName && (
           <span
-            data-tauri-drag-region
             className="text-sm text-[rgb(var(--color-text-secondary))] font-normal ml-1.5"
           >
             / {workspaceName}
@@ -113,17 +202,16 @@ export function TitleBar({
       </div>
 
       {/* Center: Command center */}
-      <div data-tauri-drag-region className="flex-1 flex items-center justify-center min-w-0 px-4">
+      <div className="flex-1 flex items-center justify-center min-w-0 px-4">
         <button
           className="flex items-center gap-1.5 w-full max-w-[380px] h-[22px] px-2.5 bg-[rgb(var(--color-surface-alt))] border border-[rgb(var(--color-border))] rounded-md text-[rgb(var(--color-text-secondary))] text-[12px] cursor-pointer hover:border-[rgb(var(--color-text-secondary))] transition-colors"
           onClick={onCommandPaletteOpen}
-          style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
-          title="Command Palette (Ctrl+Shift+P)"
+          title={`Command Palette (${formatKeybinding("Ctrl+Shift+P")})`}
         >
           <Search className="w-3.5 h-3.5" />
           <span className="flex-1 text-left truncate">Search commands…</span>
           <kbd className="text-[10px] px-1 py-px rounded bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] text-[rgb(var(--color-text-secondary))] font-[inherit]">
-            Ctrl+Shift+P
+            {formatKeybinding("Ctrl+Shift+P")}
           </kbd>
         </button>
       </div>
@@ -131,7 +219,7 @@ export function TitleBar({
       {/* Right: Panel toggles + update indicator + window controls */}
       <div className="flex items-center h-full shrink-0">
         {/* Panel layout toggles */}
-        <div className="flex items-center gap-0.5 px-2" style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}>
+        <div className="flex items-center gap-0.5 px-2">
           {/* Move sidebar to other side — leftmost so it's clearly separate from the layout toggles */}
           <button
             className="flex items-center justify-center w-6 h-5 rounded transition-colors text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))]"
@@ -149,7 +237,7 @@ export function TitleBar({
                 : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))]"
             } hover:bg-[rgb(var(--color-surface-alt))]`}
             onClick={sidebarPosition === "left" ? onToggleSidebar : onToggleSecondary}
-            title={sidebarPosition === "left" ? "Toggle Sidebar (Ctrl+B)" : "Toggle Secondary Panel (Ctrl+Shift+B)"}
+            title={sidebarPosition === "left" ? formatKeybinding("Toggle Sidebar (Ctrl+B)") : formatKeybinding("Toggle Secondary Panel (Ctrl+Shift+B)")}
           >
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <rect x="3" y="3" width="18" height="18" rx="2" />
@@ -164,7 +252,7 @@ export function TitleBar({
                 : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))]"
             } hover:bg-[rgb(var(--color-surface-alt))]`}
             onClick={onToggleOutput}
-            title="Toggle Activity Panel (Ctrl+`)"
+            title={formatKeybinding("Toggle Activity Panel (Ctrl+`)")}
           >
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <rect x="3" y="3" width="18" height="18" rx="2" />
@@ -179,7 +267,7 @@ export function TitleBar({
                 : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))]"
             } hover:bg-[rgb(var(--color-surface-alt))]`}
             onClick={sidebarPosition === "right" ? onToggleSidebar : onToggleSecondary}
-            title={sidebarPosition === "right" ? "Toggle Sidebar (Ctrl+B)" : "Toggle Secondary Panel (Ctrl+Shift+B)"}
+            title={sidebarPosition === "right" ? formatKeybinding("Toggle Sidebar (Ctrl+B)") : formatKeybinding("Toggle Secondary Panel (Ctrl+Shift+B)")}
           >
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <rect x="3" y="3" width="18" height="18" rx="2" />
@@ -192,39 +280,43 @@ export function TitleBar({
         {/* Update indicator */}
         <UpdateIndicator />
 
-        {/* Window controls */}
-        <button
-          onClick={handleMinimize}
-          className="inline-flex items-center justify-center w-11 h-full hover:bg-[rgb(var(--color-surface-alt))] transition-colors"
-          aria-label="Minimize"
-        >
-          <svg width="10" height="1" viewBox="0 0 10 1" fill="currentColor">
-            <rect width="10" height="1" />
-          </svg>
-        </button>
-        <button
-          onClick={handleMaximize}
-          className="inline-flex items-center justify-center w-11 h-full hover:bg-[rgb(var(--color-surface-alt))] transition-colors"
-          aria-label="Maximize"
-        >
-          {maximized ? (
-            <svg width="10" height="10" viewBox="0 0 11 11" fill="none" stroke="currentColor" strokeWidth="1">
-              <rect x="3.5" y="0.5" width="7" height="7" rx="0.5" />
-              <rect x="0.5" y="3.5" width="7" height="7" rx="0.5" fill="rgb(var(--color-surface-toolbar))" />
-            </svg>
-          ) : (
-            <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1">
-              <rect x="0.5" y="0.5" width="9" height="9" rx="0.5" />
-            </svg>
-          )}
-        </button>
-        <button
-          onClick={handleClose}
-          className="inline-flex items-center justify-center w-11 h-full hover:bg-error hover:text-[rgb(var(--color-accent-fg))] transition-colors"
-          aria-label="Close"
-        >
-          <X className="w-2.5 h-2.5" />
-        </button>
+        {/* Window controls — Windows style on the right, hidden on macOS */}
+        {!isMac && (
+          <div className="flex items-center h-full">
+            <button
+              onClick={handleMinimize}
+              className="inline-flex items-center justify-center w-11 h-full hover:bg-[rgb(var(--color-surface-alt))] transition-colors"
+              aria-label="Minimize"
+            >
+              <svg width="10" height="1" viewBox="0 0 10 1" fill="currentColor">
+                <rect width="10" height="1" />
+              </svg>
+            </button>
+            <button
+              onClick={handleMaximize}
+              className="inline-flex items-center justify-center w-11 h-full hover:bg-[rgb(var(--color-surface-alt))] transition-colors"
+              aria-label="Maximize"
+            >
+              {maximized ? (
+                <svg width="10" height="10" viewBox="0 0 11 11" fill="none" stroke="currentColor" strokeWidth="1">
+                  <rect x="3.5" y="0.5" width="7" height="7" rx="0.5" />
+                  <rect x="0.5" y="3.5" width="7" height="7" rx="0.5" fill="rgb(var(--color-surface-toolbar))" />
+                </svg>
+              ) : (
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1">
+                  <rect x="0.5" y="0.5" width="9" height="9" rx="0.5" />
+                </svg>
+              )}
+            </button>
+            <button
+              onClick={handleClose}
+              className="inline-flex items-center justify-center w-11 h-full hover:bg-error hover:text-[rgb(var(--color-accent-fg))] transition-colors"
+              aria-label="Close"
+            >
+              <X className="w-2.5 h-2.5" />
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -267,7 +359,6 @@ function UpdateIndicator() {
     <div
       ref={ref}
       className="relative flex items-center px-1"
-      style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
     >
       <button
         className="relative flex items-center justify-center w-7 h-[22px] rounded text-accent hover:text-accent-hover hover:bg-[rgb(var(--color-surface-alt))] transition-colors"

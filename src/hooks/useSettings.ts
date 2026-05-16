@@ -220,88 +220,98 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
 
   _loadSettings: async () => {
     if (get().loaded) return;
-    const store = new LazyStore(STORE_PATH);
-    set({ _store: store });
-
-    const result = { ...defaultGlobalSettings };
-    for (const key of Object.keys(defaultGlobalSettings) as (keyof GlobalSettings)[]) {
-      const val = await store.get(key);
-      if (val !== null && val !== undefined) {
-        (result as Record<string, unknown>)[key] = val;
-      }
-    }
-
-    // Migrate legacy fields
-    if (!result.aiApiKey && result.llmApiKey) {
-      result.aiApiKey = result.llmApiKey;
-      result.aiEndpoint = result.llmEndpoint || "";
-      result.aiModel = result.llmDeployment || "";
-      result.aiProvider = "azure_openai";
-    }
-
-    // Load secrets from Stronghold (encrypted vault)
     try {
-      const secrets = await loadAllSecrets();
+      const store = new LazyStore(STORE_PATH);
+      set({ _store: store });
 
-      // Migrate: if stronghold is empty but plain store has secrets, move them over
-      let migrated = false;
-      for (const sk of Object.keys(secrets) as SecretKey[]) {
-        const plainVal = (result as Record<string, unknown>)[sk] as string | undefined;
-        if (!secrets[sk] && plainVal) {
-          // Secret exists in plain store but not vault — migrate it
-          await setSecret(sk, plainVal);
-          secrets[sk] = plainVal;
-          // Clear from plain store
-          await store.set(sk, "");
-          migrated = true;
-        }
-      }
-      if (migrated) await store.save();
-
-      // Override result with vault values (vault is authoritative)
-      for (const sk of Object.keys(secrets) as SecretKey[]) {
-        if (secrets[sk]) {
-          (result as Record<string, unknown>)[sk] = secrets[sk];
-        }
-      }
-    } catch {
-      // Stronghold unavailable (e.g. browser dev mode) — use plain store values
-    }
-
-    set({ settings: { ...get().settings, ...result }, loaded: true });
-
-    // Auto-refresh OAuth token on startup if we have a refresh token
-    const needsOAuth = result.aiAuthMode === "azure_oauth" &&
-      (result.aiProvider === "azure_openai" || result.aiProvider === "microsoft_foundry");
-    if (needsOAuth && result.aiRefreshToken) {
-      try {
-        const tokenResult = await invoke<{ access_token: string; refresh_token?: string }>(
-          "azure_token_refresh",
-          {
-            tenantId: result.aiTenantId || "",
-            refreshToken: result.aiRefreshToken,
-            clientId: result.aiClientId || null,
-          },
-        );
-        if (tokenResult.access_token) {
-          const updates: Partial<GlobalSettings> = { aiAccessToken: tokenResult.access_token };
-          if (tokenResult.refresh_token) {
-            updates.aiRefreshToken = tokenResult.refresh_token;
+      const result = { ...defaultGlobalSettings };
+      for (const key of Object.keys(defaultGlobalSettings) as (keyof GlobalSettings)[]) {
+        try {
+          const val = await store.get(key);
+          if (val !== null && val !== undefined) {
+            (result as Record<string, unknown>)[key] = val;
           }
-          set((state) => ({ settings: { ...state.settings, ...updates } }));
-          // Save refreshed tokens to vault
-          try {
-            await setSecret("aiAccessToken", tokenResult.access_token);
-            if (tokenResult.refresh_token) {
-              await setSecret("aiRefreshToken", tokenResult.refresh_token);
-            }
-          } catch {
-            // Vault unavailable — fall through
+        } catch {
+          // Individual key read failed — keep default
+        }
+      }
+
+      // Migrate legacy fields
+      if (!result.aiApiKey && result.llmApiKey) {
+        result.aiApiKey = result.llmApiKey;
+        result.aiEndpoint = result.llmEndpoint || "";
+        result.aiModel = result.llmDeployment || "";
+        result.aiProvider = "azure_openai";
+      }
+
+      // Load secrets from Stronghold (encrypted vault)
+      try {
+        const secrets = await loadAllSecrets();
+
+        // Migrate: if stronghold is empty but plain store has secrets, move them over
+        let migrated = false;
+        for (const sk of Object.keys(secrets) as SecretKey[]) {
+          const plainVal = (result as Record<string, unknown>)[sk] as string | undefined;
+          if (!secrets[sk] && plainVal) {
+            // Secret exists in plain store but not vault — migrate it
+            await setSecret(sk, plainVal);
+            secrets[sk] = plainVal;
+            // Clear from plain store
+            await store.set(sk, "");
+            migrated = true;
+          }
+        }
+        if (migrated) await store.save();
+
+        // Override result with vault values (vault is authoritative)
+        for (const sk of Object.keys(secrets) as SecretKey[]) {
+          if (secrets[sk]) {
+            (result as Record<string, unknown>)[sk] = secrets[sk];
           }
         }
       } catch {
-        // Token refresh failed silently — user will re-auth when needed
+        // Stronghold unavailable (e.g. browser dev mode) — use plain store values
       }
+
+      set({ settings: { ...get().settings, ...result }, loaded: true });
+
+      // Auto-refresh OAuth token on startup if we have a refresh token
+      const needsOAuth = result.aiAuthMode === "azure_oauth" &&
+        (result.aiProvider === "azure_openai" || result.aiProvider === "microsoft_foundry");
+      if (needsOAuth && result.aiRefreshToken) {
+        try {
+          const tokenResult = await invoke<{ access_token: string; refresh_token?: string }>(
+            "azure_token_refresh",
+            {
+              tenantId: result.aiTenantId || "",
+              refreshToken: result.aiRefreshToken,
+              clientId: result.aiClientId || null,
+            },
+          );
+          if (tokenResult.access_token) {
+            const updates: Partial<GlobalSettings> = { aiAccessToken: tokenResult.access_token };
+            if (tokenResult.refresh_token) {
+              updates.aiRefreshToken = tokenResult.refresh_token;
+            }
+            set((state) => ({ settings: { ...state.settings, ...updates } }));
+            // Save refreshed tokens to vault
+            try {
+              await setSecret("aiAccessToken", tokenResult.access_token);
+              if (tokenResult.refresh_token) {
+                await setSecret("aiRefreshToken", tokenResult.refresh_token);
+              }
+            } catch {
+              // Vault unavailable — fall through
+            }
+          }
+        } catch {
+          // Token refresh failed silently — user will re-auth when needed
+        }
+      }
+    } catch (err) {
+      // Catastrophic settings failure — still mark loaded so the app renders
+      console.error("[settings] Failed to load settings, using defaults:", err);
+      set({ loaded: true });
     }
   },
 
