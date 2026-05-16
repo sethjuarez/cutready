@@ -110,12 +110,28 @@ pub struct RecordingDeviceDiscovery {
 pub struct ActiveRecording {
     process: ActiveRecordingProcess,
     camera_process: Option<ActiveCameraProcess>,
-    system_audio_process: Option<Child>,
+    system_audio_process: Option<SystemAudioProcess>,
     take: RecordingTake,
     take_dir: PathBuf,
     output_path: PathBuf,
     output_asset_path: String,
     camera_output_path: Option<PathBuf>,
+}
+
+enum SystemAudioProcess {
+    Ffmpeg(Child),
+    #[cfg(target_os = "macos")]
+    ScreenCaptureKit(crate::engine::recording_native_audio_macos::NativeMacAudioRecording),
+}
+
+impl SystemAudioProcess {
+    fn stop(self) -> anyhow::Result<()> {
+        match self {
+            Self::Ffmpeg(mut child) => stop_ffmpeg_child(&mut child),
+            #[cfg(target_os = "macos")]
+            Self::ScreenCaptureKit(recording) => recording.stop(),
+        }
+    }
 }
 
 enum ActiveRecordingProcess {
@@ -1045,18 +1061,45 @@ pub fn start_recording_capture(
     };
     write_take_sidecar(&take_dir.join("take.json"), &take)?;
 
-    // System audio capture (macOS: loopback device via avfoundation)
-    let system_audio_process = if take.settings.include_system_audio {
+    // System audio capture
+    // macOS: prefer ScreenCaptureKit (native, no virtual driver needed)
+    // Windows: handled by native WASAPI in recording_native_windows.rs
+    // Fallback: FFmpeg with loopback device
+    let system_audio_process: Option<SystemAudioProcess> = if take.settings.include_system_audio {
         let sys_audio_path = take_dir.join("system-audio.wav");
-        match spawn_system_audio_capture(&take.settings, &sys_audio_path) {
-            Ok(child) => {
+
+        #[cfg(target_os = "macos")]
+        let result = {
+            // Try native ScreenCaptureKit first
+            match crate::engine::recording_native_audio_macos::NativeMacAudioRecording::start_system_audio(
+                take.settings.system_audio_volume,
+                &sys_audio_path,
+            ) {
+                Ok(recording) => {
+                    log::info!("[recording] using ScreenCaptureKit for system audio");
+                    Ok(SystemAudioProcess::ScreenCaptureKit(recording))
+                }
+                Err(sck_err) => {
+                    log::warn!("[recording] ScreenCaptureKit system audio unavailable: {sck_err}, trying FFmpeg loopback");
+                    spawn_system_audio_capture(&take.settings, &sys_audio_path)
+                        .map(SystemAudioProcess::Ffmpeg)
+                }
+            }
+        };
+
+        #[cfg(not(target_os = "macos"))]
+        let result = spawn_system_audio_capture(&take.settings, &sys_audio_path)
+            .map(SystemAudioProcess::Ffmpeg);
+
+        match result {
+            Ok(process) => {
                 take.assets.push(RecordingAssetRef {
                     kind: RecordingAssetKind::SystemAudio,
                     path: "system-audio.wav".to_string(),
                     status: RecordingAssetStatus::Planned,
                 });
                 write_take_sidecar(&take_dir.join("take.json"), &take)?;
-                Some(child)
+                Some(process)
             }
             Err(err) => {
                 log::warn!(
@@ -1088,8 +1131,8 @@ pub fn stop_recording_capture(mut active: ActiveRecording) -> anyhow::Result<Rec
             log::warn!("[recording] failed to stop camera capture: {err}");
         }
     }
-    if let Some(mut sys_audio) = active.system_audio_process.take() {
-        if let Err(err) = stop_ffmpeg_child(&mut sys_audio) {
+    if let Some(sys_audio) = active.system_audio_process.take() {
+        if let Err(err) = sys_audio.stop() {
             log::warn!("[recording] failed to stop system audio capture: {err}");
         }
     }
@@ -1214,8 +1257,8 @@ pub fn discard_recording_capture(mut active: ActiveRecording) -> anyhow::Result<
             log::warn!("[recording] failed to stop camera capture before discard: {err}");
         }
     }
-    if let Some(mut sys_audio) = active.system_audio_process.take() {
-        if let Err(err) = stop_ffmpeg_child(&mut sys_audio) {
+    if let Some(sys_audio) = active.system_audio_process.take() {
+        if let Err(err) = sys_audio.stop() {
             log::warn!("[recording] failed to stop system audio capture before discard: {err}");
         }
     }
@@ -1304,7 +1347,21 @@ fn spawn_capture_process(
         output_path.display()
     );
     log::debug!("[recording] ffmpeg args: {}", args.join(" "));
-    spawn_ffmpeg_capture(args, log_path).map(ActiveRecordingProcess::Ffmpeg)
+    let mut child = spawn_ffmpeg_capture(args, log_path)?;
+
+    // Brief startup check — if FFmpeg exits immediately, surface the error
+    std::thread::sleep(Duration::from_millis(500));
+    if let Some(exit_status) = child.try_wait()? {
+        let log_tail = read_log_tail(log_path, 5);
+        let msg = if log_tail.is_empty() {
+            format!("FFmpeg exited immediately with {exit_status}")
+        } else {
+            format!("FFmpeg exited immediately with {exit_status}: {log_tail}")
+        };
+        return Err(anyhow::anyhow!(msg));
+    }
+
+    Ok(ActiveRecordingProcess::Ffmpeg(child))
 }
 
 #[cfg(target_os = "windows")]
@@ -1341,6 +1398,21 @@ fn stop_ffmpeg_child(child: &mut Child) -> anyhow::Result<()> {
     }
 
     Ok(())
+}
+
+/// Read the last N non-empty lines from a log file for error diagnostics.
+fn read_log_tail(path: &Path, max_lines: usize) -> String {
+    let content = std::fs::read_to_string(path).unwrap_or_default();
+    content
+        .lines()
+        .rev()
+        .filter(|l| !l.trim().is_empty())
+        .take(max_lines)
+        .collect::<Vec<_>>()
+        .into_iter()
+        .rev()
+        .collect::<Vec<_>>()
+        .join(" | ")
 }
 
 fn spawn_ffmpeg_capture(args: Vec<String>, log_path: &Path) -> anyhow::Result<Child> {
