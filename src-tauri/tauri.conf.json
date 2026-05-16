@@ -58,6 +58,11 @@
         "bannerPath": "installer-assets/wix-banner.bmp",
         "dialogImagePath": "installer-assets/wix-dialog.bmp"
       }
+    },
+    "macOS": {
+      "entitlements": "Entitlements.plist",
+      "signingIdentity": null,
+      "minimumSystemVersion": "10.15"
     }
   },
   "plugins": {

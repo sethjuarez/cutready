@@ -240,7 +240,21 @@ fn discover_recording_devices_with_ffmpeg() -> anyhow::Result<Vec<RecordingDevic
     Ok(parse_dshow_devices(&output.stderr))
 }
 
-#[cfg(not(target_os = "windows"))]
+#[cfg(target_os = "macos")]
+fn discover_recording_devices_with_ffmpeg() -> anyhow::Result<Vec<RecordingDeviceInfo>> {
+    let output = run_ffmpeg([
+        "-hide_banner",
+        "-f",
+        "avfoundation",
+        "-list_devices",
+        "true",
+        "-i",
+        "",
+    ])?;
+    Ok(parse_avfoundation_devices(&output.stderr))
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "macos")))]
 fn discover_recording_devices_with_ffmpeg() -> anyhow::Result<Vec<RecordingDeviceInfo>> {
     Ok(Vec::new())
 }
@@ -266,7 +280,15 @@ pub fn discover_camera_formats(device: &str) -> anyhow::Result<Vec<CameraFormatI
     Ok(parse_dshow_camera_formats(&output.stderr))
 }
 
-#[cfg(not(target_os = "windows"))]
+#[cfg(target_os = "macos")]
+pub fn discover_camera_formats(device: &str) -> anyhow::Result<Vec<CameraFormatInfo>> {
+    // avfoundation doesn't provide detailed format listing via FFmpeg CLI
+    // Return empty — camera format discovery is best-effort on macOS
+    let _ = device;
+    Ok(Vec::new())
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "macos")))]
 pub fn discover_camera_formats(_device: &str) -> anyhow::Result<Vec<CameraFormatInfo>> {
     Ok(Vec::new())
 }
@@ -494,6 +516,94 @@ fn quoted_value(line: &str) -> Option<String> {
     let rest = &line[start + 1..];
     let end = rest.find('"')?;
     Some(rest[..end].to_string())
+}
+
+/// Parse avfoundation `-list_devices true` output on macOS.
+///
+/// FFmpeg output looks like:
+/// ```text
+/// [AVFoundation indev @ ...] AVFoundation video devices:
+/// [AVFoundation indev @ ...] [0] FaceTime HD Camera
+/// [AVFoundation indev @ ...] [1] Capture screen 0
+/// [AVFoundation indev @ ...] AVFoundation audio devices:
+/// [AVFoundation indev @ ...] [0] MacBook Pro Microphone
+/// [AVFoundation indev @ ...] [1] Microsoft Teams Audio
+/// ```
+#[cfg(target_os = "macos")]
+fn parse_avfoundation_devices(stderr: &str) -> Vec<RecordingDeviceInfo> {
+    #[derive(Copy, Clone, PartialEq)]
+    enum Section {
+        Video,
+        Audio,
+    }
+
+    let mut section: Option<Section> = None;
+    let mut devices = Vec::new();
+    let mut screen_index = 0u32;
+
+    for line in stderr.lines() {
+        let lower = line.to_ascii_lowercase();
+        if lower.contains("avfoundation video devices") {
+            section = Some(Section::Video);
+            continue;
+        }
+        if lower.contains("avfoundation audio devices") {
+            section = Some(Section::Audio);
+            continue;
+        }
+
+        // Match lines like "[0] Device Name" after the ] prefix
+        let Some(bracket_start) = line.rfind('[') else {
+            continue;
+        };
+        let after_bracket = &line[bracket_start + 1..];
+        let Some(bracket_end) = after_bracket.find(']') else {
+            continue;
+        };
+        let index_str = &after_bracket[..bracket_end];
+        if index_str.parse::<u32>().is_err() {
+            continue;
+        }
+        let name = after_bracket[bracket_end + 1..].trim().to_string();
+        if name.is_empty() {
+            continue;
+        }
+
+        let Some(current_section) = section else {
+            continue;
+        };
+
+        // Screen capture devices show as "Capture screen N" — treat as system resource
+        if current_section == Section::Video && name.to_ascii_lowercase().contains("capture screen") {
+            devices.push(RecordingDeviceInfo {
+                id: format!("screen:{screen_index}"),
+                label: name,
+                kind: RecordingDeviceKind::Camera, // categorized as video source
+                is_default: screen_index == 0,
+                camera_formats: Vec::new(),
+            });
+            screen_index += 1;
+        } else {
+            let kind = match current_section {
+                Section::Video => RecordingDeviceKind::Camera,
+                Section::Audio => RecordingDeviceKind::Microphone,
+            };
+            devices.push(RecordingDeviceInfo {
+                id: name.clone(),
+                label: name,
+                kind,
+                is_default: false,
+                camera_formats: Vec::new(),
+            });
+        }
+    }
+
+    // Mark first mic as default
+    if let Some(first_mic) = devices.iter_mut().find(|d| d.kind == RecordingDeviceKind::Microphone) {
+        first_mic.is_default = true;
+    }
+
+    devices
 }
 
 pub fn build_prompter_script(
@@ -1404,7 +1514,124 @@ fn build_ffmpeg_capture_args(
         anyhow::bail!("Only full-screen recording is available in this build");
     }
 
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(target_os = "macos")]
+    {
+        let mut args = vec![
+            "-y".to_string(),
+            "-hide_banner".to_string(),
+            "-loglevel".to_string(),
+            "warning".to_string(),
+        ];
+
+        // Screen capture via avfoundation — device "0" is typically first screen
+        let screen_index = settings
+            .capture_area
+            .as_ref()
+            .and_then(|area| area.dxgi_output_index) // reuse as screen index on macOS
+            .unwrap_or(0);
+
+        args.extend([
+            "-f".to_string(),
+            "avfoundation".to_string(),
+            "-framerate".to_string(),
+            settings.frame_rate.to_string(),
+            "-capture_cursor".to_string(),
+            if settings.include_cursor { "1" } else { "0" }.to_string(),
+        ]);
+
+        let has_mic = settings
+            .mic_device_id
+            .as_ref()
+            .map(|device| !device.trim().is_empty())
+            .unwrap_or(false);
+
+        // avfoundation input format: "video_device_index:audio_device_index"
+        if has_mic {
+            let mic_index = settings
+                .mic_device_id
+                .as_ref()
+                .and_then(|d| d.parse::<u32>().ok())
+                .unwrap_or(0);
+            args.extend(["-i".to_string(), format!("{screen_index}:{mic_index}")]);
+        } else {
+            args.extend(["-i".to_string(), format!("{screen_index}:none")]);
+        }
+
+        // Video encoding
+        args.extend(["-map".to_string(), "0:v:0".to_string()]);
+
+        match settings.output_quality {
+            OutputQuality::Lossless => args.extend([
+                "-r".to_string(),
+                settings.frame_rate.to_string(),
+                "-c:v".to_string(),
+                "ffv1".to_string(),
+                "-level".to_string(),
+                "3".to_string(),
+                "-g".to_string(),
+                "1".to_string(),
+            ]),
+            OutputQuality::High | OutputQuality::Compact => {
+                let crf = match settings.output_quality {
+                    OutputQuality::High => "20",
+                    OutputQuality::Compact => "28",
+                    OutputQuality::Lossless => unreachable!(),
+                };
+                args.extend([
+                    "-vf".to_string(),
+                    format!("fps={},format=yuv420p", settings.frame_rate),
+                    "-c:v".to_string(),
+                    "libx264".to_string(),
+                    "-preset".to_string(),
+                    "ultrafast".to_string(),
+                    "-tune".to_string(),
+                    "zerolatency".to_string(),
+                    "-crf".to_string(),
+                    crf.to_string(),
+                ]);
+                if settings.output_quality == OutputQuality::Compact {
+                    args.extend([
+                        "-maxrate".to_string(),
+                        "8M".to_string(),
+                        "-bufsize".to_string(),
+                        "16M".to_string(),
+                    ]);
+                }
+            }
+        }
+
+        // Audio encoding
+        if has_mic {
+            let audio_codec = match settings.output_quality {
+                OutputQuality::Lossless => "pcm_s16le",
+                OutputQuality::High | OutputQuality::Compact => "aac",
+            };
+            args.extend([
+                "-map".to_string(),
+                "0:a:0".to_string(),
+                "-c:a".to_string(),
+                audio_codec.to_string(),
+            ]);
+            if settings.mic_volume != default_audio_volume() {
+                args.extend([
+                    "-af".to_string(),
+                    format!("volume={:.2}", settings.mic_volume.min(200) as f32 / 100.0),
+                ]);
+            }
+            if settings.output_quality != OutputQuality::Lossless {
+                args.extend(["-b:a".to_string(), "192k".to_string()]);
+            }
+        }
+
+        if settings.output_quality != OutputQuality::Lossless {
+            args.extend(["-movflags".to_string(), "+faststart".to_string()]);
+        }
+
+        args.push(output_path.to_string_lossy().to_string());
+        return Ok(args);
+    }
+
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
     {
         let _ = output_path;
         return Err(anyhow::anyhow!(
@@ -1612,7 +1839,42 @@ fn build_ffmpeg_camera_args_with_mode(
         return Ok(None);
     };
 
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(target_os = "macos")]
+    {
+        let _ = use_explicit_input_options;
+        let mut args = vec![
+            "-y".to_string(),
+            "-hide_banner".to_string(),
+            "-loglevel".to_string(),
+            "warning".to_string(),
+            "-f".to_string(),
+            "avfoundation".to_string(),
+            "-framerate".to_string(),
+            "30".to_string(),
+            "-i".to_string(),
+            format!("{device}:none"),
+            "-map".to_string(),
+            "0:v:0".to_string(),
+            "-an".to_string(),
+            "-vf".to_string(),
+            "fps=30,format=yuv420p".to_string(),
+            "-c:v".to_string(),
+            "libx264".to_string(),
+            "-preset".to_string(),
+            "ultrafast".to_string(),
+            "-tune".to_string(),
+            "zerolatency".to_string(),
+            "-crf".to_string(),
+            "23".to_string(),
+            "-movflags".to_string(),
+            "+faststart".to_string(),
+            output_path.to_string_lossy().to_string(),
+        ];
+        let _ = &mut args; // suppress warning
+        return Ok(Some(args));
+    }
+
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
     {
         let _ = output_path;
         let _ = device;

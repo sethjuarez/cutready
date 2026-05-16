@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>NSCameraUsageDescription</key>
+  <string>CutReady uses the camera to record picture-in-picture video for your demo takes.</string>
+  <key>NSMicrophoneUsageDescription</key>
+  <string>CutReady uses the microphone to record narration audio for your demo takes.</string>
+  <key>NSScreenCaptureUsageDescription</key>
+  <string>CutReady captures the screen to record your demo walkthrough.</string>
+</dict>
+</plist>
