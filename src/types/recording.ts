@@ -132,6 +132,7 @@ export interface RecordingPlatformCapabilities {
   supports_window_capture_exclusion: boolean;
   supports_click_through_prompter: boolean;
   supports_camera_format_discovery: boolean;
+  system_audio_hint: string | null;
 }
 
 export type RecordingDeviceKind = "microphone" | "camera" | "system_audio";

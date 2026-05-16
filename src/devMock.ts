@@ -510,6 +510,9 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
         supports_window_capture_exclusion: !navigator.platform.toLowerCase().includes("mac"),
         supports_click_through_prompter: true,
         supports_camera_format_discovery: true,
+        system_audio_hint: navigator.platform.toLowerCase().includes("mac")
+          ? "Requires a virtual audio driver (BlackHole is free). Install it, then create a Multi-Output Device in Audio MIDI Setup that combines your speakers + BlackHole."
+          : null,
       };
     case "discover_camera_formats":
       return [{ width: 3840, height: 2160, fps: "30", codec: "mjpeg", pixel_format: null }];

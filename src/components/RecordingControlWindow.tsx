@@ -51,6 +51,7 @@ function defaultPlatformCapabilities(): RecordingPlatformCapabilities {
     supports_window_capture_exclusion: false,
     supports_click_through_prompter: true,
     supports_camera_format_discovery: false,
+    system_audio_hint: null,
   };
 }
 
@@ -764,10 +765,15 @@ export function RecordingControlWindow() {
             onEnabledChange={setIncludeSystemAudio}
             control={
               <span className="block truncate text-[11px] font-medium text-[rgb(var(--color-text))]">
-                {supportsSystemAudio ? "System Audio" : "Unavailable on this platform"}
+                {supportsSystemAudio ? "System Audio" : (platformCapabilities.system_audio_hint ? "Requires loopback driver" : "Unavailable on this platform")}
               </span>
             }
           >
+            {!supportsSystemAudio && platformCapabilities.system_audio_hint && (
+              <p className="text-[10px] leading-tight text-[rgb(var(--color-text-muted))] px-2 pb-2">
+                {platformCapabilities.system_audio_hint}
+              </p>
+            )}
             <AudioVolumeControl
               label="System audio volume"
               active={includeSystemAudio && supportsSystemAudio}

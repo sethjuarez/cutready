@@ -28,6 +28,8 @@ pub struct RecordingPlatformCapabilities {
     pub supports_window_capture_exclusion: bool,
     pub supports_click_through_prompter: bool,
     pub supports_camera_format_discovery: bool,
+    /// Hint message when system audio requires additional setup (e.g. macOS loopback driver)
+    pub system_audio_hint: Option<String>,
 }
 
 fn project_root(state: &AppState) -> Result<std::path::PathBuf, String> {
@@ -248,13 +250,36 @@ fn read_recent_wav_level(path: &Path) -> std::io::Result<RecordingAudioLevel> {
 }
 
 fn recording_platform_capabilities() -> RecordingPlatformCapabilities {
+    #[cfg(target_os = "macos")]
+    let (supports_system_audio, system_audio_hint) = {
+        match recording::detect_macos_loopback_device() {
+            Some(_device_name) => (true, None),
+            None => (
+                false,
+                Some(
+                    "Requires a virtual audio driver (BlackHole is free). \
+                     Install it, then create a Multi-Output Device in Audio MIDI Setup \
+                     that combines your speakers + BlackHole."
+                        .to_string(),
+                ),
+            ),
+        }
+    };
+
+    #[cfg(target_os = "windows")]
+    let (supports_system_audio, system_audio_hint) = (true, None);
+
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    let (supports_system_audio, system_audio_hint): (bool, Option<String>) = (false, None);
+
     RecordingPlatformCapabilities {
         platform: current_platform(),
-        supports_system_audio: cfg!(target_os = "windows"),
+        supports_system_audio,
         supports_native_monitor_capture: cfg!(target_os = "windows"),
         supports_window_capture_exclusion: cfg!(target_os = "windows"),
         supports_click_through_prompter: cfg!(target_os = "windows"),
         supports_camera_format_discovery: cfg!(target_os = "windows"),
+        system_audio_hint,
     }
 }
 
@@ -341,9 +366,19 @@ mod tests {
             assert!(capabilities.supports_native_monitor_capture);
             assert!(capabilities.supports_window_capture_exclusion);
             assert!(capabilities.supports_camera_format_discovery);
+            assert!(capabilities.system_audio_hint.is_none());
         }
 
-        #[cfg(not(target_os = "windows"))]
+        #[cfg(target_os = "macos")]
+        {
+            assert_eq!(capabilities.platform, "macos");
+            // system_audio depends on whether a loopback device is installed
+            if !capabilities.supports_system_audio {
+                assert!(capabilities.system_audio_hint.is_some());
+            }
+        }
+
+        #[cfg(not(any(target_os = "windows", target_os = "macos")))]
         {
             assert!(!capabilities.supports_system_audio);
             assert!(!capabilities.supports_native_monitor_capture);

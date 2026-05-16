@@ -110,6 +110,7 @@ pub struct RecordingDeviceDiscovery {
 pub struct ActiveRecording {
     process: ActiveRecordingProcess,
     camera_process: Option<ActiveCameraProcess>,
+    system_audio_process: Option<Child>,
     take: RecordingTake,
     take_dir: PathBuf,
     output_path: PathBuf,
@@ -606,6 +607,42 @@ fn parse_avfoundation_devices(stderr: &str) -> Vec<RecordingDeviceInfo> {
     devices
 }
 
+/// Known virtual audio loopback device names on macOS.
+const MACOS_LOOPBACK_DEVICE_NAMES: &[&str] = &[
+    "blackhole",
+    "loopback audio",
+    "soundflower",
+    "existential audio",
+];
+
+/// Detect if a virtual audio loopback device is available on macOS.
+/// Returns the device name if found (used as system audio source in avfoundation).
+#[cfg(target_os = "macos")]
+pub fn detect_macos_loopback_device() -> Option<String> {
+    let discovery = discover_recording_devices();
+    for device in &discovery.devices {
+        if device.kind != RecordingDeviceKind::Microphone {
+            continue;
+        }
+        let lower = device.label.to_ascii_lowercase();
+        for &pattern in MACOS_LOOPBACK_DEVICE_NAMES {
+            if lower.contains(pattern) {
+                log::info!(
+                    "[recording] detected macOS loopback device: {}",
+                    device.label
+                );
+                return Some(device.id.clone());
+            }
+        }
+    }
+    None
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn detect_macos_loopback_device() -> Option<String> {
+    None
+}
+
 pub fn build_prompter_script(
     project_root: &Path,
     scope: &RecordingScope,
@@ -1008,9 +1045,35 @@ pub fn start_recording_capture(
     };
     write_take_sidecar(&take_dir.join("take.json"), &take)?;
 
+    // System audio capture (macOS: loopback device via avfoundation)
+    let system_audio_process = if take.settings.include_system_audio {
+        let sys_audio_path = take_dir.join("system-audio.wav");
+        match spawn_system_audio_capture(&take.settings, &sys_audio_path) {
+            Ok(child) => {
+                take.assets.push(RecordingAssetRef {
+                    kind: RecordingAssetKind::SystemAudio,
+                    path: "system-audio.wav".to_string(),
+                    status: RecordingAssetStatus::Planned,
+                });
+                write_take_sidecar(&take_dir.join("take.json"), &take)?;
+                Some(child)
+            }
+            Err(err) => {
+                log::warn!(
+                    "[recording] system audio capture unavailable for take={}: {err}",
+                    take.id
+                );
+                None
+            }
+        }
+    } else {
+        None
+    };
+
     Ok(ActiveRecording {
         process,
         camera_process,
+        system_audio_process,
         take,
         take_dir,
         output_path,
@@ -1023,6 +1086,11 @@ pub fn stop_recording_capture(mut active: ActiveRecording) -> anyhow::Result<Rec
     if let Some(camera) = active.camera_process.take() {
         if let Err(err) = camera.stop() {
             log::warn!("[recording] failed to stop camera capture: {err}");
+        }
+    }
+    if let Some(mut sys_audio) = active.system_audio_process.take() {
+        if let Err(err) = stop_ffmpeg_child(&mut sys_audio) {
+            log::warn!("[recording] failed to stop system audio capture: {err}");
         }
     }
     active.process.stop()?;
@@ -1144,6 +1212,11 @@ pub fn discard_recording_capture(mut active: ActiveRecording) -> anyhow::Result<
     if let Some(camera) = active.camera_process.take() {
         if let Err(err) = camera.stop() {
             log::warn!("[recording] failed to stop camera capture before discard: {err}");
+        }
+    }
+    if let Some(mut sys_audio) = active.system_audio_process.take() {
+        if let Err(err) = stop_ffmpeg_child(&mut sys_audio) {
+            log::warn!("[recording] failed to stop system audio capture before discard: {err}");
         }
     }
     if let Err(err) = active.process.stop() {
@@ -1287,6 +1360,77 @@ fn spawn_ffmpeg_capture(args: Vec<String>, log_path: &Path) -> anyhow::Result<Ch
         command.creation_flags(0x08000000);
     }
     Ok(command.spawn()?)
+}
+
+/// Spawn a separate FFmpeg process to capture system audio on macOS via a loopback device.
+/// On Windows, system audio is captured natively by WASAPI — this is macOS-only.
+fn spawn_system_audio_capture(
+    settings: &RecorderSettings,
+    output_path: &Path,
+) -> anyhow::Result<Child> {
+    #[cfg(target_os = "macos")]
+    {
+        let loopback_device = detect_macos_loopback_device()
+            .ok_or_else(|| anyhow::anyhow!("No loopback audio device found on macOS"))?;
+
+        // Find the avfoundation index for this device
+        let discovery = discover_recording_devices();
+        let device_index = discovery
+            .devices
+            .iter()
+            .filter(|d| d.kind == RecordingDeviceKind::Microphone)
+            .position(|d| d.id == loopback_device)
+            .ok_or_else(|| {
+                anyhow::anyhow!("Loopback device '{}' not found in device list", loopback_device)
+            })?;
+
+        let mut args = vec![
+            "-y".to_string(),
+            "-hide_banner".to_string(),
+            "-loglevel".to_string(),
+            "warning".to_string(),
+            "-f".to_string(),
+            "avfoundation".to_string(),
+            "-i".to_string(),
+            format!("none:{device_index}"),
+            "-c:a".to_string(),
+            "pcm_s16le".to_string(),
+            "-ar".to_string(),
+            "48000".to_string(),
+            "-ac".to_string(),
+            "2".to_string(),
+        ];
+
+        if settings.system_audio_volume != default_audio_volume() {
+            args.extend([
+                "-af".to_string(),
+                format!(
+                    "volume={:.2}",
+                    settings.system_audio_volume.min(200) as f32 / 100.0
+                ),
+            ]);
+        }
+
+        args.push(output_path.to_string_lossy().to_string());
+
+        let log_path = output_path.with_extension("log");
+        write_ffmpeg_log_header(&log_path, &args)?;
+        log::info!(
+            "[recording] starting system audio capture via loopback device='{}' index={} output={}",
+            loopback_device,
+            device_index,
+            output_path.display()
+        );
+        spawn_ffmpeg_capture(args, &log_path)
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (settings, output_path);
+        Err(anyhow::anyhow!(
+            "System audio capture via loopback is only implemented for macOS"
+        ))
+    }
 }
 
 fn spawn_camera_process(
@@ -2327,6 +2471,7 @@ mod tests {
         );
     }
 
+    #[cfg(target_os = "windows")]
     #[test]
     fn parses_directshow_microphones_and_cameras() {
         let stderr = r#"
@@ -2378,6 +2523,7 @@ dummy: Immediate exit requested
         );
     }
 
+    #[cfg(target_os = "windows")]
     #[test]
     fn directshow_parser_ignores_alternative_device_names() {
         let stderr = r#"
@@ -2392,6 +2538,7 @@ dummy: Immediate exit requested
         assert_eq!(devices[0].id, "Primary Microphone");
     }
 
+    #[cfg(target_os = "windows")]
     #[test]
     fn parses_modern_directshow_source_lines() {
         let stderr = r#"
@@ -2434,6 +2581,7 @@ Error opening input file dummy.
         }));
     }
 
+    #[cfg(target_os = "windows")]
     #[test]
     fn parses_directshow_camera_format_options_best_first() {
         let stderr = r#"
