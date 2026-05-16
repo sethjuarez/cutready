@@ -374,13 +374,14 @@ The Actions describe what happens on screen — use them as visual design hints.
   }, [localRows, handleRowsChange]);
 
   /** Launch fullscreen preview on a specific monitor */
-  const launchPreviewOnMonitor = useCallback(async (monitor: MonitorInfo) => {
+  const launchPreviewOnMonitor = useCallback(async (monitor: MonitorInfo, mode: PresentationMode = "slides") => {
     setShowMonitorPicker(false);
     // Serialize sketch data for the preview window to read
     localStorage.setItem(PREVIEW_DATA_KEY, JSON.stringify({
       rows: localRows,
       projectRoot,
       title: localTitle || "Untitled Sketch",
+      initialMode: mode,
     }));
     try {
       await invoke("open_preview_window", {
@@ -391,28 +392,29 @@ The Actions describe what happens on screen — use them as visual design hints.
       });
     } catch (e) {
       console.error("[SketchForm] Failed to open preview window:", e);
-      setPreviewMode("slides");
+      setPreviewMode(mode);
       setShowPreview(true);
     }
   }, [localRows, projectRoot, localTitle]);
 
-  /** Handle preview button click — single monitor launches directly, multi shows picker */
-  const handlePreviewClick = useCallback(async () => {
+  /** Launch presentation in fullscreen — single monitor launches directly, multi shows picker */
+  const launchPresentation = useCallback(async (mode: PresentationMode = "slides") => {
     try {
       const monitors: MonitorInfo[] = await invoke("list_monitors");
       if (monitors.length === 0) {
-        setPreviewMode("slides");
+        setPreviewMode(mode);
         setShowPreview(true);
       } else if (monitors.length === 1) {
-        await launchPreviewOnMonitor(monitors[0]);
+        await launchPreviewOnMonitor(monitors[0], mode);
       } else {
+        setPreviewMode(mode);
         setAvailableMonitors(monitors);
         setShowMonitorPicker(true);
       }
     } catch (e) {
       console.error("[SketchForm] Failed to list monitors:", e);
       // Fallback: open in-window preview
-      setPreviewMode("slides");
+      setPreviewMode(mode);
       setShowPreview(true);
     }
   }, [launchPreviewOnMonitor]);
@@ -468,19 +470,19 @@ The Actions describe what happens on screen — use them as visual design hints.
       id: "slide-only",
       label: "Slide-only view",
       icon: documentToolbarIcons.playCircle,
-      onSelect: () => { setPreviewMode("slide-only"); setShowPreview(true); },
+      onSelect: () => launchPresentation("slide-only"),
     },
     {
       id: "teleprompter",
       label: "Teleprompter",
       icon: documentToolbarIcons.monitorPlay,
-      onSelect: () => { setPreviewMode("teleprompter"); setShowPreview(true); },
+      onSelect: () => launchPresentation("teleprompter"),
     },
     {
       id: "preview",
       label: "Preview",
       icon: documentToolbarIcons.monitor,
-      onSelect: handlePreviewClick,
+      onSelect: () => launchPresentation("slides"),
     },
   ] : [];
   const aiActions: DocumentToolbarAction[] = !sketchLocked ? [
@@ -580,7 +582,7 @@ The Actions describe what happens on screen — use them as visual design hints.
                   {availableMonitors.map((m) => (
                     <button
                       key={m.id}
-                      onClick={() => launchPreviewOnMonitor(m)}
+                      onClick={() => launchPreviewOnMonitor(m, previewMode)}
                       className="w-full px-3 py-2 text-left text-sm text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors flex items-center gap-2"
                     >
                       <Monitor className="w-3.5 h-3.5" />
@@ -592,7 +594,7 @@ The Actions describe what happens on screen — use them as visual design hints.
                   ))}
                   <div className="border-t border-[rgb(var(--color-border))]">
                     <button
-                      onClick={() => { setShowMonitorPicker(false); setPreviewMode("slides"); setShowPreview(true); }}
+                      onClick={() => { setShowMonitorPicker(false); setShowPreview(true); }}
                       className="w-full px-3 py-2 text-left text-xs text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors"
                     >
                       Preview in window instead

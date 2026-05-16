@@ -357,7 +357,7 @@ export function AppLayout() {
   );
 
   return (
-    <>
+    <div className="flex flex-col h-full">
       <TitleBar
         onCommandPaletteOpen={() => setCommandPaletteOpen(true)}
         sidebarVisible={sidebarVisible}
@@ -370,11 +370,10 @@ export function AppLayout() {
         onToggleSecondary={toggleVersionHistory}
       />
       <div
-        className="flex flex-col w-full"
+        className="flex flex-col w-full flex-1 min-h-0"
         style={{
           paddingTop: isMac ? "0" : "var(--titlebar-height)",
           paddingBottom: "var(--statusbar-height)",
-          height: "100%",
         }}
       >
         <div className="flex flex-1 overflow-hidden" ref={mainRef}>
@@ -430,7 +429,7 @@ export function AppLayout() {
       <IdentityDialog />
       <KeyboardShortcutsDialog open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
       <FeedbackDialog isOpen={feedbackOpen} onClose={() => setFeedbackOpen(false)} />
-    </>
+    </div>
   );
 }
 

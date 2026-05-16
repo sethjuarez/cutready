@@ -737,7 +737,10 @@ fn get_saved_recording_control_position(
         .and_then(|value| serde_json::from_value(value).ok())
 }
 
-/// Open a fullscreen, borderless preview window on the target monitor.
+/// Open a fullscreen preview window on the target monitor.
+///
+/// On macOS, uses native fullscreen (hides menu bar + dock) for a PowerPoint-style
+/// presentation experience. On Windows, uses borderless manual positioning.
 #[tauri::command]
 pub async fn open_preview_window(
     app: tauri::AppHandle,
@@ -778,24 +781,47 @@ pub async fn open_preview_window(
         logical_x, logical_y, logical_w, logical_h, scale
     );
 
-    let win = WebviewWindowBuilder::new(&app, "preview", WebviewUrl::App("index.html".into()))
-        .initialization_script("window.__IS_PREVIEW = true;")
-        .title("CutReady Preview")
-        .inner_size(logical_w, logical_h)
-        .position(logical_x, logical_y)
-        .decorations(false)
-        .shadow(false)
-        .resizable(false)
-        .focused(true)
-        .skip_taskbar(true)
-        .build()
-        .map_err(|e| {
-            eprintln!("[PREVIEW] build FAILED: {}", e);
-            e.to_string()
-        })?;
-    fit_window_extended_frame_to_physical_bounds(&win, phys_x, phys_y, phys_w, phys_h);
+    #[cfg(target_os = "macos")]
+    {
+        // macOS: use native fullscreen for PowerPoint-style presentation
+        let win =
+            WebviewWindowBuilder::new(&app, "preview", WebviewUrl::App("index.html".into()))
+                .initialization_script("window.__IS_PREVIEW = true;")
+                .title("CutReady Preview")
+                .inner_size(logical_w, logical_h)
+                .position(logical_x, logical_y)
+                .focused(true)
+                .build()
+                .map_err(|e| {
+                    eprintln!("[PREVIEW] build FAILED: {}", e);
+                    e.to_string()
+                })?;
+        win.set_fullscreen(true).map_err(|e| e.to_string())?;
+        eprintln!("[PREVIEW] macOS fullscreen window created OK, label={}", win.label());
+    }
 
-    eprintln!("[PREVIEW] window created OK, label={}", win.label());
+    #[cfg(not(target_os = "macos"))]
+    {
+        let win =
+            WebviewWindowBuilder::new(&app, "preview", WebviewUrl::App("index.html".into()))
+                .initialization_script("window.__IS_PREVIEW = true;")
+                .title("CutReady Preview")
+                .inner_size(logical_w, logical_h)
+                .position(logical_x, logical_y)
+                .decorations(false)
+                .shadow(false)
+                .resizable(false)
+                .focused(true)
+                .skip_taskbar(true)
+                .build()
+                .map_err(|e| {
+                    eprintln!("[PREVIEW] build FAILED: {}", e);
+                    e.to_string()
+                })?;
+        fit_window_extended_frame_to_physical_bounds(&win, phys_x, phys_y, phys_w, phys_h);
+        eprintln!("[PREVIEW] window created OK, label={}", win.label());
+    }
+
     Ok(())
 }
 

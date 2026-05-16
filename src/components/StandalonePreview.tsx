@@ -5,6 +5,7 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { SketchPreview, type PreviewSlide } from "./SketchPreview";
+import type { PresentationMode } from "./presentation/types";
 import type { PlanningRow } from "../types/sketch";
 import { getThemePalette } from "../theme/appThemePalettes";
 import { applyThemeColorTokens, cacheThemePaletteForBootstrap } from "../theme/applyThemePalette";
@@ -16,6 +17,7 @@ interface PreviewData {
   projectRoot: string;
   title: string;
   slides?: PreviewSlide[];
+  initialMode?: PresentationMode;
 }
 
 export function StandalonePreview() {
@@ -82,6 +84,7 @@ export function StandalonePreview() {
       title={data.title}
       onClose={handleClose}
       slides={data.slides}
+      initialMode={data.initialMode}
     />
   );
 }

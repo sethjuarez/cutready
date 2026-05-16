@@ -69,7 +69,7 @@ export function TitleBar({
   // macOS uses native window chrome — render only the toolbar controls
   if (isMac) {
     return (
-      <div className="flex items-center justify-between bg-[rgb(var(--color-surface))] px-3 h-10 shrink-0 mb-1">
+      <div className="flex items-center justify-between bg-[rgb(var(--color-surface))] border-b border-[rgb(var(--color-border))] px-3 h-10 shrink-0">
         {/* Left: workspace name */}
         <div className="flex items-center gap-2 shrink-0">
           {workspaceName && (

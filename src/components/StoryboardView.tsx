@@ -229,13 +229,14 @@ export function StoryboardView() {
     return nextCache;
   }, [activeStoryboard, sketchCache]);
 
-  const launchPreviewOnMonitor = useCallback(async (monitor: MonitorInfo, slides = previewSlides) => {
+  const launchPreviewOnMonitor = useCallback(async (monitor: MonitorInfo, mode: PresentationMode = "slides", slides = previewSlides) => {
     setShowMonitorPicker(false);
     localStorage.setItem(PREVIEW_DATA_KEY, JSON.stringify({
       rows: [],
       slides,
       projectRoot: currentProject?.root ?? "",
       title: activeStoryboard?.title ?? "Storyboard",
+      initialMode: mode,
     }));
     try {
       await invoke("open_preview_window", {
@@ -246,46 +247,32 @@ export function StoryboardView() {
       });
     } catch (e) {
       console.error("[StoryboardView] Failed to open preview window:", e);
-      setPreviewMode("slides");
+      setPreviewMode(mode);
       setShowPreview(true);
     }
   }, [currentProject, activeStoryboard, previewSlides]);
 
-  const openInMode = useCallback(async (mode: PresentationMode) => {
-    try {
-      const cache = await resolvePreviewSketches();
-      const slides = buildPreviewSlides(cache);
-      setPreviewSlides(slides);
-      setPreviewMode(mode);
-      setShowPreview(true);
-    } catch (e) {
-      console.error(`${mode} failed:`, e);
-      useToastStore.getState().show(`${mode} failed: ${e}`, 5000, "error");
-    }
-  }, [buildPreviewSlides, resolvePreviewSketches]);
-
-  const handleTeleprompterClick = useCallback(() => openInMode("teleprompter"), [openInMode]);
-  const handleSlideOnlyClick = useCallback(() => openInMode("slide-only"), [openInMode]);
-
-  const handlePreviewClick = useCallback(async () => {
+  /** Launch presentation in fullscreen for any mode */
+  const launchPresentation = useCallback(async (mode: PresentationMode) => {
     try {
       const cache = await resolvePreviewSketches();
       const slides = buildPreviewSlides(cache);
       setPreviewSlides(slides);
       const monitors: MonitorInfo[] = await invoke("list_monitors");
       if (monitors.length === 0) {
-        setPreviewMode("slides");
+        setPreviewMode(mode);
         setShowPreview(true);
       } else if (monitors.length === 1) {
-        await launchPreviewOnMonitor(monitors[0], slides);
+        await launchPreviewOnMonitor(monitors[0], mode, slides);
       } else {
+        setPreviewMode(mode);
         setAvailableMonitors(monitors);
         setShowMonitorPicker(true);
       }
     } catch (e) {
-      console.error("[StoryboardView] Failed to list monitors:", e);
-      useToastStore.getState().show(`Preview failed: ${e}`, 5000, "error");
-      setPreviewMode("slides");
+      console.error("[StoryboardView] Failed to launch presentation:", e);
+      useToastStore.getState().show(`Presentation failed: ${e}`, 5000, "error");
+      setPreviewMode(mode);
       setShowPreview(true);
     }
   }, [buildPreviewSlides, launchPreviewOnMonitor, resolvePreviewSketches]);
@@ -396,19 +383,19 @@ export function StoryboardView() {
       id: "slide-only",
       label: "Slide-only view",
       icon: documentToolbarIcons.playCircle,
-      onSelect: handleSlideOnlyClick,
+      onSelect: () => launchPresentation("slide-only"),
     },
     {
       id: "teleprompter",
       label: "Teleprompter",
       icon: documentToolbarIcons.monitorPlay,
-      onSelect: handleTeleprompterClick,
+      onSelect: () => launchPresentation("teleprompter"),
     },
     {
       id: "preview",
       label: "Preview",
       icon: documentToolbarIcons.monitor,
-      onSelect: handlePreviewClick,
+      onSelect: () => launchPresentation("slides"),
     },
   ] : [];
   const aiActions: DocumentToolbarAction[] = !storyboardLocked ? [
@@ -486,7 +473,7 @@ export function StoryboardView() {
                   {availableMonitors.map((m) => (
                     <button
                       key={m.id}
-                      onClick={() => launchPreviewOnMonitor(m, previewSlides)}
+                      onClick={() => launchPreviewOnMonitor(m, previewMode, previewSlides)}
                       className="w-full px-3 py-2 text-left text-sm text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors flex items-center gap-2"
                     >
                       <Monitor className="w-3.5 h-3.5" />
