@@ -229,7 +229,7 @@ export function StoryboardView() {
     return nextCache;
   }, [activeStoryboard, sketchCache]);
 
-  const launchPreviewOnMonitor = useCallback(async (monitor: MonitorInfo, mode: PresentationMode = "slides", slides = previewSlides) => {
+  const launchPreviewOnMonitor = useCallback(async (monitor: MonitorInfo | null, mode: PresentationMode = "slides", slides = previewSlides) => {
     setShowMonitorPicker(false);
     localStorage.setItem(PREVIEW_DATA_KEY, JSON.stringify({
       rows: [],
@@ -240,10 +240,10 @@ export function StoryboardView() {
     }));
     try {
       await invoke("open_preview_window", {
-        physX: monitor.x,
-        physY: monitor.y,
-        physW: monitor.width,
-        physH: monitor.height,
+        physX: monitor?.x ?? 0,
+        physY: monitor?.y ?? 0,
+        physW: monitor?.width ?? 0,
+        physH: monitor?.height ?? 0,
       });
     } catch (e) {
       console.error("[StoryboardView] Failed to open preview window:", e);
@@ -259,21 +259,26 @@ export function StoryboardView() {
       const slides = buildPreviewSlides(cache);
       setPreviewSlides(slides);
       const monitors: MonitorInfo[] = await invoke("list_monitors");
-      if (monitors.length === 0) {
-        setPreviewMode(mode);
-        setShowPreview(true);
-      } else if (monitors.length === 1) {
-        await launchPreviewOnMonitor(monitors[0], mode, slides);
-      } else {
+      if (monitors.length > 1) {
         setPreviewMode(mode);
         setAvailableMonitors(monitors);
         setShowMonitorPicker(true);
+      } else {
+        await launchPreviewOnMonitor(monitors[0] ?? null, mode, slides);
       }
     } catch (e) {
-      console.error("[StoryboardView] Failed to launch presentation:", e);
-      useToastStore.getState().show(`Presentation failed: ${e}`, 5000, "error");
-      setPreviewMode(mode);
-      setShowPreview(true);
+      console.error("[StoryboardView] list_monitors failed, launching directly:", e);
+      // Resolve sketches and launch without coordinates
+      try {
+        const cache = await resolvePreviewSketches();
+        const slides = buildPreviewSlides(cache);
+        setPreviewSlides(slides);
+        await launchPreviewOnMonitor(null, mode, slides);
+      } catch (inner) {
+        console.error("[StoryboardView] Fallback failed:", inner);
+        setPreviewMode(mode);
+        setShowPreview(true);
+      }
     }
   }, [buildPreviewSlides, launchPreviewOnMonitor, resolvePreviewSketches]);
 

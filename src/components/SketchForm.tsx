@@ -374,7 +374,7 @@ The Actions describe what happens on screen — use them as visual design hints.
   }, [localRows, handleRowsChange]);
 
   /** Launch fullscreen preview on a specific monitor */
-  const launchPreviewOnMonitor = useCallback(async (monitor: MonitorInfo, mode: PresentationMode = "slides") => {
+  const launchPreviewOnMonitor = useCallback(async (monitor: MonitorInfo | null, mode: PresentationMode = "slides") => {
     setShowMonitorPicker(false);
     // Serialize sketch data for the preview window to read
     localStorage.setItem(PREVIEW_DATA_KEY, JSON.stringify({
@@ -385,10 +385,10 @@ The Actions describe what happens on screen — use them as visual design hints.
     }));
     try {
       await invoke("open_preview_window", {
-        physX: monitor.x,
-        physY: monitor.y,
-        physW: monitor.width,
-        physH: monitor.height,
+        physX: monitor?.x ?? 0,
+        physY: monitor?.y ?? 0,
+        physW: monitor?.width ?? 0,
+        physH: monitor?.height ?? 0,
       });
     } catch (e) {
       console.error("[SketchForm] Failed to open preview window:", e);
@@ -401,21 +401,18 @@ The Actions describe what happens on screen — use them as visual design hints.
   const launchPresentation = useCallback(async (mode: PresentationMode = "slides") => {
     try {
       const monitors: MonitorInfo[] = await invoke("list_monitors");
-      if (monitors.length === 0) {
-        setPreviewMode(mode);
-        setShowPreview(true);
-      } else if (monitors.length === 1) {
-        await launchPreviewOnMonitor(monitors[0], mode);
-      } else {
+      if (monitors.length > 1) {
         setPreviewMode(mode);
         setAvailableMonitors(monitors);
         setShowMonitorPicker(true);
+      } else {
+        // Single or zero monitors — launch directly (Rust will auto-detect)
+        await launchPreviewOnMonitor(monitors[0] ?? null, mode);
       }
     } catch (e) {
-      console.error("[SketchForm] Failed to list monitors:", e);
-      // Fallback: open in-window preview
-      setPreviewMode(mode);
-      setShowPreview(true);
+      console.error("[SketchForm] list_monitors failed, launching directly:", e);
+      // list_monitors failed — launch directly without coordinates
+      await launchPreviewOnMonitor(null, mode);
     }
   }, [launchPreviewOnMonitor]);
 

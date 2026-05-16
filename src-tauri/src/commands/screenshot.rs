@@ -737,10 +737,11 @@ fn get_saved_recording_control_position(
         .and_then(|value| serde_json::from_value(value).ok())
 }
 
-/// Open a fullscreen preview window on the target monitor.
+/// Open a fullscreen preview window on the primary monitor.
 ///
 /// On macOS, uses native fullscreen (hides menu bar + dock) for a PowerPoint-style
 /// presentation experience. On Windows, uses borderless manual positioning.
+/// If phys dimensions are all zero, auto-detects primary monitor size.
 #[tauri::command]
 pub async fn open_preview_window(
     app: tauri::AppHandle,
@@ -761,21 +762,30 @@ pub async fn open_preview_window(
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     }
 
-    // Find matching Tauri monitor by physical position to get scale factor
+    // Use Tauri's own monitor API to determine size/position if not provided
     let monitors = app.available_monitors().map_err(|e| e.to_string())?;
-    let scale = monitors
-        .iter()
-        .find(|m| {
+    let target_monitor = if phys_w > 0 && phys_h > 0 {
+        monitors.iter().find(|m| {
             let pos = m.position();
             (pos.x - phys_x).abs() < 100 && (pos.y - phys_y).abs() < 100
         })
-        .map(|m| m.scale_factor())
-        .unwrap_or(1.0);
+    } else {
+        None
+    };
+    let primary = app.primary_monitor().map_err(|e| e.to_string())?;
+    let monitor = target_monitor.or(primary.as_ref()).or(monitors.first());
 
-    let logical_w = phys_w as f64 / scale;
-    let logical_h = phys_h as f64 / scale;
-    let logical_x = phys_x as f64 / scale;
-    let logical_y = phys_y as f64 / scale;
+    let (scale, logical_w, logical_h, logical_x, logical_y) = if let Some(m) = monitor {
+        let s = m.scale_factor();
+        let size = m.size();
+        let pos = m.position();
+        (s, size.width as f64 / s, size.height as f64 / s, pos.x as f64 / s, pos.y as f64 / s)
+    } else if phys_w > 0 {
+        (1.0, phys_w as f64, phys_h as f64, phys_x as f64, phys_y as f64)
+    } else {
+        (1.0, 1920.0, 1080.0, 0.0, 0.0)
+    };
+
     eprintln!(
         "[PREVIEW] logical pos=({},{}) size={}x{} scale={}",
         logical_x, logical_y, logical_w, logical_h, scale
