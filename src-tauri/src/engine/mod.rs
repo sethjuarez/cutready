@@ -9,6 +9,8 @@ pub mod project;
 pub mod recording;
 #[cfg(target_os = "windows")]
 pub(crate) mod recording_native_audio_windows;
+#[cfg(target_os = "macos")]
+pub(crate) mod recording_native_audio_macos;
 #[cfg(target_os = "windows")]
 pub(crate) mod recording_native_camera_windows;
 #[cfg(target_os = "windows")]

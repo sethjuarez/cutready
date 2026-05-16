@@ -252,17 +252,22 @@ fn read_recent_wav_level(path: &Path) -> std::io::Result<RecordingAudioLevel> {
 fn recording_platform_capabilities() -> RecordingPlatformCapabilities {
     #[cfg(target_os = "macos")]
     let (supports_system_audio, system_audio_hint) = {
-        match recording::detect_macos_loopback_device() {
-            Some(_device_name) => (true, None),
-            None => (
-                false,
-                Some(
-                    "Requires a virtual audio driver (BlackHole is free). \
-                     Install it, then create a Multi-Output Device in Audio MIDI Setup \
-                     that combines your speakers + BlackHole."
-                        .to_string(),
+        // ScreenCaptureKit provides native system audio capture on macOS 13+.
+        // Falls back to loopback device detection (BlackHole/Soundflower) if SCK unavailable.
+        if crate::engine::recording_native_audio_macos::is_system_audio_available() {
+            (true, None)
+        } else {
+            match recording::detect_macos_loopback_device() {
+                Some(_device_name) => (true, None),
+                None => (
+                    false,
+                    Some(
+                        "Grant Screen Recording permission in System Settings → \
+                         Privacy & Security, then restart CutReady."
+                            .to_string(),
+                    ),
                 ),
-            ),
+            }
         }
     };
 
