@@ -9,6 +9,7 @@
 //! The browser lifecycle is separate from the recording lifecycle.
 
 use std::path::{Path, PathBuf};
+use std::process::Stdio;
 
 use crate::util::sidecar::SidecarManager;
 
@@ -38,35 +39,58 @@ pub struct BrowserRunningStatus {
 
 /// Detect browser profiles from Edge and Chrome `Local State` files.
 ///
-/// Reads `%LOCALAPPDATA%\Microsoft\Edge\User Data\Local State` and
-/// `%LOCALAPPDATA%\Google\Chrome\User Data\Local State`, parsing the
-/// `profile.info_cache` to extract profile names and directories.
+/// On Windows, reads `%LOCALAPPDATA%\Microsoft\Edge\User Data\Local State` and
+/// `%LOCALAPPDATA%\Google\Chrome\User Data\Local State`.
+/// On macOS, reads `~/Library/Application Support/Microsoft Edge/Local State` and
+/// `~/Library/Application Support/Google/Chrome/Local State`.
+/// Parses the `profile.info_cache` to extract profile names and directories.
 pub fn detect_browser_profiles() -> Vec<BrowserProfile> {
     let mut profiles = Vec::new();
 
-    let local_app_data = match std::env::var("LOCALAPPDATA") {
-        Ok(dir) => PathBuf::from(dir),
-        Err(_) => return profiles,
+    let browsers: Vec<(&str, &str, PathBuf)> = if cfg!(target_os = "windows") {
+        let local_app_data = match std::env::var("LOCALAPPDATA") {
+            Ok(dir) => PathBuf::from(dir),
+            Err(_) => return profiles,
+        };
+        vec![
+            (
+                "msedge",
+                "Edge",
+                local_app_data
+                    .join("Microsoft")
+                    .join("Edge")
+                    .join("User Data"),
+            ),
+            (
+                "chrome",
+                "Chrome",
+                local_app_data
+                    .join("Google")
+                    .join("Chrome")
+                    .join("User Data"),
+            ),
+        ]
+    } else if cfg!(target_os = "macos") {
+        let home = match std::env::var("HOME") {
+            Ok(dir) => PathBuf::from(dir),
+            Err(_) => return profiles,
+        };
+        let app_support = home.join("Library").join("Application Support");
+        vec![
+            (
+                "msedge",
+                "Edge",
+                app_support.join("Microsoft Edge"),
+            ),
+            (
+                "chrome",
+                "Chrome",
+                app_support.join("Google").join("Chrome"),
+            ),
+        ]
+    } else {
+        return profiles;
     };
-
-    let browsers = [
-        (
-            "msedge",
-            "Edge",
-            local_app_data
-                .join("Microsoft")
-                .join("Edge")
-                .join("User Data"),
-        ),
-        (
-            "chrome",
-            "Chrome",
-            local_app_data
-                .join("Google")
-                .join("Chrome")
-                .join("User Data"),
-        ),
-    ];
 
     for (browser_id, browser_name, user_data_dir) in &browsers {
         let local_state_path = user_data_dir.join("Local State");
@@ -153,12 +177,22 @@ pub fn check_browsers_running() -> BrowserRunningStatus {
     }
 }
 
-/// On non-Windows platforms, return false for both browsers (not implemented).
+/// On non-Windows platforms, use pgrep to check for running browser processes.
 #[cfg(not(target_os = "windows"))]
 pub fn check_browsers_running() -> BrowserRunningStatus {
+    let is_running = |name: &str| -> bool {
+        std::process::Command::new("pgrep")
+            .args(["-x", name])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false)
+    };
+
     BrowserRunningStatus {
-        msedge: false,
-        chrome: false,
+        msedge: is_running("Microsoft Edge"),
+        chrome: is_running("Google Chrome"),
     }
 }
 

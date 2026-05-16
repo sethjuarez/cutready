@@ -128,6 +128,7 @@ fn gh_token() -> Option<String> {
 /// Inject auth env vars onto a git subprocess so GCM doesn't need to prompt.
 /// Sets GH_TOKEN + GITHUB_TOKEN (picked up by gh credential helper and GCM)
 /// and GIT_TERMINAL_PROMPT=0 to disable any interactive prompts.
+#[allow(dead_code)]
 fn inject_git_auth(cmd: &mut std::process::Command, token: Option<&str>) {
     cmd.env("GIT_TERMINAL_PROMPT", "0");
     let tok = token.map(|t| t.to_string()).or_else(gh_token);

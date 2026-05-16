@@ -504,10 +504,10 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
       };
     case "get_recording_platform_capabilities":
       return {
-        platform: "windows",
-        supports_system_audio: true,
+        platform: navigator.platform.toLowerCase().includes("mac") ? "macos" : "windows",
+        supports_system_audio: !navigator.platform.toLowerCase().includes("mac"),
         supports_native_monitor_capture: true,
-        supports_window_capture_exclusion: true,
+        supports_window_capture_exclusion: !navigator.platform.toLowerCase().includes("mac"),
         supports_click_through_prompter: true,
         supports_camera_format_discovery: true,
       };

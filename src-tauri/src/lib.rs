@@ -199,7 +199,14 @@ pub fn run() {
                 Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState,
             };
 
-            let shortcut = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::KeyR);
+            // On macOS, use META (Cmd); on Windows/Linux, use CONTROL
+            let primary_mod = if cfg!(target_os = "macos") {
+                Modifiers::META
+            } else {
+                Modifiers::CONTROL
+            };
+
+            let shortcut = Shortcut::new(Some(primary_mod | Modifiers::SHIFT), Code::KeyR);
 
             app.global_shortcut()
                 .on_shortcut(shortcut, |app_handle, _shortcut, event| {
@@ -210,19 +217,19 @@ pub fn run() {
 
             let prompter_shortcuts = [
                 (
-                    Shortcut::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::ArrowRight),
+                    Shortcut::new(Some(primary_mod | Modifiers::ALT), Code::ArrowRight),
                     "recording-prompter-next",
                 ),
                 (
-                    Shortcut::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::ArrowLeft),
+                    Shortcut::new(Some(primary_mod | Modifiers::ALT), Code::ArrowLeft),
                     "recording-prompter-previous",
                 ),
                 (
-                    Shortcut::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::KeyH),
+                    Shortcut::new(Some(primary_mod | Modifiers::ALT), Code::KeyH),
                     "recording-prompter-toggle-visibility",
                 ),
                 (
-                    Shortcut::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::KeyT),
+                    Shortcut::new(Some(primary_mod | Modifiers::ALT), Code::KeyT),
                     "recording-prompter-toggle-mode",
                 ),
             ];

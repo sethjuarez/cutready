@@ -314,6 +314,7 @@ pub async fn open_recording_countdown_window(
     let logical_x = phys_x as f64 / scale;
     let logical_y = phys_y as f64 / scale;
 
+    #[allow(unused_mut)]
     let mut builder = WebviewWindowBuilder::new(
         &app,
         "recording-countdown",
@@ -574,6 +575,7 @@ pub async fn open_recording_prompter_window(
     let logical_x = phys_x as f64 / scale + monitor_w - logical_w;
     let logical_y = phys_y as f64 / scale;
 
+    #[allow(unused_mut)]
     let mut builder = WebviewWindowBuilder::new(
         &app,
         "recording-prompter",

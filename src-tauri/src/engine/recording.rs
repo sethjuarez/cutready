@@ -321,6 +321,7 @@ fn first_non_empty_line(text: &str) -> Option<String> {
         .map(ToOwned::to_owned)
 }
 
+#[cfg(target_os = "windows")]
 fn parse_dshow_devices(stderr: &str) -> Vec<RecordingDeviceInfo> {
     #[derive(Copy, Clone)]
     enum Section {
@@ -388,6 +389,7 @@ fn parse_dshow_devices(stderr: &str) -> Vec<RecordingDeviceInfo> {
     devices
 }
 
+#[cfg(target_os = "windows")]
 fn parse_dshow_camera_formats(stderr: &str) -> Vec<CameraFormatInfo> {
     let mut formats = Vec::new();
     for line in stderr.lines() {
@@ -414,6 +416,7 @@ fn parse_dshow_camera_formats(stderr: &str) -> Vec<CameraFormatInfo> {
     formats
 }
 
+#[cfg(target_os = "windows")]
 fn parse_camera_format_kind(line: &str) -> Option<(Option<String>, Option<String>)> {
     if let Some(codec) = token_after(line, "vcodec=") {
         return Some((Some(codec), None));
@@ -424,6 +427,7 @@ fn parse_camera_format_kind(line: &str) -> Option<(Option<String>, Option<String
     None
 }
 
+#[cfg(target_os = "windows")]
 fn parse_dshow_resolution(line: &str) -> Option<(u32, u32)> {
     let index = line
         .find("max s=")
@@ -438,6 +442,7 @@ fn parse_dshow_resolution(line: &str) -> Option<(u32, u32)> {
     Some((width.parse().ok()?, height.parse().ok()?))
 }
 
+#[cfg(target_os = "windows")]
 fn parse_dshow_fps(line: &str) -> Option<String> {
     let search_from = line
         .find("max s=")
@@ -447,6 +452,7 @@ fn parse_dshow_fps(line: &str) -> Option<String> {
     Some(fps)
 }
 
+#[cfg(target_os = "windows")]
 fn token_after(line: &str, marker: &str) -> Option<String> {
     let start = line.find(marker)? + marker.len();
     line[start..]
@@ -456,6 +462,7 @@ fn token_after(line: &str, marker: &str) -> Option<String> {
         .filter(|token| !token.is_empty())
 }
 
+#[cfg(target_os = "windows")]
 fn camera_format_score(format: &CameraFormatInfo) -> (u64, u32, u8) {
     let area = format.width as u64 * format.height as u64;
     let fps = format.fps.as_deref().and_then(parse_fps_score).unwrap_or(0);
@@ -463,6 +470,7 @@ fn camera_format_score(format: &CameraFormatInfo) -> (u64, u32, u8) {
     (area, fps, raw_bonus)
 }
 
+#[cfg(target_os = "windows")]
 fn parse_fps_score(fps: &str) -> Option<u32> {
     if let Some((num, den)) = fps.split_once('/') {
         let numerator = num.parse::<f64>().ok()?;
@@ -475,10 +483,12 @@ fn parse_fps_score(fps: &str) -> Option<u32> {
     Some((fps.parse::<f64>().ok()? * 1000.0).round() as u32)
 }
 
+#[cfg(target_os = "windows")]
 fn best_camera_format(formats: &[CameraFormatInfo]) -> Option<CameraFormatInfo> {
     formats.iter().cloned().max_by_key(camera_format_score)
 }
 
+#[cfg(target_os = "windows")]
 fn quoted_value(line: &str) -> Option<String> {
     let start = line.find('"')?;
     let rest = &line[start + 1..];
@@ -1174,6 +1184,7 @@ fn spawn_camera_process(
     output_path: &Path,
     log_path: &Path,
 ) -> anyhow::Result<ActiveCameraProcess> {
+    #[allow(unused_mut)]
     let mut prefer_negotiated_camera_fallback = false;
 
     #[cfg(target_os = "windows")]
