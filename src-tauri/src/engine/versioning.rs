@@ -53,6 +53,7 @@ pub fn commit_snapshot(
     fork_label: Option<&str>,
 ) -> Result<String, VersioningError> {
     let repo = open_repo(project_dir)?;
+    ensure_snapshot_structural_files(project_dir)?;
 
     // If rewound (prev-tip exists), the new commit goes on a FORK branch.
     // Main keeps pointing at its original tip so original commits stay on "Main".
@@ -120,6 +121,51 @@ pub fn commit_snapshot(
     sync_index_to_head(project_dir);
 
     Ok(commit_id.to_string())
+}
+
+fn ensure_snapshot_structural_files(project_dir: &Path) -> Result<(), VersioningError> {
+    let cutready_dir = project_dir.join(".cutready");
+    std::fs::create_dir_all(&cutready_dir).map_err(|e| VersioningError::Io(e.to_string()))?;
+
+    let settings_path = cutready_dir.join("settings.json");
+    if !settings_path.exists() {
+        std::fs::write(&settings_path, "{}").map_err(|e| VersioningError::Io(e.to_string()))?;
+    }
+
+    let recordings_dir = cutready_dir.join("recordings");
+    std::fs::create_dir_all(&recordings_dir).map_err(|e| VersioningError::Io(e.to_string()))?;
+    let recordings_ignore = recordings_dir.join(".gitignore");
+    ensure_recordings_gitignore(&recordings_ignore)?;
+
+    Ok(())
+}
+
+fn ensure_recordings_gitignore(path: &Path) -> Result<(), VersioningError> {
+    const RECORDINGS_GITIGNORE_RULES: [&str; 2] = ["*", "!.gitignore"];
+
+    if !path.exists() {
+        std::fs::write(path, format!("{}\n", RECORDINGS_GITIGNORE_RULES.join("\n")))
+            .map_err(|e| VersioningError::Io(e.to_string()))?;
+        return Ok(());
+    }
+
+    let existing = std::fs::read_to_string(path).map_err(|e| VersioningError::Io(e.to_string()))?;
+    let mut updated = existing.clone();
+    let mut changed = false;
+    for rule in RECORDINGS_GITIGNORE_RULES {
+        if !existing.lines().any(|line| line.trim() == rule) {
+            if !updated.ends_with('\n') {
+                updated.push('\n');
+            }
+            updated.push_str(rule);
+            updated.push('\n');
+            changed = true;
+        }
+    }
+    if changed {
+        std::fs::write(path, updated).map_err(|e| VersioningError::Io(e.to_string()))?;
+    }
+    Ok(())
 }
 
 /// Squash a consecutive first-parent range ending at HEAD into one named snapshot.
@@ -239,23 +285,42 @@ pub fn is_rewound(project_dir: &Path) -> bool {
     prev_tip_path(project_dir).exists()
 }
 
-/// Discard all working-directory changes, resetting files to match HEAD.
-pub fn discard_changes(project_dir: &Path) -> Result<(), VersioningError> {
-    let repo = open_repo(project_dir)?;
-    let head_commit = repo
-        .head_commit()
+/// Discard changes under a repo-relative path without touching other workspace projects.
+pub fn discard_changes_in_scope(
+    project_dir: &Path,
+    scope_path: Option<&str>,
+) -> Result<(), VersioningError> {
+    let repo =
+        git2::Repository::open(project_dir).map_err(|e| VersioningError::Git(e.to_string()))?;
+
+    let mut checkout = checkout_builder_for_discard(scope_path);
+    repo.checkout_head(Some(&mut checkout))
         .map_err(|e| VersioningError::Git(e.to_string()))?;
-    let tree = head_commit
-        .tree()
-        .map_err(|e| VersioningError::Git(e.to_string()))?;
-    clean_working_dir(project_dir)?;
-    write_tree_to_dir(&repo, tree.id, project_dir)?;
+    remove_untracked_in_scope(&repo, project_dir, scope_path)?;
     sync_index_to_head(project_dir);
     Ok(())
 }
 
+/// Discard changes for one repo-relative file or folder path.
+pub fn discard_file(project_dir: &Path, file_path: &str) -> Result<(), VersioningError> {
+    validate_repo_relative_path(file_path)?;
+    discard_changes_in_scope(project_dir, Some(file_path))
+}
+
 /// Check if working directory has changes not captured in a snapshot.
 pub fn has_unsaved_changes(project_dir: &Path) -> Result<bool, VersioningError> {
+    has_unsaved_changes_in_scope(project_dir, None)
+}
+
+/// Check if a repo-relative path has changes not captured in a snapshot.
+pub fn has_unsaved_changes_in_scope(
+    project_dir: &Path,
+    scope_path: Option<&str>,
+) -> Result<bool, VersioningError> {
+    if let Some(scope) = scope_path {
+        validate_repo_relative_path(scope)?;
+    }
+
     // Use git2 status which handles CRLF normalization and .gitignore correctly.
     let repo =
         git2::Repository::open(project_dir).map_err(|e| VersioningError::Git(e.to_string()))?;
@@ -286,6 +351,9 @@ pub fn has_unsaved_changes(project_dir: &Path) -> Result<bool, VersioningError> 
         // Skip paths that build_tree_from_dir would never commit:
         // dotfiles/dotdirs at the root level (except .cutready/, .chats/, .gitignore).
         if let Some(path) = entry.path() {
+            if !path_is_in_scope(path, scope_path) {
+                continue;
+            }
             let top_segment = path.split('/').next().unwrap_or(path);
             if top_segment.starts_with('.')
                 && top_segment != ".cutready"
@@ -1093,14 +1161,9 @@ pub fn diff_snapshots(
             .to_string_lossy()
             .to_string();
         // Update current_file index
-        #[allow(clippy::needless_range_loop)]
-        for j in current_file..entry_count {
-            if entries[j].path == dpath {
-                current_file = j;
-                break;
-            }
-        }
-        if current_file < entry_count {
+        let matched = (current_file..entry_count).find(|&j| entries[j].path == dpath);
+        if let Some(index) = matched {
+            current_file = index;
             match line.origin() {
                 '+' => entries[current_file].additions += 1,
                 '-' => entries[current_file].deletions += 1,
@@ -1114,8 +1177,23 @@ pub fn diff_snapshots(
     Ok(entries)
 }
 
-/// Compare HEAD against the working directory and return file-level changes.
-pub fn diff_working_tree(project_dir: &Path) -> Result<Vec<DiffEntry>, VersioningError> {
+/// Compare HEAD against a scoped working-directory path and return file-level changes.
+pub fn diff_working_tree_in_scope(
+    project_dir: &Path,
+    scope_path: Option<&str>,
+) -> Result<Vec<DiffEntry>, VersioningError> {
+    diff_working_tree_in_scope_inner(project_dir, scope_path, false)
+}
+
+fn diff_working_tree_in_scope_inner(
+    project_dir: &Path,
+    scope_path: Option<&str>,
+    include_line_counts: bool,
+) -> Result<Vec<DiffEntry>, VersioningError> {
+    if let Some(scope) = scope_path {
+        validate_repo_relative_path(scope)?;
+    }
+
     let repo =
         git2::Repository::open(project_dir).map_err(|e| VersioningError::Git(e.to_string()))?;
 
@@ -1127,6 +1205,9 @@ pub fn diff_working_tree(project_dir: &Path) -> Result<Vec<DiffEntry>, Versionin
     let mut opts = git2::DiffOptions::new();
     opts.include_untracked(true);
     opts.recurse_untracked_dirs(true);
+    if let Some(scope) = scope_path.and_then(normalize_repo_relative_path) {
+        opts.pathspec(scope);
+    }
 
     let diff = repo
         .diff_tree_to_workdir_with_index(Some(&head_tree), Some(&mut opts))
@@ -1143,6 +1224,10 @@ pub fn diff_working_tree(project_dir: &Path) -> Result<Vec<DiffEntry>, Versionin
             .unwrap_or(Path::new(""))
             .to_string_lossy()
             .to_string();
+
+        if !path_is_in_scope(&path, scope_path) {
+            continue;
+        }
 
         // Skip dotfiles that are never committed (same rule as build_tree_from_dir)
         let top_segment = path.split('/').next().unwrap_or(&path);
@@ -1167,34 +1252,31 @@ pub fn diff_working_tree(project_dir: &Path) -> Result<Vec<DiffEntry>, Versionin
         });
     }
 
-    // Count line additions/deletions per file
-    let entry_count = entries.len();
-    let mut current_file: usize = 0;
-    diff.print(git2::DiffFormat::Patch, |delta, _hunk, line| {
-        let dpath = delta
-            .new_file()
-            .path()
-            .or_else(|| delta.old_file().path())
-            .unwrap_or(Path::new(""))
-            .to_string_lossy()
-            .to_string();
-        #[allow(clippy::needless_range_loop)]
-        for j in current_file..entry_count {
-            if entries[j].path == dpath {
-                current_file = j;
-                break;
+    if include_line_counts {
+        // Count line additions/deletions per file only for explicit diff views.
+        // The Changes panel calls the metadata-only path to stay fast with many assets.
+        let entry_count = entries.len();
+        let mut current_file: usize = 0;
+        diff.print(git2::DiffFormat::Patch, |delta, _hunk, line| {
+            let dpath = delta
+                .new_file()
+                .path()
+                .or_else(|| delta.old_file().path())
+                .unwrap_or(Path::new(""))
+                .to_string_lossy()
+                .to_string();
+            if let Some(index) = (current_file..entry_count).find(|&j| entries[j].path == dpath) {
+                current_file = index;
+                match line.origin() {
+                    '+' => entries[current_file].additions += 1,
+                    '-' => entries[current_file].deletions += 1,
+                    _ => {}
+                }
             }
-        }
-        if current_file < entry_count {
-            match line.origin() {
-                '+' => entries[current_file].additions += 1,
-                '-' => entries[current_file].deletions += 1,
-                _ => {}
-            }
-        }
-        true
-    })
-    .map_err(|e| VersioningError::Git(e.to_string()))?;
+            true
+        })
+        .map_err(|e| VersioningError::Git(e.to_string()))?;
+    }
 
     Ok(entries)
 }
@@ -1535,6 +1617,98 @@ fn resolve_commit_id(project_dir: &Path, short_id: &str) -> Result<String, Versi
     Ok(obj.id().to_string())
 }
 
+fn checkout_builder_for_discard(scope_path: Option<&str>) -> git2::build::CheckoutBuilder<'static> {
+    let mut checkout = git2::build::CheckoutBuilder::new();
+    checkout
+        .force()
+        .remove_untracked(true)
+        .remove_ignored(false);
+    if let Some(scope) = scope_path.and_then(normalize_repo_relative_path) {
+        checkout.path(scope);
+    }
+    checkout
+}
+
+fn validate_repo_relative_path(path: &str) -> Result<(), VersioningError> {
+    if normalize_repo_relative_path(path).is_none() {
+        return Err(VersioningError::Git("File path must not be empty".into()));
+    }
+
+    let rel = Path::new(path);
+    if rel.is_absolute() {
+        return Err(VersioningError::Git(format!(
+            "File path must be relative to the workspace: {}",
+            path
+        )));
+    }
+
+    for component in rel.components() {
+        match component {
+            std::path::Component::ParentDir | std::path::Component::Prefix(_) => {
+                return Err(VersioningError::Git(format!(
+                    "File path cannot escape the workspace: {}",
+                    path
+                )));
+            }
+            _ => {}
+        }
+    }
+
+    Ok(())
+}
+
+fn normalize_repo_relative_path(path: &str) -> Option<String> {
+    let normalized = path.replace('\\', "/");
+    let trimmed = normalized.trim_matches('/');
+    if trimmed.is_empty() || trimmed == "." {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
+}
+
+fn path_is_in_scope(path: &str, scope_path: Option<&str>) -> bool {
+    let Some(scope) = scope_path.and_then(normalize_repo_relative_path) else {
+        return true;
+    };
+    path == scope || path.starts_with(&format!("{scope}/"))
+}
+
+fn remove_untracked_in_scope(
+    repo: &git2::Repository,
+    project_dir: &Path,
+    scope_path: Option<&str>,
+) -> Result<(), VersioningError> {
+    let statuses = repo
+        .statuses(Some(
+            git2::StatusOptions::new()
+                .include_untracked(true)
+                .recurse_untracked_dirs(true)
+                .exclude_submodules(true),
+        ))
+        .map_err(|e| VersioningError::Git(e.to_string()))?;
+
+    let mut paths: Vec<String> = statuses
+        .iter()
+        .filter(|entry| entry.status().contains(git2::Status::WT_NEW))
+        .filter_map(|entry| entry.path().map(str::to_string))
+        .filter(|path| path_is_in_scope(path, scope_path))
+        .collect();
+    paths.sort_by_key(|path| std::cmp::Reverse(path.len()));
+
+    for path in paths {
+        validate_repo_relative_path(&path)?;
+        let target = project_dir.join(Path::new(&path));
+        if target.is_dir() {
+            std::fs::remove_dir_all(&target).map_err(|e| VersioningError::Io(e.to_string()))?;
+        } else if target.exists() {
+            std::fs::remove_file(&target).map_err(|e| VersioningError::Io(e.to_string()))?;
+        }
+    }
+
+    Ok(())
+}
+
 /// Sync the git index to match HEAD's tree so git2-based operations see
 /// a consistent view. Called after gix commits which bypass the index.
 fn sync_index_to_head(project_dir: &Path) {
@@ -1762,7 +1936,7 @@ fn reset_branch_ref(
 /// Skips hidden files/dirs (starting with '.').
 fn build_tree_from_dir(
     repo: &gix::Repository,
-    _root: &Path,
+    root: &Path,
     dir: &Path,
 ) -> Result<gix::ObjectId, VersioningError> {
     let mut entries: Vec<gix::objs::tree::Entry> = Vec::new();
@@ -1773,6 +1947,10 @@ fn build_tree_from_dir(
         let fs_entry = fs_entry.map_err(|e| VersioningError::Io(e.to_string()))?;
         let path = fs_entry.path();
         let name = fs_entry.file_name().to_string_lossy().to_string();
+
+        if is_local_recording_asset(root, &path) {
+            continue;
+        }
 
         // Skip .git and other dotfiles/dirs, but include project-essential ones
         if name == ".git"
@@ -1785,7 +1963,7 @@ fn build_tree_from_dir(
         }
 
         if path.is_dir() {
-            let sub_tree_id = build_tree_from_dir(repo, _root, &path)?;
+            let sub_tree_id = build_tree_from_dir(repo, root, &path)?;
             entries.push(gix::objs::tree::Entry {
                 mode: gix::objs::tree::EntryKind::Tree.into(),
                 filename: name.into(),
@@ -1815,6 +1993,29 @@ fn build_tree_from_dir(
         .detach();
 
     Ok(tree_id)
+}
+
+fn is_local_recording_asset(root: &Path, path: &Path) -> bool {
+    let Ok(rel) = path.strip_prefix(root) else {
+        return false;
+    };
+    let components: Vec<String> = rel
+        .components()
+        .map(|component| component.as_os_str().to_string_lossy().to_string())
+        .collect();
+
+    let Some(cutready_index) = components
+        .iter()
+        .position(|component| component == ".cutready")
+    else {
+        return false;
+    };
+    if components.get(cutready_index + 1).map(String::as_str) != Some("recordings") {
+        return false;
+    }
+
+    components.len() > cutready_index + 2
+        && components.last().map(String::as_str) != Some(".gitignore")
 }
 
 fn gix_time_to_chrono(time: gix::date::Time) -> DateTime<Utc> {
@@ -2979,7 +3180,7 @@ mod tests {
         //   | * take1 take 1
         //   |/
         //   * gs Initial getting started
-        //   * init Initialize project
+        //   * init Initialize workspace
         //
         // Key issues to test:
         // 1. fork-duplicate and main point at same commit
@@ -3324,6 +3525,95 @@ mod tests {
     }
 
     #[test]
+    fn discard_changes_scoped_to_active_project() {
+        let tmp = setup_project_dir();
+        init_project_repo(tmp.path()).unwrap();
+
+        std::fs::create_dir_all(tmp.path().join("project-a/.cutready/recordings")).unwrap();
+        std::fs::create_dir_all(tmp.path().join("project-b")).unwrap();
+        std::fs::write(tmp.path().join("project-a/a.sk"), "a v1").unwrap();
+        std::fs::write(tmp.path().join("project-a/remove.md"), "remove v1").unwrap();
+        std::fs::write(tmp.path().join("project-b/b.sk"), "b v1").unwrap();
+        commit_snapshot(tmp.path(), "init", None).unwrap();
+
+        std::fs::write(tmp.path().join("project-a/a.sk"), "a v2").unwrap();
+        std::fs::remove_file(tmp.path().join("project-a/remove.md")).unwrap();
+        std::fs::write(
+            tmp.path().join("project-a/.cutready/recordings/.gitignore"),
+            "",
+        )
+        .unwrap();
+        std::fs::write(tmp.path().join("project-b/b.sk"), "b v2").unwrap();
+
+        discard_changes_in_scope(tmp.path(), Some("project-a")).unwrap();
+
+        assert_eq!(
+            std::fs::read_to_string(tmp.path().join("project-a/a.sk")).unwrap(),
+            "a v1"
+        );
+        assert_eq!(
+            std::fs::read_to_string(tmp.path().join("project-a/remove.md")).unwrap(),
+            "remove v1"
+        );
+        assert!(
+            !tmp.path()
+                .join("project-a/.cutready/recordings/.gitignore")
+                .exists(),
+            "Scoped discard should remove new files inside the active project"
+        );
+        assert_eq!(
+            std::fs::read_to_string(tmp.path().join("project-b/b.sk")).unwrap(),
+            "b v2",
+            "Scoped discard must not touch another workspace project"
+        );
+    }
+
+    #[test]
+    fn discard_file_only_reverts_selected_path() {
+        let tmp = setup_project_dir();
+        init_project_repo(tmp.path()).unwrap();
+
+        std::fs::create_dir_all(tmp.path().join("project-a")).unwrap();
+        std::fs::write(tmp.path().join("project-a/a.sk"), "a v1").unwrap();
+        std::fs::write(tmp.path().join("project-a/b.sk"), "b v1").unwrap();
+        commit_snapshot(tmp.path(), "init", None).unwrap();
+
+        std::fs::write(tmp.path().join("project-a/a.sk"), "a v2").unwrap();
+        std::fs::write(tmp.path().join("project-a/b.sk"), "b v2").unwrap();
+
+        discard_file(tmp.path(), "project-a/a.sk").unwrap();
+
+        assert_eq!(
+            std::fs::read_to_string(tmp.path().join("project-a/a.sk")).unwrap(),
+            "a v1"
+        );
+        assert_eq!(
+            std::fs::read_to_string(tmp.path().join("project-a/b.sk")).unwrap(),
+            "b v2"
+        );
+    }
+
+    #[test]
+    fn diff_working_tree_can_be_scoped_to_project() {
+        let tmp = setup_project_dir();
+        init_project_repo(tmp.path()).unwrap();
+
+        std::fs::create_dir_all(tmp.path().join("project-a")).unwrap();
+        std::fs::create_dir_all(tmp.path().join("project-b")).unwrap();
+        std::fs::write(tmp.path().join("project-a/a.sk"), "a v1").unwrap();
+        std::fs::write(tmp.path().join("project-b/b.sk"), "b v1").unwrap();
+        commit_snapshot(tmp.path(), "init", None).unwrap();
+
+        std::fs::write(tmp.path().join("project-a/a.sk"), "a v2").unwrap();
+        std::fs::write(tmp.path().join("project-b/b.sk"), "b v2").unwrap();
+
+        let entries = diff_working_tree_in_scope(tmp.path(), Some("project-a")).unwrap();
+        let paths: Vec<String> = entries.into_iter().map(|entry| entry.path).collect();
+
+        assert_eq!(paths, vec!["project-a/a.sk"]);
+    }
+
+    #[test]
     fn dirty_gitignored_files_ignored() {
         // CutReady's build_tree_from_dir skips dotfiles (except .cutready/.chats),
         // so .gitignore itself is never committed. But we can still test that git2
@@ -3406,12 +3696,57 @@ mod tests {
         // But .cutready/ changes SHOULD trigger dirty (it's a tracked exception)
         // First commit the .gitignore so we can test .cutready in isolation
         commit_snapshot(tmp.path(), "add gitignore", None).unwrap();
-        std::fs::create_dir_all(tmp.path().join(".cutready")).unwrap();
-        std::fs::write(tmp.path().join(".cutready/settings.json"), "{}").unwrap();
+        std::fs::create_dir_all(tmp.path().join(".cutready/visuals")).unwrap();
+        std::fs::write(tmp.path().join(".cutready/visuals/example.json"), "{}").unwrap();
         assert!(
             has_unsaved_changes(tmp.path()).unwrap(),
             ".cutready/ changes should trigger dirty state"
         );
+    }
+
+    #[test]
+    fn snapshots_prepare_cutready_structural_files() {
+        let tmp = setup_project_dir();
+        init_project_repo(tmp.path()).unwrap();
+
+        let commit_id = commit_snapshot(tmp.path(), "init", None).unwrap();
+        let repo = git2::Repository::open(tmp.path()).unwrap();
+        let commit = repo
+            .find_commit(git2::Oid::from_str(&commit_id).unwrap())
+            .unwrap();
+        let tree = commit.tree().unwrap();
+
+        assert!(tree.get_path(Path::new(".cutready/settings.json")).is_ok());
+        assert!(tree
+            .get_path(Path::new(".cutready/recordings/.gitignore"))
+            .is_ok());
+    }
+
+    #[test]
+    fn snapshots_keep_recording_assets_local() {
+        let tmp = setup_project_dir();
+        init_project_repo(tmp.path()).unwrap();
+        let take_dir = tmp.path().join(".cutready/recordings/take-1");
+        std::fs::create_dir_all(&take_dir).unwrap();
+        std::fs::write(take_dir.join("screen.mkv"), "large media").unwrap();
+        std::fs::write(take_dir.join("mic.wav"), "large audio").unwrap();
+
+        let commit_id = commit_snapshot(tmp.path(), "init", None).unwrap();
+        let repo = git2::Repository::open(tmp.path()).unwrap();
+        let commit = repo
+            .find_commit(git2::Oid::from_str(&commit_id).unwrap())
+            .unwrap();
+        let tree = commit.tree().unwrap();
+
+        assert!(tree
+            .get_path(Path::new(".cutready/recordings/.gitignore"))
+            .is_ok());
+        assert!(tree
+            .get_path(Path::new(".cutready/recordings/take-1/screen.mkv"))
+            .is_err());
+        assert!(tree
+            .get_path(Path::new(".cutready/recordings/take-1/mic.wav"))
+            .is_err());
     }
 
     #[test]

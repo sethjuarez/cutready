@@ -6,7 +6,7 @@ use chrono::Utc;
 use tauri::State;
 use tauri_plugin_store::StoreExt;
 
-use crate::engine::project;
+use crate::engine::{project, versioning};
 use crate::models::script::{ProjectEntry, ProjectView, RecentProject, RepoView};
 use crate::AppState;
 
@@ -314,6 +314,15 @@ fn repo_root(state: &AppState) -> Result<PathBuf, String> {
     Ok(view.root.clone())
 }
 
+fn snapshot_workspace_structure(repo_root: &std::path::Path, message: &str) -> Result<(), String> {
+    if versioning::has_unsaved_changes(repo_root).map_err(|e| e.to_string())? {
+        versioning::commit_snapshot(repo_root, message, None)
+            .map(|_| ())
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 /// List all projects in the current repo.
 #[tauri::command]
 pub async fn list_projects(state: State<'_, AppState>) -> Result<Vec<ProjectEntry>, String> {
@@ -373,7 +382,10 @@ pub async fn create_project_in_repo(
     state: State<'_, AppState>,
 ) -> Result<ProjectEntry, String> {
     let root = repo_root(&state)?;
-    project::create_project_in_repo(&root, &name, description.as_deref()).map_err(|e| e.to_string())
+    let entry = project::create_project_in_repo(&root, &name, description.as_deref())
+        .map_err(|e| e.to_string())?;
+    snapshot_workspace_structure(&root, &format!("Add {} to workspace", entry.name))?;
+    Ok(entry)
 }
 
 /// Delete a project from the current repo manifest.
@@ -399,6 +411,8 @@ pub async fn delete_project(
             std::fs::remove_dir_all(&dir).map_err(|e| e.to_string())?;
         }
     }
+
+    snapshot_workspace_structure(&root, "Remove project from workspace")?;
 
     // If deleted project was active, clear it
     {
@@ -434,6 +448,7 @@ pub async fn rename_project(
     if project_path == "." && !project::is_multi_project(&root) {
         let entry =
             project::migrate_to_multi_project(&root, &new_name).map_err(|e| e.to_string())?;
+        snapshot_workspace_structure(&root, "Organize workspace projects")?;
 
         // Update current project to point at the new subdirectory
         let mut current = state.current_project.lock().map_err(|e| e.to_string())?;
@@ -478,6 +493,8 @@ pub async fn rename_project(
         project::write_manifest(&root, &manifest).map_err(|e| e.to_string())?;
     }
 
+    snapshot_workspace_structure(&root, "Rename workspace project")?;
+
     // Update current project view if this is the active project
     {
         let mut current = state.current_project.lock().map_err(|e| e.to_string())?;
@@ -501,6 +518,7 @@ pub async fn migrate_to_multi_project(
     let root = repo_root(&state)?;
     let entry =
         project::migrate_to_multi_project(&root, &existing_name).map_err(|e| e.to_string())?;
+    snapshot_workspace_structure(&root, "Organize workspace projects")?;
 
     // Update current project to point at the new subdirectory
     let view = ProjectView::in_repo(root, &entry.path, entry.name.clone());
@@ -717,7 +735,8 @@ pub async fn set_workspace_settings(
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let root = repo_root(&state)?;
-    project::write_repo_settings(&root, &settings).map_err(|e| e.to_string())
+    project::write_repo_settings(&root, &settings).map_err(|e| e.to_string())?;
+    snapshot_workspace_structure(&root, "Update workspace settings")
 }
 
 /// Check if any recent project was cloned from a given GitHub repo.
