@@ -670,6 +670,7 @@ fn find_avfoundation_screen_index(display_index: usize) -> Option<u32> {
 }
 
 /// Known virtual audio loopback device names on macOS.
+#[cfg(target_os = "macos")]
 const MACOS_LOOPBACK_DEVICE_NAMES: &[&str] = &[
     "blackhole",
     "loopback audio",
@@ -697,11 +698,6 @@ pub fn detect_macos_loopback_device() -> Option<String> {
             }
         }
     }
-    None
-}
-
-#[cfg(not(target_os = "macos"))]
-pub fn detect_macos_loopback_device() -> Option<String> {
     None
 }
 

@@ -9,7 +9,6 @@
 //! The browser lifecycle is separate from the recording lifecycle.
 
 use std::path::{Path, PathBuf};
-use std::process::Stdio;
 
 use crate::util::sidecar::SidecarManager;
 
@@ -183,8 +182,8 @@ pub fn check_browsers_running() -> BrowserRunningStatus {
     let is_running = |name: &str| -> bool {
         std::process::Command::new("pgrep")
             .args(["-x", name])
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
             .status()
             .map(|s| s.success())
             .unwrap_or(false)
