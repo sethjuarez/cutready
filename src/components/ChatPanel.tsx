@@ -6,7 +6,6 @@ import { SafeMarkdown } from "./SafeMarkdown";
 import { useAppStore } from "../stores/appStore";
 import { useSettings, type AgentPreset } from "../hooks/useSettings";
 import { BUILT_IN_AGENTS, resolveAgentPrompt } from "../agents/builtInAgents";
-import { VersionHistory } from "./VersionHistory";
 import { SketchIcon, StoryboardIcon, NoteIcon } from "./Icons";
 import type { ChatMessage, ChatSessionSummary, ToolCall } from "../types/sketch";
 import {
@@ -18,7 +17,6 @@ import {
   Wrench,
   Trash2,
   Plus,
-  Download,
   Paperclip,
   ChevronDown,
   ChevronRight,
@@ -205,7 +203,7 @@ interface FileReference {
   webStatus?: "loading" | "ready" | "error";
 }
 
-type SecondaryTab = "chat" | "sessions" | "snapshots";
+type SecondaryTab = "chat" | "sessions";
 
 function resolveAgentModelOverride(
   agent: AgentPreset,
@@ -248,9 +246,6 @@ function IconPlus({ size = 14 }: { size?: number }) {
   return <Plus width={size} height={size} />;
 }
 
-function IconSave({ size = 14 }: { size?: number }) {
-  return <Download width={size} height={size} />;
-}
 
 function IconPaperclip({ size = 14 }: { size?: number }) {
   return <Paperclip width={size} height={size} />;
@@ -305,7 +300,6 @@ export function ChatPanel() {
   const tabs: Array<{ id: SecondaryTab; label: string; icon: ReactNode }> = [
     { id: "chat", label: "Chat", icon: <IconSparkles size={13} /> },
     { id: "sessions", label: "Sessions", icon: <IconHistory size={13} /> },
-    { id: "snapshots", label: "Snapshots", icon: <IconSave size={13} /> },
   ];
   const rail = (
     <nav className={`no-select flex w-12 shrink-0 flex-col items-center gap-1.5 bg-[rgb(var(--color-surface))] py-3 ${
@@ -346,7 +340,6 @@ export function ChatPanel() {
       <div className="flex-1 min-w-0 min-h-0">
         {activeTab === "chat" && <ChatTab />}
         {activeTab === "sessions" && <ChatHistory onOpenSession={() => setActiveTab("chat")} />}
-        {activeTab === "snapshots" && <VersionHistory />}
       </div>
 
       {!railOnLeft && rail}

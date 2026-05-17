@@ -174,8 +174,8 @@ interface AppStoreState {
   timelines: TimelineInfo[];
   /** Full graph data for SVG rendering. */
   graphNodes: GraphNode[];
-  /** Whether the version history sidebar is visible. */
-  showVersionHistory: boolean;
+  /** Whether the secondary panel is visible. */
+  showSecondaryPanel: boolean;
   /** Whether the snapshot name prompt should be shown (triggered by Ctrl+S). */
   snapshotPromptOpen: boolean;
   /** Whether the identity prompt dialog should be shown. */
@@ -464,8 +464,8 @@ interface AppStoreState {
   promoteTimeline: (name: string) => Promise<void>;
   /** Load full graph data for SVG rendering. */
   loadGraphData: () => Promise<void>;
-  /** Toggle version history sidebar. */
-  toggleVersionHistory: () => void;
+  /** Toggle the secondary panel. */
+  toggleSecondaryPanel: () => void;
   /** Open the named snapshot flow for legacy quick-save callers. */
   quickSave: () => Promise<void>;
   /** Open snapshot name prompt (and ensure panel is visible). */
@@ -552,11 +552,21 @@ function loadLayout(): Partial<{
   outputVisible: boolean;
   outputHeight: number;
   secondaryWidth: number;
-  showVersionHistory: boolean;
+  showSecondaryPanel: boolean;
 }> {
   try {
     const raw = localStorage.getItem(LAYOUT_KEY);
-    return raw ? JSON.parse(raw) : {};
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const legacySecondary = typeof parsed["showSecondaryPanel"] === "boolean"
+      ? parsed["showSecondaryPanel"]
+      : typeof parsed["showVersionHistory"] === "boolean"
+        ? parsed["showVersionHistory"]
+        : undefined;
+    return {
+      ...parsed,
+      ...(legacySecondary === undefined ? {} : { showSecondaryPanel: legacySecondary }),
+    };
   } catch {
     return {};
   }
@@ -614,7 +624,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   versions: [],
   timelines: [],
   graphNodes: [],
-  showVersionHistory: savedLayout.showVersionHistory ?? false,
+  showSecondaryPanel: savedLayout.showSecondaryPanel ?? false,
   snapshotPromptOpen: false,
   identityPromptOpen: false,
   identityPromptCallback: null,
@@ -1951,10 +1961,10 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     }
   },
 
-  toggleVersionHistory: () => {
+  toggleSecondaryPanel: () => {
     set((state) => {
-      saveLayout({ showVersionHistory: !state.showVersionHistory });
-      return { showVersionHistory: !state.showVersionHistory };
+      saveLayout({ showSecondaryPanel: !state.showSecondaryPanel });
+      return { showSecondaryPanel: !state.showSecondaryPanel };
     });
   },
 

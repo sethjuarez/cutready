@@ -21,7 +21,7 @@ export function StoryboardPanel() {
   const activeStoryboard = useAppStore((s) => s.activeStoryboard);
   const activeSketch = useAppStore((s) => s.activeSketch);
   const activeNotePath = useAppStore((s) => s.activeNotePath);
-  const showVersionHistory = useAppStore((s) => s.showVersionHistory);
+  const showSecondaryPanel = useAppStore((s) => s.showSecondaryPanel);
   const sidebarPosition = useAppStore((s) => s.sidebarPosition);
   const openTabs = useAppStore((s) => s.openTabs);
   const activeTabId = useAppStore((s) => s.activeTabId);
@@ -53,7 +53,7 @@ export function StoryboardPanel() {
     [],
   );
 
-  const secondaryPanel = showVersionHistory ? (
+  const secondaryPanel = showSecondaryPanel ? (
     <>
       {!secondaryOnLeft && <ResizeHandle direction="horizontal" onResize={handleSecondaryResize} />}
       <div className="shrink-0 h-full bg-[rgb(var(--color-surface-inset))] border-l border-[rgb(var(--color-border))]" style={{ width: secondaryWidth }}>

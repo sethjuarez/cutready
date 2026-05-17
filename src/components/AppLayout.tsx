@@ -57,8 +57,8 @@ export function AppLayout() {
   const outputHeight = useAppStore((s) => s.outputHeight);
   const setOutputHeight = useAppStore((s) => s.setOutputHeight);
   const toggleOutput = useAppStore((s) => s.toggleOutput);
-  const toggleVersionHistory = useAppStore((s) => s.toggleVersionHistory);
-  const showVersionHistory = useAppStore((s) => s.showVersionHistory);
+  const toggleSecondaryPanel = useAppStore((s) => s.toggleSecondaryPanel);
+  const showSecondaryPanel = useAppStore((s) => s.showSecondaryPanel);
   const isMerging = useAppStore((s) => s.isMerging);
 
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
@@ -110,7 +110,7 @@ export function AppLayout() {
         category: "View",
         keybinding: "Ctrl+Shift+B",
         icon: <Columns2 className="w-4 h-4" />,
-        handler: () => toggleVersionHistory(),
+        handler: () => toggleSecondaryPanel(),
       },
       {
         id: "nav.chat",
@@ -249,7 +249,7 @@ export function AppLayout() {
         },
       },
     ]);
-  }, [setView, toggleSidebar, toggleSidebarPosition, toggleOutput, toggleVersionHistory, toggleTheme]);
+  }, [setView, toggleSidebar, toggleSidebarPosition, toggleOutput, toggleSecondaryPanel, toggleTheme]);
 
   // Global keyboard shortcuts
   useEffect(() => {
@@ -278,7 +278,7 @@ export function AppLayout() {
       }
       if (mod && e.shiftKey && (e.key === "B" || e.key === "b")) {
         e.preventDefault();
-        toggleVersionHistory();
+        toggleSecondaryPanel();
         return;
       }
       if (mod && e.shiftKey && (e.key === "C" || e.key === "c")) {
@@ -310,7 +310,7 @@ export function AppLayout() {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [toggleSidebar, toggleOutput, toggleVersionHistory, toggleTheme, commandPaletteOpen]);
+  }, [toggleSidebar, toggleOutput, toggleSecondaryPanel, toggleTheme, commandPaletteOpen]);
 
   // Apply display settings as CSS variables
   const { settings: displaySettings, loaded: displaySettingsLoaded } = useSettings();
@@ -371,11 +371,11 @@ export function AppLayout() {
         sidebarVisible={sidebarVisible}
         sidebarPosition={sidebarPosition}
         outputVisible={outputVisible}
-        secondaryVisible={showVersionHistory}
+        secondaryVisible={showSecondaryPanel}
         onToggleSidebar={toggleSidebar}
         onToggleSidebarPosition={toggleSidebarPosition}
         onToggleOutput={toggleOutput}
-        onToggleSecondary={toggleVersionHistory}
+        onToggleSecondary={toggleSecondaryPanel}
       />
       <div
         className="flex flex-col w-full flex-1 min-h-0"
