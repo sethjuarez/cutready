@@ -5,7 +5,7 @@ use tauri::State;
 use crate::engine::{project, versioning, versioning_remote};
 use crate::models::script::ProjectView;
 use crate::models::sketch::VersionEntry;
-use crate::AppState;
+use crate::{AppState, ProjectLock};
 
 /// Helper: get the repo root (where .git lives) from current state.
 /// In single-project mode, repo_root == project root.
@@ -20,7 +20,9 @@ pub async fn save_with_label(
     label: String,
     fork_label: Option<String>,
     state: State<'_, AppState>,
+    lock: State<'_, ProjectLock>,
 ) -> Result<String, String> {
+    let _guard = lock.0.lock().await;
     let root = versioning_root(&state)?;
     project::save_with_label(&root, &label, fork_label.as_deref()).map_err(|e| e.to_string())
 }
@@ -31,7 +33,9 @@ pub async fn squash_snapshots(
     newest_commit_id: String,
     label: String,
     state: State<'_, AppState>,
+    lock: State<'_, ProjectLock>,
 ) -> Result<String, String> {
+    let _guard = lock.0.lock().await;
     let root = versioning_root(&state)?;
     versioning::squash_head_snapshots(&root, &oldest_commit_id, &newest_commit_id, &label)
         .map_err(|e| e.to_string())
@@ -87,7 +91,8 @@ pub async fn preview_version(
 }
 
 #[tauri::command]
-pub async fn restore_version(commit_id: String, state: State<'_, AppState>) -> Result<(), String> {
+pub async fn restore_version(commit_id: String, state: State<'_, AppState>, lock: State<'_, ProjectLock>) -> Result<(), String> {
+    let _guard = lock.0.lock().await;
     let root = versioning_root(&state)?;
     versioning::restore_version(&root, &commit_id).map_err(|e| e.to_string())?;
 
@@ -100,7 +105,8 @@ pub async fn restore_version(commit_id: String, state: State<'_, AppState>) -> R
 }
 
 #[tauri::command]
-pub async fn checkout_version(commit_id: String, state: State<'_, AppState>) -> Result<(), String> {
+pub async fn checkout_version(commit_id: String, state: State<'_, AppState>, lock: State<'_, ProjectLock>) -> Result<(), String> {
+    let _guard = lock.0.lock().await;
     let root = versioning_root(&state)?;
     versioning::checkout_version(&root, &commit_id).map_err(|e| e.to_string())?;
 
@@ -113,7 +119,8 @@ pub async fn checkout_version(commit_id: String, state: State<'_, AppState>) -> 
 }
 
 #[tauri::command]
-pub async fn discard_changes(state: State<'_, AppState>) -> Result<(), String> {
+pub async fn discard_changes(state: State<'_, AppState>, lock: State<'_, ProjectLock>) -> Result<(), String> {
+    let _guard = lock.0.lock().await;
     let root = versioning_root(&state)?;
     versioning::discard_changes(&root).map_err(|e| e.to_string())?;
 
@@ -135,13 +142,15 @@ pub async fn has_unsaved_changes(state: State<'_, AppState>) -> Result<bool, Str
 }
 
 #[tauri::command]
-pub async fn stash_changes(state: State<'_, AppState>) -> Result<(), String> {
+pub async fn stash_changes(state: State<'_, AppState>, lock: State<'_, ProjectLock>) -> Result<(), String> {
+    let _guard = lock.0.lock().await;
     let root = versioning_root(&state)?;
     versioning::stash_working_tree(&root).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub async fn pop_stash(state: State<'_, AppState>) -> Result<bool, String> {
+pub async fn pop_stash(state: State<'_, AppState>, lock: State<'_, ProjectLock>) -> Result<bool, String> {
+    let _guard = lock.0.lock().await;
     let root = versioning_root(&state)?;
     versioning::pop_stash(&root).map_err(|e| e.to_string())
 }
@@ -151,7 +160,9 @@ pub async fn create_timeline(
     from_commit_id: String,
     name: String,
     state: State<'_, AppState>,
+    lock: State<'_, ProjectLock>,
 ) -> Result<(), String> {
+    let _guard = lock.0.lock().await;
     let root = versioning_root(&state)?;
     versioning::create_timeline(&root, &from_commit_id, &name).map_err(|e| e.to_string())
 }
@@ -168,7 +179,8 @@ pub async fn list_timelines(
 }
 
 #[tauri::command]
-pub async fn switch_timeline(name: String, state: State<'_, AppState>) -> Result<(), String> {
+pub async fn switch_timeline(name: String, state: State<'_, AppState>, lock: State<'_, ProjectLock>) -> Result<(), String> {
+    let _guard = lock.0.lock().await;
     let root = versioning_root(&state)?;
     versioning::switch_timeline(&root, &name).map_err(|e| e.to_string())?;
     // Re-scan project
@@ -179,13 +191,15 @@ pub async fn switch_timeline(name: String, state: State<'_, AppState>) -> Result
 }
 
 #[tauri::command]
-pub async fn delete_timeline(name: String, state: State<'_, AppState>) -> Result<(), String> {
+pub async fn delete_timeline(name: String, state: State<'_, AppState>, lock: State<'_, ProjectLock>) -> Result<(), String> {
+    let _guard = lock.0.lock().await;
     let root = versioning_root(&state)?;
     versioning::delete_timeline(&root, &name).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub async fn promote_timeline(name: String, state: State<'_, AppState>) -> Result<(), String> {
+pub async fn promote_timeline(name: String, state: State<'_, AppState>, lock: State<'_, ProjectLock>) -> Result<(), String> {
+    let _guard = lock.0.lock().await;
     let root = versioning_root(&state)?;
     versioning::promote_timeline(&root, &name).map_err(|e| e.to_string())
 }
@@ -205,7 +219,9 @@ pub async fn get_timeline_graph(
 pub async fn navigate_to_snapshot(
     commit_id: String,
     state: State<'_, AppState>,
+    lock: State<'_, ProjectLock>,
 ) -> Result<(), String> {
+    let _guard = lock.0.lock().await;
     let root = versioning_root(&state)?;
     versioning::navigate_to_snapshot(&root, &commit_id).map_err(|e| e.to_string())?;
 
@@ -229,13 +245,20 @@ pub async fn add_git_remote(
     name: String,
     url: String,
     state: State<'_, AppState>,
+    lock: State<'_, ProjectLock>,
 ) -> Result<(), String> {
+    let _guard = lock.0.lock().await;
     let root = versioning_root(&state)?;
     versioning_remote::add_remote(&root, &name, &url).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub async fn remove_git_remote(name: String, state: State<'_, AppState>) -> Result<(), String> {
+pub async fn remove_git_remote(
+    name: String,
+    state: State<'_, AppState>,
+    lock: State<'_, ProjectLock>,
+) -> Result<(), String> {
+    let _guard = lock.0.lock().await;
     let root = versioning_root(&state)?;
     versioning_remote::remove_remote(&root, &name).map_err(|e| e.to_string())
 }
@@ -261,7 +284,9 @@ pub async fn fetch_git_remote(
     remote_name: String,
     token: Option<String>,
     state: State<'_, AppState>,
+    lock: State<'_, ProjectLock>,
 ) -> Result<(), String> {
+    let _guard = lock.0.lock().await;
     let root = versioning_root(&state)?;
     let token = resolve_token(token);
     versioning_remote::fetch_remote(&root, &remote_name, token.as_deref())
@@ -274,7 +299,9 @@ pub async fn push_git_remote(
     branch: String,
     token: Option<String>,
     state: State<'_, AppState>,
+    lock: State<'_, ProjectLock>,
 ) -> Result<(), String> {
+    let _guard = lock.0.lock().await;
     let root = versioning_root(&state)?;
     let token = resolve_token(token);
     versioning_remote::push_remote(&root, &remote_name, &branch, token.as_deref())
@@ -330,7 +357,9 @@ pub async fn pull_git_remote(
     branch: String,
     token: Option<String>,
     state: State<'_, AppState>,
+    lock: State<'_, ProjectLock>,
 ) -> Result<versioning_remote::PullResult, String> {
+    let _guard = lock.0.lock().await;
     let root = versioning_root(&state)?;
     let token = resolve_token(token);
     versioning_remote::pull_remote(&root, &remote_name, &branch, token.as_deref())
@@ -351,7 +380,9 @@ pub async fn checkout_remote_branch(
     remote_name: String,
     branch: String,
     state: State<'_, AppState>,
+    lock: State<'_, ProjectLock>,
 ) -> Result<(), String> {
+    let _guard = lock.0.lock().await;
     let root = versioning_root(&state)?;
     versioning_remote::checkout_remote_branch(&root, &remote_name, &branch)
         .map_err(|e| e.to_string())
@@ -467,7 +498,9 @@ pub async fn merge_timelines(
     source_timeline: String,
     target_timeline: String,
     state: State<'_, AppState>,
+    lock: State<'_, ProjectLock>,
 ) -> Result<crate::engine::versioning_merge::MergeResult, String> {
+    let _guard = lock.0.lock().await;
     let root = versioning_root(&state)?;
     crate::engine::versioning_merge::merge_timelines(&root, &source_timeline, &target_timeline)
         .map_err(|e| e.to_string())
@@ -479,7 +512,9 @@ pub async fn apply_merge_resolution(
     target_timeline: String,
     resolutions: Vec<crate::engine::versioning_merge::FileResolution>,
     state: State<'_, AppState>,
+    lock: State<'_, ProjectLock>,
 ) -> Result<String, String> {
+    let _guard = lock.0.lock().await;
     let root = versioning_root(&state)?;
     crate::engine::versioning_merge::apply_merge_resolution(
         &root,

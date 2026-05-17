@@ -61,6 +61,10 @@ pub struct AppState {
     pub last_chat_summary: Mutex<Option<(String, String)>>, // (session_id, summary)
 }
 
+/// Serializes access to project-level operations that mutate the filesystem or git state.
+/// Prevents concurrent git operations, snapshot + checkout races, and write-during-read corruption.
+pub struct ProjectLock(pub tokio::sync::Mutex<()>);
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let app_state = AppState {
@@ -73,6 +77,7 @@ pub fn run() {
 
     tauri::Builder::default()
         .manage(app_state)
+        .manage(ProjectLock(tokio::sync::Mutex::new(())))
         .manage(commands::screenshot::CaptureState(Mutex::new(None)))
         .manage(commands::screenshot::RecordingCountdownState(Mutex::new(
             None,
