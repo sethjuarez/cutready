@@ -32,15 +32,15 @@ import type {
 const suppressedEditorFlushPaths = new Set<string>();
 
 export function suppressEditorFlush(relativePath: string) {
-  suppressedEditorFlushPaths.add(relativePath);
+  suppressedEditorFlushPaths.add(normalizeRelativePath(relativePath));
 }
 
 export function shouldSuppressEditorFlush(relativePath: string | null | undefined): boolean {
-  return !!relativePath && suppressedEditorFlushPaths.has(relativePath);
+  return !!relativePath && suppressedEditorFlushPaths.has(normalizeRelativePath(relativePath));
 }
 
 export function clearSuppressedEditorFlush(relativePath: string) {
-  suppressedEditorFlushPaths.delete(relativePath);
+  suppressedEditorFlushPaths.delete(normalizeRelativePath(relativePath));
 }
 
 function clearSuppressedEditorFlushes(relativePaths: string[]) {
@@ -59,6 +59,40 @@ function nextActiveTabIdAfterFiltering(previousTabs: EditorTab[], nextTabs: Edit
   if (nextTabs.length === 0) return null;
   const previousIndex = previousTabs.findIndex((tab) => tab.id === activeTabId);
   return nextTabs[Math.min(Math.max(previousIndex, 0), nextTabs.length - 1)]?.id ?? null;
+}
+
+function normalizeRelativePath(path: string): string {
+  return path.replace(/\\/g, "/").replace(/^\.\/+/, "").replace(/^\/+/, "").replace(/\/+$/, "");
+}
+
+function normalizeAbsolutePath(path: string): string {
+  return path.replace(/\\/g, "/").replace(/\/+$/, "");
+}
+
+function activeProjectScope(currentProject: ProjectView | null): string | null {
+  if (!currentProject) return null;
+  const root = normalizeAbsolutePath(currentProject.root);
+  const repoRoot = normalizeAbsolutePath(currentProject.repo_root);
+  if (root.toLowerCase() === repoRoot.toLowerCase()) return null;
+  const repoPrefix = `${repoRoot}/`;
+  if (!root.toLowerCase().startsWith(repoPrefix.toLowerCase())) return null;
+  return normalizeRelativePath(root.slice(repoPrefix.length));
+}
+
+function scopedPathVariants(filePath: string, currentProject: ProjectView | null) {
+  const normalized = normalizeRelativePath(filePath);
+  const scope = activeProjectScope(currentProject);
+  if (!scope) {
+    return { repoPath: normalized, projectPath: normalized };
+  }
+  if (normalized === scope) {
+    return { repoPath: normalized, projectPath: "" };
+  }
+  const scopePrefix = `${scope}/`;
+  if (normalized.startsWith(scopePrefix)) {
+    return { repoPath: normalized, projectPath: normalized.slice(scopePrefix.length) };
+  }
+  return { repoPath: `${scopePrefix}${normalized}`, projectPath: normalized };
 }
 
 /** The panels / views available in the app. */
@@ -1910,9 +1944,16 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   },
 
   discardFile: async (filePath) => {
+    const { repoPath, projectPath } = scopedPathVariants(filePath, get().currentProject);
+    const suppressedPaths = Array.from(new Set([filePath, repoPath, projectPath].filter(Boolean)));
+    const pathMatchesDiscard = (path: string | null | undefined) => {
+      if (!path) return false;
+      const normalized = normalizeRelativePath(path);
+      return normalized === repoPath || normalized === projectPath;
+    };
     try {
-      suppressEditorFlush(filePath);
-      await invoke("discard_file", { filePath });
+      for (const path of suppressedPaths) suppressEditorFlush(path);
+      await invoke("discard_file", { filePath: repoPath });
       await get().loadSketches();
       await get().loadStoryboards();
       await get().loadNotes();
@@ -1930,20 +1971,20 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         activeEditorGroup,
       } = get();
       const fileExistsForTab = (tab: EditorTab) => {
-        if (tab.path !== filePath || !isDocumentTab(tab)) return true;
-        if (tab.type === "sketch") return sketches.some((sketch) => sketch.path === filePath);
-        if (tab.type === "storyboard") return storyboards.some((storyboard) => storyboard.path === filePath);
-        return notes.some((note) => note.path === filePath);
+        if (!pathMatchesDiscard(tab.path) || !isDocumentTab(tab)) return true;
+        if (tab.type === "sketch") return sketches.some((sketch) => sketch.path === projectPath);
+        if (tab.type === "storyboard") return storyboards.some((storyboard) => storyboard.path === projectPath);
+        return notes.some((note) => note.path === projectPath);
       };
       const nextOpenTabs = openTabs.filter(fileExistsForTab);
       const nextSplitTabs = splitTabs.filter(fileExistsForTab);
       const nextActiveTabId = nextActiveTabIdAfterFiltering(openTabs, nextOpenTabs, activeTabId);
       const nextSplitActiveTabId = nextActiveTabIdAfterFiltering(splitTabs, nextSplitTabs, splitActiveTabId);
-      const fileWasOpen = openTabs.some((tab) => isDocumentTab(tab) && tab.path === filePath)
-        || splitTabs.some((tab) => isDocumentTab(tab) && tab.path === filePath)
-        || activeSketchPath === filePath
-        || activeStoryboardPath === filePath
-        || activeNotePath === filePath;
+      const fileWasOpen = openTabs.some((tab) => isDocumentTab(tab) && pathMatchesDiscard(tab.path))
+        || splitTabs.some((tab) => isDocumentTab(tab) && pathMatchesDiscard(tab.path))
+        || pathMatchesDiscard(activeSketchPath)
+        || pathMatchesDiscard(activeStoryboardPath)
+        || pathMatchesDiscard(activeNotePath);
       set((state) => ({
         openTabs: nextOpenTabs,
         activeTabId: nextActiveTabId,
@@ -1951,38 +1992,38 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         splitActiveTabId: nextSplitActiveTabId,
         activeEditorGroup: nextSplitTabs.length > 0 ? activeEditorGroup : "main",
         editorReloadKey: fileWasOpen ? state.editorReloadKey + 1 : state.editorReloadKey,
-        editorReloadPath: fileWasOpen ? filePath : state.editorReloadPath,
+        editorReloadPath: fileWasOpen ? projectPath : state.editorReloadPath,
       }));
-      if (activeSketchPath === filePath) {
+      if (pathMatchesDiscard(activeSketchPath)) {
         set({
           activeSketchPath: null,
           activeSketch: null,
         });
-        if (sketches.some((sketch) => sketch.path === filePath)) {
-          await get().openSketch(filePath);
+        if (sketches.some((sketch) => sketch.path === projectPath)) {
+          await get().openSketch(projectPath);
         } else {
           set({ activeSketchPath: null, activeSketch: null });
           if (nextActiveTabId) get().setActiveTab(nextActiveTabId);
         }
-      } else if (activeStoryboardPath === filePath) {
+      } else if (pathMatchesDiscard(activeStoryboardPath)) {
         set({
           activeStoryboardPath: null,
           activeStoryboard: null,
         });
-        if (storyboards.some((storyboard) => storyboard.path === filePath)) {
-          await get().openStoryboard(filePath);
+        if (storyboards.some((storyboard) => storyboard.path === projectPath)) {
+          await get().openStoryboard(projectPath);
         } else {
           set({ activeStoryboardPath: null, activeStoryboard: null });
           if (nextActiveTabId) get().setActiveTab(nextActiveTabId);
         }
-      } else if (activeNotePath === filePath) {
+      } else if (pathMatchesDiscard(activeNotePath)) {
         set({
           activeNotePath: null,
           activeNoteContent: null,
           activeNoteLocked: false,
         });
-        if (notes.some((note) => note.path === filePath)) {
-          await get().openNote(filePath);
+        if (notes.some((note) => note.path === projectPath)) {
+          await get().openNote(projectPath);
         } else {
           set({ activeNotePath: null, activeNoteContent: null, activeNoteLocked: false });
           if (nextActiveTabId) get().setActiveTab(nextActiveTabId);
@@ -2000,10 +2041,10 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         });
       }
       get()._persistTabs();
-      globalThis.setTimeout(() => clearSuppressedEditorFlush(filePath), 100);
+      globalThis.setTimeout(() => clearSuppressedEditorFlushes(suppressedPaths), 100);
       await get().checkDirty();
     } catch (err) {
-      clearSuppressedEditorFlush(filePath);
+      clearSuppressedEditorFlushes(suppressedPaths);
       console.error("Failed to discard file:", err);
       useToastStore.getState().show(`Discard failed: ${err}`, 5000, "error");
       await get().checkDirty();

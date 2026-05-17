@@ -527,7 +527,7 @@ function SectionHeader({
         <span className="shrink-0 truncate">{title}</span>
         {scope && (
           <span
-            className="min-w-0 flex-1 truncate rounded-full border border-[rgb(var(--color-border))] px-1.5 py-0 text-[9px] font-medium normal-case tracking-normal text-[rgb(var(--color-text-secondary))]/80"
+            className="min-w-0 max-w-full shrink truncate rounded-full border border-[rgb(var(--color-border))] px-1.5 py-0 text-left text-[9px] font-medium normal-case tracking-normal text-[rgb(var(--color-text-secondary))]/80"
             title={scopeTitle}
           >
             {scope}

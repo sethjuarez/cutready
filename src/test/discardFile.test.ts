@@ -38,6 +38,7 @@ describe("discardFile", () => {
       activeNotePath: null,
       activeNoteContent: null,
       activeNoteLocked: false,
+      currentProject: null,
       sketches: [],
       storyboards: [],
       notes: [],
@@ -100,6 +101,61 @@ describe("discardFile", () => {
     vi.advanceTimersByTime(100);
     expect(shouldSuppressEditorFlush("demo.sk")).toBe(false);
     expect(useAppStore.getState().isDirty).toBe(false);
+  });
+
+  it("matches repo-scoped changed paths to project-relative open editors", async () => {
+    vi.useFakeTimers();
+    mockInvoke.mockImplementation((command: string) => {
+      switch (command) {
+        case "discard_file":
+          return Promise.resolve();
+        case "list_sketches":
+          return Promise.resolve([
+            { path: "demo.sk", title: "Restored sketch", state: "draft", row_count: 1, created_at: "", updated_at: "" },
+          ]);
+        case "list_storyboards":
+        case "list_notes":
+          return Promise.resolve([]);
+        case "get_sketch":
+          return Promise.resolve(restoredSketch);
+        case "has_unsaved_changes":
+          return Promise.resolve(false);
+        case "diff_working_tree":
+          return Promise.resolve([]);
+        case "set_workspace_state":
+          return Promise.resolve();
+        default:
+          return Promise.resolve(null);
+      }
+    });
+
+    useAppStore.setState({
+      currentProject: {
+        root: "D:\\repo\\project-a",
+        repo_root: "D:\\repo",
+        name: "Project A",
+      },
+      activeSketchPath: "demo.sk",
+      activeSketch: {
+        ...restoredSketch,
+        title: "Accidental edit",
+        rows: [],
+      },
+      openTabs: [{ id: "sketch-demo.sk", type: "sketch", path: "demo.sk", title: "Demo" }],
+      activeTabId: "sketch-demo.sk",
+    });
+
+    await useAppStore.getState().discardFile("project-a/demo.sk");
+
+    expect(mockInvoke).toHaveBeenCalledWith("discard_file", { filePath: "project-a/demo.sk" });
+    expect(mockInvoke).toHaveBeenCalledWith("get_sketch", { relativePath: "demo.sk" });
+    expect(useAppStore.getState().activeSketch).toEqual(restoredSketch);
+    expect(useAppStore.getState().editorReloadPath).toBe("demo.sk");
+    expect(shouldSuppressEditorFlush("project-a/demo.sk")).toBe(true);
+    expect(shouldSuppressEditorFlush("demo.sk")).toBe(true);
+    vi.advanceTimersByTime(100);
+    expect(shouldSuppressEditorFlush("project-a/demo.sk")).toBe(false);
+    expect(shouldSuppressEditorFlush("demo.sk")).toBe(false);
   });
 
   it("signals a remount when discarding a file that is only open in the split pane", async () => {
