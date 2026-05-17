@@ -519,13 +519,25 @@ mod tests {
     use std::fs;
     use tempfile::TempDir;
 
+    /// Convert a path to a proper file:// URI (handles Unix vs Windows).
+    fn path_to_file_url(path: &Path) -> String {
+        let path_str = path.display().to_string().replace('\\', "/");
+        if path_str.starts_with('/') {
+            format!("file://{}", path_str)
+        } else {
+            format!("file:///{}", path_str)
+        }
+    }
+
     /// Create a bare "remote" repo and a local repo with remote configured.
     fn setup_repos() -> (TempDir, TempDir) {
         let remote_dir = TempDir::new().unwrap();
         let local_dir = TempDir::new().unwrap();
 
-        // Init bare remote
+        // Init bare remote and set its HEAD to main (libgit2 may default to master)
         Repository::init_bare(remote_dir.path()).unwrap();
+        let bare_head = remote_dir.path().join("HEAD");
+        fs::write(&bare_head, "ref: refs/heads/main\n").unwrap();
 
         // Init local repo
         let local_repo = Repository::init(local_dir.path()).unwrap();
@@ -535,10 +547,7 @@ mod tests {
         fs::write(&head_path, "ref: refs/heads/main\n").unwrap();
 
         // Add remote — use platform-appropriate file URL
-        let remote_url = format!(
-            "file:///{}",
-            remote_dir.path().display().to_string().replace('\\', "/")
-        );
+        let remote_url = path_to_file_url(remote_dir.path());
         local_repo.remote("origin", &remote_url).unwrap();
 
         (remote_dir, local_dir)
@@ -632,10 +641,7 @@ mod tests {
 
         // Create a second local clone
         let clone_dir = TempDir::new().unwrap();
-        let clone_url = format!(
-            "file:///{}",
-            remote_dir.path().display().to_string().replace('\\', "/")
-        );
+        let clone_url = path_to_file_url(remote_dir.path());
         Repository::clone(&clone_url, clone_dir.path()).unwrap();
 
         // Make another commit in original and push
@@ -696,10 +702,7 @@ mod tests {
 
         // Clone a second copy
         let clone_dir = TempDir::new().unwrap();
-        let clone_url = format!(
-            "file:///{}",
-            remote_dir.path().display().to_string().replace('\\', "/")
-        );
+        let clone_url = path_to_file_url(remote_dir.path());
         Repository::clone(&clone_url, clone_dir.path()).unwrap();
 
         // Make 2 more commits in original and push
@@ -727,10 +730,7 @@ mod tests {
         push_remote(local_dir.path(), "origin", "main", None).unwrap();
 
         let clone_dir = TempDir::new().unwrap();
-        let clone_url = format!(
-            "file:///{}",
-            remote_dir.path().display().to_string().replace('\\', "/")
-        );
+        let clone_url = path_to_file_url(remote_dir.path());
         Repository::clone(&clone_url, clone_dir.path()).unwrap();
 
         // Pull with nothing new
@@ -757,10 +757,7 @@ mod tests {
 
         // Fetch in a clone to get remote tracking branches
         let clone_dir = TempDir::new().unwrap();
-        let clone_url = format!(
-            "file:///{}",
-            remote_dir.path().display().to_string().replace('\\', "/")
-        );
+        let clone_url = path_to_file_url(remote_dir.path());
         Repository::clone(&clone_url, clone_dir.path()).unwrap();
 
         let branches = list_remote_branches(clone_dir.path(), "origin").unwrap();

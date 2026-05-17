@@ -422,10 +422,7 @@ mod tests {
             assert!(!capabilities.supports_camera_format_discovery);
         }
 
-        assert_eq!(
-            capabilities.supports_click_through_prompter,
-            cfg!(target_os = "windows")
-        );
+        assert!(capabilities.supports_click_through_prompter);
     }
 
     #[cfg(target_os = "windows")]
