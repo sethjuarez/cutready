@@ -94,6 +94,19 @@ export function DiffViewer({ filePath }: { filePath: string }) {
   const isDeleted = diff.working_content === null;
   const oldText = diff.head_content ?? "";
   const newText = diff.working_content ?? "";
+  const isStructured = filePath.endsWith(".sk") || filePath.endsWith(".sb");
+
+  // For .sk/.sb files, show a semantic field-level diff
+  if (isStructured && !isNew && !isDeleted) {
+    return (
+      <div className="flex h-full flex-col bg-[rgb(var(--color-surface))]">
+        <DiffHeader filename={filename} status="modified" />
+        <div className="flex-1 overflow-auto p-4">
+          <StructuredDiff oldJson={oldText} newJson={newText} />
+        </div>
+      </div>
+    );
+  }
 
   if (isNew) {
     // New file — just show all lines as added
@@ -190,5 +203,166 @@ function LineNum({ num, dimmed }: { num: number | null; dimmed?: boolean }) {
     }`}>
       {num ?? ""}
     </span>
+  );
+}
+
+// --- Structured diff for .sk / .sb files ---
+
+interface FieldChange {
+  path: string;
+  type: "changed" | "added" | "removed";
+  oldValue?: string;
+  newValue?: string;
+}
+
+function collectChanges(oldObj: unknown, newObj: unknown, path: string = ""): FieldChange[] {
+  const changes: FieldChange[] = [];
+
+  if (oldObj === newObj) return changes;
+  if (oldObj === null || oldObj === undefined) {
+    changes.push({ path: path || "(root)", type: "added", newValue: summarize(newObj) });
+    return changes;
+  }
+  if (newObj === null || newObj === undefined) {
+    changes.push({ path: path || "(root)", type: "removed", oldValue: summarize(oldObj) });
+    return changes;
+  }
+
+  if (Array.isArray(oldObj) && Array.isArray(newObj)) {
+    const maxLen = Math.max(oldObj.length, newObj.length);
+    for (let i = 0; i < maxLen; i++) {
+      const childPath = `${path}[${i}]`;
+      if (i >= oldObj.length) {
+        changes.push({ path: childPath, type: "added", newValue: summarize(newObj[i]) });
+      } else if (i >= newObj.length) {
+        changes.push({ path: childPath, type: "removed", oldValue: summarize(oldObj[i]) });
+      } else {
+        changes.push(...collectChanges(oldObj[i], newObj[i], childPath));
+      }
+    }
+    return changes;
+  }
+
+  if (typeof oldObj === "object" && typeof newObj === "object" && oldObj !== null && newObj !== null) {
+    const allKeys = new Set([...Object.keys(oldObj as Record<string, unknown>), ...Object.keys(newObj as Record<string, unknown>)]);
+    for (const key of allKeys) {
+      const childPath = path ? `${path}.${key}` : key;
+      const oldVal = (oldObj as Record<string, unknown>)[key];
+      const newVal = (newObj as Record<string, unknown>)[key];
+      if (oldVal === undefined) {
+        changes.push({ path: childPath, type: "added", newValue: summarize(newVal) });
+      } else if (newVal === undefined) {
+        changes.push({ path: childPath, type: "removed", oldValue: summarize(oldVal) });
+      } else {
+        changes.push(...collectChanges(oldVal, newVal, childPath));
+      }
+    }
+    return changes;
+  }
+
+  // Primitive change
+  if (oldObj !== newObj) {
+    changes.push({ path: path || "(root)", type: "changed", oldValue: summarize(oldObj), newValue: summarize(newObj) });
+  }
+  return changes;
+}
+
+function summarize(val: unknown): string {
+  if (val === null || val === undefined) return "null";
+  if (typeof val === "string") return val.length > 80 ? `"${val.slice(0, 77)}…"` : `"${val}"`;
+  if (typeof val === "number" || typeof val === "boolean") return String(val);
+  if (Array.isArray(val)) return `[${val.length} item${val.length !== 1 ? "s" : ""}]`;
+  if (typeof val === "object") {
+    const keys = Object.keys(val);
+    return `{${keys.slice(0, 3).join(", ")}${keys.length > 3 ? ", …" : ""}}`;
+  }
+  return String(val);
+}
+
+function humanizePath(path: string): string {
+  // Make paths like "rows[2].narrative" more readable
+  return path
+    .replace(/^rows\[(\d+)\]/, (_, i) => `Row ${+i + 1}`)
+    .replace(/\.narrative$/, " → Narrative")
+    .replace(/\.actions$/, " → Actions")
+    .replace(/\.time$/, " → Time")
+    .replace(/\.screenshot$/, " → Screenshot")
+    .replace(/\.visual$/, " → Visual")
+    .replace(/^title$/, "Title")
+    .replace(/^description$/, "Description")
+    .replace(/^items\[(\d+)\]/, (_, i) => `Item ${+i + 1}`)
+    .replace(/^state$/, "State");
+}
+
+function StructuredDiff({ oldJson, newJson }: { oldJson: string; newJson: string }) {
+  let oldObj: unknown, newObj: unknown;
+  try { oldObj = JSON.parse(oldJson); } catch { return <FallbackMessage msg="Could not parse previous version" />; }
+  try { newObj = JSON.parse(newJson); } catch { return <FallbackMessage msg="Could not parse current version" />; }
+
+  const changes = collectChanges(oldObj, newObj);
+
+  if (changes.length === 0) {
+    return (
+      <div className="flex items-center justify-center py-8 text-[rgb(var(--color-text-secondary))] text-sm">
+        No differences found
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-1">
+      <div className="mb-3 text-[11px] text-[rgb(var(--color-text-secondary))]">
+        {changes.length} field{changes.length !== 1 ? "s" : ""} changed
+      </div>
+      {changes.map((change, i) => (
+        <div key={i} className={`rounded-md border px-3 py-2 text-[12px] ${
+          change.type === "added" ? "border-success/30 bg-success/5" :
+          change.type === "removed" ? "border-error/30 bg-error/5" :
+          "border-warning/30 bg-warning/5"
+        }`}>
+          <div className="flex items-center gap-2 mb-1">
+            <span className={`inline-block w-1.5 h-1.5 rounded-full ${
+              change.type === "added" ? "bg-success" :
+              change.type === "removed" ? "bg-error" :
+              "bg-warning"
+            }`} />
+            <span className="font-medium text-[rgb(var(--color-text))]">{humanizePath(change.path)}</span>
+            <span className={`text-[10px] ${
+              change.type === "added" ? "text-success" :
+              change.type === "removed" ? "text-error" :
+              "text-warning"
+            }`}>
+              {change.type}
+            </span>
+          </div>
+          {change.type === "changed" && (
+            <div className="ml-3.5 space-y-0.5">
+              <div className="flex items-start gap-2">
+                <span className="shrink-0 text-[10px] text-error font-medium">−</span>
+                <span className="text-[rgb(var(--color-text-secondary))] break-all">{change.oldValue}</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <span className="shrink-0 text-[10px] text-success font-medium">+</span>
+                <span className="text-[rgb(var(--color-text))] break-all">{change.newValue}</span>
+              </div>
+            </div>
+          )}
+          {change.type === "added" && change.newValue && (
+            <div className="ml-3.5 text-[rgb(var(--color-text))] break-all">{change.newValue}</div>
+          )}
+          {change.type === "removed" && change.oldValue && (
+            <div className="ml-3.5 text-[rgb(var(--color-text-secondary))] break-all line-through">{change.oldValue}</div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function FallbackMessage({ msg }: { msg: string }) {
+  return (
+    <div className="flex items-center justify-center py-8 text-[rgb(var(--color-text-secondary))] text-sm">
+      {msg}
+    </div>
   );
 }
