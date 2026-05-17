@@ -379,8 +379,8 @@ export function AppLayout() {
           {/* Activity bar on left (hidden on home) */}
           {view !== "home" && sidebarPosition === "left" && <Sidebar onFeedback={() => setFeedbackOpen(true)} />}
 
-          {/* Primary sidebar (hidden on home, global settings, workspace settings, chat) */}
-          {view !== "home" && view !== "settings" && view !== "workspace" && view !== "chat" && sidebarVisible && sidebarPosition === "left" && <PrimarySidebar />}
+          {/* Primary sidebar (hidden on home, settings, and chat) */}
+          {view !== "home" && view !== "settings" && view !== "chat" && sidebarVisible && sidebarPosition === "left" && <PrimarySidebar />}
 
           {/* Center column: content + output panel */}
           <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
@@ -390,13 +390,12 @@ export function AppLayout() {
               {(view === "project" || view === "sketch" || view === "assets" || view === "changes") && (isMerging ? <MergeConflictPanel /> : <StoryboardPanel />)}
               {view === "editor" && <div className="h-full overflow-y-auto"><ScriptEditorPanel /></div>}
               {view === "recording" && displaySettings.featureRecording && <div className="h-full overflow-y-auto"><RecordingPanel /></div>}
-              {view === "settings" && <div className="h-full overflow-y-auto"><SettingsPanel mode="global" /></div>}
-              {view === "workspace" && <div className="h-full overflow-y-auto"><SettingsPanel mode="workspace" /></div>}
+              {view === "settings" && <div className="h-full overflow-y-auto"><SettingsPanel /></div>}
               {view === "chat" && <div className="h-full overflow-hidden"><ChatPanel /></div>}
             </div>
 
             {/* Lower: output panel (hidden on home, settings, and chat views) */}
-            {view !== "home" && view !== "settings" && view !== "workspace" && view !== "chat" && outputVisible && (
+            {view !== "home" && view !== "settings" && view !== "chat" && outputVisible && (
               <>
                 <ResizeHandle direction="vertical" onResize={handleOutputResize} />
                 <div className="shrink-0 overflow-hidden" style={{ height: outputHeight }}>
@@ -409,7 +408,7 @@ export function AppLayout() {
           </div>
 
           {/* Primary sidebar on right (hidden on home, settings, and chat views) */}
-          {view !== "home" && view !== "settings" && view !== "workspace" && view !== "chat" && sidebarVisible && sidebarPosition === "right" && <PrimarySidebar />}
+          {view !== "home" && view !== "settings" && view !== "chat" && sidebarVisible && sidebarPosition === "right" && <PrimarySidebar />}
 
           {/* Activity bar on right (hidden on home) */}
           {view !== "home" && sidebarPosition === "right" && <Sidebar onFeedback={() => setFeedbackOpen(true)} />}

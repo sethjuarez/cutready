@@ -274,7 +274,7 @@ export function ChangesPanel() {
       )}
 
       {changesExpanded && (
-        <div className="overflow-y-auto px-1 py-0.5" style={{ maxHeight: changedFiles.length > 0 ? "40%" : undefined }}>
+        <div className="overflow-y-auto px-1 py-1" style={{ maxHeight: changedFiles.length > 0 ? "40%" : undefined }}>
           {changedFiles.length === 0 ? (
             <div className="flex items-center gap-2 px-2 py-3 text-[10px] text-[rgb(var(--color-text-secondary))]">
               <Camera className="h-3.5 w-3.5 opacity-40" />
@@ -472,14 +472,14 @@ function SectionHeader({
 function FileGroup({ label, files, icon }: { label: string; files: DiffEntry[]; icon: ReactNode }) {
   return (
     <div className="mb-0.5">
-      <div className="flex items-center gap-1.5 px-3 py-1 text-[10px] font-medium uppercase tracking-wider text-[rgb(var(--color-text-secondary))]">
+      <div className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-medium uppercase tracking-wider text-[rgb(var(--color-text-secondary))]">
         {icon}
         {label} ({files.length})
       </div>
       {files.map((file) => (
         <div
           key={file.path}
-          className="group flex cursor-default items-center gap-2 rounded px-3 py-1 transition-colors hover:bg-[rgb(var(--color-surface-alt))]"
+          className="group flex cursor-default items-center gap-2 rounded px-3 py-1.5 transition-colors hover:bg-[rgb(var(--color-surface-alt))]"
           title={file.path}
         >
           <span className="flex-1 truncate text-[12px] text-[rgb(var(--color-text))]">

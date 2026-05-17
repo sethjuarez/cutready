@@ -28,7 +28,7 @@ import type {
 } from "../types/sketch";
 
 /** The panels / views available in the app. */
-export type AppView = "home" | "project" | "sketch" | "assets" | "editor" | "recording" | "settings" | "workspace" | "chat" | "changes";
+export type AppView = "home" | "project" | "sketch" | "assets" | "editor" | "recording" | "settings" | "chat" | "changes";
 
 /** Sidebar position. */
 export type SidebarPosition = "left" | "right";

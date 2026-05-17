@@ -33,11 +33,11 @@
     "fs:default",
     {
       "identifier": "fs:allow-read",
-      "allow": [{ "path": "**" }]
+      "allow": [{ "path": "**" }, { "path": "$HOME/**" }, { "path": "$DOCUMENT/**" }]
     },
     {
       "identifier": "fs:allow-read-file",
-      "allow": [{ "path": "**" }]
+      "allow": [{ "path": "**" }, { "path": "$HOME/**" }, { "path": "$DOCUMENT/**" }]
     },
     {
       "identifier": "core:app:default"

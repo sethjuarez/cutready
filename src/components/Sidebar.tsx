@@ -1,5 +1,5 @@
 import { type ReactNode, useCallback } from "react";
-import { House, Monitor, SlidersHorizontal, Images, LayoutList, MessageSquare, GitCompareArrows } from "lucide-react";
+import { House, SlidersHorizontal, Images, LayoutList, MessageSquare, GitCompareArrows } from "lucide-react";
 import type { AppView } from "../stores/appStore";
 import { useAppStore } from "../stores/appStore";
 import { usePopover } from "../hooks/usePopover";
@@ -24,11 +24,6 @@ const navItems: { id: AppView; label: string; icon: ReactNode }[] = [
     id: "changes",
     label: "Changes",
     icon: <GitCompareArrows className="w-4 h-4" />,
-  },
-  {
-    id: "workspace",
-    label: "Workspace",
-    icon: <Monitor className="w-4 h-4" />,
   },
 ];
 
@@ -61,7 +56,7 @@ export function Sidebar({ onFeedback }: { onFeedback?: () => void }) {
       >
         {navItems.map((item) => {
           const isActive = view === item.id;
-          const requiresProject = item.id === "project" || item.id === "assets" || item.id === "workspace" || item.id === "changes";
+          const requiresProject = item.id === "project" || item.id === "assets" || item.id === "changes";
           const isDisabled = requiresProject && !currentProject;
 
           return (

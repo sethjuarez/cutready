@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { useAppStore } from "../stores/appStore";
 import { useSettings, useSettingsStore, type AgentPreset } from "../hooks/useSettings";
 import { useRecordingDevices } from "../hooks/useRecordingDevices";
 import { useTheme, type ThemePreference } from "../hooks/useTheme";
@@ -104,17 +105,37 @@ export function canFetchModelsFor(settings: {
       : !!settings.aiApiKey || (isFoundry && !!settings.aiEndpoint);
 }
 
-export function SettingsPanel({ mode = "global" }: { mode?: "global" | "workspace" }) {
+export function SettingsPanel() {
   const { settings, updateSetting, loaded } = useSettings();
-  const [activeTab, setActiveTab] = useState<SettingsTab>(mode === "workspace" ? "repository" : "display");
+  const currentProject = useAppStore((s) => s.currentProject);
+  const [scope, setScope] = useState<"app" | "workspace">("app");
+  const [activeTab, setActiveTab] = useState<SettingsTab>("display");
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [loadingModels, setLoadingModels] = useState(false);
   const [modelError, setModelError] = useState("");
   const [modelFilter, setModelFilter] = useState("");
 
+  const globalTabs: SettingsTab[] = settings.featureRecording
+    ? ["display", "themes", "recording", "ai", "agents", "feedback", "updates", "experimental"]
+    : ["display", "themes", "ai", "agents", "feedback", "updates", "experimental"];
+  const workspaceTabs: SettingsTab[] = ["repository", "memory", "display", "themes", "ai", "agents"];
+  const tabs: SettingsTab[] = scope === "workspace" ? workspaceTabs : globalTabs;
+
   // OAuth flow state
   const [oauthStatus, setOauthStatus] = useState<"idle" | "waiting" | "polling" | "success" | "error">("idle");
   const [oauthError, setOauthError] = useState("");
+
+  useEffect(() => {
+    if (!currentProject && scope !== "app") {
+      setScope("app");
+      setActiveTab("display");
+      return;
+    }
+
+    if (!tabs.includes(activeTab)) {
+      setActiveTab(scope === "workspace" ? "repository" : "display");
+    }
+  }, [activeTab, currentProject, scope, tabs]);
 
   const buildConfig = () => buildProviderConfig(settings);
 
@@ -189,10 +210,6 @@ export function SettingsPanel({ mode = "global" }: { mode?: "global" | "workspac
   const hasToken = !!settings.aiAccessToken;
   const canFetchModels = canFetchModelsFor(settings);
 
-  // Tabs depend on mode
-  const globalTabs = (["display", "themes", ...(settings.featureRecording ? ["recording"] : []), "ai", "agents", "feedback", "updates", "experimental"] as const);
-  const workspaceTabs = ["repository", "memory", "display", "themes", "ai", "agents"] as const;
-  const tabs = mode === "workspace" ? workspaceTabs : globalTabs;
   const tabLabels: Record<string, string> = {
     display: "Display",
     themes: "Themes",
@@ -209,13 +226,44 @@ export function SettingsPanel({ mode = "global" }: { mode?: "global" | "workspac
   return (
     <div className="max-w-4xl mx-auto px-6 py-10">
       <h1 className="text-2xl font-semibold tracking-tight mb-2">
-        {mode === "workspace" ? "Workspace Settings" : "Settings"}
+        {scope === "workspace" ? "Workspace Settings" : "Settings"}
       </h1>
-      <p className="text-sm text-[rgb(var(--color-text-secondary))] mb-6">
-        {mode === "workspace"
+      <p className="text-sm text-[rgb(var(--color-text-secondary))] mb-4">
+        {scope === "workspace"
           ? "Settings for this workspace. Overrides apply only here."
           : "Global preferences that apply to all workspaces."}
       </p>
+
+      {currentProject && (
+        <div className="flex items-center gap-1 mb-6 p-1 rounded-lg bg-[rgb(var(--color-surface-alt))] w-fit">
+          <button
+            onClick={() => {
+              setScope("app");
+              setActiveTab("display");
+            }}
+            className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+              scope === "app"
+                ? "bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text))] shadow-sm"
+                : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))]"
+            }`}
+          >
+            App
+          </button>
+          <button
+            onClick={() => {
+              setScope("workspace");
+              setActiveTab("repository");
+            }}
+            className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+              scope === "workspace"
+                ? "bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text))] shadow-sm"
+                : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))]"
+            }`}
+          >
+            Workspace
+          </button>
+        </div>
+      )}
 
       {/* Tab bar */}
       <div className="flex items-stretch border-b border-[rgb(var(--color-border))] mb-6">
@@ -223,12 +271,9 @@ export function SettingsPanel({ mode = "global" }: { mode?: "global" | "workspac
           <button
             key={tab}
             className={tabBtnClass(activeTab === tab)}
-            onClick={() => setActiveTab(tab as SettingsTab)}
+            onClick={() => setActiveTab(tab)}
           >
             {tabLabels[tab]}
-            {mode === "workspace" && tab !== "repository" && (
-              <span className="ml-1.5 text-[10px] text-[rgb(var(--color-text-secondary))]" title="Override global setting for this workspace">⟳</span>
-            )}
           </button>
         ))}
       </div>
