@@ -9,6 +9,55 @@
 Covector manages this changelog. Do not edit manually.
 Each release section is generated from `.changes/*.md` files.
 
+## [1.7.0](https://github.com/sethjuarez/cutready/compare/v1.6.0...v1.7.0) (2026-05-17)
+
+
+### Features
+
+* add Changes panel with activity bar icon and badge ([9b83ad0](https://github.com/sethjuarez/cutready/commit/9b83ad000aa30e00bf9597e732a9893366091425))
+* add file diff content backend and reorder Changes tab ([4fda605](https://github.com/sethjuarez/cutready/commit/4fda605a94c120129597e54fcc0bbbb87d7b4c55))
+* add Semantic/Split/Unified toggle for .sk/.sb diff views ([8527cda](https://github.com/sethjuarez/cutready/commit/8527cda0f8a6ce5a8aa13a95ecd1b8129b672ea6))
+* consolidate Changes panel as single home for files, snapshots, and sync ([333a6d6](https://github.com/sethjuarez/cutready/commit/333a6d6fee426c904a2f363430545c53fd84b170))
+* cross-platform ProjectImage component for macOS image rendering ([5c63019](https://github.com/sethjuarez/cutready/commit/5c6301973eff9bd2425a187ce133b117f865d371))
+* fullscreen presentation window for all present modes ([b25e43c](https://github.com/sethjuarez/cutready/commit/b25e43c9489ed0deb07069b04261f6ae53bdc5ec))
+* GitHub-style split/unified diff viewer with hunk grouping ([4ce3fce](https://github.com/sethjuarez/cutready/commit/4ce3fcec08694374ec2c351d178b21746c8e17a2))
+* hide recording behind featureRecording settings flag ([bce430a](https://github.com/sethjuarez/cutready/commit/bce430a6a39b093d213299421f704dcce48f6081))
+* macOS native window chrome and platform fixes ([eb0cde3](https://github.com/sethjuarez/cutready/commit/eb0cde3cb5f12d169118708ee52f96566f951e15))
+* macOS recording via avfoundation and entitlements ([b0091f3](https://github.com/sethjuarez/cutready/commit/b0091f31750a215297f930bfa11a2eb7ee48ac49))
+* **merge:** backend conflict resolution preserving non-conflicting edits ([ec7c7b3](https://github.com/sethjuarez/cutready/commit/ec7c7b39d5dc11848d83e6abbf0fd0a20e76d615))
+* move Home to bottom bar and add diff viewer for changed files ([caa60b3](https://github.com/sethjuarez/cutready/commit/caa60b3eaccec50dadd951d3016b798eb1eed4c7))
+* **recording:** macOS system audio via loopback device detection ([a42c6a5](https://github.com/sethjuarez/cutready/commit/a42c6a5b44ea37952ea651106897fb7dcddcf3e9))
+* **recording:** native macOS system audio via ScreenCaptureKit ([fc0e092](https://github.com/sethjuarez/cutready/commit/fc0e092da5bb55d5db18715e8368fa628a46e1dd))
+* semantic diff for sketches and improved changes hierarchy ([3117f2d](https://github.com/sethjuarez/cutready/commit/3117f2d92710f0de1f1700850fb6874720037053))
+* **settings:** add Experimental tab for feature flags ([3a4de06](https://github.com/sethjuarez/cutready/commit/3a4de069039bbcaba1c766bc97fa305080827da4))
+* simplify activity bar and normalize sidebar styling ([bfdd0fc](https://github.com/sethjuarez/cutready/commit/bfdd0fc43df2c4c5332cca8edd1183c6eb50ee4d))
+* split diff with linked scroll between left and right panes ([4dc0f57](https://github.com/sethjuarez/cutready/commit/4dc0f5781cbb709453240adec112782bd5b975d3))
+* unify settings panel and fix macOS image import ([181f03d](https://github.com/sethjuarez/cutready/commit/181f03d7d44b76d1bdf989ce96b8b4d956bfc472))
+
+
+### Bug Fixes
+
+* add Swift runtime rpath for screencapturekit on macOS ([4cc9fa2](https://github.com/sethjuarez/cutready/commit/4cc9fa23b0174abfe6fb3af1773c052b30b4c0eb))
+* commit .gitignore with snapshots instead of hiding it ([3d2f42a](https://github.com/sethjuarez/cutready/commit/3d2f42aa5e4319b89ac01371fb673432bb37373d))
+* dotfiles no longer trigger false dirty state ([ecea1e7](https://github.com/sethjuarez/cutready/commit/ecea1e7e1e453e4f8bd06e9fc8e8509061a046e4))
+* friendlier diff toggle labels for non-technical users ([ff03c42](https://github.com/sethjuarez/cutready/commit/ff03c42a677e9ee6605b96974742bcdb6e54b863))
+* hide internal files (.gitignore, .cutready/settings) from Changes panel ([5862867](https://github.com/sethjuarez/cutready/commit/5862867662d06b7ab5cce31f89a64b10e576959e))
+* macOS global shortcuts, browser detection, and compiler warnings ([b970fbd](https://github.com/sethjuarez/cutready/commit/b970fbda0785abd4d95242814f00fcb3928684a4))
+* **merge:** add safety guards for conflict resolution ([4d8dc24](https://github.com/sethjuarez/cutready/commit/4d8dc249300e76df395596532830e18a9764b9a9))
+* **merge:** fix mixed text merge silently dropping theirs selections ([6141263](https://github.com/sethjuarez/cutready/commit/614126373bc5cfd16e6b8f5ff2ff6b54e2d51f7b))
+* **merge:** polish merge conflict UI for non-technical users ([db9dbfc](https://github.com/sethjuarez/cutready/commit/db9dbfc32dff449910478b3448bd0d9f5844b6c5))
+* **recording:** cfg-gate build_ffmpeg_camera_args to Windows-only ([bb13291](https://github.com/sethjuarez/cutready/commit/bb13291198efe3aca46e30aa509fa922766c41b3))
+* **recording:** detect FFmpeg startup failures and cfg-gate Windows tests ([b94ef3d](https://github.com/sethjuarez/cutready/commit/b94ef3dd4c436f60a5426674d17237514e4c07e4))
+* **recording:** macOS screen capture permission and device mapping ([944ea9f](https://github.com/sethjuarez/cutready/commit/944ea9fd14ad32e65dc17a79b972bf76348f6477))
+* **recording:** manual window drag on macOS for prompter and recorder ([9b3bf45](https://github.com/sethjuarez/cutready/commit/9b3bf458f18d379d86713612c302aa32c8ec1d0b))
+* **recording:** transparent fullscreen overlays on macOS ([c1dede1](https://github.com/sethjuarez/cutready/commit/c1dede1c2119095851713e7e68726d96741dbd52))
+* robust fullscreen preview launch without xcap dependency ([3f9e84a](https://github.com/sethjuarez/cutready/commit/3f9e84ad8fce025c526112cb57b2e8a1c462bd57))
+* suppress WKWebView event-listener race condition errors ([57fd5ba](https://github.com/sethjuarez/cutready/commit/57fd5ba4fec4fc61877d68308cb6642c661e6049))
+* **test:** fix cross-platform test failures on macOS ([093fe7a](https://github.com/sethjuarez/cutready/commit/093fe7ab3202ff5a1865cd19949f7da07cb73b1a))
+* **versioning:** add dirty-state guard on destructive operations ([06eb65e](https://github.com/sethjuarez/cutready/commit/06eb65eba11dae2310177639b5b5eb748ac1db73))
+* **versioning:** add project operation lock to prevent concurrent corruption ([be51960](https://github.com/sethjuarez/cutready/commit/be51960a010372b918d5b2500936d1946eb24937))
+* **versioning:** parse push rejection into user-friendly error ([6076021](https://github.com/sethjuarez/cutready/commit/6076021091ebf8486c49810c02257caed042db0c))
+
 ## [1.6.0](https://github.com/sethjuarez/cutready/compare/v1.5.1...v1.6.0) (2026-05-15)
 
 
