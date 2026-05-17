@@ -10,6 +10,7 @@ import {
   GitBranch,
   Image,
   Sparkles,
+  FileDiff,
 } from "lucide-react";
 
 interface IconProps {
@@ -50,4 +51,9 @@ export function ImageIcon({ size = 14, className = "" }: IconProps) {
 /** Visual icon — sparkles, representing a generated visual/animation. */
 export function VisualIcon({ size = 14, className = "" }: IconProps) {
   return <Sparkles width={size} height={size} className={className} />;
+}
+
+/** Diff icon — file diff, representing a change comparison. */
+export function DiffIcon({ size = 14, className = "" }: IconProps) {
+  return <FileDiff width={size} height={size} className={className} />;
 }

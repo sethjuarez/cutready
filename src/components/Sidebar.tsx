@@ -6,11 +6,6 @@ import { usePopover } from "../hooks/usePopover";
 
 const navItems: { id: AppView; label: string; icon: ReactNode }[] = [
   {
-    id: "home",
-    label: "Home",
-    icon: <House className="w-4 h-4" />,
-  },
-  {
     id: "project",
     label: "Project",
     icon: <LayoutList className="w-4 h-4" />,
@@ -94,10 +89,36 @@ export function Sidebar({ onFeedback }: { onFeedback?: () => void }) {
           );
         })}
 
-        {/* Spacer pushes settings gear to bottom */}
+        {/* Spacer pushes bottom items down */}
         <div className="flex-1" />
 
-        {/* Feedback — pinned above settings */}
+        {/* Home — pinned to bottom */}
+        {(() => {
+          const isActive = view === "home";
+          return (
+            <button
+              onClick={() => setView("home")}
+              className={`
+                flex items-center justify-center w-10 h-10 rounded-lg transition-colors relative
+                ${
+                  isActive
+                    ? "bg-[rgb(var(--color-accent))]/15 text-[rgb(var(--color-accent))]"
+                    : "text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
+                }
+              `}
+              title="Home"
+            >
+              <House className="w-4 h-4" />
+              {isActive && (
+                <span className={`absolute top-1/4 h-1/2 w-[2px] rounded-full bg-[rgb(var(--color-accent))] ${
+                  isRight ? "right-[-6px]" : "left-[-6px]"
+                }`} />
+              )}
+            </button>
+          );
+        })()}
+
+        {/* Feedback */}
         {onFeedback && (
           <button
             onClick={onFeedback}

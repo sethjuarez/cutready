@@ -52,7 +52,7 @@ export interface SidebarOrder {
 /** An open tab in the editor area. */
 export interface EditorTab {
   id: string;
-  type: "sketch" | "storyboard" | "note" | "history" | "asset";
+  type: "sketch" | "storyboard" | "note" | "history" | "asset" | "diff";
   path: string;
   title: string;
 }

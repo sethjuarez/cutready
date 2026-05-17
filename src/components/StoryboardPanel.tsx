@@ -4,6 +4,7 @@ import { StoryboardView } from "./StoryboardView";
 import { SketchForm } from "./SketchForm";
 import { NoteEditor } from "./NoteEditor";
 import { AssetViewer } from "./AssetViewer";
+import { DiffViewer } from "./DiffViewer";
 import { ChatPanel } from "./ChatPanel";
 import { ResizeHandle } from "./ResizeHandle";
 import { TabBar } from "./TabBar";
@@ -34,6 +35,7 @@ export function StoryboardPanel() {
   const activeTab = openTabs.find((t) => t.id === activeTabId);
   const isHistoryTab = activeTab?.type === "history";
   const isAssetTab = activeTab?.type === "asset";
+  const isDiffTab = activeTab?.type === "diff";
 
   const [splitWidth, setSplitWidth] = useState<number | null>(null);
   const secondaryOnLeft = sidebarPosition === "right";
@@ -96,6 +98,8 @@ export function StoryboardPanel() {
               >
                 <HistoryGraphTab />
               </ErrorBoundary>
+            ) : isDiffTab && activeTab ? (
+              <DiffViewer filePath={activeTab.path} />
             ) : isAssetTab && activeTab ? (
               <AssetViewer assetPath={activeTab.path} />
             ) : activeSketch ? (

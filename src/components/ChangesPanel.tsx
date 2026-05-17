@@ -470,36 +470,40 @@ function SectionHeader({
 }
 
 function FileGroup({ label, files, icon }: { label: string; files: DiffEntry[]; icon: ReactNode }) {
+  const openTab = useAppStore((s) => s.openTab);
+
   return (
     <div className="mb-0.5">
-      <div className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-medium uppercase tracking-wider text-[rgb(var(--color-text-secondary))]">
+      <div className="flex items-center gap-1.5 px-3 py-1 text-[10px] font-medium uppercase tracking-wider text-[rgb(var(--color-text-secondary))]">
         {icon}
         {label} ({files.length})
       </div>
-      {files.map((file) => (
-        <div
-          key={file.path}
-          className="group flex cursor-default items-center gap-2 rounded px-3 py-1.5 transition-colors hover:bg-[rgb(var(--color-surface-alt))]"
-          title={file.path}
-        >
-          <span className="flex-1 truncate text-[12px] text-[rgb(var(--color-text))]">
-            {formatPath(file.path)}
-          </span>
-          {(file.additions > 0 || file.deletions > 0) && (
-            <span className="shrink-0 text-[10px] text-[rgb(var(--color-text-secondary))] opacity-0 transition-opacity group-hover:opacity-100">
-              {file.additions > 0 && <span className="text-success">+{file.additions}</span>}
-              {file.additions > 0 && file.deletions > 0 && " "}
-              {file.deletions > 0 && <span className="text-error">-{file.deletions}</span>}
+      {files.map((file) => {
+        const parts = file.path.split("/");
+        const filename = parts.pop() ?? file.path;
+        const dir = parts.join("/");
+        return (
+          <button
+            key={file.path}
+            onClick={() => openTab({ type: "diff", path: file.path, title: `${filename} (diff)` })}
+            className="group flex w-full cursor-pointer items-center gap-2 rounded px-3 py-1.5 text-left transition-colors hover:bg-[rgb(var(--color-surface-alt))]"
+            title={`View diff: ${file.path}`}
+          >
+            <span className="flex flex-1 items-baseline gap-1 overflow-hidden">
+              <span className="truncate text-[12px] font-medium text-[rgb(var(--color-text))]">{filename}</span>
+              {dir && (
+                <span className="shrink-0 text-[10px] text-[rgb(var(--color-text-secondary))]/60">{dir}/</span>
+              )}
             </span>
-          )}
-        </div>
-      ))}
+            {(file.additions > 0 || file.deletions > 0) && (
+              <span className="shrink-0 flex items-center gap-1 text-[10px] text-[rgb(var(--color-text-secondary))] opacity-0 transition-opacity group-hover:opacity-100">
+                {file.additions > 0 && <span className="text-success">+{file.additions}</span>}
+                {file.deletions > 0 && <span className="text-error">-{file.deletions}</span>}
+              </span>
+            )}
+          </button>
+        );
+      })}
     </div>
   );
-}
-
-function formatPath(path: string): string {
-  const parts = path.split("/");
-  if (parts.length <= 1) return path;
-  return parts[parts.length - 1];
 }

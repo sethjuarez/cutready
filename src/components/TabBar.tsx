@@ -1,7 +1,7 @@
 import { useAppStore } from "../stores/appStore";
 import type { EditorTab } from "../stores/appStore";
 import { useToastStore } from "../stores/toastStore";
-import { SketchIcon, StoryboardIcon, NoteIcon, HistoryIcon, ImageIcon, VisualIcon } from "./Icons";
+import { SketchIcon, StoryboardIcon, NoteIcon, HistoryIcon, ImageIcon, VisualIcon, DiffIcon } from "./Icons";
 import { usePopover } from "../hooks/usePopover";
 import React, { useCallback, useRef, useState } from "react";
 import { Copy, LayoutGrid, X } from "lucide-react";
@@ -236,6 +236,7 @@ function Tab({
     tab.type === "sketch" ? "Sketch"
     : tab.type === "storyboard" ? "Storyboard"
     : tab.type === "history" ? "History"
+    : tab.type === "diff" ? "Diff"
     : isImage ? "Image"
     : isVisual ? "Visual"
     : "Note";
@@ -248,16 +249,19 @@ function Tab({
         ? { bar: "bg-success", icon: "text-success", tint: "bg-success" }
         : tab.type === "history"
           ? { bar: "bg-sky-500", icon: "text-sky-500", tint: "bg-sky-500" }
-          : isImage
-            ? { bar: "bg-violet-500", icon: "text-violet-500", tint: "bg-violet-500" }
-            : isVisual
-              ? { bar: "bg-amber-500", icon: "text-amber-500", tint: "bg-amber-500" }
-              : { bar: "bg-rose-500", icon: "text-rose-500", tint: "bg-rose-500" };
+          : tab.type === "diff"
+            ? { bar: "bg-orange-500", icon: "text-orange-500", tint: "bg-orange-500" }
+            : isImage
+              ? { bar: "bg-violet-500", icon: "text-violet-500", tint: "bg-violet-500" }
+              : isVisual
+                ? { bar: "bg-amber-500", icon: "text-amber-500", tint: "bg-amber-500" }
+                : { bar: "bg-rose-500", icon: "text-rose-500", tint: "bg-rose-500" };
 
   const TabIcon =
     tab.type === "sketch" ? SketchIcon
     : tab.type === "storyboard" ? StoryboardIcon
     : tab.type === "history" ? HistoryIcon
+    : tab.type === "diff" ? DiffIcon
     : isImage ? ImageIcon
     : isVisual ? VisualIcon
     : NoteIcon;
