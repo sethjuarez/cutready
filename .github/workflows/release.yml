@@ -25,6 +25,8 @@ jobs:
       tag: ${{ steps.tag.outputs.tag }}
       version: ${{ steps.tag.outputs.version }}
     steps:
+      - uses: actions/checkout@v4
+
       - name: Resolve tag
         id: tag
         run: |
