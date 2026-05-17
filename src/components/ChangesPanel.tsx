@@ -558,6 +558,7 @@ function formatRemoteLabel(url: string): string {
 function FileGroup({ label, files, icon }: { label: string; files: DiffEntry[]; icon: ReactNode }) {
   const openTab = useAppStore((s) => s.openTab);
   const discardFile = useAppStore((s) => s.discardFile);
+  const [confirmPath, setConfirmPath] = useState<string | null>(null);
 
   return (
     <div className="mb-1">
@@ -587,13 +588,35 @@ function FileGroup({ label, files, icon }: { label: string; files: DiffEntry[]; 
                   </span>
                 )}
               </button>
-              <button
-                onClick={() => void discardFile(file.path)}
-                className="shrink-0 rounded p-0.5 text-[rgb(var(--color-text-secondary))] opacity-0 transition-colors hover:text-error group-hover:opacity-100"
-                title={`Discard changes to ${file.path}`}
-              >
-                <X className="h-3 w-3" />
-              </button>
+              {confirmPath === file.path ? (
+                <div className="flex shrink-0 items-center gap-1 pr-1">
+                  <button
+                    onClick={() => {
+                      setConfirmPath(null);
+                      void discardFile(file.path);
+                    }}
+                    className="rounded bg-error px-1.5 py-0.5 text-[9px] font-medium text-[rgb(var(--color-accent-fg))] transition-colors hover:bg-error/80"
+                    title={`Discard changes to ${file.path}`}
+                  >
+                    Discard
+                  </button>
+                  <button
+                    onClick={() => setConfirmPath(null)}
+                    className="rounded px-1 py-0.5 text-[9px] text-[rgb(var(--color-text-secondary))] transition-colors hover:text-[rgb(var(--color-text))]"
+                    title="Cancel discard"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setConfirmPath(file.path)}
+                  className="shrink-0 rounded p-0.5 text-[rgb(var(--color-text-secondary))] opacity-0 transition-colors hover:text-error group-hover:opacity-100"
+                  title={`Discard changes to ${file.path}`}
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              )}
             </div>
           );
         })}

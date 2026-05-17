@@ -1834,6 +1834,40 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await get().loadSketches();
       await get().loadStoryboards();
       await get().loadNotes();
+      const {
+        activeSketchPath,
+        activeStoryboardPath,
+        activeNotePath,
+        sketches,
+        storyboards,
+        notes,
+        openTabs,
+      } = get();
+      if (activeSketchPath === filePath) {
+        if (sketches.some((sketch) => sketch.path === filePath)) {
+          await get().openSketch(filePath);
+        } else {
+          const tab = openTabs.find((candidate) => candidate.type === "sketch" && candidate.path === filePath);
+          if (tab) get().closeTab(tab.id);
+          else set({ activeSketchPath: null, activeSketch: null });
+        }
+      } else if (activeStoryboardPath === filePath) {
+        if (storyboards.some((storyboard) => storyboard.path === filePath)) {
+          await get().openStoryboard(filePath);
+        } else {
+          const tab = openTabs.find((candidate) => candidate.type === "storyboard" && candidate.path === filePath);
+          if (tab) get().closeTab(tab.id);
+          else set({ activeStoryboardPath: null, activeStoryboard: null });
+        }
+      } else if (activeNotePath === filePath) {
+        if (notes.some((note) => note.path === filePath)) {
+          await get().openNote(filePath);
+        } else {
+          const tab = openTabs.find((candidate) => candidate.type === "note" && candidate.path === filePath);
+          if (tab) get().closeTab(tab.id);
+          else set({ activeNotePath: null, activeNoteContent: null, activeNoteLocked: false });
+        }
+      }
       await get().checkDirty();
     } catch (err) {
       console.error("Failed to discard file:", err);
