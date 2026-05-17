@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Columns2, Rows2, LayoutList } from "lucide-react";
 
@@ -250,12 +250,27 @@ function ToggleButton({ active, onClick, icon, label, border }: {
 function SplitDiffView({ oldText, newText, isNew }: { oldText: string; newText: string; isNew?: boolean }) {
   const diffLines = useMemo(() => computeDiffLines(oldText, newText), [oldText, newText]);
   const hunks = useMemo(() => groupIntoHunks(diffLines), [diffLines]);
+  const leftRef = useRef<HTMLDivElement>(null);
+  const rightRef = useRef<HTMLDivElement>(null);
+  const syncing = useRef(false);
+
+  // Sync scroll between left and right panes
+  const handleScroll = useCallback((source: "left" | "right") => {
+    if (syncing.current) return;
+    syncing.current = true;
+    const from = source === "left" ? leftRef.current : rightRef.current;
+    const to = source === "left" ? rightRef.current : leftRef.current;
+    if (from && to) {
+      to.scrollTop = from.scrollTop;
+      to.scrollLeft = from.scrollLeft;
+    }
+    requestAnimationFrame(() => { syncing.current = false; });
+  }, []);
 
   // Build left (old) and right (new) line pairs for side-by-side display
   const pairs = useMemo(() => {
     const result: { left: DiffLine | null; right: DiffLine | null }[] = [];
     for (const hunk of hunks) {
-      // Collect removals and additions in sequence, pair them
       let i = 0;
       while (i < hunk.length) {
         const line = hunk[i];
@@ -263,19 +278,16 @@ function SplitDiffView({ oldText, newText, isNew }: { oldText: string; newText: 
           result.push({ left: line, right: line });
           i++;
         } else if (line.type === "removed") {
-          // Collect consecutive removals
           const removals: DiffLine[] = [];
           while (i < hunk.length && hunk[i].type === "removed") {
             removals.push(hunk[i]);
             i++;
           }
-          // Collect consecutive additions after
           const additions: DiffLine[] = [];
           while (i < hunk.length && hunk[i].type === "added") {
             additions.push(hunk[i]);
             i++;
           }
-          // Pair them up
           const maxLen = Math.max(removals.length, additions.length);
           for (let k = 0; k < maxLen; k++) {
             result.push({
@@ -288,50 +300,59 @@ function SplitDiffView({ oldText, newText, isNew }: { oldText: string; newText: 
           i++;
         }
       }
-      // Add separator between hunks
+      // Separator between hunks
       result.push({ left: { type: "context", oldNum: null, newNum: null, text: "⋯" }, right: { type: "context", oldNum: null, newNum: null, text: "⋯" } });
     }
-    // Remove trailing separator
     if (result.length > 0 && result[result.length - 1].left?.text === "⋯") result.pop();
     return result;
   }, [hunks]);
 
   return (
-    <div className="font-mono text-[12px] leading-5 min-w-fit">
-      {/* Header row */}
-      <div className="flex sticky top-0 z-10 border-b border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-inset))]">
-        <div className="flex-1 px-3 py-1 text-[10px] font-medium text-[rgb(var(--color-text-secondary))] uppercase tracking-wider border-r border-[rgb(var(--color-border))]">
+    <div className="flex h-full font-mono text-[12px] leading-5">
+      {/* Left pane */}
+      <div className="flex-1 flex flex-col min-w-0 border-r border-[rgb(var(--color-border))]">
+        <div className="shrink-0 px-3 py-1 text-[10px] font-medium text-[rgb(var(--color-text-secondary))] uppercase tracking-wider border-b border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-inset))]">
           {isNew ? "(New file)" : "Last Snapshot"}
         </div>
-        <div className="flex-1 px-3 py-1 text-[10px] font-medium text-[rgb(var(--color-text-secondary))] uppercase tracking-wider">
-          Working Copy
+        <div
+          ref={leftRef}
+          className="flex-1 overflow-auto"
+          onScroll={() => handleScroll("left")}
+        >
+          {pairs.map((pair, i) => (
+            <SplitLineRow key={i} line={pair.left} side="left" />
+          ))}
         </div>
       </div>
-      {pairs.map((pair, i) => {
-        const isSeparator = pair.left?.text === "⋯" && pair.left?.oldNum === null;
-        if (isSeparator) {
-          return (
-            <div key={i} className="flex border-y border-[rgb(var(--color-border))]/50 bg-[rgb(var(--color-surface-inset))]">
-              <div className="flex-1 px-3 py-0.5 text-center text-[10px] text-[rgb(var(--color-text-secondary))]/50 border-r border-[rgb(var(--color-border))]/50">⋯</div>
-              <div className="flex-1 px-3 py-0.5 text-center text-[10px] text-[rgb(var(--color-text-secondary))]/50">⋯</div>
-            </div>
-          );
-        }
-        return (
-          <div key={i} className="flex">
-            <SplitLine line={pair.left} side="left" />
-            <SplitLine line={pair.right} side="right" />
-          </div>
-        );
-      })}
+      {/* Right pane */}
+      <div className="flex-1 flex flex-col min-w-0">
+        <div className="shrink-0 px-3 py-1 text-[10px] font-medium text-[rgb(var(--color-text-secondary))] uppercase tracking-wider border-b border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-inset))]">
+          Working Copy
+        </div>
+        <div
+          ref={rightRef}
+          className="flex-1 overflow-auto"
+          onScroll={() => handleScroll("right")}
+        >
+          {pairs.map((pair, i) => (
+            <SplitLineRow key={i} line={pair.right} side="right" />
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
 
-function SplitLine({ line, side }: { line: DiffLine | null; side: "left" | "right" }) {
-  const borderCls = side === "left" ? "border-r border-[rgb(var(--color-border))]/50" : "";
+function SplitLineRow({ line, side }: { line: DiffLine | null; side: "left" | "right" }) {
   if (!line) {
-    return <div className={`flex-1 ${borderCls} bg-[rgb(var(--color-surface-inset))]/50`}>&nbsp;</div>;
+    return <div className="h-5 bg-[rgb(var(--color-surface-inset))]/50">&nbsp;</div>;
+  }
+  if (line.text === "⋯" && line.oldNum === null) {
+    return (
+      <div className="h-5 flex items-center justify-center border-y border-[rgb(var(--color-border))]/50 bg-[rgb(var(--color-surface-inset))] text-[10px] text-[rgb(var(--color-text-secondary))]/50">
+        ⋯
+      </div>
+    );
   }
   const bgCls = line.type === "removed" ? "bg-error/8" :
                 line.type === "added" ? "bg-success/8" : "";
@@ -341,11 +362,11 @@ function SplitLine({ line, side }: { line: DiffLine | null; side: "left" | "righ
   const num = side === "left" ? line.oldNum : line.newNum;
 
   return (
-    <div className={`flex-1 flex min-w-0 ${bgCls} ${hoverCls} ${borderCls}`}>
+    <div className={`flex h-5 ${bgCls} ${hoverCls}`}>
       <span className="inline-block w-10 shrink-0 select-none pr-2 text-right text-[10px] text-[rgb(var(--color-text-secondary))]/40 border-r border-[rgb(var(--color-border))]/20 leading-5">
         {num ?? ""}
       </span>
-      <span className="flex-1 px-2 whitespace-pre overflow-hidden text-ellipsis text-[rgb(var(--color-text))] leading-5">
+      <span className="px-2 whitespace-pre text-[rgb(var(--color-text))] leading-5">
         {line.text}
       </span>
     </div>
