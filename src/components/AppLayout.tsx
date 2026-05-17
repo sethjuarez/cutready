@@ -20,6 +20,7 @@ import { IdentityDialog } from "./IdentityDialog";
 import { KeyboardShortcutsDialog } from "./KeyboardShortcutsDialog";
 import { MergeConflictPanel } from "./MergeConflictPanel";
 import { ChatPanel } from "./ChatPanel";
+import { ChangesPanel } from "./ChangesPanel";
 import { FeedbackDialog } from "./FeedbackDialog";
 import { commandRegistry, useCommands } from "../services/commandRegistry";
 import { useTheme } from "../hooks/useTheme";
@@ -395,7 +396,7 @@ export function AppLayout() {
             {/* Upper: main content */}
             <div className="flex-1 min-h-0">
               {view === "home" && <div className="h-full overflow-y-auto"><HomePanel /></div>}
-              {(view === "project" || view === "sketch" || view === "storyboards" || view === "sketches" || view === "notes" || view === "assets" || view === "explorer") && (isMerging ? <MergeConflictPanel /> : <StoryboardPanel />)}
+              {(view === "project" || view === "sketch" || view === "storyboards" || view === "sketches" || view === "notes" || view === "assets" || view === "explorer" || view === "changes") && (isMerging ? <MergeConflictPanel /> : <StoryboardPanel />)}
               {view === "editor" && <div className="h-full overflow-y-auto"><ScriptEditorPanel /></div>}
               {view === "recording" && displaySettings.featureRecording && <div className="h-full overflow-y-auto"><RecordingPanel /></div>}
               {view === "settings" && <div className="h-full overflow-y-auto"><SettingsPanel mode="global" /></div>}
@@ -463,6 +464,8 @@ function PrimarySidebar() {
           <AssetList />
         ) : view === "explorer" ? (
           <FileTreeView />
+        ) : view === "changes" ? (
+          <ChangesPanel />
         ) : view === "project" ? (
           <StoryboardList />
         ) : view === "storyboards" ? (

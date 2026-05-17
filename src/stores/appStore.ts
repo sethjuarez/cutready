@@ -28,7 +28,7 @@ import type {
 } from "../types/sketch";
 
 /** The panels / views available in the app. */
-export type AppView = "home" | "project" | "sketch" | "storyboards" | "sketches" | "notes" | "assets" | "explorer" | "editor" | "recording" | "settings" | "workspace" | "chat";
+export type AppView = "home" | "project" | "sketch" | "storyboards" | "sketches" | "notes" | "assets" | "explorer" | "editor" | "recording" | "settings" | "workspace" | "chat" | "changes";
 
 /** Sidebar position. */
 export type SidebarPosition = "left" | "right";
@@ -186,6 +186,8 @@ interface AppStoreState {
   pendingNavAfterSave: string | null;
   /** Whether there are unsaved changes since the last snapshot. */
   isDirty: boolean;
+  /** List of changed files since last snapshot (for Changes panel). */
+  changedFiles: DiffEntry[];
   /** Whether a quickSave is in progress. */
   saving: boolean;
   /** Whether a stash (temporarily saved work) exists. */
@@ -434,6 +436,8 @@ interface AppStoreState {
   loadVersions: () => Promise<void>;
   /** Check if working directory has unsaved changes. */
   checkDirty: () => Promise<void>;
+  /** Refresh list of changed files since last snapshot. */
+  refreshChangedFiles: () => Promise<void>;
   /** Save a labeled version. Optional forkLabel for naming the old timeline when forking. */
   saveVersion: (label: string, forkLabel?: string) => Promise<void>;
   /** Stash dirty working tree before browsing snapshots. */
@@ -616,6 +620,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   identityPromptCallback: null,
   pendingNavAfterSave: null,
   isDirty: false,
+  changedFiles: [],
   saving: false,
   hasStash: false,
   isRewound: false,
@@ -1090,10 +1095,10 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       identityPromptOpen: false,
       identityPromptCallback: null,
       isDirty: false,
+      changedFiles: [],
       hasStash: false,
       isRewound: false,
       currentRemote: null,
-      syncStatus: null,
       isSyncing: false,
       syncError: null,
       isMerging: false,
@@ -1719,8 +1724,19 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     try {
       const isDirty = await invoke<boolean>("has_unsaved_changes");
       set({ isDirty });
+      // Also refresh the changed files list
+      get().refreshChangedFiles();
     } catch {
-      set({ isDirty: false });
+      set({ isDirty: false, changedFiles: [] });
+    }
+  },
+
+  refreshChangedFiles: async () => {
+    try {
+      const files = await invoke<DiffEntry[]>("diff_working_tree");
+      set({ changedFiles: files });
+    } catch {
+      set({ changedFiles: [] });
     }
   },
 
@@ -1730,8 +1746,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         label,
         forkLabel: forkLabel || null,
       });
-      set({ isDirty: false, isRewound: false });
-      // Persist editor state for this snapshot
+      set({ isDirty: false, isRewound: false, changedFiles: [] });
       const { openTabs, activeTabId } = get();
       const editorState = JSON.stringify({ openTabs, activeTabId });
       await invoke("save_editor_state", { commitId, editorState }).catch(() => {});
@@ -1760,8 +1775,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       // Clear active editors FIRST to cancel pending debounced saves
       set({ activeSketch: null, activeSketchPath: null, activeStoryboard: null, activeStoryboardPath: null, activeNotePath: null, activeNoteContent: null, activeNoteLocked: false });
       await invoke("discard_changes");
-      set({ isDirty: false });
-      // Reload all file lists
+      set({ isDirty: false, changedFiles: [] });
       await get().loadSketches();
       await get().loadStoryboards();
       await get().loadNotes();
@@ -2106,7 +2120,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
           syncError: null,
         });
       } else if (result.type === "Diverged") {
-        set({ syncError: `Timelines have diverged (${result.ahead} local, ${result.behind} remote). Merge failed.` });
+        set({ syncError: `Your changes and remote changes can't be merged automatically (${result.ahead} local, ${result.behind} remote snapshots). Try taking a snapshot first, then pull again.` });
       }
       // Merged and FastForward are handled automatically
       await get().refreshSyncStatus();

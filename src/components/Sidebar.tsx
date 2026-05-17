@@ -1,5 +1,5 @@
 import { type ReactNode, useCallback } from "react";
-import { House, Clapperboard, FolderOpen, Monitor, SlidersHorizontal, SquarePen, NotebookPen, Images, LayoutList, MessageSquare } from "lucide-react";
+import { House, Clapperboard, FolderOpen, Monitor, SlidersHorizontal, SquarePen, NotebookPen, Images, LayoutList, MessageSquare, GitCompareArrows } from "lucide-react";
 import type { AppView } from "../stores/appStore";
 import { useAppStore } from "../stores/appStore";
 import { usePopover } from "../hooks/usePopover";
@@ -45,12 +45,18 @@ const navItems: { id: AppView; label: string; icon: ReactNode }[] = [
     label: "Workspace",
     icon: <Monitor className="w-4 h-4" />,
   },
+  {
+    id: "changes",
+    label: "Changes",
+    icon: <GitCompareArrows className="w-4 h-4" />,
+  },
 ];
 
 export function Sidebar({ onFeedback }: { onFeedback?: () => void }) {
   const view = useAppStore((s) => s.view);
   const setView = useAppStore((s) => s.setView);
   const currentProject = useAppStore((s) => s.currentProject);
+  const changedFilesCount = useAppStore((s) => s.changedFiles.length);
 
   const sidebarPosition = useAppStore((s) => s.sidebarPosition);
   const toggleSidebarPosition = useAppStore((s) => s.toggleSidebarPosition);
@@ -75,7 +81,7 @@ export function Sidebar({ onFeedback }: { onFeedback?: () => void }) {
       >
         {navItems.map((item) => {
           const isActive = view === item.id;
-          const requiresProject = item.id === "project" || item.id === "storyboards" || item.id === "sketches" || item.id === "notes" || item.id === "assets" || item.id === "explorer" || item.id === "workspace";
+          const requiresProject = item.id === "project" || item.id === "storyboards" || item.id === "sketches" || item.id === "notes" || item.id === "assets" || item.id === "explorer" || item.id === "workspace" || item.id === "changes";
           const isDisabled = requiresProject && !currentProject;
 
           return (
@@ -96,6 +102,12 @@ export function Sidebar({ onFeedback }: { onFeedback?: () => void }) {
               title={item.label}
             >
               {item.icon}
+              {/* Badge for changes count */}
+              {item.id === "changes" && changedFilesCount > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 min-w-[14px] h-[14px] flex items-center justify-center rounded-full bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))] text-[8px] font-bold leading-none px-0.5">
+                  {changedFilesCount > 99 ? "99+" : changedFilesCount}
+                </span>
+              )}
               {/* Active indicator bar */}
               {isActive && (
                 <span className={`absolute top-1/4 h-1/2 w-[2px] rounded-full bg-[rgb(var(--color-accent))] ${

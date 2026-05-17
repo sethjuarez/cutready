@@ -189,6 +189,8 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
       ];
     case "has_unsaved_changes":
       return false;
+    case "diff_working_tree":
+      return [];
     case "is_rewound":
       return false;
     case "check_git_identity":

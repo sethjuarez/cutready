@@ -176,22 +176,27 @@ export function SyncBar() {
       </div>
 
       {/* Conflict / diverge banner */}
-      {syncError && syncError.includes("diverged") && (
+      {syncError && syncError.includes("can't be merged") && (
         <div className="mt-1.5 flex items-center gap-1.5 px-2 py-1.5 rounded bg-warning/10 border border-warning/20">
           <AlertTriangle className="text-warning shrink-0 w-3 h-3" />
           <span className="text-[10px] text-warning flex-1">
-            Timelines have diverged. Manual merge may be required.
+            Changes conflict with remote. Take a snapshot, then try pulling again.
           </span>
         </div>
       )}
 
       {/* General error message (non-diverge) */}
-      {syncError && !syncError.includes("diverged") && (
+      {syncError && !syncError.includes("can't be merged") && (
         <div className="mt-1.5 flex items-center gap-1.5 text-[10px] text-error" title={syncError}>
           {(syncError.includes("network") || syncError.includes("resolve host") || syncError.includes("Could not resolve") || syncError.includes("timed out")) ? (
             <>
               <Globe className="shrink-0 w-2.5 h-2.5" />
               <span className="truncate">Offline — changes saved locally</span>
+            </>
+          ) : syncError.includes("Push rejected") ? (
+            <>
+              <AlertTriangle className="shrink-0 w-2.5 h-2.5" />
+              <span className="truncate">Remote is ahead — pull first, then push</span>
             </>
           ) : syncError && syncError.includes("404") ? (
             <>
