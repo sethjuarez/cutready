@@ -1744,13 +1744,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   refreshChangedFiles: async () => {
     try {
       const files = await invoke<DiffEntry[]>("diff_working_tree");
-      // Hide internal implementation files from users
-      const visible = files.filter((f) =>
-        !f.path.endsWith(".gitignore") &&
-        !f.path.startsWith(".git/") &&
-        !f.path.startsWith(".cutready/settings.json")
-      );
-      set({ changedFiles: visible });
+      set({ changedFiles: files });
     } catch {
       set({ changedFiles: [] });
     }

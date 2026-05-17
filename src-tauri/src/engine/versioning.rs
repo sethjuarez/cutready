@@ -284,14 +284,13 @@ pub fn has_unsaved_changes(project_dir: &Path) -> Result<bool, VersioningError> 
             continue;
         }
         // Skip paths that build_tree_from_dir would never commit:
-        // dotfiles/dotdirs at the root level (except .cutready/ and .chats/).
-        // Paths from git2 status are relative, e.g. ".gitignore", ".DS_Store",
-        // ".cutready/settings.json".
+        // dotfiles/dotdirs at the root level (except .cutready/, .chats/, .gitignore).
         if let Some(path) = entry.path() {
             let top_segment = path.split('/').next().unwrap_or(path);
             if top_segment.starts_with('.')
                 && top_segment != ".cutready"
                 && top_segment != ".chats"
+                && top_segment != ".gitignore"
             {
                 continue;
             }
@@ -1144,6 +1143,17 @@ pub fn diff_working_tree(project_dir: &Path) -> Result<Vec<DiffEntry>, Versionin
             .unwrap_or(Path::new(""))
             .to_string_lossy()
             .to_string();
+
+        // Skip dotfiles that are never committed (same rule as build_tree_from_dir)
+        let top_segment = path.split('/').next().unwrap_or(&path);
+        if top_segment.starts_with('.')
+            && top_segment != ".cutready"
+            && top_segment != ".chats"
+            && top_segment != ".gitignore"
+        {
+            continue;
+        }
+
         let status = match delta.status() {
             git2::Delta::Added | git2::Delta::Untracked => "added",
             git2::Delta::Deleted => "deleted",
@@ -1764,8 +1774,13 @@ fn build_tree_from_dir(
         let path = fs_entry.path();
         let name = fs_entry.file_name().to_string_lossy().to_string();
 
-        // Skip .git but include .cutready (screenshots, metadata) and .chats (chat sessions)
-        if name == ".git" || (name.starts_with('.') && name != ".cutready" && name != ".chats") {
+        // Skip .git and other dotfiles/dirs, but include project-essential ones
+        if name == ".git"
+            || (name.starts_with('.')
+                && name != ".cutready"
+                && name != ".chats"
+                && name != ".gitignore")
+        {
             continue;
         }
 
@@ -3362,8 +3377,9 @@ mod tests {
 
     #[test]
     fn dirty_dotfiles_not_tracked() {
-        // Root-level dotfiles (.gitignore, .DS_Store, etc.) are never committed
+        // Root-level dotfiles (.DS_Store, .env, etc.) are never committed
         // by build_tree_from_dir, so they should not trigger dirty state.
+        // Exception: .gitignore IS committed (it's a project-essential file).
         let tmp = setup_project_dir();
         init_project_repo(tmp.path()).unwrap();
 
@@ -3371,7 +3387,6 @@ mod tests {
         commit_snapshot(tmp.path(), "init", None).unwrap();
 
         // Add various dotfiles that should NOT trigger dirty
-        std::fs::write(tmp.path().join(".gitignore"), "*.tmp\n").unwrap();
         std::fs::write(tmp.path().join(".DS_Store"), "binary").unwrap();
         std::fs::create_dir_all(tmp.path().join(".env")).unwrap();
         std::fs::write(tmp.path().join(".env/local"), "SECRET=x").unwrap();
@@ -3381,7 +3396,16 @@ mod tests {
             "Root-level dotfiles should not trigger dirty state"
         );
 
+        // .gitignore SHOULD trigger dirty (it's committed as a project-essential file)
+        std::fs::write(tmp.path().join(".gitignore"), "*.tmp\n").unwrap();
+        assert!(
+            has_unsaved_changes(tmp.path()).unwrap(),
+            ".gitignore should trigger dirty state since it is committed"
+        );
+
         // But .cutready/ changes SHOULD trigger dirty (it's a tracked exception)
+        // First commit the .gitignore so we can test .cutready in isolation
+        commit_snapshot(tmp.path(), "add gitignore", None).unwrap();
         std::fs::create_dir_all(tmp.path().join(".cutready")).unwrap();
         std::fs::write(tmp.path().join(".cutready/settings.json"), "{}").unwrap();
         assert!(
