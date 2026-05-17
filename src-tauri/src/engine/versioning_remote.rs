@@ -28,6 +28,8 @@ pub struct SyncStatus {
 pub enum RemoteError {
     #[error("Git error: {0}")]
     Git(#[from] git2::Error),
+    #[error("Push rejected: remote has changes you don't have yet. Fetch and sync first.")]
+    PushRejected,
     #[error("{0}")]
     Other(String),
 }
@@ -301,11 +303,19 @@ pub fn push_remote(
     if output.status.success() {
         Ok(())
     } else {
-        Err(RemoteError::Other(if stderr.is_empty() {
-            format!("git push exited with status {}", output.status)
+        let combined = format!("{} {}", stdout, stderr).to_lowercase();
+        if combined.contains("non-fast-forward")
+            || combined.contains("fetch first")
+            || combined.contains("failed to push some refs")
+        {
+            Err(RemoteError::PushRejected)
         } else {
-            stderr
-        }))
+            Err(RemoteError::Other(if stderr.is_empty() {
+                format!("git push exited with status {}", output.status)
+            } else {
+                stderr
+            }))
+        }
     }
 }
 
