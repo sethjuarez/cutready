@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { Columns2, Rows2 } from "lucide-react";
+import { Columns2, Rows2, LayoutList } from "lucide-react";
 
 interface FileDiffContent {
   path: string;
@@ -15,7 +15,7 @@ interface DiffLine {
   text: string;
 }
 
-type ViewMode = "split" | "unified";
+type ViewMode = "split" | "unified" | "semantic";
 
 function computeDiffLines(oldText: string, newText: string): DiffLine[] {
   const oldLines = oldText.split("\n");
@@ -99,10 +99,11 @@ function groupIntoHunks(lines: DiffLine[], contextSize = 3): DiffLine[][] {
 }
 
 export function DiffViewer({ filePath }: { filePath: string }) {
+  const isStructured = filePath.endsWith(".sk") || filePath.endsWith(".sb");
   const [diff, setDiff] = useState<FileDiffContent | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<ViewMode>("split");
+  const [viewMode, setViewMode] = useState<ViewMode>(isStructured ? "semantic" : "split");
 
   useEffect(() => {
     setLoading(true);
@@ -136,27 +137,8 @@ export function DiffViewer({ filePath }: { filePath: string }) {
   const isDeleted = diff.working_content === null;
   const oldText = diff.head_content ?? "";
   const newText = diff.working_content ?? "";
-  const isStructured = filePath.endsWith(".sk") || filePath.endsWith(".sb");
-
-  // For .sk/.sb files, show a semantic field-level diff
-  if (isStructured) {
-    return (
-      <div className="flex h-full flex-col bg-[rgb(var(--color-surface))]">
-        <DiffToolbar
-          filename={filename}
-          status={isNew ? "added" : isDeleted ? "deleted" : "modified"}
-          viewMode={viewMode}
-          onViewModeChange={setViewMode}
-          showToggle={false}
-        />
-        <div className="flex-1 overflow-auto p-4">
-          <StructuredDiff oldJson={oldText} newJson={newText} isNew={isNew} />
-        </div>
-      </div>
-    );
-  }
-
   const status = isNew ? "added" : isDeleted ? "deleted" : "modified";
+  const showToggle = !isDeleted || isStructured;
 
   return (
     <div className="flex h-full flex-col bg-[rgb(var(--color-surface))]">
@@ -165,16 +147,21 @@ export function DiffViewer({ filePath }: { filePath: string }) {
         status={status}
         viewMode={viewMode}
         onViewModeChange={setViewMode}
-        showToggle={!isNew && !isDeleted}
-        additions={newText.split("\n").length - (isNew ? 0 : oldText.split("\n").length)}
+        showToggle={showToggle}
+        isStructured={isStructured}
+        additions={!isNew && !isDeleted ? newText.split("\n").length - oldText.split("\n").length : undefined}
       />
       <div className="flex-1 overflow-auto">
-        {isNew ? (
+        {viewMode === "semantic" && isStructured ? (
+          <div className="p-4">
+            <StructuredDiff oldJson={oldText} newJson={newText} isNew={isNew} />
+          </div>
+        ) : isNew && viewMode !== "split" ? (
           <NewFileView text={newText} />
         ) : isDeleted ? (
           <DeletedFileView text={oldText} />
         ) : viewMode === "split" ? (
-          <SplitDiffView oldText={oldText} newText={newText} />
+          <SplitDiffView oldText={oldText} newText={newText} isNew={isNew} />
         ) : (
           <UnifiedDiffView oldText={oldText} newText={newText} />
         )}
@@ -185,12 +172,13 @@ export function DiffViewer({ filePath }: { filePath: string }) {
 
 // --- Toolbar ---
 
-function DiffToolbar({ filename, status, viewMode, onViewModeChange, showToggle, additions }: {
+function DiffToolbar({ filename, status, viewMode, onViewModeChange, showToggle, isStructured, additions }: {
   filename: string;
   status: "added" | "deleted" | "modified";
   viewMode: ViewMode;
   onViewModeChange: (mode: ViewMode) => void;
   showToggle: boolean;
+  isStructured?: boolean;
   additions?: number;
 }) {
   const badge = status === "added" ? { label: "New file", cls: "bg-success/15 text-success" } :
@@ -208,39 +196,58 @@ function DiffToolbar({ filename, status, viewMode, onViewModeChange, showToggle,
       <div className="flex-1" />
       {showToggle && (
         <div className="flex items-center rounded-md border border-[rgb(var(--color-border))] overflow-hidden">
-          <button
+          {isStructured && (
+            <ToggleButton
+              active={viewMode === "semantic"}
+              onClick={() => onViewModeChange("semantic")}
+              icon={<LayoutList className="w-3 h-3" />}
+              label="Semantic"
+            />
+          )}
+          <ToggleButton
+            active={viewMode === "split"}
             onClick={() => onViewModeChange("split")}
-            className={`flex items-center gap-1 px-2 py-1 text-[10px] transition-colors ${
-              viewMode === "split"
-                ? "bg-[rgb(var(--color-accent))]/15 text-[rgb(var(--color-accent))]"
-                : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))]"
-            }`}
-            title="Side by side"
-          >
-            <Columns2 className="w-3 h-3" />
-            Split
-          </button>
-          <button
+            icon={<Columns2 className="w-3 h-3" />}
+            label="Split"
+            border={true}
+          />
+          <ToggleButton
+            active={viewMode === "unified"}
             onClick={() => onViewModeChange("unified")}
-            className={`flex items-center gap-1 px-2 py-1 text-[10px] border-l border-[rgb(var(--color-border))] transition-colors ${
-              viewMode === "unified"
-                ? "bg-[rgb(var(--color-accent))]/15 text-[rgb(var(--color-accent))]"
-                : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))]"
-            }`}
-            title="Unified"
-          >
-            <Rows2 className="w-3 h-3" />
-            Unified
-          </button>
+            icon={<Rows2 className="w-3 h-3" />}
+            label="Unified"
+            border={true}
+          />
         </div>
       )}
     </div>
   );
 }
 
+function ToggleButton({ active, onClick, icon, label, border }: {
+  active: boolean; onClick: () => void; icon: React.ReactNode; label: string; border?: boolean;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex items-center gap-1 px-2 py-1 text-[10px] transition-colors ${
+        border ? "border-l border-[rgb(var(--color-border))]" : ""
+      } ${
+        active
+          ? "bg-[rgb(var(--color-accent))]/15 text-[rgb(var(--color-accent))]"
+          : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))]"
+      }`}
+      title={label}
+    >
+      {icon}
+      {label}
+    </button>
+  );
+}
+
 // --- Split (side-by-side) view ---
 
-function SplitDiffView({ oldText, newText }: { oldText: string; newText: string }) {
+function SplitDiffView({ oldText, newText, isNew }: { oldText: string; newText: string; isNew?: boolean }) {
   const diffLines = useMemo(() => computeDiffLines(oldText, newText), [oldText, newText]);
   const hunks = useMemo(() => groupIntoHunks(diffLines), [diffLines]);
 
@@ -294,7 +301,7 @@ function SplitDiffView({ oldText, newText }: { oldText: string; newText: string 
       {/* Header row */}
       <div className="flex sticky top-0 z-10 border-b border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-inset))]">
         <div className="flex-1 px-3 py-1 text-[10px] font-medium text-[rgb(var(--color-text-secondary))] uppercase tracking-wider border-r border-[rgb(var(--color-border))]">
-          Last Snapshot
+          {isNew ? "(New file)" : "Last Snapshot"}
         </div>
         <div className="flex-1 px-3 py-1 text-[10px] font-medium text-[rgb(var(--color-text-secondary))] uppercase tracking-wider">
           Working Copy
