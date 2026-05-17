@@ -1,0 +1,332 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g. v1.7.0)'
+        required: true
+
+concurrency:
+  group: release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  resolve-tag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+      version: ${{ steps.tag.outputs.version }}
+    steps:
+      - name: Resolve tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ inputs.tag }}"
+          else
+            TAG="${GITHUB_REF#refs/tags/}"
+          fi
+          VERSION="${TAG#v}"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Find or create release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.tag.outputs.tag }}
+          VERSION: ${{ steps.tag.outputs.version }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            exit 0
+          fi
+          gh release create "$TAG" \
+            --title "CutReady v${VERSION}" \
+            --notes "See the assets to download and install this version."
+
+  test:
+    needs: resolve-tag
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: 'npm'
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+  build:
+    needs:
+      - resolve-tag
+      - test
+    strategy:
+      fail-fast: false
+      max-parallel: 5
+      matrix:
+        include:
+          - key: linux-x64
+            platform: ubuntu-24.04
+            args: ''
+            rust_targets: ''
+          - key: windows-x64
+            platform: windows-latest
+            args: ''
+            rust_targets: ''
+          - key: windows-arm64
+            platform: windows-latest
+            args: '--target aarch64-pc-windows-msvc'
+            rust_targets: 'aarch64-pc-windows-msvc'
+          - key: macos-silicon
+            platform: macos-latest
+            args: '--target aarch64-apple-darwin'
+            rust_targets: 'aarch64-apple-darwin,x86_64-apple-darwin'
+          - key: macos-intel
+            platform: macos-latest
+            args: '--target x86_64-apple-darwin'
+            rust_targets: 'aarch64-apple-darwin,x86_64-apple-darwin'
+
+    runs-on: ${{ matrix.platform }}
+    timeout-minutes: 45
+    env:
+      SCCACHE_GHA_ENABLED: 'true'
+      RUSTC_WRAPPER: sccache
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies (ubuntu only)
+        if: matrix.platform == 'ubuntu-24.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libpipewire-0.3-dev libgbm-dev
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: 'npm'
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_targets }}
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+          key: release-${{ matrix.key }}
+
+      - name: Configure sccache
+        uses: mozilla-actions/sccache-action@v0.0.7
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - uses: tauri-apps/tauri-action@v1
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        with:
+          args: ${{ matrix.args }}
+          retryAttempts: 3
+          uploadUpdaterJson: false
+          uploadWorkflowArtifacts: true
+          workflowArtifactNamePattern: cutready-${{ matrix.key }}-[bundle]
+
+  publish:
+    needs:
+      - resolve-tag
+      - build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      TAG: ${{ needs.resolve-tag.outputs.tag }}
+      VERSION: ${{ needs.resolve-tag.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts
+
+      - name: Stage release assets
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+
+          const sourceDir = 'release-artifacts';
+          const outputDir = 'release-upload';
+          fs.rmSync(outputDir, { recursive: true, force: true });
+          fs.mkdirSync(outputDir, { recursive: true });
+
+          function walk(dir) {
+            return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+              const fullPath = path.join(dir, entry.name);
+              if (entry.isDirectory()) {
+                return walk(fullPath);
+              }
+              return [fullPath];
+            });
+          }
+
+          function stagedName(file) {
+            const normalized = file.replaceAll(path.sep, '/');
+            const base = path.basename(file);
+            if (base === 'CutReady.app.tar.gz' || base === 'CutReady.app.tar.gz.sig') {
+              if (normalized.includes('macos-silicon')) {
+                return base.replace('CutReady.app', 'CutReady_aarch64.app');
+              }
+              if (normalized.includes('macos-intel')) {
+                return base.replace('CutReady.app', 'CutReady_x64.app');
+              }
+            }
+            return base;
+          }
+
+          for (const file of walk(sourceDir)) {
+            const name = stagedName(file);
+            if (!/\.(dmg|AppImage|deb|rpm|msi|exe|tar\.gz)(\.sig)?$/.test(name)) {
+              continue;
+            }
+            const dest = path.join(outputDir, name);
+            if (fs.existsSync(dest)) {
+              throw new Error(`Duplicate staged release asset: ${name}`);
+            }
+            fs.copyFileSync(file, dest);
+          }
+
+          console.log(fs.readdirSync(outputDir).sort().join('\n'));
+          NODE
+
+      - name: Upload release assets
+        run: |
+          find release-upload -type f | sort
+          while IFS= read -r file; do
+            echo "Uploading ${file}"
+            gh release upload "$TAG" "$file" --clobber
+          done < <(find release-upload -type f | sort)
+
+      - name: Generate updater manifest
+        run: |
+          gh release view "$TAG" --json body --jq .body > release-notes.md
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+
+          const tag = process.env.TAG;
+          const version = process.env.VERSION;
+          const repo = process.env.GITHUB_REPOSITORY;
+          const artifactDir = 'release-upload';
+          const notes = fs.readFileSync('release-notes.md', 'utf8');
+          function walk(dir) {
+            return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+              const fullPath = path.join(dir, entry.name);
+              if (entry.isDirectory()) {
+                return walk(fullPath);
+              }
+              return [path.relative(artifactDir, fullPath)];
+            });
+          }
+
+          const files = walk(artifactDir);
+          const fileSet = new Set(files);
+
+          function findFile(pattern) {
+            return files.find((name) => pattern.test(name));
+          }
+
+          function addPlatform(platforms, key, asset, sig) {
+            if (!asset || !sig || !fileSet.has(asset) || !fileSet.has(sig)) {
+              return;
+            }
+            platforms[key] = {
+              signature: fs.readFileSync(path.join(artifactDir, sig), 'utf8'),
+              url: `https://github.com/${repo}/releases/download/${tag}/${encodeURIComponent(path.basename(asset))}`,
+            };
+          }
+
+          const linuxAppImage = findFile(/_amd64\.AppImage$/);
+          const linuxAppImageSig = `${linuxAppImage}.sig`;
+          const linuxDeb = findFile(/_amd64\.deb$/);
+          const linuxDebSig = `${linuxDeb}.sig`;
+          const linuxRpm = findFile(/-1\.x86_64\.rpm$/);
+          const linuxRpmSig = `${linuxRpm}.sig`;
+
+          const windowsX64Nsis = findFile(/_x64-setup\.exe$/);
+          const windowsX64NsisSig = `${windowsX64Nsis}.sig`;
+          const windowsX64Msi = findFile(/_x64_en-US\.msi$/);
+          const windowsX64MsiSig = `${windowsX64Msi}.sig`;
+          const windowsArmNsis = findFile(/_(arm64|aarch64)-setup\.exe$/);
+          const windowsArmNsisSig = `${windowsArmNsis}.sig`;
+          const windowsArmMsi = findFile(/_(arm64|aarch64)_en-US\.msi$/);
+          const windowsArmMsiSig = `${windowsArmMsi}.sig`;
+
+          const macArmApp = findFile(/_aarch64\.app\.tar\.gz$/);
+          const macArmAppSig = `${macArmApp}.sig`;
+          const macX64App = findFile(/_x64\.app\.tar\.gz$/);
+          const macX64AppSig = `${macX64App}.sig`;
+
+          const platforms = {};
+          addPlatform(platforms, 'linux-x86_64', linuxAppImage, linuxAppImageSig);
+          addPlatform(platforms, 'linux-x86_64-appimage', linuxAppImage, linuxAppImageSig);
+          addPlatform(platforms, 'linux-x86_64-deb', linuxDeb, linuxDebSig);
+          addPlatform(platforms, 'linux-x86_64-rpm', linuxRpm, linuxRpmSig);
+          addPlatform(platforms, 'windows-x86_64', windowsX64Nsis, windowsX64NsisSig);
+          addPlatform(platforms, 'windows-x86_64-nsis', windowsX64Nsis, windowsX64NsisSig);
+          addPlatform(platforms, 'windows-x86_64-msi', windowsX64Msi, windowsX64MsiSig);
+          addPlatform(platforms, 'windows-aarch64', windowsArmNsis, windowsArmNsisSig);
+          addPlatform(platforms, 'windows-aarch64-nsis', windowsArmNsis, windowsArmNsisSig);
+          addPlatform(platforms, 'windows-aarch64-msi', windowsArmMsi, windowsArmMsiSig);
+          addPlatform(platforms, 'darwin-aarch64', macArmApp, macArmAppSig);
+          addPlatform(platforms, 'darwin-aarch64-app', macArmApp, macArmAppSig);
+          addPlatform(platforms, 'darwin-x86_64', macX64App, macX64AppSig);
+          addPlatform(platforms, 'darwin-x86_64-app', macX64App, macX64AppSig);
+
+          const manifest = {
+            version,
+            notes,
+            pub_date: new Date().toISOString(),
+            platforms,
+          };
+
+          const requiredPlatforms = [
+            'linux-x86_64',
+            'windows-x86_64',
+            'windows-aarch64',
+            'darwin-aarch64',
+            'darwin-x86_64',
+          ];
+          const missing = requiredPlatforms.filter((platform) => !platforms[platform]);
+          if (missing.length > 0) {
+            throw new Error(`latest.json is missing updater entries for: ${missing.join(', ')}`);
+          }
+
+          fs.writeFileSync('latest.json', `${JSON.stringify(manifest, null, 2)}\n`);
+          console.log(`latest.json includes ${Object.keys(platforms).length} platform entries`);
+          NODE
+
+      - name: Upload updater manifest
+        run: gh release upload "$TAG" latest.json --clobber

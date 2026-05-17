@@ -37,14 +37,11 @@ jobs:
         with:
           script: |
             const tag = '${{ needs.release-please.outputs.tag_name }}';
-            const workflows = ['release-win-linux.yml', 'release-macos.yml'];
-            for (const workflow of workflows) {
-              console.log(`Dispatching ${workflow} for tag ${tag}`);
-              await github.rest.actions.createWorkflowDispatch({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                workflow_id: workflow,
-                ref: 'main',
-                inputs: { tag: tag }
-              });
-            }
+            console.log(`Dispatching release.yml for tag ${tag}`);
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'release.yml',
+              ref: 'main',
+              inputs: { tag: tag }
+            });
