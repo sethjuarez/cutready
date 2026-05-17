@@ -166,7 +166,7 @@ const defaultGlobalSettings: GlobalSettings = {
   recorderCameraDeviceId: "",
   recorderSystemAudioEnabled: false,
   recorderSystemAudioVolume: 100,
-  featureRecording: false,
+  featureRecording: import.meta.env.DEV,
 };
 
 function getInitialGlobalSettings(): GlobalSettings {
