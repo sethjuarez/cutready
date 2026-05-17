@@ -1280,6 +1280,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     try {
       await invoke("update_sketch", { relativePath: activeSketchPath, ...update });
       set({ isDirty: true });
+      await get().refreshChangedFiles();
     } catch (err) {
       console.error("Failed to update sketch:", err);
     }
@@ -1295,6 +1296,8 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       if (activeSketch && activeSketchPath === sketchPath) {
         set({ activeSketch: { ...activeSketch, title } });
       }
+      set({ isDirty: true });
+      await get().refreshChangedFiles();
     } catch (err) {
       console.error("Failed to update sketch title:", err);
     }
@@ -1372,6 +1375,8 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       const storyboard = await invoke<Storyboard>("get_storyboard", { relativePath: activeStoryboardPath });
       set({ activeStoryboard: storyboard });
       await get().loadStoryboards();
+      set({ isDirty: true });
+      await get().refreshChangedFiles();
     } catch (err) {
       console.error("Failed to update storyboard:", err);
     }
@@ -1384,6 +1389,8 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       const storyboard = await invoke<Storyboard>("set_storyboard_lock", { relativePath: activeStoryboardPath, locked });
       set({ activeStoryboard: storyboard });
       await get().loadStoryboards();
+      set({ isDirty: true });
+      await get().refreshChangedFiles();
     } catch (err) {
       console.error("Failed to update storyboard lock:", err);
     }
@@ -1417,6 +1424,8 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       const storyboard = await invoke<Storyboard>("get_storyboard", { relativePath: activeStoryboardPath });
       set({ activeStoryboard: storyboard });
       await get().loadStoryboards();
+      set({ isDirty: true });
+      await get().refreshChangedFiles();
     } catch (err) {
       console.error("Failed to add sketch to storyboard:", err);
     }
@@ -1433,6 +1442,8 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       const storyboard = await invoke<Storyboard>("get_storyboard", { relativePath: activeStoryboardPath });
       set({ activeStoryboard: storyboard });
       await get().loadStoryboards();
+      set({ isDirty: true });
+      await get().refreshChangedFiles();
     } catch (err) {
       console.error("Failed to remove from storyboard:", err);
     }
@@ -1449,6 +1460,8 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       });
       const storyboard = await invoke<Storyboard>("get_storyboard", { relativePath: activeStoryboardPath });
       set({ activeStoryboard: storyboard });
+      set({ isDirty: true });
+      await get().refreshChangedFiles();
     } catch (err) {
       console.error("Failed to add section:", err);
     }
@@ -1464,6 +1477,8 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       });
       const storyboard = await invoke<Storyboard>("get_storyboard", { relativePath: activeStoryboardPath });
       set({ activeStoryboard: storyboard });
+      set({ isDirty: true });
+      await get().refreshChangedFiles();
     } catch (err) {
       console.error("Failed to reorder items:", err);
     }
@@ -1535,6 +1550,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     try {
       await invoke("update_note", { relativePath: activeNotePath, content });
       set({ activeNoteContent: content, isDirty: true });
+      await get().refreshChangedFiles();
     } catch (err) {
       console.error("Failed to update note:", err);
     }
@@ -1847,7 +1863,11 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         openTabs,
       } = get();
       if (activeSketchPath === filePath) {
-        set((state) => ({ editorReloadKey: state.editorReloadKey + 1 }));
+        set((state) => ({
+          activeSketchPath: null,
+          activeSketch: null,
+          editorReloadKey: state.editorReloadKey + 1,
+        }));
         if (sketches.some((sketch) => sketch.path === filePath)) {
           await get().openSketch(filePath);
         } else {
@@ -1856,7 +1876,11 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
           else set({ activeSketchPath: null, activeSketch: null });
         }
       } else if (activeStoryboardPath === filePath) {
-        set((state) => ({ editorReloadKey: state.editorReloadKey + 1 }));
+        set((state) => ({
+          activeStoryboardPath: null,
+          activeStoryboard: null,
+          editorReloadKey: state.editorReloadKey + 1,
+        }));
         if (storyboards.some((storyboard) => storyboard.path === filePath)) {
           await get().openStoryboard(filePath);
         } else {
@@ -1865,7 +1889,12 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
           else set({ activeStoryboardPath: null, activeStoryboard: null });
         }
       } else if (activeNotePath === filePath) {
-        set((state) => ({ editorReloadKey: state.editorReloadKey + 1 }));
+        set((state) => ({
+          activeNotePath: null,
+          activeNoteContent: null,
+          activeNoteLocked: false,
+          editorReloadKey: state.editorReloadKey + 1,
+        }));
         if (notes.some((note) => note.path === filePath)) {
           await get().openNote(filePath);
         } else {
