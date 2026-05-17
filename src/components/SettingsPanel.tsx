@@ -46,7 +46,7 @@ interface AuthCodeFlowInit {
   port: number;
 }
 
-type SettingsTab = "ai" | "agents" | "memory" | "display" | "themes" | "recording" | "feedback" | "repository" | "updates";
+type SettingsTab = "ai" | "agents" | "memory" | "display" | "themes" | "recording" | "feedback" | "repository" | "updates" | "experimental";
 
 import { inputClass, tabBtnClass } from "../styles";
 import { FoundryResourcePicker } from "./FoundryResourcePicker";
@@ -190,7 +190,7 @@ export function SettingsPanel({ mode = "global" }: { mode?: "global" | "workspac
   const canFetchModels = canFetchModelsFor(settings);
 
   // Tabs depend on mode
-  const globalTabs = (["display", "themes", ...(settings.featureRecording ? ["recording"] : []), "ai", "agents", "feedback", "updates"] as const);
+  const globalTabs = (["display", "themes", ...(settings.featureRecording ? ["recording"] : []), "ai", "agents", "feedback", "updates", "experimental"] as const);
   const workspaceTabs = ["repository", "memory", "display", "themes", "ai", "agents"] as const;
   const tabs = mode === "workspace" ? workspaceTabs : globalTabs;
   const tabLabels: Record<string, string> = {
@@ -203,6 +203,7 @@ export function SettingsPanel({ mode = "global" }: { mode?: "global" | "workspac
     feedback: "Feedback",
     repository: "Git Remote",
     updates: "Updates",
+    experimental: "Experimental",
   };
 
   return (
@@ -287,6 +288,9 @@ export function SettingsPanel({ mode = "global" }: { mode?: "global" | "workspac
       )}
       {activeTab === "updates" && (
         <UpdatesTab />
+      )}
+      {activeTab === "experimental" && (
+        <ExperimentalTab settings={settings} updateSetting={updateSetting} />
       )}
     </div>
   );
@@ -2319,6 +2323,38 @@ function UpdatesTab() {
           </a>
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Experimental Tab ────────────────────────────────────────────
+
+function ExperimentalTab({ settings, updateSetting }: {
+  settings: ReturnType<typeof useSettings>["settings"];
+  updateSetting: ReturnType<typeof useSettings>["updateSetting"];
+}) {
+  return (
+    <div className="flex flex-col gap-6">
+      <p className="text-sm text-[rgb(var(--color-text-secondary))]">
+        These features are still in development. They may be incomplete or unstable.
+      </p>
+
+      <fieldset className="flex flex-col gap-2">
+        <legend className="text-sm font-medium mb-1">Feature Flags</legend>
+
+        <label className="flex items-center justify-between gap-3 rounded-lg bg-[rgb(var(--color-surface))] px-3 py-2">
+          <span>
+            <span className="block text-xs text-[rgb(var(--color-text))]">Recording</span>
+            <span className="block text-[11px] text-[rgb(var(--color-text-secondary))]">Screen, camera, and audio capture for demo recordings</span>
+          </span>
+          <input
+            type="checkbox"
+            checked={settings.featureRecording}
+            onChange={(e) => updateSetting("featureRecording", e.target.checked)}
+            className="h-4 w-4 accent-[rgb(var(--color-accent))]"
+          />
+        </label>
+      </fieldset>
     </div>
   );
 }
