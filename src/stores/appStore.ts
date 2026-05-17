@@ -29,6 +29,20 @@ import type {
   FileResolution,
 } from "../types/sketch";
 
+const suppressedEditorFlushPaths = new Set<string>();
+
+export function suppressEditorFlush(relativePath: string) {
+  suppressedEditorFlushPaths.add(relativePath);
+}
+
+export function shouldSuppressEditorFlush(relativePath: string | null | undefined): boolean {
+  return !!relativePath && suppressedEditorFlushPaths.has(relativePath);
+}
+
+export function clearSuppressedEditorFlush(relativePath: string) {
+  suppressedEditorFlushPaths.delete(relativePath);
+}
+
 /** The panels / views available in the app. */
 export type AppView = "home" | "project" | "sketch" | "assets" | "editor" | "recording" | "settings" | "chat" | "changes";
 
@@ -1849,6 +1863,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
 
   discardFile: async (filePath) => {
     try {
+      suppressEditorFlush(filePath);
       await invoke("discard_file", { filePath });
       await get().loadSketches();
       await get().loadStoryboards();
@@ -1903,8 +1918,10 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
           else set({ activeNotePath: null, activeNoteContent: null, activeNoteLocked: false });
         }
       }
+      globalThis.setTimeout(() => clearSuppressedEditorFlush(filePath), 100);
       await get().checkDirty();
     } catch (err) {
+      clearSuppressedEditorFlush(filePath);
       console.error("Failed to discard file:", err);
       useToastStore.getState().show(`Discard failed: ${err}`, 5000, "error");
       await get().checkDirty();

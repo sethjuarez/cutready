@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { FileText, Sparkles, Pencil, Eye, Lock, Unlock } from "lucide-react";
 import { SafeMarkdown } from "./SafeMarkdown";
-import { useAppStore } from "../stores/appStore";
+import { shouldSuppressEditorFlush, useAppStore } from "../stores/appStore";
 import { useSettings } from "../hooks/useSettings";
 import { MarkdownEditor } from "./MarkdownEditor";
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
@@ -149,7 +149,7 @@ export function NoteEditor() {
     return () => {
       if (saveTimeoutRef.current) {
         clearTimeout(saveTimeoutRef.current);
-        if (pendingContentRef.current !== null) {
+        if (pendingContentRef.current !== null && !shouldSuppressEditorFlush(activeNotePath)) {
           updateNoteRef.current(pendingContentRef.current);
         }
       }

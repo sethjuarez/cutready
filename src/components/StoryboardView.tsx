@@ -26,7 +26,7 @@ import {
   Plus,
   FileText,
 } from "lucide-react";
-import { useAppStore } from "../stores/appStore";
+import { shouldSuppressEditorFlush, useAppStore } from "../stores/appStore";
 import { useToastStore } from "../stores/toastStore";
 import { useSettings } from "../hooks/useSettings";
 import { SketchPickerItem } from "./SketchCard";
@@ -136,9 +136,10 @@ export function StoryboardView() {
     const pending = pendingDescRef.current;
     if (pending === null) return;
     pendingDescRef.current = null;
+    if (shouldSuppressEditorFlush(activeStoryboardPath)) return;
     if (storyboardLocked) return;
     updateStoryboard({ description: pending });
-  }, [storyboardLocked, updateStoryboard]);
+  }, [activeStoryboardPath, storyboardLocked, updateStoryboard]);
 
   const handleDescriptionChange = useCallback((value: string) => {
     if (storyboardLocked) return;

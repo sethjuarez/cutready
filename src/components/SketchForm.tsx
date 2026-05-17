@@ -4,7 +4,7 @@ import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import { SafeMarkdown } from "./SafeMarkdown";
 import { ChevronLeft, Sparkles, Monitor, Plus, X, Folder } from "lucide-react";
-import { useAppStore } from "../stores/appStore";
+import { shouldSuppressEditorFlush, useAppStore } from "../stores/appStore";
 import { useToastStore } from "../stores/toastStore";
 import { useSettings } from "../hooks/useSettings";
 import { ScriptTable } from "./ScriptTable";
@@ -271,13 +271,13 @@ export function SketchForm() {
       const path = pendingPathRef.current;
       if (titleTimeoutRef.current) {
         clearTimeout(titleTimeoutRef.current);
-        if (pendingTitleRef.current !== null && path) {
+        if (pendingTitleRef.current !== null && path && !shouldSuppressEditorFlush(path)) {
           invoke("update_sketch_title", { relativePath: path, title: pendingTitleRef.current }).catch(() => {});
         }
       }
       if (rowsTimeoutRef.current) {
         clearTimeout(rowsTimeoutRef.current);
-        if (pendingRowsRef.current !== null && path) {
+        if (pendingRowsRef.current !== null && path && !shouldSuppressEditorFlush(path)) {
           invoke("update_sketch", { relativePath: path, rows: pendingRowsRef.current }).catch(() => {});
         }
       }

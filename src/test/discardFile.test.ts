@@ -7,7 +7,7 @@ vi.mock("@tauri-apps/api/core", () => ({
   Channel: class {},
 }));
 
-import { useAppStore } from "../stores/appStore";
+import { shouldSuppressEditorFlush, useAppStore } from "../stores/appStore";
 import type { Sketch } from "../types/sketch";
 
 const restoredSketch: Sketch = {
@@ -28,6 +28,7 @@ const restoredSketch: Sketch = {
 
 describe("discardFile", () => {
   afterEach(() => {
+    vi.useRealTimers();
     mockInvoke.mockReset();
     useAppStore.setState({
       activeSketchPath: null,
@@ -49,6 +50,7 @@ describe("discardFile", () => {
   });
 
   it("refreshes the active sketch after discarding its in-flight edits", async () => {
+    vi.useFakeTimers();
     mockInvoke.mockImplementation((command: string) => {
       switch (command) {
         case "discard_file":
@@ -90,6 +92,9 @@ describe("discardFile", () => {
     expect(mockInvoke).toHaveBeenCalledWith("get_sketch", { relativePath: "demo.sk" });
     expect(useAppStore.getState().activeSketch).toEqual(restoredSketch);
     expect(useAppStore.getState().editorReloadKey).toBe(1);
+    expect(shouldSuppressEditorFlush("demo.sk")).toBe(true);
+    vi.advanceTimersByTime(100);
+    expect(shouldSuppressEditorFlush("demo.sk")).toBe(false);
     expect(useAppStore.getState().isDirty).toBe(false);
   });
 });
