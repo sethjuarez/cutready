@@ -9,6 +9,10 @@ on:
       tag:
         description: 'Release tag (e.g. v1.7.0)'
         required: true
+      build_run_id:
+        description: 'Optional completed Release run ID with build artifacts; skips test/build and only publishes'
+        required: false
+        default: ''
 
 concurrency:
   group: release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
@@ -16,6 +20,7 @@ concurrency:
 
 permissions:
   contents: write
+  actions: read
 
 jobs:
   resolve-tag:
@@ -54,6 +59,7 @@ jobs:
 
   test:
     needs: resolve-tag
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.build_run_id == '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -75,6 +81,7 @@ jobs:
     needs:
       - resolve-tag
       - test
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.build_run_id == '' }}
     strategy:
       fail-fast: false
       max-parallel: 5
@@ -171,18 +178,25 @@ jobs:
     needs:
       - resolve-tag
       - build
+    if: ${{ always() && needs.resolve-tag.result == 'success' && (needs.build.result == 'success' || (github.event_name == 'workflow_dispatch' && inputs.build_run_id != '')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       TAG: ${{ needs.resolve-tag.outputs.tag }}
       VERSION: ${{ needs.resolve-tag.outputs.version }}
+      ARTIFACT_RUN_ID: ${{ github.event_name == 'workflow_dispatch' && inputs.build_run_id != '' && inputs.build_run_id || github.run_id }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: Report artifact source
+        run: echo "Publishing release assets from workflow run ${ARTIFACT_RUN_ID}"
 
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ env.ARTIFACT_RUN_ID }}
           path: release-artifacts
 
       - name: Stage release assets
