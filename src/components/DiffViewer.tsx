@@ -201,21 +201,21 @@ function DiffToolbar({ filename, status, viewMode, onViewModeChange, showToggle,
               active={viewMode === "semantic"}
               onClick={() => onViewModeChange("semantic")}
               icon={<LayoutList className="w-3 h-3" />}
-              label="Semantic"
+              label="Changes"
             />
           )}
           <ToggleButton
             active={viewMode === "split"}
             onClick={() => onViewModeChange("split")}
             icon={<Columns2 className="w-3 h-3" />}
-            label="Split"
-            border={true}
+            label="Side by Side"
+            border={isStructured}
           />
           <ToggleButton
             active={viewMode === "unified"}
             onClick={() => onViewModeChange("unified")}
             icon={<Rows2 className="w-3 h-3" />}
-            label="Unified"
+            label="Inline"
             border={true}
           />
         </div>
