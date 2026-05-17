@@ -1189,6 +1189,49 @@ pub fn diff_working_tree(project_dir: &Path) -> Result<Vec<DiffEntry>, Versionin
     Ok(entries)
 }
 
+/// Content of a file at HEAD vs working directory for diff viewing.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct FileDiffContent {
+    /// File path relative to project root.
+    pub path: String,
+    /// Content of the file at HEAD (None if file is new/added).
+    pub head_content: Option<String>,
+    /// Content of the file in the working directory (None if deleted).
+    pub working_content: Option<String>,
+}
+
+/// Read both the HEAD and working-directory versions of a file for diff viewing.
+pub fn get_file_diff_content(
+    project_dir: &Path,
+    file_path: &str,
+) -> Result<FileDiffContent, VersioningError> {
+    let repo =
+        git2::Repository::open(project_dir).map_err(|e| VersioningError::Git(e.to_string()))?;
+
+    // Read HEAD version
+    let head_content = repo
+        .head()
+        .and_then(|h| h.peel_to_tree())
+        .ok()
+        .and_then(|tree| tree.get_path(std::path::Path::new(file_path)).ok())
+        .and_then(|entry| repo.find_blob(entry.id()).ok())
+        .and_then(|blob| String::from_utf8(blob.content().to_vec()).ok());
+
+    // Read working directory version
+    let abs_path = project_dir.join(file_path);
+    let working_content = if abs_path.exists() {
+        std::fs::read_to_string(&abs_path).ok()
+    } else {
+        None
+    };
+
+    Ok(FileDiffContent {
+        path: file_path.to_string(),
+        head_content,
+        working_content,
+    })
+}
+
 fn open_repo(project_dir: &Path) -> Result<gix::Repository, VersioningError> {
     // Ensure the git identity is configured before opening with gix.
     // gix needs user.name/email in config for reflog entries — without them,

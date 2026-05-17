@@ -41,14 +41,14 @@ const navItems: { id: AppView; label: string; icon: ReactNode }[] = [
     icon: <FolderOpen className="w-4 h-4" />,
   },
   {
-    id: "workspace",
-    label: "Workspace",
-    icon: <Monitor className="w-4 h-4" />,
-  },
-  {
     id: "changes",
     label: "Changes",
     icon: <GitCompareArrows className="w-4 h-4" />,
+  },
+  {
+    id: "workspace",
+    label: "Workspace",
+    icon: <Monitor className="w-4 h-4" />,
   },
 ];
 

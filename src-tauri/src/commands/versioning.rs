@@ -458,6 +458,15 @@ pub async fn diff_working_tree(
     versioning::diff_working_tree(&root).map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+pub async fn get_file_diff_content(
+    file_path: String,
+    state: State<'_, AppState>,
+) -> Result<versioning::FileDiffContent, String> {
+    let root = versioning_root(&state)?;
+    versioning::get_file_diff_content(&root, &file_path).map_err(|e| e.to_string())
+}
+
 /// Check for large files (>50MB) in the working tree.
 #[tauri::command]
 pub async fn check_large_files(
