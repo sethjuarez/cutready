@@ -524,17 +524,17 @@ function SectionHeader({
         className="flex min-w-0 flex-1 items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-[rgb(var(--color-text-secondary))] transition-colors hover:text-[rgb(var(--color-text))]"
       >
         {expanded ? <ChevronDown className="h-3 w-3 shrink-0" /> : <ChevronRight className="h-3 w-3 shrink-0" />}
-        <span className="truncate">{title}</span>
+        <span className="shrink-0 truncate">{title}</span>
         {scope && (
           <span
-            className="min-w-0 max-w-[4.75rem] shrink truncate rounded-full border border-[rgb(var(--color-border))] px-1.5 py-0 text-[9px] font-medium normal-case tracking-normal text-[rgb(var(--color-text-secondary))]/80"
+            className="min-w-0 flex-1 truncate rounded-full border border-[rgb(var(--color-border))] px-1.5 py-0 text-[9px] font-medium normal-case tracking-normal text-[rgb(var(--color-text-secondary))]/80"
             title={scopeTitle}
           >
             {scope}
           </span>
         )}
         {count !== undefined && count > 0 && (
-          <span className="ml-1 rounded-full bg-[rgb(var(--color-accent))]/15 px-1 py-0 text-[9px] font-medium text-[rgb(var(--color-accent))]">
+          <span className="ml-1 shrink-0 rounded-full bg-[rgb(var(--color-accent))]/15 px-1 py-0 text-[9px] font-medium text-[rgb(var(--color-accent))]">
             {count}
           </span>
         )}
