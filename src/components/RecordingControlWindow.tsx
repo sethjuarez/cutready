@@ -726,7 +726,7 @@ export function RecordingControlWindow() {
                 aria-label="Screen"
                 value={selectedMonitorId ?? ""}
                 onChange={(event) => setSelectedMonitorId(Number(event.target.value))}
-                className="w-full bg-transparent text-[11px] font-medium text-[rgb(var(--color-text))] outline-none"
+                className="w-full rounded-md border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] px-1.5 py-0.5 text-[11px] font-medium text-[rgb(var(--color-text))] outline-none"
               >
                 {monitors.length === 0 && <option value="">No screens</option>}
                 {monitors.map((monitor) => (
@@ -751,7 +751,7 @@ export function RecordingControlWindow() {
                 aria-label="Camera"
                 value={cameraDeviceId}
                 onChange={(event) => setCameraDeviceId(event.target.value)}
-                className="w-full bg-transparent text-[11px] font-medium text-[rgb(var(--color-text))] outline-none"
+                className="w-full rounded-md border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] px-1.5 py-0.5 text-[11px] font-medium text-[rgb(var(--color-text))] outline-none"
               >
                 <option value="">No camera</option>
                 {cameras.map((device) => (
@@ -773,7 +773,7 @@ export function RecordingControlWindow() {
                 aria-label="Microphone"
                 value={micDeviceId}
                 onChange={(event) => setMicDeviceId(event.target.value)}
-                className="w-full bg-transparent text-[11px] font-medium text-[rgb(var(--color-text))] outline-none"
+                className="w-full rounded-md border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] px-1.5 py-0.5 text-[11px] font-medium text-[rgb(var(--color-text))] outline-none"
               >
                 <option value="">No microphone</option>
                 {microphones.map((device) => (

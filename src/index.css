@@ -3,6 +3,7 @@
 @tailwind utilities;
 
 :root {
+  color-scheme: light;
   --color-surface: 250 249 247;
   --color-surface-alt: 240 238 235;
   --color-surface-inset: 234 231 226;
@@ -42,6 +43,7 @@
 }
 
 .dark {
+  color-scheme: dark;
   --color-surface: 43 41 38;
   --color-surface-alt: 53 50 48;
   --color-surface-inset: 37 34 32;

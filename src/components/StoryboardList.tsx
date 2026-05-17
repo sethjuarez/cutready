@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import {
   DndContext,
   closestCenter,
@@ -14,11 +14,10 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { invoke } from "@tauri-apps/api/core";
-import { ArrowRight, Copy, Download, FolderOpen, Plus, SquareTerminal, Trash2 } from "lucide-react";
+import { ArrowRight, ChevronDown, ChevronRight, Copy, FileInput, FolderOpen, Plus, SquareTerminal, Trash2 } from "lucide-react";
 import { useAppStore, type SidebarOrder } from "../stores/appStore";
 import type { ProjectEntry } from "../types/project";
 import { SketchIcon, StoryboardIcon, NoteIcon } from "./Icons";
-import { ProjectSwitcher } from "./ProjectSwitcher";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { ContextMenu, type ContextMenuItem } from "./ContextMenu";
 import { useToastStore } from "../stores/toastStore";
@@ -32,6 +31,22 @@ function applySidebarOrder<T extends { path: string }>(items: T[], order: string
     const bi = indexMap.get(b.path) ?? Infinity;
     return ai - bi;
   });
+}
+
+function sectionBodyStyle(
+  mode: "storyboards" | "sketches" | "notes" | "all",
+  weight: number,
+  itemCount: number,
+  expandedCount: number,
+  itemHeight = 34,
+): CSSProperties {
+  if (mode !== "all" || expandedCount === 1) return { flex: "1 1 0%", minHeight: 0 };
+
+  const estimatedHeight = Math.min(220, Math.max(56, itemCount * itemHeight + 8));
+  return {
+    flex: `${weight} 1 ${estimatedHeight}px`,
+    minHeight: 0,
+  };
 }
 
 /** Wrapper that makes a sidebar list item draggable. */
@@ -62,6 +77,38 @@ function SortableSidebarItem({ id, children }: { id: string; children: React.Rea
         </div>
         <div className="flex-1 min-w-0">{children}</div>
       </div>
+    </div>
+  );
+}
+
+function SidebarSectionHeader({
+  title,
+  count,
+  expanded,
+  onToggle,
+  actions,
+}: {
+  title: string;
+  count: number;
+  expanded: boolean;
+  onToggle: () => void;
+  actions?: React.ReactNode;
+}) {
+  return (
+    <div className="flex h-8 min-w-0 shrink-0 items-center justify-between gap-2 border-b border-[rgb(var(--color-border))] px-3">
+      <button
+        onClick={onToggle}
+        className="flex min-w-0 flex-1 items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-[rgb(var(--color-text-secondary))] transition-colors hover:text-[rgb(var(--color-text))]"
+      >
+        {expanded ? <ChevronDown className="h-3 w-3 shrink-0" /> : <ChevronRight className="h-3 w-3 shrink-0" />}
+        <span className="truncate">{title}</span>
+        {count > 0 && (
+          <span className="ml-1 rounded-full bg-[rgb(var(--color-accent))]/15 px-1 py-0 text-[9px] font-medium text-[rgb(var(--color-accent))]">
+            {count}
+          </span>
+        )}
+      </button>
+      <div className="flex shrink-0 items-center gap-1">{actions}</div>
     </div>
   );
 }
@@ -121,6 +168,9 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
   const [newSkTitle, setNewSkTitle] = useState("");
   const [isCreatingNote, setIsCreatingNote] = useState(false);
   const [newNoteTitle, setNewNoteTitle] = useState("");
+  const [storyboardsExpanded, setStoryboardsExpanded] = useState(true);
+  const [sketchesExpanded, setSketchesExpanded] = useState(true);
+  const [notesExpanded, setNotesExpanded] = useState(true);
   const [pendingDelete, setPendingDelete] = useState<{ type: "storyboard" | "sketch" | "note"; path: string; title: string; usedBy?: string[] } | null>(null);
   const [drmConfirm, setDrmConfirm] = useState<{ resolve: (ok: boolean) => void } | null>(null);
   const [importing, setImporting] = useState(false);
@@ -352,6 +402,11 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
   const orderedStoryboards = applySidebarOrder(storyboards, sidebarOrder?.storyboards ?? []);
   const orderedSketches = applySidebarOrder(sketches, sidebarOrder?.sketches ?? []);
   const orderedNotes = applySidebarOrder(notes, sidebarOrder?.notes ?? []);
+  const sectionBodyClass = "min-h-0 overflow-y-auto py-1";
+  const expandedSectionCount = [storyboardsExpanded, sketchesExpanded, notesExpanded].filter(Boolean).length;
+  const storyboardsBodyStyle = sectionBodyStyle(resolvedMode, 0.75, orderedStoryboards.length, expandedSectionCount, 42);
+  const sketchesBodyStyle = sectionBodyStyle(resolvedMode, 1.25, orderedSketches.length, expandedSectionCount, 42);
+  const notesBodyStyle = sectionBodyStyle(resolvedMode, 2, orderedNotes.length, expandedSectionCount, 30);
 
   // DnD sensors — require 5px movement to start drag (avoids accidental drags on click)
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
@@ -525,9 +580,6 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
     <div
       className="flex flex-col h-full bg-[rgb(var(--color-surface-inset))]"
     >
-      {/* ── Project switcher ── */}
-      <ProjectSwitcher />
-
       {/* ── Documents header (all-mode only) ──────────────────────────────── */}
       {resolvedMode === "all" && (
         <div className="flex h-8 shrink-0 items-center justify-between border-b border-[rgb(var(--color-border))] px-3">
@@ -547,7 +599,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                 </svg>
               ) : (
-                <Download className="w-3 h-3" />
+                <FileInput className="w-3 h-3" />
               )}
             </button>
           </div>
@@ -557,11 +609,13 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
       {/* ── Storyboards section ────────────────────────── */}
       {(resolvedMode === "all" || resolvedMode === "storyboards") && (
         <>
-          <div className="flex h-8 shrink-0 items-center justify-between border-b border-[rgb(var(--color-border))] px-3">
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-[rgb(var(--color-text-secondary))]">
-              Storyboards
-            </span>
-            <div className="flex items-center gap-1">
+          <SidebarSectionHeader
+            title="Storyboards"
+            count={orderedStoryboards.length}
+            expanded={storyboardsExpanded}
+            onToggle={() => setStoryboardsExpanded(!storyboardsExpanded)}
+            actions={
+              <>
               {resolvedMode === "storyboards" && (
                 <button
                   onClick={handleImport}
@@ -575,21 +629,22 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                     </svg>
                   ) : (
-                    <Download className="w-3 h-3" />
+                    <FileInput className="w-3 h-3" />
                   )}
                 </button>
               )}
               <button
-                onClick={() => setIsCreatingSb(true)}
+                onClick={() => { setStoryboardsExpanded(true); setIsCreatingSb(true); }}
                 className="p-1 rounded-md text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10 transition-colors"
                 title="New storyboard"
               >
                 <Plus className="w-3.5 h-3.5" />
               </button>
-            </div>
-          </div>
+              </>
+            }
+          />
 
-          {isCreatingSb && (
+          {storyboardsExpanded && isCreatingSb && (
             <div className="px-3 py-2 border-b border-[rgb(var(--color-border))]">
               <input
                 type="text"
@@ -606,10 +661,10 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
             </div>
           )}
 
-          <div className="overflow-y-auto py-1" style={resolvedMode === "all" ? { maxHeight: "40%" } : { flex: 1 }}>
+          {storyboardsExpanded && <div className={sectionBodyClass} style={storyboardsBodyStyle}>
             {orderedStoryboards.length === 0 && !isCreatingSb ? (
               <button
-                onClick={() => setIsCreatingSb(true)}
+                onClick={() => { setStoryboardsExpanded(true); setIsCreatingSb(true); }}
                 className="w-full px-3 py-4 text-xs text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] transition-colors"
               >
                 + New storyboard
@@ -681,18 +736,20 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                 </SortableContext>
               </DndContext>
             )}
-          </div>
+          </div>}
         </>
       )}
 
       {/* ── Sketches section──────────────────────────── */}
       {(resolvedMode === "all" || resolvedMode === "sketches") && (
         <>
-          <div className="flex h-8 shrink-0 items-center justify-between border-b border-[rgb(var(--color-border))] px-3">
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-[rgb(var(--color-text-secondary))]">
-              Sketches
-            </span>
-            <div className="flex items-center gap-1">
+          <SidebarSectionHeader
+            title="Sketches"
+            count={orderedSketches.length}
+            expanded={sketchesExpanded}
+            onToggle={() => setSketchesExpanded(!sketchesExpanded)}
+            actions={
+              <>
               {resolvedMode === "sketches" && (
                 <button
                   onClick={handleImport}
@@ -706,21 +763,22 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                     </svg>
                   ) : (
-                    <Download className="w-3 h-3" />
+                    <FileInput className="w-3 h-3" />
                   )}
                 </button>
               )}
               <button
-                onClick={() => setIsCreatingSk(true)}
+                onClick={() => { setSketchesExpanded(true); setIsCreatingSk(true); }}
                 className="p-1 rounded-md text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10 transition-colors"
                 title="New sketch"
               >
                 <Plus className="w-3.5 h-3.5" />
               </button>
-            </div>
-          </div>
+              </>
+            }
+          />
 
-          {isCreatingSk && (
+          {sketchesExpanded && isCreatingSk && (
             <div className="px-3 py-2 border-b border-[rgb(var(--color-border))]">
               <input
                 type="text"
@@ -737,10 +795,10 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
             </div>
           )}
 
-          <div className="flex-1 overflow-y-auto py-1">
+          {sketchesExpanded && <div className={sectionBodyClass} style={sketchesBodyStyle}>
             {orderedSketches.length === 0 && !isCreatingSk ? (
               <button
-                onClick={() => setIsCreatingSk(true)}
+                onClick={() => { setSketchesExpanded(true); setIsCreatingSk(true); }}
                 className="w-full px-3 py-4 text-xs text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] transition-colors"
               >
                 + New sketch
@@ -812,18 +870,20 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                 </SortableContext>
               </DndContext>
             )}
-          </div>
+          </div>}
         </>
       )}
 
       {/* ── Notes section─────────────────────────────── */}
       {(resolvedMode === "all" || resolvedMode === "notes") && (
         <>
-          <div className="flex h-8 shrink-0 items-center justify-between border-b border-[rgb(var(--color-border))] px-3">
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-[rgb(var(--color-text-secondary))]">
-              Notes
-            </span>
-            <div className="flex items-center gap-1">
+          <SidebarSectionHeader
+            title="Notes"
+            count={orderedNotes.length}
+            expanded={notesExpanded}
+            onToggle={() => setNotesExpanded(!notesExpanded)}
+            actions={
+              <>
               {resolvedMode === "notes" && (
                 <button
                   onClick={handleImport}
@@ -837,21 +897,22 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                     </svg>
                   ) : (
-                    <Download className="w-3 h-3" />
+                    <FileInput className="w-3 h-3" />
                   )}
                 </button>
               )}
               <button
-                onClick={() => setIsCreatingNote(true)}
+                onClick={() => { setNotesExpanded(true); setIsCreatingNote(true); }}
                 className="p-1 rounded-md text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10 transition-colors"
                 title="New note"
               >
                 <Plus className="w-3.5 h-3.5" />
               </button>
-            </div>
-          </div>
+              </>
+            }
+          />
 
-          {isCreatingNote && (
+          {notesExpanded && isCreatingNote && (
             <div className="px-3 py-2 border-b border-[rgb(var(--color-border))]">
               <input
                 type="text"
@@ -868,7 +929,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
             </div>
           )}
 
-          <div className="flex-1 overflow-y-auto py-1">
+          {notesExpanded && <div className={sectionBodyClass} style={notesBodyStyle}>
             {orderedNotes.length === 0 && !isCreatingNote ? (
               <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
                 <p className="text-xs text-[rgb(var(--color-text-secondary))] mb-3 leading-relaxed">
@@ -876,7 +937,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                 </p>
                 <div className="flex gap-2">
                   <button
-                    onClick={() => setIsCreatingNote(true)}
+                    onClick={() => { setNotesExpanded(true); setIsCreatingNote(true); }}
                     className="px-3 py-1.5 text-[11px] rounded-lg border border-[rgb(var(--color-border))] text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:border-[rgb(var(--color-accent))] transition-colors"
                   >
                     + New note
@@ -951,7 +1012,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                 </SortableContext>
               </DndContext>
             )}
-          </div>
+          </div>}
         </>
       )}
 

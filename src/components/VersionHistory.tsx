@@ -22,6 +22,8 @@ export function VersionHistory() {
   const squashSnapshots = useAppStore((s) => s.squashSnapshots);
   const currentRemote = useAppStore((s) => s.currentRemote);
   const saving = useAppStore((s) => s.saving);
+  const currentProject = useAppStore((s) => s.currentProject);
+  const isMultiProject = useAppStore((s) => s.isMultiProject);
   const hasRemote = !!currentRemote;
 
   const [pendingNavTarget, setPendingNavTarget] = useState<string | null>(null);
@@ -156,6 +158,8 @@ export function VersionHistory() {
   }, [cancelSquash, selectedHead, selectedOldest, squashLabel, squashSnapshots]);
 
   const borderClass = sidebarPosition === "left" ? "border-l" : "border-r";
+  const workspaceName = currentProject ? getPathBasename(currentProject.repo_root) : "workspace";
+  const activeProjectName = currentProject?.name ?? "this project";
 
   return (
     <div className={`flex flex-col h-full ${borderClass} border-[rgb(var(--color-border))]`}>
@@ -165,6 +169,14 @@ export function VersionHistory() {
           <span className="text-xs font-medium text-[rgb(var(--color-text-secondary))] uppercase tracking-wider">
             Snapshots
           </span>
+          {isMultiProject && (
+            <span
+              className="rounded-full border border-[rgb(var(--color-border))] px-1.5 py-0 text-[9px] font-medium text-[rgb(var(--color-text-secondary))]/80"
+              title={`Workspace snapshots: ${workspaceName}`}
+            >
+              Workspace
+            </span>
+          )}
           {timelines.length > 1 && <TimelineSelector />}
         </div>
         <div className="flex items-center gap-0.5">
@@ -172,7 +184,7 @@ export function VersionHistory() {
             <button
               onClick={() => setConfirmDiscard(true)}
               className="group/btn flex items-center gap-1 p-1 rounded text-[rgb(var(--color-text-secondary))] hover:text-error transition-colors"
-              title="Discard changes"
+              title="Discard active project changes"
             >
               <RefreshCw className="shrink-0 w-3.5 h-3.5" />
               <span className="max-w-0 overflow-hidden group-hover/btn:max-w-[10rem] transition-all duration-200 whitespace-nowrap text-[10px]">
@@ -239,6 +251,9 @@ export function VersionHistory() {
         </div>
       </div>
 
+      {/* Sync Bar — only visible when remote is configured */}
+      <SyncBar />
+
       {/* Search bar */}
       {showSearch && (
         <div className="px-3 py-1.5 border-b border-[rgb(var(--color-border))]">
@@ -301,14 +316,11 @@ export function VersionHistory() {
         </div>
       )}
 
-      {/* Sync Bar — only visible when remote is configured */}
-      <SyncBar />
-
       {/* Discard confirmation */}
       {confirmDiscard && (
         <div className="px-3 py-2 border-b border-error/20 bg-error/5">
           <div className="text-[10px] font-medium text-error mb-1.5">
-            Discard all changes since last snapshot?
+            Discard changes in {isMultiProject ? activeProjectName : "this project"} since the last snapshot?
           </div>
           <div className="flex gap-1.5">
             <button
@@ -366,7 +378,7 @@ export function VersionHistory() {
             </div>
             <p className="text-sm font-medium text-[rgb(var(--color-text))] mb-1">No snapshots yet</p>
             <p className="text-xs text-[rgb(var(--color-text-secondary))] max-w-[240px] leading-relaxed">
-              Save a snapshot to create a restore point. Press <kbd className="px-1 py-0.5 rounded border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] text-[10px] font-mono">Ctrl+S</kbd> to name and save one.
+              Save a workspace snapshot to create a restore point. Press <kbd className="px-1 py-0.5 rounded border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] text-[10px] font-mono">Ctrl+S</kbd> to name and save one.
             </p>
           </div>
         ) : (
@@ -398,4 +410,8 @@ export function VersionHistory() {
       <SnapshotDiffPanel />
     </div>
   );
+}
+
+function getPathBasename(path: string): string {
+  return path.split(/[\\/]/).filter(Boolean).pop() ?? path;
 }

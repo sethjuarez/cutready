@@ -1,11 +1,13 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useCallback, useEffect, useState } from "react";
+import type { MouseEvent } from "react";
 import { Search, X, Download, LayoutGrid } from "lucide-react";
 import { useUpdateStore } from "../stores/updateStore";
 import { useAppStore } from "../stores/appStore";
 import { usePopover } from "../hooks/usePopover";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { isMac, formatKeybinding } from "../utils/platform";
+import { ProjectSwitcher } from "./ProjectSwitcher";
 
 interface TitleBarProps {
   onCommandPaletteOpen?: () => void;
@@ -34,14 +36,7 @@ export function TitleBar({
     try { return getCurrentWindow(); } catch { return null; }
   })();
   const [maximized, setMaximized] = useState(false);
-  const projectName = useAppStore((s) => s.currentProject?.name);
-  const workspaceName = useAppStore((s) => {
-    const repoRoot = s.currentProject?.repo_root;
-    if (!repoRoot) return null;
-    // Extract folder name from path (last segment)
-    return repoRoot.replace(/[/\\]+$/, "").split(/[/\\]/).pop() ?? null;
-  });
-  const isMultiProject = useAppStore((s) => s.isMultiProject);
+  const currentProject = useAppStore((s) => s.currentProject);
 
   useEffect(() => {
     if (!appWindow) return;
@@ -65,21 +60,30 @@ export function TitleBar({
     [appWindow],
   );
   const handleClose = useCallback(() => appWindow?.close(), [appWindow]);
+  const handleTitleBarMouseDown = useCallback(
+    (event: MouseEvent<HTMLElement>) => {
+      if (isMac || event.button !== 0 || !appWindow) return;
+      const target = event.target as HTMLElement;
+      if (target.closest("button, input, textarea, select, a, [role='button']")) return;
+
+      if (event.detail === 2) {
+        event.preventDefault();
+        void appWindow.toggleMaximize();
+        return;
+      }
+
+      void appWindow.startDragging();
+    },
+    [appWindow],
+  );
 
   // macOS uses native window chrome — render only the toolbar controls
   if (isMac) {
     return (
       <div className="flex items-center justify-between bg-[rgb(var(--color-surface))] border-b border-[rgb(var(--color-border))] px-3 h-10 shrink-0">
-        {/* Left: workspace name */}
+        {/* Left: workspace/project breadcrumb */}
         <div className="flex items-center gap-2 shrink-0">
-          {workspaceName && (
-            <span className="text-xs text-[rgb(var(--color-text-secondary))] font-medium truncate max-w-[200px]">
-              {workspaceName}
-              {isMultiProject && projectName && (
-                <span className="text-[rgb(var(--color-text-secondary))]/60"> / {projectName}</span>
-              )}
-            </span>
-          )}
+          {currentProject && <ProjectSwitcher variant="title" />}
         </div>
 
         {/* Center: Command palette */}
@@ -161,6 +165,7 @@ export function TitleBar({
       className="no-select fixed top-0 left-0 right-0 z-chrome flex items-center justify-between bg-[rgb(var(--color-surface))] border-b border-[rgb(var(--color-border))]"
       style={{ height: "var(--titlebar-height)" }}
       data-tauri-drag-region
+      onMouseDown={handleTitleBarMouseDown}
     >
       {/* Left side */}
       <div className="flex items-center gap-2 shrink-0 pl-3">
@@ -189,16 +194,7 @@ export function TitleBar({
         >
           CutReady
         </span>
-        {workspaceName && (
-          <span
-            className="text-sm text-[rgb(var(--color-text-secondary))] font-normal ml-1.5"
-          >
-            / {workspaceName}
-            {isMultiProject && projectName && (
-              <span className="text-[rgb(var(--color-text-secondary))]/60"> / {projectName}</span>
-            )}
-          </span>
-        )}
+        {currentProject && <ProjectSwitcher variant="title" />}
       </div>
 
       {/* Center: Command center */}

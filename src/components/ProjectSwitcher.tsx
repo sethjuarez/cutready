@@ -4,11 +4,12 @@ import { useAppStore } from "../stores/appStore";
 import type { ProjectEntry } from "../types/project";
 import { Folder, ChevronDown, Pencil, Check, Plus } from "lucide-react";
 
-/**
- * Compact project switcher dropdown. Only visible when the workspace has multiple
- * projects (or when the user wants to add one). Sits at the top of the sidebar.
- */
-export function ProjectSwitcher() {
+/** Compact project switcher dropdown for the title breadcrumb or sidebar. */
+interface ProjectSwitcherProps {
+  variant?: "sidebar" | "title";
+}
+
+export function ProjectSwitcher({ variant = "sidebar" }: ProjectSwitcherProps) {
   const currentProject = useAppStore((s) => s.currentProject);
   const projects = useAppStore((s) => s.projects);
   const isMultiProject = useAppStore((s) => s.isMultiProject);
@@ -136,19 +137,48 @@ export function ProjectSwitcher() {
     return currentProject.root.endsWith(p.path.replace(/\//g, "\\")) || currentProject.root.endsWith(p.path);
   });
 
+  const workspaceName = currentProject
+    ? currentProject.repo_root.replace(/[/\\]+$/, "").split(/[/\\]/).pop()
+    : null;
+  const isTitle = variant === "title";
+
   return (
-    <div ref={dropdownRef} className="relative shrink-0 border-b border-[rgb(var(--color-border))]">
+    <div
+      ref={dropdownRef}
+      className={
+        isTitle
+          ? "relative min-w-0 shrink"
+          : "relative shrink-0 border-b border-[rgb(var(--color-border))]"
+      }
+    >
       {/* Trigger */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 w-full px-3 py-1.5 text-left hover:bg-[rgb(var(--color-surface))] transition-colors"
+        className={
+          isTitle
+            ? "flex max-w-[320px] min-w-0 items-center gap-1.5 rounded px-1.5 py-0.5 text-left text-sm text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
+            : "flex items-center gap-2 w-full px-3 py-1.5 text-left hover:bg-[rgb(var(--color-surface))] transition-colors"
+        }
+        title={isTitle ? "Switch project" : undefined}
       >
-        {/* Project icon */}
-        <Folder className="text-[rgb(var(--color-accent))] shrink-0 w-3.5 h-3.5" />
-        <span className="text-[12px] font-medium text-[rgb(var(--color-text))] truncate flex-1">
-          {activeEntry?.name ?? currentProject?.name ?? "Select project"}
-        </span>
-        {/* Chevron */}
+        {!isTitle && <Folder className="text-[rgb(var(--color-accent))] shrink-0 w-3.5 h-3.5" />}
+        {isTitle ? (
+          <>
+            {workspaceName && <span className="truncate">{workspaceName}</span>}
+            {isMultiProject && (
+              <>
+                <span className="text-[rgb(var(--color-text-secondary))]/50">/</span>
+                <span className="truncate text-[rgb(var(--color-text))]">
+                  {activeEntry?.name ?? currentProject?.name ?? "Select project"}
+                </span>
+              </>
+            )}
+          </>
+        ) : (
+          <span className="text-[12px] font-medium text-[rgb(var(--color-text))] truncate flex-1">
+            {activeEntry?.name ?? currentProject?.name ?? "Select project"}
+          </span>
+        )}
         <ChevronDown
           className={`text-[rgb(var(--color-text-secondary))] shrink-0 transition-transform w-2.5 h-2.5 ${isOpen ? "rotate-180" : ""}`}
         />
@@ -156,7 +186,23 @@ export function ProjectSwitcher() {
 
       {/* Dropdown */}
       {isOpen && (
-        <div className="absolute left-0 right-0 top-full z-dropdown bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-b-lg shadow-lg overflow-hidden">
+        <div
+          className={
+            isTitle
+              ? "absolute left-0 top-full z-dropdown mt-1 w-[260px] overflow-hidden rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] shadow-lg"
+              : "absolute left-0 right-0 top-full z-dropdown bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-b-lg shadow-lg overflow-hidden"
+          }
+        >
+          {isTitle && (
+            <div className="border-b border-[rgb(var(--color-border))] px-3 py-2">
+              <div className="text-[10px] font-medium uppercase tracking-wider text-[rgb(var(--color-text-secondary))]">
+                Workspace
+              </div>
+              <div className="truncate text-[12px] text-[rgb(var(--color-text))]">
+                {workspaceName ?? "Current workspace"}
+              </div>
+            </div>
+          )}
           {projects.map((p) => {
             const isActive = activeEntry?.path === p.path;
             const isRenaming = renamingPath === p.path;

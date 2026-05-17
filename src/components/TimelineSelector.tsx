@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useAppStore } from "../stores/appStore";
 import { ArrowLeftRight, ChevronDown, Check, Plus } from "lucide-react";
 
@@ -21,8 +22,10 @@ export function TimelineSelector() {
   const [filter, setFilter] = useState("");
   const [newName, setNewName] = useState("");
   const [showNew, setShowNew] = useState(false);
+  const triggerRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const filterRef = useRef<HTMLInputElement>(null);
+  const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties | null>(null);
 
   const active = timelines.find((t) => t.is_active);
 
@@ -30,7 +33,14 @@ export function TimelineSelector() {
   useEffect(() => {
     if (!open) return;
     const handle = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      if (
+        triggerRef.current?.contains(target) ||
+        dropdownRef.current?.contains(target)
+      ) {
+        return;
+      }
+      {
         setOpen(false);
         setFilter("");
         setShowNew(false);
@@ -38,6 +48,32 @@ export function TimelineSelector() {
     };
     window.addEventListener("mousedown", handle);
     return () => window.removeEventListener("mousedown", handle);
+  }, [open]);
+
+  useLayoutEffect(() => {
+    if (!open) return;
+
+    const updatePosition = () => {
+      const trigger = triggerRef.current;
+      if (!trigger) return;
+      const rect = trigger.getBoundingClientRect();
+      const width = 224;
+      const left = Math.min(rect.left, window.innerWidth - width - 8);
+      setDropdownStyle({
+        position: "fixed",
+        left: Math.max(8, left),
+        top: rect.bottom + 4,
+        width,
+      });
+    };
+
+    updatePosition();
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+    return () => {
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
   }, [open]);
 
   // Focus filter when opening
@@ -107,12 +143,119 @@ export function TimelineSelector() {
     t.label.toLowerCase().includes(filter.toLowerCase())
   );
 
+  const dropdown = open && dropdownStyle ? createPortal(
+    <div
+      ref={dropdownRef}
+      style={dropdownStyle}
+      className="rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] shadow-lg z-dropdown overflow-hidden"
+    >
+      {/* Search filter */}
+      {timelines.length > 3 && (
+        <div className="px-2 pt-2">
+          <input
+            ref={filterRef}
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            placeholder="Filter branches…"
+            className="w-full px-2 py-1 rounded text-[10px] bg-[rgb(var(--color-surface-alt))] border border-[rgb(var(--color-border))] text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/50 outline-none focus:border-[rgb(var(--color-accent))]"
+          />
+        </div>
+      )}
+
+      {/* Timeline list */}
+      <div className="max-h-48 overflow-y-auto py-1">
+        {filtered.map((t) => (
+          <button
+            key={t.name}
+            onClick={() => t.is_active ? setOpen(false) : handleSwitch(t.name)}
+            className={`group w-full flex items-center gap-2 px-3 py-1.5 text-left text-[11px] transition-colors relative ${
+              t.is_active
+                ? "bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))] font-medium"
+                : "text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-border))]/30"
+            }`}
+          >
+            {/* Consistent icon area */}
+            <span className="w-[10px] shrink-0 flex items-center justify-center">
+              {t.is_active ? (
+                <Check className="w-2.5 h-2.5" />
+              ) : (
+                <span className="w-1.5 h-1.5 rounded-full bg-[rgb(var(--color-text-secondary))]/30" />
+              )}
+            </span>
+            <span className="truncate flex-1">{t.label}</span>
+            <span className="text-[9px] text-[rgb(var(--color-text-secondary))] tabular-nums ml-auto">
+              {t.snapshot_count} {t.snapshot_count === 1 ? "snap" : "snaps"}
+            </span>
+            {!t.is_active && t.name !== "main" && timelines.length > 1 && (
+              <span className="absolute right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-[rgb(var(--color-surface))] pl-1 rounded">
+                <button
+                  onClick={(e) => handleMerge(t.name, t.label, e)}
+                  className="text-[9px] px-1.5 py-0.5 rounded hover:bg-success/15 hover:text-success transition-colors"
+                >
+                  Merge
+                </button>
+                <button
+                  onClick={(e) => handlePromote(t.name, t.label, e)}
+                  className="text-[9px] px-1.5 py-0.5 rounded hover:bg-[rgb(var(--color-accent))]/15 hover:text-[rgb(var(--color-accent))] transition-colors"
+                >
+                  Promote
+                </button>
+                <button
+                  onClick={(e) => handleDelete(t.name, e)}
+                  className="text-[9px] px-1.5 py-0.5 rounded hover:bg-error/15 hover:text-error transition-colors"
+                >
+                  x
+                </button>
+              </span>
+            )}
+          </button>
+        ))}
+        {filtered.length === 0 && (
+          <div className="px-3 py-2 text-[10px] text-[rgb(var(--color-text-secondary))]">
+            No branches match "{filter}"
+          </div>
+        )}
+      </div>
+
+      {/* New timeline */}
+      <div className="border-t border-[rgb(var(--color-border))]">
+        {showNew ? (
+          <div className="flex items-center gap-1.5 px-2 py-2">
+            <input
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleCreate()}
+              placeholder="Branch name…"
+              className="flex-1 px-2 py-1 rounded text-[10px] bg-[rgb(var(--color-surface-alt))] border border-[rgb(var(--color-border))] text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/50 outline-none focus:border-[rgb(var(--color-accent))]"
+              autoFocus
+            />
+            <button
+              onClick={handleCreate}
+              className="px-2 py-1 rounded text-[10px] font-medium bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))] hover:opacity-90 transition-opacity"
+            >
+              Create
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => setShowNew(true)}
+            className="w-full flex items-center gap-2 px-3 py-2 text-[11px] text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/5 transition-colors"
+          >
+            <Plus className="w-2.5 h-2.5" />
+            New Branch
+          </button>
+        )}
+      </div>
+    </div>,
+    document.body,
+  ) : null;
+
   return (
-    <div className="relative" ref={dropdownRef}>
+    <div className="relative" ref={triggerRef}>
       {/* Trigger button */}
       <button
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-1.5 px-2 py-1 rounded text-[10px] text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-border))]/50 transition-colors max-w-[140px]"
+        className="flex h-5 max-w-[5.75rem] items-center gap-1.5 rounded-md px-1.5 text-[10px] text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
         title={`Branch: ${active?.label ?? "main"}`}
       >
         <ArrowLeftRight className="shrink-0 w-3 h-3" />
@@ -120,108 +263,7 @@ export function TimelineSelector() {
         <ChevronDown className="shrink-0 opacity-50 w-2 h-2" />
       </button>
 
-      {/* Dropdown */}
-      {open && (
-        <div className="absolute top-full left-0 mt-1 w-56 rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] shadow-lg z-dropdown overflow-hidden">
-          {/* Search filter */}
-          {timelines.length > 3 && (
-            <div className="px-2 pt-2">
-              <input
-                ref={filterRef}
-                value={filter}
-                onChange={(e) => setFilter(e.target.value)}
-                placeholder="Filter branches…"
-                className="w-full px-2 py-1 rounded text-[10px] bg-[rgb(var(--color-bg))] border border-[rgb(var(--color-border))] text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/50 outline-none focus:border-[rgb(var(--color-accent))]"
-              />
-            </div>
-          )}
-
-          {/* Timeline list */}
-          <div className="max-h-48 overflow-y-auto py-1">
-            {filtered.map((t) => (
-              <button
-                key={t.name}
-                onClick={() => t.is_active ? setOpen(false) : handleSwitch(t.name)}
-                className={`group w-full flex items-center gap-2 px-3 py-1.5 text-left text-[11px] transition-colors relative ${
-                  t.is_active
-                    ? "bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))] font-medium"
-                    : "text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-border))]/30"
-                }`}
-              >
-                {/* Consistent icon area */}
-                <span className="w-[10px] shrink-0 flex items-center justify-center">
-                  {t.is_active ? (
-                    <Check className="w-2.5 h-2.5" />
-                  ) : (
-                    <span className="w-1.5 h-1.5 rounded-full bg-[rgb(var(--color-text-secondary))]/30" />
-                  )}
-                </span>
-                <span className="truncate flex-1">{t.label}</span>
-                <span className="text-[9px] text-[rgb(var(--color-text-secondary))] tabular-nums ml-auto">
-                  {t.snapshot_count} {t.snapshot_count === 1 ? "snap" : "snaps"}
-                </span>
-                {!t.is_active && t.name !== "main" && timelines.length > 1 && (
-                  <span className="absolute right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-[rgb(var(--color-surface))] pl-1 rounded">
-                    <button
-                      onClick={(e) => handleMerge(t.name, t.label, e)}
-                      className="text-[9px] px-1.5 py-0.5 rounded hover:bg-success/15 hover:text-success transition-colors"
-                    >
-                      Merge
-                    </button>
-                    <button
-                      onClick={(e) => handlePromote(t.name, t.label, e)}
-                      className="text-[9px] px-1.5 py-0.5 rounded hover:bg-[rgb(var(--color-accent))]/15 hover:text-[rgb(var(--color-accent))] transition-colors"
-                    >
-                      Promote
-                    </button>
-                    <button
-                      onClick={(e) => handleDelete(t.name, e)}
-                      className="text-[9px] px-1.5 py-0.5 rounded hover:bg-error/15 hover:text-error transition-colors"
-                    >
-                      ✕
-                    </button>
-                  </span>
-                )}
-              </button>
-            ))}
-            {filtered.length === 0 && (
-              <div className="px-3 py-2 text-[10px] text-[rgb(var(--color-text-secondary))]">
-                No branches match "{filter}"
-              </div>
-            )}
-          </div>
-
-          {/* New timeline */}
-          <div className="border-t border-[rgb(var(--color-border))]">
-            {showNew ? (
-              <div className="flex items-center gap-1.5 px-2 py-2">
-                <input
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleCreate()}
-                  placeholder="Branch name…"
-                  className="flex-1 px-2 py-1 rounded text-[10px] bg-[rgb(var(--color-bg))] border border-[rgb(var(--color-border))] text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/50 outline-none focus:border-[rgb(var(--color-accent))]"
-                  autoFocus
-                />
-                <button
-                  onClick={handleCreate}
-                  className="px-2 py-1 rounded text-[10px] font-medium bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))] hover:opacity-90 transition-opacity"
-                >
-                  Create
-                </button>
-              </div>
-            ) : (
-              <button
-                onClick={() => setShowNew(true)}
-                className="w-full flex items-center gap-2 px-3 py-2 text-[11px] text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/5 transition-colors"
-              >
-                <Plus className="w-2.5 h-2.5" />
-                New Branch
-              </button>
-            )}
-          </div>
-        </div>
-      )}
+      {dropdown}
     </div>
   );
 }

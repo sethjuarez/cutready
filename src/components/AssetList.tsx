@@ -127,7 +127,7 @@ export function AssetList() {
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value as SortBy)}
-              className="text-[10px] bg-transparent text-[rgb(var(--color-text-secondary))] border-none outline-none cursor-pointer"
+              className="cursor-pointer rounded-md border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] px-1.5 py-0.5 text-[10px] text-[rgb(var(--color-text-secondary))] outline-none transition-colors hover:text-[rgb(var(--color-text))] focus:border-[rgb(var(--color-accent))]"
             >
               <option value="type">Type</option>
               <option value="reference">Reference</option>
