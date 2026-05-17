@@ -343,6 +343,13 @@ export function AppLayout() {
     root.style.setProperty("--app-font-family", fontMap[displaySettings.displayFontFamily] ?? fontMap.system);
   }, [displaySettings, displaySettingsLoaded, resolvedTheme]);
 
+  // Redirect away from recording view if feature flag is off
+  useEffect(() => {
+    if (displaySettingsLoaded && view === "recording" && !displaySettings.featureRecording) {
+      setView("home");
+    }
+  }, [displaySettingsLoaded, displaySettings.featureRecording, view, setView]);
+
   const handleExecuteCommand= useCallback((commandId: string) => {
     commandRegistry.execute(commandId);
     setRecentCommands((prev) => [
@@ -390,7 +397,7 @@ export function AppLayout() {
               {view === "home" && <div className="h-full overflow-y-auto"><HomePanel /></div>}
               {(view === "project" || view === "sketch" || view === "storyboards" || view === "sketches" || view === "notes" || view === "assets" || view === "explorer") && (isMerging ? <MergeConflictPanel /> : <StoryboardPanel />)}
               {view === "editor" && <div className="h-full overflow-y-auto"><ScriptEditorPanel /></div>}
-              {view === "recording" && <div className="h-full overflow-y-auto"><RecordingPanel /></div>}
+              {view === "recording" && displaySettings.featureRecording && <div className="h-full overflow-y-auto"><RecordingPanel /></div>}
               {view === "settings" && <div className="h-full overflow-y-auto"><SettingsPanel mode="global" /></div>}
               {view === "workspace" && <div className="h-full overflow-y-auto"><SettingsPanel mode="workspace" /></div>}
               {view === "chat" && <div className="h-full overflow-hidden"><ChatPanel /></div>}

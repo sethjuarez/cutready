@@ -98,6 +98,8 @@ export interface GlobalSettings {
   recorderSystemAudioEnabled: boolean;
   /** Software gain for system audio recording, 0-200 where 100 is unity. */
   recorderSystemAudioVolume: number;
+  /** Feature flag: show recording UI (experimental, default false). */
+  featureRecording: boolean;
   // Legacy fields (migrated on load)
   llmApiKey?: string;
   llmEndpoint?: string;
@@ -164,6 +166,7 @@ const defaultGlobalSettings: GlobalSettings = {
   recorderCameraDeviceId: "",
   recorderSystemAudioEnabled: false,
   recorderSystemAudioVolume: 100,
+  featureRecording: false,
 };
 
 function getInitialGlobalSettings(): GlobalSettings {

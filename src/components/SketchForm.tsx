@@ -6,6 +6,7 @@ import { SafeMarkdown } from "./SafeMarkdown";
 import { ChevronLeft, Sparkles, Monitor, Plus, X, Folder } from "lucide-react";
 import { useAppStore } from "../stores/appStore";
 import { useToastStore } from "../stores/toastStore";
+import { useSettings } from "../hooks/useSettings";
 import { ScriptTable } from "./ScriptTable";
 import { ScreenCaptureOverlay } from "./ScreenCaptureOverlay";
 import { SketchPreview } from "./SketchPreview";
@@ -40,6 +41,7 @@ export function SketchForm() {
   const updateSketch = useAppStore((s) => s.updateSketch);
   const updateSketchTitle = useAppStore((s) => s.updateSketchTitle);
   const closeSketch = useAppStore((s) => s.closeSketch);
+  const { settings } = useSettings();
 
   const [localTitle, setLocalTitle] = useState(activeSketch?.title ?? "");
   const [localRows, setLocalRows] = useState<PlanningRow[]>(activeSketch?.rows ?? []);
@@ -561,6 +563,7 @@ The Actions describe what happens on screen — use them as visual design hints.
             <DocumentToolbar
               canRecord={canRecord}
               onRecord={handleRecord}
+              showRecord={settings.featureRecording}
               presentActions={presentActions}
               aiActions={aiActions}
               exportActions={exportActions}

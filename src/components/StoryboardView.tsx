@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import { useAppStore } from "../stores/appStore";
 import { useToastStore } from "../stores/toastStore";
+import { useSettings } from "../hooks/useSettings";
 import { SketchPickerItem } from "./SketchCard";
 import { SketchPreview } from "./SketchPreview";
 import { ScriptTable } from "./ScriptTable";
@@ -77,6 +78,7 @@ export function StoryboardView() {
   const reorderStoryboardItems = useAppStore((s) => s.reorderStoryboardItems);
   const updateStoryboard = useAppStore((s) => s.updateStoryboard);
   const setStoryboardLocked = useAppStore((s) => s.setStoryboardLocked);
+  const { settings } = useSettings();
   const loadSketches = useAppStore((s) => s.loadSketches);
   const sendChatPrompt = useAppStore((s) => s.sendChatPrompt);
 
@@ -460,6 +462,7 @@ export function StoryboardView() {
             <DocumentToolbar
               canRecord={canRecord}
               onRecord={handleRecord}
+              showRecord={settings.featureRecording}
               presentActions={presentActions}
               aiActions={aiActions}
               exportActions={exportActions}

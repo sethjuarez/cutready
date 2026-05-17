@@ -1,8 +1,10 @@
 import { useAppStore } from "../stores/appStore";
+import { useSettings } from "../hooks/useSettings";
 
 export function ScriptEditorPanel() {
   const project = useAppStore((s) => s.currentProject);
   const closeProject = useAppStore((s) => s.closeProject);
+  const { settings } = useSettings();
 
   if (!project) {
     return (
@@ -41,13 +43,15 @@ export function ScriptEditorPanel() {
           segments manually.
         </p>
         <div className="flex justify-center gap-3 mt-6">
-          <button
-            disabled
-            className="px-4 py-2 rounded-lg bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))] text-sm font-medium opacity-50 cursor-not-allowed"
-            title="Recording not yet implemented"
-          >
-            Record Demo
-          </button>
+          {settings.featureRecording && (
+            <button
+              disabled
+              className="px-4 py-2 rounded-lg bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))] text-sm font-medium opacity-50 cursor-not-allowed"
+              title="Recording not yet implemented"
+            >
+              Record Demo
+            </button>
+          )}
         </div>
       </div>
     </div>

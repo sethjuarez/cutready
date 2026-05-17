@@ -26,6 +26,7 @@ interface DocumentToolbarProps {
   canRecord: boolean;
   onRecord: () => void | Promise<void>;
   recordLabel?: string;
+  showRecord?: boolean;
   presentActions: DocumentToolbarAction[];
   aiActions?: DocumentToolbarAction[];
   exportActions?: DocumentToolbarAction[];
@@ -45,6 +46,7 @@ export function DocumentToolbar({
   canRecord,
   onRecord,
   recordLabel = "Record",
+  showRecord = true,
   presentActions,
   aiActions = [],
   exportActions = [],
@@ -55,16 +57,18 @@ export function DocumentToolbar({
 }: DocumentToolbarProps) {
   return (
     <div className="flex shrink-0 items-center gap-1.5">
-      <button
-        type="button"
-        onClick={onRecord}
-        disabled={!canRecord}
-        className={primaryButtonClass}
-        title={canRecord ? recordLabel : "Add content before recording"}
-      >
-        <Video className="h-3.5 w-3.5" />
-        {recordLabel}
-      </button>
+      {showRecord && (
+        <button
+          type="button"
+          onClick={onRecord}
+          disabled={!canRecord}
+          className={primaryButtonClass}
+          title={canRecord ? recordLabel : "Add content before recording"}
+        >
+          <Video className="h-3.5 w-3.5" />
+          {recordLabel}
+        </button>
+      )}
 
       <ToolbarMenu
         label="Present"

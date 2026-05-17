@@ -190,7 +190,7 @@ export function SettingsPanel({ mode = "global" }: { mode?: "global" | "workspac
   const canFetchModels = canFetchModelsFor(settings);
 
   // Tabs depend on mode
-  const globalTabs = ["display", "themes", "recording", "ai", "agents", "feedback", "updates"] as const;
+  const globalTabs = (["display", "themes", ...(settings.featureRecording ? ["recording"] : []), "ai", "agents", "feedback", "updates"] as const);
   const workspaceTabs = ["repository", "memory", "display", "themes", "ai", "agents"] as const;
   const tabs = mode === "workspace" ? workspaceTabs : globalTabs;
   const tabLabels: Record<string, string> = {
