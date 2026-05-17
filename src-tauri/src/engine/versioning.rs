@@ -283,6 +283,19 @@ pub fn has_unsaved_changes(project_dir: &Path) -> Result<bool, VersioningError> 
         if status.contains(git2::Status::IGNORED) {
             continue;
         }
+        // Skip paths that build_tree_from_dir would never commit:
+        // dotfiles/dotdirs at the root level (except .cutready/ and .chats/).
+        // Paths from git2 status are relative, e.g. ".gitignore", ".DS_Store",
+        // ".cutready/settings.json".
+        if let Some(path) = entry.path() {
+            let top_segment = path.split('/').next().unwrap_or(path);
+            if top_segment.starts_with('.')
+                && top_segment != ".cutready"
+                && top_segment != ".chats"
+            {
+                continue;
+            }
+        }
         // Any index or working-tree change counts
         if status.intersects(
             git2::Status::INDEX_NEW
@@ -3301,6 +3314,36 @@ mod tests {
         assert!(
             !has_unsaved_changes(tmp.path()).unwrap(),
             "Files in .git/ should never trigger dirty state"
+        );
+    }
+
+    #[test]
+    fn dirty_dotfiles_not_tracked() {
+        // Root-level dotfiles (.gitignore, .DS_Store, etc.) are never committed
+        // by build_tree_from_dir, so they should not trigger dirty state.
+        let tmp = setup_project_dir();
+        init_project_repo(tmp.path()).unwrap();
+
+        std::fs::write(tmp.path().join("a.sk"), "content").unwrap();
+        commit_snapshot(tmp.path(), "init", None).unwrap();
+
+        // Add various dotfiles that should NOT trigger dirty
+        std::fs::write(tmp.path().join(".gitignore"), "*.tmp\n").unwrap();
+        std::fs::write(tmp.path().join(".DS_Store"), "binary").unwrap();
+        std::fs::create_dir_all(tmp.path().join(".env")).unwrap();
+        std::fs::write(tmp.path().join(".env/local"), "SECRET=x").unwrap();
+
+        assert!(
+            !has_unsaved_changes(tmp.path()).unwrap(),
+            "Root-level dotfiles should not trigger dirty state"
+        );
+
+        // But .cutready/ changes SHOULD trigger dirty (it's a tracked exception)
+        std::fs::create_dir_all(tmp.path().join(".cutready")).unwrap();
+        std::fs::write(tmp.path().join(".cutready/settings.json"), "{}").unwrap();
+        assert!(
+            has_unsaved_changes(tmp.path()).unwrap(),
+            ".cutready/ changes should trigger dirty state"
         );
     }
 
