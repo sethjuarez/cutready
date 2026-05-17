@@ -9,6 +9,26 @@
 Covector manages this changelog. Do not edit manually.
 Each release section is generated from `.changes/*.md` files.
 
+## [1.9.0](https://github.com/sethjuarez/cutready/compare/v1.8.0...v1.9.0) (2026-05-17)
+
+
+### Features
+
+* **updates:** promote update availability ([73d6cd9](https://github.com/sethjuarez/cutready/commit/73d6cd9b4df6bc048164e46049597144ad25a4e7))
+
+
+### Bug Fixes
+
+* **changes:** match scoped paths when discarding files ([7dde869](https://github.com/sethjuarez/cutready/commit/7dde869437376f0b5410742d2d7074593c781348)), closes [#75](https://github.com/sethjuarez/cutready/issues/75)
+* **changes:** refresh changed files after edits ([84af8e3](https://github.com/sethjuarez/cutready/commit/84af8e394943acc21eedf1c2cf81545892c6bb29)), closes [#75](https://github.com/sethjuarez/cutready/issues/75)
+* **changes:** reload any open document after discard ([f872768](https://github.com/sethjuarez/cutready/commit/f87276883d3f13a99bc4b5bb72439a26ab8aa6f7)), closes [#75](https://github.com/sethjuarez/cutready/issues/75)
+* **changes:** remount active editor after discard ([41c9d11](https://github.com/sethjuarez/cutready/commit/41c9d11e2a6f534e358ddf24e552333a7c6c4d97)), closes [#75](https://github.com/sethjuarez/cutready/issues/75)
+* **changes:** safely discard active file edits ([c1dd14f](https://github.com/sethjuarez/cutready/commit/c1dd14f39e671e05d662f89fa28dfe6ac78d8b4f)), closes [#75](https://github.com/sethjuarez/cutready/issues/75)
+* **changes:** suppress stale editor flush on discard ([e85c108](https://github.com/sethjuarez/cutready/commit/e85c108f00cdc1b5114a012394ea2bba58400443)), closes [#75](https://github.com/sethjuarez/cutready/issues/75)
+* **changes:** truncate project scope pill ([1551abb](https://github.com/sethjuarez/cutready/commit/1551abbbf4cab3a31e9c134e52ee344c03db4f7c))
+* **editor:** pull in Elucim preview crash fix ([fcb5571](https://github.com/sethjuarez/cutready/commit/fcb5571fb689f21579277bf20d2b9f741ef4a495))
+* **export:** reuse Word export icon ([64a3969](https://github.com/sethjuarez/cutready/commit/64a39698ac6e4c68d7cc6ce82715b18381252fbb))
+
 ## [1.8.0](https://github.com/sethjuarez/cutready/compare/v1.7.0...v1.8.0) (2026-05-17)
 
 
