@@ -408,6 +408,7 @@ pub fn run() {
             commands::note::delete_project_image,
             commands::note::delete_orphaned_images,
             commands::note::import_image,
+            commands::note::read_project_image,
             commands::import::import_docx,
             commands::import::import_pdf,
             commands::import::import_pptx,

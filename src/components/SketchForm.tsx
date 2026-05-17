@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { invoke, convertFileSrc } from "@tauri-apps/api/core";
+import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import { SafeMarkdown } from "./SafeMarkdown";
@@ -8,6 +8,7 @@ import { useAppStore } from "../stores/appStore";
 import { useToastStore } from "../stores/toastStore";
 import { useSettings } from "../hooks/useSettings";
 import { ScriptTable } from "./ScriptTable";
+import { ProjectImage } from "./ProjectImage";
 import { ScreenCaptureOverlay } from "./ScreenCaptureOverlay";
 import { SketchPreview } from "./SketchPreview";
 import type { PresentationMode } from "./presentation/types";
@@ -760,8 +761,9 @@ The row already has a visual and design_plan. Read the sketch with read_sketch f
                           <VisualCell visualPath={asset.path} mode="thumbnail" className="!w-full !h-full !rounded-none" />
                         </div>
                       ) : (
-                        <img
-                          src={projectRoot ? convertFileSrc(`${projectRoot}/${asset.path}`) : asset.path}
+                        <ProjectImage
+                          relativePath={asset.path}
+                          projectRoot={projectRoot}
                           alt={asset.path.split("/").pop() ?? ""}
                           className="w-full aspect-video object-cover"
                         />

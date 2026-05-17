@@ -1,11 +1,12 @@
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
-import { convertFileSrc, invoke } from "@tauri-apps/api/core";
+import { invoke } from "@tauri-apps/api/core";
 import { RefreshCw, Pencil, Check, X } from "lucide-react";
 import { normalizeDocument } from "@elucim/dsl";
 import type { CutReadyElucimDocument } from "../types/elucim";
 import VisualCell, { type VisualControlHandle } from "./VisualCell";
 import type { AssetInfo } from "../stores/appStore";
 import { useAppStore } from "../stores/appStore";
+import { ProjectImage } from "./ProjectImage";
 
 const EditorWrapper = lazy(() => import("./EditorWrapper"));
 
@@ -39,7 +40,6 @@ function ImageAssetViewer({
   asset?: AssetInfo;
   projectRoot: string | null;
 }) {
-  const src = projectRoot ? convertFileSrc(`${projectRoot}/${assetPath}`) : assetPath;
   const filename = assetPath.split("/").pop() ?? assetPath;
 
   return (
@@ -49,8 +49,9 @@ function ImageAssetViewer({
 
       {/* Image viewer */}
       <div className="flex-1 flex items-center justify-center overflow-auto p-4 bg-[rgb(var(--color-surface-alt))]">
-        <img
-          src={src}
+        <ProjectImage
+          relativePath={assetPath}
+          projectRoot={projectRoot}
           alt={filename}
           className="max-w-full max-h-full object-contain rounded-lg shadow-lg"
         />

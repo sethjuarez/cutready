@@ -237,6 +237,36 @@ pub async fn import_image(
     Ok(format!(".cutready/screenshots/{filename}"))
 }
 
+/// Read a project-relative image file and return it as a data URL.
+/// Works cross-platform without relying on asset protocol.
+#[tauri::command]
+pub async fn read_project_image(
+    relative_path: String,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    let root = project_root(&state)?;
+    let abs_path = root.join(&relative_path);
+
+    if !abs_path.exists() {
+        return Err(format!("Image not found: {relative_path}"));
+    }
+
+    let data = std::fs::read(&abs_path).map_err(|e| format!("Failed to read image: {e}"))?;
+
+    let mime = match abs_path.extension().and_then(|e| e.to_str()) {
+        Some("png") => "image/png",
+        Some("jpg" | "jpeg") => "image/jpeg",
+        Some("gif") => "image/gif",
+        Some("webp") => "image/webp",
+        Some("svg") => "image/svg+xml",
+        _ => "application/octet-stream",
+    };
+
+    use base64::Engine;
+    let b64 = base64::engine::general_purpose::STANDARD.encode(&data);
+    Ok(format!("data:{mime};base64,{b64}"))
+}
+
 fn base64_decode(input: &str) -> Result<Vec<u8>, String> {
     use base64::Engine;
     base64::engine::general_purpose::STANDARD

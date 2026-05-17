@@ -1,5 +1,4 @@
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
-import { convertFileSrc } from "@tauri-apps/api/core";
 import {
   Download,
   Trash2,
@@ -8,6 +7,7 @@ import {
   ArrowUpAZ,
 } from "lucide-react";
 import { useAppStore, type AssetInfo } from "../stores/appStore";
+import { ProjectImage } from "./ProjectImage";
 import VisualCell from "./VisualCell";
 
 type SortBy = "type" | "reference" | "recency";
@@ -265,8 +265,9 @@ function AssetItem({
             />
           </Suspense>
         ) : (
-          <img
-            src={projectRoot ? convertFileSrc(`${projectRoot}/${asset.path}`) : asset.path}
+          <ProjectImage
+            relativePath={asset.path}
+            projectRoot={projectRoot}
             alt=""
             className="w-full h-full object-cover"
           />
