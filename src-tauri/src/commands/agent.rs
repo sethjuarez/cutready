@@ -395,15 +395,25 @@ pub async fn get_chat_session(
 #[tauri::command]
 pub async fn save_chat_session(
     relative_path: String,
-    session: ChatSession,
+    mut session: ChatSession,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
-    let root = {
+    let (root, repo_root) = {
         let guard = state.current_project.lock().unwrap();
-        guard.as_ref().ok_or("No project open")?.root.clone()
+        let view = guard.as_ref().ok_or("No project open")?;
+        (view.root.clone(), view.repo_root.clone())
     };
     let abs =
         crate::engine::project::safe_resolve(&root, &relative_path).map_err(|e| e.to_string())?;
+    if session.author_name.is_none() || session.author_email.is_none() {
+        let identity = crate::engine::versioning::check_git_identity(&repo_root);
+        if session.author_name.is_none() {
+            session.author_name = Some(identity.name);
+        }
+        if session.author_email.is_none() {
+            session.author_email = Some(identity.email);
+        }
+    }
     crate::engine::project::write_chat_session(&abs, &session).map_err(|e| e.to_string())
 }
 

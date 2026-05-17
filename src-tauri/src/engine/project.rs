@@ -107,7 +107,7 @@ pub fn init_project_folder(root: &Path) -> Result<ProjectView, ProjectError> {
     // Init git if not already a repo
     if !root.join(".git").exists() {
         versioning::init_project_repo(root).map_err(|e| ProjectError::Io(e.to_string()))?;
-        let _ = versioning::commit_snapshot(root, "Initialize project", None);
+        let _ = versioning::commit_snapshot(root, "Initialize workspace", None);
     }
 
     Ok(ProjectView::new(root.to_path_buf()))
@@ -170,7 +170,7 @@ pub fn open_repo(root: &Path) -> Result<(RepoView, Vec<ProjectEntry>), ProjectEr
     // Init git if not already a repo so snapshots work
     if !root.join(".git").exists() {
         versioning::init_project_repo(root).map_err(|e| ProjectError::Io(e.to_string()))?;
-        let _ = versioning::commit_snapshot(root, "Initialize project", None);
+        let _ = versioning::commit_snapshot(root, "Initialize workspace", None);
     }
 
     // Repair: move orphaned repo-level assets into the first project.
@@ -1289,6 +1289,10 @@ pub struct ChatSessionSummary {
     pub title: String,
     pub message_count: usize,
     pub updated_at: chrono::DateTime<chrono::Utc>,
+    #[serde(default)]
+    pub author_name: Option<String>,
+    #[serde(default)]
+    pub author_email: Option<String>,
 }
 
 /// A persisted chat session.
@@ -1298,6 +1302,10 @@ pub struct ChatSession {
     pub messages: Vec<serde_json::Value>,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
+    #[serde(default)]
+    pub author_name: Option<String>,
+    #[serde(default)]
+    pub author_email: Option<String>,
 }
 
 /// Scan for .chat files in the project.
@@ -1313,11 +1321,20 @@ pub fn scan_chat_sessions(project_root: &Path) -> Result<Vec<ChatSessionSummary>
                 if let Ok(data) = std::fs::read_to_string(&path) {
                     if let Ok(session) = serde_json::from_str::<ChatSession>(&data) {
                         if let Ok(rel) = path.strip_prefix(project_root) {
+                            let rel_path = rel.to_string_lossy().replace('\\', "/");
+                            let committed_author =
+                                last_committed_file_author(project_root, &path).unwrap_or(None);
                             summaries.push(ChatSessionSummary {
-                                path: rel.to_string_lossy().replace('\\', "/"),
+                                path: rel_path,
                                 title: session.title,
                                 message_count: session.messages.len(),
                                 updated_at: session.updated_at,
+                                author_name: session
+                                    .author_name
+                                    .or_else(|| committed_author.clone().map(|author| author.0)),
+                                author_email: session
+                                    .author_email
+                                    .or_else(|| committed_author.map(|author| author.1)),
                             });
                         }
                     }
@@ -1327,6 +1344,56 @@ pub fn scan_chat_sessions(project_root: &Path) -> Result<Vec<ChatSessionSummary>
     }
     summaries.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
     Ok(summaries)
+}
+
+fn last_committed_file_author(
+    project_root: &Path,
+    file_path: &Path,
+) -> Result<Option<(String, String)>, git2::Error> {
+    let repo = git2::Repository::discover(project_root)?;
+    let workdir = match repo.workdir() {
+        Some(path) => path,
+        None => return Ok(None),
+    };
+    let relative_path = match file_path.strip_prefix(workdir) {
+        Ok(path) => path,
+        Err(_) => return Ok(None),
+    };
+
+    let mut revwalk = repo.revwalk()?;
+    revwalk.push_head()?;
+
+    for oid in revwalk {
+        let oid = oid?;
+        let commit = repo.find_commit(oid)?;
+        let tree = commit.tree()?;
+        let changed = if commit.parent_count() == 0 {
+            tree.get_path(relative_path).is_ok()
+        } else {
+            let mut touched = false;
+            for parent in commit.parents() {
+                let parent_tree = parent.tree()?;
+                let mut options = git2::DiffOptions::new();
+                options.pathspec(relative_path);
+                let diff =
+                    repo.diff_tree_to_tree(Some(&parent_tree), Some(&tree), Some(&mut options))?;
+                if diff.deltas().len() > 0 {
+                    touched = true;
+                    break;
+                }
+            }
+            touched
+        };
+
+        if changed {
+            let author = commit.author();
+            let name = author.name().unwrap_or("Unknown").to_string();
+            let email = author.email().unwrap_or("").to_string();
+            return Ok(Some((name, email)));
+        }
+    }
+
+    Ok(None)
 }
 
 /// Read a chat session file.
@@ -1599,6 +1666,8 @@ mod tests {
         let view = init_project_folder(&root).unwrap();
         assert_eq!(view.name, "My Demo");
         assert!(root.join(".git").exists());
+        let versions = versioning::list_versions(&root).unwrap();
+        assert!(versions.iter().any(|v| v.message == "Initialize workspace"));
     }
 
     #[test]
@@ -2300,6 +2369,70 @@ Some text
             dir.to_string_lossy().contains("demo"),
             "Should contain project name for multi-project: {:?}",
             dir
+        );
+    }
+
+    #[test]
+    fn scan_chat_sessions_includes_saved_author_metadata() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        let now = chrono::Utc::now();
+        let session = ChatSession {
+            title: "Planning chat".into(),
+            messages: vec![serde_json::json!({ "role": "user", "content": "hello" })],
+            created_at: now,
+            updated_at: now,
+            author_name: Some("Ada Lovelace".into()),
+            author_email: Some("ada@example.com".into()),
+        };
+        write_chat_session(&root.join(".chats/chat.chat"), &session).unwrap();
+
+        let sessions = scan_chat_sessions(root).unwrap();
+        assert_eq!(sessions.len(), 1);
+        assert_eq!(sessions[0].author_name.as_deref(), Some("Ada Lovelace"));
+        assert_eq!(sessions[0].author_email.as_deref(), Some("ada@example.com"));
+    }
+
+    #[test]
+    fn scan_chat_sessions_falls_back_to_committed_author() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        let repo = git2::Repository::init(root).unwrap();
+        let now = chrono::Utc::now();
+        let session = ChatSession {
+            title: "Imported teammate chat".into(),
+            messages: vec![serde_json::json!({ "role": "user", "content": "hello" })],
+            created_at: now,
+            updated_at: now,
+            author_name: None,
+            author_email: None,
+        };
+        let chat_path = root.join(".chats/chat.chat");
+        write_chat_session(&chat_path, &session).unwrap();
+
+        let mut index = repo.index().unwrap();
+        index.add_path(Path::new(".chats/chat.chat")).unwrap();
+        index.write().unwrap();
+        let tree_id = index.write_tree().unwrap();
+        let tree = repo.find_tree(tree_id).unwrap();
+        let signature = git2::Signature::now("Grace Hopper", "grace@example.com").unwrap();
+        repo.commit(
+            Some("HEAD"),
+            &signature,
+            &signature,
+            "add teammate chat",
+            &tree,
+            &[],
+        )
+        .unwrap();
+        drop(tree);
+
+        let sessions = scan_chat_sessions(root).unwrap();
+        assert_eq!(sessions.len(), 1);
+        assert_eq!(sessions[0].author_name.as_deref(), Some("Grace Hopper"));
+        assert_eq!(
+            sessions[0].author_email.as_deref(),
+            Some("grace@example.com")
         );
     }
 }
