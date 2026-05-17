@@ -15,6 +15,57 @@ fn versioning_root(state: &AppState) -> Result<std::path::PathBuf, String> {
     Ok(view.repo_root.clone())
 }
 
+fn current_project_view(state: &AppState) -> Result<ProjectView, String> {
+    let current = state.current_project.lock().map_err(|e| e.to_string())?;
+    current
+        .as_ref()
+        .cloned()
+        .ok_or("No project is currently open".into())
+}
+
+fn active_project_scope(state: &AppState) -> Result<Option<String>, String> {
+    let view = current_project_view(state)?;
+    if view.root == view.repo_root {
+        return Ok(None);
+    }
+    let relative = view
+        .root
+        .strip_prefix(&view.repo_root)
+        .map_err(|e| e.to_string())?
+        .to_string_lossy()
+        .replace('\\', "/");
+    if relative.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(relative))
+    }
+}
+
+fn path_in_scope(path: &str, scope: Option<&str>) -> bool {
+    let Some(scope) = scope else {
+        return true;
+    };
+    path == scope || path.starts_with(&format!("{scope}/"))
+}
+
+fn refresh_current_project(state: &AppState) -> Result<(), String> {
+    let view = current_project_view(state)?;
+    let refreshed = if view.root == view.repo_root {
+        ProjectView::new(view.repo_root)
+    } else {
+        let relative = view
+            .root
+            .strip_prefix(&view.repo_root)
+            .map_err(|e| e.to_string())?
+            .to_string_lossy()
+            .replace('\\', "/");
+        ProjectView::in_repo(view.repo_root, &relative, view.name)
+    };
+    let mut current = state.current_project.lock().map_err(|e| e.to_string())?;
+    *current = Some(refreshed);
+    Ok(())
+}
+
 /// Reject the operation if the working tree has unsaved changes.
 fn require_clean(root: &std::path::Path) -> Result<(), String> {
     let dirty = versioning::has_unsaved_changes(root).map_err(|e| e.to_string())?;
@@ -100,46 +151,66 @@ pub async fn preview_version(
 }
 
 #[tauri::command]
-pub async fn restore_version(commit_id: String, state: State<'_, AppState>, lock: State<'_, ProjectLock>) -> Result<(), String> {
+pub async fn restore_version(
+    commit_id: String,
+    state: State<'_, AppState>,
+    lock: State<'_, ProjectLock>,
+) -> Result<(), String> {
     let _guard = lock.0.lock().await;
     let root = versioning_root(&state)?;
     require_clean(&root)?;
     versioning::restore_version(&root, &commit_id).map_err(|e| e.to_string())?;
 
-    // Re-scan the project folder after restore
-    let view = ProjectView::new(root);
-    let mut current = state.current_project.lock().map_err(|e| e.to_string())?;
-    *current = Some(view);
+    refresh_current_project(&state)?;
 
     Ok(())
 }
 
 #[tauri::command]
-pub async fn checkout_version(commit_id: String, state: State<'_, AppState>, lock: State<'_, ProjectLock>) -> Result<(), String> {
+pub async fn checkout_version(
+    commit_id: String,
+    state: State<'_, AppState>,
+    lock: State<'_, ProjectLock>,
+) -> Result<(), String> {
     let _guard = lock.0.lock().await;
     let root = versioning_root(&state)?;
     require_clean(&root)?;
     versioning::checkout_version(&root, &commit_id).map_err(|e| e.to_string())?;
 
-    // Re-scan the project folder after checkout
-    let view = ProjectView::new(root);
-    let mut current = state.current_project.lock().map_err(|e| e.to_string())?;
-    *current = Some(view);
+    refresh_current_project(&state)?;
 
     Ok(())
 }
 
 #[tauri::command]
-pub async fn discard_changes(state: State<'_, AppState>, lock: State<'_, ProjectLock>) -> Result<(), String> {
+pub async fn discard_changes(
+    state: State<'_, AppState>,
+    lock: State<'_, ProjectLock>,
+) -> Result<(), String> {
     let _guard = lock.0.lock().await;
     let root = versioning_root(&state)?;
-    versioning::discard_changes(&root).map_err(|e| e.to_string())?;
+    let scope = active_project_scope(&state)?;
+    versioning::discard_changes_in_scope(&root, scope.as_deref()).map_err(|e| e.to_string())?;
 
-    // Re-scan project after discard
-    let view = ProjectView::new(root);
-    let mut current = state.current_project.lock().map_err(|e| e.to_string())?;
-    *current = Some(view);
+    refresh_current_project(&state)?;
 
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn discard_file(
+    file_path: String,
+    state: State<'_, AppState>,
+    lock: State<'_, ProjectLock>,
+) -> Result<(), String> {
+    let _guard = lock.0.lock().await;
+    let root = versioning_root(&state)?;
+    let scope = active_project_scope(&state)?;
+    if !path_in_scope(&file_path, scope.as_deref()) {
+        return Err("File is outside the active project".into());
+    }
+    versioning::discard_file(&root, &file_path).map_err(|e| e.to_string())?;
+    refresh_current_project(&state)?;
     Ok(())
 }
 
@@ -149,18 +220,25 @@ pub async fn has_unsaved_changes(state: State<'_, AppState>) -> Result<bool, Str
     if !root.join(".git").exists() {
         return Ok(false);
     }
-    versioning::has_unsaved_changes(&root).map_err(|e| e.to_string())
+    let scope = active_project_scope(&state)?;
+    versioning::has_unsaved_changes_in_scope(&root, scope.as_deref()).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub async fn stash_changes(state: State<'_, AppState>, lock: State<'_, ProjectLock>) -> Result<(), String> {
+pub async fn stash_changes(
+    state: State<'_, AppState>,
+    lock: State<'_, ProjectLock>,
+) -> Result<(), String> {
     let _guard = lock.0.lock().await;
     let root = versioning_root(&state)?;
     versioning::stash_working_tree(&root).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub async fn pop_stash(state: State<'_, AppState>, lock: State<'_, ProjectLock>) -> Result<bool, String> {
+pub async fn pop_stash(
+    state: State<'_, AppState>,
+    lock: State<'_, ProjectLock>,
+) -> Result<bool, String> {
     let _guard = lock.0.lock().await;
     let root = versioning_root(&state)?;
     versioning::pop_stash(&root).map_err(|e| e.to_string())
@@ -190,27 +268,36 @@ pub async fn list_timelines(
 }
 
 #[tauri::command]
-pub async fn switch_timeline(name: String, state: State<'_, AppState>, lock: State<'_, ProjectLock>) -> Result<(), String> {
+pub async fn switch_timeline(
+    name: String,
+    state: State<'_, AppState>,
+    lock: State<'_, ProjectLock>,
+) -> Result<(), String> {
     let _guard = lock.0.lock().await;
     let root = versioning_root(&state)?;
     require_clean(&root)?;
     versioning::switch_timeline(&root, &name).map_err(|e| e.to_string())?;
-    // Re-scan project
-    let view = crate::models::script::ProjectView::new(root);
-    let mut current = state.current_project.lock().map_err(|e| e.to_string())?;
-    *current = Some(view);
+    refresh_current_project(&state)?;
     Ok(())
 }
 
 #[tauri::command]
-pub async fn delete_timeline(name: String, state: State<'_, AppState>, lock: State<'_, ProjectLock>) -> Result<(), String> {
+pub async fn delete_timeline(
+    name: String,
+    state: State<'_, AppState>,
+    lock: State<'_, ProjectLock>,
+) -> Result<(), String> {
     let _guard = lock.0.lock().await;
     let root = versioning_root(&state)?;
     versioning::delete_timeline(&root, &name).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub async fn promote_timeline(name: String, state: State<'_, AppState>, lock: State<'_, ProjectLock>) -> Result<(), String> {
+pub async fn promote_timeline(
+    name: String,
+    state: State<'_, AppState>,
+    lock: State<'_, ProjectLock>,
+) -> Result<(), String> {
     let _guard = lock.0.lock().await;
     let root = versioning_root(&state)?;
     versioning::promote_timeline(&root, &name).map_err(|e| e.to_string())
@@ -238,10 +325,7 @@ pub async fn navigate_to_snapshot(
     require_clean(&root)?;
     versioning::navigate_to_snapshot(&root, &commit_id).map_err(|e| e.to_string())?;
 
-    // Re-scan the project folder
-    let view = ProjectView::new(root);
-    let mut current = state.current_project.lock().map_err(|e| e.to_string())?;
-    *current = Some(view);
+    refresh_current_project(&state)?;
     Ok(())
 }
 
@@ -374,9 +458,20 @@ pub async fn pull_git_remote(
 ) -> Result<versioning_remote::PullResult, String> {
     let _guard = lock.0.lock().await;
     let root = versioning_root(&state)?;
-    require_clean(&root)?;
     let token = resolve_token(token);
     versioning_remote::pull_remote(&root, &remote_name, &branch, token.as_deref())
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn list_incoming_commits(
+    remote_name: String,
+    branch: String,
+    limit: Option<usize>,
+    state: State<'_, AppState>,
+) -> Result<Vec<versioning_remote::IncomingCommit>, String> {
+    let root = versioning_root(&state)?;
+    versioning_remote::list_incoming_commits(&root, &remote_name, &branch, limit.unwrap_or(10))
         .map_err(|e| e.to_string())
 }
 
@@ -455,7 +550,8 @@ pub async fn diff_working_tree(
     state: State<'_, AppState>,
 ) -> Result<Vec<versioning::DiffEntry>, String> {
     let root = versioning_root(&state)?;
-    versioning::diff_working_tree(&root).map_err(|e| e.to_string())
+    let scope = active_project_scope(&state)?;
+    versioning::diff_working_tree_in_scope(&root, scope.as_deref()).map_err(|e| e.to_string())
 }
 
 #[tauri::command]

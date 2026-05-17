@@ -119,6 +119,16 @@ export interface SyncStatus {
   behind: number;
 }
 
+/** A remote snapshot available to bring into the workspace. */
+export interface IncomingCommit {
+  id: string;
+  message: string;
+  author: string;
+  timestamp: string;
+  changed_files: DiffEntry[];
+  projects: string[];
+}
+
 /** A file change between two snapshots. */
 export interface DiffEntry {
   path: string;
@@ -168,6 +178,8 @@ export interface ChatSessionSummary {
   title: string;
   message_count: number;
   updated_at: string;
+  author_name?: string | null;
+  author_email?: string | null;
 }
 
 /** A persisted chat session. */
@@ -176,6 +188,8 @@ export interface ChatSession {
   messages: ChatMessage[];
   created_at: string;
   updated_at: string;
+  author_name?: string | null;
+  author_email?: string | null;
 }
 
 // ── Merge types ──────────────────────────────────────────────

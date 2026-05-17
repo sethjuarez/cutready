@@ -2207,6 +2207,7 @@ function FileTypeIcon({ type }: { type: string }) {
 function ChatHistory({ onOpenSession }: { onOpenSession: () => void }) {
   const [sessions, setSessions] = useState<ChatSessionSummary[]>([]);
   const [loading, setLoading] = useState(true);
+  const [currentEmail, setCurrentEmail] = useState<string | null>(null);
   const listChatSessions = useAppStore((s) => s.listChatSessions);
   const loadChatSession = useAppStore((s) => s.loadChatSession);
   const deleteChatSession = useAppStore((s) => s.deleteChatSession);
@@ -2223,6 +2224,12 @@ function ChatHistory({ onOpenSession }: { onOpenSession: () => void }) {
   }, [listChatSessions]);
 
   useEffect(() => { refresh(); }, [refresh]);
+
+  useEffect(() => {
+    invoke<{ email: string }>("check_git_identity")
+      .then((identity) => setCurrentEmail(identity.email || null))
+      .catch(() => setCurrentEmail(null));
+  }, []);
 
   const handleOpen = useCallback(async (path: string) => {
     await loadChatSession(path);
@@ -2258,6 +2265,13 @@ function ChatHistory({ onOpenSession }: { onOpenSession: () => void }) {
     }
   };
 
+  const isMine = (session: ChatSessionSummary) =>
+    !!currentEmail && session.author_email?.toLowerCase() === currentEmail.toLowerCase();
+  const groupedSessions = [
+    { label: "My chats", sessions: sessions.filter(isMine) },
+    { label: "Collaborator chats", sessions: sessions.filter((session) => !isMine(session)) },
+  ].filter((group) => group.sessions.length > 0);
+
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
@@ -2291,7 +2305,12 @@ function ChatHistory({ onOpenSession }: { onOpenSession: () => void }) {
           </div>
         ) : (
           <div className="py-1">
-            {sessions.map((s) => {
+            {groupedSessions.map((group) => (
+              <div key={group.label}>
+                <div className="px-3 pb-1 pt-2 text-[9px] font-semibold uppercase tracking-wider text-[rgb(var(--color-text-secondary))]/70">
+                  {group.label}
+                </div>
+                {group.sessions.map((s) => {
               const isActive = s.path === chatSessionPath;
               return (
                 <div
@@ -2312,6 +2331,20 @@ function ChatHistory({ onOpenSession }: { onOpenSession: () => void }) {
                       {s.title || "Untitled chat"}
                     </div>
                     <div className="flex items-center gap-2 mt-0.5">
+                      <span className={`rounded-full px-1.5 py-0 text-[9px] font-medium ${isMine(s) ? "bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))]" : "bg-[rgb(var(--color-surface-alt))] text-[rgb(var(--color-text-secondary))]"}`}>
+                        {isMine(s) ? "Mine" : "Shared"}
+                      </span>
+                      {(s.author_name || s.author_email) && (
+                        <>
+                          <span
+                            className="max-w-[8rem] truncate text-[10px] text-[rgb(var(--color-accent))]"
+                            title={formatAuthor(s)}
+                          >
+                            {s.author_name || s.author_email}
+                          </span>
+                          <span className="text-[10px] text-[rgb(var(--color-text-secondary))]/50">·</span>
+                        </>
+                      )}
                       <span className="text-[10px] text-[rgb(var(--color-text-secondary))]">
                         {s.message_count} message{s.message_count !== 1 ? "s" : ""}
                       </span>
@@ -2331,10 +2364,19 @@ function ChatHistory({ onOpenSession }: { onOpenSession: () => void }) {
                   </button>
                 </div>
               );
-            })}
+                })}
+              </div>
+            ))}
           </div>
         )}
       </div>
     </div>
   );
+}
+
+function formatAuthor(session: ChatSessionSummary) {
+  if (session.author_name && session.author_email) {
+    return `${session.author_name} <${session.author_email}>`;
+  }
+  return session.author_name || session.author_email || "Unknown author";
 }

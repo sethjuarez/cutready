@@ -7,6 +7,8 @@ use std::path::Path;
 
 use git2::{Cred, FetchOptions, RemoteCallbacks, Repository};
 
+use crate::engine::versioning;
+
 /// Info about a configured remote.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct RemoteInfo {
@@ -23,6 +25,17 @@ pub struct SyncStatus {
     pub behind: usize,
 }
 
+/// A remote snapshot that is available to pull into the current branch.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct IncomingCommit {
+    pub id: String,
+    pub message: String,
+    pub author: String,
+    pub timestamp: String,
+    pub changed_files: Vec<versioning::DiffEntry>,
+    pub projects: Vec<String>,
+}
+
 /// Errors from remote operations.
 #[derive(Debug, thiserror::Error)]
 pub enum RemoteError {
@@ -32,6 +45,19 @@ pub enum RemoteError {
     PushRejected,
     #[error("{0}")]
     Other(String),
+}
+
+fn ensure_safety_snapshot(project_dir: &Path, operation: &str) -> Result<Option<String>, RemoteError> {
+    if !versioning::has_unsaved_changes(project_dir)
+        .map_err(|e| RemoteError::Other(e.to_string()))?
+    {
+        return Ok(None);
+    }
+
+    let message = format!("Auto-snapshot before {}", operation);
+    versioning::commit_snapshot(project_dir, &message, None)
+        .map(Some)
+        .map_err(|e| RemoteError::Other(e.to_string()))
 }
 
 // ─── Remote CRUD ────────────────────────────────────────────────
@@ -182,8 +208,9 @@ pub fn fetch_remote(
     let fetch_target = build_authed_url(project_dir, remote_name, token_owned.as_deref())
         .unwrap_or_else(|| remote_name.to_string());
 
+    let tracking_refspec = format!("+refs/heads/*:refs/remotes/{}/*", remote_name);
     let mut cmd = std::process::Command::new("git");
-    cmd.args(["fetch", &fetch_target, "--prune"])
+    cmd.args(["fetch", "--prune", &fetch_target, &tracking_refspec])
         .current_dir(project_dir)
         .env("GIT_TERMINAL_PROMPT", "0");
     #[cfg(windows)]
@@ -265,6 +292,7 @@ pub fn push_remote(
     local_branch: &str,
     token: Option<&str>,
 ) -> Result<(), RemoteError> {
+    ensure_safety_snapshot(project_dir, &format!("push to {}/{}", remote_name, local_branch))?;
     let token_owned = token.map(|t| t.to_string()).or_else(gh_token);
     let push_target = build_authed_url(project_dir, remote_name, token_owned.as_deref())
         .unwrap_or_else(|| remote_name.to_string());
@@ -301,6 +329,7 @@ pub fn push_remote(
         stderr
     );
     if output.status.success() {
+        update_remote_tracking_ref(project_dir, remote_name, local_branch)?;
         Ok(())
     } else {
         let combined = format!("{} {}", stdout, stderr).to_lowercase();
@@ -319,6 +348,26 @@ pub fn push_remote(
     }
 }
 
+fn update_remote_tracking_ref(
+    project_dir: &Path,
+    remote_name: &str,
+    local_branch: &str,
+) -> Result<(), RemoteError> {
+    let repo = Repository::open(project_dir)?;
+    let local_ref = format!("refs/heads/{}", local_branch);
+    let remote_ref = format!("refs/remotes/{}/{}", remote_name, local_branch);
+    let local_oid = repo
+        .refname_to_id(&local_ref)
+        .map_err(|_| RemoteError::Other(format!("Local branch '{}' not found", local_branch)))?;
+    repo.reference(
+        &remote_ref,
+        local_oid,
+        true,
+        "CutReady: update remote tracking ref after push",
+    )?;
+    Ok(())
+}
+
 // ─── Pull (fast-forward merge) ──────────────────────────────────
 
 /// Pull from remote: fetch + fast-forward merge.
@@ -329,6 +378,7 @@ pub fn pull_remote(
     branch: &str,
     token: Option<&str>,
 ) -> Result<PullResult, RemoteError> {
+    ensure_safety_snapshot(project_dir, &format!("pull from {}/{}", remote_name, branch))?;
     // Step 1: fetch
     fetch_remote(project_dir, remote_name, token)?;
 
@@ -406,6 +456,84 @@ pub fn pull_remote(
             .map(|(a, _)| a)
             .unwrap_or(0),
     })
+}
+
+pub fn list_incoming_commits(
+    project_dir: &Path,
+    remote_name: &str,
+    branch: &str,
+    limit: usize,
+) -> Result<Vec<IncomingCommit>, RemoteError> {
+    let repo = Repository::open(project_dir)?;
+    let local_ref = format!("refs/heads/{}", branch);
+    let remote_ref = format!("refs/remotes/{}/{}", remote_name, branch);
+    let local_oid = repo.refname_to_id(&local_ref)?;
+    let remote_oid = repo.refname_to_id(&remote_ref)?;
+
+    let mut revwalk = repo.revwalk()?;
+    revwalk.push(remote_oid)?;
+    revwalk.hide(local_oid)?;
+    revwalk.set_sorting(git2::Sort::TIME)?;
+
+    let mut commits = Vec::new();
+    for oid in revwalk.take(limit) {
+        let oid = oid?;
+        let commit = repo.find_commit(oid)?;
+        let tree = commit.tree()?;
+        let parent_tree = if commit.parent_count() > 0 {
+            Some(commit.parent(0)?.tree()?)
+        } else {
+            None
+        };
+        let diff = repo.diff_tree_to_tree(parent_tree.as_ref(), Some(&tree), None)?;
+        let mut changed_files = Vec::new();
+        let mut projects = std::collections::BTreeSet::new();
+        for delta in diff.deltas() {
+            let path = delta
+                .new_file()
+                .path()
+                .or_else(|| delta.old_file().path())
+                .unwrap_or(Path::new(""))
+                .to_string_lossy()
+                .replace('\\', "/");
+            let status = match delta.status() {
+                git2::Delta::Added => "added",
+                git2::Delta::Deleted => "deleted",
+                _ => "modified",
+            };
+            if let Some(project) = project_segment(&path) {
+                projects.insert(project);
+            }
+            changed_files.push(versioning::DiffEntry {
+                path,
+                status: status.to_string(),
+                additions: 0,
+                deletions: 0,
+            });
+        }
+        let author = commit.author();
+        commits.push(IncomingCommit {
+            id: oid.to_string(),
+            message: commit.summary().unwrap_or("Untitled snapshot").to_string(),
+            author: author.name().unwrap_or("Unknown").to_string(),
+            timestamp: chrono::DateTime::<chrono::Utc>::from_timestamp(author.when().seconds(), 0)
+                .map(|t| t.to_rfc3339())
+                .unwrap_or_default(),
+            changed_files,
+            projects: projects.into_iter().collect(),
+        });
+    }
+
+    Ok(commits)
+}
+
+fn project_segment(path: &str) -> Option<String> {
+    let first = path.split('/').next()?;
+    if first.is_empty() || first.starts_with('.') {
+        None
+    } else {
+        Some(first.to_string())
+    }
 }
 
 /// Result of a pull operation.
@@ -731,6 +859,41 @@ mod tests {
         let status = get_ahead_behind(clone_dir.path(), "main", "origin").unwrap();
         assert_eq!(status.ahead, 0);
         assert_eq!(status.behind, 0);
+    }
+
+    #[test]
+    fn test_pull_preserves_dirty_work_with_safety_snapshot() {
+        let (remote_dir, local_dir) = setup_repos();
+
+        make_commit(local_dir.path(), "initial");
+        push_remote(local_dir.path(), "origin", "main", None).unwrap();
+
+        let clone_dir = TempDir::new().unwrap();
+        let clone_url = path_to_file_url(remote_dir.path());
+        Repository::clone(&clone_url, clone_dir.path()).unwrap();
+
+        make_commit(local_dir.path(), "remote update");
+        push_remote(local_dir.path(), "origin", "main", None).unwrap();
+
+        let local_note = clone_dir.path().join("local-note.md");
+        fs::write(&local_note, "unsaved collaborator notes").unwrap();
+
+        let result = pull_remote(clone_dir.path(), "origin", "main", None).unwrap();
+        match result {
+            PullResult::Merged { .. } | PullResult::FastForward { .. } => {}
+            other => panic!("Expected safe merge or fast-forward, got {:?}", other),
+        }
+
+        assert_eq!(fs::read_to_string(&local_note).unwrap(), "unsaved collaborator notes");
+        let repo = Repository::open(clone_dir.path()).unwrap();
+        let mut revwalk = repo.revwalk().unwrap();
+        revwalk.push_head().unwrap();
+        let messages: Vec<String> = revwalk
+            .filter_map(Result::ok)
+            .filter_map(|oid| repo.find_commit(oid).ok())
+            .filter_map(|commit| commit.summary().map(str::to_string))
+            .collect();
+        assert!(messages.iter().any(|message| message.starts_with("Auto-snapshot before pull")));
     }
 
     #[test]

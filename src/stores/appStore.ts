@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { invoke, Channel } from "@tauri-apps/api/core";
+import { useToastStore } from "./toastStore";
 import type { ProjectView, ProjectEntry, RecentProject } from "../types/project";
 import type {
   BrowserProfile,
@@ -21,6 +22,7 @@ import type {
   ChatSessionSummary,
   RemoteInfo,
   SyncStatus,
+  IncomingCommit,
   DiffEntry,
   ConflictFile,
   MergeResult,
@@ -65,6 +67,14 @@ export function makeMainTabId(type: EditorTab["type"], path: string): string {
 /** Generate a deterministic split-pane tab ID from type + path. */
 export function makeSplitTabId(type: EditorTab["type"], path: string): string {
   return `split-${type}-${path}`;
+}
+
+function buildShareUrl(remoteUrl: string, branch: string): string | null {
+  const match = remoteUrl.match(/github\.com[/:]([^/]+\/[^/.]+)(?:\.git)?$/);
+  if (!match) return null;
+  const repo = match[1];
+  if (branch === "main" || branch === "master") return `https://github.com/${repo}`;
+  return `https://github.com/${repo}/compare/${branch}?expand=1`;
 }
 
 /** A project asset (screenshot or visual) with reference info. */
@@ -204,6 +214,10 @@ interface AppStoreState {
   isSyncing: boolean;
   /** Last error from a sync operation. */
   syncError: string | null;
+  /** Incoming snapshots discovered by the latest fetch. */
+  incomingCommits: IncomingCommit[];
+  /** Share/PR URL for the latest successful share operation. */
+  shareUrl: string | null;
 
   // ── Merge ──────────────────────────────────────────────────
   /** Whether a merge is in progress (conflicts being resolved). */
@@ -444,6 +458,8 @@ interface AppStoreState {
   stashChanges: () => Promise<void>;
   /** Discard all working-directory changes, resetting to last snapshot. */
   discardChanges: () => Promise<void>;
+  /** Discard changes for one file. */
+  discardFile: (filePath: string) => Promise<void>;
   /** Pop stash (restore stashed work). */
   popStash: () => Promise<void>;
   /** Check whether a stash exists. */
@@ -484,6 +500,10 @@ interface AppStoreState {
   pullFromRemote: () => Promise<void>;
   /** Sync: fetch then push (or pull if behind). */
   syncWithRemote: () => Promise<void>;
+  /** Share local changes safely with collaborators. */
+  shareChanges: () => Promise<void>;
+  /** Refresh incoming remote snapshot preview. */
+  refreshIncomingCommits: () => Promise<void>;
   /** Refresh the ahead/behind sync status. */
   refreshSyncStatus: () => Promise<void>;
   /** List branches available on the remote. */
@@ -638,6 +658,8 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   syncStatus: null,
   isSyncing: false,
   syncError: null,
+  incomingCommits: [],
+  shareUrl: null,
   isMerging: false,
   mergeSource: null,
   mergeTarget: null,
@@ -1655,7 +1677,14 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
 
   loadChatSession: async (sessionPath) => {
     try {
-      const session = await invoke<{ title: string; messages: ChatMessage[]; created_at: string; updated_at: string }>(
+      const session = await invoke<{
+        title: string;
+        messages: ChatMessage[];
+        created_at: string;
+        updated_at: string;
+        author_name?: string | null;
+        author_email?: string | null;
+      }>(
         "get_chat_session",
         { relativePath: sessionPath },
       );
@@ -1736,8 +1765,9 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       set({ isDirty });
       // Also refresh the changed files list
       get().refreshChangedFiles();
-    } catch {
-      set({ isDirty: false, changedFiles: [] });
+    } catch (err) {
+      console.error("Failed to check dirty state:", err);
+      useToastStore.getState().show(`Could not check project changes: ${err}`, 5000, "error");
     }
   },
 
@@ -1785,14 +1815,30 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       // Clear active editors FIRST to cancel pending debounced saves
       set({ activeSketch: null, activeSketchPath: null, activeStoryboard: null, activeStoryboardPath: null, activeNotePath: null, activeNoteContent: null, activeNoteLocked: false });
       await invoke("discard_changes");
-      set({ isDirty: false, changedFiles: [] });
       await get().loadSketches();
       await get().loadStoryboards();
       await get().loadNotes();
       // Clear tabs (files may have changed)
       set({ openTabs: [], activeTabId: null });
+      await get().checkDirty();
     } catch (err) {
       console.error("Failed to discard changes:", err);
+      useToastStore.getState().show(`Discard failed: ${err}`, 5000, "error");
+      await get().checkDirty();
+    }
+  },
+
+  discardFile: async (filePath) => {
+    try {
+      await invoke("discard_file", { filePath });
+      await get().loadSketches();
+      await get().loadStoryboards();
+      await get().loadNotes();
+      await get().checkDirty();
+    } catch (err) {
+      console.error("Failed to discard file:", err);
+      useToastStore.getState().show(`Discard failed: ${err}`, 5000, "error");
+      await get().checkDirty();
     }
   },
 
@@ -2036,6 +2082,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         token,
       });
       await get().refreshSyncStatus();
+      await get().refreshIncomingCommits();
       await get().loadGraphData();
       await get().loadTimelines();
       await get().loadVersions();
@@ -2070,6 +2117,8 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         token,
       });
       await get().refreshSyncStatus();
+      await get().checkDirty();
+      await get().refreshChangedFiles();
       await get().loadGraphData();
       await get().loadTimelines();
       await get().loadVersions();
@@ -2081,11 +2130,6 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   },
 
   syncWithRemote: async () => {
-    // Guard: if dirty, ask user to save first
-    if (get().isDirty) {
-      set({ syncError: "Save your changes before syncing." });
-      return;
-    }
     // Fetch first to get latest state
     await get().fetchFromRemote();
     const updated = get().syncStatus;
@@ -2101,13 +2145,27 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     }
   },
 
-  pullFromRemote: async () => {
-    const { currentRemote, timelines, isDirty } = get();
+  shareChanges: async () => {
+    const { currentRemote, timelines } = get();
     if (!currentRemote) return;
-    if (isDirty) {
-      set({ syncError: "Save your changes before pulling." });
-      return;
+    const active = timelines.find((t) => t.is_active);
+    if (!active) return;
+    await get().pushToRemote();
+    const url = buildShareUrl(currentRemote.url, active.name);
+    set({ shareUrl: url });
+    if (url) {
+      try {
+        await navigator.clipboard.writeText(url);
+        useToastStore.getState().show("Share link copied. Your work is safely published.", 4000, "success");
+      } catch {
+        useToastStore.getState().show("Your work is safely published.", 4000, "success");
+      }
     }
+  },
+
+  pullFromRemote: async () => {
+    const { currentRemote, timelines } = get();
+    if (!currentRemote) return;
     const active = timelines.find((t) => t.is_active);
     if (!active) return;
     set({ isSyncing: true, syncError: null });
@@ -2134,6 +2192,9 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       }
       // Merged and FastForward are handled automatically
       await get().refreshSyncStatus();
+      await get().refreshIncomingCommits();
+      await get().checkDirty();
+      await get().refreshChangedFiles();
       await get().loadGraphData();
       await get().loadTimelines();
       await get().loadVersions();
@@ -2217,6 +2278,29 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       set({ syncStatus: status });
     } catch {
       set({ syncStatus: null });
+    }
+  },
+
+  refreshIncomingCommits: async () => {
+    const { currentRemote, timelines, syncStatus } = get();
+    if (!currentRemote || !syncStatus || syncStatus.behind === 0) {
+      set({ incomingCommits: [] });
+      return;
+    }
+    const active = timelines.find((t) => t.is_active);
+    if (!active) {
+      set({ incomingCommits: [] });
+      return;
+    }
+    try {
+      const incoming = await invoke<IncomingCommit[]>("list_incoming_commits", {
+        remoteName: currentRemote.name,
+        branch: active.name,
+        limit: 10,
+      });
+      set({ incomingCommits: incoming });
+    } catch {
+      set({ incomingCommits: [] });
     }
   },
 

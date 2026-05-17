@@ -191,6 +191,8 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
       return false;
     case "diff_working_tree":
       return [];
+    case "discard_file":
+      return null;
     case "is_rewound":
       return false;
     case "check_git_identity":
@@ -214,7 +216,14 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
     case "save_chat_session":
       return null;
     case "get_chat_session":
-      return { title: "New Chat", messages: [], created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
+      return {
+        title: "New Chat",
+        messages: [],
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        author_name: "Demo User",
+        author_email: "demo@example.com",
+      };
     case "delete_chat_session":
       return null;
     case "get_memory_context":
@@ -644,6 +653,20 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
       return null;
     case "get_sync_status":
       return { ahead: 0, behind: 0 };
+    case "list_incoming_commits":
+      return [
+        {
+          id: "abc123",
+          message: "Refine opening demo flow",
+          author: "Avery",
+          timestamp: new Date().toISOString(),
+          changed_files: [
+            { path: "sketches/demo-introduction.sk", status: "modified", additions: 0, deletions: 0 },
+            { path: "notes/script-draft.md", status: "modified", additions: 0, deletions: 0 },
+          ],
+          projects: ["sketches", "notes"],
+        },
+      ];
     case "get_github_token":
       return null;
     case "pull_git_remote":

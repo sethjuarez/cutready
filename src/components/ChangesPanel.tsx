@@ -6,13 +6,14 @@ import {
   Camera,
   ChevronDown,
   ChevronRight,
-  RefreshCw,
   Search,
   Clock,
-  Download,
+  Save,
   GitPullRequestArrow,
   X,
   MoreHorizontal,
+  Trash2,
+  Share2,
 } from "lucide-react";
 import { useAppStore } from "../stores/appStore";
 import { SnapshotGraph } from "./SnapshotGraph";
@@ -38,7 +39,10 @@ export function ChangesPanel() {
   const loadTimelines = useAppStore((s) => s.loadTimelines);
   const squashSnapshots = useAppStore((s) => s.squashSnapshots);
   const currentRemote = useAppStore((s) => s.currentRemote);
+  const shareChanges = useAppStore((s) => s.shareChanges);
   const saving = useAppStore((s) => s.saving);
+  const currentProject = useAppStore((s) => s.currentProject);
+  const isMultiProject = useAppStore((s) => s.isMultiProject);
   const hasRemote = !!currentRemote;
 
   const [changesExpanded, setChangesExpanded] = useState(true);
@@ -47,6 +51,7 @@ export function ChangesPanel() {
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [discarding, setDiscarding] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [authorFilter, setAuthorFilter] = useState("all");
   const [showSearch, setShowSearch] = useState(false);
   const [squashMode, setSquashMode] = useState(false);
   const [selectedForSquash, setSelectedForSquash] = useState<Set<string>>(new Set());
@@ -89,9 +94,16 @@ export function ChangesPanel() {
     timelines.map((t) => [t.name, { label: t.label, colorIndex: t.color_index }]),
   );
 
-  const filteredNodes = searchQuery
-    ? activeNodes.filter((node) => node.message.toLowerCase().includes(searchQuery.toLowerCase()))
-    : activeNodes;
+  const historyAuthors = Array.from(
+    new Set(activeNodes.map((node) => node.author).filter((author): author is string => !!author)),
+  ).sort((a, b) => a.localeCompare(b));
+  const filteredNodes = activeNodes.filter((node) => {
+    const matchesSearch = searchQuery
+      ? node.message.toLowerCase().includes(searchQuery.toLowerCase())
+      : true;
+    const matchesAuthor = authorFilter === "all" || node.author === authorFilter;
+    return matchesSearch && matchesAuthor;
+  });
 
   const selectedNodes = activeNodes
     .filter((node) => selectedForSquash.has(node.id))
@@ -184,48 +196,81 @@ export function ChangesPanel() {
   const added = changedFiles.filter((f) => f.status === "added");
   const modified = changedFiles.filter((f) => f.status === "modified");
   const deleted = changedFiles.filter((f) => f.status === "deleted");
+  const sectionBodyClass = "min-h-0 flex-1 overflow-y-auto";
+  const workspaceName = currentProject ? getPathBasename(currentProject.repo_root) : "workspace";
+  const activeProjectName = currentProject?.name ?? "project";
+  const remoteUrl = currentRemote?.url ?? null;
+  const remoteLabel = remoteUrl ? formatRemoteLabel(remoteUrl) : null;
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-[rgb(var(--color-surface-inset))]">
+      <div className="flex min-h-10 shrink-0 items-center justify-between gap-2 border-b border-[rgb(var(--color-border))] px-3 py-1">
+        <div className="min-w-0">
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-[rgb(var(--color-text-secondary))]">
+            Changes
+          </div>
+          {remoteLabel && (
+            <div
+              className="flex min-w-0 items-center gap-1 text-[9px] leading-tight text-[rgb(var(--color-text-secondary))]/60"
+              title={remoteUrl ?? undefined}
+            >
+              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-success" />
+              <span className="truncate">{remoteLabel}</span>
+            </div>
+          )}
+        </div>
+        <div className="flex min-w-0 items-center gap-1">
+          <SyncBar variant="compact" />
+          {currentRemote && (
+            <button
+              onClick={() => shareChanges()}
+              disabled={saving}
+              className="rounded p-1 text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))] disabled:pointer-events-none disabled:opacity-30"
+              title="Share changes safely"
+            >
+              <Share2 className="h-3 w-3" />
+            </button>
+          )}
+          {isDirty && !pendingNavTarget && (
+            <button
+              onClick={() => setConfirmDiscard(true)}
+              className="rounded p-1 text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-error/10 hover:text-error"
+              title="Discard active project changes"
+            >
+              <Trash2 className="h-3 w-3" />
+            </button>
+          )}
+          <button
+            onClick={() => promptSnapshot()}
+            disabled={!isDirty || saving}
+            className="rounded p-1 text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))] disabled:pointer-events-none disabled:opacity-30"
+            title="Take Snapshot (Ctrl+S)"
+          >
+            {saving ? (
+              <svg className="h-3 w-3 animate-spin text-[rgb(var(--color-accent))]" viewBox="0 0 24 24" fill="none">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+            ) : (
+              <Save className="h-3 w-3" />
+            )}
+          </button>
+        </div>
+      </div>
+
       <SectionHeader
-        title="Changes"
+        title="Project"
         count={changedFiles.length}
+        scope={isMultiProject ? activeProjectName : undefined}
+        scopeTitle={isMultiProject ? `Active project: ${activeProjectName}` : undefined}
         expanded={changesExpanded}
         onToggle={() => setChangesExpanded(!changesExpanded)}
-        actions={
-          <>
-            {isDirty && !pendingNavTarget && (
-              <button
-                onClick={() => setConfirmDiscard(true)}
-                className="rounded p-0.5 text-[rgb(var(--color-text-secondary))] transition-colors hover:text-error"
-                title="Discard all changes"
-              >
-                <RefreshCw className="h-3 w-3" />
-              </button>
-            )}
-            <button
-              onClick={() => promptSnapshot()}
-              disabled={!isDirty || saving}
-              className="rounded p-0.5 text-[rgb(var(--color-text-secondary))] transition-colors hover:text-[rgb(var(--color-accent))] disabled:pointer-events-none disabled:opacity-30"
-              title="Take Snapshot (Ctrl+S)"
-            >
-              {saving ? (
-                <svg className="h-3 w-3 animate-spin text-[rgb(var(--color-accent))]" viewBox="0 0 24 24" fill="none">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                </svg>
-              ) : (
-                <Download className="h-3 w-3" />
-              )}
-            </button>
-          </>
-        }
       />
 
       {confirmDiscard && (
         <div className="border-b border-error/20 bg-error/5 px-3 py-2">
           <div className="mb-1.5 text-[10px] font-medium text-error">
-            Discard all changes since last snapshot?
+            Discard changes in {isMultiProject ? activeProjectName : "this project"} since the last snapshot?
           </div>
           <div className="flex gap-1.5">
             <button
@@ -274,11 +319,11 @@ export function ChangesPanel() {
       )}
 
       {changesExpanded && (
-        <div className="overflow-y-auto px-1 py-1" style={{ maxHeight: changedFiles.length > 0 ? "40%" : undefined }}>
+        <div className={`${sectionBodyClass} px-1 py-1`}>
           {changedFiles.length === 0 ? (
             <div className="flex items-center gap-2 px-2 py-3 text-[10px] text-[rgb(var(--color-text-secondary))]">
               <Camera className="h-3.5 w-3.5 opacity-40" />
-              No changes since last snapshot
+              No {isMultiProject ? "project " : ""}changes since last snapshot
             </div>
           ) : (
             <>
@@ -290,13 +335,13 @@ export function ChangesPanel() {
         </div>
       )}
 
-      <SyncBar />
-
       <SectionHeader
         title="History"
+        scope={isMultiProject ? "Workspace" : undefined}
+        scopeTitle={isMultiProject ? `Workspace history: ${workspaceName}` : undefined}
         expanded={historyExpanded}
         onToggle={() => setHistoryExpanded(!historyExpanded)}
-        actions={
+        actions={historyExpanded ? (
           <>
             {timelines.length > 1 && <TimelineSelector />}
             <button
@@ -304,31 +349,34 @@ export function ChangesPanel() {
                 setShowSearch(!showSearch);
                 if (showSearch) setSearchQuery("");
               }}
-              className={`rounded p-0.5 transition-colors ${showSearch ? "text-[rgb(var(--color-accent))]" : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))]"}`}
+              className={`grid h-5 w-5 place-items-center rounded-md transition-colors ${showSearch ? "text-[rgb(var(--color-accent))] bg-[rgb(var(--color-accent))]/10" : "text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"}`}
               title="Search snapshots"
             >
               <Search className="h-3 w-3" />
             </button>
             <button
-              onClick={() => openTab({ type: "history", path: "__history__", title: "History" })}
-              className="rounded p-0.5 text-[rgb(var(--color-text-secondary))] transition-colors hover:text-[rgb(var(--color-accent))]"
-              title="Open full history graph"
-            >
-              <Clock className="h-3 w-3" />
-            </button>
-            <button
               onClick={() => setShowAdvanced(!showAdvanced)}
-              className={`rounded p-0.5 transition-colors ${showAdvanced ? "text-[rgb(var(--color-accent))]" : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))]"}`}
+              className={`grid h-5 w-5 place-items-center rounded-md transition-colors ${showAdvanced ? "text-[rgb(var(--color-accent))] bg-[rgb(var(--color-accent))]/10" : "text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"}`}
               title="More actions"
             >
               <MoreHorizontal className="h-3 w-3" />
             </button>
           </>
-        }
+        ) : null}
       />
 
       {showAdvanced && !squashMode && (
-        <div className="border-b border-[rgb(var(--color-border))] px-3 py-1">
+        <div className="space-y-0.5 border-b border-[rgb(var(--color-border))] px-3 py-1">
+          <button
+            onClick={() => {
+              openTab({ type: "history", path: "__history__", title: "History" });
+              setShowAdvanced(false);
+            }}
+            className="flex w-full items-center gap-1.5 rounded px-2 py-1 text-[10px] text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
+          >
+            <Clock className="h-3 w-3" />
+            Open full history
+          </button>
           <button
             onClick={() => {
               setSquashMode(true);
@@ -339,6 +387,21 @@ export function ChangesPanel() {
             <GitPullRequestArrow className="h-3 w-3" />
             Squash snapshots
           </button>
+          {historyAuthors.length > 1 && (
+            <label className="flex items-center gap-1.5 rounded px-2 py-1 text-[10px] text-[rgb(var(--color-text-secondary))]">
+              Author
+              <select
+                value={authorFilter}
+                onChange={(event) => setAuthorFilter(event.target.value)}
+                className="min-w-0 flex-1 rounded border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] px-1 py-0.5 text-[10px] text-[rgb(var(--color-text))] outline-none"
+              >
+                <option value="all">Everyone</option>
+                {historyAuthors.map((author) => (
+                  <option key={author} value={author}>{author}</option>
+                ))}
+              </select>
+            </label>
+          )}
         </div>
       )}
 
@@ -397,7 +460,7 @@ export function ChangesPanel() {
       )}
 
       {historyExpanded && (
-        <div className="flex-1 overflow-y-auto">
+        <div className={sectionBodyClass}>
           {activeNodes.length === 0 ? (
             <div className="flex flex-col items-center justify-center px-4 py-8 text-center">
               <div className="mb-2 flex h-8 w-8 items-center justify-center rounded-full bg-[rgb(var(--color-accent))]/10">
@@ -405,7 +468,7 @@ export function ChangesPanel() {
               </div>
               <p className="mb-0.5 text-[11px] font-medium text-[rgb(var(--color-text))]">No snapshots yet</p>
               <p className="max-w-[200px] text-[10px] leading-relaxed text-[rgb(var(--color-text-secondary))]">
-                Press <kbd className="rounded border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] px-1 py-0.5 text-[9px] font-mono">Ctrl+S</kbd> to save one.
+                Press <kbd className="rounded border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] px-1 py-0.5 text-[9px] font-mono">Ctrl+S</kbd> to save a workspace snapshot.
               </p>
             </div>
           ) : (
@@ -440,37 +503,61 @@ export function ChangesPanel() {
 function SectionHeader({
   title,
   count,
+  scope,
+  scopeTitle,
   expanded,
   onToggle,
   actions,
 }: {
   title: string;
   count?: number;
+  scope?: string;
+  scopeTitle?: string;
   expanded: boolean;
   onToggle: () => void;
   actions?: ReactNode;
 }) {
   return (
-    <div className="flex h-8 shrink-0 items-center justify-between border-b border-[rgb(var(--color-border))] px-3">
+    <div className="flex h-8 min-w-0 shrink-0 items-center justify-between gap-2 border-b border-[rgb(var(--color-border))] px-3">
       <button
         onClick={onToggle}
-        className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-[rgb(var(--color-text-secondary))] transition-colors hover:text-[rgb(var(--color-text))]"
+        className="flex min-w-0 flex-1 items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-[rgb(var(--color-text-secondary))] transition-colors hover:text-[rgb(var(--color-text))]"
       >
-        {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-        {title}
+        {expanded ? <ChevronDown className="h-3 w-3 shrink-0" /> : <ChevronRight className="h-3 w-3 shrink-0" />}
+        <span className="truncate">{title}</span>
+        {scope && (
+          <span
+            className="min-w-0 max-w-[4.75rem] shrink truncate rounded-full border border-[rgb(var(--color-border))] px-1.5 py-0 text-[9px] font-medium normal-case tracking-normal text-[rgb(var(--color-text-secondary))]/80"
+            title={scopeTitle}
+          >
+            {scope}
+          </span>
+        )}
         {count !== undefined && count > 0 && (
           <span className="ml-1 rounded-full bg-[rgb(var(--color-accent))]/15 px-1 py-0 text-[9px] font-medium text-[rgb(var(--color-accent))]">
             {count}
           </span>
         )}
       </button>
-      <div className="flex items-center gap-0.5">{actions}</div>
+      <div className="flex shrink-0 items-center gap-1">{actions}</div>
     </div>
   );
 }
 
+function getPathBasename(path: string): string {
+  return path.split(/[\\/]/).filter(Boolean).pop() ?? path;
+}
+
+function formatRemoteLabel(url: string): string {
+  return url
+    .replace(/^https?:\/\/(www\.)?github\.com\//, "")
+    .replace(/^git@github\.com:/, "")
+    .replace(/\.git$/, "");
+}
+
 function FileGroup({ label, files, icon }: { label: string; files: DiffEntry[]; icon: ReactNode }) {
   const openTab = useAppStore((s) => s.openTab);
+  const discardFile = useAppStore((s) => s.discardFile);
 
   return (
     <div className="mb-1">
@@ -482,27 +569,32 @@ function FileGroup({ label, files, icon }: { label: string; files: DiffEntry[]; 
         {files.map((file) => {
           const parts = file.path.split("/");
           const filename = parts.pop() ?? file.path;
-          const dir = parts.join("/");
           return (
-            <button
+            <div
               key={file.path}
-              onClick={() => openTab({ type: "diff", path: file.path, title: `${filename} (diff)` })}
-              className="group flex w-full cursor-pointer items-center gap-2 rounded-r px-3 py-1.5 text-left transition-colors hover:bg-[rgb(var(--color-surface-alt))]"
-              title={`View diff: ${file.path}`}
+              className="group flex w-full items-center gap-1 rounded-r pr-1 transition-colors hover:bg-[rgb(var(--color-surface-alt))]"
             >
-              <span className="flex flex-1 items-baseline gap-1 overflow-hidden">
+              <button
+                onClick={() => openTab({ type: "diff", path: file.path, title: `${filename} (diff)` })}
+                className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 px-3 py-1.5 text-left"
+                title={`View diff: ${file.path}`}
+              >
                 <span className="truncate text-[12px] font-medium text-[rgb(var(--color-text))]">{filename}</span>
-                {dir && (
-                  <span className="shrink-0 text-[10px] text-[rgb(var(--color-text-secondary))]/60">{dir}/</span>
+                {(file.additions > 0 || file.deletions > 0) && (
+                  <span className="shrink-0 flex items-center gap-1 text-[10px]">
+                    {file.additions > 0 && <span className="text-success">+{file.additions}</span>}
+                    {file.deletions > 0 && <span className="text-error">-{file.deletions}</span>}
+                  </span>
                 )}
-              </span>
-              {(file.additions > 0 || file.deletions > 0) && (
-                <span className="shrink-0 flex items-center gap-1 text-[10px]">
-                  {file.additions > 0 && <span className="text-success">+{file.additions}</span>}
-                  {file.deletions > 0 && <span className="text-error">-{file.deletions}</span>}
-                </span>
-              )}
-            </button>
+              </button>
+              <button
+                onClick={() => void discardFile(file.path)}
+                className="shrink-0 rounded p-0.5 text-[rgb(var(--color-text-secondary))] opacity-0 transition-colors hover:text-error group-hover:opacity-100"
+                title={`Discard changes to ${file.path}`}
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </div>
           );
         })}
       </div>
