@@ -409,7 +409,7 @@ function TextConflictRow({
   );
 }
 
-function buildMergedText(
+export function buildMergedText(
   conflict: ConflictFile,
   choices: Record<number, "ours" | "theirs">,
 ): string {
@@ -421,10 +421,40 @@ function buildMergedText(
   const allTheirs = Object.values(choices).every((c) => c === "theirs");
   if (allTheirs) return conflict.theirs;
 
-  // Mixed: use ours as base. A more sophisticated approach would
-  // reconstruct line-by-line from conflict regions, but for now
-  // mixed choices default to ours as the base.
-  return conflict.ours;
+  // Mixed: reconstruct from ancestor, replacing each conflict region
+  // with the chosen side's lines
+  const ancestorLines = conflict.ancestor.split("\n");
+  const regions = [...conflict.text_conflicts].sort(
+    (a, b) => a.start_line - b.start_line,
+  );
+
+  const result: string[] = [];
+  let cursor = 0;
+
+  for (let i = 0; i < regions.length; i++) {
+    const region = regions[i];
+    // Add non-conflicting lines before this region
+    while (cursor < region.start_line) {
+      result.push(ancestorLines[cursor]);
+      cursor++;
+    }
+    // Add chosen side's lines for this region
+    const chosen =
+      choices[conflict.text_conflicts.indexOf(region)] === "theirs"
+        ? region.theirs_lines
+        : region.ours_lines;
+    result.push(...chosen);
+    // Skip ancestor lines that were part of this conflict
+    cursor += region.ancestor_lines.length;
+  }
+
+  // Add remaining non-conflicting lines after last region
+  while (cursor < ancestorLines.length) {
+    result.push(ancestorLines[cursor]);
+    cursor++;
+  }
+
+  return result.join("\n");
 }
 
 // ── Whole-file resolver (fallback for unknown types) ────────────

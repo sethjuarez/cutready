@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildMergedJson, setNestedValue } from "../components/MergeConflictPanel";
+import { buildMergedJson, buildMergedText, setNestedValue } from "../components/MergeConflictPanel";
 import type { ConflictFile } from "../types/sketch";
 
 /** Helper to build a minimal ConflictFile for testing. */
@@ -148,5 +148,87 @@ describe("buildMergedJson", () => {
     // Should not throw — setNestedValue bails on missing intermediates
     const result = buildMergedJson(conflict, { "nonexistent.deep.path": "theirs" });
     expect(JSON.parse(result)).toEqual({ title: "A", description: "desc-ours" });
+  });
+});
+
+// ── buildMergedText ────────────────────────────────────────────
+
+describe("buildMergedText", () => {
+  /** Helper to build a text ConflictFile for testing. */
+  function makeTextConflict(overrides: Partial<ConflictFile> = {}): ConflictFile {
+    return {
+      path: "test.md",
+      file_type: "note",
+      ours: "line1\nours-change\nline3",
+      theirs: "line1\ntheirs-change\nline3",
+      ancestor: "line1\noriginal\nline3",
+      field_conflicts: [],
+      text_conflicts: [
+        {
+          start_line: 1,
+          ours_lines: ["ours-change"],
+          theirs_lines: ["theirs-change"],
+          ancestor_lines: ["original"],
+        },
+      ],
+      ...overrides,
+    };
+  }
+
+  it("returns ours when all choices are ours", () => {
+    const conflict = makeTextConflict();
+    const result = buildMergedText(conflict, { 0: "ours" });
+    expect(result).toBe("line1\nours-change\nline3");
+  });
+
+  it("returns theirs when all choices are theirs", () => {
+    const conflict = makeTextConflict();
+    const result = buildMergedText(conflict, { 0: "theirs" });
+    expect(result).toBe("line1\ntheirs-change\nline3");
+  });
+
+  it("correctly reconstructs mixed choices from ancestor", () => {
+    const conflict = makeTextConflict({
+      ours: "line1\nours-A\nline3\nline4\nours-B\nline6",
+      theirs: "line1\ntheirs-A\nline3\nline4\ntheirs-B\nline6",
+      ancestor: "line1\noriginal-A\nline3\nline4\noriginal-B\nline6",
+      text_conflicts: [
+        {
+          start_line: 1,
+          ours_lines: ["ours-A"],
+          theirs_lines: ["theirs-A"],
+          ancestor_lines: ["original-A"],
+        },
+        {
+          start_line: 4,
+          ours_lines: ["ours-B"],
+          theirs_lines: ["theirs-B"],
+          ancestor_lines: ["original-B"],
+        },
+      ],
+    });
+
+    // Pick theirs for first region, ours for second
+    const result = buildMergedText(conflict, { 0: "theirs", 1: "ours" });
+    expect(result).toBe("line1\ntheirs-A\nline3\nline4\nours-B\nline6");
+  });
+
+  it("handles multi-line conflict regions", () => {
+    const conflict = makeTextConflict({
+      ancestor: "header\nold-1\nold-2\nfooter",
+      ours: "header\nnew-ours-1\nnew-ours-2\nfooter",
+      theirs: "header\nnew-theirs-1\nnew-theirs-2\nnew-theirs-3\nfooter",
+      text_conflicts: [
+        {
+          start_line: 1,
+          ours_lines: ["new-ours-1", "new-ours-2"],
+          theirs_lines: ["new-theirs-1", "new-theirs-2", "new-theirs-3"],
+          ancestor_lines: ["old-1", "old-2"],
+        },
+      ],
+    });
+
+    const result = buildMergedText(conflict, { 0: "theirs" });
+    expect(result).toBe("header\nnew-theirs-1\nnew-theirs-2\nnew-theirs-3\nfooter");
   });
 });
