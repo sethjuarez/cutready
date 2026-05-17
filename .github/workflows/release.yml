@@ -151,9 +151,21 @@ jobs:
         with:
           args: ${{ matrix.args }}
           retryAttempts: 3
-          uploadUpdaterJson: false
-          uploadWorkflowArtifacts: true
-          workflowArtifactNamePattern: cutready-${{ matrix.key }}-[bundle]
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: cutready-${{ matrix.key }}
+          if-no-files-found: error
+          path: |
+            src-tauri/target/**/release/bundle/**/*.AppImage
+            src-tauri/target/**/release/bundle/**/*.deb
+            src-tauri/target/**/release/bundle/**/*.rpm
+            src-tauri/target/**/release/bundle/**/*.msi
+            src-tauri/target/**/release/bundle/**/*.exe
+            src-tauri/target/**/release/bundle/**/*.dmg
+            src-tauri/target/**/release/bundle/**/*.tar.gz
+            src-tauri/target/**/release/bundle/**/*.sig
 
   publish:
     needs:
@@ -181,6 +193,10 @@ jobs:
 
           const sourceDir = 'release-artifacts';
           const outputDir = 'release-upload';
+          if (!fs.existsSync(sourceDir)) {
+            throw new Error('No build artifacts were downloaded; build jobs did not upload release bundles.');
+          }
+
           fs.rmSync(outputDir, { recursive: true, force: true });
           fs.mkdirSync(outputDir, { recursive: true });
 
