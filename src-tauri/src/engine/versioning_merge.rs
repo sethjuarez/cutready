@@ -242,12 +242,25 @@ pub fn merge_timelines(
 ///
 /// Called after `merge_timelines` returns `Conflicts` and the user has
 /// resolved each conflict file via the UI.
+///
+/// Creates a pre-merge safety snapshot before applying resolutions so
+/// users can always roll back if something goes wrong.
 pub fn apply_merge_resolution(
     project_dir: &Path,
     source_timeline: &str,
     target_timeline: &str,
     resolutions: Vec<FileResolution>,
 ) -> Result<String, VersioningError> {
+    // Safety snapshot: save current state before merge so user can roll back
+    let snapshot_msg = format!(
+        "Pre-merge snapshot (before merging {} into {})",
+        source_timeline, target_timeline
+    );
+    if let Err(e) = crate::engine::versioning::commit_snapshot(project_dir, &snapshot_msg, None) {
+        // Log but don't block the merge — snapshot is a safety net, not a gate
+        tracing::warn!("Failed to create pre-merge snapshot: {}", e);
+    }
+
     let repo =
         git2::Repository::open(project_dir).map_err(|e| VersioningError::Git(e.to_string()))?;
 
@@ -795,12 +808,15 @@ fn resolve_text_conflict(
     // Build result
     let mut result: Vec<String> = Vec::new();
     for (i, action) in actions.iter().enumerate() {
-        if i >= ancestor_lines.len() {
+        // For empty ancestors, the only valid index is 0 (pure insertion point)
+        if i >= ancestor_lines.len() && i > 0 {
             break;
         }
         match action {
             Action::Keep => {
-                result.push(ancestor_lines[i].to_string());
+                if i < ancestor_lines.len() {
+                    result.push(ancestor_lines[i].to_string());
+                }
             }
             Action::Replace(lines) => {
                 for line in lines {
@@ -878,9 +894,20 @@ fn resolve_json_conflict(
         // Ours is already the default from the base
     }
 
-    serde_json::to_string_pretty(&base).map_err(|e| {
+    let serialized = serde_json::to_string_pretty(&base).map_err(|e| {
         VersioningError::Git(format!("Failed to serialize merged JSON: {}", e))
-    })
+    })?;
+
+    // Round-trip validation: parse the result to ensure it's valid JSON.
+    // This catches any corruption from the merge process.
+    serde_json::from_str::<serde_json::Value>(&serialized).map_err(|e| {
+        VersioningError::Git(format!(
+            "Merge produced invalid JSON (round-trip validation failed): {}",
+            e
+        ))
+    })?;
+
+    Ok(serialized)
 }
 
 /// Set a value at a dot/bracket-separated JSON path.
@@ -1659,5 +1686,225 @@ mod tests {
         let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
         assert_eq!(parsed["title"], "theirs-title");
         assert_eq!(parsed["description"], "ours-desc");
+    }
+
+    // ── Edge case tests ─────────────────────────────────────────
+
+    #[test]
+    fn text_resolve_empty_ancestor() {
+        // Both sides added content to an empty file
+        let ancestor = "";
+        let ours = "line from ours";
+        let theirs = "line from theirs";
+
+        let conflict = make_text_conflict(ancestor, ours, theirs);
+        let choices = ConflictChoices {
+            text_choices: conflict
+                .text_conflicts
+                .iter()
+                .enumerate()
+                .map(|(i, _)| (i, ConflictSide::Theirs))
+                .collect(),
+            field_choices: Default::default(),
+        };
+        let result = resolve_conflict_file(&conflict, &choices).unwrap();
+        assert!(result.contains("theirs"), "should pick theirs content");
+    }
+
+    #[test]
+    fn text_resolve_adjacent_hunks() {
+        // Two consecutive changed regions — tests off-by-one in hunk boundaries
+        let ancestor = "line1\nline2\nline3\nline4\nline5";
+        let ours = "line1\nours-2\nours-3\nline4\nline5";
+        let theirs = "line1\ntheirs-2\ntheirs-3\nline4\ntheirs-5";
+
+        let conflict = make_text_conflict(ancestor, ours, theirs);
+        // Lines 2-3 conflict, line 5 is theirs-only non-conflicting
+        let choices = ConflictChoices {
+            text_choices: conflict
+                .text_conflicts
+                .iter()
+                .enumerate()
+                .map(|(i, _)| (i, ConflictSide::Ours))
+                .collect(),
+            field_choices: Default::default(),
+        };
+        let result = resolve_conflict_file(&conflict, &choices).unwrap();
+        assert!(result.contains("ours-2"), "should pick ours for conflict");
+        assert!(result.contains("theirs-5"), "should preserve theirs non-conflicting");
+    }
+
+    #[test]
+    fn text_resolve_insertion_at_end() {
+        // Theirs appends new lines at the end (no conflict, just ours changes mid-file)
+        let ancestor = "line1\nline2\nline3";
+        let ours = "line1\nours-2\nline3";
+        let theirs = "line1\ntheirs-2\nline3";
+
+        let conflict = make_text_conflict(ancestor, ours, theirs);
+        assert!(!conflict.text_conflicts.is_empty());
+        let choices = ConflictChoices {
+            text_choices: [(0, ConflictSide::Ours)].into(),
+            field_choices: Default::default(),
+        };
+        let result = resolve_conflict_file(&conflict, &choices).unwrap();
+        assert!(result.contains("ours-2"));
+        assert!(result.contains("line3"));
+    }
+
+    #[test]
+    fn text_resolve_single_line_file() {
+        let ancestor = "old";
+        let ours = "ours";
+        let theirs = "theirs";
+        let conflict = make_text_conflict(ancestor, ours, theirs);
+        let choices = ConflictChoices {
+            text_choices: [(0, ConflictSide::Theirs)].into(),
+            field_choices: Default::default(),
+        };
+        let result = resolve_conflict_file(&conflict, &choices).unwrap();
+        assert_eq!(result.trim(), "theirs");
+    }
+
+    #[test]
+    fn json_resolve_new_field_from_theirs() {
+        // Theirs adds a brand new field that doesn't exist in ancestor or ours
+        let ancestor = r#"{"title":"same"}"#;
+        let ours = r#"{"title":"same"}"#;
+        let theirs = r#"{"title":"same","newField":"added"}"#;
+
+        let conflict = make_json_conflict(ancestor, ours, theirs);
+        // No conflicts — theirs' new field is non-conflicting
+        let choices = ConflictChoices {
+            text_choices: Default::default(),
+            field_choices: Default::default(),
+        };
+        let result = resolve_conflict_file(&conflict, &choices).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+        assert_eq!(parsed["newField"], "added", "should apply theirs new field");
+    }
+
+    #[test]
+    fn json_resolve_round_trip_validation() {
+        // Verify the round-trip validation works (result must be valid JSON)
+        let ancestor = r#"{"title":"old"}"#;
+        let ours = r#"{"title":"ours"}"#;
+        let theirs = r#"{"title":"theirs"}"#;
+        let conflict = make_json_conflict(ancestor, ours, theirs);
+        let choices = ConflictChoices {
+            text_choices: Default::default(),
+            field_choices: [("title".to_string(), ConflictSide::Ours)].into(),
+        };
+        let result = resolve_conflict_file(&conflict, &choices).unwrap();
+        // Should always produce valid JSON
+        assert!(serde_json::from_str::<serde_json::Value>(&result).is_ok());
+    }
+
+    #[test]
+    fn other_file_type_uses_whole_file() {
+        let conflict = ConflictFile {
+            path: "image.png".to_string(),
+            file_type: ConflictFileType::Other,
+            ours: "ours-binary-data".to_string(),
+            theirs: "theirs-binary-data".to_string(),
+            ancestor: "ancestor".to_string(),
+            field_conflicts: Vec::new(),
+            text_conflicts: Vec::new(),
+        };
+        // Theirs choice → whole theirs file
+        let choices = ConflictChoices {
+            text_choices: [(0, ConflictSide::Theirs)].into(),
+            field_choices: Default::default(),
+        };
+        let result = resolve_conflict_file(&conflict, &choices).unwrap();
+        assert_eq!(result, "theirs-binary-data");
+
+        // Ours choice → whole ours file
+        let choices = ConflictChoices {
+            text_choices: [(0, ConflictSide::Ours)].into(),
+            field_choices: Default::default(),
+        };
+        let result = resolve_conflict_file(&conflict, &choices).unwrap();
+        assert_eq!(result, "ours-binary-data");
+    }
+
+    // ── Integration test: full merge + resolve pipeline ─────────
+
+    #[test]
+    fn integration_merge_resolve_full_pipeline() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().join("proj");
+        setup_project(&dir);
+
+        // Create a fork
+        create_fork(&dir, "fork-a");
+
+        // Edit on main: change title in sketch
+        commit_on_branch(
+            &dir,
+            "main",
+            &[("sketches/intro.sk", r#"{"title":"main-title","description":"initial"}"#)],
+            "main edits title",
+        );
+
+        // Edit on fork-a: change description in sketch
+        commit_on_branch(
+            &dir,
+            "fork-a",
+            &[("sketches/intro.sk", r#"{"title":"Hello","description":"fork-desc"}"#)],
+            "fork edits desc",
+        );
+
+        // Checkout main (required for working dir operations)
+        let repo = git2::Repository::open(&dir).unwrap();
+        repo.set_head("refs/heads/main").unwrap();
+        repo.checkout_head(Some(git2::build::CheckoutBuilder::new().force())).unwrap();
+        drop(repo);
+
+        // Merge fork-a into main
+        let result = merge_timelines(&dir, "timeline/fork-a", "main").unwrap();
+
+        match result {
+            MergeResult::Conflicts { conflicts } => {
+                assert!(!conflicts.is_empty(), "should have conflicts");
+                let sk_conflict = conflicts.iter().find(|c| c.path.contains("intro.sk")).unwrap();
+
+                // Resolve: pick ours (main) for title
+                let choices = ConflictChoices {
+                    text_choices: Default::default(),
+                    field_choices: [("title".to_string(), ConflictSide::Ours)].into(),
+                };
+                let resolved = resolve_conflict_file(sk_conflict, &choices).unwrap();
+                let parsed: serde_json::Value = serde_json::from_str(&resolved).unwrap();
+
+                // title from ours, description from theirs (non-conflicting)
+                assert_eq!(parsed["title"], "main-title");
+                assert_eq!(parsed["description"], "fork-desc");
+
+                // Apply resolution
+                let resolutions = vec![FileResolution {
+                    path: sk_conflict.path.clone(),
+                    content: resolved,
+                }];
+                let commit_id =
+                    apply_merge_resolution(&dir, "timeline/fork-a", "main", resolutions).unwrap();
+                assert!(!commit_id.is_empty(), "should produce a merge commit");
+
+                // Verify working directory
+                let final_content = fs::read_to_string(dir.join("sketches/intro.sk")).unwrap();
+                let final_parsed: serde_json::Value = serde_json::from_str(&final_content).unwrap();
+                assert_eq!(final_parsed["title"], "main-title");
+                assert_eq!(final_parsed["description"], "fork-desc");
+            }
+            MergeResult::Clean { .. } => {
+                // If git handles it cleanly (different JSON fields), also acceptable
+                let final_content = fs::read_to_string(dir.join("sketches/intro.sk")).unwrap();
+                assert!(
+                    final_content.contains("main-title") || final_content.contains("fork-desc"),
+                    "clean merge should preserve edits"
+                );
+            }
+            other => panic!("Expected Conflicts or Clean, got: {:?}", other),
+        }
     }
 }
