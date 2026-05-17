@@ -9,6 +9,21 @@
 Covector manages this changelog. Do not edit manually.
 Each release section is generated from `.changes/*.md` files.
 
+## [1.8.0](https://github.com/sethjuarez/cutready/compare/v1.7.0...v1.8.0) (2026-05-17)
+
+
+### Features
+
+* **collaboration:** safeguard workspace sharing ([45e6720](https://github.com/sethjuarez/cutready/commit/45e67202a573cdfe4afa40990201f4c050e78377))
+* **workspace:** polish project navigation ([c4d737c](https://github.com/sethjuarez/cutready/commit/c4d737cf6356807ca67b84f94c21f6d928c7c272))
+
+
+### Bug Fixes
+
+* **collaboration:** persist chat authors ([5a1e814](https://github.com/sethjuarez/cutready/commit/5a1e81478e7dd25ea07229280866dfaa6349802b))
+* **recording:** tighten platform-specific helpers ([f61c38f](https://github.com/sethjuarez/cutready/commit/f61c38f359fef0035d40ee38950676ed5d13e1df))
+* **versioning:** snapshot workspace structure safely ([63d5aa1](https://github.com/sethjuarez/cutready/commit/63d5aa15bed476fce73e8058275c832d379a4d8e))
+
 ## [1.7.0](https://github.com/sethjuarez/cutready/compare/v1.6.0...v1.7.0) (2026-05-17)
 
 
