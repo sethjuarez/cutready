@@ -3,6 +3,7 @@ import { House, SlidersHorizontal, Images, LayoutList, MessageSquare, GitCompare
 import type { AppView } from "../stores/appStore";
 import { useAppStore } from "../stores/appStore";
 import { usePopover } from "../hooks/usePopover";
+import { UpdateAvailableButton } from "./UpdateAvailableButton";
 
 const navItems: { id: AppView; label: string; icon: ReactNode }[] = [
   {
@@ -91,6 +92,8 @@ export function Sidebar({ onFeedback }: { onFeedback?: () => void }) {
 
         {/* Spacer pushes bottom items down */}
         <div className="flex-1" />
+
+        <UpdateAvailableButton />
 
         {/* Home — pinned to bottom */}
         {(() => {

@@ -1,11 +1,8 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useCallback, useEffect, useState } from "react";
 import type { MouseEvent } from "react";
-import { Search, X, Download, LayoutGrid } from "lucide-react";
-import { useUpdateStore } from "../stores/updateStore";
+import { Search, X, LayoutGrid } from "lucide-react";
 import { useAppStore } from "../stores/appStore";
-import { usePopover } from "../hooks/usePopover";
-import { relaunch } from "@tauri-apps/plugin-process";
 import { isMac, formatKeybinding } from "../utils/platform";
 import { ProjectSwitcher } from "./ProjectSwitcher";
 
@@ -101,7 +98,7 @@ export function TitleBar({
           </button>
         </div>
 
-        {/* Right: Panel toggles + update indicator */}
+        {/* Right: Panel toggles */}
         <div className="flex items-center gap-0.5">
           <button
             className="flex items-center justify-center w-6 h-5 rounded transition-colors text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))]"
@@ -153,8 +150,6 @@ export function TitleBar({
               <line x1="15" y1="3" x2="15" y2="21" />
             </svg>
           </button>
-          <div className="w-px h-3 bg-[rgb(var(--color-border))] mx-0.5 shrink-0" />
-          <UpdateIndicator />
         </div>
       </div>
     );
@@ -212,7 +207,7 @@ export function TitleBar({
         </button>
       </div>
 
-      {/* Right: Panel toggles + update indicator + window controls */}
+      {/* Right: Panel toggles + window controls */}
       <div className="flex items-center h-full shrink-0">
         {/* Panel layout toggles */}
         <div className="flex items-center gap-0.5 px-2">
@@ -273,9 +268,6 @@ export function TitleBar({
           <div className="w-px h-3 bg-[rgb(var(--color-border))] mx-0.5 shrink-0" />
         </div>
 
-        {/* Update indicator */}
-        <UpdateIndicator />
-
         {/* Window controls — Windows style on the right, hidden on macOS */}
         {!isMac && (
           <div className="flex items-center h-full">
@@ -314,83 +306,6 @@ export function TitleBar({
           </div>
         )}
       </div>
-    </div>
-  );
-}
-
-function UpdateIndicator() {
-  const update = useUpdateStore((s) => s.update);
-  const { state: open, ref, toggle } = usePopover();
-  const [installing, setInstalling] = useState(false);
-  const [progress, setProgress] = useState("");
-
-  if (!update) return null;
-
-  const handleInstall = async () => {
-    setInstalling(true);
-    try {
-      let downloaded = 0;
-      await update.downloadAndInstall((event) => {
-        switch (event.event) {
-          case "Started":
-            setProgress("Downloading...");
-            break;
-          case "Progress":
-            downloaded += event.data.chunkLength;
-            setProgress(`${(downloaded / 1024 / 1024).toFixed(1)} MB`);
-            break;
-          case "Finished":
-            setProgress("Installing...");
-            break;
-        }
-      });
-      await relaunch();
-    } catch {
-      setProgress("Failed");
-      setInstalling(false);
-    }
-  };
-
-  return (
-    <div
-      ref={ref}
-      className="relative flex items-center px-1"
-    >
-      <button
-        className="relative flex items-center justify-center w-7 h-[22px] rounded text-accent hover:text-accent-hover hover:bg-[rgb(var(--color-surface-alt))] transition-colors"
-        onClick={() => toggle()}
-        title={`Update available: v${update.version}${update.body ? `\n${update.body.slice(0, 200)}` : ""}`}
-      >
-        <Download className="w-3.5 h-3.5" />
-        {/* Notification dot */}
-        <span className="absolute top-0.5 right-0.5 w-2 h-2 rounded-full bg-accent animate-pulse" />
-      </button>
-
-      {open && (
-        <div className="absolute right-0 top-full mt-1 z-dropdown w-[240px] py-2.5 px-3 bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-lg shadow-lg">
-          <div className="text-[10px] font-medium text-[rgb(var(--color-text-secondary))] uppercase tracking-wider mb-1.5">
-            Update Available
-          </div>
-          <div className="text-xs text-[rgb(var(--color-text))] mb-2">
-            <span className="font-semibold">v{update.version}</span>
-            {update.body && (
-              <p className="mt-1 text-[rgb(var(--color-text-secondary))] line-clamp-3">
-                {update.body}
-              </p>
-            )}
-          </div>
-          {installing ? (
-            <div className="text-[11px] text-accent">{progress}</div>
-          ) : (
-            <button
-              onClick={handleInstall}
-              className="w-full h-[26px] rounded text-[11px] font-medium bg-accent hover:bg-accent-hover text-[rgb(var(--color-accent-fg))] transition-colors"
-            >
-              Download &amp; Install
-            </button>
-          )}
-        </div>
-      )}
     </div>
   );
 }

@@ -10,7 +10,7 @@ import { relaunch } from "@tauri-apps/plugin-process";
 import { BUILT_IN_AGENTS } from "../agents/builtInAgents";
 import { useToastStore } from "../stores/toastStore";
 import { useUpdateStore } from "../stores/updateStore";
-import { SafeMarkdown } from "./SafeMarkdown";
+import { ReleaseNotesMarkdown } from "./UpdateAvailableButton";
 import { Dialog } from "./Dialog";
 import { agentChat } from "../services/agentChat";
 import {
@@ -2346,16 +2346,14 @@ function UpdatesTab() {
           {update.body && (
             <div className="px-4 py-3 max-h-[420px] overflow-y-auto">
               <p className="text-xs text-[rgb(var(--color-text-secondary))] uppercase tracking-wider mb-2">Release Notes</p>
-              <div className="prose prose-sm text-[rgb(var(--color-text))] text-xs leading-relaxed [&_h1]:text-sm [&_h1]:font-semibold [&_h1]:mb-1 [&_h2]:text-xs [&_h2]:font-semibold [&_h2]:mt-3 [&_h2]:mb-1 [&_ul]:pl-4 [&_li]:mb-0.5 [&_a]:text-[rgb(var(--color-accent))] [&_a]:underline [&_code]:bg-[rgb(var(--color-surface))] [&_code]:px-1 [&_code]:rounded">
-                <SafeMarkdown>{update.body}</SafeMarkdown>
-              </div>
+              <ReleaseNotesMarkdown>{update.body}</ReleaseNotesMarkdown>
             </div>
           )}
         </div>
       ) : (
         <div className="flex flex-col gap-2">
           <p className="text-sm text-[rgb(var(--color-text-secondary))]">
-            CutReady checks for updates automatically. You'll see a notification in the title bar when one is available.
+            CutReady checks for updates automatically. You'll see a notification in the activity bar when one is available.
           </p>
           <a
             href="https://github.com/sethjuarez/cutready/blob/main/CHANGELOG.md"
