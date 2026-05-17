@@ -138,10 +138,11 @@ export function NoteEditor() {
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
       saveTimeoutRef.current = setTimeout(() => {
         pendingContentRef.current = null;
+        if (shouldSuppressEditorFlush(activeNotePath)) return;
         updateNoteRef.current(value);
       }, 800);
     },
-    [activeNoteLocked],
+    [activeNoteLocked, activeNotePath],
   );
 
   // Flush on unmount

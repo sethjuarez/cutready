@@ -203,6 +203,7 @@ export function SketchForm() {
       if (titleTimeoutRef.current) clearTimeout(titleTimeoutRef.current);
       titleTimeoutRef.current = setTimeout(() => {
         pendingTitleRef.current = null;
+        if (shouldSuppressEditorFlush(activeSketchPath)) return;
         updateSketchTitle(activeSketchPath, value);
       }, 500);
     },
@@ -218,6 +219,7 @@ export function SketchForm() {
       if (rowsTimeoutRef.current) clearTimeout(rowsTimeoutRef.current);
       rowsTimeoutRef.current = setTimeout(() => {
         pendingRowsRef.current = null;
+        if (shouldSuppressEditorFlush(activeSketchPath)) return;
         updateSketch({ rows });
       }, 500);
     },

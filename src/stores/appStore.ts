@@ -43,6 +43,24 @@ export function clearSuppressedEditorFlush(relativePath: string) {
   suppressedEditorFlushPaths.delete(relativePath);
 }
 
+function clearSuppressedEditorFlushes(relativePaths: string[]) {
+  for (const relativePath of relativePaths) {
+    clearSuppressedEditorFlush(relativePath);
+  }
+}
+
+function isDocumentTab(tab: EditorTab): tab is EditorTab & { type: "sketch" | "storyboard" | "note" } {
+  return tab.type === "sketch" || tab.type === "storyboard" || tab.type === "note";
+}
+
+function nextActiveTabIdAfterFiltering(previousTabs: EditorTab[], nextTabs: EditorTab[], activeTabId: string | null): string | null {
+  if (!activeTabId) return null;
+  if (nextTabs.some((tab) => tab.id === activeTabId)) return activeTabId;
+  if (nextTabs.length === 0) return null;
+  const previousIndex = previousTabs.findIndex((tab) => tab.id === activeTabId);
+  return nextTabs[Math.min(Math.max(previousIndex, 0), nextTabs.length - 1)]?.id ?? null;
+}
+
 /** The panels / views available in the app. */
 export type AppView = "home" | "project" | "sketch" | "assets" | "editor" | "recording" | "settings" | "chat" | "changes";
 
@@ -142,6 +160,8 @@ interface AppStoreState {
   activeEditorGroup: "main" | "split";
   /** Incremented to force the active editor to remount after external file restoration. */
   editorReloadKey: number;
+  /** The file path associated with the latest forced editor remount. */
+  editorReloadPath: string | null;
 
   // ── Sketch state ───────────────────────────────────────
 
@@ -638,6 +658,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   splitActiveTabId: null,
   activeEditorGroup: "main",
   editorReloadKey: 0,
+  editorReloadPath: null,
 
   sketches: [],
   activeSketchPath: null,
@@ -1291,6 +1312,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   updateSketch: async (update) => {
     const { activeSketchPath } = get();
     if (!activeSketchPath) return;
+    if (shouldSuppressEditorFlush(activeSketchPath)) return;
     try {
       await invoke("update_sketch", { relativePath: activeSketchPath, ...update });
       set({ isDirty: true });
@@ -1303,6 +1325,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   updateSketchTitle: async (sketchPath, title) => {
     // Guard: skip if navigation has cleared the active sketch
     if (!get().activeSketchPath) return;
+    if (shouldSuppressEditorFlush(sketchPath)) return;
     try {
       await invoke("update_sketch_title", { relativePath: sketchPath, title });
       await get().loadSketches();
@@ -1384,6 +1407,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   updateStoryboard: async (update) => {
     const { activeStoryboardPath } = get();
     if (!activeStoryboardPath) return;
+    if (shouldSuppressEditorFlush(activeStoryboardPath)) return;
     try {
       await invoke("update_storyboard", { relativePath: activeStoryboardPath, ...update });
       const storyboard = await invoke<Storyboard>("get_storyboard", { relativePath: activeStoryboardPath });
@@ -1560,6 +1584,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   updateNote: async (content) => {
     const { activeNotePath, activeNoteLocked } = get();
     if (!activeNotePath) return;
+    if (shouldSuppressEditorFlush(activeNotePath)) return;
     if (activeNoteLocked) return;
     try {
       await invoke("update_note", { relativePath: activeNotePath, content });
@@ -1844,17 +1869,40 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   },
 
   discardChanges: async () => {
+    const suppressedPaths = Array.from(new Set([
+      ...get().openTabs.filter(isDocumentTab).map((tab) => tab.path),
+      ...get().splitTabs.filter(isDocumentTab).map((tab) => tab.path),
+      get().activeSketchPath,
+      get().activeStoryboardPath,
+      get().activeNotePath,
+    ].filter((path): path is string => !!path)));
     try {
-      // Clear active editors FIRST to cancel pending debounced saves
-      set({ activeSketch: null, activeSketchPath: null, activeStoryboard: null, activeStoryboardPath: null, activeNotePath: null, activeNoteContent: null, activeNoteLocked: false });
+      for (const path of suppressedPaths) suppressEditorFlush(path);
+      set({
+        activeSketch: null,
+        activeSketchPath: null,
+        activeStoryboard: null,
+        activeStoryboardPath: null,
+        activeNotePath: null,
+        activeNoteContent: null,
+        activeNoteLocked: false,
+      });
       await invoke("discard_changes");
       await get().loadSketches();
       await get().loadStoryboards();
       await get().loadNotes();
-      // Clear tabs (files may have changed)
-      set({ openTabs: [], activeTabId: null });
+      set({
+        openTabs: [],
+        activeTabId: null,
+        splitTabs: [],
+        splitActiveTabId: null,
+        activeEditorGroup: "main",
+        editorReloadPath: null,
+      });
+      globalThis.setTimeout(() => clearSuppressedEditorFlushes(suppressedPaths), 100);
       await get().checkDirty();
     } catch (err) {
+      clearSuppressedEditorFlushes(suppressedPaths);
       console.error("Failed to discard changes:", err);
       useToastStore.getState().show(`Discard failed: ${err}`, 5000, "error");
       await get().checkDirty();
@@ -1876,48 +1924,82 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         storyboards,
         notes,
         openTabs,
+        activeTabId,
+        splitTabs,
+        splitActiveTabId,
+        activeEditorGroup,
       } = get();
+      const fileExistsForTab = (tab: EditorTab) => {
+        if (tab.path !== filePath || !isDocumentTab(tab)) return true;
+        if (tab.type === "sketch") return sketches.some((sketch) => sketch.path === filePath);
+        if (tab.type === "storyboard") return storyboards.some((storyboard) => storyboard.path === filePath);
+        return notes.some((note) => note.path === filePath);
+      };
+      const nextOpenTabs = openTabs.filter(fileExistsForTab);
+      const nextSplitTabs = splitTabs.filter(fileExistsForTab);
+      const nextActiveTabId = nextActiveTabIdAfterFiltering(openTabs, nextOpenTabs, activeTabId);
+      const nextSplitActiveTabId = nextActiveTabIdAfterFiltering(splitTabs, nextSplitTabs, splitActiveTabId);
+      const fileWasOpen = openTabs.some((tab) => isDocumentTab(tab) && tab.path === filePath)
+        || splitTabs.some((tab) => isDocumentTab(tab) && tab.path === filePath)
+        || activeSketchPath === filePath
+        || activeStoryboardPath === filePath
+        || activeNotePath === filePath;
+      set((state) => ({
+        openTabs: nextOpenTabs,
+        activeTabId: nextActiveTabId,
+        splitTabs: nextSplitTabs,
+        splitActiveTabId: nextSplitActiveTabId,
+        activeEditorGroup: nextSplitTabs.length > 0 ? activeEditorGroup : "main",
+        editorReloadKey: fileWasOpen ? state.editorReloadKey + 1 : state.editorReloadKey,
+        editorReloadPath: fileWasOpen ? filePath : state.editorReloadPath,
+      }));
       if (activeSketchPath === filePath) {
-        set((state) => ({
+        set({
           activeSketchPath: null,
           activeSketch: null,
-          editorReloadKey: state.editorReloadKey + 1,
-        }));
+        });
         if (sketches.some((sketch) => sketch.path === filePath)) {
           await get().openSketch(filePath);
         } else {
-          const tab = openTabs.find((candidate) => candidate.type === "sketch" && candidate.path === filePath);
-          if (tab) get().closeTab(tab.id);
-          else set({ activeSketchPath: null, activeSketch: null });
+          set({ activeSketchPath: null, activeSketch: null });
+          if (nextActiveTabId) get().setActiveTab(nextActiveTabId);
         }
       } else if (activeStoryboardPath === filePath) {
-        set((state) => ({
+        set({
           activeStoryboardPath: null,
           activeStoryboard: null,
-          editorReloadKey: state.editorReloadKey + 1,
-        }));
+        });
         if (storyboards.some((storyboard) => storyboard.path === filePath)) {
           await get().openStoryboard(filePath);
         } else {
-          const tab = openTabs.find((candidate) => candidate.type === "storyboard" && candidate.path === filePath);
-          if (tab) get().closeTab(tab.id);
-          else set({ activeStoryboardPath: null, activeStoryboard: null });
+          set({ activeStoryboardPath: null, activeStoryboard: null });
+          if (nextActiveTabId) get().setActiveTab(nextActiveTabId);
         }
       } else if (activeNotePath === filePath) {
-        set((state) => ({
+        set({
           activeNotePath: null,
           activeNoteContent: null,
           activeNoteLocked: false,
-          editorReloadKey: state.editorReloadKey + 1,
-        }));
+        });
         if (notes.some((note) => note.path === filePath)) {
           await get().openNote(filePath);
         } else {
-          const tab = openTabs.find((candidate) => candidate.type === "note" && candidate.path === filePath);
-          if (tab) get().closeTab(tab.id);
-          else set({ activeNotePath: null, activeNoteContent: null, activeNoteLocked: false });
+          set({ activeNotePath: null, activeNoteContent: null, activeNoteLocked: false });
+          if (nextActiveTabId) get().setActiveTab(nextActiveTabId);
         }
+      } else if (nextActiveTabId !== activeTabId) {
+        if (nextActiveTabId) get().setActiveTab(nextActiveTabId);
+        else set({
+          activeSketchPath: null,
+          activeSketch: null,
+          activeStoryboardPath: null,
+          activeStoryboard: null,
+          activeNotePath: null,
+          activeNoteContent: null,
+          activeNoteLocked: false,
+        });
       }
+      get()._persistTabs();
       globalThis.setTimeout(() => clearSuppressedEditorFlush(filePath), 100);
       await get().checkDirty();
     } catch (err) {

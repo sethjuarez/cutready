@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { X, Sparkles, Pencil, Lock } from "lucide-react";
-import { useAppStore } from "../stores/appStore";
+import { shouldSuppressEditorFlush, useAppStore } from "../stores/appStore";
 import type { EditorTab } from "../stores/appStore";
 import type { Sketch, Storyboard } from "../types/sketch";
 import type { PlanningRow } from "../types/sketch";
@@ -94,6 +94,8 @@ export function SplitPaneContent() {
   const activeSketchPath = useAppStore((s) => s.activeSketchPath);
   const activeNotePath = useAppStore((s) => s.activeNotePath);
   const activeStoryboardPath = useAppStore((s) => s.activeStoryboardPath);
+  const editorReloadKey = useAppStore((s) => s.editorReloadKey);
+  const editorReloadPath = useAppStore((s) => s.editorReloadPath);
 
   if (splitTabs.length === 0) return null;
 
@@ -111,7 +113,7 @@ export function SplitPaneContent() {
 
           return (
             <div
-              key={tab.id}
+              key={`${tab.id}:${tab.path === editorReloadPath ? editorReloadKey : 0}`}
               className={`absolute inset-0 overflow-y-auto ${tab.id !== splitActiveTabId ? "hidden" : ""}`}
             >
               {tab.type === "sketch" && (isActiveMain ? <SketchForm /> : <SketchSplitEditor path={tab.path} />)}
@@ -239,15 +241,21 @@ function SketchSplitEditor({ path }: { path: string }) {
       cancelled = true;
       if (titleTimerRef.current && pendingTitleRef.current !== null) {
         clearTimeout(titleTimerRef.current);
-        invoke("update_sketch_title", { relativePath: path, title: pendingTitleRef.current }).catch(() => {});
+        if (!shouldSuppressEditorFlush(path)) {
+          invoke("update_sketch_title", { relativePath: path, title: pendingTitleRef.current }).catch(() => {});
+        }
       }
       if (descTimerRef.current && pendingDescRef.current !== null) {
         clearTimeout(descTimerRef.current);
-        invoke("update_sketch", { relativePath: path, description: pendingDescRef.current }).catch(() => {});
+        if (!shouldSuppressEditorFlush(path)) {
+          invoke("update_sketch", { relativePath: path, description: pendingDescRef.current }).catch(() => {});
+        }
       }
       if (saveTimerRef.current && pendingRowsRef.current) {
         clearTimeout(saveTimerRef.current);
-        invoke("update_sketch", { relativePath: path, rows: pendingRowsRef.current }).catch(() => {});
+        if (!shouldSuppressEditorFlush(path)) {
+          invoke("update_sketch", { relativePath: path, rows: pendingRowsRef.current }).catch(() => {});
+        }
       }
     };
   }, [path]);
@@ -278,9 +286,10 @@ function SketchSplitEditor({ path }: { path: string }) {
     pendingTitleRef.current = title;
     if (titleTimerRef.current) clearTimeout(titleTimerRef.current);
     titleTimerRef.current = setTimeout(() => {
+      pendingTitleRef.current = null;
+      if (shouldSuppressEditorFlush(path)) return;
       invoke("update_sketch_title", { relativePath: path, title }).catch(() => {});
       window.dispatchEvent(new CustomEvent("cutready:sketch-saved"));
-      pendingTitleRef.current = null;
     }, 500);
   };
 
@@ -290,8 +299,9 @@ function SketchSplitEditor({ path }: { path: string }) {
     pendingDescRef.current = desc;
     if (descTimerRef.current) clearTimeout(descTimerRef.current);
     descTimerRef.current = setTimeout(() => {
-      invoke("update_sketch", { relativePath: path, description: desc }).catch(() => {});
       pendingDescRef.current = null;
+      if (shouldSuppressEditorFlush(path)) return;
+      invoke("update_sketch", { relativePath: path, description: desc }).catch(() => {});
     }, 500);
   };
 
@@ -301,9 +311,10 @@ function SketchSplitEditor({ path }: { path: string }) {
     pendingRowsRef.current = rows;
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
+      pendingRowsRef.current = null;
+      if (shouldSuppressEditorFlush(path)) return;
       invoke("update_sketch", { relativePath: path, rows }).catch(() => {});
       window.dispatchEvent(new CustomEvent("cutready:sketch-saved"));
-      pendingRowsRef.current = null;
     }, 800);
   };
 
@@ -408,9 +419,11 @@ function NoteSplitEditor({ path }: { path: string }) {
     return () => {
       cancelled = true;
       // Flush any pending save on unmount
-      if (!locked && saveTimerRef.current && pendingContentRef.current !== null) {
+      if (saveTimerRef.current) {
         clearTimeout(saveTimerRef.current);
-        invoke("update_note", { relativePath: path, content: pendingContentRef.current }).catch(() => {});
+        if (!locked && pendingContentRef.current !== null && !shouldSuppressEditorFlush(path)) {
+          invoke("update_note", { relativePath: path, content: pendingContentRef.current }).catch(() => {});
+        }
       }
     };
   }, [path, locked]);
@@ -435,8 +448,9 @@ function NoteSplitEditor({ path }: { path: string }) {
     pendingContentRef.current = value;
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
-      invoke("update_note", { relativePath: path, content: value }).catch(() => {});
       pendingContentRef.current = null;
+      if (shouldSuppressEditorFlush(path)) return;
+      invoke("update_note", { relativePath: path, content: value }).catch(() => {});
     }, 800);
   };
 

@@ -28,6 +28,7 @@ export function StoryboardPanel() {
   const activeTabId = useAppStore((s) => s.activeTabId);
   const splitTabs = useAppStore((s) => s.splitTabs);
   const editorReloadKey = useAppStore((s) => s.editorReloadKey);
+  const editorReloadPath = useAppStore((s) => s.editorReloadPath);
   const setActiveEditorGroup = useAppStore((s) => s.setActiveEditorGroup);
   const secondaryWidth = useAppStore((s) => s.secondaryWidth);
   const setSecondaryWidth = useAppStore((s) => s.setSecondaryWidth);
@@ -37,6 +38,7 @@ export function StoryboardPanel() {
   const isHistoryTab = activeTab?.type === "history";
   const isAssetTab = activeTab?.type === "asset";
   const isDiffTab = activeTab?.type === "diff";
+  const activeEditorReloadKey = activeTab?.path === editorReloadPath ? editorReloadKey : 0;
 
   const [splitWidth, setSplitWidth] = useState<number | null>(null);
   const secondaryOnLeft = sidebarPosition === "right";
@@ -104,11 +106,11 @@ export function StoryboardPanel() {
             ) : isAssetTab && activeTab ? (
               <AssetViewer assetPath={activeTab.path} />
             ) : activeSketch ? (
-              <SketchForm key={`sketch:${activeTab?.path ?? ""}:${editorReloadKey}`} />
+              <SketchForm key={`sketch:${activeTab?.path ?? ""}:${activeEditorReloadKey}`} />
             ) : activeStoryboard ? (
-              <StoryboardView key={`storyboard:${activeTab?.path ?? ""}:${editorReloadKey}`} />
+              <StoryboardView key={`storyboard:${activeTab?.path ?? ""}:${activeEditorReloadKey}`} />
             ) : activeNotePath ? (
-              <NoteEditor key={`note:${activeTab?.path ?? ""}:${editorReloadKey}`} />
+              <NoteEditor key={`note:${activeTab?.path ?? ""}:${activeEditorReloadKey}`} />
             ) : (
               <div className="flex-1 flex items-center justify-center">
                 <div className="flex flex-col items-center gap-3">
