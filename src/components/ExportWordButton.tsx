@@ -12,6 +12,15 @@ interface ExportWordButtonProps {
   className?: string;
 }
 
+export function WordDocumentIcon({ className = "h-3.5 w-3.5" }: { className?: string }) {
+  return (
+    <span className={`relative inline-flex items-center justify-center ${className}`}>
+      <FileText className="h-full w-full" />
+      <span className="absolute -bottom-0.5 -right-0.5 rounded-[2px] bg-[rgb(var(--color-surface))] px-[1px] text-[7px] font-semibold leading-none text-[rgb(var(--color-accent))]">W</span>
+    </span>
+  );
+}
+
 export function ExportWordButton({
   onExport,
   disabled,
@@ -59,10 +68,7 @@ export function ExportWordButton({
             <path d="M21 12a9 9 0 1 1-6.219-8.56" />
           </svg>
         ) : (
-          <span className="relative inline-flex h-3.5 w-3.5 items-center justify-center">
-            <FileText className="w-3.5 h-3.5" />
-            <span className="absolute -bottom-0.5 -right-0.5 rounded-[2px] bg-[rgb(var(--color-surface))] px-[1px] text-[7px] font-semibold leading-none text-[rgb(var(--color-accent))]">W</span>
-          </span>
+          <WordDocumentIcon />
         )}
         {showLabel && "Word"}
       </button>

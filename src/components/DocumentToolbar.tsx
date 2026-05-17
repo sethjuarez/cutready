@@ -1,8 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   ChevronDown,
-  Download,
-  FileText,
   Lock,
   Monitor,
   MonitorPlay,
@@ -12,6 +10,7 @@ import {
   Unlock,
   Video,
 } from "lucide-react";
+import { WordDocumentIcon } from "./ExportWordButton";
 
 export interface DocumentToolbarAction {
   id: string;
@@ -87,7 +86,7 @@ export function DocumentToolbar({
       {exportActions.length > 0 && (
         <ToolbarMenu
           label="Export"
-          icon={<Download className="h-3.5 w-3.5" />}
+          icon={<WordDocumentIcon />}
           actions={exportActions}
         />
       )}
@@ -187,7 +186,7 @@ function ToolbarMenu({ label, icon, actions }: ToolbarMenuProps) {
 }
 
 export const documentToolbarIcons = {
-  fileText: <FileText className="h-3.5 w-3.5" />,
+  fileText: <WordDocumentIcon />,
   monitor: <Monitor className="h-3.5 w-3.5" />,
   monitorPlay: <MonitorPlay className="h-3.5 w-3.5" />,
   playCircle: <PlayCircle className="h-3.5 w-3.5" />,
