@@ -27,6 +27,7 @@ export function StoryboardPanel() {
   const openTabs = useAppStore((s) => s.openTabs);
   const activeTabId = useAppStore((s) => s.activeTabId);
   const splitTabs = useAppStore((s) => s.splitTabs);
+  const editorReloadKey = useAppStore((s) => s.editorReloadKey);
   const setActiveEditorGroup = useAppStore((s) => s.setActiveEditorGroup);
   const secondaryWidth = useAppStore((s) => s.secondaryWidth);
   const setSecondaryWidth = useAppStore((s) => s.setSecondaryWidth);
@@ -103,11 +104,11 @@ export function StoryboardPanel() {
             ) : isAssetTab && activeTab ? (
               <AssetViewer assetPath={activeTab.path} />
             ) : activeSketch ? (
-              <SketchForm />
+              <SketchForm key={`sketch:${activeTab?.path ?? ""}:${editorReloadKey}`} />
             ) : activeStoryboard ? (
-              <StoryboardView />
+              <StoryboardView key={`storyboard:${activeTab?.path ?? ""}:${editorReloadKey}`} />
             ) : activeNotePath ? (
-              <NoteEditor />
+              <NoteEditor key={`note:${activeTab?.path ?? ""}:${editorReloadKey}`} />
             ) : (
               <div className="flex-1 flex items-center justify-center">
                 <div className="flex flex-col items-center gap-3">

@@ -126,6 +126,8 @@ interface AppStoreState {
   splitActiveTabId: string | null;
   /** Which editor group currently has focus ("main" or "split"). */
   activeEditorGroup: "main" | "split";
+  /** Incremented to force the active editor to remount after external file restoration. */
+  editorReloadKey: number;
 
   // ── Sketch state ───────────────────────────────────────
 
@@ -621,6 +623,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   splitTabs: [],
   splitActiveTabId: null,
   activeEditorGroup: "main",
+  editorReloadKey: 0,
 
   sketches: [],
   activeSketchPath: null,
@@ -1844,6 +1847,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         openTabs,
       } = get();
       if (activeSketchPath === filePath) {
+        set((state) => ({ editorReloadKey: state.editorReloadKey + 1 }));
         if (sketches.some((sketch) => sketch.path === filePath)) {
           await get().openSketch(filePath);
         } else {
@@ -1852,6 +1856,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
           else set({ activeSketchPath: null, activeSketch: null });
         }
       } else if (activeStoryboardPath === filePath) {
+        set((state) => ({ editorReloadKey: state.editorReloadKey + 1 }));
         if (storyboards.some((storyboard) => storyboard.path === filePath)) {
           await get().openStoryboard(filePath);
         } else {
@@ -1860,6 +1865,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
           else set({ activeStoryboardPath: null, activeStoryboard: null });
         }
       } else if (activeNotePath === filePath) {
+        set((state) => ({ editorReloadKey: state.editorReloadKey + 1 }));
         if (notes.some((note) => note.path === filePath)) {
           await get().openNote(filePath);
         } else {

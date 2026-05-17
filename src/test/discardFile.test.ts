@@ -44,6 +44,7 @@ describe("discardFile", () => {
       activeTabId: null,
       changedFiles: [],
       isDirty: false,
+      editorReloadKey: 0,
     });
   });
 
@@ -88,6 +89,7 @@ describe("discardFile", () => {
     expect(mockInvoke).toHaveBeenCalledWith("discard_file", { filePath: "demo.sk" });
     expect(mockInvoke).toHaveBeenCalledWith("get_sketch", { relativePath: "demo.sk" });
     expect(useAppStore.getState().activeSketch).toEqual(restoredSketch);
+    expect(useAppStore.getState().editorReloadKey).toBe(1);
     expect(useAppStore.getState().isDirty).toBe(false);
   });
 });
