@@ -28,6 +28,7 @@ export function MergeConflictPanel() {
   }, []);
 
   const allResolved = mergeConflicts.every((c) => resolutions[c.path] !== undefined);
+  const resolvedCount = mergeConflicts.filter((c) => resolutions[c.path] !== undefined).length;
 
   const handleApply = useCallback(async () => {
     if (!allResolved) return;
@@ -54,15 +55,27 @@ export function MergeConflictPanel() {
           </div>
           <div>
             <h2 className="text-sm font-semibold text-[rgb(var(--color-text))]">
-              Combining <span className="text-[rgb(var(--color-accent))]">{mergeSource}</span> into{" "}
+              Merging <span className="text-[rgb(var(--color-accent))]">{mergeSource}</span> into{" "}
               <span className="text-[rgb(var(--color-accent))]">{mergeTarget}</span>
             </h2>
             <p className="text-[10px] text-[rgb(var(--color-text-secondary))]">
-              {mergeConflicts.length} file{mergeConflicts.length !== 1 ? "s" : ""} need{mergeConflicts.length === 1 ? "s" : ""} your attention
+              {resolvedCount === mergeConflicts.length
+                ? `All ${mergeConflicts.length} file${mergeConflicts.length !== 1 ? "s" : ""} resolved — ready to apply`
+                : `${resolvedCount} of ${mergeConflicts.length} file${mergeConflicts.length !== 1 ? "s" : ""} resolved`
+              }
             </p>
           </div>
         </div>
         <div className="flex-1" />
+        {/* Progress bar */}
+        {mergeConflicts.length > 1 && (
+          <div className="w-24 h-1.5 rounded-full bg-[rgb(var(--color-border))] overflow-hidden">
+            <div
+              className="h-full rounded-full bg-[rgb(var(--color-accent))] transition-all duration-300"
+              style={{ width: `${(resolvedCount / mergeConflicts.length) * 100}%` }}
+            />
+          </div>
+        )}
         <div className="flex items-center gap-2">
           <button
             onClick={cancelMerge}
@@ -75,7 +88,7 @@ export function MergeConflictPanel() {
             disabled={!allResolved || applying}
             className="px-4 py-1.5 rounded-lg text-xs font-medium bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))] hover:bg-[rgb(var(--color-accent-hover))] disabled:opacity-40 transition-colors"
           >
-            {applying ? "Combining…" : "Apply & Combine"}
+            {applying ? "Applying…" : "Apply Changes"}
           </button>
         </div>
       </div>
@@ -206,6 +219,40 @@ function JsonFieldResolver({
 
   return (
     <div className="space-y-2">
+      {/* Quick actions */}
+      {conflict.field_conflicts.length > 1 && (
+        <div className="flex items-center gap-2 mb-1">
+          <span className="text-[10px] text-[rgb(var(--color-text-secondary))]">Quick:</span>
+          <button
+            onClick={() => {
+              const all: Record<string, "ours" | "theirs"> = {};
+              conflict.field_conflicts.forEach((fc) => { all[fc.field_path] = "ours"; });
+              setChoices(all);
+              const conflictChoices: ConflictChoices = { text_choices: {}, field_choices: all };
+              invoke<string>("resolve_merge_conflict", { conflict, choices: conflictChoices })
+                .then(onResolve)
+                .catch(() => { try { onResolve(buildMergedJson(conflict, all)); } catch {} });
+            }}
+            className="text-[10px] px-2 py-0.5 rounded bg-[rgb(var(--color-border))]/30 text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-border))]/50 transition-colors"
+          >
+            Accept all current
+          </button>
+          <button
+            onClick={() => {
+              const all: Record<string, "ours" | "theirs"> = {};
+              conflict.field_conflicts.forEach((fc) => { all[fc.field_path] = "theirs"; });
+              setChoices(all);
+              const conflictChoices: ConflictChoices = { text_choices: {}, field_choices: all };
+              invoke<string>("resolve_merge_conflict", { conflict, choices: conflictChoices })
+                .then(onResolve)
+                .catch(() => { try { onResolve(buildMergedJson(conflict, all)); } catch {} });
+            }}
+            className="text-[10px] px-2 py-0.5 rounded bg-[rgb(var(--color-border))]/30 text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-border))]/50 transition-colors"
+          >
+            Accept all incoming
+          </button>
+        </div>
+      )}
       {conflict.field_conflicts.map((fc) => (
         <FieldConflictRow
           key={fc.field_path}
@@ -246,7 +293,7 @@ function FieldConflictRow({
   return (
     <div className="rounded-md border border-[rgb(var(--color-border))]/50 bg-[rgb(var(--color-surface))] overflow-hidden">
       <div className="px-3 py-1.5 bg-[rgb(var(--color-bg))] border-b border-[rgb(var(--color-border))]/30">
-        <span className="text-[10px] font-mono text-[rgb(var(--color-text-secondary))]">{field.field_path}</span>
+        <span className="text-[10px] font-medium text-[rgb(var(--color-text-secondary))]">{friendlyFieldName(field.field_path)}</span>
       </div>
       <div className="grid grid-cols-2 gap-px bg-[rgb(var(--color-border))]/30">
         <button
@@ -278,6 +325,29 @@ function FieldConflictRow({
       </div>
     </div>
   );
+}
+
+/** Convert a JSON field path to a user-friendly label. */
+function friendlyFieldName(path: string): string {
+  const labels: Record<string, string> = {
+    title: "Title",
+    description: "Description",
+    rows: "Planning Table",
+    sections: "Sections",
+    sketches: "Sketches",
+    narrative: "Narrative",
+    actions: "Actions",
+    time: "Time",
+    screenshot: "Screenshot",
+    visual: "Visual",
+  };
+  // "rows[2].narrative" → "Row 3 · Narrative"
+  const parts = path.replace(/\[(\d+)\]/g, ".$1").split(".");
+  const friendly = parts.map((p) => {
+    if (/^\d+$/.test(p)) return `#${Number(p) + 1}`;
+    return labels[p] || p.charAt(0).toUpperCase() + p.slice(1);
+  });
+  return friendly.join(" · ");
 }
 
 export function buildMergedJson(
@@ -359,6 +429,40 @@ function TextRegionResolver({
 
   return (
     <div className="space-y-2">
+      {/* Quick actions */}
+      {conflict.text_conflicts.length > 1 && (
+        <div className="flex items-center gap-2 mb-1">
+          <span className="text-[10px] text-[rgb(var(--color-text-secondary))]">Quick:</span>
+          <button
+            onClick={() => {
+              const all: Record<number, "ours" | "theirs"> = {};
+              conflict.text_conflicts.forEach((_, i) => { all[i] = "ours"; });
+              setChoices(all);
+              const conflictChoices: ConflictChoices = { text_choices: all, field_choices: {} };
+              invoke<string>("resolve_merge_conflict", { conflict, choices: conflictChoices })
+                .then(onResolve)
+                .catch(() => onResolve(buildMergedText(conflict, all)));
+            }}
+            className="text-[10px] px-2 py-0.5 rounded bg-[rgb(var(--color-border))]/30 text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-border))]/50 transition-colors"
+          >
+            Accept all current
+          </button>
+          <button
+            onClick={() => {
+              const all: Record<number, "ours" | "theirs"> = {};
+              conflict.text_conflicts.forEach((_, i) => { all[i] = "theirs"; });
+              setChoices(all);
+              const conflictChoices: ConflictChoices = { text_choices: all, field_choices: {} };
+              invoke<string>("resolve_merge_conflict", { conflict, choices: conflictChoices })
+                .then(onResolve)
+                .catch(() => onResolve(buildMergedText(conflict, all)));
+            }}
+            className="text-[10px] px-2 py-0.5 rounded bg-[rgb(var(--color-border))]/30 text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-border))]/50 transition-colors"
+          >
+            Accept all incoming
+          </button>
+        </div>
+      )}
       {conflict.text_conflicts.map((region, i) => (
         <TextConflictRow
           key={i}
