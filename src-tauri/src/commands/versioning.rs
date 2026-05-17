@@ -539,3 +539,12 @@ pub async fn apply_merge_resolution(
     )
     .map_err(|e| e.to_string())
 }
+
+#[tauri::command]
+pub async fn resolve_merge_conflict(
+    conflict: crate::engine::versioning_merge::ConflictFile,
+    choices: crate::engine::versioning_merge::ConflictChoices,
+) -> Result<String, String> {
+    crate::engine::versioning_merge::resolve_conflict_file(&conflict, &choices)
+        .map_err(|e| e.to_string())
+}

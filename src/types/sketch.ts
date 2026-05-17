@@ -216,3 +216,10 @@ export interface FileResolution {
   path: string;
   content: string;
 }
+
+export type ConflictSide = "ours" | "theirs";
+
+export interface ConflictChoices {
+  text_choices: Record<number, ConflictSide>;
+  field_choices: Record<string, ConflictSide>;
+}

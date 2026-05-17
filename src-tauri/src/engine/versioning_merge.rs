@@ -95,6 +95,25 @@ pub struct FileResolution {
     pub content: String,
 }
 
+/// Which side to pick for a conflict region.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum ConflictSide {
+    Ours,
+    Theirs,
+}
+
+/// User choices for resolving a single file's conflicts.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConflictChoices {
+    /// For text files: map of region index → side
+    #[serde(default)]
+    pub text_choices: std::collections::HashMap<usize, ConflictSide>,
+    /// For JSON files: map of field_path → side
+    #[serde(default)]
+    pub field_choices: std::collections::HashMap<String, ConflictSide>,
+}
+
 // ── Constants ───────────────────────────────────────────────────────
 
 const TIMELINE_PREFIX: &str = "refs/heads/timeline/";
@@ -649,6 +668,264 @@ fn longest_common_subsequence(a: &[&str], b: &[&str]) -> Vec<(usize, usize)> {
     }
     result.reverse();
     result
+}
+
+// ── Backend conflict resolution ─────────────────────────────────────
+
+/// Resolve a single conflict file using user choices, preserving non-conflicting
+/// edits from both sides via proper three-way merge.
+pub fn resolve_conflict_file(
+    conflict: &ConflictFile,
+    choices: &ConflictChoices,
+) -> Result<String, VersioningError> {
+    match conflict.file_type {
+        ConflictFileType::Note => resolve_text_conflict(conflict, &choices.text_choices),
+        ConflictFileType::Sketch | ConflictFileType::Storyboard => {
+            resolve_json_conflict(conflict, &choices.field_choices)
+        }
+        ConflictFileType::Other => {
+            // Whole-file: any theirs choice means use theirs
+            if choices.text_choices.values().any(|c| *c == ConflictSide::Theirs)
+                || choices
+                    .field_choices
+                    .values()
+                    .any(|c| *c == ConflictSide::Theirs)
+            {
+                Ok(conflict.theirs.clone())
+            } else {
+                Ok(conflict.ours.clone())
+            }
+        }
+    }
+}
+
+/// Resolve a text file conflict by merging non-conflicting hunks from both sides
+/// and applying user choices for conflicting regions.
+fn resolve_text_conflict(
+    conflict: &ConflictFile,
+    text_choices: &std::collections::HashMap<usize, ConflictSide>,
+) -> Result<String, VersioningError> {
+    let ancestor_lines: Vec<&str> = conflict.ancestor.lines().collect();
+    let ours_lines: Vec<&str> = conflict.ours.lines().collect();
+    let theirs_lines: Vec<&str> = conflict.theirs.lines().collect();
+
+    let ours_hunks = compute_diff_hunks(&ancestor_lines, &ours_lines);
+    let theirs_hunks = compute_diff_hunks(&ancestor_lines, &theirs_lines);
+
+    // Build a map of ancestor ranges → action
+    // Each ancestor line either: stays unchanged, gets replaced by an ours hunk,
+    // gets replaced by a theirs hunk, or is part of a conflict (user chooses).
+    #[derive(Debug, Clone)]
+    enum Action<'a> {
+        Keep,                    // Use ancestor line
+        Replace(Vec<&'a str>),   // Non-conflicting hunk
+        Conflict(usize),         // Conflict region index — user picks
+    }
+
+    // Map ancestor line index → action
+    let mut actions: Vec<Action> = vec![Action::Keep; ancestor_lines.len() + 1];
+
+    // Mark ours-only hunks (non-conflicting)
+    for o_hunk in &ours_hunks {
+        let is_conflict = theirs_hunks
+            .iter()
+            .any(|t| hunks_overlap(o_hunk, t) && o_hunk.new_lines != t.new_lines);
+        if !is_conflict {
+            // This is an ours-only change — apply it
+            for i in 0..o_hunk.ancestor_count {
+                let idx = o_hunk.ancestor_start + i;
+                if idx < actions.len() {
+                    actions[idx] = Action::Replace(Vec::new()); // Mark for removal
+                }
+            }
+            if o_hunk.ancestor_count > 0 {
+                actions[o_hunk.ancestor_start] =
+                    Action::Replace(o_hunk.new_lines.clone());
+            } else if o_hunk.ancestor_start <= actions.len() {
+                // Pure insertion at a position
+                actions[o_hunk.ancestor_start] =
+                    Action::Replace(o_hunk.new_lines.clone());
+            }
+        }
+    }
+
+    // Mark theirs-only hunks (non-conflicting)
+    for t_hunk in &theirs_hunks {
+        let is_conflict = ours_hunks
+            .iter()
+            .any(|o| hunks_overlap(o, t_hunk) && o.new_lines != t_hunk.new_lines);
+        if !is_conflict {
+            // Check if ours made the same change (both sides agree)
+            let same_change = ours_hunks
+                .iter()
+                .any(|o| hunks_overlap(o, t_hunk) && o.new_lines == t_hunk.new_lines);
+            if same_change {
+                continue; // Already applied via ours
+            }
+            for i in 0..t_hunk.ancestor_count {
+                let idx = t_hunk.ancestor_start + i;
+                if idx < actions.len() {
+                    actions[idx] = Action::Replace(Vec::new());
+                }
+            }
+            if t_hunk.ancestor_count > 0 {
+                actions[t_hunk.ancestor_start] =
+                    Action::Replace(t_hunk.new_lines.clone());
+            } else if t_hunk.ancestor_start <= actions.len() {
+                actions[t_hunk.ancestor_start] =
+                    Action::Replace(t_hunk.new_lines.clone());
+            }
+        }
+    }
+
+    // Mark conflict regions
+    for (ci, tc) in conflict.text_conflicts.iter().enumerate() {
+        for i in 0..tc.ancestor_lines.len() {
+            let idx = tc.start_line + i;
+            if idx < actions.len() {
+                actions[idx] = Action::Replace(Vec::new()); // Clear ancestor lines
+            }
+        }
+        // The first line of the region carries the chosen content
+        if tc.start_line < actions.len() {
+            actions[tc.start_line] = Action::Conflict(ci);
+        }
+    }
+
+    // Build result
+    let mut result: Vec<String> = Vec::new();
+    for (i, action) in actions.iter().enumerate() {
+        if i >= ancestor_lines.len() {
+            break;
+        }
+        match action {
+            Action::Keep => {
+                result.push(ancestor_lines[i].to_string());
+            }
+            Action::Replace(lines) => {
+                for line in lines {
+                    result.push(line.to_string());
+                }
+            }
+            Action::Conflict(ci) => {
+                let tc = &conflict.text_conflicts[*ci];
+                let choice = text_choices.get(ci).unwrap_or(&ConflictSide::Ours);
+                let chosen = match choice {
+                    ConflictSide::Ours => &tc.ours_lines,
+                    ConflictSide::Theirs => &tc.theirs_lines,
+                };
+                for line in chosen {
+                    result.push(line.clone());
+                }
+            }
+        }
+    }
+
+    Ok(result.join("\n"))
+}
+
+/// Resolve a JSON file conflict by starting from ours, applying theirs-only
+/// non-conflicting changes, then applying user choices for conflicting fields.
+fn resolve_json_conflict(
+    conflict: &ConflictFile,
+    field_choices: &std::collections::HashMap<String, ConflictSide>,
+) -> Result<String, VersioningError> {
+    let mut base: serde_json::Value = serde_json::from_str(&conflict.ours).map_err(|e| {
+        VersioningError::Git(format!("Failed to parse ours JSON: {}", e))
+    })?;
+    let ancestor: serde_json::Value =
+        serde_json::from_str(&conflict.ancestor).unwrap_or(serde_json::Value::Null);
+    let theirs: serde_json::Value =
+        serde_json::from_str(&conflict.theirs).unwrap_or(serde_json::Value::Null);
+
+    // Collect conflict field paths for exclusion
+    let conflict_paths: std::collections::HashSet<&str> = conflict
+        .field_conflicts
+        .iter()
+        .map(|fc| fc.field_path.as_str())
+        .collect();
+
+    // Apply theirs-only non-conflicting changes:
+    // Walk theirs top-level fields. If a field differs from ancestor AND
+    // is not in our conflict set AND ours still matches ancestor, apply it.
+    if let (Some(base_obj), Some(anc_obj), Some(theirs_obj)) = (
+        base.as_object_mut(),
+        ancestor.as_object(),
+        theirs.as_object(),
+    ) {
+        for (key, theirs_val) in theirs_obj {
+            if conflict_paths.contains(key.as_str()) {
+                continue; // Handled below by user choice
+            }
+            let anc_val = anc_obj.get(key);
+            // Theirs changed this field from ancestor
+            if anc_val != Some(theirs_val) {
+                // Only apply if ours didn't also change it (ours still matches ancestor)
+                let ours_val = base_obj.get(key);
+                if ours_val == anc_val {
+                    base_obj.insert(key.clone(), theirs_val.clone());
+                }
+            }
+        }
+    }
+
+    // Apply user choices for conflict fields
+    for fc in &conflict.field_conflicts {
+        let choice = field_choices.get(&fc.field_path).unwrap_or(&ConflictSide::Ours);
+        if *choice == ConflictSide::Theirs {
+            set_json_value(&mut base, &fc.field_path, &fc.theirs);
+        }
+        // Ours is already the default from the base
+    }
+
+    serde_json::to_string_pretty(&base).map_err(|e| {
+        VersioningError::Git(format!("Failed to serialize merged JSON: {}", e))
+    })
+}
+
+/// Set a value at a dot/bracket-separated JSON path.
+fn set_json_value(obj: &mut serde_json::Value, path: &str, value: &serde_json::Value) {
+    let parts: Vec<String> = path
+        .replace('[', ".")
+        .replace(']', "")
+        .split('.')
+        .map(|s| s.to_string())
+        .collect();
+    let mut current = obj;
+    for (i, part) in parts.iter().enumerate() {
+        if i == parts.len() - 1 {
+            // Set the value
+            if let Ok(idx) = part.parse::<usize>() {
+                if let Some(arr) = current.as_array_mut() {
+                    if idx < arr.len() {
+                        arr[idx] = value.clone();
+                    }
+                }
+            } else if let Some(map) = current.as_object_mut() {
+                map.insert(part.clone(), value.clone());
+            }
+        } else {
+            // Navigate deeper
+            if let Ok(idx) = part.parse::<usize>() {
+                if let Some(arr) = current.as_array_mut() {
+                    if idx < arr.len() {
+                        current = &mut arr[idx];
+                    } else {
+                        return;
+                    }
+                } else {
+                    return;
+                }
+            } else if let Some(map) = current.as_object_mut() {
+                if !map.contains_key(part.as_str()) {
+                    return;
+                }
+                current = map.get_mut(part.as_str()).unwrap();
+            } else {
+                return;
+            }
+        }
+    }
 }
 
 // ── Internal helpers ────────────────────────────────────────────────
@@ -1258,5 +1535,129 @@ mod tests {
             "refs/heads/timeline/fork-123"
         );
         assert_eq!(timeline_ref_name("refs/heads/custom"), "refs/heads/custom");
+    }
+
+    // ── resolve_conflict_file tests ─────────────────────────────
+
+    fn make_text_conflict(ancestor: &str, ours: &str, theirs: &str) -> ConflictFile {
+        let text_conflicts = text_line_diff(ancestor, ours, theirs);
+        ConflictFile {
+            path: "test.md".to_string(),
+            file_type: ConflictFileType::Note,
+            ours: ours.to_string(),
+            theirs: theirs.to_string(),
+            ancestor: ancestor.to_string(),
+            field_conflicts: Vec::new(),
+            text_conflicts,
+        }
+    }
+
+    fn make_json_conflict(
+        ancestor: &str,
+        ours: &str,
+        theirs: &str,
+    ) -> ConflictFile {
+        let field_conflicts = json_field_diff(ancestor, ours, theirs);
+        ConflictFile {
+            path: "test.sk".to_string(),
+            file_type: ConflictFileType::Sketch,
+            ours: ours.to_string(),
+            theirs: theirs.to_string(),
+            ancestor: ancestor.to_string(),
+            field_conflicts,
+            text_conflicts: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn text_resolve_all_ours() {
+        let conflict = make_text_conflict("line1\nold\nline3", "line1\nours\nline3", "line1\ntheirs\nline3");
+        let choices = ConflictChoices {
+            text_choices: [(0, ConflictSide::Ours)].into(),
+            field_choices: Default::default(),
+        };
+        let result = resolve_conflict_file(&conflict, &choices).unwrap();
+        assert!(result.contains("ours"));
+        assert!(!result.contains("theirs"));
+    }
+
+    #[test]
+    fn text_resolve_all_theirs() {
+        let conflict = make_text_conflict("line1\nold\nline3", "line1\nours\nline3", "line1\ntheirs\nline3");
+        let choices = ConflictChoices {
+            text_choices: [(0, ConflictSide::Theirs)].into(),
+            field_choices: Default::default(),
+        };
+        let result = resolve_conflict_file(&conflict, &choices).unwrap();
+        assert!(result.contains("theirs"));
+        assert!(!result.contains("ours"));
+    }
+
+    #[test]
+    fn text_resolve_preserves_non_conflicting_edits() {
+        // ancestor has 5 lines. ours changes line 2 (conflict) and line 5 (non-conflict).
+        // theirs changes line 2 (conflict) and line 4 (non-conflict).
+        let ancestor = "header\nold-conflict\nshared\nold-line4\nold-line5";
+        let ours = "header\nours-conflict\nshared\nold-line4\nours-line5";
+        let theirs = "header\ntheirs-conflict\nshared\ntheirs-line4\nold-line5";
+
+        let conflict = make_text_conflict(ancestor, ours, theirs);
+        assert_eq!(conflict.text_conflicts.len(), 1, "should have exactly 1 conflict region");
+
+        // Pick theirs for the conflict
+        let choices = ConflictChoices {
+            text_choices: [(0, ConflictSide::Theirs)].into(),
+            field_choices: Default::default(),
+        };
+        let result = resolve_conflict_file(&conflict, &choices).unwrap();
+
+        // Should have theirs' conflict choice
+        assert!(result.contains("theirs-conflict"), "should pick theirs for conflict");
+        // Should preserve theirs' non-conflicting edit
+        assert!(result.contains("theirs-line4"), "should preserve theirs non-conflicting edit");
+        // Should preserve ours' non-conflicting edit
+        assert!(result.contains("ours-line5"), "should preserve ours non-conflicting edit");
+    }
+
+    #[test]
+    fn json_resolve_preserves_theirs_non_conflicting() {
+        let ancestor = r#"{"title":"old","description":"desc","version":1}"#;
+        let ours = r#"{"title":"ours-title","description":"desc","version":1}"#;
+        let theirs = r#"{"title":"theirs-title","description":"desc","version":2}"#;
+
+        let conflict = make_json_conflict(ancestor, ours, theirs);
+        // title should be a conflict, version should be theirs-only non-conflicting
+        assert!(conflict.field_conflicts.iter().any(|fc| fc.field_path == "title"));
+
+        let choices = ConflictChoices {
+            text_choices: Default::default(),
+            field_choices: [("title".to_string(), ConflictSide::Ours)].into(),
+        };
+        let result = resolve_conflict_file(&conflict, &choices).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+        assert_eq!(parsed["title"], "ours-title", "should pick ours for conflict");
+        assert_eq!(parsed["version"], 2, "should preserve theirs non-conflicting edit");
+    }
+
+    #[test]
+    fn json_resolve_mixed_choices() {
+        let ancestor = r#"{"title":"old","description":"old-desc"}"#;
+        let ours = r#"{"title":"ours-title","description":"ours-desc"}"#;
+        let theirs = r#"{"title":"theirs-title","description":"theirs-desc"}"#;
+
+        let conflict = make_json_conflict(ancestor, ours, theirs);
+        assert_eq!(conflict.field_conflicts.len(), 2);
+
+        let choices = ConflictChoices {
+            text_choices: Default::default(),
+            field_choices: [
+                ("title".to_string(), ConflictSide::Theirs),
+                ("description".to_string(), ConflictSide::Ours),
+            ].into(),
+        };
+        let result = resolve_conflict_file(&conflict, &choices).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+        assert_eq!(parsed["title"], "theirs-title");
+        assert_eq!(parsed["description"], "ours-desc");
     }
 }

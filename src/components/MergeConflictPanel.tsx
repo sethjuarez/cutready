@@ -1,7 +1,8 @@
 import { useCallback, useState } from "react";
 import { ArrowLeftRight } from "lucide-react";
+import { invoke } from "@tauri-apps/api/core";
 import { useAppStore } from "../stores/appStore";
-import type { ConflictFile, FieldConflict, TextConflictRegion, FileResolution } from "../types/sketch";
+import type { ConflictFile, ConflictChoices, FieldConflict, TextConflictRegion, FileResolution } from "../types/sketch";
 
 /**
  * MergeConflictPanel — shown when a merge has conflicts.
@@ -185,12 +186,21 @@ function JsonFieldResolver({
     const next = { ...choices, [fieldPath]: choice };
     setChoices(next);
 
-    // If all fields resolved, build merged JSON
+    // If all fields resolved, resolve via backend
     if (conflict.field_conflicts.every((fc) => next[fc.field_path] !== undefined)) {
-      try {
-        const merged = buildMergedJson(conflict, next);
-        onResolve(merged);
-      } catch { /* wait for all choices */ }
+      const conflictChoices: ConflictChoices = {
+        text_choices: {},
+        field_choices: next,
+      };
+      invoke<string>("resolve_merge_conflict", { conflict, choices: conflictChoices })
+        .then(onResolve)
+        .catch(() => {
+          // Fallback to local resolution
+          try {
+            const merged = buildMergedJson(conflict, next);
+            onResolve(merged);
+          } catch { /* wait for all choices */ }
+        });
     }
   };
 
@@ -328,8 +338,22 @@ function TextRegionResolver({
     setChoices(next);
 
     if (conflict.text_conflicts.every((_, i) => next[i] !== undefined)) {
-      const merged = buildMergedText(conflict, next);
-      onResolve(merged);
+      // Convert numeric keys to proper Record<number, string> for backend
+      const textChoices: Record<number, "ours" | "theirs"> = {};
+      for (const [k, v] of Object.entries(next)) {
+        textChoices[Number(k)] = v;
+      }
+      const conflictChoices: ConflictChoices = {
+        text_choices: textChoices,
+        field_choices: {},
+      };
+      invoke<string>("resolve_merge_conflict", { conflict, choices: conflictChoices })
+        .then(onResolve)
+        .catch(() => {
+          // Fallback to local resolution
+          const merged = buildMergedText(conflict, next);
+          onResolve(merged);
+        });
     }
   };
 
