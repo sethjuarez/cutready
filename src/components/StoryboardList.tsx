@@ -68,8 +68,7 @@ function SortableSidebarItem({ id, children }: { id: string; children: React.Rea
 
 /**
  * StoryboardList — Documents pane: Storyboards, Sketches, and Notes.
- * Pass `mode` to show only one section (used by dedicated sidebar views).
- * File tree view is now in the separate Explorer pane.
+ * Pass `mode` to optionally focus a single section.
  */
 export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "notes" | "all" }) {
   const resolvedMode = mode ?? "all";
@@ -531,8 +530,8 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
 
       {/* ── Documents header (all-mode only) ──────────────────────────────── */}
       {resolvedMode === "all" && (
-        <div className="flex items-center justify-between px-3 h-9 shrink-0 border-b border-[rgb(var(--color-border-subtle))]">
-          <span className="text-[12px] font-medium text-[rgb(var(--color-text-secondary))]">
+        <div className="flex h-8 shrink-0 items-center justify-between border-b border-[rgb(var(--color-border))] px-3">
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-[rgb(var(--color-text-secondary))]">
             Documents
           </span>
           <div className="flex items-center gap-1">
@@ -558,8 +557,8 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
       {/* ── Storyboards section ────────────────────────── */}
       {(resolvedMode === "all" || resolvedMode === "storyboards") && (
         <>
-          <div className="flex items-center justify-between px-3 h-9 shrink-0 border-b border-[rgb(var(--color-border-subtle))]">
-            <span className="text-[12px] font-medium text-[rgb(var(--color-text-secondary))]">
+          <div className="flex h-8 shrink-0 items-center justify-between border-b border-[rgb(var(--color-border))] px-3">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-[rgb(var(--color-text-secondary))]">
               Storyboards
             </span>
             <div className="flex items-center gap-1">
@@ -633,9 +632,9 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                           if (e.key === "F2") { e.preventDefault(); startRename("storyboard", sb.path); }
                           else if (e.key === "Enter" || e.key === " ") { if (!renamingItem) openStoryboard(sb.path); }
                         }}
-                        className={`group/item w-full flex items-center gap-2 px-3 py-2.5 text-left transition-colors cursor-pointer ${
+                        className={`group/item flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-left text-[12px] transition-colors ${
                           sb.path === activeStoryboardPath
-                            ? "bg-success/10 text-success"
+                            ? "bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))]"
                             : "text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))]"
                         }`}
                       >
@@ -657,7 +656,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                             />
                           ) : (
                             <>
-                              <div className="text-xs font-medium truncate">{sb.title}</div>
+                              <div className="truncate text-[12px] font-medium">{sb.title}</div>
                               <div className="text-[10px] text-[rgb(var(--color-text-secondary))]">
                                 {sb.sketch_count} {sb.sketch_count === 1 ? "sketch" : "sketches"}
                               </div>
@@ -689,8 +688,8 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
       {/* ── Sketches section──────────────────────────── */}
       {(resolvedMode === "all" || resolvedMode === "sketches") && (
         <>
-          <div className="flex items-center justify-between px-3 h-9 shrink-0 border-y border-[rgb(var(--color-border-subtle))]">
-            <span className="text-[12px] font-medium text-[rgb(var(--color-text-secondary))]">
+          <div className="flex h-8 shrink-0 items-center justify-between border-b border-[rgb(var(--color-border))] px-3">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-[rgb(var(--color-text-secondary))]">
               Sketches
             </span>
             <div className="flex items-center gap-1">
@@ -764,9 +763,9 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                           if (e.key === "F2") { e.preventDefault(); startRename("sketch", sk.path); }
                           else if (e.key === "Enter" || e.key === " ") { if (!renamingItem) handleOpenSketchStandalone(sk.path); }
                         }}
-                        className={`group/item w-full flex items-center gap-2 px-3 py-2.5 text-left transition-colors cursor-pointer ${
+                        className={`group/item flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-left text-[12px] transition-colors ${
                           sk.path === activeSketchPath
-                            ? "bg-violet-500/10 text-[rgb(var(--color-accent))]"
+                            ? "bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))]"
                             : "text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))]"
                         }`}
                       >
@@ -788,7 +787,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                             />
                           ) : (
                             <>
-                              <div className="text-xs font-medium truncate">{sk.title}</div>
+                              <div className="truncate text-[12px] font-medium">{sk.title}</div>
                               <div className="text-[10px] text-[rgb(var(--color-text-secondary))]">
                                 {sk.row_count} {sk.row_count === 1 ? "row" : "rows"}
                               </div>
@@ -820,8 +819,8 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
       {/* ── Notes section─────────────────────────────── */}
       {(resolvedMode === "all" || resolvedMode === "notes") && (
         <>
-          <div className="flex items-center justify-between px-3 h-9 shrink-0 border-y border-[rgb(var(--color-border-subtle))]">
-            <span className="text-[12px] font-medium text-[rgb(var(--color-text-secondary))]">
+          <div className="flex h-8 shrink-0 items-center justify-between border-b border-[rgb(var(--color-border))] px-3">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-[rgb(var(--color-text-secondary))]">
               Notes
             </span>
             <div className="flex items-center gap-1">
@@ -908,9 +907,9 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                           if (e.key === "F2") { e.preventDefault(); startRename("note", note.path); }
                           else if (e.key === "Enter" || e.key === " ") { if (!renamingItem) openNote(note.path); }
                         }}
-                        className={`group/item w-full flex items-center gap-2 px-3 py-2.5 text-left transition-colors cursor-pointer ${
+                        className={`group/item flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-left text-[12px] transition-colors ${
                           note.path === activeNotePath
-                            ? "bg-rose-500/10 text-rose-500"
+                            ? "bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))]"
                             : "text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))]"
                         }`}
                       >

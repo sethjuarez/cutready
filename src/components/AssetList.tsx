@@ -108,9 +108,9 @@ export function AssetList() {
   const SortDirIcon = sortDir === "asc" ? ArrowUpAZ : ArrowDownAZ;
 
   return (
-    <div className="flex flex-col h-full bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text))]">
+    <div className="flex flex-col h-full bg-[rgb(var(--color-surface-inset))] text-[rgb(var(--color-text))]">
       {/* Header */}
-      <div className="flex items-center gap-2 px-3 h-10 shrink-0 border-b border-[rgb(var(--color-border))]">
+      <div className="flex h-8 shrink-0 items-center gap-2 border-b border-[rgb(var(--color-border))] px-3">
         <span className="text-[11px] font-semibold text-[rgb(var(--color-text-secondary))] uppercase tracking-wider">
           Assets
         </span>
@@ -196,7 +196,7 @@ function AssetGroupSection({
       {showGroupHeader && (
         <button
           onClick={() => setCollapsed((c) => !c)}
-          className={`w-full flex items-center gap-1.5 px-3 h-6 text-[10px] transition-colors ${
+          className={`flex h-8 w-full items-center gap-1.5 border-b border-[rgb(var(--color-border))] px-3 text-[11px] font-semibold uppercase tracking-wider transition-colors ${
             isUnlinked
               ? "text-[rgb(var(--color-warning))] hover:bg-[rgb(var(--color-warning))]/5"
               : "text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-alt))]"
@@ -205,7 +205,7 @@ function AssetGroupSection({
           <ChevronRight
             className={`w-2.5 h-2.5 shrink-0 transition-transform ${collapsed ? "" : "rotate-90"}`}
           />
-          <span className="truncate font-medium">{group.label}</span>
+          <span className="truncate">{group.label}</span>
           <span className="ml-auto opacity-60">{group.items.length}</span>
         </button>
       )}

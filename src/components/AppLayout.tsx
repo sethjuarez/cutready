@@ -10,7 +10,6 @@ import { Sidebar } from "./Sidebar";
 import { StoryboardPanel } from "./StoryboardPanel";
 import { StoryboardList } from "./StoryboardList";
 import { AssetList } from "./AssetList";
-import { FileTreeView } from "./FileTreeView";
 import { ResizeHandle } from "./ResizeHandle";
 import { OutputPanel } from "./OutputPanel";
 import { CommandPalette } from "./CommandPalette";
@@ -31,7 +30,6 @@ import {
   House,
   Layers,
   Clapperboard,
-  FolderOpen,
   Settings,
   Search,
   Columns2,
@@ -141,7 +139,7 @@ export function AppLayout() {
         title: "Go to Documents",
         category: "Navigate",
         icon: <Layers className="w-4 h-4" />,
-        handler: () => setView("storyboards"),
+        handler: () => setView("project"),
       },
       {
         id: "nav.assets",
@@ -149,13 +147,6 @@ export function AppLayout() {
         category: "Navigate",
         icon: <Clapperboard className="w-4 h-4" />,
         handler: () => setView("assets"),
-      },
-      {
-        id: "nav.explorer",
-        title: "Go to Explorer",
-        category: "Navigate",
-        icon: <FolderOpen className="w-4 h-4" />,
-        handler: () => setView("explorer"),
       },
       {
         id: "nav.settings",
@@ -396,7 +387,7 @@ export function AppLayout() {
             {/* Upper: main content */}
             <div className="flex-1 min-h-0">
               {view === "home" && <div className="h-full overflow-y-auto"><HomePanel /></div>}
-              {(view === "project" || view === "sketch" || view === "storyboards" || view === "sketches" || view === "notes" || view === "assets" || view === "explorer" || view === "changes") && (isMerging ? <MergeConflictPanel /> : <StoryboardPanel />)}
+              {(view === "project" || view === "sketch" || view === "assets" || view === "changes") && (isMerging ? <MergeConflictPanel /> : <StoryboardPanel />)}
               {view === "editor" && <div className="h-full overflow-y-auto"><ScriptEditorPanel /></div>}
               {view === "recording" && displaySettings.featureRecording && <div className="h-full overflow-y-auto"><RecordingPanel /></div>}
               {view === "settings" && <div className="h-full overflow-y-auto"><SettingsPanel mode="global" /></div>}
@@ -462,18 +453,8 @@ function PrimarySidebar() {
       <div className="h-full shrink-0" style={{ width: sidebarWidth }}>
         {view === "assets" ? (
           <AssetList />
-        ) : view === "explorer" ? (
-          <FileTreeView />
         ) : view === "changes" ? (
           <ChangesPanel />
-        ) : view === "project" ? (
-          <StoryboardList />
-        ) : view === "storyboards" ? (
-          <StoryboardList mode="storyboards" />
-        ) : view === "sketches" ? (
-          <StoryboardList mode="sketches" />
-        ) : view === "notes" ? (
-          <StoryboardList mode="notes" />
         ) : (
           <StoryboardList />
         )}

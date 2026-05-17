@@ -28,7 +28,7 @@ import type {
 } from "../types/sketch";
 
 /** The panels / views available in the app. */
-export type AppView = "home" | "project" | "sketch" | "storyboards" | "sketches" | "notes" | "assets" | "explorer" | "editor" | "recording" | "settings" | "workspace" | "chat" | "changes";
+export type AppView = "home" | "project" | "sketch" | "assets" | "editor" | "recording" | "settings" | "workspace" | "chat" | "changes";
 
 /** Sidebar position. */
 export type SidebarPosition = "left" | "right";
@@ -716,7 +716,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     }
     // Navigate away from non-editor views (settings, home) to show the tab
     if (view === "settings" || view === "home") {
-      set({ view: "storyboards" });
+      set({ view: "project" });
     }
     get()._persistTabs();
   },

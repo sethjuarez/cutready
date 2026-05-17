@@ -1,5 +1,5 @@
 import { type ReactNode, useCallback } from "react";
-import { House, Clapperboard, FolderOpen, Monitor, SlidersHorizontal, SquarePen, NotebookPen, Images, LayoutList, MessageSquare, GitCompareArrows } from "lucide-react";
+import { House, Monitor, SlidersHorizontal, Images, LayoutList, MessageSquare, GitCompareArrows } from "lucide-react";
 import type { AppView } from "../stores/appStore";
 import { useAppStore } from "../stores/appStore";
 import { usePopover } from "../hooks/usePopover";
@@ -16,29 +16,9 @@ const navItems: { id: AppView; label: string; icon: ReactNode }[] = [
     icon: <LayoutList className="w-4 h-4" />,
   },
   {
-    id: "storyboards",
-    label: "Storyboards",
-    icon: <Clapperboard className="w-4 h-4" />,
-  },
-  {
-    id: "sketches",
-    label: "Sketches",
-    icon: <SquarePen className="w-4 h-4" />,
-  },
-  {
-    id: "notes",
-    label: "Notes",
-    icon: <NotebookPen className="w-4 h-4" />,
-  },
-  {
     id: "assets",
     label: "Assets",
     icon: <Images className="w-4 h-4" />,
-  },
-  {
-    id: "explorer",
-    label: "Explorer",
-    icon: <FolderOpen className="w-4 h-4" />,
   },
   {
     id: "changes",
@@ -81,7 +61,7 @@ export function Sidebar({ onFeedback }: { onFeedback?: () => void }) {
       >
         {navItems.map((item) => {
           const isActive = view === item.id;
-          const requiresProject = item.id === "project" || item.id === "storyboards" || item.id === "sketches" || item.id === "notes" || item.id === "assets" || item.id === "explorer" || item.id === "workspace" || item.id === "changes";
+          const requiresProject = item.id === "project" || item.id === "assets" || item.id === "workspace" || item.id === "changes";
           const isDisabled = requiresProject && !currentProject;
 
           return (

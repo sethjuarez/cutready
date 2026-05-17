@@ -186,7 +186,7 @@ export function ChangesPanel() {
   const deleted = changedFiles.filter((f) => f.status === "deleted");
 
   return (
-    <div className="flex h-full flex-col overflow-hidden bg-[rgb(var(--color-bg))]">
+    <div className="flex h-full flex-col overflow-hidden bg-[rgb(var(--color-surface-inset))]">
       <SectionHeader
         title="Changes"
         count={changedFiles.length}
@@ -451,10 +451,10 @@ function SectionHeader({
   actions?: ReactNode;
 }) {
   return (
-    <div className="flex h-7 shrink-0 items-center justify-between border-b border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))]/50 px-2">
+    <div className="flex h-8 shrink-0 items-center justify-between border-b border-[rgb(var(--color-border))] px-3">
       <button
         onClick={onToggle}
-        className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-[rgb(var(--color-text-secondary))] transition-colors hover:text-[rgb(var(--color-text))]"
+        className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-[rgb(var(--color-text-secondary))] transition-colors hover:text-[rgb(var(--color-text))]"
       >
         {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
         {title}
@@ -472,21 +472,21 @@ function SectionHeader({
 function FileGroup({ label, files, icon }: { label: string; files: DiffEntry[]; icon: ReactNode }) {
   return (
     <div className="mb-0.5">
-      <div className="flex items-center gap-1.5 px-2 py-0.5 text-[9px] font-medium uppercase tracking-wider text-[rgb(var(--color-text-secondary))]">
+      <div className="flex items-center gap-1.5 px-3 py-1 text-[10px] font-medium uppercase tracking-wider text-[rgb(var(--color-text-secondary))]">
         {icon}
         {label} ({files.length})
       </div>
       {files.map((file) => (
         <div
           key={file.path}
-          className="group flex cursor-default items-center gap-2 rounded px-2 py-0.5 transition-colors hover:bg-[rgb(var(--color-surface-alt))]"
+          className="group flex cursor-default items-center gap-2 rounded px-3 py-1 transition-colors hover:bg-[rgb(var(--color-surface-alt))]"
           title={file.path}
         >
-          <span className="flex-1 truncate text-[11px] text-[rgb(var(--color-text))]">
+          <span className="flex-1 truncate text-[12px] text-[rgb(var(--color-text))]">
             {formatPath(file.path)}
           </span>
           {(file.additions > 0 || file.deletions > 0) && (
-            <span className="shrink-0 text-[9px] text-[rgb(var(--color-text-secondary))] opacity-0 transition-opacity group-hover:opacity-100">
+            <span className="shrink-0 text-[10px] text-[rgb(var(--color-text-secondary))] opacity-0 transition-opacity group-hover:opacity-100">
               {file.additions > 0 && <span className="text-success">+{file.additions}</span>}
               {file.additions > 0 && file.deletions > 0 && " "}
               {file.deletions > 0 && <span className="text-error">-{file.deletions}</span>}
