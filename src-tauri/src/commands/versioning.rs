@@ -15,6 +15,15 @@ fn versioning_root(state: &AppState) -> Result<std::path::PathBuf, String> {
     Ok(view.repo_root.clone())
 }
 
+/// Reject the operation if the working tree has unsaved changes.
+fn require_clean(root: &std::path::Path) -> Result<(), String> {
+    let dirty = versioning::has_unsaved_changes(root).map_err(|e| e.to_string())?;
+    if dirty {
+        return Err("You have unsaved changes. Save or discard them before this operation.".into());
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn save_with_label(
     label: String,
@@ -94,6 +103,7 @@ pub async fn preview_version(
 pub async fn restore_version(commit_id: String, state: State<'_, AppState>, lock: State<'_, ProjectLock>) -> Result<(), String> {
     let _guard = lock.0.lock().await;
     let root = versioning_root(&state)?;
+    require_clean(&root)?;
     versioning::restore_version(&root, &commit_id).map_err(|e| e.to_string())?;
 
     // Re-scan the project folder after restore
@@ -108,6 +118,7 @@ pub async fn restore_version(commit_id: String, state: State<'_, AppState>, lock
 pub async fn checkout_version(commit_id: String, state: State<'_, AppState>, lock: State<'_, ProjectLock>) -> Result<(), String> {
     let _guard = lock.0.lock().await;
     let root = versioning_root(&state)?;
+    require_clean(&root)?;
     versioning::checkout_version(&root, &commit_id).map_err(|e| e.to_string())?;
 
     // Re-scan the project folder after checkout
@@ -182,6 +193,7 @@ pub async fn list_timelines(
 pub async fn switch_timeline(name: String, state: State<'_, AppState>, lock: State<'_, ProjectLock>) -> Result<(), String> {
     let _guard = lock.0.lock().await;
     let root = versioning_root(&state)?;
+    require_clean(&root)?;
     versioning::switch_timeline(&root, &name).map_err(|e| e.to_string())?;
     // Re-scan project
     let view = crate::models::script::ProjectView::new(root);
@@ -223,6 +235,7 @@ pub async fn navigate_to_snapshot(
 ) -> Result<(), String> {
     let _guard = lock.0.lock().await;
     let root = versioning_root(&state)?;
+    require_clean(&root)?;
     versioning::navigate_to_snapshot(&root, &commit_id).map_err(|e| e.to_string())?;
 
     // Re-scan the project folder
@@ -361,6 +374,7 @@ pub async fn pull_git_remote(
 ) -> Result<versioning_remote::PullResult, String> {
     let _guard = lock.0.lock().await;
     let root = versioning_root(&state)?;
+    require_clean(&root)?;
     let token = resolve_token(token);
     versioning_remote::pull_remote(&root, &remote_name, &branch, token.as_deref())
         .map_err(|e| e.to_string())
@@ -384,6 +398,7 @@ pub async fn checkout_remote_branch(
 ) -> Result<(), String> {
     let _guard = lock.0.lock().await;
     let root = versioning_root(&state)?;
+    require_clean(&root)?;
     versioning_remote::checkout_remote_branch(&root, &remote_name, &branch)
         .map_err(|e| e.to_string())
 }
