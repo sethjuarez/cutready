@@ -130,7 +130,7 @@ pub async fn set_sketch_lock(
     let abs_path = project::safe_resolve(&root, &relative_path).map_err(|e| e.to_string())?;
 
     let mut sketch = project::read_sketch(&abs_path).map_err(|e| e.to_string())?;
-    sketch.locked = locked;
+    sketch.set_locked_recursive(locked);
     sketch.updated_at = chrono::Utc::now();
     project::write_sketch(&sketch, &abs_path, &root).map_err(|e| e.to_string())?;
     Ok(sketch)
@@ -150,7 +150,7 @@ pub async fn set_planning_row_lock(
     if index >= sketch.rows.len() {
         return Err(format!("Row {} does not exist", index + 1));
     }
-    sketch.rows[index].locked = locked;
+    sketch.rows[index].set_locked_recursive(locked);
     sketch.updated_at = chrono::Utc::now();
     project::write_sketch(&sketch, &abs_path, &root).map_err(|e| e.to_string())?;
     Ok(sketch)

@@ -95,6 +95,15 @@ function scopedPathVariants(filePath: string, currentProject: ProjectView | null
   return { repoPath: `${scopePrefix}${normalized}`, projectPath: normalized };
 }
 
+function collectStoryboardSketchPaths(storyboard: Storyboard): string[] {
+  const paths: string[] = [];
+  for (const item of storyboard.items) {
+    if (item.type === "sketch_ref") paths.push(item.path);
+    else paths.push(...item.sketches);
+  }
+  return paths;
+}
+
 /** The panels / views available in the app. */
 export type AppView = "home" | "project" | "sketch" | "assets" | "editor" | "recording" | "settings" | "chat" | "changes";
 
@@ -1461,6 +1470,13 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       const storyboard = await invoke<Storyboard>("set_storyboard_lock", { relativePath: activeStoryboardPath, locked });
       set({ activeStoryboard: storyboard });
       await get().loadStoryboards();
+      await get().loadSketches();
+      const sketchPaths = collectStoryboardSketchPaths(storyboard);
+      const { activeSketchPath } = get();
+      if (activeSketchPath && sketchPaths.includes(activeSketchPath)) {
+        await get().openSketch(activeSketchPath);
+      }
+      window.dispatchEvent(new CustomEvent("cutready:sketch-saved"));
       set({ isDirty: true });
       await get().refreshChangedFiles();
     } catch (err) {

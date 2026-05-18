@@ -239,6 +239,10 @@ export function SketchForm() {
     try {
       const sketch = await invoke<Sketch>("set_sketch_lock", { relativePath: activeSketchPath, locked });
       applySketchFromLockCommand(sketch);
+      const { loadSketches, refreshChangedFiles, checkDirty } = useAppStore.getState();
+      await loadSketches();
+      await checkDirty();
+      await refreshChangedFiles();
     } catch (err) {
       console.error("[SketchForm] Failed to update sketch lock:", err);
     }
@@ -249,6 +253,9 @@ export function SketchForm() {
     try {
       const sketch = await invoke<Sketch>("set_planning_row_lock", { relativePath: activeSketchPath, index, locked });
       applySketchFromLockCommand(sketch);
+      const { refreshChangedFiles, checkDirty } = useAppStore.getState();
+      await checkDirty();
+      await refreshChangedFiles();
     } catch (err) {
       console.error("[SketchForm] Failed to update row lock:", err);
     }
@@ -259,6 +266,9 @@ export function SketchForm() {
     try {
       const sketch = await invoke<Sketch>("set_planning_cell_lock", { relativePath: activeSketchPath, index, field, locked });
       applySketchFromLockCommand(sketch);
+      const { refreshChangedFiles, checkDirty } = useAppStore.getState();
+      await checkDirty();
+      await refreshChangedFiles();
     } catch (err) {
       console.error("[SketchForm] Failed to update cell lock:", err);
     }

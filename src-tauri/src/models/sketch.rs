@@ -52,6 +52,15 @@ impl PlanningCellLocks {
         true
     }
 
+    pub fn set_all(&mut self, locked: bool) {
+        self.time = locked;
+        self.narrative = locked;
+        self.demo_actions = locked;
+        self.screenshot = locked;
+        self.visual = locked;
+        self.design_plan = locked;
+    }
+
     pub fn any(&self) -> bool {
         self.time
             || self.narrative
@@ -115,6 +124,11 @@ impl PlanningRow {
             design_plan: None,
         }
     }
+
+    pub fn set_locked_recursive(&mut self, locked: bool) {
+        self.locked = locked;
+        self.locks.set_all(locked);
+    }
 }
 
 impl Default for PlanningRow {
@@ -155,6 +169,13 @@ impl Sketch {
             state: SketchState::Draft,
             created_at: now,
             updated_at: now,
+        }
+    }
+
+    pub fn set_locked_recursive(&mut self, locked: bool) {
+        self.locked = locked;
+        for row in &mut self.rows {
+            row.set_locked_recursive(locked);
         }
     }
 }
@@ -336,6 +357,29 @@ mod tests {
         assert_eq!(sketch.description, serde_json::Value::Null);
         assert!(sketch.rows.is_empty());
         assert_eq!(sketch.state, SketchState::Draft);
+    }
+
+    #[test]
+    fn sketch_lock_cascades_to_rows_and_cells() {
+        let mut sketch = Sketch::new("Demo");
+        sketch.rows.push(PlanningRow::new());
+
+        sketch.set_locked_recursive(true);
+
+        assert!(sketch.locked);
+        assert!(sketch.rows[0].locked);
+        assert!(sketch.rows[0].locks.time);
+        assert!(sketch.rows[0].locks.narrative);
+        assert!(sketch.rows[0].locks.demo_actions);
+        assert!(sketch.rows[0].locks.screenshot);
+        assert!(sketch.rows[0].locks.visual);
+        assert!(sketch.rows[0].locks.design_plan);
+
+        sketch.set_locked_recursive(false);
+
+        assert!(!sketch.locked);
+        assert!(!sketch.rows[0].locked);
+        assert!(!sketch.rows[0].locks.any());
     }
 
     #[test]

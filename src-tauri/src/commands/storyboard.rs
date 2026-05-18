@@ -3,6 +3,8 @@
 //! Storyboards are `.sb` files, identified by relative path from project root.
 
 use chrono::Utc;
+use std::collections::BTreeSet;
+use std::path::Path;
 use tauri::State;
 
 use crate::engine::project;
@@ -14,6 +16,43 @@ fn project_root(state: &AppState) -> Result<std::path::PathBuf, String> {
     let current = state.current_project.lock().map_err(|e| e.to_string())?;
     let view = current.as_ref().ok_or("No project is currently open")?;
     Ok(view.root.clone())
+}
+
+fn storyboard_sketch_paths(storyboard: &Storyboard) -> BTreeSet<String> {
+    storyboard
+        .items
+        .iter()
+        .flat_map(|item| match item {
+            StoryboardItem::SketchRef { path } => vec![path.clone()],
+            StoryboardItem::Section { sketches, .. } => sketches.clone(),
+        })
+        .collect()
+}
+
+fn set_referenced_sketches_lock(
+    root: &Path,
+    storyboard: &Storyboard,
+    locked: bool,
+) -> Result<(), String> {
+    for sketch_path in storyboard_sketch_paths(storyboard) {
+        let abs_path = match project::safe_resolve(root, &sketch_path) {
+            Ok(path) => path,
+            Err(err) => {
+                log::warn!("Skipping invalid storyboard sketch reference {sketch_path}: {err}");
+                continue;
+            }
+        };
+        if !abs_path.exists() {
+            log::warn!("Skipping missing storyboard sketch reference {sketch_path}");
+            continue;
+        }
+
+        let mut sketch = project::read_sketch(&abs_path).map_err(|e| e.to_string())?;
+        sketch.set_locked_recursive(locked);
+        sketch.updated_at = Utc::now();
+        project::write_sketch(&sketch, &abs_path, root).map_err(|e| e.to_string())?;
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -83,6 +122,7 @@ pub async fn set_storyboard_lock(
     let mut sb = project::read_storyboard(&abs_path).map_err(|e| e.to_string())?;
     sb.locked = locked;
     sb.updated_at = Utc::now();
+    set_referenced_sketches_lock(&root, &sb, locked)?;
     project::write_storyboard(&sb, &abs_path, &root).map_err(|e| e.to_string())?;
     Ok(sb)
 }
@@ -223,4 +263,43 @@ pub async fn reorder_storyboard_items(
 
     project::write_storyboard(&sb, &sb_abs, &root).map_err(|e| e.to_string())?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::sketch::{PlanningRow, Sketch};
+
+    #[test]
+    fn storyboard_lock_cascades_to_referenced_sketches() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        let mut sketch = Sketch::new("Intro");
+        sketch.rows.push(PlanningRow::new());
+        project::write_sketch(&sketch, &root.join("intro.sk"), root).unwrap();
+
+        let storyboard = Storyboard {
+            title: "Demo".into(),
+            description: String::new(),
+            locked: false,
+            items: vec![StoryboardItem::Section {
+                title: "Section".into(),
+                sketches: vec!["intro.sk".into()],
+            }],
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+
+        set_referenced_sketches_lock(root, &storyboard, true).unwrap();
+        let locked = project::read_sketch(&root.join("intro.sk")).unwrap();
+        assert!(locked.locked);
+        assert!(locked.rows[0].locked);
+        assert!(locked.rows[0].locks.any());
+
+        set_referenced_sketches_lock(root, &storyboard, false).unwrap();
+        let unlocked = project::read_sketch(&root.join("intro.sk")).unwrap();
+        assert!(!unlocked.locked);
+        assert!(!unlocked.rows[0].locked);
+        assert!(!unlocked.rows[0].locks.any());
+    }
 }
