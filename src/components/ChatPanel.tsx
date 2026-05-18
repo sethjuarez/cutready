@@ -3,7 +3,7 @@ import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { SafeMarkdown } from "./SafeMarkdown";
 
-import { useAppStore } from "../stores/appStore";
+import { clearSuppressedEditorFlush, suppressEditorFlush, useAppStore } from "../stores/appStore";
 import { useSettings, type AgentPreset } from "../hooks/useSettings";
 import { BUILT_IN_AGENTS, resolveAgentPrompt } from "../agents/builtInAgents";
 import { SketchIcon, StoryboardIcon, NoteIcon } from "./Icons";
@@ -94,9 +94,40 @@ function extractSketchMutationsFromMessages(messages: ChatMessage[], fallbackPat
   return mutations;
 }
 
+function sketchMutationKey(mutation: { path: string | null; rows: number[]; toolName: string }): string {
+  const path = mutation.path?.trim().replace(/\\/g, "/") ?? "";
+  const rows = mutation.rows.length > 0 ? [...mutation.rows].sort((a, b) => a - b).join(",") : "*";
+  return `${mutation.toolName}:${path}:${rows}`;
+}
+
+function recordSketchMutation(
+  counts: Map<string, number>,
+  mutation: { path: string | null; rows: number[]; toolName: string },
+) {
+  const key = sketchMutationKey(mutation);
+  counts.set(key, (counts.get(key) ?? 0) + 1);
+}
+
+function consumeRecordedSketchMutation(
+  counts: Map<string, number>,
+  mutation: { path: string | null; rows: number[]; toolName: string },
+): boolean {
+  const key = sketchMutationKey(mutation);
+  const count = counts.get(key) ?? 0;
+  if (count <= 0) return false;
+  if (count === 1) counts.delete(key);
+  else counts.set(key, count - 1);
+  return true;
+}
+
 function normalizeStoryboardPath(path: string): string {
   const trimmed = path.trim().replace(/\\/g, "/");
   return trimmed.endsWith(".sb") ? trimmed : `${trimmed}.sb`;
+}
+
+function normalizeMutationPath(path: string | null | undefined): string | null {
+  const normalized = path?.trim().replace(/\\/g, "/").replace(/^\.\/+/, "").replace(/^\/+/, "").replace(/\/+$/, "");
+  return normalized || null;
 }
 
 function storyboardMutationInfo(toolName: string, argsJson: string, fallbackPath: string | null) {
@@ -370,6 +401,8 @@ function ChatTab() {
   const loadSketches = useAppStore((s) => s.loadSketches);
   const loadNotes = useAppStore((s) => s.loadNotes);
   const loadStoryboards = useAppStore((s) => s.loadStoryboards);
+  const checkDirty = useAppStore((s) => s.checkDirty);
+  const refreshChangedFiles = useAppStore((s) => s.refreshChangedFiles);
   const openSketch = useAppStore((s) => s.openSketch);
   const openNote = useAppStore((s) => s.openNote);
   const openStoryboard = useAppStore((s) => s.openStoryboard);
@@ -399,20 +432,37 @@ function ChatTab() {
   const thinkingRef = useRef("");
   const abortedRef = useRef(false);
   const pendingToolArgsRef = useRef<Record<string, string[]>>({});
+  const handledSketchMutationsRef = useRef<Map<string, number>>(new Map());
   const refreshSketchAfterMutation = useCallback((mutation: { path: string | null; rows: number[]; toolName: string }) => {
-    loadSketches();
+    const mutationPath = normalizeMutationPath(mutation.path);
+    const fallbackPath = normalizeMutationPath(useAppStore.getState().activeSketchPath);
+    const affectedPath = mutationPath ?? fallbackPath;
+    if (affectedPath) suppressEditorFlush(affectedPath);
+    void loadSketches();
     window.dispatchEvent(new CustomEvent("cutready:ai-sketch-updated", { detail: mutation }));
-    if (mutation.path) {
-      void openSketch(mutation.path);
-    }
-  }, [loadSketches, openSketch]);
+    const reload = mutationPath ? openSketch(mutationPath) : Promise.resolve();
+    void reload.finally(() => {
+      if (affectedPath) {
+        globalThis.setTimeout(() => clearSuppressedEditorFlush(affectedPath), 100);
+      }
+    });
+    void checkDirty();
+    void refreshChangedFiles();
+  }, [checkDirty, loadSketches, openSketch, refreshChangedFiles]);
   const refreshStoryboardAfterMutation = useCallback((mutation: { path: string | null; toolName: string }) => {
-    loadStoryboards();
+    const mutationPath = normalizeMutationPath(mutation.path);
+    if (mutationPath) suppressEditorFlush(mutationPath);
+    void loadStoryboards();
     window.dispatchEvent(new CustomEvent("cutready:ai-storyboard-updated", { detail: mutation }));
-    if (mutation.path) {
-      void openStoryboard(mutation.path);
-    }
-  }, [loadStoryboards, openStoryboard]);
+    const reload = mutationPath ? openStoryboard(mutationPath) : Promise.resolve();
+    void reload.finally(() => {
+      if (mutationPath) {
+        globalThis.setTimeout(() => clearSuppressedEditorFlush(mutationPath), 100);
+      }
+    });
+    void checkDirty();
+    void refreshChangedFiles();
+  }, [checkDirty, loadStoryboards, openStoryboard, refreshChangedFiles]);
   useEffect(() => {
     const unlisten = listen<{ type: string; content?: string; message?: string; name?: string; arguments?: string; result?: string; response?: string; agent_id?: string; task?: string }>("agent-event", (event) => {
       const ev = event.payload;
@@ -473,7 +523,10 @@ function ChatTab() {
           if (isSuccess && SKETCH_MUTATION_TOOLS.has(toolName)) {
             const argsJson = consumeQueuedToolArgs(pendingToolArgsRef.current, toolName);
             const mutation = sketchMutationInfo(toolName, argsJson, useAppStore.getState().activeSketchPath);
-            if (mutation) refreshSketchAfterMutation(mutation);
+            if (mutation) {
+              recordSketchMutation(handledSketchMutationsRef.current, mutation);
+              refreshSketchAfterMutation(mutation);
+            }
           }
           if (isSuccess && toolName === "write_note") {
             loadNotes();
@@ -742,6 +795,7 @@ function ChatTab() {
 
     setChatLoading(true);
     abortedRef.current = false;
+    handledSketchMutationsRef.current.clear();
     streamingRef.current = "";
     thinkingRef.current = "";
     setStreamingText("");
@@ -842,6 +896,7 @@ function ChatTab() {
         result.messages.slice(fullMessages.length),
         useAppStore.getState().activeSketchPath,
       )) {
+        if (consumeRecordedSketchMutation(handledSketchMutationsRef.current, mutation)) continue;
         refreshSketchAfterMutation(mutation);
       }
       for (const mutation of extractStoryboardMutationsFromMessages(
