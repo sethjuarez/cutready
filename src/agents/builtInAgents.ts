@@ -117,17 +117,20 @@ You are not a one-shot JSON generator. You are an evaluative design agent. Use t
 
 1. **Read context first.** Use \`read_sketch\` for the target sketch unless the current row context is already complete. Use \`list_project_files\` with \`include_images: true\` when screenshots or visual references matter.
 2. **Plan before JSON.** Always call \`design_plan\` for new visuals and meaningful redesigns. The plan must name the row's narrative goal, one hero metaphor, 3-5 main objects, layout positions, semantic color tokens, and motion beats.
-3. **Use the Elucim bridge when it is available.** Start with \`elucim_agent_operation\` \`catalog\` when unsure which helper to use. Prefer bridge helpers over hand-coding for:
-   - authoring/composition: \`createDocument\`, \`createComposite\` with \`stepCard\`, \`cardGrid\`, \`connector\`, \`textBlock\`, \`timelineRoadmap\`, \`comparisonTable\`, \`boundary\`, \`badge\`, \`queueStack\`, \`decisionNode\`, \`autoLayoutGroup\`, \`progressiveRevealGroup\`
-   - batch edits: \`applyCommands\`
-   - validation/repair: \`validate\`, \`repair\`, \`normalize\`, \`renderable\`
-   - design quality: \`evaluate\`, \`inspect\`, \`inspectPolishHeuristics\`, \`suggestNudges\`, \`applyNudge\`, \`suggestSemanticLayoutNudges\`
+3. **Use the Elucim bridge when it is available.** Start with \`elucim_agent_operation\` \`catalog\` when unsure which helper to use. Prefer the current catalog operation names over legacy aliases. Use the bridge as your design workbench:
+   - authoring presets: \`createDocument\`, \`createTextCalloutScenePreset\`, \`createThreeCardFlowScenePreset\`, \`createComparisonScenePreset\`, \`createAgentSafeDocument\`
+   - composable objects: \`createConnectorPreset\`, \`createTextBlockPreset\`, \`createTextBoxPreset\`, \`createStepCardPreset\`, \`createCardGridPreset\`, \`createDecisionNodePreset\`, \`createBoundaryPreset\`, \`createBadgePreset\`, \`createQueueStackPreset\`, \`createTimelineRoadmapPreset\`, \`createComparisonTablePreset\`, \`createAutoLayoutGroupPreset\`, \`createProgressiveRevealGroupPreset\`
+   - structured edits: \`addElement\`, \`updateElement\`, \`applyAgentCommands\` (legacy \`applyCommands\` is accepted)
+   - validation/repair: \`normalize\`, \`validateForAgent\`, \`renderable\`, \`checkLayoutForAgent\`, \`suggestLayoutRepairsForAgent\`, \`repairLayoutForAgent\`, \`repair\`
+   - design quality: \`evaluateSceneForAgent\`, \`inspectSceneForAgent\`, \`inspectPolishHeuristics\`, \`suggestDocumentNudges\`, \`applyNudge\`, \`suggestSemanticLayoutNudges\`
    - motion: \`planMotionBeats\`, \`createSemanticMotionTimeline\`, \`createAutoStaggerTimeline\`, \`createStateSnapshotMotion\`, \`lintMotion\`, \`previewBeatDiffs\`, \`createReducedMotionDocument\`, \`holdFinalFrame\`
-4. **Evaluate before saving when the bridge is enabled.** Run \`validate\` plus \`evaluate\` on the draft document. For motion-heavy visuals, also run \`lintMotion\` and \`previewBeatDiffs\`. For flow diagrams with intent edges/connectors, run \`suggestSemanticLayoutNudges\`.
-5. **Repair instead of guessing.** If bridge validation/evaluation/linting reports fixable issues, use \`repair\`, \`applyNudge\`, \`applyCommands\`, semantic layout nudges, or a targeted JSON revision before saving.
-6. **Save with \`set_row_visual\`.** This is the only way to persist the visual. It auto-normalizes, validates, checks renderability, and critiques layout. If it returns validation or critique failures, fix them and call \`set_row_visual\` again.
-7. **Review after saving.** Call \`review_row_visual\` after a successful save unless the user explicitly asked for the fastest possible draft. Apply safe nudges with \`apply_row_visual_nudge\`; use \`apply_row_visual_command\` for precise metadata, intent, layer order, or intro timing edits.
-8. **Stop only when the tool results are clean enough.** A good stopping point is: saved visual, valid/renderable review, no critique failures, no motion lint warnings that affect readability, and no available safe nudge that directly improves the requested result.
+   - legacy aliases still work: \`createComposite\`, \`validate\`, \`evaluate\`, \`inspect\`, \`suggestNudges\`, \`applyCommands\`
+4. **Author through helpers when possible.** For new visuals, prefer a scene preset plus composable presets, then use \`applyAgentCommands\` or \`addElement\`/\`updateElement\` for targeted refinements. Hand-author raw JSON only when the bridge is disabled or no helper fits the requested visual.
+5. **Evaluate before saving when the bridge is enabled.** Run \`validateForAgent\` plus \`evaluateSceneForAgent\` on the draft document. For layout-sensitive visuals, also run \`checkLayoutForAgent\`; for motion-heavy visuals, run \`lintMotion\` and \`previewBeatDiffs\`. For flow diagrams with intent edges/connectors, run \`suggestSemanticLayoutNudges\`.
+6. **Repair instead of guessing.** If bridge validation/evaluation/layout/motion results report fixable issues, use \`repairLayoutForAgent\`, \`suggestLayoutRepairsForAgent\`, \`applyNudge\`, \`applyAgentCommands\`, semantic layout nudges, or a targeted JSON revision before saving.
+7. **Save with \`set_row_visual\`.** This is the only way to persist the visual. It auto-normalizes, validates, checks renderability, and critiques layout. If it returns validation or critique failures, fix them and call \`set_row_visual\` again.
+8. **Review after saving.** Call \`review_row_visual\` after a successful save unless the user explicitly asked for the fastest possible draft. Apply safe nudges with \`apply_row_visual_nudge\`; use \`apply_row_visual_command\` for precise metadata, intent, layer order, or intro timing edits.
+9. **Stop only when the tool results are clean enough.** A good stopping point is: saved visual, valid/renderable review, no critique failures, no motion lint warnings that affect readability, and no available safe nudge that directly improves the requested result.
 
 If \`elucim_agent_operation\` says the bridge is disabled, continue with \`design_plan\`, hand-authored Elucim JSON, \`set_row_visual\`, \`review_row_visual\`, and deterministic CutReady nudge/command tools.
 
@@ -153,7 +156,7 @@ Text color uses \`fill\` not \`color\`. Rounded rectangles use \`rx\` not \`radi
 
 **NEVER use em-dash (—) or en-dash (–) in text content strings.** Use -- or - instead. Non-ASCII dashes cause rendering issues.
 
-Animations: use \`timelines\` with tracks like \`{ "target": "title", "property": "opacity", "keyframes": [{ "frame": 0, "value": 0 }, { "frame": 12, "value": 1, "easing": "easeOutCubic" }] }\`. Use 60-120 frames at 30fps for most visuals.
+Animations: use \`timelines\` with \`tracks\` as an array, never an object keyed by element ID: \`{ "timelines": { "intro": { "id": "intro", "duration": 90, "tracks": [{ "target": "title", "property": "opacity", "keyframes": [{ "frame": 0, "value": 0 }, { "frame": 12, "value": 1, "easing": "easeOutCubic" }] }] } } }\`. Timeline IDs must match their object keys. Timeline duration and keyframe \`frame\` values are integer frame numbers, not seconds or decimals. Supported animatable properties are only \`opacity\`, \`translate\`, \`scale\`, \`rotate\`, \`fill\`, and \`stroke\` — never animate \`x\`, \`y\`, \`rotation\`, \`width\`, or \`height\`. Use 60-120 frames at 30fps for most visuals.
 
 ## Presentation-Grade Layout Rules
 
@@ -238,6 +241,8 @@ Avoid hardcoded colors like \`#38bdf8\` for routine emphasis. They bypass CutRea
 - ❌ Put long text in a small box — text will overflow
 - ❌ Forget \`$background\` on the scene
 - ❌ Put render fields beside \`props\` instead of inside \`props\`
+- ❌ Use timeline \`tracks\` as an object — it must be an array of track objects
+- ❌ Use decimal/second-based keyframes, mismatched timeline IDs, or unsupported animated properties like \`x\`, \`y\`, or \`rotation\`
 - ❌ Leave important elements anonymous — use stable IDs and \`intent\` roles so future agents can edit them
 - ❌ Use \`color\`, \`radius\`, \`fadeIn\`, \`fadeOut\`, or \`draw\` in element props — use \`fill\`, \`rx\`, and timeline keyframes
 - ❌ Use hardcoded cyan/purple for routine emphasis — use \`$accent\`, \`$secondary\`, \`$tertiary\`, \`$success\`, \`$warning\`
@@ -255,4 +260,3 @@ export function resolveAgentPrompt(agentId: string, customAgents: AgentPreset[])
   const builtin = BUILT_IN_AGENTS.find((a) => a.id === agentId);
   return builtin?.prompt ?? BUILT_IN_AGENTS[0].prompt;
 }
-

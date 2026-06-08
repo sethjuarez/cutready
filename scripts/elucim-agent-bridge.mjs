@@ -41,6 +41,14 @@ function normalizeInput(payload) {
   return normalizeDocument(payload.document);
 }
 
+function required(payload, key) {
+  const value = payload[key];
+  if (value === undefined || value === null || value === "") {
+    throw new Error(`payload.${key} is required`);
+  }
+  return value;
+}
+
 function ok(op, result, extra = {}) {
   return { ok: true, op, ...extra, result };
 }
@@ -73,6 +81,7 @@ async function run(payload) {
       const normalized = normalizeInput(payload);
       return ok(op, summarizeDocument(normalized.document));
     }
+    case "validateForAgent":
     case "validate": {
       const normalized = normalizeInput(payload);
       return ok(op, validateForAgent(normalized.document));
@@ -85,22 +94,38 @@ async function run(payload) {
         validation: validate(renderable),
       });
     }
+    case "evaluateSceneForAgent":
     case "evaluate": {
       const normalized = normalizeInput(payload);
       return ok(op, agent.evaluateSceneForAgent(normalized.document));
     }
+    case "inspectSceneForAgent":
     case "inspect": {
       const normalized = normalizeInput(payload);
       return ok(op, agent.inspectSceneForAgent(normalized.document, payload.options ?? {}));
+    }
+    case "checkLayoutForAgent": {
+      const normalized = normalizeInput(payload);
+      return ok(op, agent.checkLayoutForAgent(normalized.document, payload.options ?? {}));
     }
     case "inspectPolishHeuristics": {
       const normalized = normalizeInput(payload);
       return ok(op, agent.inspectPolishHeuristics(normalized.document));
     }
+    case "repairLayoutForAgent": {
+      const normalized = normalizeInput(payload);
+      return ok(op, agent.repairLayoutForAgent(normalized.document, payload.options ?? {}));
+    }
     case "repair": {
       const normalized = normalizeInput(payload);
       return ok(op, agent.repairDocumentForAgent(normalized.document));
     }
+    case "suggestLayoutRepairsForAgent": {
+      const normalized = normalizeInput(payload);
+      const layoutResult = payload.layoutResult ?? payload.layout_result;
+      return ok(op, agent.suggestLayoutRepairsForAgent(normalized.document, layoutResult));
+    }
+    case "suggestDocumentNudges":
     case "suggestNudges": {
       const normalized = normalizeInput(payload);
       return ok(op, agent.suggestDocumentNudges(normalized.document));
@@ -113,6 +138,7 @@ async function run(payload) {
       if (!nudge) throw new Error(`Nudge "${nudgeId}" is not available`);
       return ok(op, agent.applyNudge(normalized.document, nudge));
     }
+    case "applyAgentCommands":
     case "applyCommands": {
       const normalized = normalizeInput(payload);
       if (!Array.isArray(payload.commands)) {
@@ -120,6 +146,22 @@ async function run(payload) {
       }
       return ok(op, agent.applyAgentCommands(normalized.document, payload.commands));
     }
+    case "addElement": {
+      const normalized = normalizeInput(payload);
+      return ok(op, agent.addElement(normalized.document, payload.spec ?? payload.element ?? {}));
+    }
+    case "updateElement": {
+      const normalized = normalizeInput(payload);
+      return ok(op, agent.updateElement(normalized.document, required(payload, "id"), payload.patch ?? {}));
+    }
+    case "createAgentSafeDocument":
+      return ok(op, agent.createAgentSafeDocument(required(payload, "preset"), payload.options ?? {}));
+    case "createTextCalloutScenePreset":
+      return ok(op, agent.createTextCalloutScenePreset(payload.spec ?? {}));
+    case "createThreeCardFlowScenePreset":
+      return ok(op, agent.createThreeCardFlowScenePreset(payload.spec ?? {}));
+    case "createComparisonScenePreset":
+      return ok(op, agent.createComparisonScenePreset(payload.spec ?? {}));
     case "planMotionBeats":
       return ok(op, agent.planMotionBeats(payload.spec ?? {}));
     case "createSemanticMotionTimeline": {
@@ -154,6 +196,32 @@ async function run(payload) {
     }
     case "createDocument":
       return ok(op, agent.createDocument(payload.spec ?? {}));
+    case "createConnectorPreset":
+      return ok(op, agent.createConnectorPreset(payload.spec ?? {}));
+    case "createTextBlockPreset":
+      return ok(op, agent.createTextBlockPreset(payload.spec ?? {}));
+    case "createTextBoxPreset":
+      return ok(op, agent.createTextBoxPreset(payload.spec ?? {}));
+    case "createStepCardPreset":
+      return ok(op, agent.createStepCardPreset(payload.spec ?? {}));
+    case "createCardGridPreset":
+      return ok(op, agent.createCardGridPreset(payload.spec ?? {}));
+    case "createDecisionNodePreset":
+      return ok(op, agent.createDecisionNodePreset(payload.spec ?? {}));
+    case "createBoundaryPreset":
+      return ok(op, agent.createBoundaryPreset(payload.spec ?? {}));
+    case "createBadgePreset":
+      return ok(op, agent.createBadgePreset(payload.spec ?? {}));
+    case "createQueueStackPreset":
+      return ok(op, agent.createQueueStackPreset(payload.spec ?? {}));
+    case "createTimelineRoadmapPreset":
+      return ok(op, agent.createTimelineRoadmapPreset(payload.spec ?? {}));
+    case "createComparisonTablePreset":
+      return ok(op, agent.createComparisonTablePreset(payload.spec ?? {}));
+    case "createAutoLayoutGroupPreset":
+      return ok(op, agent.createAutoLayoutGroupPreset(payload.spec ?? {}));
+    case "createProgressiveRevealGroupPreset":
+      return ok(op, agent.createProgressiveRevealGroupPreset(payload.spec ?? {}));
     case "createComposite": {
       const kind = payload.kind;
       const helper = COMPOSITE_HELPERS[kind];

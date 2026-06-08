@@ -28,6 +28,7 @@ import { readFile, writeFile } from "@tauri-apps/plugin-fs";
 import { openPath } from "@tauri-apps/plugin-opener";
 import { invoke } from "@tauri-apps/api/core";
 import type { Sketch, Storyboard } from "../types/sketch";
+import { getElucimDocumentSize } from "./elucimDocument";
 
 // ── Markdown → docx primitives ──────────────────────────────────
 
@@ -257,8 +258,7 @@ async function captureVisualLastFrame(visualPath: string): Promise<ImageRun | nu
     const root = dsl.root as unknown as Record<string, unknown>;
     const totalFrames = (root.durationInFrames as number) || 60;
     const lastFrame = Math.max(0, totalFrames - 1);
-    const width = (root.width as number) || 640;
-    const height = (root.height as number) || 360;
+    const { width, height } = getElucimDocumentSize(dsl, { width: 640, height: 360 });
 
     const pngBytes = await renderToPng(dsl, lastFrame, { width, height, scale: 2 });
 

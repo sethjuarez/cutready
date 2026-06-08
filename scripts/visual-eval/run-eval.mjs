@@ -407,6 +407,10 @@ Canvas and schema:
 - Put render fields in props. Text elements use props.content for real visible copy and props.fill for color. Never use text or color.
 - Rect elements use props.rx for rounded corners. Never use radius.
 - Put animation in timelines with keyframes. Do not use legacy props like "fadeIn", "draw", or "fadeOut".
+- Timeline tracks MUST be an array: { "tracks": [{ "target": "title", "property": "opacity", "keyframes": [...] }] }. Never use an object keyed by element ID for tracks.
+- Timeline IDs must match their object key exactly: { "timelines": { "intro": { "id": "intro", "duration": 90, ... } } }.
+- Timeline duration and every keyframe frame must be integer frame numbers, not seconds or decimals. Use frames like 0, 12, 24, 60, 90.
+- Animatable properties are only "opacity", "translate", "scale", "rotate", "fill", and "stroke". Never animate x, y, rotation, width, height, or arbitrary props.
 
 Presentation polish rules:
 - Use $background for scene background, "$title" as the fill color for the main title, and "$subtitle" as the fill color for the subtitle.
@@ -530,21 +534,50 @@ function parseVisual(content) {
   const trimmed = content.trim().replace(/^```(?:json)?/i, "").replace(/```$/i, "").trim();
   const parsed = JSON.parse(trimmed);
   const normalized = normalizeDocument(parsed);
-  const validation = validateForAgent(normalized.document);
+  let validation;
+  try {
+    validation = validateForAgent(normalized.document);
+  } catch (error) {
+    throw new Error(`Generated JSON could not be validated: ${error instanceof Error ? error.message : String(error)}`);
+  }
   if (!validation.valid) {
     const hints = validation.repairHints?.length > 0
-      ? ` Repair hints: ${validation.repairHints.join("; ")}`
+      ? ` Repair hints: ${formatValidationItems(validation.repairHints)}`
       : "";
-    throw new Error(`Generated JSON is not a valid Elucim agent document: ${validation.errors.join("; ")}.${hints}`);
+    throw new Error(`Generated JSON is not a valid Elucim agent document: ${formatValidationItems(validation.errors)}.${hints}`);
   }
-  toRenderableDocument(normalized.document);
+  try {
+    toRenderableDocument(normalized.document);
+  } catch (error) {
+    throw new Error(`Generated JSON could not be rendered: ${error instanceof Error ? error.message : String(error)}`);
+  }
   return normalized.document;
+}
+
+function formatValidationItems(items = []) {
+  return items
+    .map((item) => {
+      if (typeof item === "string") return item;
+      const pathValue = item.path ? `${item.path}: ` : "";
+      const code = item.code ? `[${item.code}] ` : "";
+      return `${pathValue}${code}${item.message ?? JSON.stringify(item)}`;
+    })
+    .join("; ");
 }
 
 function evaluateAgenticDocument(visual, options) {
   const normalized = normalizeDocument(visual);
   let current = normalized.document;
-  const initialValidation = validateForAgent(current);
+  let initialValidation;
+  try {
+    initialValidation = validateForAgent(current);
+  } catch (error) {
+    initialValidation = {
+      valid: false,
+      errors: [{ path: "document", message: error instanceof Error ? error.message : String(error), severity: "error" }],
+      repairHints: [],
+    };
+  }
   const result = {
     inputFormat: normalized.inputFormat,
     migrated: normalized.migrated,
@@ -586,7 +619,16 @@ function evaluateAgenticDocument(visual, options) {
     result.diffCount += patch.length;
   }
 
-  const finalValidation = validateForAgent(current);
+  let finalValidation;
+  try {
+    finalValidation = validateForAgent(current);
+  } catch (error) {
+    finalValidation = {
+      valid: false,
+      errors: [{ path: "document", message: error instanceof Error ? error.message : String(error), severity: "error" }],
+      repairHints: [],
+    };
+  }
   result.validFinal = finalValidation.valid;
   result.validationErrors = finalValidation.errors ?? [];
   result.repairHints = finalValidation.repairHints ?? [];
@@ -643,6 +685,7 @@ async function main() {
         process.stdout.write(`Generating ${id}... `);
         try {
           const content = await callModel(provider, buildMessages(brief, variant), options);
+          writeFileSync(path.join(candidateDir, `${id}.raw.txt`), content, "utf8");
           let bestVisual = parseVisual(content);
           writeFileSync(file, `${JSON.stringify(bestVisual, null, 2)}\n`, "utf8");
           let bestScore = scoreVisual(file);
@@ -663,6 +706,7 @@ async function main() {
               buildRepairMessages(brief, variant, bestVisual, bestScore, round),
               { ...options, temperature: Math.min(options.temperature, 0.2) },
             );
+            writeFileSync(path.join(candidateDir, `${id}__repair${round}.raw.txt`), repairContent, "utf8");
             const repairedVisual = parseVisual(repairContent);
             const repairFile = path.join(candidateDir, `${id}__repair${round}.json`);
             writeFileSync(repairFile, `${JSON.stringify(repairedVisual, null, 2)}\n`, "utf8");

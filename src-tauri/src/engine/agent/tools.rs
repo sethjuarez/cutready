@@ -500,16 +500,30 @@ pub fn all_tools(web_search_enabled: bool) -> Vec<Tool> {
                     "properties": {
                         "op": {
                             "type": "string",
-                            "enum": ["catalog", "normalize", "summarize", "validate", "renderable", "evaluate", "inspect", "inspectPolishHeuristics", "repair", "suggestNudges", "applyNudge", "applyCommands", "createDocument", "createComposite", "planMotionBeats", "createSemanticMotionTimeline", "createAutoStaggerTimeline", "createStateSnapshotMotion", "lintMotion", "previewBeatDiffs", "createReducedMotionDocument", "holdFinalFrame", "suggestSemanticLayoutNudges"],
-                            "description": "Bridge operation to run"
+                            "enum": [
+                                "catalog", "normalize", "summarize", "renderable",
+                                "createDocument", "createTextCalloutScenePreset", "createThreeCardFlowScenePreset", "createComparisonScenePreset", "createAgentSafeDocument",
+                                "createConnectorPreset", "createTextBlockPreset", "createTextBoxPreset", "createStepCardPreset", "createCardGridPreset", "createDecisionNodePreset", "createBoundaryPreset", "createBadgePreset", "createQueueStackPreset", "createTimelineRoadmapPreset", "createComparisonTablePreset", "createAutoLayoutGroupPreset", "createProgressiveRevealGroupPreset",
+                                "addElement", "updateElement", "applyAgentCommands",
+                                "validateForAgent", "checkLayoutForAgent", "suggestLayoutRepairsForAgent", "repairLayoutForAgent", "repair",
+                                "evaluateSceneForAgent", "inspectSceneForAgent", "inspectPolishHeuristics", "suggestDocumentNudges", "applyNudge", "suggestSemanticLayoutNudges",
+                                "planMotionBeats", "createSemanticMotionTimeline", "createAutoStaggerTimeline", "createStateSnapshotMotion", "lintMotion", "previewBeatDiffs", "createReducedMotionDocument", "holdFinalFrame",
+                                "validate", "evaluate", "inspect", "suggestNudges", "applyCommands", "createComposite"
+                            ],
+                            "description": "Bridge operation to run. Prefer current catalog names; legacy aliases are accepted for compatibility."
                         },
                         "document": { "type": "object", "description": "Elucim document for document-based operations" },
-                        "commands": { "type": "array", "description": "Commands for applyCommands" },
+                        "commands": { "type": "array", "description": "Commands for applyAgentCommands/applyCommands" },
+                        "element": { "type": "object", "description": "Element spec for addElement" },
+                        "id": { "type": "string", "description": "Element ID for updateElement or other targeted operations" },
+                        "patch": { "type": "object", "description": "Element patch for updateElement" },
                         "nudgeId": { "type": "string", "description": "Nudge ID for applyNudge" },
                         "timelineId": { "type": "string", "description": "Timeline ID for timeline-specific motion operations such as holdFinalFrame" },
+                        "preset": { "type": "object", "description": "Agent-safe scene preset for createAgentSafeDocument" },
                         "kind": { "type": "string", "description": "Composite kind for createComposite, e.g. stepCard, cardGrid, connector" },
-                        "spec": { "type": "object", "description": "Spec for createDocument, createComposite, motion helpers, or timeline generation" },
-                        "options": { "type": "object", "description": "Options for inspect, motion linting, beat previews, reduced motion, or semantic layout" }
+                        "spec": { "type": "object", "description": "Spec for createDocument, preset helpers, createComposite, motion helpers, or timeline generation" },
+                        "options": { "type": "object", "description": "Options for inspection, layout checks/repairs, motion linting, beat previews, reduced motion, or semantic layout" },
+                        "layoutResult": { "type": "object", "description": "Optional checkLayoutForAgent result for suggestLayoutRepairsForAgent" }
                     },
                     "required": ["op"]
                 }),
@@ -4328,6 +4342,48 @@ mod tests {
         let mut sketch = Sketch::new("Locked Tool Test");
         sketch.rows = vec![row];
         project::write_sketch(&sketch, &root.join(rel), root).unwrap();
+    }
+
+    #[test]
+    fn elucim_agent_operation_schema_advertises_catalog_operations() {
+        let previous = std::env::var_os("CUTREADY_ELUCIM_BRIDGE");
+        std::env::set_var("CUTREADY_ELUCIM_BRIDGE", "1");
+        let tools = all_tools(false);
+        if let Some(value) = previous {
+            std::env::set_var("CUTREADY_ELUCIM_BRIDGE", value);
+        } else {
+            std::env::remove_var("CUTREADY_ELUCIM_BRIDGE");
+        }
+
+        let tool = tools
+            .iter()
+            .map(|tool| serde_json::to_value(tool).unwrap())
+            .find(|tool| tool.pointer("/function/name").and_then(Value::as_str) == Some("elucim_agent_operation"))
+            .expect("elucim_agent_operation tool should be registered when bridge is enabled");
+        let ops = tool
+            .pointer("/function/parameters/properties/op/enum")
+            .and_then(Value::as_array)
+            .expect("operation enum should be present");
+
+        for expected in [
+            "createTextCalloutScenePreset",
+            "createStepCardPreset",
+            "addElement",
+            "updateElement",
+            "applyAgentCommands",
+            "validateForAgent",
+            "checkLayoutForAgent",
+            "repairLayoutForAgent",
+            "evaluateSceneForAgent",
+            "inspectSceneForAgent",
+            "suggestDocumentNudges",
+            "createComposite",
+        ] {
+            assert!(
+                ops.iter().any(|op| op.as_str() == Some(expected)),
+                "schema should include {expected}: {ops:?}"
+            );
+        }
     }
 
     #[test]

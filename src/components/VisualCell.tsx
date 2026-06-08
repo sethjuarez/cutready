@@ -6,6 +6,7 @@ import { ELUCIM_THEME } from "../theme/elucimTheme";
 import { useElucimImageResolver } from "../hooks/useElucimImageResolver";
 import { ErrorBoundary } from "./ErrorBoundary";
 import type { CutReadyElucimDocument } from "../types/elucim";
+import { getElucimDocumentSize } from "../utils/elucimDocument";
 
 interface VisualCellProps {
   /** Path to the visual file (e.g., ".cutready/visuals/abc123.json"). */
@@ -120,9 +121,8 @@ export default function VisualCell({ visualPath, mode, onClick, className, contr
     const ro = new ResizeObserver(([entry]) => {
       const { width: cw, height: ch } = entry.contentRect;
       if (!dsl || cw === 0 || ch === 0) return;
-      const sw = (dsl as unknown as { width?: number }).width || 960;
-      const sh = (dsl as unknown as { height?: number }).height || 540;
-      const ratio = sw / sh;
+      const { width, height } = getElucimDocumentSize(dsl);
+      const ratio = width / height;
       setFitWidth(Math.min(cw, ch * ratio));
     });
     ro.observe(el);

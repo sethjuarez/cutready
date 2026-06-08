@@ -8,8 +8,9 @@
  */
 import { memo, lazy, Suspense, useState, useCallback, useRef } from "react";
 import type { ComponentType } from "react";
+import { convertFileSrc } from "@tauri-apps/api/core";
 import "@elucim/editor/style.css";
-import type { ElucimEditorProps } from "@elucim/editor";
+import type { BrowseImageResult, ElucimEditorProps } from "@elucim/editor";
 import type { CutReadyElucimDocument } from "../types/elucim";
 import { elucimThemeFromTokens } from "../theme/elucimTheme";
 import { getThemePalette } from "../theme/appThemePalettes";
@@ -27,10 +28,11 @@ export interface EditorWrapperProps {
 
 type ElucimEditorCompatProps = Omit<
   ElucimEditorProps,
-  "initialDocument" | "onDocumentChange"
+  "initialDocument" | "onDocumentChange" | "onCompatibilityWarnings"
 > & {
   initialDocument?: CutReadyElucimDocument;
   onDocumentChange?: (document: CutReadyElucimDocument, details?: unknown) => void;
+  onCompatibilityWarnings?: (warnings: string[]) => void;
 };
 
 const LazyElucimEditor = lazy(() =>
@@ -51,21 +53,25 @@ export default memo(function EditorWrapper({
   // Promise-based picker: onBrowseImage opens the modal and returns a promise
   // that resolves when the user picks an image or cancels.
   const [pickerOpen, setPickerOpen] = useState(false);
-  const pickerResolver = useRef<((result: { ref: string; displayName: string } | null) => void) | null>(null);
+  const pickerResolver = useRef<((result: BrowseImageResult | null) => void) | null>(null);
 
   const handleBrowseImage = useCallback(async () => {
     setPickerOpen(true);
-    return new Promise<{ ref: string; displayName: string } | null>((resolve) => {
+    return new Promise<BrowseImageResult | null>((resolve) => {
       pickerResolver.current = resolve;
     });
   }, []);
 
   const handlePickerSelect = useCallback((asset: AssetInfo) => {
     const displayName = asset.path.split("/").pop() ?? asset.path;
-    pickerResolver.current?.({ ref: asset.path, displayName });
+    pickerResolver.current?.({
+      ref: asset.path,
+      src: projectRoot ? convertFileSrc(`${projectRoot}/${asset.path}`) : asset.path,
+      displayName,
+    });
     pickerResolver.current = null;
     setPickerOpen(false);
-  }, []);
+  }, [projectRoot]);
 
   const handlePickerCancel = useCallback(() => {
     pickerResolver.current?.(null);
@@ -79,6 +85,11 @@ export default memo(function EditorWrapper({
   const handleEditorDocumentChange = useCallback((doc: CutReadyElucimDocument) => {
     onDocumentChange(doc);
   }, [onDocumentChange]);
+  const handleCompatibilityWarnings = useCallback((warnings: string[]) => {
+    if (warnings.length > 0) {
+      console.warn("[EditorWrapper] Elucim compatibility warnings:", warnings);
+    }
+  }, []);
 
   return (
     <ErrorBoundary
@@ -105,6 +116,7 @@ export default memo(function EditorWrapper({
             "--elucim-editor-bg": `rgb(${colors.surfaceInset})`,
           }}
           onDocumentChange={handleEditorDocumentChange}
+          onCompatibilityWarnings={handleCompatibilityWarnings}
           onBrowseImage={projectRoot ? handleBrowseImage : undefined}
           imageResolver={imageResolver}
           className="w-full h-full"
