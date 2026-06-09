@@ -136,7 +136,7 @@ export function OutputPanel({ onCollapse }: OutputPanelProps) {
           <>
             {debugEntries.length === 0 ? (
               <div className="text-center text-[rgb(var(--color-text-secondary))] py-8">
-                No debug messages yet — backend and frontend logs will appear here
+                Debug telemetry is captured by Auditaur. Use Export Logs for a local diagnostic bundle.
               </div>
             ) : (
               [...debugEntries].reverse().map((entry) => (

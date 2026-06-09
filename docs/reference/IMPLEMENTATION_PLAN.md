@@ -48,7 +48,7 @@ Created the full directory structure from ARCHITECTURE.md with type definitions 
 
 | Task | Details | Test | Status |
 | --- | --- | --- | --- |
-| Add required plugins to `Cargo.toml` | `tauri-plugin-fs`, `tauri-plugin-dialog`, `tauri-plugin-shell`, `tauri-plugin-store`, `tauri-plugin-global-shortcut`, `tauri-plugin-window-state`, `tauri-plugin-log`, `tauri-plugin-single-instance`, `tauri-plugin-process` | `cargo build` succeeds | ✅ Done — 9 plugins |
+| Add required plugins to `Cargo.toml` | `tauri-plugin-fs`, `tauri-plugin-dialog`, `tauri-plugin-shell`, `tauri-plugin-store`, `tauri-plugin-global-shortcut`, `tauri-plugin-window-state`, `tauri-plugin-auditaur`, `tauri-plugin-single-instance`, `tauri-plugin-process` | `cargo build` succeeds | ✅ Done — 9 plugins |
 | Register all plugins in `lib.rs` | Builder chain | App launches with plugins active | ✅ Done |
 | Configure capabilities in `capabilities/default.json` | File access, dialog, shell, store, global-shortcut permissions | No permission errors at runtime | ✅ Done |
 

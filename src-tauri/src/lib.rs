@@ -2,6 +2,7 @@ use std::sync::{Arc, Mutex};
 
 use tauri::{Emitter, Manager};
 use tauri_plugin_deep_link::DeepLinkExt;
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use models::script::{ProjectView, RepoView};
 use models::session::CapturedAction;
@@ -67,6 +68,11 @@ pub struct ProjectLock(pub tokio::sync::Mutex<()>);
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let _ = tracing_log::LogTracer::init();
+    tracing_subscriber::registry()
+        .with(tauri_plugin_auditaur::tracing_layer())
+        .init();
+
     let app_state = AppState {
         current_repo: Mutex::new(None),
         current_project: Mutex::new(None),
@@ -102,41 +108,15 @@ pub fn run() {
                 .with_denylist(&["capture", "preview"])
                 .build(),
         )
-        .plugin({
-            let mut builder = tauri_plugin_log::Builder::new()
-                .level(log::LevelFilter::Info)
-                .filter(|metadata| {
-                    !metadata.target().starts_with("tao::")
-                        && !metadata.target().starts_with("tauri_plugin_updater")
-                        && !metadata.target().starts_with("reqwest::connect")
-                });
-
-            #[cfg(debug_assertions)]
-            {
-                builder = builder.level(log::LevelFilter::Debug).targets([
-                    tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Stdout),
-                    tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Webview),
-                    tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::LogDir {
-                        file_name: Some("dev-trace".into()),
-                    }),
-                ]);
-            }
-            #[cfg(not(debug_assertions))]
-            {
-                builder = builder
-                    .max_file_size(5 * 1024 * 1024)
-                    .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepSome(3))
-                    .targets([
-                        tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Stdout),
-                        tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Webview),
-                        tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::LogDir {
-                            file_name: Some("CutReady".into()),
-                        }),
-                    ]);
-            }
-
-            builder.build()
-        })
+        .plugin(
+            tauri_plugin_auditaur::Builder::new()
+                .service_name("cutready")
+                .session_name("cutready-app")
+                .redact_defaults(true)
+                .max_session_bytes(256 * 1024 * 1024)
+                .allow_release_builds(true)
+                .build(),
+        )
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
             // On Windows/Linux, deep link URLs arrive as CLI args via single-instance
@@ -153,9 +133,6 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
-            // Initialize dev trace logger (no-op in release builds)
-            crate::util::trace::init();
-
             // Deep link: register URL scheme handler on Windows/Linux
             #[cfg(any(target_os = "linux", target_os = "windows"))]
             {

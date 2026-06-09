@@ -76,9 +76,9 @@ cutready/
 │   ├── devMock.ts                 # Web shim — fakes Tauri backend for browser testing
 │   ├── index.css                  # CSS variables, theme tokens, global styles
 │   ├── App.tsx                    # Root component
-│   ├── hooks/                     # useTheme, useSettings, useGlobalHotkeys, useDebugLog
+│   ├── hooks/                     # useTheme, useSettings, useGlobalHotkeys, useDiagnostics
 │   ├── stores/                    # Zustand: appStore, toastStore, updateStore
-│   ├── services/                  # commandRegistry, richPaste
+│   ├── services/                  # auditaur, commandRegistry, richPaste
 │   ├── utils/                     # exportToWord
 │   ├── types/                     # project.ts, sketch.ts, recording.ts
 │   ├── test/                      # Vitest unit tests
@@ -216,6 +216,7 @@ The LLM engine (`src-tauri/src/engine/agent/llm.rs` + `runner.rs`) should be mig
 ### TODO: CutReady agentive migration
 
 After the agentive `azure_oauth` module lands, CutReady's migration should also:
+
 - Replace `engine/agent/azure_auth.rs` internals with calls to `agentive::azure_oauth::*`
 - Keep the Tauri command wrappers in `commands/agent.rs` (they call agentive functions)
 - Replace `LlmClient` / `LlmProvider` with agentive providers (per migration plan above)
@@ -249,4 +250,3 @@ When updating, also use `store_memory` to capture the convention for cross-sessi
 - [docs/GUIDANCE.md](docs/GUIDANCE.md) — Feature catalog
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — Technical design
 - [User-facing docs site](https://sethjuarez.github.io/cutready) — Astro Starlight
-

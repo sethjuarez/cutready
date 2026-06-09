@@ -813,7 +813,7 @@ missing identity via a priority chain:
 3. **Global/system git config** (user's machine-wide identity)
 4. **GitHub CLI** (`gh api user` — uses the authenticated GitHub profile)
 5. **Frontend prompt** (one-time dialog before the first snapshot)
-6. **Fallback** ("CutReady" / "app@cutready.local" — last resort)
+6. **Fallback** ("CutReady" / `app@cutready.local` — last resort)
 
 The resolved identity is persisted to both local git config and workspace
 settings, so subsequent operations are instant.
@@ -873,7 +873,7 @@ blocks using `CommandExt::creation_flags()` (std) or the inherent
 | `gix` | Git operations (versioning, commit history, diff, restore) |
 | `git2` | Change detection (has_unsaved_changes status check) |
 | `anyhow` / `thiserror` | Error handling |
-| `tracing` | Structured logging |
+| `tracing` / Auditaur | Structured observability, local traces, logs, frontend errors, IPC/events |
 
 ### Tauri Plugins
 
@@ -886,7 +886,7 @@ blocks using `CommandExt::creation_flags()` (std) or the inherent
 | `tauri-plugin-notification` | Notify when recording/rendering completes |
 | `tauri-plugin-global-shortcut` | Hotkeys for start/stop recording |
 | `tauri-plugin-window-state` | Persist window size/position |
-| `tauri-plugin-log` | Structured logging across Rust + frontend |
+| `tauri-plugin-auditaur` | Local-first observability across Rust tracing, frontend console/errors, IPC/events, windows |
 | `tauri-plugin-single-instance` | Prevent multiple app instances |
 | `tauri-plugin-process` | App restart, exit handling |
 | `tauri-plugin-updater` | Auto-update the app |

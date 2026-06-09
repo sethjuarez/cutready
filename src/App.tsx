@@ -1,7 +1,6 @@
 import { useEffect, useCallback, useState } from "react";
 import { useTheme } from "./hooks/useTheme";
 import { useGlobalHotkeys } from "./hooks/useGlobalHotkeys";
-import { useDebugLog } from "./hooks/useDebugLog";
 import { useDiagnostics } from "./hooks/useDiagnostics";
 import { getCurrentDeepLinkUrl, useDeepLink } from "./hooks/useDeepLink";
 import { StatusBar } from "./components/StatusBar";
@@ -15,7 +14,6 @@ import { useUpdateStore } from "./stores/updateStore";
 function App() {
   useTheme();
   useGlobalHotkeys();
-  useDebugLog();
   useDiagnostics();
   useDeepLink();
 
@@ -73,4 +71,3 @@ function App() {
 }
 
 export default App;
-

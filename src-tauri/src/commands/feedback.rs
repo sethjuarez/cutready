@@ -1,7 +1,7 @@
 //! Tauri command for persisting user feedback to the app data directory.
 
 use serde::{Deserialize, Serialize};
-use std::fs;
+use std::{fs, io::Write};
 use tauri::Manager;
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -184,14 +184,13 @@ fn is_safe_github_repo(repo: &str) -> bool {
         })
 }
 
-/// Collect all log files into a zip archive at the given destination path.
+/// Collect local diagnostic files into a zip archive at the given destination path.
 #[tauri::command]
 pub fn export_logs(
     app: tauri::AppHandle,
     dest: String,
     debug_log: Option<String>,
 ) -> Result<(), String> {
-    use std::io::Write;
     use zip::write::SimpleFileOptions;
 
     let log_dir = dirs::data_local_dir()
@@ -204,23 +203,20 @@ pub fn export_logs(
     let mut zip = zip::ZipWriter::new(file);
     let options = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
 
-    // Collect backend log files
+    // Collect legacy backend log files if they exist from older builds.
     if log_dir.exists() {
-        if let Ok(entries) = fs::read_dir(&log_dir) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if path.is_file() {
-                    if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                        if let Ok(data) = fs::read(&path) {
-                            zip.start_file(name, options)
-                                .map_err(|e| format!("Zip error: {e}"))?;
-                            zip.write_all(&data)
-                                .map_err(|e| format!("Write error: {e}"))?;
-                        }
-                    }
-                }
-            }
-        }
+        add_dir_to_zip(&mut zip, &log_dir, "legacy-logs", options)?;
+    }
+
+    let auditaur_dir = std::env::var("AUDITAUR_DATA_DIR")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| {
+            dirs::data_local_dir()
+                .unwrap_or_else(|| std::path::PathBuf::from("."))
+                .join("auditaur")
+        });
+    if auditaur_dir.exists() {
+        add_dir_to_zip(&mut zip, &auditaur_dir, "auditaur", options)?;
     }
 
     // Include frontend debug log if provided
@@ -246,6 +242,49 @@ pub fn export_logs(
 
     zip.finish()
         .map_err(|e| format!("Zip finalize error: {e}"))?;
+    Ok(())
+}
+
+fn add_dir_to_zip(
+    zip: &mut zip::ZipWriter<fs::File>,
+    dir: &std::path::Path,
+    zip_prefix: &str,
+    options: zip::write::SimpleFileOptions,
+) -> Result<(), String> {
+    add_dir_entries_to_zip(zip, dir, dir, zip_prefix, options)
+}
+
+fn add_dir_entries_to_zip(
+    zip: &mut zip::ZipWriter<fs::File>,
+    root: &std::path::Path,
+    dir: &std::path::Path,
+    zip_prefix: &str,
+    options: zip::write::SimpleFileOptions,
+) -> Result<(), String> {
+    let entries = fs::read_dir(dir).map_err(|e| format!("Could not read {}: {e}", dir.display()))?;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            add_dir_entries_to_zip(zip, root, &path, zip_prefix, options)?;
+            continue;
+        }
+        if !path.is_file() {
+            continue;
+        }
+
+        let relative = path
+            .strip_prefix(root)
+            .ok()
+            .and_then(|path| path.to_str())
+            .unwrap_or("diagnostic-file")
+            .replace('\\', "/");
+        let name = format!("{zip_prefix}/{relative}");
+        let data = fs::read(&path).map_err(|e| format!("Could not read {}: {e}", path.display()))?;
+        zip.start_file(name, options)
+            .map_err(|e| format!("Zip error: {e}"))?;
+        zip.write_all(&data)
+            .map_err(|e| format!("Write error: {e}"))?;
+    }
     Ok(())
 }
 

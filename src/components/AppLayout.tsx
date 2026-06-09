@@ -206,14 +206,7 @@ export function AppLayout() {
               filters: [{ name: "Zip Archive", extensions: ["zip"] }],
             });
             if (!dest) return;
-            // Collect frontend debug log
-            const debugEntries = useAppStore.getState().debugLog;
-            const debugText = debugEntries.length > 0
-              ? debugEntries.map(
-                  (e) => `[${e.timestamp.toISOString()}] [${e.level.toUpperCase().padEnd(7)}] [${e.source}] ${e.content}`
-                ).join("\n")
-              : null;
-            await invoke("export_logs", { dest, debugLog: debugText });
+            await invoke("export_logs", { dest, debugLog: null });
             useToastStore.getState().show("Logs exported", 3000);
           } catch (err) {
             console.error("Export logs failed:", err);
@@ -462,4 +455,3 @@ function PrimarySidebar() {
     </>
   );
 }
-

@@ -53,7 +53,7 @@
     "stronghold:default",
     "global-shortcut:default",
     "window-state:default",
-    "log:default",
+    "auditaur:default",
     "process:default",
     "updater:default",
     "deep-link:default"
