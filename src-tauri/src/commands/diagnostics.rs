@@ -4,12 +4,12 @@ use rusqlite::Connection;
 use serde::Deserialize;
 use serde::Serialize;
 use serde_json::Value;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 use tauri::State;
 
 use crate::engine::{agent::tools::normalize_visual_document_for_save, project};
-use crate::AppState;
+use crate::{AppState, AuditaurDiagnosticsPolicy};
 
 #[derive(Debug, Serialize)]
 pub struct DiagnosticsDump {
@@ -76,7 +76,17 @@ pub struct AuditaurSessionDiagnostics {
     app_identifier: Option<String>,
     pid: Option<u32>,
     database_path: String,
+    database_size_bytes: Option<u64>,
+    session_size_bytes: Option<u64>,
     last_heartbeat_at: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ClearAuditaurLogsResult {
+    removed_sessions: usize,
+    removed_bytes: u64,
+    skipped_active_session: bool,
+    notes: Vec<String>,
 }
 
 #[derive(Debug, Serialize, Default)]
@@ -109,6 +119,15 @@ struct AuditaurDiscovery {
     pid: Option<u32>,
     database_path: PathBuf,
     last_heartbeat_at: Option<String>,
+    #[serde(skip)]
+    discovery_path: Option<PathBuf>,
+}
+
+#[tauri::command]
+pub async fn get_diagnostics_policy(
+    policy: State<'_, AuditaurDiagnosticsPolicy>,
+) -> Result<AuditaurDiagnosticsPolicy, String> {
+    Ok(policy.inner().clone())
 }
 
 #[tauri::command]
@@ -240,6 +259,11 @@ pub async fn get_auditaur_diagnostics() -> Result<AuditaurDiagnosticsSummary, St
             service_name: discovery.service_name,
             app_identifier: discovery.app_identifier,
             pid: discovery.pid,
+            database_size_bytes: file_size(&discovery.database_path),
+            session_size_bytes: discovery
+                .database_path
+                .parent()
+                .and_then(|path| directory_size(path).ok()),
             database_path: discovery.database_path.display().to_string(),
             last_heartbeat_at: discovery.last_heartbeat_at,
         }),
@@ -248,6 +272,126 @@ pub async fn get_auditaur_diagnostics() -> Result<AuditaurDiagnosticsSummary, St
         failed_ipc,
         failed_traces,
         warning_logs,
+        notes,
+    })
+}
+
+#[tauri::command]
+pub async fn clear_auditaur_logs() -> Result<ClearAuditaurLogsResult, String> {
+    let mut notes = Vec::new();
+    let auditaur_root = auditaur_root();
+    let apps_dir = auditaur_root.join("apps");
+    let sessions_dir = auditaur_root.join("sessions");
+    if !apps_dir.exists() || !sessions_dir.exists() {
+        return Ok(ClearAuditaurLogsResult {
+            removed_sessions: 0,
+            removed_bytes: 0,
+            skipped_active_session: false,
+            notes: vec!["No Auditaur logs were found for CutReady.".to_string()],
+        });
+    }
+
+    let current_pid = std::process::id();
+    let mut removed_sessions = 0;
+    let mut removed_bytes = 0;
+    let mut skipped_active_session = false;
+    let mut removable = Vec::new();
+
+    let entries = std::fs::read_dir(&apps_dir)
+        .map_err(|e| format!("Could not read Auditaur discovery directory: {e}"))?;
+    for entry in entries {
+        let entry = entry.map_err(|e| format!("Could not read Auditaur discovery entry: {e}"))?;
+        if entry.path().extension().and_then(|ext| ext.to_str()) != Some("json") {
+            continue;
+        }
+        let content = match std::fs::read_to_string(entry.path()) {
+            Ok(content) => content,
+            Err(error) => {
+                notes.push(format!(
+                    "Skipping unreadable discovery file {}: {error}",
+                    entry.path().display()
+                ));
+                continue;
+            }
+        };
+        let mut discovery: AuditaurDiscovery = match serde_json::from_str(&content) {
+            Ok(discovery) => discovery,
+            Err(error) => {
+                notes.push(format!(
+                    "Skipping invalid discovery file {}: {error}",
+                    entry.path().display()
+                ));
+                continue;
+            }
+        };
+        discovery.discovery_path = Some(entry.path());
+        if discovery.service_name != "cutready" {
+            continue;
+        }
+        if discovery.pid == Some(current_pid)
+            && heartbeat_is_fresh(discovery.last_heartbeat_at.as_deref())
+        {
+            skipped_active_session = true;
+            continue;
+        }
+        removable.push(discovery);
+    }
+
+    for discovery in removable {
+        let session_dir = discovery
+            .database_path
+            .parent()
+            .map(Path::to_path_buf)
+            .unwrap_or_else(|| sessions_dir.join(&discovery.session_id));
+        if !is_path_inside(&session_dir, &sessions_dir) {
+            notes.push(format!(
+                "Skipped Auditaur session outside sessions directory: {}",
+                session_dir.display()
+            ));
+            continue;
+        }
+        let session_bytes = directory_size(&session_dir).unwrap_or_else(|error| {
+            notes.push(format!(
+                "Could not size Auditaur session {}: {error}",
+                session_dir.display()
+            ));
+            0
+        });
+        if session_dir.exists() {
+            match std::fs::remove_dir_all(&session_dir) {
+                Ok(()) => {
+                    removed_sessions += 1;
+                    removed_bytes += session_bytes;
+                }
+                Err(error) => {
+                    notes.push(format!(
+                        "Could not remove Auditaur session {}: {error}",
+                        session_dir.display()
+                    ));
+                    continue;
+                }
+            }
+        }
+        if let Some(discovery_path) = discovery.discovery_path {
+            if is_path_inside(&discovery_path, &apps_dir) {
+                if let Err(error) = std::fs::remove_file(&discovery_path) {
+                    notes.push(format!(
+                        "Could not remove Auditaur discovery file {}: {error}",
+                        discovery_path.display()
+                    ));
+                }
+            }
+        }
+    }
+
+    if skipped_active_session {
+        notes.push("The current Auditaur session is still open and will be cleared after restarting CutReady with diagnostics disabled, or by clearing logs after restart.".to_string());
+    }
+
+    Ok(ClearAuditaurLogsResult {
+        removed_sessions,
+        removed_bytes,
+        skipped_active_session,
         notes,
     })
 }
@@ -319,6 +463,42 @@ fn auditaur_root() -> PathBuf {
         })
 }
 
+fn file_size(path: &Path) -> Option<u64> {
+    std::fs::metadata(path).ok().map(|metadata| metadata.len())
+}
+
+fn directory_size(path: &Path) -> Result<u64, String> {
+    let mut total = 0;
+    if !path.exists() {
+        return Ok(0);
+    }
+    let entries = std::fs::read_dir(path)
+        .map_err(|e| format!("Could not read directory {}: {e}", path.display()))?;
+    for entry in entries {
+        let entry = entry
+            .map_err(|e| format!("Could not read directory entry in {}: {e}", path.display()))?;
+        let metadata = entry
+            .metadata()
+            .map_err(|e| format!("Could not inspect {}: {e}", entry.path().display()))?;
+        if metadata.is_dir() {
+            total += directory_size(&entry.path())?;
+        } else {
+            total += metadata.len();
+        }
+    }
+    Ok(total)
+}
+
+fn is_path_inside(path: &Path, root: &Path) -> bool {
+    let Ok(path) = path.canonicalize() else {
+        return false;
+    };
+    let Ok(root) = root.canonicalize() else {
+        return false;
+    };
+    path.starts_with(root)
+}
+
 fn find_current_auditaur_discovery(
     notes: &mut Vec<String>,
 ) -> Result<Option<AuditaurDiscovery>, String> {
@@ -351,7 +531,7 @@ fn find_current_auditaur_discovery(
                 continue;
             }
         };
-        let discovery: AuditaurDiscovery = match serde_json::from_str(&content) {
+        let mut discovery: AuditaurDiscovery = match serde_json::from_str(&content) {
             Ok(discovery) => discovery,
             Err(error) => {
                 notes.push(format!(
@@ -361,6 +541,7 @@ fn find_current_auditaur_discovery(
                 continue;
             }
         };
+        discovery.discovery_path = Some(entry.path());
 
         if discovery.pid == Some(current_pid)
             && discovery.database_path.exists()
@@ -391,7 +572,8 @@ fn heartbeat_is_fresh(last_heartbeat_at: Option<&str>) -> bool {
     let Ok(last_heartbeat_at) = chrono::DateTime::parse_from_rfc3339(last_heartbeat_at) else {
         return false;
     };
-    let age = chrono::Utc::now().signed_duration_since(last_heartbeat_at.with_timezone(&chrono::Utc));
+    let age =
+        chrono::Utc::now().signed_duration_since(last_heartbeat_at.with_timezone(&chrono::Utc));
     age.num_seconds() <= 60
 }
 

@@ -1443,6 +1443,47 @@ interface IssueReviewDraft {
   entry: FeedbackEntry;
 }
 
+interface DiagnosticsPolicy {
+  enabled: boolean;
+  release_build: boolean;
+  source: string;
+  startup_flag_enabled: boolean;
+  auditaur_flag_enabled: boolean;
+  persisted_setting_enabled: boolean | null;
+  settings_path: string | null;
+}
+
+interface AuditaurDiagnosticsSummary {
+  session: {
+    session_id: string;
+    service_name: string;
+    database_path: string;
+    database_size_bytes: number | null;
+    session_size_bytes: number | null;
+  } | null;
+  notes: string[];
+}
+
+interface ClearAuditaurLogsResult {
+  removed_sessions: number;
+  removed_bytes: number;
+  skipped_active_session: boolean;
+  notes: string[];
+}
+
+function formatBytes(bytes: number | null | undefined): string {
+  if (bytes === null || bytes === undefined) return "not available";
+  if (bytes < 1024) return `${bytes} B`;
+  const units = ["KB", "MB", "GB"];
+  let value = bytes / 1024;
+  let unit = units[0];
+  for (let i = 1; i < units.length && value >= 1024; i += 1) {
+    value /= 1024;
+    unit = units[i];
+  }
+  return `${value.toFixed(value >= 10 ? 1 : 2)} ${unit}`;
+}
+
 const ISSUE_FORMAT_PROMPT = `You are formatting user feedback into a GitHub issue for the CutReady desktop app. Given the feedback below, produce a JSON object with two fields:
 - "title": A concise, descriptive issue title (max 80 chars)
 - "body": A well-formatted GitHub issue body in markdown. Include:
@@ -1460,6 +1501,7 @@ const FEEDBACK_ISSUE_FORMAT_TIMEOUT_MS = 20_000;
 export const CUTREADY_FEEDBACK_REPO = "sethjuarez/cutready";
 
 function FeedbackListTab() {
+  const { settings, updateSetting } = useSettings();
   const [entries, setEntries] = useState<FeedbackEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
@@ -1469,6 +1511,9 @@ function FeedbackListTab() {
   const [issueReviewTitle, setIssueReviewTitle] = useState("");
   const [issueReviewBody, setIssueReviewBody] = useState("");
   const [issueSubmitting, setIssueSubmitting] = useState(false);
+  const [diagnosticsPolicy, setDiagnosticsPolicy] = useState<DiagnosticsPolicy | null>(null);
+  const [auditaurSummary, setAuditaurSummary] = useState<AuditaurDiagnosticsSummary | null>(null);
+  const [clearingLogs, setClearingLogs] = useState(false);
   const mountedRef = useRef(true);
 
   useEffect(() => {
@@ -1479,6 +1524,27 @@ function FeedbackListTab() {
       .finally(() => setLoading(false));
     return () => {
       mountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([
+      invoke<DiagnosticsPolicy>("get_diagnostics_policy"),
+      invoke<AuditaurDiagnosticsSummary>("get_auditaur_diagnostics"),
+    ])
+      .then(([policy, summary]) => {
+        if (cancelled) return;
+        setDiagnosticsPolicy(policy);
+        setAuditaurSummary(summary);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setDiagnosticsPolicy(null);
+        setAuditaurSummary(null);
+      });
+    return () => {
+      cancelled = true;
     };
   }, []);
 
@@ -1509,6 +1575,26 @@ function FeedbackListTab() {
   const clearAll = async () => {
     await invoke("clear_feedback").catch(() => {});
     setEntries([]);
+  };
+
+  const clearDiagnosticsLogs = async () => {
+    setClearingLogs(true);
+    try {
+      const result = await invoke<ClearAuditaurLogsResult>("clear_auditaur_logs");
+      const skipped = result.skipped_active_session ? " Current session is still open." : "";
+      useToastStore.getState().show(
+        `Cleared ${result.removed_sessions} diagnostics session${result.removed_sessions === 1 ? "" : "s"} (${formatBytes(result.removed_bytes)}).${skipped}`,
+        5000,
+        "info",
+      );
+      const summary = await invoke<AuditaurDiagnosticsSummary>("get_auditaur_diagnostics").catch(() => null);
+      if (summary) setAuditaurSummary(summary);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      useToastStore.getState().show(`Could not clear diagnostics logs: ${message}`, 5000, "error");
+    } finally {
+      setClearingLogs(false);
+    }
   };
 
   const deleteSingle = async (realIndex: number) => {
@@ -1681,6 +1767,62 @@ function FeedbackListTab() {
 
   return (
     <div className="space-y-4">
+      <div className="rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]/50 p-4">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <div className="text-sm font-medium text-[rgb(var(--color-text))]">Diagnostics capture</div>
+            <p className="mt-1 text-xs text-[rgb(var(--color-text-secondary))]">
+              Auditaur stores local diagnostics in a SQLite database. Full capture is off by default in packaged builds unless enabled here for the next launch, or started with <code className="font-mono">CUTREADY_DIAGNOSTICS=1</code>.
+            </p>
+          </div>
+          <label className="flex shrink-0 items-center gap-2 text-xs text-[rgb(var(--color-text))]">
+            <span>Enable next launch</span>
+            <input
+              type="checkbox"
+              checked={settings.auditaurDiagnosticsEnabled}
+              onChange={(e) => updateSetting("auditaurDiagnosticsEnabled", e.target.checked)}
+              className="h-4 w-4 accent-[rgb(var(--color-accent))]"
+            />
+          </label>
+        </div>
+
+        <div className="mt-3 grid gap-2 text-[11px] text-[rgb(var(--color-text-secondary))] sm:grid-cols-3">
+          <div className="rounded-lg bg-[rgb(var(--color-surface))] px-3 py-2">
+            <span className="block uppercase tracking-wider opacity-70">Current status</span>
+            <span className="mt-0.5 block text-[rgb(var(--color-text))]">
+              {diagnosticsPolicy?.enabled ? `On (${diagnosticsPolicy.source})` : "Off"}
+            </span>
+          </div>
+          <div className="rounded-lg bg-[rgb(var(--color-surface))] px-3 py-2">
+            <span className="block uppercase tracking-wider opacity-70">Current log size</span>
+            <span className="mt-0.5 block text-[rgb(var(--color-text))]">
+              {formatBytes(auditaurSummary?.session?.session_size_bytes ?? auditaurSummary?.session?.database_size_bytes)}
+            </span>
+          </div>
+          <div className="rounded-lg bg-[rgb(var(--color-surface))] px-3 py-2">
+            <span className="block uppercase tracking-wider opacity-70">Startup flag</span>
+            <span className="mt-0.5 block font-mono text-[rgb(var(--color-text))]">CUTREADY_DIAGNOSTICS=1</span>
+          </div>
+        </div>
+
+        <div className="mt-3 flex items-center justify-between gap-3">
+          <p className="text-[11px] text-[rgb(var(--color-text-secondary))]">
+            {auditaurSummary?.session
+              ? `Session ${auditaurSummary.session.session_id.slice(0, 8)} is active.`
+              : "No active Auditaur diagnostics session was found."}
+          </p>
+          <button
+            type="button"
+            onClick={clearDiagnosticsLogs}
+            disabled={clearingLogs}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-[rgb(var(--color-border))] px-3 py-1.5 text-[11px] font-medium text-[rgb(var(--color-text-secondary))] transition-colors hover:border-error/40 hover:text-error disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <Trash2 className="h-3 w-3" />
+            {clearingLogs ? "Clearing..." : "Clear old diagnostics logs"}
+          </button>
+        </div>
+      </div>
+
       <div className="flex items-center justify-between">
         <p className="text-xs text-[rgb(var(--color-text-secondary))]">
           {entries.length === 0

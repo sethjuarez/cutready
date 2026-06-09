@@ -89,6 +89,7 @@ The app uses a **VS Code-inspired** layout:
 ## Telemetry
 
 - Use Auditaur as the canonical diagnostics substrate. Frontend Activity entries remain curated user-facing breadcrumbs, but `appStore.addActivityEntries()` also records structured `cutready.activity` console logs for Auditaur.
+- Full Auditaur diagnostics are controlled from Settings > Feedback. Packaged builds should default to diagnostics off unless the persisted Feedback setting is enabled for the next launch or the app is started with `CUTREADY_DIAGNOSTICS=1`.
 - The Debug output panel should summarize Auditaur data (exceptions, failed IPC, failed traces, warn/error logs) instead of maintaining a separate in-memory debug log.
 - Feedback and Export Logs should include compact Auditaur diagnostics and scoped current-session Auditaur data, not the shared global Auditaur root.
 

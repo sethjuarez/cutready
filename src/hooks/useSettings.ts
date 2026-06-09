@@ -100,6 +100,8 @@ export interface GlobalSettings {
   recorderSystemAudioVolume: number;
   /** Feature flag: show recording UI (experimental, default false). */
   featureRecording: boolean;
+  /** Enable full Auditaur diagnostics capture on the next app launch. */
+  auditaurDiagnosticsEnabled: boolean;
   // Legacy fields (migrated on load)
   llmApiKey?: string;
   llmEndpoint?: string;
@@ -167,6 +169,7 @@ const defaultGlobalSettings: GlobalSettings = {
   recorderSystemAudioEnabled: false,
   recorderSystemAudioVolume: 100,
   featureRecording: import.meta.env.DEV,
+  auditaurDiagnosticsEnabled: import.meta.env.DEV || import.meta.env.VITE_CUTREADY_DIAGNOSTICS === "1",
 };
 
 function getInitialGlobalSettings(): GlobalSettings {
