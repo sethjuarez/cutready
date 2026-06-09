@@ -5,7 +5,7 @@
  * and drives mode switches through onSwitchMode (Teleprompter, Slide-only).
  */
 import { useCallback, useEffect, useState, useRef, lazy, Suspense } from "react";
-import { convertFileSrc } from "@tauri-apps/api/core";
+import { convertFileSrc } from "../../services/tauri";
 import {
   Clock,
   RefreshCw,

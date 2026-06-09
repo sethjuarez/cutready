@@ -5,7 +5,7 @@
  * from existing project images instead of the OS file dialog.
  */
 import { useEffect, useMemo, useState } from "react";
-import { convertFileSrc } from "@tauri-apps/api/core";
+import { convertFileSrc } from "../services/tauri";
 import { X, Image as ImageIcon, Search } from "lucide-react";
 import { useAppStore, type AssetInfo } from "../stores/appStore";
 

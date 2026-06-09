@@ -8,7 +8,7 @@
  * asset URL via `convertFileSrc`.
  */
 import { useCallback } from "react";
-import { convertFileSrc } from "@tauri-apps/api/core";
+import { convertFileSrc } from "../services/tauri";
 import { useAppStore } from "../stores/appStore";
 import type { ImageResolverFn } from "@elucim/core";
 

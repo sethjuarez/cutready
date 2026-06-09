@@ -2,7 +2,8 @@ use std::sync::{Arc, Mutex};
 
 use tauri::{Emitter, Manager};
 use tauri_plugin_deep_link::DeepLinkExt;
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+use tracing::{Level, Metadata};
+use tracing_subscriber::{filter::filter_fn, layer::SubscriberExt, Layer};
 
 use models::script::{ProjectView, RepoView};
 use models::session::CapturedAction;
@@ -68,10 +69,23 @@ pub struct ProjectLock(pub tokio::sync::Mutex<()>);
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let _ = tracing_log::LogTracer::init();
-    tracing_subscriber::registry()
-        .with(tauri_plugin_auditaur::tracing_layer())
-        .init();
+    if let Err(error) = tracing_log::LogTracer::init() {
+        eprintln!("Auditaur log bridge was not installed: {error}");
+    }
+    let subscriber = tracing_subscriber::registry().with(
+        tauri_plugin_auditaur::tracing_layer().with_filter(filter_fn(should_capture_telemetry)),
+    );
+    if let Err(error) = tracing::subscriber::set_global_default(subscriber) {
+        eprintln!("Auditaur tracing subscriber was not installed: {error}");
+    }
+
+    fn should_capture_telemetry(metadata: &Metadata<'_>) -> bool {
+        let target = metadata.target();
+        target.starts_with("cutready")
+            || target.starts_with("cutready_lib")
+            || target.starts_with("agentive")
+            || metadata.level() <= &Level::WARN
+    }
 
     let app_state = AppState {
         current_repo: Mutex::new(None),
@@ -265,6 +279,7 @@ pub fn run() {
             commands::project::set_workspace_settings,
             commands::project::resolve_deep_link,
             commands::diagnostics::dump_diagnostics,
+            commands::diagnostics::get_auditaur_diagnostics,
             commands::sketch::create_sketch,
             commands::sketch::update_sketch,
             commands::sketch::update_sketch_title,

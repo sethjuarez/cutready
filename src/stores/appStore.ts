@@ -1,5 +1,6 @@
 import { create } from "zustand";
-import { invoke, Channel } from "@tauri-apps/api/core";
+import { invoke, Channel } from "../services/tauri";
+import { recordActivityEntries } from "../services/telemetry";
 import { useToastStore } from "./toastStore";
 import type { ProjectView, ProjectEntry, RecentProject } from "../types/project";
 import type {
@@ -1833,7 +1834,10 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   setChatLoading: (loading) => set({ chatLoading: loading }),
   setChatError: (error) => set({ chatError: error }),
   sendChatPrompt: (prompt, opts) => set({ pendingChatPrompt: { text: prompt, silent: opts?.silent, agent: opts?.agent } }),
-  addActivityEntries: (entries) => set((s) => ({ activityLog: [...s.activityLog, ...entries] })),
+  addActivityEntries: (entries) => {
+    recordActivityEntries(entries);
+    set((s) => ({ activityLog: [...s.activityLog, ...entries] }));
+  },
   clearActivityLog: () => set({ activityLog: [] }),
   addDebugEntry: (entry) => set((s) => ({ debugLog: [...s.debugLog.slice(-499), entry] })),
   clearDebugLog: () => set({ debugLog: [] }),

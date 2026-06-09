@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { create } from "zustand";
 import { LazyStore } from "@tauri-apps/plugin-store";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "../services/tauri";
 import { isSecretKey, loadAllSecrets, setSecret, type SecretKey } from "./useSecretStore";
 
 export interface AgentPreset {

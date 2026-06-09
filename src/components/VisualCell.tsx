@@ -1,6 +1,6 @@
 import { useRef, useCallback, useState, useEffect } from "react";
 import { DslRenderer, type ElucimDocument, type DslRendererRef } from "@elucim/dsl";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "../services/tauri";
 import { Play } from "lucide-react";
 import { ELUCIM_THEME } from "../theme/elucimTheme";
 import { useElucimImageResolver } from "../hooks/useElucimImageResolver";

@@ -1,7 +1,11 @@
 //! Diagnostics commands for local debugging.
 
+use rusqlite::Connection;
+use serde::Deserialize;
 use serde::Serialize;
 use serde_json::Value;
+use std::path::PathBuf;
+use std::time::Duration;
 use tauri::State;
 
 use crate::engine::{agent::tools::normalize_visual_document_for_save, project};
@@ -52,6 +56,200 @@ pub struct VisualDiagnostics {
     normalized_state_machine_ids: Vec<String>,
     valid_after_normalization: bool,
     normalization_error: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct AuditaurDiagnosticsSummary {
+    session: Option<AuditaurSessionDiagnostics>,
+    counts: AuditaurDiagnosticsCounts,
+    frontend_errors: Vec<AuditaurDiagnosticItem>,
+    failed_ipc: Vec<AuditaurDiagnosticItem>,
+    failed_traces: Vec<AuditaurDiagnosticItem>,
+    warning_logs: Vec<AuditaurDiagnosticItem>,
+    notes: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct AuditaurSessionDiagnostics {
+    session_id: String,
+    service_name: String,
+    app_identifier: Option<String>,
+    pid: Option<u32>,
+    database_path: String,
+    last_heartbeat_at: Option<String>,
+}
+
+#[derive(Debug, Serialize, Default)]
+pub struct AuditaurDiagnosticsCounts {
+    frontend_errors: i64,
+    failed_ipc: i64,
+    failed_traces: i64,
+    warning_logs: i64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct AuditaurDiagnosticItem {
+    timestamp_unix_nanos: String,
+    source: String,
+    kind: String,
+    title: String,
+    detail: Option<String>,
+    status: Option<String>,
+    trace_id: Option<String>,
+    span_id: Option<String>,
+    window_label: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AuditaurDiscovery {
+    session_id: String,
+    service_name: String,
+    app_identifier: Option<String>,
+    pid: Option<u32>,
+    database_path: PathBuf,
+    last_heartbeat_at: Option<String>,
+}
+
+#[tauri::command]
+pub async fn get_auditaur_diagnostics() -> Result<AuditaurDiagnosticsSummary, String> {
+    let mut notes = Vec::new();
+    let Some(discovery) = find_current_auditaur_discovery(&mut notes)? else {
+        return Ok(AuditaurDiagnosticsSummary {
+            session: None,
+            counts: AuditaurDiagnosticsCounts::default(),
+            frontend_errors: Vec::new(),
+            failed_ipc: Vec::new(),
+            failed_traces: Vec::new(),
+            warning_logs: Vec::new(),
+            notes,
+        });
+    };
+
+    let conn = Connection::open_with_flags(
+        &discovery.database_path,
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+    )
+    .map_err(|e| format!("Could not open Auditaur database: {e}"))?;
+    conn.busy_timeout(Duration::from_millis(750))
+        .map_err(|e| format!("Could not configure Auditaur database timeout: {e}"))?;
+
+    let counts = AuditaurDiagnosticsCounts {
+        frontend_errors: count_rows_or_note(
+            &conn,
+            "SELECT COUNT(*) FROM frontend_errors",
+            "frontend error count",
+            &mut notes,
+        ),
+        failed_ipc: count_rows_or_note(
+            &conn,
+            "SELECT COUNT(*) FROM tauri_ipc_calls WHERE status != 'OK'",
+            "failed IPC count",
+            &mut notes,
+        ),
+        failed_traces: count_rows_or_note(
+            &conn,
+            "SELECT COUNT(DISTINCT trace_id) FROM spans WHERE status_code = 'ERROR'",
+            "failed trace count",
+            &mut notes,
+        ),
+        warning_logs: count_rows_or_note(
+            &conn,
+            "SELECT COUNT(*) FROM logs WHERE severity_number >= 13 OR severity_text IN ('WARN', 'WARNING', 'ERROR')",
+            "warning/error log count",
+            &mut notes,
+        ),
+    };
+
+    let frontend_errors = query_items_or_note(
+        &conn,
+        "SELECT timestamp_unix_nanos,
+                    'frontend' AS source,
+                    COALESCE(error_type, 'Frontend error') AS kind,
+                    message AS title,
+                    stack AS detail,
+                    NULL AS status,
+                    trace_id,
+                    span_id,
+                    window_label
+             FROM frontend_errors
+             ORDER BY timestamp_unix_nanos DESC
+             LIMIT 10",
+        "recent frontend errors",
+        &mut notes,
+    );
+    let failed_ipc = query_items_or_note(
+        &conn,
+        "SELECT timestamp_unix_nanos,
+                    'ipc' AS source,
+                    command AS kind,
+                    command AS title,
+                    error_message AS detail,
+                    status,
+                    trace_id,
+                    span_id,
+                    window_label
+             FROM tauri_ipc_calls
+             WHERE status != 'OK'
+             ORDER BY timestamp_unix_nanos DESC
+             LIMIT 10",
+        "recent failed IPC",
+        &mut notes,
+    );
+    let failed_traces = query_items_or_note(
+        &conn,
+        "SELECT MAX(start_time_unix_nanos) AS timestamp_unix_nanos,
+                    'trace' AS source,
+                    'Failed trace' AS kind,
+                    name AS title,
+                    status_message AS detail,
+                    status_code AS status,
+                    trace_id,
+                    span_id,
+                    NULL AS window_label
+             FROM spans
+             WHERE status_code = 'ERROR'
+             GROUP BY trace_id
+             ORDER BY timestamp_unix_nanos DESC
+             LIMIT 10",
+        "recent failed traces",
+        &mut notes,
+    );
+    let warning_logs = query_items_or_note(
+        &conn,
+        "SELECT timestamp_unix_nanos,
+                    source,
+                    COALESCE(severity_text, 'WARN') AS kind,
+                    COALESCE(body, severity_text, 'Log entry') AS title,
+                    body_json AS detail,
+                    severity_text AS status,
+                    trace_id,
+                    span_id,
+                    NULL AS window_label
+             FROM logs
+             WHERE severity_number >= 13 OR severity_text IN ('WARN', 'WARNING', 'ERROR')
+             ORDER BY timestamp_unix_nanos DESC
+             LIMIT 10",
+        "recent warning/error logs",
+        &mut notes,
+    );
+
+    Ok(AuditaurDiagnosticsSummary {
+        session: Some(AuditaurSessionDiagnostics {
+            session_id: discovery.session_id,
+            service_name: discovery.service_name,
+            app_identifier: discovery.app_identifier,
+            pid: discovery.pid,
+            database_path: discovery.database_path.display().to_string(),
+            last_heartbeat_at: discovery.last_heartbeat_at,
+        }),
+        counts,
+        frontend_errors,
+        failed_ipc,
+        failed_traces,
+        warning_logs,
+        notes,
+    })
 }
 
 #[tauri::command]
@@ -109,6 +307,146 @@ fn env_flag(name: &str) -> bool {
     std::env::var(name)
         .map(|value| value == "1" || value.eq_ignore_ascii_case("true"))
         .unwrap_or(false)
+}
+
+fn auditaur_root() -> PathBuf {
+    std::env::var("AUDITAUR_DATA_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| {
+            dirs::data_local_dir()
+                .unwrap_or_else(|| PathBuf::from("."))
+                .join("auditaur")
+        })
+}
+
+fn find_current_auditaur_discovery(
+    notes: &mut Vec<String>,
+) -> Result<Option<AuditaurDiscovery>, String> {
+    let apps_dir = auditaur_root().join("apps");
+    if !apps_dir.exists() {
+        notes.push(format!(
+            "Auditaur discovery directory does not exist: {}",
+            apps_dir.display()
+        ));
+        return Ok(None);
+    }
+
+    let current_pid = std::process::id();
+    let mut candidates = Vec::new();
+    let entries = std::fs::read_dir(&apps_dir)
+        .map_err(|e| format!("Could not read Auditaur discovery directory: {e}"))?;
+    for entry in entries {
+        let entry = entry.map_err(|e| format!("Could not read Auditaur discovery entry: {e}"))?;
+        if entry.path().extension().and_then(|ext| ext.to_str()) != Some("json") {
+            continue;
+        }
+
+        let content = match std::fs::read_to_string(entry.path()) {
+            Ok(content) => content,
+            Err(error) => {
+                notes.push(format!(
+                    "Skipping unreadable Auditaur discovery file {}: {error}",
+                    entry.path().display()
+                ));
+                continue;
+            }
+        };
+        let discovery: AuditaurDiscovery = match serde_json::from_str(&content) {
+            Ok(discovery) => discovery,
+            Err(error) => {
+                notes.push(format!(
+                    "Skipping invalid Auditaur discovery file {}: {error}",
+                    entry.path().display()
+                ));
+                continue;
+            }
+        };
+
+        if discovery.pid == Some(current_pid)
+            && discovery.database_path.exists()
+            && heartbeat_is_fresh(discovery.last_heartbeat_at.as_deref())
+        {
+            return Ok(Some(discovery));
+        }
+        if discovery.service_name == "cutready" && discovery.database_path.exists() {
+            candidates.push(discovery);
+        }
+    }
+
+    candidates.sort_by(|left, right| left.last_heartbeat_at.cmp(&right.last_heartbeat_at));
+    let fallback = candidates.pop();
+    if let Some(discovery) = &fallback {
+        notes.push(format!(
+            "Using newest readable CutReady Auditaur session {} because this process did not have a fresh matching discovery PID.",
+            discovery.session_id
+        ));
+    }
+    Ok(fallback)
+}
+
+fn heartbeat_is_fresh(last_heartbeat_at: Option<&str>) -> bool {
+    let Some(last_heartbeat_at) = last_heartbeat_at else {
+        return false;
+    };
+    let Ok(last_heartbeat_at) = chrono::DateTime::parse_from_rfc3339(last_heartbeat_at) else {
+        return false;
+    };
+    let age = chrono::Utc::now().signed_duration_since(last_heartbeat_at.with_timezone(&chrono::Utc));
+    age.num_seconds() <= 60
+}
+
+fn count_rows(conn: &Connection, sql: &str) -> Result<i64, String> {
+    conn.query_row(sql, [], |row| row.get(0))
+        .map_err(|e| format!("Auditaur count query failed: {e}"))
+}
+
+fn count_rows_or_note(conn: &Connection, sql: &str, label: &str, notes: &mut Vec<String>) -> i64 {
+    match count_rows(conn, sql) {
+        Ok(count) => count,
+        Err(error) => {
+            notes.push(format!("Could not read Auditaur {label}: {error}"));
+            0
+        }
+    }
+}
+
+fn query_items_or_note(
+    conn: &Connection,
+    sql: &str,
+    label: &str,
+    notes: &mut Vec<String>,
+) -> Vec<AuditaurDiagnosticItem> {
+    match query_items(conn, sql) {
+        Ok(items) => items,
+        Err(error) => {
+            notes.push(format!("Could not read Auditaur {label}: {error}"));
+            Vec::new()
+        }
+    }
+}
+
+fn query_items(conn: &Connection, sql: &str) -> Result<Vec<AuditaurDiagnosticItem>, String> {
+    let mut statement = conn
+        .prepare(sql)
+        .map_err(|e| format!("Auditaur query prepare failed: {e}"))?;
+    let rows = statement
+        .query_map([], |row| {
+            Ok(AuditaurDiagnosticItem {
+                timestamp_unix_nanos: row.get::<_, i64>(0)?.to_string(),
+                source: row.get(1)?,
+                kind: row.get(2)?,
+                title: row.get(3)?,
+                detail: row.get(4)?,
+                status: row.get(5)?,
+                trace_id: row.get(6)?,
+                span_id: row.get(7)?,
+                window_label: row.get(8)?,
+            })
+        })
+        .map_err(|e| format!("Auditaur query failed: {e}"))?;
+
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|e| format!("Auditaur row mapping failed: {e}"))
 }
 
 fn diagnostic_checks(

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "../services/tauri";
 import { RefreshCw } from "lucide-react";
 import type { AppSettings } from "../hooks/useSettings";
 import { inputClass } from "../styles";

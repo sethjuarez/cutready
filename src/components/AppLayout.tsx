@@ -22,6 +22,7 @@ import { ChatPanel } from "./ChatPanel";
 import { ChangesPanel } from "./ChangesPanel";
 import { FeedbackDialog } from "./FeedbackDialog";
 import { commandRegistry, useCommands } from "../services/commandRegistry";
+import { invoke } from "../services/tauri";
 import { useTheme } from "../hooks/useTheme";
 import { isMac } from "../utils/platform";
 import { getThemePalette } from "../theme/appThemePalettes";
@@ -200,13 +201,17 @@ export function AppLayout() {
         handler: async () => {
           try {
             const { save } = await import("@tauri-apps/plugin-dialog");
-            const { invoke } = await import("@tauri-apps/api/core");
             const dest = await save({
               defaultPath: `cutready-logs-${new Date().toISOString().replace(/[:.]/g, "-")}.zip`,
               filters: [{ name: "Zip Archive", extensions: ["zip"] }],
             });
             if (!dest) return;
-            await invoke("export_logs", { dest, debugLog: null });
+            const debugLog = await invoke<unknown>("get_auditaur_diagnostics")
+              .then((diagnostics) => JSON.stringify(diagnostics, null, 2))
+              .catch((error) => JSON.stringify({
+                error: error instanceof Error ? error.message : String(error),
+              }, null, 2));
+            await invoke("export_logs", { dest, debugLog });
             useToastStore.getState().show("Logs exported", 3000);
           } catch (err) {
             console.error("Export logs failed:", err);

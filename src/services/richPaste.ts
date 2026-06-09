@@ -8,7 +8,7 @@
 import TurndownService from "turndown";
 // @ts-expect-error — no type declarations for turndown-plugin-gfm
 import { gfm } from "turndown-plugin-gfm";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "./tauri";
 import { agentChat } from "./agentChat";
 
 // ─── Turndown instance (singleton) ──────────────────────────────────

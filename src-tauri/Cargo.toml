@@ -39,6 +39,7 @@ urlencoding = "2"
 zip = "2"
 quick-xml = "0.37"
 pdf-extract = "0.8"
+rusqlite = "0.37"
 
 # Tauri plugins
 tauri-plugin-shell = "2"

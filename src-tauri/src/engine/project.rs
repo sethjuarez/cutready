@@ -1355,7 +1355,11 @@ fn last_committed_file_author(
         Some(path) => path,
         None => return Ok(None),
     };
-    let relative_path = match file_path.strip_prefix(workdir) {
+    let canonical_workdir = workdir.canonicalize().unwrap_or_else(|_| workdir.to_path_buf());
+    let canonical_file_path = file_path
+        .canonicalize()
+        .unwrap_or_else(|_| file_path.to_path_buf());
+    let relative_path = match canonical_file_path.strip_prefix(&canonical_workdir) {
         Ok(path) => path,
         Err(_) => return Ok(None),
     };

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "../services/tauri";
 import { useAppStore } from "../stores/appStore";
 import { NoteIcon, SketchIcon, StoryboardIcon } from "./Icons";
 import { ChevronRight, Folder, FileText } from "lucide-react";

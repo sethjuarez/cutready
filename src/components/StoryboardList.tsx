@@ -13,7 +13,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "../services/tauri";
 import { ArrowRight, ChevronDown, ChevronRight, Copy, FileInput, FolderOpen, Plus, SquareTerminal, Trash2 } from "lucide-react";
 import { useAppStore, type SidebarOrder } from "../stores/appStore";
 import type { ProjectEntry } from "../types/project";

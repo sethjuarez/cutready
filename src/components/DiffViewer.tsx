@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "../services/tauri";
 import { Columns2, Rows2, LayoutList } from "lucide-react";
 
 interface FileDiffContent {
@@ -622,4 +622,3 @@ function FallbackMessage({ msg }: { msg: string }) {
     </div>
   );
 }
-

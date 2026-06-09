@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAppStore } from "../stores/appStore";
 import { open } from "@tauri-apps/plugin-dialog";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "../services/tauri";
 import { Plus, Download, Folder, X, XCircle } from "lucide-react";
 
 /* ── Decorative icon components ───────────────────────────── */
@@ -462,4 +462,3 @@ function formatRelativeDate(isoString: string): string {
 
   return date.toLocaleDateString();
 }
-

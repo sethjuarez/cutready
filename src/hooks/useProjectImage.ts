@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
-import { convertFileSrc } from "@tauri-apps/api/core";
-import { invoke } from "@tauri-apps/api/core";
+import { convertFileSrc, invoke } from "../services/tauri";
 
 /**
  * Hook that resolves a project-relative image path to a displayable src URL.

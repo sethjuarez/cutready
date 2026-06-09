@@ -3,7 +3,7 @@
  * Reads sketch data from localStorage and renders SketchPreview in fullscreen.
  */
 import { useEffect, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "../services/tauri";
 import { SketchPreview, type PreviewSlide } from "./SketchPreview";
 import type { PresentationMode } from "./presentation/types";
 import type { PlanningRow } from "../types/sketch";

@@ -3,7 +3,7 @@ import { useAppStore } from "../stores/appStore";
 import { useSettings, useSettingsStore, type AgentPreset } from "../hooks/useSettings";
 import { useRecordingDevices } from "../hooks/useRecordingDevices";
 import { useTheme, type ThemePreference } from "../hooks/useTheme";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "../services/tauri";
 import { getVersion } from "@tauri-apps/api/app";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
 import { relaunch } from "@tauri-apps/plugin-process";

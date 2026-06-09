@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "../services/tauri";
 import { User } from "lucide-react";
 import { useAppStore } from "../stores/appStore";
 import { Dialog } from "./Dialog";

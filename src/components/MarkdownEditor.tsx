@@ -19,7 +19,7 @@ import {
   blobToBase64,
   type RichPasteOptions,
 } from "../services/richPaste";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "../services/tauri";
 import { useAppStore, type ActivityEntry } from "../stores/appStore";
 
 const RICH_PASTE_CONFIG_TIMEOUT_MS = 5_000;
@@ -217,4 +217,3 @@ export function MarkdownEditor({ value, onChange, placeholder, editorKey, saveIm
     />
   );
 }
-

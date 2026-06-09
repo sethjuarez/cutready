@@ -208,20 +208,16 @@ pub fn export_logs(
         add_dir_to_zip(&mut zip, &log_dir, "legacy-logs", options)?;
     }
 
-    let auditaur_dir = std::env::var("AUDITAUR_DATA_DIR")
-        .map(std::path::PathBuf::from)
-        .unwrap_or_else(|_| {
-            dirs::data_local_dir()
-                .unwrap_or_else(|| std::path::PathBuf::from("."))
-                .join("auditaur")
-        });
-    if auditaur_dir.exists() {
-        add_dir_to_zip(&mut zip, &auditaur_dir, "auditaur", options)?;
+    if let Some(session_dir) = debug_log
+        .as_deref()
+        .and_then(auditaur_session_dir_from_summary)
+    {
+        add_dir_to_zip(&mut zip, &session_dir, "auditaur/current-session", options)?;
     }
 
-    // Include frontend debug log if provided
+    // Include compact Auditaur diagnostics if provided by the frontend.
     if let Some(log_text) = debug_log {
-        zip.start_file("frontend-debug.log", options)
+        zip.start_file("auditaur-diagnostics.json", options)
             .map_err(|e| format!("Zip error: {e}"))?;
         zip.write_all(log_text.as_bytes())
             .map_err(|e| format!("Write error: {e}"))?;
@@ -252,6 +248,31 @@ fn add_dir_to_zip(
     options: zip::write::SimpleFileOptions,
 ) -> Result<(), String> {
     add_dir_entries_to_zip(zip, dir, dir, zip_prefix, options)
+}
+
+fn auditaur_session_dir_from_summary(summary: &str) -> Option<std::path::PathBuf> {
+    let value: serde_json::Value = serde_json::from_str(summary).ok()?;
+    let database_path = value
+        .get("session")?
+        .get("database_path")?
+        .as_str()
+        .map(std::path::PathBuf::from)?;
+    let session_dir = database_path.parent()?.to_path_buf();
+    if !session_dir.exists() {
+        return None;
+    }
+
+    let auditaur_root = std::env::var("AUDITAUR_DATA_DIR")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| {
+            dirs::data_local_dir()
+                .unwrap_or_else(|| std::path::PathBuf::from("."))
+                .join("auditaur")
+        })
+        .canonicalize()
+        .ok()?;
+    let session_dir = session_dir.canonicalize().ok()?;
+    session_dir.starts_with(auditaur_root).then_some(session_dir)
 }
 
 fn add_dir_entries_to_zip(

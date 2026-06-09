@@ -4,7 +4,7 @@ import { SafeMarkdown } from "./SafeMarkdown";
 import { shouldSuppressEditorFlush, useAppStore } from "../stores/appStore";
 import { useSettings } from "../hooks/useSettings";
 import { MarkdownEditor } from "./MarkdownEditor";
-import { invoke, convertFileSrc } from "@tauri-apps/api/core";
+import { invoke, convertFileSrc } from "../services/tauri";
 import { exportNoteToWord } from "../utils/exportToWord";
 import { ExportWordButton } from "./ExportWordButton";
 import { agentChat } from "../services/agentChat";

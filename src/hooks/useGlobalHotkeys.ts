@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { listen } from "@tauri-apps/api/event";
+import { listen } from "../services/tauri";
 import { useAppStore } from "../stores/appStore";
 import { useSettingsStore } from "../hooks/useSettings";
 

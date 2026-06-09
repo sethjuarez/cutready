@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { convertFileSrc, invoke } from "@tauri-apps/api/core";
+import { convertFileSrc, invoke } from "../services/tauri";
 import { useAppStore } from "../stores/appStore";
 
 interface ProjectImageProps extends React.ImgHTMLAttributes<HTMLImageElement> {

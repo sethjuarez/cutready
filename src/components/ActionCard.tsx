@@ -1,5 +1,5 @@
 import type { CapturedAction } from "../types/recording";
-import { convertFileSrc } from "@tauri-apps/api/core";
+import { convertFileSrc } from "../services/tauri";
 
 /** Human-readable labels for action types. */
 const actionLabels: Record<string, string> = {
@@ -118,4 +118,3 @@ export function ActionCard({ action, index }: ActionCardProps) {
     </div>
   );
 }
-

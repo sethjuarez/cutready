@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 import { ArrowLeftRight } from "lucide-react";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "../services/tauri";
 import { useAppStore } from "../stores/appStore";
 import type { ConflictFile, ConflictChoices, FieldConflict, TextConflictRegion, FileResolution } from "../types/sketch";
 

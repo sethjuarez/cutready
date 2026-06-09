@@ -7,7 +7,7 @@
  * inactivity to keep the view clean during recording.
  */
 import { useCallback, useEffect, useRef, useState, lazy, Suspense } from "react";
-import { convertFileSrc } from "@tauri-apps/api/core";
+import { convertFileSrc } from "../../services/tauri";
 import { X, MonitorPlay, Layout, Image as ImageIcon } from "lucide-react";
 import type { PreviewSlide, PresentationMode } from "./types";
 

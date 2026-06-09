@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
-import { emit } from "@tauri-apps/api/event";
+import { invoke, emit } from "../services/tauri";
 import { Keyboard } from "lucide-react";
 
 interface RecordingCountdownParams {

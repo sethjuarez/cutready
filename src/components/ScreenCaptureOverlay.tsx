@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { invoke, convertFileSrc } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+import { invoke, convertFileSrc, listen } from "../services/tauri";
 
 interface MonitorInfo {
   id: number;

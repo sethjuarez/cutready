@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "../services/tauri";
 import {
   MessageSquare,
   Bug,
@@ -9,7 +9,6 @@ import {
   Check,
   X,
 } from "lucide-react";
-import { useAppStore } from "../stores/appStore";
 import { Dialog } from "./Dialog";
 
 interface FeedbackDialogProps {
@@ -49,15 +48,11 @@ export function FeedbackDialog({ isOpen, onClose }: FeedbackDialogProps) {
 
     let debugLogText: string | undefined;
     if (includeDebug) {
-      const entries = useAppStore.getState().debugLog;
-      if (entries.length > 0) {
-        debugLogText = entries
-          .map(
-            (e) =>
-              `[${e.timestamp.toISOString()}] [${e.level.toUpperCase().padEnd(7)}] [${e.source}] ${e.content}`,
-          )
-          .join("\n");
-      }
+      debugLogText = await invoke<unknown>("get_auditaur_diagnostics")
+        .then((diagnostics) => JSON.stringify(diagnostics, null, 2))
+        .catch((error) => JSON.stringify({
+          error: error instanceof Error ? error.message : String(error),
+        }, null, 2));
     }
 
     const entry = {
@@ -76,7 +71,7 @@ export function FeedbackDialog({ isOpen, onClose }: FeedbackDialogProps) {
       ``,
       entry.feedback,
       ...(debugLogText
-        ? [``, `---`, `### Debug Log`, `\`\`\``, debugLogText, `\`\`\``]
+        ? [``, `---`, `### Auditaur Diagnostics`, `\`\`\`json`, debugLogText, `\`\`\``]
         : []),
     ].join("\n");
 
@@ -156,7 +151,7 @@ export function FeedbackDialog({ isOpen, onClose }: FeedbackDialogProps) {
               />
             </button>
             <span className="text-[11px] text-[rgb(var(--color-text-secondary))] group-hover:text-[rgb(var(--color-text))] transition-colors select-none">
-              Include debug log
+              Include Auditaur diagnostics
             </span>
           </label>
 

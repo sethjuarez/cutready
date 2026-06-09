@@ -26,7 +26,7 @@ import {
 import { save } from "@tauri-apps/plugin-dialog";
 import { readFile, writeFile } from "@tauri-apps/plugin-fs";
 import { openPath } from "@tauri-apps/plugin-opener";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "../services/tauri";
 import type { Sketch, Storyboard } from "../types/sketch";
 import { getElucimDocumentSize } from "./elucimDocument";
 

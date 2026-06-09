@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Monitor, LayoutGrid, ArrowLeft } from "lucide-react";
-import { invoke, convertFileSrc } from "@tauri-apps/api/core";
-import { emit } from "@tauri-apps/api/event";
+import { invoke, convertFileSrc, emit } from "../services/tauri";
 
 type Phase = "loading" | "choose-mode" | "select-region";
 

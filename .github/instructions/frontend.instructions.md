@@ -81,9 +81,16 @@ The app uses a **VS Code-inspired** layout:
 
 ## Tauri IPC
 
-- Import from `@tauri-apps/api/core` (invoke, Channel) and `@tauri-apps/api/window` (getCurrentWindow).
-- Use `invoke()` for Commands, `Channel` for streaming data, `listen()` for events.
+- Import `invoke`, `Channel`, `listen`, `emit`, `emitTo`, and `convertFileSrc` from `src/services/tauri` so Auditaur captures IPC spans, events, and trace context.
+- Import window-specific APIs such as `getCurrentWindow`, `LogicalPosition`, and `LogicalSize` directly from `@tauri-apps/api/window`.
+- Use `invoke()` for Commands, `Channel` for streaming data, `listen()` for events, and the telemetry-aware wrappers for frontend Tauri events.
 - Type all IPC payloads with TypeScript interfaces.
+
+## Telemetry
+
+- Use Auditaur as the canonical diagnostics substrate. Frontend Activity entries remain curated user-facing breadcrumbs, but `appStore.addActivityEntries()` also records structured `cutready.activity` console logs for Auditaur.
+- The Debug output panel should summarize Auditaur data (exceptions, failed IPC, failed traces, warn/error logs) instead of maintaining a separate in-memory debug log.
+- Feedback and Export Logs should include compact Auditaur diagnostics and scoped current-session Auditaur data, not the shared global Auditaur root.
 
 ## Theme System
 
@@ -102,4 +109,3 @@ The app uses a **VS Code-inspired** layout:
 - Use icons instead of text buttons where possible — match the rest of the app's icon style.
 - Minimize unnecessary UI chrome — no redundant headers or decorative elements.
 - Purple/violet is the brand accent color — avoid using other strong colors for primary UI elements.
-

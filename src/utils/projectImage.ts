@@ -1,4 +1,4 @@
-import { invoke, convertFileSrc } from "@tauri-apps/api/core";
+import { invoke, convertFileSrc } from "../services/tauri";
 
 /**
  * Resolve a project-relative image path to a displayable URL.

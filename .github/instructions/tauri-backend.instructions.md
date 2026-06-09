@@ -158,6 +158,12 @@ cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
 - Use `thiserror` for typed error enums per engine.
 - Convert to `String` at the Tauri command boundary.
 
+## Observability
+
+- Use Auditaur as the backend diagnostics sink via `tauri_plugin_auditaur::tracing_layer()`.
+- Keep the `tracing_log::LogTracer` bridge installed so existing `log::*` records flow into Auditaur; initialize the tracing subscriber with `tracing::subscriber::set_global_default()` rather than `SubscriberInitExt::init()` to avoid double-installing the log bridge.
+- Filter the Auditaur tracing layer to CutReady/agentive targets plus dependency warnings/errors so framework trace noise does not fill the local session store.
+
 ## Key Crates
 
 `tauri`, `tokio`, `serde`/`serde_json`, `reqwest` (LLM API), `gix` (git), `quick-xml` (FCPXML), `uuid`, `chrono`, `windows` (native automation), `anyhow`, `thiserror`, `tracing`.

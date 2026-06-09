@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+import { invoke, listen } from "../services/tauri";
 import { getCurrentWindow, LogicalPosition, PhysicalPosition } from "@tauri-apps/api/window";
 import { ChevronLeft, ChevronRight, GripVertical, Lock, PanelLeft, PanelRight, X } from "lucide-react";
 import { SafeMarkdown } from "./SafeMarkdown";

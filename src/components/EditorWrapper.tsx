@@ -8,7 +8,7 @@
  */
 import { memo, lazy, Suspense, useState, useCallback, useRef } from "react";
 import type { ComponentType } from "react";
-import { convertFileSrc } from "@tauri-apps/api/core";
+import { convertFileSrc } from "../services/tauri";
 import "@elucim/editor/style.css";
 import type { BrowseImageResult, ElucimEditorProps } from "@elucim/editor";
 import type { CutReadyElucimDocument } from "../types/elucim";

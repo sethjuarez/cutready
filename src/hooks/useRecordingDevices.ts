@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "../services/tauri";
 import type { RecordingDeviceDiscovery, RecordingDeviceInfo } from "../types/recording";
 
 const initialDiscovery: RecordingDeviceDiscovery = {
