@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { reconcileMessagesForDisplay } from "../components/ChatPanel";
+import { isChatScrolledNearBottom, reconcileMessagesForDisplay } from "../components/ChatPanel";
 import type { ChatMessage } from "../types/sketch";
 
 describe("reconcileMessagesForDisplay", () => {
@@ -92,5 +92,23 @@ backend-only scraped page text`,
       "Dropped backend user message that duplicated assistant response",
       expect.objectContaining({ index: 1 }),
     );
+  });
+});
+
+describe("isChatScrolledNearBottom", () => {
+  it("treats positions within the threshold as following the bottom", () => {
+    expect(isChatScrolledNearBottom({
+      scrollHeight: 1_000,
+      scrollTop: 452,
+      clientHeight: 500,
+    } satisfies Pick<HTMLElement, "scrollHeight" | "scrollTop" | "clientHeight">)).toBe(true);
+  });
+
+  it("detects when the user has intentionally scrolled away from the bottom", () => {
+    expect(isChatScrolledNearBottom({
+      scrollHeight: 1_000,
+      scrollTop: 300,
+      clientHeight: 500,
+    } satisfies Pick<HTMLElement, "scrollHeight" | "scrollTop" | "clientHeight">)).toBe(false);
   });
 });

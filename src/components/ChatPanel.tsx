@@ -1,4 +1,4 @@
-import { Children, isValidElement, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Children, isValidElement, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type UIEvent } from "react";
 import { invoke, convertFileSrc, listen } from "../services/tauri";
 import { SafeMarkdown } from "./SafeMarkdown";
 
@@ -27,6 +27,15 @@ import {
 } from "lucide-react";
 
 // ── Helpers ──────────────────────────────────────────────────────
+
+const CHAT_AUTO_SCROLL_THRESHOLD_PX = 48;
+
+export function isChatScrolledNearBottom(
+  scrollState: Pick<HTMLElement, "scrollHeight" | "scrollTop" | "clientHeight">,
+  thresholdPx = CHAT_AUTO_SCROLL_THRESHOLD_PX,
+): boolean {
+  return scrollState.scrollHeight - scrollState.scrollTop - scrollState.clientHeight <= thresholdPx;
+}
 
 /**
  * Safely extract text from a ChatMessage content field.
@@ -582,7 +591,9 @@ function ChatTab() {
     return () => { unlisten.then((f) => f()); };
   }, [addActivityEntries, loadNotes, openNote, refreshSketchAfterMutation, refreshStoryboardAfterMutation]);
 
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const shouldStickToBottomRef = useRef(true);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const autocompleteRef = useRef<HTMLDivElement>(null);
   const contextPickerRef = useRef<HTMLDivElement>(null);
@@ -606,10 +617,19 @@ function ChatTab() {
     return allAgents.find((a) => a.id === id) ?? BUILT_IN_AGENTS[0];
   }, [settings.aiSelectedAgent, allAgents]);
 
-  // Auto-scroll to bottom on new messages and streaming updates
+  const handleMessagesScroll = useCallback((event: UIEvent<HTMLDivElement>) => {
+    shouldStickToBottomRef.current = isChatScrolledNearBottom(event.currentTarget);
+  }, []);
+
+  const scrollMessagesToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
+    messagesEndRef.current?.scrollIntoView({ behavior });
+  }, []);
+
+  // Auto-scroll only while the user is already following the bottom of the chat.
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, streamingText]);
+    if (!shouldStickToBottomRef.current) return;
+    scrollMessagesToBottom();
+  }, [messages, scrollMessagesToBottom, streamingStatus, streamingText, streamingThinking]);
 
   // Click-outside to close pickers
   useEffect(() => {
@@ -716,6 +736,7 @@ function ChatTab() {
     if (!text) return;
     const silent = opts?.silent ?? false;
     const agentOverride = opts?.agent;
+    shouldStickToBottomRef.current = true;
 
     setInput("");
     setShowAutocomplete(false);
@@ -727,6 +748,7 @@ function ChatTab() {
         // Show pending message with a queued marker (rendered specially by MessageRow)
         const pendingMsg: ChatMessage = { role: "user", content: text, pending: true };
         setChatMessages([...messages, pendingMsg]);
+        requestAnimationFrame(() => scrollMessagesToBottom());
       } catch (err) {
         console.error("Failed to push pending message:", err);
       }
@@ -769,6 +791,7 @@ function ChatTab() {
     // For silent sends, don't update the displayed chat with the user message
     if (!silent) {
       setChatMessages(newMessages);
+      requestAnimationFrame(() => scrollMessagesToBottom());
     }
     setReferences([]);
 
@@ -928,7 +951,7 @@ function ChatTab() {
       streamingRef.current = "";
       thinkingRef.current = "";
     }
-  }, [input, loading, messages, references, systemPrompt, buildConfig, setChatMessages, setChatLoading, setChatError, addActivityEntries, settings, selectedAgent, memoryContext, activeSketchPath, activeStoryboardPath, activeNotePath, refreshSketchAfterMutation, refreshStoryboardAfterMutation, updateSetting]);
+  }, [input, loading, messages, references, systemPrompt, buildConfig, setChatMessages, setChatLoading, setChatError, addActivityEntries, settings, selectedAgent, memoryContext, activeSketchPath, activeStoryboardPath, activeNotePath, refreshSketchAfterMutation, refreshStoryboardAfterMutation, scrollMessagesToBottom, updateSetting]);
 
   // Pick up prompts queued from outside the chat (e.g. sparkle buttons)
   const handleSendRef = useRef(handleSend);
@@ -1122,7 +1145,12 @@ function ChatTab() {
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto min-h-0 py-2" style={{ fontSize: "var(--chat-font-size, 13px)" }}>
+      <div
+        ref={messagesContainerRef}
+        className="flex-1 overflow-y-auto min-h-0 py-2"
+        style={{ fontSize: "var(--chat-font-size, 13px)" }}
+        onScroll={handleMessagesScroll}
+      >
         {messages.length === 0 && !loading && (
           <div className="flex flex-col items-center justify-center h-full text-center px-4">
             <div className="w-10 h-10 rounded-full bg-[rgb(var(--color-accent))]/10 flex items-center justify-center mb-3 text-[rgb(var(--color-accent))]">
@@ -1309,11 +1337,10 @@ function ChatTab() {
             className="w-full resize-none bg-transparent px-2.5 py-2 text-[13px] text-[rgb(var(--color-text))] placeholder-[rgb(var(--color-text-secondary))]/60 focus:outline-none leading-[1.5]"
             style={{ maxHeight: 300 }}
             rows={3}
-            placeholder="Ask about your demo plan… (# to reference files)"
+            placeholder={loading ? "Add guidance for the current response..." : "Ask about your demo plan… (# to reference files)"}
             value={input}
             onChange={handleInputChange}
             onKeyDown={handleKeyDown}
-            disabled={loading}
           />
         </div>
 
@@ -1719,7 +1746,7 @@ function MessageRow({
             {message.pending && (
               <span className="inline-flex items-center gap-1 text-[10px] text-[rgb(var(--color-text-secondary))] mb-1">
                 <Clock className="w-2.5 h-2.5" />
-                Queued
+                Pending
               </span>
             )}
             <UserContent content={textContent(message.content)} />
