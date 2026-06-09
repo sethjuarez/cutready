@@ -7,6 +7,7 @@ use crate::engine::agent::runner::{self, AgentEvent};
 use crate::AppState;
 use agentive::azure_oauth::{self, AuthCodeFlowInit, DeviceCodeResponse, TokenResponse};
 use std::time::{Duration, Instant};
+use tauri_plugin_auditaur::{instrument_ipc, IpcTraceContext};
 
 const SIMPLE_CHAT_TIMEOUT: Duration = Duration::from_secs(45);
 const MIN_SIMPLE_CHAT_TIMEOUT_MS: u64 = 5_000;
@@ -53,18 +54,24 @@ impl From<ProviderConfig> for LlmConfig {
 }
 
 /// List available models for the configured provider.
+#[instrument_ipc(skip_all, err)]
 #[tauri::command]
-pub async fn list_models(config: ProviderConfig) -> Result<Vec<ModelInfo>, String> {
+pub async fn list_models(
+    config: ProviderConfig,
+    auditaur_trace_context: Option<IpcTraceContext>,
+) -> Result<Vec<ModelInfo>, String> {
     let llm_config: LlmConfig = config.into();
     llm::list_models(&llm_config).await
 }
 
 /// A single chat turn (non-streaming) for quick operations like ✨ field fill.
+#[instrument_ipc(skip_all, err)]
 #[tauri::command]
 pub async fn agent_chat(
     config: ProviderConfig,
     messages: Vec<ChatMessage>,
     timeout_ms: Option<u64>,
+    auditaur_trace_context: Option<IpcTraceContext>,
 ) -> Result<ChatMessage, String> {
     let started = Instant::now();
     let mut messages = messages;
@@ -177,10 +184,12 @@ pub async fn agent_chat(
 }
 
 /// Push a message onto the pending stack while the agent loop is running.
+#[instrument_ipc(skip_all, err)]
 #[tauri::command]
 pub async fn push_pending_chat_message(
     state: tauri::State<'_, AppState>,
     message: String,
+    auditaur_trace_context: Option<IpcTraceContext>,
 ) -> Result<(), String> {
     state.steering.send(&message);
     Ok(())
@@ -189,6 +198,7 @@ pub async fn push_pending_chat_message(
 /// Agentic chat with function calling — the LLM can read/write project files.
 /// Returns the full conversation (including tool calls) and the final response.
 /// Emits `agent-event` events to the frontend for real-time streaming.
+#[instrument_ipc(skip_all, err)]
 #[tauri::command]
 pub async fn agent_chat_with_tools(
     app: tauri::AppHandle,
@@ -196,6 +206,7 @@ pub async fn agent_chat_with_tools(
     config: ProviderConfig,
     messages: Vec<ChatMessage>,
     agent_prompts: Option<std::collections::HashMap<String, String>>,
+    auditaur_trace_context: Option<IpcTraceContext>,
 ) -> Result<AgentChatResult, String> {
     use tauri::Emitter;
 

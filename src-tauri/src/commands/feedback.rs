@@ -3,6 +3,7 @@
 use serde::{Deserialize, Serialize};
 use std::{fs, io::Write};
 use tauri::Manager;
+use tauri_plugin_auditaur::{instrument_ipc, IpcTraceContext};
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct FeedbackEntry {
@@ -14,8 +15,13 @@ pub struct FeedbackEntry {
 }
 
 /// Append a feedback entry to `<app_data>/feedback.json`.
+#[instrument_ipc(skip_all, err)]
 #[tauri::command]
-pub fn save_feedback(app: tauri::AppHandle, entry: FeedbackEntry) -> Result<(), String> {
+pub fn save_feedback(
+    app: tauri::AppHandle,
+    entry: FeedbackEntry,
+    auditaur_trace_context: Option<IpcTraceContext>,
+) -> Result<(), String> {
     let data_dir = app
         .path()
         .app_data_dir()
@@ -40,8 +46,12 @@ pub fn save_feedback(app: tauri::AppHandle, entry: FeedbackEntry) -> Result<(), 
 }
 
 /// Read all feedback entries from `<app_data>/feedback.json`.
+#[instrument_ipc(skip_all, err)]
 #[tauri::command]
-pub fn list_feedback(app: tauri::AppHandle) -> Result<Vec<FeedbackEntry>, String> {
+pub fn list_feedback(
+    app: tauri::AppHandle,
+    auditaur_trace_context: Option<IpcTraceContext>,
+) -> Result<Vec<FeedbackEntry>, String> {
     let data_dir = app
         .path()
         .app_data_dir()
@@ -59,8 +69,12 @@ pub fn list_feedback(app: tauri::AppHandle) -> Result<Vec<FeedbackEntry>, String
 }
 
 /// Clear all feedback entries.
+#[instrument_ipc(skip_all, err)]
 #[tauri::command]
-pub fn clear_feedback(app: tauri::AppHandle) -> Result<(), String> {
+pub fn clear_feedback(
+    app: tauri::AppHandle,
+    auditaur_trace_context: Option<IpcTraceContext>,
+) -> Result<(), String> {
     let data_dir = app
         .path()
         .app_data_dir()
@@ -73,8 +87,13 @@ pub fn clear_feedback(app: tauri::AppHandle) -> Result<(), String> {
 }
 
 /// Delete a single feedback entry by index.
+#[instrument_ipc(skip_all, err)]
 #[tauri::command]
-pub fn delete_feedback(app: tauri::AppHandle, index: usize) -> Result<(), String> {
+pub fn delete_feedback(
+    app: tauri::AppHandle,
+    index: usize,
+    auditaur_trace_context: Option<IpcTraceContext>,
+) -> Result<(), String> {
     let data_dir = app
         .path()
         .app_data_dir()
@@ -98,12 +117,14 @@ pub fn delete_feedback(app: tauri::AppHandle, index: usize) -> Result<(), String
 
 /// Create a GitHub issue via the `gh` CLI. Returns the issue URL on success.
 /// Uses `--body-file -` to pipe the body via stdin (avoids shell escaping and length limits).
+#[instrument_ipc(skip_all, err)]
 #[tauri::command]
 pub async fn create_github_issue(
     repo: String,
     title: String,
     body: String,
     labels: Option<Vec<String>>,
+    auditaur_trace_context: Option<IpcTraceContext>,
 ) -> Result<String, String> {
     use std::process::Stdio;
     use tokio::io::AsyncWriteExt;
@@ -185,11 +206,13 @@ fn is_safe_github_repo(repo: &str) -> bool {
 }
 
 /// Collect local diagnostic files into a zip archive at the given destination path.
+#[instrument_ipc(skip_all, err)]
 #[tauri::command]
 pub fn export_logs(
     app: tauri::AppHandle,
     dest: String,
     debug_log: Option<String>,
+    auditaur_trace_context: Option<IpcTraceContext>,
 ) -> Result<(), String> {
     use zip::write::SimpleFileOptions;
 
@@ -208,18 +231,13 @@ pub fn export_logs(
         add_dir_to_zip(&mut zip, &log_dir, "legacy-logs", options)?;
     }
 
-    if let Some(session_dir) = debug_log
-        .as_deref()
-        .and_then(auditaur_session_dir_from_summary)
-    {
-        add_dir_to_zip(&mut zip, &session_dir, "auditaur/current-session", options)?;
-    }
-
-    // Include compact Auditaur diagnostics if provided by the frontend.
+    // Include a compact, redacted Auditaur summary rather than the raw SQLite
+    // session directory so exported reports stay shareable by default.
     if let Some(log_text) = debug_log {
-        zip.start_file("auditaur-diagnostics.json", options)
+        zip.start_file("auditaur-redacted-summary.json", options)
             .map_err(|e| format!("Zip error: {e}"))?;
-        zip.write_all(log_text.as_bytes())
+        let redacted = redact_auditaur_summary(&log_text);
+        zip.write_all(redacted.as_bytes())
             .map_err(|e| format!("Write error: {e}"))?;
     }
 
@@ -250,31 +268,6 @@ fn add_dir_to_zip(
     add_dir_entries_to_zip(zip, dir, dir, zip_prefix, options)
 }
 
-fn auditaur_session_dir_from_summary(summary: &str) -> Option<std::path::PathBuf> {
-    let value: serde_json::Value = serde_json::from_str(summary).ok()?;
-    let database_path = value
-        .get("session")?
-        .get("database_path")?
-        .as_str()
-        .map(std::path::PathBuf::from)?;
-    let session_dir = database_path.parent()?.to_path_buf();
-    if !session_dir.exists() {
-        return None;
-    }
-
-    let auditaur_root = std::env::var("AUDITAUR_DATA_DIR")
-        .map(std::path::PathBuf::from)
-        .unwrap_or_else(|_| {
-            dirs::data_local_dir()
-                .unwrap_or_else(|| std::path::PathBuf::from("."))
-                .join("auditaur")
-        })
-        .canonicalize()
-        .ok()?;
-    let session_dir = session_dir.canonicalize().ok()?;
-    session_dir.starts_with(auditaur_root).then_some(session_dir)
-}
-
 fn add_dir_entries_to_zip(
     zip: &mut zip::ZipWriter<fs::File>,
     root: &std::path::Path,
@@ -282,7 +275,8 @@ fn add_dir_entries_to_zip(
     zip_prefix: &str,
     options: zip::write::SimpleFileOptions,
 ) -> Result<(), String> {
-    let entries = fs::read_dir(dir).map_err(|e| format!("Could not read {}: {e}", dir.display()))?;
+    let entries =
+        fs::read_dir(dir).map_err(|e| format!("Could not read {}: {e}", dir.display()))?;
     for entry in entries.flatten() {
         let path = entry.path();
         if path.is_dir() {
@@ -300,7 +294,8 @@ fn add_dir_entries_to_zip(
             .unwrap_or("diagnostic-file")
             .replace('\\', "/");
         let name = format!("{zip_prefix}/{relative}");
-        let data = fs::read(&path).map_err(|e| format!("Could not read {}: {e}", path.display()))?;
+        let data =
+            fs::read(&path).map_err(|e| format!("Could not read {}: {e}", path.display()))?;
         zip.start_file(name, options)
             .map_err(|e| format!("Zip error: {e}"))?;
         zip.write_all(&data)
@@ -309,9 +304,37 @@ fn add_dir_entries_to_zip(
     Ok(())
 }
 
+fn redact_auditaur_summary(summary: &str) -> String {
+    let Ok(mut value) = serde_json::from_str::<serde_json::Value>(summary) else {
+        return summary.to_string();
+    };
+    redact_paths_in_value(&mut value);
+    serde_json::to_string_pretty(&value).unwrap_or_else(|_| summary.to_string())
+}
+
+fn redact_paths_in_value(value: &mut serde_json::Value) {
+    match value {
+        serde_json::Value::Object(map) => {
+            for (key, value) in map.iter_mut() {
+                if matches!(key.as_str(), "database_path" | "settings_path") {
+                    *value = serde_json::Value::String("<redacted local path>".to_string());
+                } else {
+                    redact_paths_in_value(value);
+                }
+            }
+        }
+        serde_json::Value::Array(items) => {
+            for value in items {
+                redact_paths_in_value(value);
+            }
+        }
+        _ => {}
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::is_safe_github_repo;
+    use super::{is_safe_github_repo, redact_auditaur_summary};
 
     #[test]
     fn github_repo_validation_accepts_owner_repo() {
@@ -324,5 +347,22 @@ mod tests {
         assert!(!is_safe_github_repo("sethjuarez"));
         assert!(!is_safe_github_repo("sethjuarez/cutready/extra"));
         assert!(!is_safe_github_repo("sethjuarez/$(bad)"));
+    }
+
+    #[test]
+    fn redacted_auditaur_summary_removes_local_paths() {
+        let summary = r#"{
+          "session": {
+            "database_path": "C:\\Users\\person\\AppData\\Local\\auditaur\\sessions\\id\\telemetry.sqlite"
+          },
+          "policy": {
+            "settings_path": "C:\\Users\\person\\AppData\\Roaming\\com.cutready.app\\settings.json"
+          }
+        }"#;
+
+        let redacted = redact_auditaur_summary(summary);
+
+        assert!(!redacted.contains("Users\\\\person"));
+        assert!(redacted.contains("<redacted local path>"));
     }
 }
