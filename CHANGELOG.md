@@ -9,6 +9,24 @@
 Covector manages this changelog. Do not edit manually.
 Each release section is generated from `.changes/*.md` files.
 
+## [1.10.0](https://github.com/sethjuarez/cutready/compare/v1.9.0...v1.10.0) (2026-06-09)
+
+
+### Features
+
+* **agent:** update designer for latest elucim tools ([d24cd30](https://github.com/sethjuarez/cutready/commit/d24cd30742f4c322750ee3a9869ef5c7c35c9037))
+* **observability:** centralize diagnostics with Auditaur ([c8b3829](https://github.com/sethjuarez/cutready/commit/c8b3829e92686aa269aac0015e4baf670a137783))
+* **observability:** gate release diagnostics ([f6822a3](https://github.com/sethjuarez/cutready/commit/f6822a3c86bd1387a492ad30843222c63c976fda))
+* **observability:** replace plugin log with auditaur ([50d64bc](https://github.com/sethjuarez/cutready/commit/50d64bcb2710d6809b9f96114c3a785f431523ae))
+
+
+### Bug Fixes
+
+* **agent:** preserve sketch refresh highlights ([a2168ce](https://github.com/sethjuarez/cutready/commit/a2168cefb64890987edd7cf04293c178b7d5a7f4))
+* **chat:** improve streaming chat interactions ([aad6921](https://github.com/sethjuarez/cutready/commit/aad6921e931996a6f4694450849595f73cf6e75b))
+* **editor:** cascade lock state to children ([b219e4d](https://github.com/sethjuarez/cutready/commit/b219e4d9ebaa6facb3add00eb48622b8503b649b))
+* **observability:** stitch Auditaur IPC traces ([33d1eee](https://github.com/sethjuarez/cutready/commit/33d1eee8bcbd51dec59ba4051201ee13c9ff6712))
+
 ## [1.9.0](https://github.com/sethjuarez/cutready/compare/v1.8.0...v1.9.0) (2026-05-17)
 
 
