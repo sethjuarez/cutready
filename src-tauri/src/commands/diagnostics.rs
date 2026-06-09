@@ -7,7 +7,7 @@ use serde_json::Value;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 use tauri::State;
-use tauri_plugin_auditaur::{instrument_ipc, IpcTraceContext};
+use tauri_plugin_auditaur::auditaur_command;
 
 use crate::engine::{agent::tools::normalize_visual_document_for_save, project};
 use crate::{AppState, AuditaurDiagnosticsPolicy};
@@ -124,20 +124,15 @@ struct AuditaurDiscovery {
     discovery_path: Option<PathBuf>,
 }
 
-#[instrument_ipc(skip_all, err)]
-#[tauri::command]
+#[auditaur_command(skip_all, err)]
 pub async fn get_diagnostics_policy(
     policy: State<'_, AuditaurDiagnosticsPolicy>,
-    auditaur_trace_context: Option<IpcTraceContext>,
 ) -> Result<AuditaurDiagnosticsPolicy, String> {
     Ok(policy.inner().clone())
 }
 
-#[instrument_ipc(skip_all, err)]
-#[tauri::command]
-pub async fn get_auditaur_diagnostics(
-    auditaur_trace_context: Option<IpcTraceContext>,
-) -> Result<AuditaurDiagnosticsSummary, String> {
+#[auditaur_command(skip_all, err)]
+pub async fn get_auditaur_diagnostics() -> Result<AuditaurDiagnosticsSummary, String> {
     let mut notes = Vec::new();
     let Some(discovery) = find_current_auditaur_discovery(&mut notes)? else {
         return Ok(AuditaurDiagnosticsSummary {
@@ -282,11 +277,8 @@ pub async fn get_auditaur_diagnostics(
     })
 }
 
-#[instrument_ipc(skip_all, err)]
-#[tauri::command]
-pub async fn clear_auditaur_logs(
-    auditaur_trace_context: Option<IpcTraceContext>,
-) -> Result<ClearAuditaurLogsResult, String> {
+#[auditaur_command(skip_all, err)]
+pub async fn clear_auditaur_logs() -> Result<ClearAuditaurLogsResult, String> {
     let mut notes = Vec::new();
     let auditaur_root = auditaur_root();
     let apps_dir = auditaur_root.join("apps");
@@ -405,13 +397,11 @@ pub async fn clear_auditaur_logs(
     })
 }
 
-#[instrument_ipc(skip_all, err)]
-#[tauri::command]
+#[auditaur_command(skip_all, err)]
 pub async fn dump_diagnostics(
     sketch_path: Option<String>,
     row_index: Option<usize>,
     state: State<'_, AppState>,
-    auditaur_trace_context: Option<IpcTraceContext>,
 ) -> Result<DiagnosticsDump, String> {
     if !diagnostics_enabled() {
         return Err(

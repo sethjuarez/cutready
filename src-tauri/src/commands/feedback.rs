@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 use std::{fs, io::Write};
 use tauri::Manager;
-use tauri_plugin_auditaur::{instrument_ipc, IpcTraceContext};
+use tauri_plugin_auditaur::auditaur_command;
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct FeedbackEntry {
@@ -15,13 +15,8 @@ pub struct FeedbackEntry {
 }
 
 /// Append a feedback entry to `<app_data>/feedback.json`.
-#[instrument_ipc(skip_all, err)]
-#[tauri::command]
-pub fn save_feedback(
-    app: tauri::AppHandle,
-    entry: FeedbackEntry,
-    auditaur_trace_context: Option<IpcTraceContext>,
-) -> Result<(), String> {
+#[auditaur_command(skip_all, err)]
+pub fn save_feedback(app: tauri::AppHandle, entry: FeedbackEntry) -> Result<(), String> {
     let data_dir = app
         .path()
         .app_data_dir()
@@ -46,12 +41,8 @@ pub fn save_feedback(
 }
 
 /// Read all feedback entries from `<app_data>/feedback.json`.
-#[instrument_ipc(skip_all, err)]
-#[tauri::command]
-pub fn list_feedback(
-    app: tauri::AppHandle,
-    auditaur_trace_context: Option<IpcTraceContext>,
-) -> Result<Vec<FeedbackEntry>, String> {
+#[auditaur_command(skip_all, err)]
+pub fn list_feedback(app: tauri::AppHandle) -> Result<Vec<FeedbackEntry>, String> {
     let data_dir = app
         .path()
         .app_data_dir()
@@ -69,12 +60,8 @@ pub fn list_feedback(
 }
 
 /// Clear all feedback entries.
-#[instrument_ipc(skip_all, err)]
-#[tauri::command]
-pub fn clear_feedback(
-    app: tauri::AppHandle,
-    auditaur_trace_context: Option<IpcTraceContext>,
-) -> Result<(), String> {
+#[auditaur_command(skip_all, err)]
+pub fn clear_feedback(app: tauri::AppHandle) -> Result<(), String> {
     let data_dir = app
         .path()
         .app_data_dir()
@@ -87,13 +74,8 @@ pub fn clear_feedback(
 }
 
 /// Delete a single feedback entry by index.
-#[instrument_ipc(skip_all, err)]
-#[tauri::command]
-pub fn delete_feedback(
-    app: tauri::AppHandle,
-    index: usize,
-    auditaur_trace_context: Option<IpcTraceContext>,
-) -> Result<(), String> {
+#[auditaur_command(skip_all, err)]
+pub fn delete_feedback(app: tauri::AppHandle, index: usize) -> Result<(), String> {
     let data_dir = app
         .path()
         .app_data_dir()
@@ -117,14 +99,12 @@ pub fn delete_feedback(
 
 /// Create a GitHub issue via the `gh` CLI. Returns the issue URL on success.
 /// Uses `--body-file -` to pipe the body via stdin (avoids shell escaping and length limits).
-#[instrument_ipc(skip_all, err)]
-#[tauri::command]
+#[auditaur_command(skip_all, err)]
 pub async fn create_github_issue(
     repo: String,
     title: String,
     body: String,
     labels: Option<Vec<String>>,
-    auditaur_trace_context: Option<IpcTraceContext>,
 ) -> Result<String, String> {
     use std::process::Stdio;
     use tokio::io::AsyncWriteExt;
@@ -206,13 +186,11 @@ fn is_safe_github_repo(repo: &str) -> bool {
 }
 
 /// Collect local diagnostic files into a zip archive at the given destination path.
-#[instrument_ipc(skip_all, err)]
-#[tauri::command]
+#[auditaur_command(skip_all, err)]
 pub fn export_logs(
     app: tauri::AppHandle,
     dest: String,
     debug_log: Option<String>,
-    auditaur_trace_context: Option<IpcTraceContext>,
 ) -> Result<(), String> {
     use zip::write::SimpleFileOptions;
 

@@ -163,7 +163,7 @@ cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
 - Use Auditaur as the backend diagnostics sink via `tauri_plugin_auditaur::tracing_layer()`.
 - Keep the `tracing_log::LogTracer` bridge installed so existing `log::*` records flow into Auditaur; initialize the tracing subscriber with `tracing::subscriber::set_global_default()` rather than `SubscriberInitExt::init()` to avoid double-installing the log bridge.
 - Filter the Auditaur tracing layer to CutReady/agentive targets plus dependency warnings/errors so framework trace noise does not fill the local session store.
-- Commands that should connect frontend `auditaur.invoke()` spans to backend spans must accept `auditaur_trace_context: Option<tauri_plugin_auditaur::IpcTraceContext>` and use `#[tauri_plugin_auditaur::instrument_ipc(skip_all, err)]` above `#[tauri::command]`.
+- Commands that should connect frontend `auditaur.invoke()` spans to backend spans should use `#[tauri_plugin_auditaur::auditaur_command(skip_all, err)]`; it wraps `#[tauri::command]` and injects the IPC trace carrier automatically.
 - Keep packaged-release Auditaur capture opt-in. Full diagnostics can be enabled for a launch with `CUTREADY_DIAGNOSTICS=1` or for the next launch via the persisted Settings > Feedback toggle; do not unconditionally call `.allow_release_builds(true)`.
 
 ## Key Crates
