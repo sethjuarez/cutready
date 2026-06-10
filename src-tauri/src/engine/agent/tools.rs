@@ -846,7 +846,132 @@ pub fn execute_tool(
         }),
     );
 
-    output
+    decorate_tool_output(&call.function.name, &args, output)
+}
+
+pub fn decorate_tool_output(
+    tool_name: &str,
+    args: &Value,
+    output: agentive::ToolOutput,
+) -> agentive::ToolOutput {
+    let mut resources = touched_resources_for_tool(tool_name, args);
+    let success = !is_tool_error(output.text());
+    let verification = agentive::VerificationResult::new(
+        format!("Tool {tool_name} completed"),
+        if success {
+            agentive::VerificationStatus::Passed
+        } else {
+            agentive::VerificationStatus::Failed
+        },
+        if success {
+            "Tool returned a non-error response"
+        } else {
+            "Tool returned an error response"
+        },
+    );
+
+    if resources.is_empty() && !matches!(tool_name, "delegate_to_agent") {
+        resources.push(agentive::TouchedResource::new(
+            "tool",
+            tool_name,
+            agentive::ResourceOperation::Execute,
+        ));
+    }
+
+    output.with_metadata(resources, vec![verification], Vec::new())
+}
+
+fn is_tool_error(result_text: &str) -> bool {
+    result_text.starts_with("Error:") || result_text.starts_with("Validation failed")
+}
+
+fn touched_resources_for_tool(tool_name: &str, args: &Value) -> Vec<agentive::TouchedResource> {
+    let mut resources = Vec::new();
+    let operation = match tool_name {
+        "read_note" | "read_sketch" | "read_storyboard" | "read_visual" => {
+            agentive::ResourceOperation::Read
+        }
+        "write_note" | "write_sketch" | "write_storyboard" | "write_visual" => {
+            agentive::ResourceOperation::Write
+        }
+        "create_visual" => agentive::ResourceOperation::Create,
+        "update_planning_row"
+        | "set_row_visual"
+        | "review_row_visual"
+        | "apply_row_visual_nudge"
+        | "apply_row_visual_command" => agentive::ResourceOperation::Update,
+        "fetch_url" => agentive::ResourceOperation::Read,
+        "search_web" => agentive::ResourceOperation::Search,
+        "list_project_files" => agentive::ResourceOperation::Inspect,
+        _ => agentive::ResourceOperation::Execute,
+    };
+
+    match tool_name {
+        "read_note" | "write_note" => push_path_resource(
+            &mut resources,
+            "note",
+            args.get("path").and_then(Value::as_str),
+            operation,
+            tool_name,
+        ),
+        "read_sketch" | "write_sketch" | "update_planning_row" | "set_row_visual" => {
+            push_path_resource(
+                &mut resources,
+                "sketch",
+                args.get("path").and_then(Value::as_str),
+                operation,
+                tool_name,
+            );
+        }
+        "read_storyboard" | "write_storyboard" => push_path_resource(
+            &mut resources,
+            "storyboard",
+            args.get("path").and_then(Value::as_str),
+            operation,
+            tool_name,
+        ),
+        "create_visual" | "read_visual" | "write_visual" => push_path_resource(
+            &mut resources,
+            "visual",
+            args.get("path")
+                .or_else(|| args.get("visual_path"))
+                .and_then(Value::as_str),
+            operation,
+            tool_name,
+        ),
+        "fetch_url" => push_path_resource(
+            &mut resources,
+            "url",
+            args.get("url").and_then(Value::as_str),
+            operation,
+            tool_name,
+        ),
+        "search_web" => push_path_resource(
+            &mut resources,
+            "web_search",
+            args.get("query").and_then(Value::as_str),
+            operation,
+            tool_name,
+        ),
+        _ => {}
+    }
+
+    resources
+}
+
+fn push_path_resource(
+    resources: &mut Vec<agentive::TouchedResource>,
+    kind: &str,
+    id: Option<&str>,
+    operation: agentive::ResourceOperation,
+    tool_name: &str,
+) {
+    if let Some(id) = id.map(str::trim).filter(|id| !id.is_empty()) {
+        resources.push(
+            agentive::TouchedResource::new(kind, id, operation)
+                .with_metadata("tool", tool_name.to_string()),
+        );
+    }
 }
 
 /// Extract a JSON object from a tool argument field. Handles three LLM behaviors:
@@ -4345,6 +4470,28 @@ mod tests {
     }
 
     #[test]
+    fn decorate_tool_output_adds_resource_and_verification_metadata() {
+        let output = decorate_tool_output(
+            "write_sketch",
+            &json!({ "path": "intro.sk" }),
+            agentive::ToolOutput::from("Saved sketch"),
+        );
+
+        assert_eq!(output.touched_resources().len(), 1);
+        assert_eq!(output.touched_resources()[0].kind, "sketch");
+        assert_eq!(output.touched_resources()[0].id, "intro.sk");
+        assert_eq!(
+            output.touched_resources()[0].operation,
+            agentive::ResourceOperation::Write
+        );
+        assert_eq!(output.verification_results().len(), 1);
+        assert_eq!(
+            output.verification_results()[0].status,
+            agentive::VerificationStatus::Passed
+        );
+    }
+
+    #[test]
     fn elucim_agent_operation_schema_advertises_catalog_operations() {
         let previous = std::env::var_os("CUTREADY_ELUCIM_BRIDGE");
         std::env::set_var("CUTREADY_ELUCIM_BRIDGE", "1");
@@ -4358,7 +4505,10 @@ mod tests {
         let tool = tools
             .iter()
             .map(|tool| serde_json::to_value(tool).unwrap())
-            .find(|tool| tool.pointer("/function/name").and_then(Value::as_str) == Some("elucim_agent_operation"))
+            .find(|tool| {
+                tool.pointer("/function/name").and_then(Value::as_str)
+                    == Some("elucim_agent_operation")
+            })
             .expect("elucim_agent_operation tool should be registered when bridge is enabled");
         let ops = tool
             .pointer("/function/parameters/properties/op/enum")

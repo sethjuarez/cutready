@@ -249,8 +249,52 @@ pub async fn agent_chat_with_tools(
 
     let provider = llm::build_provider(&llm_config, reported_context);
     let budget_chars = provider.context_budget_chars();
+    let run_id = uuid::Uuid::new_v4().to_string();
+    let agent_state = match crate::engine::agent_state::AgentStateStore::for_project(
+        &project_root,
+        run_id.clone(),
+    ) {
+        Ok(store) => {
+            let insert_result = store.insert_run(
+                None,
+                &provider_name,
+                &model,
+                serde_json::json!({
+                    "messages": message_count,
+                    "chars": message_chars,
+                    "budget_chars": budget_chars,
+                    "reported_context": reported_context,
+                    "vision_enabled": vision.enabled,
+                    "web_search_enabled": web_access.search_enabled,
+                    "agent_prompts": prompts.len(),
+                }),
+            );
+            match insert_result {
+                Ok(()) => Some(store),
+                Err(err) => {
+                    log::warn!("[agent_chat_with_tools] agent state disabled: {err}");
+                    crate::util::trace::emit(
+                        "agent_state_disabled",
+                        "agent",
+                        serde_json::json!({ "run_id": &run_id, "error": err }),
+                    );
+                    None
+                }
+            }
+        }
+        Err(err) => {
+            log::warn!("[agent_chat_with_tools] agent state disabled: {err}");
+            crate::util::trace::emit(
+                "agent_state_disabled",
+                "agent",
+                serde_json::json!({ "run_id": &run_id, "error": err }),
+            );
+            None
+        }
+    };
     log::info!(
-        "[agent_chat_with_tools] start provider={} model={} messages={} chars={} budget={}chars reported_context={:?} vision={} web_search={} prompts={}",
+        "[agent_chat_with_tools] start run_id={} provider={} model={} messages={} chars={} budget={}chars reported_context={:?} vision={} web_search={} prompts={}",
+        run_id,
         provider_name,
         model,
         message_count,
@@ -267,6 +311,7 @@ pub async fn agent_chat_with_tools(
         serde_json::json!({
             "provider": provider_name,
             "model": model,
+            "run_id": &run_id,
             "messages": message_count,
             "chars": message_chars,
             "budget_chars": budget_chars,
@@ -286,6 +331,8 @@ pub async fn agent_chat_with_tools(
         &steering,
         &vision,
         &web_access,
+        Some(run_id.clone()),
+        agent_state.clone(),
         move |event: AgentEvent| {
             let _ = emit_handle.emit("agent-event", &event);
         },
@@ -309,12 +356,18 @@ pub async fn agent_chat_with_tools(
                 serde_json::json!({
                     "provider": provider_name,
                     "model": model,
+                    "run_id": &run_id,
                     "elapsed_ms": elapsed_ms,
                     "response_chars": result.response.len(),
                     "total_messages": result.messages.len(),
                     "total_tokens": result.total_usage.total_tokens,
                 }),
             );
+            if let Some(agent_state) = &agent_state {
+                if let Err(err) = agent_state.finish_run("completed") {
+                    log::warn!("[agent_chat_with_tools] failed to finish agent state run: {err}");
+                }
+            }
             result
         }
         Err(err) => {
@@ -332,10 +385,18 @@ pub async fn agent_chat_with_tools(
                 serde_json::json!({
                     "provider": provider_name,
                     "model": model,
+                    "run_id": &run_id,
                     "elapsed_ms": elapsed_ms,
                     "error": err,
                 }),
             );
+            if let Some(agent_state) = &agent_state {
+                if let Err(state_err) = agent_state.finish_run("failed") {
+                    log::warn!(
+                        "[agent_chat_with_tools] failed to mark agent state run failed: {state_err}"
+                    );
+                }
+            }
             return Err(err);
         }
     };

@@ -60,8 +60,9 @@ dependencies = [
 
 [[package]]
 name = "agentive"
-version = "0.1.0"
-source = "git+https://github.com/sethjuarez/agentive.git#8be3d6514f6b24ca756beee032ea1c9ef2e6cad5"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4179ee996e7d083348b558730746ecec242b6ea6529295520cd5f05d679777af"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -77,6 +78,7 @@ dependencies = [
  "sha2",
  "thiserror 2.0.18",
  "tokio",
+ "tracing",
  "urlencoding",
  "uuid",
 ]
@@ -1295,7 +1297,7 @@ dependencies = [
 
 [[package]]
 name = "cutready"
-version = "1.9.0"
+version = "1.10.0"
 dependencies = [
  "agentive",
  "anyhow",
