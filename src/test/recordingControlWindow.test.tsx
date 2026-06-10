@@ -400,6 +400,7 @@ describe("RecordingControlWindow", () => {
     render(<RecordingControlWindow />);
 
     await screen.findByRole("button", { name: /cancel recording without saving/i });
+    await waitFor(() => expect(mocks.onCloseRequested.mock.calls.length).toBeGreaterThanOrEqual(2));
     act(() => {
       mocks.closeState.handler?.({ preventDefault });
     });
