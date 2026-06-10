@@ -15,6 +15,7 @@ use std::time::Instant;
 
 use crate::engine::agent::llm::ChatMessage;
 use crate::engine::agent::tools;
+use crate::engine::agent_state::AgentStateStore;
 use crate::engine::project;
 
 /// Maximum tool-call rounds to prevent infinite loops.
@@ -93,6 +94,8 @@ pub async fn run(
     steering: &agentive::Steering,
     vision: &VisionConfig,
     web_access: &WebAccessConfig,
+    run_id: Option<String>,
+    agent_state: Option<AgentStateStore>,
     emit: impl Fn(AgentEvent) + Send + Sync + 'static,
 ) -> Result<agentive::RunnerResult, String> {
     let emit = Arc::new(emit);
@@ -105,6 +108,8 @@ pub async fn run(
         0,
         vision,
         web_access,
+        run_id,
+        agent_state,
         emit,
     )
     .await
@@ -121,6 +126,8 @@ fn run_inner<'a>(
     depth: usize,
     vision: &'a VisionConfig,
     web_access: &'a WebAccessConfig,
+    run_id: Option<String>,
+    agent_state: Option<AgentStateStore>,
     emit: Arc<dyn Fn(AgentEvent) + Send + Sync + 'static>,
 ) -> std::pin::Pin<
     Box<dyn std::future::Future<Output = Result<agentive::RunnerResult, String>> + Send + 'a>,
@@ -162,6 +169,13 @@ fn run_inner<'a>(
             sanitize_tool_results: true,
             compaction_provider: Some(provider.clone()),
             reference_resolver: Some(build_reference_resolver(project_root)),
+            run_id: run_id.clone(),
+            trajectory_sink: agent_state
+                .clone()
+                .map(|store| Arc::new(store) as Arc<dyn agentive::TrajectorySink>),
+            memory_promotion_hook: agent_state
+                .clone()
+                .map(|store| Arc::new(store) as Arc<dyn agentive::MemoryPromotionHook>),
             ..Default::default()
         };
 
@@ -271,6 +285,10 @@ fn run_inner<'a>(
                         }),
                     );
                 }
+                agentive::RunnerEvent::ResourceTouched { .. }
+                | agentive::RunnerEvent::VerificationRecorded { .. }
+                | agentive::RunnerEvent::MemoryPromotionSuggested { .. }
+                | agentive::RunnerEvent::MemoryPromotionCompleted { .. } => {}
                 agentive::RunnerEvent::Done { response, .. } => {
                     emit_events(AgentEvent::Done { response });
                 }
@@ -322,6 +340,7 @@ fn run_inner<'a>(
                     agentive::web::fetch_and_clean(url)
                         .await
                         .map(agentive::ToolOutput::from)
+                        .map(|output| tools::decorate_tool_output(&tc.function.name, &args, output))
                 })
             } else if tool_call.function.name == "search_web" {
                 let tc = tool_call;
@@ -331,6 +350,7 @@ fn run_inner<'a>(
                     tools::exec_search_web(&args)
                         .await
                         .map(agentive::ToolOutput::from)
+                        .map(|output| tools::decorate_tool_output(&tc.function.name, &args, output))
                 })
             } else {
                 let output =
@@ -398,6 +418,13 @@ fn run_inner<'a>(
                     sanitize_tool_results: true,
                     compaction_provider: Some(provider.clone()),
                     reference_resolver: Some(build_reference_resolver(project_root)),
+                    run_id: run_id.clone(),
+                    trajectory_sink: agent_state
+                        .clone()
+                        .map(|store| Arc::new(store) as Arc<dyn agentive::TrajectorySink>),
+                    memory_promotion_hook: agent_state
+                        .clone()
+                        .map(|store| Arc::new(store) as Arc<dyn agentive::MemoryPromotionHook>),
                     ..Default::default()
                 };
 
@@ -444,6 +471,9 @@ fn run_inner<'a>(
                             agentive::web::fetch_and_clean(url)
                                 .await
                                 .map(agentive::ToolOutput::from)
+                                .map(|output| {
+                                    tools::decorate_tool_output(&tc.function.name, &args, output)
+                                })
                         })
                     } else if tool_call.function.name == "search_web" {
                         let tc = tool_call;
@@ -453,6 +483,9 @@ fn run_inner<'a>(
                             tools::exec_search_web(&args)
                                 .await
                                 .map(agentive::ToolOutput::from)
+                                .map(|output| {
+                                    tools::decorate_tool_output(&tc.function.name, &args, output)
+                                })
                         })
                     } else {
                         let output = tools::execute_tool(
