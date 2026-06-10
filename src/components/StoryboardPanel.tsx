@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useAppStore } from "../stores/appStore";
 import { StoryboardView } from "./StoryboardView";
 import { SketchForm } from "./SketchForm";
@@ -41,6 +41,7 @@ export function StoryboardPanel() {
   const activeEditorReloadKey = activeTab?.path === editorReloadPath ? editorReloadKey : 0;
 
   const [splitWidth, setSplitWidth] = useState<number | null>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const secondaryOnLeft = sidebarPosition === "right";
 
   const handleSecondaryResize = useCallback(
@@ -53,7 +54,9 @@ export function StoryboardPanel() {
 
   const handleSplitResize = useCallback(
     (delta: number) => {
-      setSplitWidth((w) => Math.max(200, (w ?? 400) - delta));
+      const availableWidth = panelRef.current?.clientWidth ?? window.innerWidth;
+      const maxSplitWidth = Math.max(180, availableWidth - 280);
+      setSplitWidth((w) => Math.min(maxSplitWidth, Math.max(180, (w ?? availableWidth / 2) - delta)));
     },
     [],
   );
@@ -88,7 +91,7 @@ export function StoryboardPanel() {
         </div>
 
         {/* Content row — primary + optional split */}
-        <div className="flex-1 flex min-h-0">
+        <div className="flex-1 flex min-h-0" ref={panelRef}>
           {/* Primary pane */}
           <div className="flex-1 flex flex-col min-w-0" onMouseDown={() => setActiveEditorGroup("main")}>
             {isHistoryTab ? (
