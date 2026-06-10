@@ -28,6 +28,15 @@ const VisualCell = lazy(() => import("../VisualCell"));
 
 const PREFS_KEY = "cutready:preview";
 
+function clampPreviewPanelWidth(width: number) {
+  const viewportWidth = typeof window === "undefined" ? 1440 : window.innerWidth;
+  const maxWidth = Math.max(
+    180,
+    Math.min(Math.max(720, viewportWidth - 360), Math.max(180, viewportWidth - 280)),
+  );
+  return Math.min(maxWidth, Math.max(180, width));
+}
+
 function loadPrefs(): {
   panelSide: "left" | "right";
   panelWidth: number;
@@ -39,7 +48,7 @@ function loadPrefs(): {
       const parsed = JSON.parse(raw);
       return {
         panelSide: parsed.panelSide === "right" ? "right" : "left",
-        panelWidth: Math.min(600, Math.max(200, parsed.panelWidth ?? 320)),
+        panelWidth: clampPreviewPanelWidth(parsed.panelWidth ?? 320),
         panelVisible: parsed.panelVisible !== false,
       };
     }
@@ -115,7 +124,7 @@ export function SlidesView({
     (delta: number) => {
       setPanelWidth((w) => {
         const adjusted = panelSide === "left" ? w + delta : w - delta;
-        return Math.min(600, Math.max(200, adjusted));
+        return clampPreviewPanelWidth(adjusted);
       });
     },
     [panelSide]

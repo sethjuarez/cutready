@@ -681,6 +681,38 @@ function saveLayout(partial: Record<string, unknown>) {
 
 const savedLayout = loadLayout();
 
+function viewportWidth() {
+  return typeof window === "undefined" ? 1440 : window.innerWidth;
+}
+
+function viewportHeight() {
+  return typeof window === "undefined" ? 900 : window.innerHeight;
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function maxWidthWithRemainder(min: number, desired: number, minRemainder: number) {
+  return Math.max(min, Math.min(Math.max(min, desired), Math.max(min, viewportWidth() - minRemainder)));
+}
+
+function maxHeightWithRemainder(min: number, desired: number, minRemainder: number) {
+  return Math.max(min, Math.min(Math.max(min, desired), Math.max(min, viewportHeight() - minRemainder)));
+}
+
+function clampSidebarWidth(width: number) {
+  return clamp(width, 160, maxWidthWithRemainder(160, Math.max(400, viewportWidth() - 420), 320));
+}
+
+function clampSecondaryWidth(width: number) {
+  return clamp(width, 260, maxWidthWithRemainder(260, Math.max(720, viewportWidth() - 360), 320));
+}
+
+function clampOutputHeight(height: number) {
+  return clamp(height, 72, maxHeightWithRemainder(72, Math.max(500, viewportHeight() - 220), 160));
+}
+
 export const useAppStore = create<AppStoreState>((set, get) => ({
   view: "home",
   currentProject: null,
@@ -689,11 +721,11 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   isMultiProject: false,
   loading: false,
   error: null,
-  sidebarWidth: savedLayout.sidebarWidth ?? 240,
+  sidebarWidth: clampSidebarWidth(savedLayout.sidebarWidth ?? 240),
   sidebarVisible: savedLayout.sidebarVisible ?? true,
   outputVisible: savedLayout.outputVisible ?? false,
-  outputHeight: savedLayout.outputHeight ?? 200,
-  secondaryWidth: savedLayout.secondaryWidth ?? 420,
+  outputHeight: clampOutputHeight(savedLayout.outputHeight ?? 200),
+  secondaryWidth: clampSecondaryWidth(savedLayout.secondaryWidth ?? 420),
   sidebarPosition: savedLayout.sidebarPosition ?? "left",
 
   openTabs: [],
@@ -767,7 +799,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   clearError: () => set({ error: null }),
   setView: (view) => set({ view }),
   setSidebarWidth: (width) => {
-    const w = Math.min(400, Math.max(180, width));
+    const w = clampSidebarWidth(width);
     set({ sidebarWidth: w });
     saveLayout({ sidebarWidth: w });
   },
@@ -780,13 +812,13 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     return { outputVisible: !s.outputVisible };
   }),
   setOutputHeight: (height) => {
-    const h = Math.min(500, Math.max(80, height));
+    const h = clampOutputHeight(height);
     set({ outputHeight: h });
     saveLayout({ outputHeight: h });
   },
   setSecondaryWidth: (width) => {
     const next = typeof width === "function" ? width(get().secondaryWidth) : width;
-    const w = Math.min(720, Math.max(320, next));
+    const w = clampSecondaryWidth(next);
     set({ secondaryWidth: w });
     saveLayout({ secondaryWidth: w });
   },
