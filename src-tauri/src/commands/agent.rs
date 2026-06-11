@@ -350,6 +350,8 @@ pub async fn agent_chat_with_tools(
     let emit_handle = app.clone();
     let result = match runner::run(
         provider,
+        Some(provider_name.clone()),
+        Some(model.clone()),
         messages,
         &project_root,
         &prompts,
