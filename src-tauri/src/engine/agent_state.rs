@@ -14,7 +14,7 @@ use agentive::{
     TrajectorySink, VerificationResult,
 };
 use chrono::{DateTime, Utc};
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{params, Connection, OpenFlags, OptionalExtension, Row};
 
 const AGENT_STATE_RELATIVE_PATH: &str = ".cutready/agent-state.db";
 const SCHEMA_VERSION: i32 = 1;
@@ -43,6 +43,78 @@ pub struct AgentRunRecord {
     pub status: String,
     pub started_at: DateTime<Utc>,
     pub completed_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+pub struct AgentRunSummary {
+    pub run_id: String,
+    pub parent_run_id: Option<String>,
+    pub provider: String,
+    pub model: String,
+    pub status: String,
+    pub started_at: DateTime<Utc>,
+    pub completed_at: Option<DateTime<Utc>>,
+    pub trajectory_event_count: usize,
+    pub touched_resource_count: usize,
+    pub checkpoint_count: usize,
+    pub resume_context_count: usize,
+    pub verification_result_count: usize,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+pub struct AgentTrajectoryEventRecord {
+    pub id: i64,
+    pub event_id: Option<String>,
+    pub parent_event_id: Option<String>,
+    pub iteration: Option<i64>,
+    pub event_type: String,
+    pub created_at: DateTime<Utc>,
+    pub event: serde_json::Value,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+pub struct AgentTouchedResourceRecord {
+    pub id: i64,
+    pub kind: String,
+    pub resource_id: String,
+    pub operation: String,
+    pub created_at: DateTime<Utc>,
+    pub resource: serde_json::Value,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+pub struct AgentCheckpointRecord {
+    pub id: String,
+    pub created_at: DateTime<Utc>,
+    pub checkpoint: serde_json::Value,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+pub struct AgentResumeContextRecord {
+    pub id: i64,
+    pub checkpoint_id: String,
+    pub created_at: DateTime<Utc>,
+    pub context: serde_json::Value,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+pub struct AgentVerificationResultRecord {
+    pub id: i64,
+    pub criterion: String,
+    pub status: String,
+    pub created_at: DateTime<Utc>,
+    pub result: serde_json::Value,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+pub struct AgentRunDetail {
+    pub run: AgentRunSummary,
+    pub metadata: serde_json::Value,
+    pub trajectory_events: Vec<AgentTrajectoryEventRecord>,
+    pub touched_resources: Vec<AgentTouchedResourceRecord>,
+    pub checkpoints: Vec<AgentCheckpointRecord>,
+    pub resume_contexts: Vec<AgentResumeContextRecord>,
+    pub verification_results: Vec<AgentVerificationResultRecord>,
 }
 
 impl AgentStateStore {
@@ -90,6 +162,97 @@ impl AgentStateStore {
         initialize_schema(&conn)
     }
 
+    pub fn list_recent_runs(
+        project_root: &Path,
+        limit: usize,
+    ) -> Result<Vec<AgentRunSummary>, String> {
+        let Some(conn) = Self::connect_existing_project_database(project_root)? else {
+            return Ok(Vec::new());
+        };
+        let mut stmt = conn
+            .prepare(
+                "SELECT
+                    r.run_id,
+                    r.parent_run_id,
+                    r.provider,
+                    r.model,
+                    r.status,
+                    r.started_at,
+                    r.completed_at,
+                    (SELECT COUNT(*) FROM trajectory_events te WHERE te.run_id = r.run_id),
+                    (SELECT COUNT(*) FROM touched_resources tr WHERE tr.run_id = r.run_id),
+                    (SELECT COUNT(*) FROM checkpoints c WHERE c.run_id = r.run_id),
+                    (SELECT COUNT(*) FROM resume_contexts rc WHERE rc.run_id = r.run_id),
+                    (SELECT COUNT(*) FROM verification_results vr WHERE vr.run_id = r.run_id)
+                 FROM agent_runs r
+                 ORDER BY datetime(r.started_at) DESC, r.run_id DESC
+                 LIMIT ?1",
+            )
+            .map_err(|e| format!("Could not prepare agent run query: {e}"))?;
+        let rows = stmt
+            .query_map(
+                params![limit.max(1).min(MAX_COMPLETED_RUNS) as i64],
+                Self::read_run_summary,
+            )
+            .map_err(|e| format!("Could not query agent runs: {e}"))?;
+
+        let mut runs = Vec::new();
+        for row in rows {
+            runs.push(row.map_err(|e| format!("Could not read agent run row: {e}"))?);
+        }
+        Ok(runs)
+    }
+
+    pub fn get_run_detail(
+        project_root: &Path,
+        run_id: &str,
+    ) -> Result<Option<AgentRunDetail>, String> {
+        let Some(conn) = Self::connect_existing_project_database(project_root)? else {
+            return Ok(None);
+        };
+        let row = conn
+            .query_row(
+                "SELECT
+                    r.run_id,
+                    r.parent_run_id,
+                    r.provider,
+                    r.model,
+                    r.status,
+                    r.started_at,
+                    r.completed_at,
+                    (SELECT COUNT(*) FROM trajectory_events te WHERE te.run_id = r.run_id),
+                    (SELECT COUNT(*) FROM touched_resources tr WHERE tr.run_id = r.run_id),
+                    (SELECT COUNT(*) FROM checkpoints c WHERE c.run_id = r.run_id),
+                    (SELECT COUNT(*) FROM resume_contexts rc WHERE rc.run_id = r.run_id),
+                    (SELECT COUNT(*) FROM verification_results vr WHERE vr.run_id = r.run_id),
+                    r.metadata_json
+                 FROM agent_runs r
+                 WHERE r.run_id = ?1",
+                params![run_id],
+                |row| {
+                    let run = Self::read_run_summary(row)?;
+                    let metadata_json: String = row.get(12)?;
+                    Ok((run, metadata_json))
+                },
+            )
+            .optional()
+            .map_err(|e| format!("Could not read agent run detail: {e}"))?;
+
+        let Some((run, metadata_json)) = row else {
+            return Ok(None);
+        };
+        let metadata = Self::parse_json_value(&metadata_json, "run metadata")?;
+        Ok(Some(AgentRunDetail {
+            trajectory_events: Self::query_trajectory_events(&conn, run_id)?,
+            touched_resources: Self::query_touched_resources(&conn, run_id)?,
+            checkpoints: Self::query_checkpoints(&conn, run_id)?,
+            resume_contexts: Self::query_resume_contexts(&conn, run_id)?,
+            verification_results: Self::query_verification_results(&conn, run_id)?,
+            run,
+            metadata,
+        }))
+    }
+
     pub fn insert_run(
         &self,
         parent_run_id: Option<&str>,
@@ -115,6 +278,247 @@ impl AgentStateStore {
         .map_err(|e| format!("Could not insert agent run: {e}"))?;
         prune_completed_runs(&conn)?;
         Ok(())
+    }
+
+    fn connect_existing_project_database(
+        project_root: &Path,
+    ) -> Result<Option<Connection>, String> {
+        let db_path = project_root.join(AGENT_STATE_RELATIVE_PATH);
+        if !db_path.exists() {
+            return Ok(None);
+        }
+        let conn = Connection::open_with_flags(db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+            .map_err(|e| format!("Could not open CutReady agent state database: {e}"))?;
+        conn.busy_timeout(BUSY_TIMEOUT)
+            .map_err(|e| format!("Could not configure agent state database timeout: {e}"))?;
+        let existing_version: i32 = conn
+            .pragma_query_value(None, "user_version", |row| row.get(0))
+            .map_err(|e| format!("Could not read agent state schema version: {e}"))?;
+        if existing_version > SCHEMA_VERSION {
+            return Err(format!(
+                "Agent state database schema version {existing_version} is newer than this CutReady build supports ({SCHEMA_VERSION})"
+            ));
+        }
+        Ok(Some(conn))
+    }
+
+    fn read_run_summary(row: &Row<'_>) -> rusqlite::Result<AgentRunSummary> {
+        Ok(AgentRunSummary {
+            run_id: row.get(0)?,
+            parent_run_id: row.get(1)?,
+            provider: row.get(2)?,
+            model: row.get(3)?,
+            status: row.get(4)?,
+            started_at: parse_rfc3339_row(row.get::<_, String>(5)?, 5)?,
+            completed_at: row
+                .get::<_, Option<String>>(6)?
+                .map(|value| parse_rfc3339_row(value, 6))
+                .transpose()?,
+            trajectory_event_count: row.get::<_, usize>(7)?,
+            touched_resource_count: row.get::<_, usize>(8)?,
+            checkpoint_count: row.get::<_, usize>(9)?,
+            resume_context_count: row.get::<_, usize>(10)?,
+            verification_result_count: row.get::<_, usize>(11)?,
+        })
+    }
+
+    fn query_trajectory_events(
+        conn: &Connection,
+        run_id: &str,
+    ) -> Result<Vec<AgentTrajectoryEventRecord>, String> {
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, event_id, parent_event_id, iteration, event_type, event_json, created_at
+                 FROM trajectory_events
+                 WHERE run_id = ?1
+                 ORDER BY id ASC",
+            )
+            .map_err(|e| format!("Could not prepare trajectory event query: {e}"))?;
+        let rows = stmt
+            .query_map(params![run_id], |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, Option<String>>(1)?,
+                    row.get::<_, Option<String>>(2)?,
+                    row.get::<_, Option<i64>>(3)?,
+                    row.get::<_, String>(4)?,
+                    row.get::<_, String>(5)?,
+                    parse_rfc3339_row(row.get::<_, String>(6)?, 6)?,
+                ))
+            })
+            .map_err(|e| format!("Could not query trajectory events: {e}"))?;
+
+        let mut events = Vec::new();
+        for row in rows {
+            let (id, event_id, parent_event_id, iteration, event_type, event_json, created_at) =
+                row.map_err(|e| format!("Could not read trajectory event row: {e}"))?;
+            events.push(AgentTrajectoryEventRecord {
+                id,
+                event_id,
+                parent_event_id,
+                iteration,
+                event_type,
+                created_at,
+                event: Self::parse_json_value(&event_json, "trajectory event")?,
+            });
+        }
+        Ok(events)
+    }
+
+    fn query_touched_resources(
+        conn: &Connection,
+        run_id: &str,
+    ) -> Result<Vec<AgentTouchedResourceRecord>, String> {
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, kind, resource_id, operation, resource_json, created_at
+                 FROM touched_resources
+                 WHERE run_id = ?1
+                 ORDER BY id ASC",
+            )
+            .map_err(|e| format!("Could not prepare touched resource query: {e}"))?;
+        let rows = stmt
+            .query_map(params![run_id], |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
+                    row.get::<_, String>(4)?,
+                    parse_rfc3339_row(row.get::<_, String>(5)?, 5)?,
+                ))
+            })
+            .map_err(|e| format!("Could not query touched resources: {e}"))?;
+
+        let mut resources = Vec::new();
+        for row in rows {
+            let (id, kind, resource_id, operation, resource_json, created_at) =
+                row.map_err(|e| format!("Could not read touched resource row: {e}"))?;
+            resources.push(AgentTouchedResourceRecord {
+                id,
+                kind,
+                resource_id,
+                operation,
+                created_at,
+                resource: Self::parse_json_value(&resource_json, "touched resource")?,
+            });
+        }
+        Ok(resources)
+    }
+
+    fn query_checkpoints(
+        conn: &Connection,
+        run_id: &str,
+    ) -> Result<Vec<AgentCheckpointRecord>, String> {
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, created_at, checkpoint_json
+                 FROM checkpoints
+                 WHERE run_id = ?1
+                 ORDER BY datetime(created_at) ASC, id ASC",
+            )
+            .map_err(|e| format!("Could not prepare checkpoint query: {e}"))?;
+        let rows = stmt
+            .query_map(params![run_id], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    parse_rfc3339_row(row.get::<_, String>(1)?, 1)?,
+                    row.get::<_, String>(2)?,
+                ))
+            })
+            .map_err(|e| format!("Could not query checkpoints: {e}"))?;
+
+        let mut checkpoints = Vec::new();
+        for row in rows {
+            let (id, created_at, checkpoint_json) =
+                row.map_err(|e| format!("Could not read checkpoint row: {e}"))?;
+            checkpoints.push(AgentCheckpointRecord {
+                id,
+                created_at,
+                checkpoint: Self::parse_json_value(&checkpoint_json, "checkpoint")?,
+            });
+        }
+        Ok(checkpoints)
+    }
+
+    fn query_resume_contexts(
+        conn: &Connection,
+        run_id: &str,
+    ) -> Result<Vec<AgentResumeContextRecord>, String> {
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, checkpoint_id, created_at, context_json
+                 FROM resume_contexts
+                 WHERE run_id = ?1
+                 ORDER BY id ASC",
+            )
+            .map_err(|e| format!("Could not prepare resume context query: {e}"))?;
+        let rows = stmt
+            .query_map(params![run_id], |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, String>(1)?,
+                    parse_rfc3339_row(row.get::<_, String>(2)?, 2)?,
+                    row.get::<_, String>(3)?,
+                ))
+            })
+            .map_err(|e| format!("Could not query resume contexts: {e}"))?;
+
+        let mut contexts = Vec::new();
+        for row in rows {
+            let (id, checkpoint_id, created_at, context_json) =
+                row.map_err(|e| format!("Could not read resume context row: {e}"))?;
+            contexts.push(AgentResumeContextRecord {
+                id,
+                checkpoint_id,
+                created_at,
+                context: Self::parse_json_value(&context_json, "resume context")?,
+            });
+        }
+        Ok(contexts)
+    }
+
+    fn query_verification_results(
+        conn: &Connection,
+        run_id: &str,
+    ) -> Result<Vec<AgentVerificationResultRecord>, String> {
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, criterion, status, result_json, created_at
+                 FROM verification_results
+                 WHERE run_id = ?1
+                 ORDER BY id ASC",
+            )
+            .map_err(|e| format!("Could not prepare verification result query: {e}"))?;
+        let rows = stmt
+            .query_map(params![run_id], |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
+                    parse_rfc3339_row(row.get::<_, String>(4)?, 4)?,
+                ))
+            })
+            .map_err(|e| format!("Could not query verification results: {e}"))?;
+
+        let mut results = Vec::new();
+        for row in rows {
+            let (id, criterion, status, result_json, created_at) =
+                row.map_err(|e| format!("Could not read verification result row: {e}"))?;
+            results.push(AgentVerificationResultRecord {
+                id,
+                criterion,
+                status,
+                created_at,
+                result: Self::parse_json_value(&result_json, "verification result")?,
+            });
+        }
+        Ok(results)
+    }
+
+    fn parse_json_value(json: &str, label: &str) -> Result<serde_json::Value, String> {
+        serde_json::from_str(json).map_err(|e| format!("Could not parse {label}: {e}"))
     }
 
     pub fn finish_run(&self, status: &str) -> Result<(), String> {
@@ -898,6 +1302,59 @@ mod tests {
             store.verification_result_count("run-trajectory").unwrap(),
             1
         );
+    }
+
+    #[test]
+    fn query_projection_returns_recent_runs_and_detail() {
+        let project_root = tempfile::tempdir().unwrap().keep();
+        let store = AgentStateStore::for_database_path(
+            project_root.join(".cutready").join("agent-state.db"),
+            "run-query",
+        )
+        .unwrap();
+        store
+            .insert_run(
+                None,
+                "microsoft_foundry",
+                "gpt-5-codex",
+                serde_json::json!({"messages":2,"vision_enabled":true}),
+            )
+            .unwrap();
+        store
+            .record(TrajectoryEvent::VerificationRecorded {
+                metadata: TrajectoryMetadata::new().with_run_id("run-query"),
+                result: VerificationResult::new(
+                    "Result was valid",
+                    VerificationStatus::Passed,
+                    "Parsed successfully",
+                ),
+            })
+            .unwrap();
+
+        let runs = AgentStateStore::list_recent_runs(&project_root, 10).unwrap();
+        assert_eq!(runs.len(), 1);
+        assert_eq!(runs[0].run_id, "run-query");
+        assert_eq!(runs[0].trajectory_event_count, 1);
+        assert_eq!(runs[0].verification_result_count, 1);
+
+        let detail = AgentStateStore::get_run_detail(&project_root, "run-query")
+            .unwrap()
+            .unwrap();
+        assert_eq!(detail.run.model, "gpt-5-codex");
+        assert_eq!(detail.metadata["messages"], 2);
+        assert_eq!(detail.trajectory_events.len(), 1);
+        assert_eq!(detail.verification_results[0].criterion, "Result was valid");
+    }
+
+    #[test]
+    fn query_projection_returns_empty_for_missing_database() {
+        let project_root = tempfile::tempdir().unwrap().keep();
+        assert!(AgentStateStore::list_recent_runs(&project_root, 10)
+            .unwrap()
+            .is_empty());
+        assert!(AgentStateStore::get_run_detail(&project_root, "missing")
+            .unwrap()
+            .is_none());
     }
 
     #[test]
