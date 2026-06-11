@@ -1,6 +1,7 @@
 import { Children, isValidElement, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type UIEvent } from "react";
 import { invoke, convertFileSrc, listen } from "../services/tauri";
 import { SafeMarkdown } from "./SafeMarkdown";
+import { AgentRunInspector } from "./AgentRunInspector";
 
 import { clearSuppressedEditorFlush, suppressEditorFlush, useAppStore } from "../stores/appStore";
 import { useSettings, type AgentPreset } from "../hooks/useSettings";
@@ -24,6 +25,7 @@ import {
   X,
   Menu,
   Square,
+  Activity,
 } from "lucide-react";
 
 // ── Helpers ──────────────────────────────────────────────────────
@@ -242,7 +244,7 @@ interface FileReference {
   webStatus?: "loading" | "ready" | "error";
 }
 
-type SecondaryTab = "chat" | "sessions";
+type SecondaryTab = "chat" | "sessions" | "runs";
 
 function resolveAgentModelOverride(
   agent: AgentPreset,
@@ -259,6 +261,10 @@ function IconSparkles({ size = 14 }: { size?: number }) {
 
 function IconHistory({ size = 14 }: { size?: number }) {
   return <Clock width={size} height={size} />;
+}
+
+function IconRuns({ size = 14 }: { size?: number }) {
+  return <Activity width={size} height={size} />;
 }
 
 function IconSend({ size = 14 }: { size?: number }) {
@@ -339,6 +345,7 @@ export function ChatPanel() {
   const tabs: Array<{ id: SecondaryTab; label: string; icon: ReactNode }> = [
     { id: "chat", label: "Chat", icon: <IconSparkles size={13} /> },
     { id: "sessions", label: "Sessions", icon: <IconHistory size={13} /> },
+    { id: "runs", label: "Runs", icon: <IconRuns size={13} /> },
   ];
   const rail = (
     <nav className={`no-select flex w-12 shrink-0 flex-col items-center gap-1.5 bg-[rgb(var(--color-surface))] py-3 ${
@@ -379,6 +386,7 @@ export function ChatPanel() {
       <div className="flex-1 min-w-0 min-h-0">
         {activeTab === "chat" && <ChatTab />}
         {activeTab === "sessions" && <ChatHistory onOpenSession={() => setActiveTab("chat")} />}
+        {activeTab === "runs" && <AgentRunInspector />}
       </div>
 
       {!railOnLeft && rail}

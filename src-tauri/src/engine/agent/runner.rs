@@ -88,6 +88,8 @@ pub struct WebAccessConfig {
 /// Run the agentic loop with streaming and event emission.
 pub async fn run(
     provider: Arc<dyn agentive::Provider>,
+    provider_name: Option<String>,
+    model_name: Option<String>,
     messages: Vec<ChatMessage>,
     project_root: &Path,
     agent_prompts: &HashMap<String, String>,
@@ -101,6 +103,8 @@ pub async fn run(
     let emit = Arc::new(emit);
     run_inner(
         provider,
+        provider_name,
+        model_name,
         messages,
         project_root,
         agent_prompts,
@@ -119,6 +123,8 @@ pub async fn run(
 #[allow(clippy::too_many_arguments)]
 fn run_inner<'a>(
     provider: Arc<dyn agentive::Provider>,
+    provider_name: Option<String>,
+    model_name: Option<String>,
     messages: Vec<ChatMessage>,
     project_root: &'a Path,
     agent_prompts: &'a HashMap<String, String>,
@@ -170,6 +176,8 @@ fn run_inner<'a>(
             compaction_provider: Some(provider.clone()),
             reference_resolver: Some(build_reference_resolver(project_root)),
             run_id: run_id.clone(),
+            provider_name: provider_name.clone(),
+            model_name: model_name.clone(),
             trajectory_sink: agent_state
                 .clone()
                 .map(|store| Arc::new(store) as Arc<dyn agentive::TrajectorySink>),
@@ -273,7 +281,7 @@ fn run_inner<'a>(
                     );
                     emit_events(AgentEvent::ToolResult { name, result });
                 }
-                agentive::RunnerEvent::Usage { usage } => {
+                agentive::RunnerEvent::Usage { usage, .. } => {
                     crate::util::trace::emit(
                         "agent_usage",
                         "agent",
@@ -292,7 +300,7 @@ fn run_inner<'a>(
                 agentive::RunnerEvent::Done { response, .. } => {
                     emit_events(AgentEvent::Done { response });
                 }
-                agentive::RunnerEvent::Error { message } => {
+                agentive::RunnerEvent::Error { message, .. } => {
                     emit_events(AgentEvent::Error { message });
                 }
                 _ => {} // Usage, MessagesUpdated — no CutReady equivalent
@@ -303,6 +311,8 @@ fn run_inner<'a>(
         let project_root_str = project_root.to_string_lossy().to_string();
         let agent_prompts_owned = agent_prompts.clone();
         let provider_for_tools = provider.clone();
+        let provider_name_for_tools = provider_name.clone();
+        let model_name_for_tools = model_name.clone();
         let tools_for_exec = tool_defs.clone();
         let emit_for_tools = emit.clone();
         let vision_enabled = vision.enabled;
@@ -315,6 +325,8 @@ fn run_inner<'a>(
             let project_root = project_root_str.clone();
             let agent_prompts = agent_prompts_owned.clone();
             let provider = provider_for_tools.clone();
+            let provider_name = provider_name_for_tools.clone();
+            let model_name = model_name_for_tools.clone();
             let tools = tools_for_exec.clone();
             let emit = emit_for_tools.clone();
             let steering = steering_for_tools.clone();
@@ -322,6 +334,8 @@ fn run_inner<'a>(
             if tool_call.function.name == "delegate_to_agent" {
                 exec_delegation(
                     provider,
+                    provider_name,
+                    model_name,
                     &tool_call,
                     &project_root,
                     &agent_prompts,
@@ -419,6 +433,8 @@ fn run_inner<'a>(
                     compaction_provider: Some(provider.clone()),
                     reference_resolver: Some(build_reference_resolver(project_root)),
                     run_id: run_id.clone(),
+                    provider_name: provider_name.clone(),
+                    model_name: model_name.clone(),
                     trajectory_sink: agent_state
                         .clone()
                         .map(|store| Arc::new(store) as Arc<dyn agentive::TrajectorySink>),
@@ -431,6 +447,8 @@ fn run_inner<'a>(
                 let project_root_str = project_root.to_string_lossy().to_string();
                 let agent_prompts_owned = agent_prompts.clone();
                 let provider_for_tools = provider.clone();
+                let provider_name_for_tools = provider_name.clone();
+                let model_name_for_tools = model_name.clone();
                 let tools_for_exec = tools::all_tools(web_access.search_enabled);
                 let emit_for_tools = emit.clone();
                 let vision_enabled = vision.enabled;
@@ -446,6 +464,8 @@ fn run_inner<'a>(
                     let project_root = project_root_str.clone();
                     let agent_prompts = agent_prompts_owned.clone();
                     let provider = provider_for_tools.clone();
+                    let provider_name = provider_name_for_tools.clone();
+                    let model_name = model_name_for_tools.clone();
                     let tools = tools_for_exec.clone();
                     let emit = emit_for_tools.clone();
                     let steering = steering_for_tools.clone();
@@ -453,6 +473,8 @@ fn run_inner<'a>(
                     if tool_call.function.name == "delegate_to_agent" {
                         exec_delegation(
                             provider,
+                            provider_name,
+                            model_name,
                             &tool_call,
                             &project_root,
                             &agent_prompts,
@@ -739,6 +761,8 @@ fn format_sketch_for_ref(sketch: &crate::models::sketch::Sketch) -> String {
 #[allow(clippy::too_many_arguments)]
 fn exec_delegation(
     provider: Arc<dyn agentive::Provider>,
+    provider_name: Option<String>,
+    model_name: Option<String>,
     call: &agentive::ToolCall,
     project_root: &str,
     agent_prompts: &HashMap<String, String>,
@@ -804,12 +828,16 @@ fn exec_delegation(
             auto_trim_context: true,
             sanitize_tool_results: true,
             reference_resolver: Some(build_reference_resolver(Path::new(&project_root))),
+            provider_name: provider_name.clone(),
+            model_name: model_name.clone(),
             ..Default::default()
         };
 
         let project_root_for_tools = project_root.clone();
         let agent_prompts_for_tools = agent_prompts.clone();
         let provider_for_tools = provider.clone();
+        let provider_name_for_tools = provider_name.clone();
+        let model_name_for_tools = model_name.clone();
         let tools_for_tools = tools.clone();
         let emit_for_tools = emit.clone();
         let steering_for_tools = steering.clone();
@@ -820,6 +848,8 @@ fn exec_delegation(
             let project_root = project_root_for_tools.clone();
             let agent_prompts = agent_prompts_for_tools.clone();
             let provider = provider_for_tools.clone();
+            let provider_name = provider_name_for_tools.clone();
+            let model_name = model_name_for_tools.clone();
             let tools = tools_for_tools.clone();
             let emit = emit_for_tools.clone();
             let steering = steering_for_tools.clone();
@@ -827,6 +857,8 @@ fn exec_delegation(
             if tool_call.function.name == "delegate_to_agent" {
                 exec_delegation(
                     provider,
+                    provider_name,
+                    model_name,
                     &tool_call,
                     &project_root,
                     &agent_prompts,

@@ -4,6 +4,7 @@ use serde::Deserialize;
 
 use crate::engine::agent::llm::{self, ChatMessage, LlmConfig, LlmProvider, ModelInfo};
 use crate::engine::agent::runner::{self, AgentEvent};
+use crate::engine::agent_state::{AgentRunDetail, AgentRunSummary, AgentStateStore};
 use crate::AppState;
 use agentive::azure_oauth::{self, AuthCodeFlowInit, DeviceCodeResponse, TokenResponse};
 use std::time::{Duration, Instant};
@@ -187,6 +188,30 @@ pub async fn push_pending_chat_message(
     Ok(())
 }
 
+#[auditaur_command(skip_all, err)]
+pub async fn list_agent_runs(
+    state: tauri::State<'_, AppState>,
+    limit: Option<usize>,
+) -> Result<Vec<AgentRunSummary>, String> {
+    let root = {
+        let guard = state.current_project.lock().unwrap();
+        guard.as_ref().ok_or("No project open")?.root.clone()
+    };
+    AgentStateStore::list_recent_runs(&root, limit.unwrap_or(25).clamp(1, 100))
+}
+
+#[auditaur_command(skip_all, err)]
+pub async fn get_agent_run(
+    state: tauri::State<'_, AppState>,
+    run_id: String,
+) -> Result<Option<AgentRunDetail>, String> {
+    let root = {
+        let guard = state.current_project.lock().unwrap();
+        guard.as_ref().ok_or("No project open")?.root.clone()
+    };
+    AgentStateStore::get_run_detail(&root, &run_id)
+}
+
 /// Agentic chat with function calling — the LLM can read/write project files.
 /// Returns the full conversation (including tool calls) and the final response.
 /// Emits `agent-event` events to the frontend for real-time streaming.
@@ -325,6 +350,8 @@ pub async fn agent_chat_with_tools(
     let emit_handle = app.clone();
     let result = match runner::run(
         provider,
+        Some(provider_name.clone()),
+        Some(model.clone()),
         messages,
         &project_root,
         &prompts,

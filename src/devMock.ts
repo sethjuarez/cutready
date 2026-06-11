@@ -226,6 +226,83 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
       };
     case "delete_chat_session":
       return null;
+    case "list_agent_runs":
+      return [
+        {
+          run_id: "mock-run-20260610-a17f2c44",
+          parent_run_id: null,
+          provider: "microsoft_foundry",
+          model: "gpt-5-codex",
+          status: "completed",
+          started_at: new Date(Date.now() - 1000 * 60 * 24).toISOString(),
+          completed_at: new Date(Date.now() - 1000 * 60 * 21).toISOString(),
+          trajectory_event_count: 6,
+          touched_resource_count: 2,
+          checkpoint_count: 1,
+          resume_context_count: 1,
+          verification_result_count: 2,
+        },
+        {
+          run_id: "mock-run-20260610-b83d91e0",
+          parent_run_id: null,
+          provider: "azure_openai",
+          model: "gpt-4o",
+          status: "failed",
+          started_at: new Date(Date.now() - 1000 * 60 * 95).toISOString(),
+          completed_at: new Date(Date.now() - 1000 * 60 * 93).toISOString(),
+          trajectory_event_count: 3,
+          touched_resource_count: 1,
+          checkpoint_count: 0,
+          resume_context_count: 0,
+          verification_result_count: 1,
+        },
+      ];
+    case "get_agent_run":
+      return {
+        run: {
+          run_id: args?.runId ?? "mock-run-20260610-a17f2c44",
+          parent_run_id: null,
+          provider: "microsoft_foundry",
+          model: "gpt-5-codex",
+          status: "completed",
+          started_at: new Date(Date.now() - 1000 * 60 * 24).toISOString(),
+          completed_at: new Date(Date.now() - 1000 * 60 * 21).toISOString(),
+          trajectory_event_count: 6,
+          touched_resource_count: 2,
+          checkpoint_count: 1,
+          resume_context_count: 1,
+          verification_result_count: 2,
+        },
+        metadata: {
+          messages: 4,
+          chars: 8421,
+          budget_chars: 180000,
+          vision_enabled: true,
+          web_search_enabled: false,
+        },
+        trajectory_events: [
+          { id: 1, event_id: "evt-1", parent_event_id: null, iteration: 0, event_type: "turn_started", created_at: new Date(Date.now() - 1000 * 60 * 24).toISOString(), event: { goal: "Refine storyboard pacing" } },
+          { id: 2, event_id: "evt-2", parent_event_id: "evt-1", iteration: 0, event_type: "model_call_started", created_at: new Date(Date.now() - 1000 * 60 * 23).toISOString(), event: { model: "gpt-5-codex" } },
+          { id: 3, event_id: "evt-3", parent_event_id: "evt-2", iteration: 1, event_type: "tool_call_started", created_at: new Date(Date.now() - 1000 * 60 * 22).toISOString(), event: { tool_name: "read_sketch", path: "sketches/demo-introduction.sk" } },
+          { id: 4, event_id: "evt-4", parent_event_id: "evt-3", iteration: 1, event_type: "resource_touched", created_at: new Date(Date.now() - 1000 * 60 * 22).toISOString(), event: { resource: { kind: "sketch", id: "sketches/demo-introduction.sk" } } },
+          { id: 5, event_id: "evt-5", parent_event_id: "evt-2", iteration: 2, event_type: "verification_recorded", created_at: new Date(Date.now() - 1000 * 60 * 21).toISOString(), event: { criterion: "No parse errors" } },
+          { id: 6, event_id: "evt-6", parent_event_id: "evt-1", iteration: 2, event_type: "turn_completed", created_at: new Date(Date.now() - 1000 * 60 * 21).toISOString(), event: { summary: "Storyboard update completed" } },
+        ],
+        touched_resources: [
+          { id: 1, kind: "sketch", resource_id: "sketches/demo-introduction.sk", operation: "read", created_at: new Date(Date.now() - 1000 * 60 * 22).toISOString(), resource: { kind: "sketch", id: "sketches/demo-introduction.sk" } },
+          { id: 2, kind: "note", resource_id: "notes/script-draft.md", operation: "write", created_at: new Date(Date.now() - 1000 * 60 * 21).toISOString(), resource: { kind: "note", id: "notes/script-draft.md" } },
+        ],
+        checkpoints: [
+          { id: "checkpoint-storyboard-pass", created_at: new Date(Date.now() - 1000 * 60 * 22).toISOString(), checkpoint: { goal: "Refine storyboard pacing", next_step: "Verify timing changes" } },
+        ],
+        resume_contexts: [
+          { id: 1, checkpoint_id: "checkpoint-storyboard-pass", created_at: new Date(Date.now() - 1000 * 60 * 21).toISOString(), context: { summary: "Resume after storyboard timing verification." } },
+        ],
+        verification_results: [
+          { id: 1, criterion: "Tool read_sketch completed", status: "passed", created_at: new Date(Date.now() - 1000 * 60 * 22).toISOString(), result: { details: "Sketch loaded successfully" } },
+          { id: 2, criterion: "No parse errors", status: "passed", created_at: new Date(Date.now() - 1000 * 60 * 21).toISOString(), result: { details: "Updated plan remained valid JSON" } },
+        ],
+      };
     case "get_memory_context":
       return "";
     case "archive_chat_session":

@@ -501,6 +501,8 @@ pub fn run() {
             commands::agent::agent_chat,
             commands::agent::agent_chat_with_tools,
             commands::agent::push_pending_chat_message,
+            commands::agent::list_agent_runs,
+            commands::agent::get_agent_run,
             commands::agent::fetch_url_content,
             commands::agent::list_chat_sessions,
             commands::agent::get_chat_session,
