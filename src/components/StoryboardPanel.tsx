@@ -11,6 +11,7 @@ import { TabBar } from "./TabBar";
 import { HistoryGraphTab } from "./HistoryGraphTab";
 import { SplitTabBar, SplitPaneContent } from "./SplitPreviewPane";
 import { ErrorBoundary } from "./ErrorBoundary";
+import { AgentRunTab } from "./AgentRunInspector";
 
 /**
  * StoryboardPanel — center content area for sketch/storyboard workflow.
@@ -38,6 +39,7 @@ export function StoryboardPanel() {
   const isHistoryTab = activeTab?.type === "history";
   const isAssetTab = activeTab?.type === "asset";
   const isDiffTab = activeTab?.type === "diff";
+  const isAgentRunTab = activeTab?.type === "agent-run";
   const activeEditorReloadKey = activeTab?.path === editorReloadPath ? editorReloadKey : 0;
 
   const [splitWidth, setSplitWidth] = useState<number | null>(null);
@@ -72,12 +74,12 @@ export function StoryboardPanel() {
   ) : null;
 
   return (
-    <div className="flex h-full">
+    <div className="flex h-full min-h-0 overflow-hidden">
       {/* Secondary panel on left when sidebar is right */}
       {secondaryOnLeft && secondaryPanel}
 
       {/* Editor area */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 min-h-0">
         {/* Tab bar row — main + split side by side */}
         <div className="flex shrink-0 min-w-0">
           <div className="flex-1 min-w-0 overflow-hidden">
@@ -93,7 +95,7 @@ export function StoryboardPanel() {
         {/* Content row — primary + optional split */}
         <div className="flex-1 flex min-h-0" ref={panelRef}>
           {/* Primary pane */}
-          <div className="flex-1 flex flex-col min-w-0" onMouseDown={() => setActiveEditorGroup("main")}>
+          <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden" onMouseDown={() => setActiveEditorGroup("main")}>
             {isHistoryTab ? (
               <ErrorBoundary
                 fallback={
@@ -106,6 +108,8 @@ export function StoryboardPanel() {
               </ErrorBoundary>
             ) : isDiffTab && activeTab ? (
               <DiffViewer filePath={activeTab.path} />
+            ) : isAgentRunTab && activeTab ? (
+              <AgentRunTab runId={agentRunIdFromTabPath(activeTab.path)} />
             ) : isAssetTab && activeTab ? (
               <AssetViewer assetPath={activeTab.path} />
             ) : activeSketch ? (
@@ -153,4 +157,8 @@ export function StoryboardPanel() {
       {!secondaryOnLeft && secondaryPanel}
     </div>
   );
+}
+
+function agentRunIdFromTabPath(path: string): string {
+  return path.startsWith("__agent_run/") ? path.slice("__agent_run/".length) : path;
 }
