@@ -73,7 +73,7 @@ The app uses a **VS Code-inspired** layout:
 
 ## Web Shim (devMock)
 
-`src/devMock.ts` fakes the Tauri backend when running in a browser. Activated when `import.meta.env.DEV && !__TAURI_INTERNALS__`. Start with `npx vite --port 1420`. This enables:
+`src/devMock.ts` fakes the Tauri backend when running in a browser. Activated when `import.meta.env.DEV && !__TAURI_INTERNALS__`. This is a secondary browser-only path for Playwright and documentation screenshots, not the default validation path for app work. Use `npm run dev` only when intentionally testing the web shim without Tauri.
 
 - Playwright E2E testing without the Tauri shell.
 - Browser-based development for UI work.
@@ -89,6 +89,7 @@ The app uses a **VS Code-inspired** layout:
 ## Telemetry
 
 - Use Auditaur as the canonical diagnostics substrate. Frontend Activity entries remain curated user-facing breadcrumbs, but `appStore.addActivityEntries()` also records structured `cutready.activity` console logs for Auditaur.
+- Default to running the real Tauri app with `npm run debug` for UI, IPC, and workflow validation. Debug builds enable Auditaur end-to-end observability across frontend console/errors, Tauri IPC/events, and backend tracing; inspect the Debug output panel or `get_auditaur_diagnostics` instead of relying only on browser console output.
 - Full Auditaur diagnostics are controlled from Settings > Feedback. Packaged builds should default to diagnostics off unless the persisted Feedback setting is enabled for the next launch or the app is started with `CUTREADY_DIAGNOSTICS=1`.
 - The Debug output panel should summarize Auditaur data (exceptions, failed IPC, failed traces, warn/error logs) instead of maintaining a separate in-memory debug log.
 - Feedback and Export Logs should include compact Auditaur diagnostics and scoped current-session Auditaur data, not the shared global Auditaur root.
