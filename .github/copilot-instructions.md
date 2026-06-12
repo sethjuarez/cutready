@@ -228,7 +228,8 @@ After the agentive `azure_oauth` module lands, CutReady's migration should also:
 - **Rust tests**: `cd src-tauri && cargo test`
 - **Vitest**: `npx vitest run`
 - **E2E tests**: `npx playwright test` (uses web shim, no Tauri needed)
-- **Web dev mode**: `npx vite --port 1420` (runs frontend in browser with devMock backend)
+- **Default app validation**: `npm run debug` (runs the real Tauri app; debug builds enable Auditaur end-to-end observability for frontend console/errors, Tauri IPC/events, and backend traces)
+- **Web shim mode**: `npm run dev` (Vite/devMock only; use for browser-only Playwright/docs work, not as the default app validation path)
 - **Docs site**: `cd docs && npm run build`
 
 ## Keeping Instructions Current

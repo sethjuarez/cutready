@@ -58,6 +58,8 @@ export function AppLayout() {
   const toggleOutput = useAppStore((s) => s.toggleOutput);
   const toggleSecondaryPanel = useAppStore((s) => s.toggleSecondaryPanel);
   const showSecondaryPanel = useAppStore((s) => s.showSecondaryPanel);
+  const chatFocusMode = useAppStore((s) => s.chatFocusMode);
+  const setChatFocusMode = useAppStore((s) => s.setChatFocusMode);
   const isMerging = useAppStore((s) => s.isMerging);
 
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
@@ -246,6 +248,18 @@ export function AppLayout() {
       // Use metaKey on macOS, ctrlKey on Windows/Linux
       const mod = e.metaKey || e.ctrlKey;
 
+      if (e.key === "Escape" && chatFocusMode) {
+        const target = e.target as HTMLElement | null;
+        const interactiveTarget =
+          target?.closest("textarea, input, select, [contenteditable='true']");
+
+        if (interactiveTarget) return;
+
+        e.preventDefault();
+        setChatFocusMode(false);
+        return;
+      }
+
       // Always allow Mod+Shift+P to toggle the command palette
       if (mod && e.shiftKey && (e.key === "P" || e.key === "p")) {
         e.preventDefault();
@@ -299,7 +313,7 @@ export function AppLayout() {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [toggleSidebar, toggleOutput, toggleSecondaryPanel, toggleTheme, commandPaletteOpen]);
+  }, [chatFocusMode, setChatFocusMode, toggleSidebar, toggleOutput, toggleSecondaryPanel, toggleTheme, commandPaletteOpen]);
 
   // Apply display settings as CSS variables
   const { settings: displaySettings, loaded: displaySettingsLoaded } = useSettings();
@@ -367,7 +381,11 @@ export function AppLayout() {
         onToggleSecondary={toggleSecondaryPanel}
       />
       <div
-        className="flex flex-col w-full flex-1 min-h-0"
+        className={
+          chatFocusMode
+            ? "hidden"
+            : "flex flex-col w-full flex-1 min-h-0"
+        }
         style={{
           paddingTop: isMac ? "0" : "var(--titlebar-height)",
           paddingBottom: "var(--statusbar-height)",
@@ -412,6 +430,21 @@ export function AppLayout() {
           {view !== "home" && sidebarPosition === "right" && <Sidebar onFeedback={() => setFeedbackOpen(true)} />}
         </div>
       </div>
+
+      {chatFocusMode && (
+        <div
+          className="fixed left-0 right-0 z-20 overflow-hidden border-y border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-inset))] shadow-2xl"
+          style={{
+            top: isMac ? "0" : "var(--titlebar-height)",
+            bottom: "var(--statusbar-height)",
+          }}
+          role="dialog"
+          aria-label="Chat focus mode"
+          aria-modal="true"
+        >
+          <ChatPanel focusMode />
+        </div>
+      )}
 
       <CommandPalette
         isOpen={commandPaletteOpen}

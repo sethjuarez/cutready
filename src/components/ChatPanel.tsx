@@ -26,6 +26,8 @@ import {
   Menu,
   Square,
   Activity,
+  Maximize2,
+  Minimize2,
 } from "lucide-react";
 
 // ── Helpers ──────────────────────────────────────────────────────
@@ -338,7 +340,7 @@ function useDropdownMaxHeight(
 
 // ── Main Panel ───────────────────────────────────────────────────
 
-export function ChatPanel() {
+export function ChatPanel({ focusMode = false }: { focusMode?: boolean }) {
   const [activeTab, setActiveTab] = useState<SecondaryTab>("chat");
   const sidebarPosition = useAppStore((s) => s.sidebarPosition);
   const railOnLeft = sidebarPosition === "right";
@@ -378,6 +380,16 @@ export function ChatPanel() {
     </nav>
   );
 
+  if (focusMode) {
+    return (
+      <div className="flex h-full bg-[rgb(var(--color-surface-inset))]">
+        <div className="flex-1 min-w-0 min-h-0">
+          <ChatTab />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-full bg-[rgb(var(--color-surface-inset))]">
       {railOnLeft && rail}
@@ -398,6 +410,8 @@ export function ChatPanel() {
 
 function ChatTab() {
   const { settings, updateSetting } = useSettings();
+  const chatFocusMode = useAppStore((s) => s.chatFocusMode);
+  const setChatFocusMode = useAppStore((s) => s.setChatFocusMode);
   const currentProject = useAppStore((s) => s.currentProject);
   const sketches = useAppStore((s) => s.sketches);
   const notes = useAppStore((s) => s.notes);
@@ -1090,9 +1104,17 @@ function ChatTab() {
         }
         if (e.key === "Escape") {
           e.preventDefault();
+          e.stopPropagation();
           setShowAutocomplete(false);
           return;
         }
+      }
+
+      if (e.key === "Escape" && chatFocusMode) {
+        e.preventDefault();
+        e.stopPropagation();
+        setChatFocusMode(false);
+        return;
       }
 
       if (e.key === "Enter" && !e.shiftKey) {
@@ -1100,7 +1122,15 @@ function ChatTab() {
         handleSend();
       }
     },
-    [showAutocomplete, autocompleteOptions, autocompleteIndex, insertReference, handleSend],
+    [
+      showAutocomplete,
+      autocompleteOptions,
+      autocompleteIndex,
+      insertReference,
+      handleSend,
+      chatFocusMode,
+      setChatFocusMode,
+    ],
   );
 
   const clearChat = useCallback(() => {
@@ -1141,34 +1171,82 @@ function ChatTab() {
   return (
     <div className="flex flex-col h-full">
       {/* Top toolbar — session controls */}
-      <div className="flex items-center gap-0.5 px-2 h-[30px] border-b border-[rgb(var(--color-border))] shrink-0">
+      <div
+        className={`flex items-center gap-1 h-9 border-b border-[rgb(var(--color-border))] shrink-0 ${
+          chatFocusMode ? "px-4" : "px-2"
+        }`}
+      >
+        <div className="flex min-w-0 items-center gap-2 pr-2">
+          <span className="flex h-5 w-5 items-center justify-center rounded-md bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))]">
+            <IconSparkles size={12} />
+          </span>
+          <div className="min-w-0">
+            <p className="truncate text-xs font-medium leading-none text-[rgb(var(--color-text))]">
+              {chatFocusMode ? "Chat - Focus mode" : "Chat"}
+            </p>
+            {chatFocusMode && (
+              <p className="mt-0.5 text-[10px] leading-none text-[rgb(var(--color-text-secondary))]">
+                Esc exits focus mode
+              </p>
+            )}
+          </div>
+        </div>
         <button
           className="flex items-center justify-center w-[26px] h-[26px] rounded text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-toolbar))] transition-colors"
           onClick={clearChat}
           title="New Chat"
+          aria-label="New Chat"
         >
           <IconPlus size={14} />
         </button>
         <div className="flex-1" />
+        <button
+          className={`flex h-[26px] items-center justify-center rounded transition-colors ${
+            chatFocusMode
+              ? "gap-1.5 px-2 text-[11px] font-medium text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10"
+              : "gap-1.5 px-2 text-[11px] text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-toolbar))] hover:text-[rgb(var(--color-text))]"
+          }`}
+          onClick={() => setChatFocusMode(!chatFocusMode)}
+          title={chatFocusMode ? "Exit focus mode (Esc)" : "Expand chat to focus mode"}
+          aria-label={chatFocusMode ? "Exit focus mode" : "Expand chat to focus mode"}
+        >
+          {chatFocusMode ? (
+            <>
+              <Minimize2 className="h-3.5 w-3.5" />
+              <span>Exit focus</span>
+            </>
+          ) : (
+            <>
+              <Maximize2 className="h-3.5 w-3.5" />
+              <span>Focus</span>
+            </>
+          )}
+        </button>
       </div>
 
       {/* Messages */}
       <div
         ref={messagesContainerRef}
-        className="flex-1 overflow-y-auto min-h-0 py-2"
+        className={`flex-1 overflow-y-auto min-h-0 py-2 ${
+          chatFocusMode ? "px-4" : ""
+        }`}
         style={{ fontSize: "var(--chat-font-size, 13px)" }}
         onScroll={handleMessagesScroll}
       >
         {messages.length === 0 && !loading && (
-          <div className="flex flex-col items-center justify-center h-full text-center px-4">
+          <div className="mx-auto flex h-full max-w-3xl flex-col items-center justify-center px-4 text-center">
             <div className="w-10 h-10 rounded-full bg-[rgb(var(--color-accent))]/10 flex items-center justify-center mb-3 text-[rgb(var(--color-accent))]">
               <IconSparkles size={20} />
             </div>
             <p className="text-[13px] font-medium text-[rgb(var(--color-text))] mb-1">
               CutReady AI
             </p>
-            <p className="text-xs text-[rgb(var(--color-text-secondary))] max-w-[220px] leading-relaxed mb-4">
-              I can help plan your demo, generate sketches, or refine your script. Use <kbd className="px-1 py-0.5 text-[10px] bg-[rgb(var(--color-surface-alt))] rounded border border-[rgb(var(--color-border))]">#</kbd> to reference files and websites.
+            <p
+              className={`text-xs text-[rgb(var(--color-text-secondary))] leading-relaxed mb-4 ${
+                chatFocusMode ? "max-w-sm" : "max-w-[220px]"
+              }`}
+            >
+              I can help plan your demo, generate sketches, or refine your script. Use <kbd className="px-1 py-0.5 text-[10px] bg-[rgb(var(--color-surface-alt))] rounded border border-[rgb(var(--color-border))]">@</kbd> to reference files and websites.
             </p>
             <div className="flex flex-wrap gap-1.5 justify-center max-w-[260px]">
               {(() => {
@@ -1206,16 +1284,17 @@ function ChatTab() {
         )}
 
         {messages.map((msg, i) => (
-          <MessageRow
-            key={i}
-            message={msg}
-            agentName={selectedAgent.name}
-            projectRoot={currentProject?.root}
-            onDelete={msg.role === "user" ? () => {
-              const updated = messages.filter((_, idx) => idx !== i);
-              setChatMessages(updated);
-            } : undefined}
-          />
+          <div key={i} className={chatFocusMode ? "mx-auto w-full max-w-5xl" : undefined}>
+            <MessageRow
+              message={msg}
+              agentName={selectedAgent.name}
+              projectRoot={currentProject?.root}
+              onDelete={msg.role === "user" ? () => {
+                const updated = messages.filter((_, idx) => idx !== i);
+                setChatMessages(updated);
+              } : undefined}
+            />
+          </div>
         ))}
 
         {loading && (
@@ -1257,7 +1336,11 @@ function ChatTab() {
       </div>
 
       {/* Input area — VS Code Copilot chat style */}
-      <div className="shrink-0 mx-2.5 mb-2.5 rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] shadow-sm transition-colors focus-within:border-[rgb(var(--color-accent))]">
+      <div
+        className={`shrink-0 mb-2.5 rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] shadow-sm transition-colors focus-within:border-[rgb(var(--color-accent))] ${
+          chatFocusMode ? "mx-auto w-[calc(100%-2rem)] max-w-5xl" : "mx-2.5"
+        }`}
+      >
         {/* Reference chips (shown above textarea) */}
         {references.length > 0 && (
           <div className="px-2.5 pt-2 space-y-1">
@@ -1317,7 +1400,7 @@ function ChatTab() {
           </div>
         )}
 
-        {/* Textarea with # autocomplete */}
+        {/* Textarea with @ autocomplete */}
         <div className="relative" ref={autocompleteRef}>
           {showAutocomplete && autocompleteOptions.length > 0 && (
             <div className="absolute bottom-full left-0 right-0 mb-1 bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-md shadow-lg overflow-hidden z-10 overflow-y-auto" style={{ maxHeight: acMaxH }}>
@@ -1345,7 +1428,7 @@ function ChatTab() {
             className="w-full resize-none bg-transparent px-2.5 py-2 text-[13px] text-[rgb(var(--color-text))] placeholder-[rgb(var(--color-text-secondary))]/60 focus:outline-none leading-[1.5]"
             style={{ maxHeight: 300 }}
             rows={3}
-            placeholder={loading ? "Add guidance for the current response..." : "Ask about your demo plan… (# to reference files)"}
+            placeholder={loading ? "Add guidance for the current response..." : "Ask about your demo plan… (@ to reference files)"}
             value={input}
             onChange={handleInputChange}
             onKeyDown={handleKeyDown}

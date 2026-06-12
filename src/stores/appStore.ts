@@ -253,6 +253,8 @@ interface AppStoreState {
   chatError: string | null;
   /** A prompt queued from outside the chat (e.g. sparkle buttons). ChatPanel picks this up and sends it. */
   pendingChatPrompt: { text: string; silent?: boolean; agent?: string } | null;
+  /** Whether chat is occupying the main work area as an intentional focus mode. */
+  chatFocusMode: boolean;
   /** Activity log entries for the output panel. */
   activityLog: ActivityEntry[];
   /** Debug log entries for the debug panel. */
@@ -511,6 +513,8 @@ interface AppStoreState {
   setChatError: (error: string | null) => void;
   /** Queue a prompt to be sent by the chat panel. */
   sendChatPrompt: (prompt: string, opts?: { silent?: boolean; agent?: string }) => void;
+  /** Enter or exit chat focus mode. */
+  setChatFocusMode: (enabled: boolean) => void;
   /** Add entries to activity log. */
   addActivityEntries: (entries: ActivityEntry[]) => void;
   /** Clear activity log. */
@@ -753,6 +757,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   chatLoading: false,
   chatError: null,
   pendingChatPrompt: null,
+  chatFocusMode: false,
   activityLog: [],
   debugLog: [],
   versions: [],
@@ -1866,6 +1871,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   setChatLoading: (loading) => set({ chatLoading: loading }),
   setChatError: (error) => set({ chatError: error }),
   sendChatPrompt: (prompt, opts) => set({ pendingChatPrompt: { text: prompt, silent: opts?.silent, agent: opts?.agent } }),
+  setChatFocusMode: (enabled) => set({ chatFocusMode: enabled }),
   addActivityEntries: (entries) => {
     recordActivityEntries(entries);
     set((s) => ({ activityLog: [...s.activityLog, ...entries] }));
