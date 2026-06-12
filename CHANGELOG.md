@@ -9,6 +9,25 @@
 Covector manages this changelog. Do not edit manually.
 Each release section is generated from `.changes/*.md` files.
 
+## [1.11.0](https://github.com/sethjuarez/cutready/compare/v1.10.0...v1.11.0) (2026-06-12)
+
+
+### Features
+
+* **agent:** add agent run state inspector ([7caee29](https://github.com/sethjuarez/cutready/commit/7caee29ca48aae4a52418211acf64444611188d6))
+* **agent:** add run state inspector ([ded3561](https://github.com/sethjuarez/cutready/commit/ded35618158e22a6e80c96c90df85fdbaf6b37cf))
+* **agent:** open run details in editor tabs ([156b523](https://github.com/sethjuarez/cutready/commit/156b5230ca0620f03ff388ea244755cedae1a36b))
+* **agent:** persist agentive run state ([c6a7838](https://github.com/sethjuarez/cutready/commit/c6a7838f3fd6777c919e6d9030d04ac36bdfaaa9))
+* **agent:** persist agentive run state ([01978d3](https://github.com/sethjuarez/cutready/commit/01978d3b9557fc978495ba304a4e49bd54cfeb98))
+* **chat:** add discoverable focus mode ([#85](https://github.com/sethjuarez/cutready/issues/85)) ([4101095](https://github.com/sethjuarez/cutready/commit/410109571e9ea5e7eb292714116ff9439fdde883))
+
+
+### Bug Fixes
+
+* **agent:** adopt agentive telemetry metadata ([1082bfb](https://github.com/sethjuarez/cutready/commit/1082bfb91c1ac896a452f968e9884936fc3f10bf))
+* **layout:** allow panels to resize more freely ([a51722f](https://github.com/sethjuarez/cutready/commit/a51722f19569328bf1fe0e9bacffc8c94e4be527))
+* **layout:** allow panels to resize more freely ([0094f55](https://github.com/sethjuarez/cutready/commit/0094f5514b535cd9f395c44e0ae31bdaa149aa90))
+
 ## [1.10.0](https://github.com/sethjuarez/cutready/compare/v1.9.0...v1.10.0) (2026-06-09)
 
 
