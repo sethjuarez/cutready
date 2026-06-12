@@ -8,8 +8,10 @@ import {
   GitCommitHorizontal,
   RefreshCw,
   ShieldCheck,
+  XCircle,
 } from "lucide-react";
 import { invoke } from "../services/tauri";
+import { useAppStore } from "../stores/appStore";
 
 type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
 
@@ -21,6 +23,7 @@ interface AgentRunSummary {
   status: string;
   started_at: string;
   completed_at: string | null;
+  initial_goal: string | null;
   trajectory_event_count: number;
   touched_resource_count: number;
   checkpoint_count: number;
@@ -80,11 +83,10 @@ interface AgentRunDetail {
 
 export function AgentRunInspector() {
   const [runs, setRuns] = useState<AgentRunSummary[]>([]);
-  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
-  const [detail, setDetail] = useState<AgentRunDetail | null>(null);
   const [loadingRuns, setLoadingRuns] = useState(true);
-  const [loadingDetail, setLoadingDetail] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const activeTab = useAppStore((state) => state.openTabs.find((tab) => tab.id === state.activeTabId) ?? null);
+  const openTab = useAppStore((state) => state.openTab);
 
   const loadRuns = useCallback(async () => {
     setLoadingRuns(true);
@@ -92,7 +94,6 @@ export function AgentRunInspector() {
     try {
       const nextRuns = await invoke<AgentRunSummary[]>("list_agent_runs", { limit: 30 });
       setRuns(nextRuns);
-      setSelectedRunId((current) => current ?? nextRuns[0]?.run_id ?? null);
     } catch (err) {
       setError(String(err));
     } finally {
@@ -104,16 +105,60 @@ export function AgentRunInspector() {
     void loadRuns();
   }, [loadRuns]);
 
-  useEffect(() => {
-    if (!selectedRunId) {
-      setDetail(null);
-      return;
-    }
+  return (
+    <div className="flex h-full min-h-0 flex-col bg-[rgb(var(--color-surface))]">
+      <div className="flex h-[38px] items-center gap-2 border-b border-[rgb(var(--color-border))] px-3">
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <Bot className="h-3.5 w-3.5 text-[rgb(var(--color-accent))]" />
+          <span className="truncate text-[11px] font-semibold uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))]">
+            Agent runs
+          </span>
+        </div>
+        <button
+          className="flex h-6 w-6 items-center justify-center rounded-md text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
+          onClick={() => void loadRuns()}
+          title="Refresh runs"
+        >
+          <RefreshCw className={`h-3.5 w-3.5 ${loadingRuns ? "animate-spin" : ""}`} />
+        </button>
+      </div>
 
+      <div className="flex-1 overflow-y-auto py-1">
+        {error ? (
+          <StateMessage label="Could not load agent runs" detail={error} />
+        ) : loadingRuns ? (
+          <StateMessage label="Loading runs..." />
+        ) : runs.length === 0 ? (
+          <StateMessage label="No runs yet" detail="Send an agent message that uses project tools, then refresh this list to inspect the run." />
+        ) : (
+          runs.map((run) => (
+            <RunListItem
+              key={run.run_id}
+              run={run}
+              active={activeTab?.type === "agent-run" && activeTab.path === agentRunTabPath(run.run_id)}
+              onSelect={() => openTab({
+                type: "agent-run",
+                path: agentRunTabPath(run.run_id),
+                title: `Run ${shortId(run.run_id)}`,
+              })}
+            />
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+export function AgentRunTab({ runId }: { runId: string }) {
+  const [detail, setDetail] = useState<AgentRunDetail | null>(null);
+  const [loadingDetail, setLoadingDetail] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
     let cancelled = false;
     setLoadingDetail(true);
     setError(null);
-    invoke<AgentRunDetail | null>("get_agent_run", { runId: selectedRunId })
+    invoke<AgentRunDetail | null>("get_agent_run", { runId })
       .then((nextDetail) => {
         if (!cancelled) setDetail(nextDetail);
       })
@@ -126,56 +171,15 @@ export function AgentRunInspector() {
     return () => {
       cancelled = true;
     };
-  }, [selectedRunId]);
+  }, [runId]);
+
+  if (error) return <StateMessage label="Could not load run detail" detail={error} />;
+  if (loadingDetail) return <StateMessage label="Loading run detail..." />;
+  if (!detail) return <StateMessage label="Run not found" detail="The run may have been pruned or the project agent-state database may have changed." />;
 
   return (
-    <div className="flex h-full min-h-0 bg-[rgb(var(--color-surface-inset))]">
-      <div className="flex w-[18.5rem] shrink-0 flex-col border-r border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))]">
-        <div className="flex h-[38px] items-center gap-2 border-b border-[rgb(var(--color-border))] px-3">
-          <div className="flex min-w-0 flex-1 items-center gap-2">
-            <Bot className="h-3.5 w-3.5 text-[rgb(var(--color-accent))]" />
-            <span className="truncate text-[11px] font-semibold uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))]">
-              Agent runs
-            </span>
-          </div>
-          <button
-            className="flex h-6 w-6 items-center justify-center rounded-md text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
-            onClick={() => void loadRuns()}
-            title="Refresh runs"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${loadingRuns ? "animate-spin" : ""}`} />
-          </button>
-        </div>
-
-        <div className="flex-1 overflow-y-auto py-1">
-          {loadingRuns ? (
-            <StateMessage label="Loading runs..." />
-          ) : runs.length === 0 ? (
-            <StateMessage label="No persisted agent runs yet" detail="Run the assistant with tools and the next run will appear here." />
-          ) : (
-            runs.map((run) => (
-              <RunListItem
-                key={run.run_id}
-                run={run}
-                active={run.run_id === selectedRunId}
-                onSelect={() => setSelectedRunId(run.run_id)}
-              />
-            ))
-          )}
-        </div>
-      </div>
-
-      <div className="min-w-0 flex-1 overflow-y-auto">
-        {error ? (
-          <StateMessage label="Could not load agent state" detail={error} />
-        ) : loadingDetail ? (
-          <StateMessage label="Loading run detail..." />
-        ) : detail ? (
-          <RunDetail detail={detail} />
-        ) : (
-          <StateMessage label="Select an agent run" detail="Recent persisted runs are listed on the left." />
-        )}
-      </div>
+    <div className="h-full min-h-0 overflow-y-auto">
+      <RunDetail detail={detail} />
     </div>
   );
 }
@@ -190,6 +194,7 @@ function RunListItem({
   onSelect: () => void;
 }) {
   const status = statusTone(run.status);
+  const preview = run.initial_goal?.trim() || failedRunHint(run.status);
   return (
     <button
       className={`group w-full border-l-2 px-3 py-2.5 text-left transition-colors ${
@@ -201,7 +206,7 @@ function RunListItem({
     >
       <div className="flex items-center gap-2">
         <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${status.bg} ${status.text}`}>
-          {run.status === "running" ? <CircleDashed className="h-3 w-3" /> : <CheckCircle2 className="h-3 w-3" />}
+          {statusIcon(run.status)}
         </span>
         <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-[rgb(var(--color-text))]">
           {run.model || "Unknown model"}
@@ -216,6 +221,9 @@ function RunListItem({
         <span className="opacity-50">·</span>
         <span className="font-mono">{shortId(run.run_id)}</span>
       </div>
+      <div className="mt-1 truncate pl-7 text-[11px] leading-5 text-[rgb(var(--color-text-secondary))]" title={preview}>
+        {preview}
+      </div>
       <div className="mt-2 grid grid-cols-4 gap-1 pl-7">
         <MiniCount label="events" value={run.trajectory_event_count} />
         <MiniCount label="files" value={run.touched_resource_count} />
@@ -224,6 +232,25 @@ function RunListItem({
       </div>
     </button>
   );
+}
+
+function agentRunTabPath(runId: string): string {
+  return `__agent_run/${runId}`;
+}
+
+function failedRunHint(status: string): string {
+  return status.toLowerCase() === "failed" ? "Failed before a starting message was recorded" : "No starting message recorded";
+}
+
+function statusIcon(status: string): ReactNode {
+  switch (status.toLowerCase()) {
+    case "running":
+      return <CircleDashed className="h-3 w-3" />;
+    case "failed":
+      return <XCircle className="h-3 w-3" />;
+    default:
+      return <CheckCircle2 className="h-3 w-3" />;
+  }
 }
 
 function RunDetail({ detail }: { detail: AgentRunDetail }) {
@@ -504,7 +531,33 @@ function objectEntries(value: JsonValue): Array<[string, JsonValue]> {
 
 function eventSummary(event: AgentTrajectoryEventRecord): string {
   const found = deepFindString(event.event, ["goal", "tool_name", "toolName", "name", "criterion", "message", "reason"]);
-  return found ? `${humanize(event.event_type)} · ${found}` : humanize(event.event_type);
+  const label = eventLabel(event.event_type);
+  return found ? `${label} · ${found}` : label;
+}
+
+function eventLabel(eventType: string): string {
+  switch (eventType) {
+    case "turn_started":
+      return "Started turn";
+    case "turn_completed":
+      return "Completed turn";
+    case "model_call_started":
+      return "Started model call";
+    case "model_call_completed":
+      return "Completed model call";
+    case "tool_call_started":
+      return "Started tool call";
+    case "tool_call_completed":
+      return "Completed tool call";
+    case "verification_recorded":
+      return "Recorded verification";
+    case "checkpoint_created":
+      return "Created checkpoint";
+    case "resource_touched":
+      return "Touched resource";
+    default:
+      return humanize(eventType);
+  }
 }
 
 function summaryFromJson(value: JsonValue): string {

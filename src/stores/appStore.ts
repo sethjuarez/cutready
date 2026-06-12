@@ -130,7 +130,7 @@ export interface SidebarOrder {
 /** An open tab in the editor area. */
 export interface EditorTab {
   id: string;
-  type: "sketch" | "storyboard" | "note" | "history" | "asset" | "diff";
+  type: "sketch" | "storyboard" | "note" | "history" | "asset" | "diff" | "agent-run";
   path: string;
   title: string;
 }
@@ -851,7 +851,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       set({ openTabs: [...openTabs, newTab], activeTabId: id });
     }
     // Navigate away from non-editor views (settings, home) to show the tab
-    if (view === "settings" || view === "home") {
+    if (view === "settings" || view === "home" || view === "chat") {
       set({ view: "project" });
     }
     get()._persistTabs();
@@ -942,7 +942,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     } else if (tab.type === "note") {
       set({ activeSketchPath: null, activeSketch: null, activeStoryboardPath: null, activeStoryboard: null });
       get().openNote(tab.path);
-    } else if (tab.type === "history") {
+    } else if (tab.type === "history" || tab.type === "agent-run") {
       set({ activeSketchPath: null, activeSketch: null, activeStoryboardPath: null, activeStoryboard: null, activeNotePath: null, activeNoteContent: null, activeNoteLocked: false });
     }
     get()._persistTabs();
@@ -1000,7 +1000,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     const tab = openTabs.find((t) => t.id === tabId);
     if (!tab) return;
     // Guard: only splittable types
-    if (tab.type === "history" || tab.type === "asset") return;
+    if (tab.type === "history" || tab.type === "asset" || tab.type === "agent-run" || tab.type === "diff") return;
 
     // Remove from main
     const newOpenTabs = openTabs.filter((t) => t.id !== tabId);

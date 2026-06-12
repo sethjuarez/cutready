@@ -11,6 +11,7 @@ import {
   Image,
   Sparkles,
   FileDiff,
+  Bot,
 } from "lucide-react";
 
 interface IconProps {
@@ -56,4 +57,9 @@ export function VisualIcon({ size = 14, className = "" }: IconProps) {
 /** Diff icon — file diff, representing a change comparison. */
 export function DiffIcon({ size = 14, className = "" }: IconProps) {
   return <FileDiff width={size} height={size} className={className} />;
+}
+
+/** Agent run icon — bot, representing a persisted AI run. */
+export function AgentRunIcon({ size = 14, className = "" }: IconProps) {
+  return <Bot width={size} height={size} className={className} />;
 }

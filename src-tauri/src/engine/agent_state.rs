@@ -54,6 +54,7 @@ pub struct AgentRunSummary {
     pub status: String,
     pub started_at: DateTime<Utc>,
     pub completed_at: Option<DateTime<Utc>>,
+    pub initial_goal: Option<String>,
     pub trajectory_event_count: usize,
     pub touched_resource_count: usize,
     pub checkpoint_count: usize,
@@ -183,7 +184,12 @@ impl AgentStateStore {
                     (SELECT COUNT(*) FROM touched_resources tr WHERE tr.run_id = r.run_id),
                     (SELECT COUNT(*) FROM checkpoints c WHERE c.run_id = r.run_id),
                     (SELECT COUNT(*) FROM resume_contexts rc WHERE rc.run_id = r.run_id),
-                    (SELECT COUNT(*) FROM verification_results vr WHERE vr.run_id = r.run_id)
+                    (SELECT COUNT(*) FROM verification_results vr WHERE vr.run_id = r.run_id),
+                    (SELECT json_extract(te.event_json, '$.goal')
+                       FROM trajectory_events te
+                      WHERE te.run_id = r.run_id AND te.event_type = 'turn_started'
+                      ORDER BY te.id ASC
+                      LIMIT 1)
                  FROM agent_runs r
                  ORDER BY datetime(r.started_at) DESC, r.run_id DESC
                  LIMIT ?1",
@@ -225,13 +231,18 @@ impl AgentStateStore {
                     (SELECT COUNT(*) FROM checkpoints c WHERE c.run_id = r.run_id),
                     (SELECT COUNT(*) FROM resume_contexts rc WHERE rc.run_id = r.run_id),
                     (SELECT COUNT(*) FROM verification_results vr WHERE vr.run_id = r.run_id),
+                    (SELECT json_extract(te.event_json, '$.goal')
+                       FROM trajectory_events te
+                      WHERE te.run_id = r.run_id AND te.event_type = 'turn_started'
+                      ORDER BY te.id ASC
+                      LIMIT 1),
                     r.metadata_json
                  FROM agent_runs r
                  WHERE r.run_id = ?1",
                 params![run_id],
                 |row| {
                     let run = Self::read_run_summary(row)?;
-                    let metadata_json: String = row.get(12)?;
+                    let metadata_json: String = row.get(13)?;
                     Ok((run, metadata_json))
                 },
             )
@@ -319,6 +330,7 @@ impl AgentStateStore {
             checkpoint_count: row.get::<_, usize>(9)?,
             resume_context_count: row.get::<_, usize>(10)?,
             verification_result_count: row.get::<_, usize>(11)?,
+            initial_goal: row.get(12)?,
         })
     }
 
@@ -1321,6 +1333,12 @@ mod tests {
             )
             .unwrap();
         store
+            .record(TrajectoryEvent::TurnStarted {
+                metadata: TrajectoryMetadata::new().with_run_id("run-query"),
+                goal: "Summarize the first sketch".into(),
+            })
+            .unwrap();
+        store
             .record(TrajectoryEvent::VerificationRecorded {
                 metadata: TrajectoryMetadata::new().with_run_id("run-query"),
                 result: VerificationResult::new(
@@ -1334,7 +1352,11 @@ mod tests {
         let runs = AgentStateStore::list_recent_runs(&project_root, 10).unwrap();
         assert_eq!(runs.len(), 1);
         assert_eq!(runs[0].run_id, "run-query");
-        assert_eq!(runs[0].trajectory_event_count, 1);
+        assert_eq!(
+            runs[0].initial_goal.as_deref(),
+            Some("Summarize the first sketch")
+        );
+        assert_eq!(runs[0].trajectory_event_count, 2);
         assert_eq!(runs[0].verification_result_count, 1);
 
         let detail = AgentStateStore::get_run_detail(&project_root, "run-query")
@@ -1342,7 +1364,7 @@ mod tests {
             .unwrap();
         assert_eq!(detail.run.model, "gpt-5-codex");
         assert_eq!(detail.metadata["messages"], 2);
-        assert_eq!(detail.trajectory_events.len(), 1);
+        assert_eq!(detail.trajectory_events.len(), 2);
         assert_eq!(detail.verification_results[0].criterion, "Result was valid");
     }
 
