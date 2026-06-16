@@ -2,6 +2,7 @@ import { Children, isValidElement, useCallback, useEffect, useLayoutEffect, useM
 import { invoke, convertFileSrc, listen } from "../services/tauri";
 import { SafeMarkdown } from "./SafeMarkdown";
 import { AgentRunInspector } from "./AgentRunInspector";
+import { AgentStateDatabasePanel } from "./AgentStateDatabasePanel";
 
 import { clearSuppressedEditorFlush, suppressEditorFlush, useAppStore } from "../stores/appStore";
 import { useSettings, type AgentPreset } from "../hooks/useSettings";
@@ -26,6 +27,7 @@ import {
   Menu,
   Square,
   Activity,
+  Database,
   Maximize2,
   Minimize2,
 } from "lucide-react";
@@ -246,7 +248,7 @@ interface FileReference {
   webStatus?: "loading" | "ready" | "error";
 }
 
-type SecondaryTab = "chat" | "sessions" | "runs";
+type SecondaryTab = "chat" | "sessions" | "runs" | "database";
 
 function resolveAgentModelOverride(
   agent: AgentPreset,
@@ -267,6 +269,10 @@ function IconHistory({ size = 14 }: { size?: number }) {
 
 function IconRuns({ size = 14 }: { size?: number }) {
   return <Activity width={size} height={size} />;
+}
+
+function IconDatabase({ size = 14 }: { size?: number }) {
+  return <Database width={size} height={size} />;
 }
 
 function IconSend({ size = 14 }: { size?: number }) {
@@ -348,6 +354,7 @@ export function ChatPanel({ focusMode = false }: { focusMode?: boolean }) {
     { id: "chat", label: "Chat", icon: <IconSparkles size={13} /> },
     { id: "sessions", label: "Sessions", icon: <IconHistory size={13} /> },
     { id: "runs", label: "Runs", icon: <IconRuns size={13} /> },
+    { id: "database", label: "Database", icon: <IconDatabase size={13} /> },
   ];
   const rail = (
     <nav className={`no-select flex w-12 shrink-0 flex-col items-center gap-1.5 bg-[rgb(var(--color-surface))] py-3 ${
@@ -399,6 +406,7 @@ export function ChatPanel({ focusMode = false }: { focusMode?: boolean }) {
         {activeTab === "chat" && <ChatTab />}
         {activeTab === "sessions" && <ChatHistory onOpenSession={() => setActiveTab("chat")} />}
         {activeTab === "runs" && <AgentRunInspector />}
+        {activeTab === "database" && <AgentStateDatabasePanel />}
       </div>
 
       {!railOnLeft && rail}

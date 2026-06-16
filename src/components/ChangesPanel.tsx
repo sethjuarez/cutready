@@ -548,6 +548,10 @@ function getPathBasename(path: string): string {
   return path.split(/[\\/]/).filter(Boolean).pop() ?? path;
 }
 
+function isDatabasePath(path: string): boolean {
+  return /\.(db|sqlite|sqlite3)$/i.test(path);
+}
+
 function formatRemoteLabel(url: string): string {
   return url
     .replace(/^https?:\/\/(www\.)?github\.com\//, "")
@@ -557,6 +561,7 @@ function formatRemoteLabel(url: string): string {
 
 function FileGroup({ label, files, icon }: { label: string; files: DiffEntry[]; icon: ReactNode }) {
   const openTab = useAppStore((s) => s.openTab);
+  const openDatabase = useAppStore((s) => s.openDatabase);
   const discardFile = useAppStore((s) => s.discardFile);
   const [confirmPath, setConfirmPath] = useState<string | null>(null);
 
@@ -576,9 +581,15 @@ function FileGroup({ label, files, icon }: { label: string; files: DiffEntry[]; 
               className="group flex w-full items-center gap-1 rounded-r pr-1 transition-colors hover:bg-[rgb(var(--color-surface-alt))]"
             >
               <button
-                onClick={() => openTab({ type: "diff", path: file.path, title: `${filename} (diff)` })}
+                onClick={() => {
+                  if (isDatabasePath(file.path) && file.status !== "deleted") {
+                    openDatabase(file.path);
+                  } else {
+                    openTab({ type: "diff", path: file.path, title: `${filename} (diff)` });
+                  }
+                }}
                 className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 px-3 py-1.5 text-left"
-                title={`View diff: ${file.path}`}
+                title={isDatabasePath(file.path) && file.status !== "deleted" ? `View database: ${file.path}` : `View diff: ${file.path}`}
               >
                 <span className="truncate text-[12px] font-medium text-[rgb(var(--color-text))]">{filename}</span>
                 {(file.additions > 0 || file.deletions > 0) && (

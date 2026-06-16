@@ -54,6 +54,10 @@ function isDocumentTab(tab: EditorTab): tab is EditorTab & { type: "sketch" | "s
   return tab.type === "sketch" || tab.type === "storyboard" || tab.type === "note";
 }
 
+function isDatabasePath(path: string): boolean {
+  return /\.(db|sqlite|sqlite3)$/i.test(path.split("#", 1)[0]);
+}
+
 function nextActiveTabIdAfterFiltering(previousTabs: EditorTab[], nextTabs: EditorTab[], activeTabId: string | null): string | null {
   if (!activeTabId) return null;
   if (nextTabs.some((tab) => tab.id === activeTabId)) return activeTabId;
@@ -130,7 +134,7 @@ export interface SidebarOrder {
 /** An open tab in the editor area. */
 export interface EditorTab {
   id: string;
-  type: "sketch" | "storyboard" | "note" | "history" | "asset" | "diff" | "agent-run";
+  type: "sketch" | "storyboard" | "note" | "history" | "asset" | "diff" | "agent-run" | "database";
   path: string;
   title: string;
 }
@@ -492,6 +496,8 @@ interface AppStoreState {
   loadAssets: () => Promise<void>;
   /** Open an asset in a new tab. */
   openAsset: (path: string, assetType: "screenshot" | "visual") => void;
+  /** Open a SQLite database in a read-only inspector tab. */
+  openDatabase: (path: string, tableName?: string) => void;
   /** Import an image from the filesystem into the project. */
   importAsset: () => Promise<void>;
   /** Delete an asset file. */
@@ -888,6 +894,8 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         get().openStoryboard(nextTab.path);
       } else if (nextTab?.type === "note") {
         get().openNote(nextTab.path);
+      } else if (nextTab?.type === "database" || nextTab?.type === "diff" || nextTab?.type === "history" || nextTab?.type === "asset" || nextTab?.type === "agent-run") {
+        set({ activeSketchPath: null, activeSketch: null, activeStoryboardPath: null, activeStoryboard: null, activeNotePath: null, activeNoteContent: null, activeNoteLocked: false });
       }
     } else {
       set({ activeSketchPath: null, activeSketch: null, activeStoryboardPath: null, activeStoryboard: null, activeNotePath: null, activeNoteContent: null, activeNoteLocked: false });
@@ -947,7 +955,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     } else if (tab.type === "note") {
       set({ activeSketchPath: null, activeSketch: null, activeStoryboardPath: null, activeStoryboard: null });
       get().openNote(tab.path);
-    } else if (tab.type === "history" || tab.type === "agent-run") {
+    } else if (tab.type === "history" || tab.type === "agent-run" || tab.type === "diff" || tab.type === "asset" || tab.type === "database") {
       set({ activeSketchPath: null, activeSketch: null, activeStoryboardPath: null, activeStoryboard: null, activeNotePath: null, activeNoteContent: null, activeNoteLocked: false });
     }
     get()._persistTabs();
@@ -1005,7 +1013,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     const tab = openTabs.find((t) => t.id === tabId);
     if (!tab) return;
     // Guard: only splittable types
-    if (tab.type === "history" || tab.type === "asset" || tab.type === "agent-run" || tab.type === "diff") return;
+    if (tab.type === "history" || tab.type === "asset" || tab.type === "agent-run" || tab.type === "diff" || tab.type === "database") return;
 
     // Remove from main
     const newOpenTabs = openTabs.filter((t) => t.id !== tabId);
@@ -1180,6 +1188,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
             if (t.type === "sketch") return sketches.some((s) => s.path === t.path);
             if (t.type === "storyboard") return storyboards.some((s) => s.path === t.path);
             if (t.type === "note") return notes.some((n) => n.path === t.path);
+            if (t.type === "database") return isDatabasePath(t.path);
             return false;
           });
         if (validTabs.length > 0) {
@@ -1747,6 +1756,12 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     if (get().view !== "assets" && get().view !== "sketch" && get().view !== "project") {
       set({ view: "assets" });
     }
+  },
+
+  openDatabase: (path, tableName) => {
+    const filename = path.split("/").pop() ?? path;
+    const tabPath = tableName ? `${path}#${encodeURIComponent(tableName)}` : path;
+    get().openTab({ type: "database", path: tabPath, title: tableName ? `${tableName} (${filename})` : filename });
   },
 
   importAsset: async () => {
