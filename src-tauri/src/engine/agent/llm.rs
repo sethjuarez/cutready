@@ -56,28 +56,28 @@ pub fn build_provider(
     config: &LlmConfig,
     reported_context_length: Option<usize>,
 ) -> Arc<dyn Provider + Send + Sync> {
-    let budget = context_budget(&config.model, reported_context_length);
-    let vision = supports_vision(&config.model);
+    let model = effective_model(config);
+    let budget = context_budget(model, reported_context_length);
+    let vision = supports_vision(model);
 
     if config.provider == LlmProvider::Anthropic {
         return Arc::new(
-            agentive::AnthropicProvider::new(&config.api_key, &config.model)
-                .with_context_budget(budget),
+            agentive::AnthropicProvider::new(&config.api_key, model).with_context_budget(budget),
         );
     }
 
-    let endpoint = config.endpoint.trim_end_matches('/');
+    let endpoint = effective_endpoint(config);
     let auth = resolve_auth(config);
 
-    if needs_responses_api(&config.model) {
+    if needs_responses_api(model) {
         Arc::new(
-            agentive::ResponsesProvider::with_auth(endpoint, auth, &config.model)
+            agentive::ResponsesProvider::with_auth(endpoint, auth, model)
                 .with_context_budget(budget)
                 .with_vision(vision),
         )
     } else {
         Arc::new(
-            agentive::OpenAiProvider::with_auth(endpoint, auth, &config.model)
+            agentive::OpenAiProvider::with_auth(endpoint, auth, model)
                 .with_context_budget(budget)
                 .with_vision(vision),
         )
@@ -92,9 +92,31 @@ pub async fn list_models(config: &LlmConfig) -> Result<Vec<ModelInfo>, String> {
         return Ok(anthropic_models());
     }
     let auth = resolve_auth(config);
-    agentive::discovery::list_models(&config.endpoint, &auth)
+    agentive::discovery::list_models(effective_endpoint(config), &auth)
         .await
         .map(|models| models.into_iter().map(normalize_model_info).collect())
+}
+
+fn effective_endpoint(config: &LlmConfig) -> &str {
+    let endpoint = config.endpoint.trim_end_matches('/');
+    if endpoint.is_empty() && config.provider == LlmProvider::Openai {
+        "https://api.openai.com"
+    } else {
+        endpoint
+    }
+}
+
+fn effective_model(config: &LlmConfig) -> &str {
+    if config.provider != LlmProvider::Anthropic {
+        return &config.model;
+    }
+
+    match config.model.as_str() {
+        "claude-sonnet-4-20250514" => "claude-sonnet-4-6",
+        "claude-opus-4-20250514" => "claude-opus-4-8",
+        "claude-haiku-3-5-20241022" => "claude-haiku-4-5",
+        _ => &config.model,
+    }
 }
 
 /// Map CutReady's LlmConfig to an agentive AuthStrategy.
@@ -166,9 +188,9 @@ fn normalize_model_info(mut model: ModelInfo) -> ModelInfo {
 /// Known Anthropic models (no discovery API available).
 fn anthropic_models() -> Vec<ModelInfo> {
     [
-        ("claude-sonnet-4-20250514", 200_000, true),
-        ("claude-opus-4-20250514", 200_000, true),
-        ("claude-haiku-3-5-20241022", 200_000, true),
+        ("claude-sonnet-4-6", 1_000_000, true),
+        ("claude-opus-4-8", 1_000_000, true),
+        ("claude-haiku-4-5", 200_000, true),
     ]
     .into_iter()
     .map(|(id, ctx, vision)| {
@@ -208,7 +230,7 @@ mod tests {
             provider: LlmProvider::Anthropic,
             endpoint: String::new(),
             api_key: "sk-ant-test".into(),
-            model: "claude-sonnet-4-20250514".into(),
+            model: "claude-sonnet-4-6".into(),
             bearer_token: None,
         };
         let p = build_provider(&config, None);
@@ -316,9 +338,13 @@ mod tests {
     fn anthropic_models_have_context_length() {
         let models = anthropic_models();
         assert_eq!(models.len(), 3);
-        for m in &models {
-            assert_eq!(m.context_length, Some(200_000));
-        }
+        let context_lengths: std::collections::HashMap<_, _> = models
+            .iter()
+            .map(|m| (m.id.as_str(), m.context_length))
+            .collect();
+        assert_eq!(context_lengths["claude-sonnet-4-6"], Some(1_000_000));
+        assert_eq!(context_lengths["claude-opus-4-8"], Some(1_000_000));
+        assert_eq!(context_lengths["claude-haiku-4-5"], Some(200_000));
     }
 
     #[test]
@@ -334,9 +360,27 @@ mod tests {
     fn anthropic_models_have_expected_ids() {
         let models = anthropic_models();
         let ids: Vec<&str> = models.iter().map(|m| m.id.as_str()).collect();
-        assert!(ids.contains(&"claude-sonnet-4-20250514"));
-        assert!(ids.contains(&"claude-opus-4-20250514"));
-        assert!(ids.contains(&"claude-haiku-3-5-20241022"));
+        assert!(ids.contains(&"claude-sonnet-4-6"));
+        assert!(ids.contains(&"claude-opus-4-8"));
+        assert!(ids.contains(&"claude-haiku-4-5"));
+    }
+
+    #[test]
+    fn effective_model_maps_stale_anthropic_ids() {
+        let mut config = LlmConfig {
+            provider: LlmProvider::Anthropic,
+            endpoint: String::new(),
+            api_key: "sk-ant-test".into(),
+            model: "claude-sonnet-4-20250514".into(),
+            bearer_token: None,
+        };
+        assert_eq!(effective_model(&config), "claude-sonnet-4-6");
+
+        config.model = "claude-opus-4-20250514".into();
+        assert_eq!(effective_model(&config), "claude-opus-4-8");
+
+        config.model = "claude-haiku-3-5-20241022".into();
+        assert_eq!(effective_model(&config), "claude-haiku-4-5");
     }
 
     #[test]

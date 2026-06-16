@@ -1393,10 +1393,7 @@ mod tests {
 
         assert_eq!(
             store.db_path(),
-            project_root
-                .join(".git")
-                .join("cutready")
-                .join("agent-state.db")
+            AgentStateStore::database_path_for_project(&project_root)
         );
         assert!(store.db_path().exists());
         assert!(!legacy_path.exists());

@@ -1,5 +1,6 @@
 import { describe, test, expect } from "vitest";
-import { buildProviderConfig, canFetchModelsFor, CUTREADY_FEEDBACK_REPO } from "../components/SettingsPanel";
+import { CUTREADY_FEEDBACK_REPO } from "../components/SettingsPanel";
+import { buildProviderConfig, canFetchModelsFor, isAiProviderConfigured } from "../utils/providerConfig";
 
 // ── buildProviderConfig ─────────────────────────────────────────
 
@@ -158,5 +159,73 @@ describe("canFetchModelsFor", () => {
         aiAccessToken: "token",
       })
     ).toBe(true);
+  });
+});
+
+describe("isAiProviderConfigured", () => {
+  const base = {
+    aiProvider: "openai",
+    aiAuthMode: "api_key",
+    aiApiKey: "",
+    aiAccessToken: "",
+    aiEndpoint: "",
+    aiModel: "gpt-4o",
+  };
+
+  test("Anthropic: true with API key and model without endpoint", () => {
+    expect(isAiProviderConfigured({
+      ...base,
+      aiProvider: "anthropic",
+      aiApiKey: "sk-ant-test",
+      aiEndpoint: "",
+      aiModel: "claude-sonnet-4-6",
+    })).toBe(true);
+  });
+
+  test("Anthropic: false without API key", () => {
+    expect(isAiProviderConfigured({
+      ...base,
+      aiProvider: "anthropic",
+      aiEndpoint: "",
+      aiModel: "claude-sonnet-4-6",
+    })).toBe(false);
+  });
+
+  test("OpenAI: true with API key and model without endpoint", () => {
+    expect(isAiProviderConfigured({
+      ...base,
+      aiEndpoint: "",
+      aiApiKey: "sk-test",
+    })).toBe(true);
+  });
+
+  test("OpenAI: false without API key", () => {
+    expect(isAiProviderConfigured({
+      ...base,
+      aiEndpoint: "",
+    })).toBe(false);
+  });
+
+  test("Azure OpenAI: requires endpoint, API key, and model in api_key mode", () => {
+    expect(isAiProviderConfigured({
+      ...base,
+      aiProvider: "azure_openai",
+      aiEndpoint: "https://api.openai.com",
+      aiApiKey: "sk-test",
+    })).toBe(true);
+    expect(isAiProviderConfigured({
+      ...base,
+      aiProvider: "azure_openai",
+      aiApiKey: "sk-test",
+    })).toBe(false);
+  });
+
+  test("any provider requires a model", () => {
+    expect(isAiProviderConfigured({
+      ...base,
+      aiProvider: "anthropic",
+      aiApiKey: "sk-ant-test",
+      aiModel: "",
+    })).toBe(false);
   });
 });

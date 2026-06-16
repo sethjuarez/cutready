@@ -52,58 +52,7 @@ type SettingsTab = "ai" | "agents" | "memory" | "display" | "themes" | "recordin
 import { inputClass, tabBtnClass } from "../styles";
 import { FoundryResourcePicker } from "./FoundryResourcePicker";
 import { THEME_PALETTES, type ThemePalette } from "../theme/appThemePalettes";
-
-/** Build the provider config payload for IPC calls like list_models / agent_chat_with_tools. */
-export function buildProviderConfig(settings: {
-  aiProvider: string;
-  aiEndpoint: string;
-  aiApiKey: string;
-  aiModel: string;
-  aiAuthMode: string;
-  aiAccessToken: string;
-  aiContextLength?: number;
-  aiVisionMode?: "off" | "notes" | "notes_and_sketches";
-  aiModelSupportsVision?: string;
-  aiWebAccess?: "disabled" | "enabled";
-}) {
-  return {
-    provider: settings.aiProvider,
-    endpoint: settings.aiEndpoint,
-    api_key: settings.aiApiKey,
-    model: settings.aiModel || "unused",
-    bearer_token:
-      settings.aiAuthMode === "azure_oauth"
-        ? settings.aiAccessToken
-        : null,
-    context_length: settings.aiContextLength || null,
-    vision_mode: settings.aiVisionMode || "off",
-    model_supports_vision:
-      settings.aiModelSupportsVision === ""
-        ? null
-        : settings.aiModelSupportsVision === "true",
-    web_access: settings.aiWebAccess || "disabled",
-  };
-}
-
-/** Determine whether the "Fetch Models" button should be enabled. */
-export function canFetchModelsFor(settings: {
-  aiProvider: string;
-  aiAuthMode: string;
-  aiApiKey: string;
-  aiAccessToken: string;
-  aiEndpoint: string;
-}) {
-  const isAzure = settings.aiProvider === "azure_openai";
-  const isFoundry = settings.aiProvider === "microsoft_foundry";
-  const isAnthropic = settings.aiProvider === "anthropic";
-  const isOAuth = (isAzure || isFoundry) && settings.aiAuthMode === "azure_oauth";
-  const hasToken = !!settings.aiAccessToken;
-  return isAnthropic
-    ? true
-    : isOAuth
-      ? hasToken
-      : !!settings.aiApiKey || (isFoundry && !!settings.aiEndpoint);
-}
+import { buildProviderConfig, canFetchModelsFor, isAiProviderConfigured } from "../utils/providerConfig";
 
 export function SettingsPanel() {
   const { settings, updateSetting, loaded } = useSettings();
@@ -1073,7 +1022,7 @@ function AIProviderTab({ settings, updateSetting, isAzure, isFoundry, isAnthropi
                 updateSetting("aiModel", e.target.value);
               }
             }}
-            placeholder={models.length > 0 ? "Filter models…" : (isAnthropic ? "claude-sonnet-4-20250514" : "gpt-4o")}
+            placeholder={models.length > 0 ? "Filter models…" : (isAnthropic ? "claude-sonnet-4-6" : "gpt-4o")}
             className={inputClass + " flex-1"}
           />
           <button
@@ -1697,7 +1646,7 @@ function FeedbackListTab() {
 
     try {
       const s = useSettingsStore.getState().settings;
-      const hasAi = s.aiModel && s.aiEndpoint;
+      const hasAi = isAiProviderConfigured(s);
 
       if (hasAi) {
         let bearerToken = s.aiAuthMode === "azure_oauth" ? s.aiAccessToken : null;
@@ -1712,10 +1661,7 @@ function FeedbackListTab() {
         }
 
         const config = {
-          provider: s.aiProvider,
-          endpoint: s.aiEndpoint,
-          api_key: s.aiApiKey,
-          model: s.aiModel,
+          ...buildProviderConfig(s),
           bearer_token: bearerToken,
         };
 

@@ -7,6 +7,7 @@ import { AgentStateDatabasePanel } from "./AgentStateDatabasePanel";
 import { clearSuppressedEditorFlush, suppressEditorFlush, useAppStore } from "../stores/appStore";
 import { useSettings, type AgentPreset } from "../hooks/useSettings";
 import { BUILT_IN_AGENTS, resolveAgentPrompt } from "../agents/builtInAgents";
+import { buildProviderConfig, isAiProviderConfigured } from "../utils/providerConfig";
 import { SketchIcon, StoryboardIcon, NoteIcon } from "./Icons";
 import type { ChatMessage, ChatSessionSummary, ToolCall } from "../types/sketch";
 import {
@@ -697,20 +698,7 @@ function ChatTab() {
       .slice(0, 10);
   }, [showContextPicker, contextFilter, allFiles, references]);
 
-  const buildConfig= useCallback(() => ({
-    provider: settings.aiProvider,
-    endpoint: settings.aiEndpoint,
-    api_key: settings.aiApiKey,
-    model: settings.aiModel || "unused",
-    bearer_token: settings.aiAuthMode === "azure_oauth" ? settings.aiAccessToken : null,
-    context_length: settings.aiContextLength || null,
-    vision_mode: settings.aiVisionMode || "off",
-    model_supports_vision:
-      settings.aiModelSupportsVision === ""
-        ? null
-        : settings.aiModelSupportsVision === "true",
-    web_access: settings.aiWebAccess || "disabled",
-  }), [settings]);
+  const buildConfig= useCallback(() => buildProviderConfig(settings), [settings]);
 
   // Build system prompt from selected agent
   const [memoryContext, setMemoryContext] = useState("");
@@ -1141,7 +1129,7 @@ function ChatTab() {
     setReferences([]);
   }, [newChatSession]);
 
-  const isConfigured = settings.aiEndpoint && (settings.aiApiKey || settings.aiAccessToken);
+  const isConfigured = isAiProviderConfigured(settings);
 
   if (!currentProject) {
     return (
@@ -1158,7 +1146,7 @@ function ChatTab() {
       <div className="flex-1 flex items-center justify-center p-4">
         <div className="text-center">
           <p className="text-xs text-[rgb(var(--color-text-secondary))] mb-2">
-            Configure an AI provider in Settings to use the assistant
+            Configure an AI provider and model in Settings to use the assistant
           </p>
           <button
             className="text-xs text-[rgb(var(--color-accent))] hover:underline"

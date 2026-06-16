@@ -8,6 +8,7 @@ import { invoke, convertFileSrc } from "../services/tauri";
 import { exportNoteToWord } from "../utils/exportToWord";
 import { ExportWordButton } from "./ExportWordButton";
 import { agentChat } from "../services/agentChat";
+import { isAiProviderConfigured } from "../utils/providerConfig";
 
 const AI_NOTE_CLEANUP_PROMPT = `You are a document editor. Clean up and improve the following Markdown note.
 
@@ -90,7 +91,7 @@ export function NoteEditor() {
 
   // Async getter for AI config — refreshes OAuth token on demand
   const getAiConfig = useCallback(async () => {
-    if (!settings.aiModel || !settings.aiEndpoint) return undefined;
+    if (!isAiProviderConfigured(settings)) return undefined;
 
     let bearerToken = settings.aiAuthMode === "azure_oauth" ? settings.aiAccessToken : null;
 
