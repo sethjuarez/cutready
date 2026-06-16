@@ -9,6 +9,26 @@
 Covector manages this changelog. Do not edit manually.
 Each release section is generated from `.changes/*.md` files.
 
+## [1.12.0](https://github.com/sethjuarez/cutready/compare/v1.11.0...v1.12.0) (2026-06-16)
+
+
+### Features
+
+* add run maintenance and split tab UX ([c0c3170](https://github.com/sethjuarez/cutready/commit/c0c3170a9a87ee56192d5f999c7e3b7aebdf1b0c))
+* add run maintenance and split tab UX ([339f440](https://github.com/sethjuarez/cutready/commit/339f440b94091ac772e1faf39affcf17cf4f6c43))
+* **agent:** add agent state database inspector ([a9a1f12](https://github.com/sethjuarez/cutready/commit/a9a1f128412d6aa0af28835c697c5ddf95fdab37))
+* **agent:** add agent state database inspector ([af09f26](https://github.com/sethjuarez/cutready/commit/af09f26a80d15520fc09516eefc7ae90fb4aa7dc))
+* **agent:** store memory in agent-state database ([4d2f008](https://github.com/sethjuarez/cutready/commit/4d2f0087ac5a55d28e6228d3695ac7ebb3156cf7))
+* **agent:** store memory in agent-state database ([931f370](https://github.com/sethjuarez/cutready/commit/931f370252f7c97a21b3d0d6cb9c9d331fcfd875))
+
+
+### Bug Fixes
+
+* **agent:** keep chat runtime state local ([40b6bbf](https://github.com/sethjuarez/cutready/commit/40b6bbf50b1b9d30b16e147a33183c2eec72b045))
+* **agent:** keep chat runtime state local ([7fc65dd](https://github.com/sethjuarez/cutready/commit/7fc65ddd3204d56d5c45e7f1f59029e76be019fd))
+* **agent:** keep memory state local ([ebb76a9](https://github.com/sethjuarez/cutready/commit/ebb76a96b94838f4e16f1af37d22881033c9e81f))
+* **agent:** keep memory state local ([85683e8](https://github.com/sethjuarez/cutready/commit/85683e85aec42d113e1784188d3e1a6c0b9f9297))
+
 ## [1.11.0](https://github.com/sethjuarez/cutready/compare/v1.10.0...v1.11.0) (2026-06-16)
 
 
