@@ -20,6 +20,8 @@ use crate::models::script::{ProjectEntry, ProjectManifest, ProjectView, RepoView
 use crate::models::sketch::{NoteSummary, Sketch, SketchSummary, Storyboard, StoryboardSummary};
 
 const LOCKS_PATH: &str = ".cutready/locks.json";
+const LEGACY_CHAT_URI_PREFIX: &str = "cutready://legacy-chats/";
+const LEGACY_CHAT_STATE_DIR: &str = "legacy-chats";
 
 /// Lock metadata for plain Markdown notes.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default)]
@@ -1308,10 +1310,43 @@ pub struct ChatSession {
     pub author_email: Option<String>,
 }
 
-/// Scan for .chat files in the project.
-pub fn scan_chat_sessions(project_root: &Path) -> Result<Vec<ChatSessionSummary>, ProjectError> {
-    let mut summaries = Vec::new();
+/// Move legacy `.chats/*.chat` files out of the versioned project tree.
+pub fn migrate_legacy_chat_sessions(
+    repo_root: &Path,
+    project_root: &Path,
+) -> Result<(), ProjectError> {
     let chats_dir = project_root.join(".chats");
+    if !chats_dir.exists() {
+        return Ok(());
+    }
+
+    let archive_dir = legacy_chat_state_dir(repo_root, project_root);
+    std::fs::create_dir_all(&archive_dir).map_err(|e| ProjectError::Io(e.to_string()))?;
+    let entries = std::fs::read_dir(&chats_dir).map_err(|e| ProjectError::Io(e.to_string()))?;
+    for entry in entries {
+        let entry = entry.map_err(|e| ProjectError::Io(e.to_string()))?;
+        let source = entry.path();
+        if !source.extension().is_some_and(|ext| ext == "chat") {
+            continue;
+        }
+        let Some(file_name) = source.file_name() else {
+            continue;
+        };
+        let destination = unique_legacy_chat_path(&archive_dir, file_name);
+        migrate_legacy_chat_file(project_root, &source, &destination)?;
+    }
+    let _ = std::fs::remove_dir(&chats_dir);
+    Ok(())
+}
+
+/// Scan for legacy .chat files archived in local repo state.
+pub fn scan_chat_sessions(
+    repo_root: &Path,
+    project_root: &Path,
+) -> Result<Vec<ChatSessionSummary>, ProjectError> {
+    migrate_legacy_chat_sessions(repo_root, project_root)?;
+    let mut summaries = Vec::new();
+    let chats_dir = legacy_chat_state_dir(repo_root, project_root);
     if chats_dir.exists() {
         let entries = std::fs::read_dir(&chats_dir).map_err(|e| ProjectError::Io(e.to_string()))?;
         for entry in entries {
@@ -1320,21 +1355,17 @@ pub fn scan_chat_sessions(project_root: &Path) -> Result<Vec<ChatSessionSummary>
             if path.extension().is_some_and(|ext| ext == "chat") {
                 if let Ok(data) = std::fs::read_to_string(&path) {
                     if let Ok(session) = serde_json::from_str::<ChatSession>(&data) {
-                        if let Ok(rel) = path.strip_prefix(project_root) {
-                            let rel_path = rel.to_string_lossy().replace('\\', "/");
-                            let committed_author =
-                                last_committed_file_author(project_root, &path).unwrap_or(None);
+                        if let Some(file_name) =
+                            path.file_name().map(|name| name.to_string_lossy())
+                        {
+                            let session_path = format!("{LEGACY_CHAT_URI_PREFIX}{file_name}");
                             summaries.push(ChatSessionSummary {
-                                path: rel_path,
+                                path: session_path,
                                 title: session.title,
                                 message_count: session.messages.len(),
                                 updated_at: session.updated_at,
-                                author_name: session
-                                    .author_name
-                                    .or_else(|| committed_author.clone().map(|author| author.0)),
-                                author_email: session
-                                    .author_email
-                                    .or_else(|| committed_author.map(|author| author.1)),
+                                author_name: session.author_name,
+                                author_email: session.author_email,
                             });
                         }
                     }
@@ -1346,6 +1377,90 @@ pub fn scan_chat_sessions(project_root: &Path) -> Result<Vec<ChatSessionSummary>
     Ok(summaries)
 }
 
+pub fn resolve_chat_session_path(
+    repo_root: &Path,
+    project_root: &Path,
+    relative_path: &str,
+) -> Result<PathBuf, ProjectError> {
+    migrate_legacy_chat_sessions(repo_root, project_root)?;
+    if let Some(file_name) = legacy_chat_file_name(relative_path)? {
+        let archive_path = legacy_chat_state_dir(repo_root, project_root).join(file_name);
+        return Ok(archive_path);
+    }
+
+    let project_path = safe_resolve(project_root, relative_path)?;
+    if project_path.exists() || !relative_path.starts_with(".chats/") {
+        return Ok(project_path);
+    }
+    let file_name = Path::new(relative_path)
+        .file_name()
+        .ok_or_else(|| ProjectError::PathTraversal(relative_path.to_string()))?;
+    Ok(legacy_chat_state_dir(repo_root, project_root).join(file_name))
+}
+
+fn legacy_chat_state_dir(repo_root: &Path, project_root: &Path) -> PathBuf {
+    git_state_dir(repo_root, project_root).join(LEGACY_CHAT_STATE_DIR)
+}
+
+fn legacy_chat_file_name(relative_path: &str) -> Result<Option<&str>, ProjectError> {
+    let Some(file_name) = relative_path.strip_prefix(LEGACY_CHAT_URI_PREFIX) else {
+        return Ok(None);
+    };
+    if file_name.is_empty()
+        || file_name.contains('/')
+        || file_name.contains('\\')
+        || file_name.contains("..")
+        || !file_name.ends_with(".chat")
+    {
+        return Err(ProjectError::PathTraversal(relative_path.to_string()));
+    }
+    Ok(Some(file_name))
+}
+
+fn unique_legacy_chat_path(archive_dir: &Path, file_name: &std::ffi::OsStr) -> PathBuf {
+    let candidate = archive_dir.join(file_name);
+    if !candidate.exists() {
+        return candidate;
+    }
+
+    let stem = Path::new(file_name)
+        .file_stem()
+        .map(|value| value.to_string_lossy())
+        .unwrap_or_else(|| "chat".into());
+    let extension = Path::new(file_name)
+        .extension()
+        .map(|value| value.to_string_lossy())
+        .unwrap_or_else(|| "chat".into());
+    for index in 1.. {
+        let candidate = archive_dir.join(format!("{stem}-{index}.{extension}"));
+        if !candidate.exists() {
+            return candidate;
+        }
+    }
+    unreachable!("unique legacy chat path search is unbounded")
+}
+
+fn migrate_legacy_chat_file(
+    project_root: &Path,
+    source: &Path,
+    destination: &Path,
+) -> Result<(), ProjectError> {
+    let data = std::fs::read_to_string(source).map_err(|e| ProjectError::Io(e.to_string()))?;
+    if let Ok(mut session) = serde_json::from_str::<ChatSession>(&data) {
+        let committed_author = last_committed_file_author(project_root, source).unwrap_or(None);
+        if session.author_name.is_none() {
+            session.author_name = committed_author.as_ref().map(|author| author.0.clone());
+        }
+        if session.author_email.is_none() {
+            session.author_email = committed_author.map(|author| author.1);
+        }
+        write_chat_session(destination, &session)?;
+    } else {
+        std::fs::write(destination, data).map_err(|e| ProjectError::Io(e.to_string()))?;
+    }
+    std::fs::remove_file(source).map_err(|e| ProjectError::Io(e.to_string()))
+}
+
 fn last_committed_file_author(
     project_root: &Path,
     file_path: &Path,
@@ -1355,7 +1470,9 @@ fn last_committed_file_author(
         Some(path) => path,
         None => return Ok(None),
     };
-    let canonical_workdir = workdir.canonicalize().unwrap_or_else(|_| workdir.to_path_buf());
+    let canonical_workdir = workdir
+        .canonicalize()
+        .unwrap_or_else(|_| workdir.to_path_buf());
     let canonical_file_path = file_path
         .canonicalize()
         .unwrap_or_else(|_| file_path.to_path_buf());
@@ -1438,7 +1555,7 @@ const REPO_SETTINGS_FILE: &str = ".cutready/settings.json";
 /// Resolve the per-project state directory inside .git/cutready/.
 /// For single-project repos: `.git/cutready/`
 /// For multi-project repos: `.git/cutready/<project-name>/`
-fn git_state_dir(repo_root: &Path, project_root: &Path) -> std::path::PathBuf {
+pub fn git_state_dir(repo_root: &Path, project_root: &Path) -> std::path::PathBuf {
     let base = repo_root.join(GIT_STATE_DIR);
     if repo_root == project_root {
         base
@@ -1476,14 +1593,16 @@ pub fn read_workspace_state(repo_root: &Path, project_root: &Path) -> WorkspaceS
     let state_dir = git_state_dir(repo_root, project_root);
     let new_path = state_dir.join("workspace.json");
     if let Ok(data) = std::fs::read_to_string(&new_path) {
-        if let Ok(ws) = serde_json::from_str(&data) {
+        if let Ok(mut ws) = serde_json::from_str(&data) {
+            sanitize_workspace_chat_session(repo_root, project_root, &mut ws);
             return ws;
         }
     }
     // Legacy fallback: read from .cutready/workspace.json
     let legacy_path = project_root.join(".cutready/workspace.json");
     if let Ok(data) = std::fs::read_to_string(&legacy_path) {
-        if let Ok(ws) = serde_json::from_str::<WorkspaceState>(&data) {
+        if let Ok(mut ws) = serde_json::from_str::<WorkspaceState>(&data) {
+            sanitize_workspace_chat_session(repo_root, project_root, &mut ws);
             // Migrate: write to new location, remove legacy file
             log::info!(
                 "[workspace] migrating workspace.json from {:?} → {:?}",
@@ -1497,6 +1616,27 @@ pub fn read_workspace_state(repo_root: &Path, project_root: &Path) -> WorkspaceS
         }
     }
     WorkspaceState::default()
+}
+
+fn sanitize_workspace_chat_session(
+    repo_root: &Path,
+    project_root: &Path,
+    ws: &mut WorkspaceState,
+) {
+    let Some(session_path) = ws.chat_session_path.as_deref() else {
+        return;
+    };
+    let is_legacy_session =
+        session_path.starts_with(".chats/") || session_path.starts_with(LEGACY_CHAT_URI_PREFIX);
+    if !is_legacy_session {
+        return;
+    }
+    let exists = resolve_chat_session_path(repo_root, project_root, session_path)
+        .map(|path| path.exists())
+        .unwrap_or(false);
+    if !exists {
+        ws.chat_session_path = None;
+    }
 }
 
 /// Write workspace state to .git/cutready/ (untracked by snapshots).
@@ -2315,6 +2455,49 @@ Some text
     }
 
     #[test]
+    fn workspace_state_clears_missing_legacy_chat_session() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        git2::Repository::init(root).unwrap();
+
+        let state_dir = root.join(".git/cutready");
+        std::fs::create_dir_all(&state_dir).unwrap();
+        std::fs::write(
+            state_dir.join("workspace.json"),
+            r#"{"open_tabs":[],"active_tab_id":null,"chat_session_path":".chats/missing.chat"}"#,
+        )
+        .unwrap();
+
+        let ws = read_workspace_state(root, root);
+
+        assert!(ws.chat_session_path.is_none());
+    }
+
+    #[test]
+    fn workspace_state_keeps_existing_legacy_chat_session() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        git2::Repository::init(root).unwrap();
+
+        let state_dir = root.join(".git/cutready");
+        let chat_dir = state_dir.join("legacy-chats");
+        std::fs::create_dir_all(&chat_dir).unwrap();
+        std::fs::write(chat_dir.join("chat.chat"), "{}").unwrap();
+        std::fs::write(
+            state_dir.join("workspace.json"),
+            r#"{"open_tabs":[],"active_tab_id":null,"chat_session_path":"cutready://legacy-chats/chat.chat"}"#,
+        )
+        .unwrap();
+
+        let ws = read_workspace_state(root, root);
+
+        assert_eq!(
+            ws.chat_session_path.as_deref(),
+            Some("cutready://legacy-chats/chat.chat")
+        );
+    }
+
+    #[test]
     fn workspace_state_returns_default_when_missing() {
         let tmp = TempDir::new().unwrap();
         let root = tmp.path();
@@ -2391,10 +2574,16 @@ Some text
         };
         write_chat_session(&root.join(".chats/chat.chat"), &session).unwrap();
 
-        let sessions = scan_chat_sessions(root).unwrap();
+        let sessions = scan_chat_sessions(root, root).unwrap();
         assert_eq!(sessions.len(), 1);
+        assert_eq!(
+            sessions[0].path,
+            "cutready://legacy-chats/chat.chat".to_string()
+        );
         assert_eq!(sessions[0].author_name.as_deref(), Some("Ada Lovelace"));
         assert_eq!(sessions[0].author_email.as_deref(), Some("ada@example.com"));
+        assert!(!root.join(".chats/chat.chat").exists());
+        assert!(root.join(".git/cutready/legacy-chats/chat.chat").exists());
     }
 
     #[test]
@@ -2431,12 +2620,22 @@ Some text
         .unwrap();
         drop(tree);
 
-        let sessions = scan_chat_sessions(root).unwrap();
+        let sessions = scan_chat_sessions(root, root).unwrap();
         assert_eq!(sessions.len(), 1);
         assert_eq!(sessions[0].author_name.as_deref(), Some("Grace Hopper"));
         assert_eq!(
             sessions[0].author_email.as_deref(),
             Some("grace@example.com")
         );
+
+        let migrated = read_chat_session(&resolve_chat_session_path(
+            root,
+            root,
+            ".chats/chat.chat",
+        )
+        .unwrap())
+        .unwrap();
+        assert_eq!(migrated.author_name.as_deref(), Some("Grace Hopper"));
+        assert_eq!(migrated.author_email.as_deref(), Some("grace@example.com"));
     }
 }

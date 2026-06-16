@@ -97,6 +97,8 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
     case "get_project":
     case "get_current_project":
       return MOCK_PROJECT;
+    case "get_startup_project_path":
+      return null;
     case "list_recent_projects":
       return [{ path: "C:/mock-project", last_opened: new Date().toISOString() }];
     case "list_sketches":

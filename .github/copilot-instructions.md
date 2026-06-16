@@ -19,7 +19,8 @@ CutReady uses a **Storyboard → Sketch** hierarchy:
 - **Sketch** (`.sk` files): A scene with title, description, and a planning table. Each planning table row has: Time, Narrative, Actions, Screenshot, and an optional Visual (Elucim DSL JSON stored externally in `.cutready/visuals/`).
 - **Storyboard** (`.sb` files): Sequences sketches with optional named sections. References sketches by path.
 - **Notes** (`.md` files): Markdown documents for planning, context, and AI-generated content.
-- **Sessions** (`.chats/` directory): Saved AI chat sessions with full message history.
+- **Agent runs** (`.git/cutready/agent-state.db`): Local SQLite runtime state for chat/run trajectories, checkpoints, resume context, and verification. The Runs tab is the curated UI; the database inspector is the raw/debug view.
+- **Legacy sessions** (`.chats/` directory): Old JSON chat session files. Keep readable for backward compatibility, but do not write new chat exhaust there or include it in snapshots.
 
 ## Project Storage
 
@@ -35,13 +36,14 @@ my-demo-project/
 ├── .cutready/                  # CutReady metadata
 │   ├── visuals/                # Elucim DSL visual JSON files
 │   └── settings.json           # Per-project settings
-├── .chats/                     # Saved AI chat sessions
-└── .git/                       # Git versioning (managed by gix)
+└── .git/                       # Git versioning + local CutReady runtime state
+    └── cutready/agent-state.db # Local agent run/chat trajectory DB
 ```
 
 - No central project registry — projects are opened by folder path.
 - Recent projects stored via `tauri-plugin-store` in app data.
 - All user-provided relative paths go through `project::safe_resolve()` to prevent path traversal.
+- Agent runtime state is local by default under `.git/cutready/` so normal chat activity does not dirty the project. Accepted AI outputs should be written into versioned sketches, storyboards, notes, or visuals.
 
 ## Tech Stack
 

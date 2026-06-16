@@ -28,6 +28,8 @@ interface DatabaseCellPreview {
   value: string | null;
 }
 
+export const AGENT_STATE_DATABASE_PATH = "cutready://agent-state";
+
 export function DatabaseViewer({ path }: { path: string }) {
   const { databasePath, tableName } = parseDatabaseTabPath(path);
   const [preview, setPreview] = useState<DatabasePreview | null>(null);
@@ -39,7 +41,10 @@ export function DatabaseViewer({ path }: { path: string }) {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    invoke<DatabasePreview>("get_database_preview", { relativePath: databasePath })
+    const request = databasePath === AGENT_STATE_DATABASE_PATH
+      ? invoke<DatabasePreview>("get_agent_state_database_preview")
+      : invoke<DatabasePreview>("get_database_preview", { relativePath: databasePath });
+    request
       .then((result) => {
         if (cancelled) return;
         setPreview(result);

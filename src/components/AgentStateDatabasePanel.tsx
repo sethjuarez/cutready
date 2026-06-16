@@ -2,9 +2,9 @@ import { useCallback, useEffect, useState } from "react";
 import { Database, RefreshCw, Table2 } from "lucide-react";
 import { invoke } from "../services/tauri";
 import { useAppStore } from "../stores/appStore";
-import { databaseTabPath } from "./DatabaseViewer";
+import { AGENT_STATE_DATABASE_PATH, databaseTabPath } from "./DatabaseViewer";
 
-const AGENT_STATE_DB = ".cutready/agent-state.db";
+const AGENT_STATE_DB = AGENT_STATE_DATABASE_PATH;
 
 interface DatabasePreview {
   path: string;
@@ -38,7 +38,7 @@ export function AgentStateDatabasePanel() {
     setLoading(true);
     setError(null);
     try {
-      const nextPreview = await invoke<DatabasePreview>("get_database_preview", { relativePath: AGENT_STATE_DB });
+      const nextPreview = await invoke<DatabasePreview>("get_agent_state_database_preview");
       setPreview(nextPreview);
     } catch (err) {
       setPreview(null);
@@ -78,7 +78,7 @@ export function AgentStateDatabasePanel() {
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold text-[rgb(var(--color-text))]">agent-state.db</p>
             <p className="text-[11px] text-[rgb(var(--color-text-secondary))]">
-              {preview ? `${preview.tables.length} tables · ${formatBytes(preview.size)}` : AGENT_STATE_DB}
+              {preview ? `${preview.tables.length} tables · ${formatBytes(preview.size)}` : "Local runtime state"}
             </p>
           </div>
         </div>

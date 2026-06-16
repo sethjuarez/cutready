@@ -1014,7 +1014,7 @@ fn clean_working_dir(project_dir: &Path) -> Result<(), VersioningError> {
     for entry in std::fs::read_dir(project_dir).map_err(|e| VersioningError::Io(e.to_string()))? {
         let entry = entry.map_err(|e| VersioningError::Io(e.to_string()))?;
         let name = entry.file_name().to_string_lossy().to_string();
-        if name == ".git" || (name.starts_with('.') && name != ".cutready" && name != ".chats") {
+        if name == ".git" || (name.starts_with('.') && name != ".cutready") {
             continue;
         }
         let path = entry.path();
