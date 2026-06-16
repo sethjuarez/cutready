@@ -354,7 +354,7 @@ pub fn has_unsaved_changes_in_scope(
             if !path_is_in_scope(path, scope_path) {
                 continue;
             }
-            if is_chat_exhaust_path(path) || is_legacy_agent_state_path(path) {
+            if is_chat_exhaust_path(path) || is_legacy_agent_runtime_path(path) {
                 continue;
             }
             let top_segment = path.split('/').next().unwrap_or(path);
@@ -1230,7 +1230,7 @@ fn diff_working_tree_in_scope_inner(
         if !path_is_in_scope(&path, scope_path) {
             continue;
         }
-        if is_chat_exhaust_path(&path) || is_legacy_agent_state_path(&path) {
+        if is_chat_exhaust_path(&path) || is_legacy_agent_runtime_path(&path) {
             continue;
         }
 
@@ -1953,7 +1953,7 @@ fn build_tree_from_dir(
         if is_local_recording_asset(root, &path)
             || relative_path_string(root, &path)
                 .as_deref()
-                .is_some_and(|rel| is_chat_exhaust_path(rel) || is_legacy_agent_state_path(rel))
+                .is_some_and(|rel| is_chat_exhaust_path(rel) || is_legacy_agent_runtime_path(rel))
         {
             continue;
         }
@@ -2007,8 +2007,12 @@ fn is_chat_exhaust_path(path: &str) -> bool {
     path.split('/').any(|segment| segment == ".chats")
 }
 
-fn is_legacy_agent_state_path(path: &str) -> bool {
-    path == ".cutready/agent-state.db" || path.ends_with("/.cutready/agent-state.db")
+fn is_legacy_agent_runtime_path(path: &str) -> bool {
+    matches!(
+        path.strip_prefix(".cutready/")
+            .or_else(|| path.rsplit_once("/.cutready/").map(|(_, file)| file)),
+        Some("agent-state.db" | "memory.json")
+    )
 }
 
 fn is_local_recording_asset(root: &Path, path: &Path) -> bool {
@@ -3721,7 +3725,7 @@ mod tests {
     }
 
     #[test]
-    fn chat_exhaust_and_legacy_agent_state_do_not_dirty_project() {
+    fn chat_exhaust_and_legacy_agent_runtime_do_not_dirty_project() {
         let tmp = setup_project_dir();
         init_project_repo(tmp.path()).unwrap();
 
@@ -3731,6 +3735,7 @@ mod tests {
         std::fs::create_dir_all(tmp.path().join(".chats")).unwrap();
         std::fs::write(tmp.path().join(".chats").join("chat.chat"), "{}").unwrap();
         std::fs::write(tmp.path().join(".cutready").join("agent-state.db"), "").unwrap();
+        std::fs::write(tmp.path().join(".cutready").join("memory.json"), "{}").unwrap();
 
         assert!(
             !has_unsaved_changes(tmp.path()).unwrap(),
@@ -3754,12 +3759,18 @@ mod tests {
         std::fs::write(tmp.path().join("demo/a.sk"), "content").unwrap();
         std::fs::write(tmp.path().join("demo/.chats/chat.chat"), "{}").unwrap();
         std::fs::write(tmp.path().join("demo/.cutready/agent-state.db"), "").unwrap();
+        std::fs::write(tmp.path().join("demo/.cutready/memory.json"), "{}").unwrap();
 
         let repo = git2::Repository::open(tmp.path()).unwrap();
         let mut index = repo.index().unwrap();
         index.add_path(Path::new("demo/a.sk")).unwrap();
         index.add_path(Path::new("demo/.chats/chat.chat")).unwrap();
-        index.add_path(Path::new("demo/.cutready/agent-state.db")).unwrap();
+        index
+            .add_path(Path::new("demo/.cutready/agent-state.db"))
+            .unwrap();
+        index
+            .add_path(Path::new("demo/.cutready/memory.json"))
+            .unwrap();
         index.write().unwrap();
         let tree_id = index.write_tree().unwrap();
         let tree = repo.find_tree(tree_id).unwrap();
@@ -3777,6 +3788,7 @@ mod tests {
 
         std::fs::remove_file(tmp.path().join("demo/.chats/chat.chat")).unwrap();
         std::fs::remove_file(tmp.path().join("demo/.cutready/agent-state.db")).unwrap();
+        std::fs::remove_file(tmp.path().join("demo/.cutready/memory.json")).unwrap();
 
         assert!(
             !has_unsaved_changes_in_scope(tmp.path(), Some("demo")).unwrap(),

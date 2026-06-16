@@ -1,7 +1,7 @@
 //! Memory system for the AI assistant — thin wrapper around `agentive::memory`.
 //!
 //! Delegates all data model, scoring, and formatting to agentive.
-//! This module adds CutReady-specific persistence via `.cutready/memory.json`.
+//! This module adds CutReady-specific persistence via `.git/cutready/memory.json`.
 
 use std::path::Path;
 
@@ -12,21 +12,71 @@ pub use agentive::memory::{MemoryBackend, MemoryCategory, MemoryEntry, MemorySto
 // File-based persistence backend
 // ---------------------------------------------------------------------------
 
-/// Persists the memory store as `.cutready/memory.json` inside the project.
+const MEMORY_FILENAME: &str = "memory.json";
+const LEGACY_MEMORY_PATH: &str = ".cutready/memory.json";
+
+/// Persists the memory store as local git metadata outside the project tree.
 struct FileBackend {
     path: std::path::PathBuf,
+    legacy_path: std::path::PathBuf,
 }
 
 impl FileBackend {
     fn new(project_root: &Path) -> Self {
+        let repo_root = git2::Repository::discover(project_root)
+            .ok()
+            .and_then(|repo| repo.workdir().map(Path::to_path_buf))
+            .unwrap_or_else(|| project_root.to_path_buf());
+
         Self {
-            path: project_root.join(".cutready").join("memory.json"),
+            path: crate::engine::project::git_state_dir(&repo_root, project_root)
+                .join(MEMORY_FILENAME),
+            legacy_path: project_root.join(LEGACY_MEMORY_PATH),
+        }
+    }
+
+    fn migrate_legacy(&self) {
+        if !self.legacy_path.exists() || self.legacy_path == self.path {
+            return;
+        }
+
+        if let Some(parent) = self.path.parent() {
+            if let Err(e) = std::fs::create_dir_all(parent) {
+                log::warn!("[memory] could not create local memory directory: {e}");
+                return;
+            }
+        }
+
+        if !self.path.exists() {
+            match std::fs::rename(&self.legacy_path, &self.path) {
+                Ok(()) => {
+                    log::info!(
+                        "[memory] migrated legacy memory store from {:?} to {:?}",
+                        self.legacy_path,
+                        self.path
+                    );
+                    return;
+                }
+                Err(rename_error) => {
+                    if let Err(copy_error) = std::fs::copy(&self.legacy_path, &self.path) {
+                        log::warn!(
+                            "[memory] could not migrate legacy memory store: rename failed ({rename_error}); copy failed ({copy_error})"
+                        );
+                        return;
+                    }
+                }
+            }
+        }
+
+        if let Err(e) = std::fs::remove_file(&self.legacy_path) {
+            log::warn!("[memory] could not remove legacy memory store: {e}");
         }
     }
 }
 
 impl MemoryBackend for FileBackend {
     fn load(&self) -> MemoryStore {
+        self.migrate_legacy();
         if !self.path.exists() {
             return MemoryStore::default();
         }
@@ -37,6 +87,7 @@ impl MemoryBackend for FileBackend {
     }
 
     fn save(&self, store: &MemoryStore) -> Result<(), String> {
+        self.migrate_legacy();
         if let Some(parent) = self.path.parent() {
             std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
         }
@@ -152,7 +203,6 @@ mod tests {
     fn save_and_load_roundtrip() {
         let tmp = TempDir::new().unwrap();
         let root = tmp.path();
-        std::fs::create_dir_all(root.join(".cutready")).unwrap();
 
         save_memory(
             root,
@@ -172,13 +222,14 @@ mod tests {
         let store = load(root);
         assert_eq!(store.memories.len(), 2);
         assert_eq!(store.memories[0].content, "User prefers short narration");
+        assert!(root.join(".git/cutready/memory.json").exists());
+        assert!(!root.join(".cutready/memory.json").exists());
     }
 
     #[test]
     fn recall_finds_by_keyword() {
         let tmp = TempDir::new().unwrap();
         let root = tmp.path();
-        std::fs::create_dir_all(root.join(".cutready")).unwrap();
 
         save_memory(
             root,
@@ -215,7 +266,6 @@ mod tests {
     fn core_memories_dedup_by_tags() {
         let tmp = TempDir::new().unwrap();
         let root = tmp.path();
-        std::fs::create_dir_all(root.join(".cutready")).unwrap();
 
         save_memory(
             root,
@@ -256,7 +306,6 @@ mod tests {
     fn archive_session_creates_archival_memory() {
         let tmp = TempDir::new().unwrap();
         let root = tmp.path();
-        std::fs::create_dir_all(root.join(".cutready")).unwrap();
 
         archive_session(
             root,
@@ -271,5 +320,25 @@ mod tests {
         assert!(store.memories[0]
             .tags
             .contains(&"session:chat-2026-01-01".to_string()));
+    }
+
+    #[test]
+    fn load_migrates_legacy_memory_store() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        let legacy_path = root.join(".cutready/memory.json");
+        std::fs::create_dir_all(legacy_path.parent().unwrap()).unwrap();
+        std::fs::write(
+            &legacy_path,
+            r#"{"memories":[{"category":"core","content":"Use concise narration","tags":["style"],"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z","access_count":0}]}"#,
+        )
+        .unwrap();
+
+        let store = load(root);
+
+        assert_eq!(store.memories.len(), 1);
+        assert_eq!(store.memories[0].content, "Use concise narration");
+        assert!(!legacy_path.exists());
+        assert!(root.join(".git/cutready/memory.json").exists());
     }
 }
