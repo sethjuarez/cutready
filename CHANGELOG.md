@@ -9,6 +9,13 @@
 Covector manages this changelog. Do not edit manually.
 Each release section is generated from `.changes/*.md` files.
 
+## [1.12.1](https://github.com/sethjuarez/cutready/compare/v1.12.0...v1.12.1) (2026-06-16)
+
+
+### Bug Fixes
+
+* **agent:** support endpointless AI providers ([c8c7860](https://github.com/sethjuarez/cutready/commit/c8c78608ae82fe739d35d4427ce8fb5a3120647e))
+
 ## [1.12.0](https://github.com/sethjuarez/cutready/compare/v1.11.0...v1.12.0) (2026-06-16)
 
 
