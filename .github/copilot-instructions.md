@@ -20,6 +20,7 @@ CutReady uses a **Storyboard → Sketch** hierarchy:
 - **Storyboard** (`.sb` files): Sequences sketches with optional named sections. References sketches by path.
 - **Notes** (`.md` files): Markdown documents for planning, context, and AI-generated content.
 - **Agent runs** (`.git/cutready/agent-state.db`): Local SQLite runtime state for chat/run trajectories, checkpoints, resume context, and verification. The Runs tab is the curated UI; the database inspector is the raw/debug view.
+- **Agent memory** (`.git/cutready/memory.json`): Local runtime memory for agent recall. Legacy `.cutready/memory.json` files are migrated out of the project tree and should not dirty snapshots.
 - **Legacy sessions** (`.chats/` directory): Old JSON chat session files. Keep readable for backward compatibility, but do not write new chat exhaust there or include it in snapshots.
 
 ## Project Storage
@@ -37,7 +38,9 @@ my-demo-project/
 │   ├── visuals/                # Elucim DSL visual JSON files
 │   └── settings.json           # Per-project settings
 └── .git/                       # Git versioning + local CutReady runtime state
-    └── cutready/agent-state.db # Local agent run/chat trajectory DB
+    └── cutready/
+        ├── agent-state.db      # Local agent run/chat trajectory DB
+        └── memory.json         # Local agent recall memory
 ```
 
 - No central project registry — projects are opened by folder path.
