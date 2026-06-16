@@ -181,6 +181,9 @@ fn run_inner<'a>(
             trajectory_sink: agent_state
                 .clone()
                 .map(|store| Arc::new(store) as Arc<dyn agentive::TrajectorySink>),
+            checkpoint_store: agent_state
+                .clone()
+                .map(|store| Arc::new(store) as Arc<dyn agentive::CheckpointStore>),
             memory_promotion_hook: agent_state
                 .clone()
                 .map(|store| Arc::new(store) as Arc<dyn agentive::MemoryPromotionHook>),
@@ -438,6 +441,9 @@ fn run_inner<'a>(
                     trajectory_sink: agent_state
                         .clone()
                         .map(|store| Arc::new(store) as Arc<dyn agentive::TrajectorySink>),
+                    checkpoint_store: agent_state
+                        .clone()
+                        .map(|store| Arc::new(store) as Arc<dyn agentive::CheckpointStore>),
                     memory_promotion_hook: agent_state
                         .clone()
                         .map(|store| Arc::new(store) as Arc<dyn agentive::MemoryPromotionHook>),
@@ -937,6 +943,93 @@ fn exec_delegation(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use async_trait::async_trait;
+    use rusqlite::Connection;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use tokio::sync::mpsc;
+
+    struct HarnessProvider {
+        calls: AtomicUsize,
+        budget_chars: usize,
+    }
+
+    impl HarnessProvider {
+        fn new(budget_chars: usize) -> Self {
+            Self {
+                calls: AtomicUsize::new(0),
+                budget_chars,
+            }
+        }
+    }
+
+    #[async_trait]
+    impl agentive::Provider for HarnessProvider {
+        async fn chat(
+            &self,
+            request: agentive::ChatRequest,
+            tx: mpsc::Sender<agentive::ChatEvent>,
+            _cancel: &agentive::CancellationToken,
+        ) -> Result<(), agentive::AgentError> {
+            let _call_index = self.calls.fetch_add(1, Ordering::SeqCst);
+            let is_compaction_request = request.tools.as_ref().is_none_or(Vec::is_empty);
+            let has_tool_result = request.messages.iter().any(|message| message.role == "tool");
+            let message = if is_compaction_request {
+                ChatMessage::assistant("Earlier context summarized for the tiny harness budget.")
+            } else if has_tool_result {
+                ChatMessage::assistant("Created the checkpoint integration note.")
+            } else {
+                ChatMessage::assistant_with_tool_calls(vec![agentive::ToolCall {
+                    id: "call-write-note".into(),
+                    call_type: "function".into(),
+                    function: agentive::FunctionCall {
+                        name: "write_note".into(),
+                        arguments: serde_json::json!({
+                            "path": "harness-ci.md",
+                            "content": "# Harness CI\nCheckpoint and compaction persistence are wired through AgentStateStore."
+                        })
+                        .to_string(),
+                    },
+                }])
+            };
+
+            tx.send(agentive::ChatEvent::Done {
+                response: agentive::ChatResponse {
+                    message,
+                    usage: Some(agentive::Usage {
+                        prompt_tokens: 10,
+                        completion_tokens: 5,
+                        total_tokens: 15,
+                    }),
+                },
+            })
+            .await
+            .map_err(|err| agentive::AgentError::Stream(err.to_string()))?;
+
+            Ok(())
+        }
+
+        fn name(&self) -> &str {
+            "harness-test"
+        }
+
+        fn model(&self) -> Option<&str> {
+            Some("tiny-harness")
+        }
+
+        fn context_budget_chars(&self) -> usize {
+            self.budget_chars
+        }
+    }
+
+    fn event_count(db_path: &Path, run_id: &str, event_type: &str) -> usize {
+        let conn = Connection::open(db_path).unwrap();
+        conn.query_row(
+            "SELECT COUNT(*) FROM trajectory_events WHERE run_id = ?1 AND event_type = ?2",
+            rusqlite::params![run_id, event_type],
+            |row| row.get::<_, usize>(0),
+        )
+        .unwrap()
+    }
 
     #[test]
     fn matches_ref_exact_path() {
@@ -1083,5 +1176,65 @@ mod tests {
             m.text()
                 .is_some_and(|text| text.starts_with("[Earlier conversation summary]"))
         }));
+    }
+
+    #[tokio::test]
+    async fn cutready_runner_persists_checkpoints_and_compaction_to_agent_state_store() {
+        let project = tempfile::tempdir().unwrap();
+        let run_id = "cutready-runner-checkpoint-test".to_string();
+        let store = AgentStateStore::for_project(project.path(), run_id.clone()).unwrap();
+        store
+            .insert_run(
+                None,
+                "harness-test",
+                "tiny-harness",
+                serde_json::json!({"source":"runner-test"}),
+            )
+            .unwrap();
+        let provider = Arc::new(HarnessProvider::new(3_000));
+        let messages = vec![
+            ChatMessage::system(&"Retained setup context. ".repeat(180)),
+            ChatMessage::user("Create the harness CI note."),
+        ];
+
+        let result = run_inner(
+            provider,
+            Some("harness-test".into()),
+            Some("tiny-harness".into()),
+            messages,
+            project.path(),
+            &HashMap::new(),
+            &agentive::Steering::new(),
+            0,
+            &VisionConfig { enabled: false },
+            &WebAccessConfig {
+                search_enabled: false,
+            },
+            Some(run_id.clone()),
+            Some(store.clone()),
+            Arc::new(|_| {}),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(result.response, "Created the checkpoint integration note.");
+        assert!(project.path().join("harness-ci.md").exists());
+
+        let checkpoints = agentive::CheckpointStore::list_checkpoints(&store, &run_id).unwrap();
+        let stages = checkpoints
+            .iter()
+            .filter_map(|checkpoint| checkpoint.metadata.get("stage").map(String::as_str))
+            .collect::<Vec<_>>();
+        assert!(stages.contains(&"run_start"));
+        assert!(stages.contains(&"after_tool_round"));
+        assert!(stages.contains(&"before_compaction"));
+        assert!(stages.contains(&"after_compaction"));
+        assert!(stages.contains(&"completion"));
+
+        assert!(event_count(store.db_path(), &run_id, "checkpoint_created") >= 5);
+        assert_eq!(event_count(store.db_path(), &run_id, "compaction_started"), 1);
+        assert_eq!(event_count(store.db_path(), &run_id, "compaction_completed"), 1);
+        assert_eq!(event_count(store.db_path(), &run_id, "resource_touched"), 1);
+        assert_eq!(event_count(store.db_path(), &run_id, "verification_recorded"), 1);
     }
 }
