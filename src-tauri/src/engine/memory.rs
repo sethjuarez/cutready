@@ -1,99 +1,186 @@
 //! Memory system for the AI assistant — thin wrapper around `agentive::memory`.
 //!
 //! Delegates all data model, scoring, and formatting to agentive.
-//! This module adds CutReady-specific persistence via `.git/cutready/memory.json`.
+//! This module adds CutReady-specific persistence in `.git/cutready/agent-state.db`.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
+
+use rusqlite::{params, Connection};
 
 // Re-export agentive types so callers don't need to import from two places.
 pub use agentive::memory::{MemoryBackend, MemoryCategory, MemoryEntry, MemoryStore};
 
 // ---------------------------------------------------------------------------
-// File-based persistence backend
+// SQLite persistence backend
 // ---------------------------------------------------------------------------
 
-const MEMORY_FILENAME: &str = "memory.json";
+const AGENT_MEMORIES_TABLE: &str = "agent_memories";
 const LEGACY_MEMORY_PATH: &str = ".cutready/memory.json";
 
-/// Persists the memory store as local git metadata outside the project tree.
-struct FileBackend {
-    path: std::path::PathBuf,
-    legacy_path: std::path::PathBuf,
+/// Persists the memory store in the local agent-state database.
+struct SqliteBackend {
+    db_path: PathBuf,
+    local_json_path: PathBuf,
+    legacy_json_path: PathBuf,
 }
 
-impl FileBackend {
-    fn new(project_root: &Path) -> Self {
-        let repo_root = git2::Repository::discover(project_root)
-            .ok()
-            .and_then(|repo| repo.workdir().map(Path::to_path_buf))
-            .unwrap_or_else(|| project_root.to_path_buf());
-
-        Self {
-            path: crate::engine::project::git_state_dir(&repo_root, project_root)
-                .join(MEMORY_FILENAME),
-            legacy_path: project_root.join(LEGACY_MEMORY_PATH),
-        }
+impl SqliteBackend {
+    fn new(project_root: &Path) -> Result<Self, String> {
+        let db_path =
+            crate::engine::agent_state::AgentStateStore::ensure_database_for_project(project_root)?;
+        Ok(Self {
+            local_json_path: db_path.with_file_name("memory.json"),
+            db_path,
+            legacy_json_path: project_root.join(LEGACY_MEMORY_PATH),
+        })
     }
 
-    fn migrate_legacy(&self) {
-        if !self.legacy_path.exists() || self.legacy_path == self.path {
-            return;
+    fn connect(&self) -> Result<Connection, String> {
+        Connection::open(&self.db_path)
+            .map_err(|e| format!("Could not open CutReady agent state database: {e}"))
+    }
+
+    fn migrate_json_files(&self, conn: &Connection) -> Result<(), String> {
+        self.migrate_json_file(conn, &self.local_json_path, "local memory store")?;
+        self.migrate_json_file(conn, &self.legacy_json_path, "legacy memory store")
+    }
+
+    fn migrate_json_file(&self, conn: &Connection, path: &Path, label: &str) -> Result<(), String> {
+        if !path.exists() {
+            return Ok(());
         }
 
-        if let Some(parent) = self.path.parent() {
-            if let Err(e) = std::fs::create_dir_all(parent) {
-                log::warn!("[memory] could not create local memory directory: {e}");
-                return;
-            }
-        }
-
-        if !self.path.exists() {
-            match std::fs::rename(&self.legacy_path, &self.path) {
-                Ok(()) => {
-                    log::info!(
-                        "[memory] migrated legacy memory store from {:?} to {:?}",
-                        self.legacy_path,
-                        self.path
-                    );
-                    return;
+        let data = std::fs::read_to_string(path)
+            .map_err(|e| format!("Could not read {label} for migration: {e}"))?;
+        let incoming: MemoryStore = serde_json::from_str(&data)
+            .map_err(|e| format!("Could not parse {label} for migration: {e}"))?;
+        if !incoming.memories.is_empty() {
+            let mut merged = load_store_from_conn(conn)?;
+            for memory in incoming.memories {
+                if !merged.memories.iter().any(|existing| {
+                    existing.category == memory.category
+                        && existing.content == memory.content
+                        && existing.tags == memory.tags
+                }) {
+                    merged.memories.push(memory);
                 }
-                Err(rename_error) => {
-                    if let Err(copy_error) = std::fs::copy(&self.legacy_path, &self.path) {
-                        log::warn!(
-                            "[memory] could not migrate legacy memory store: rename failed ({rename_error}); copy failed ({copy_error})"
-                        );
-                        return;
-                    }
-                }
             }
+            save_store_to_conn(conn, &merged)?;
         }
 
-        if let Err(e) = std::fs::remove_file(&self.legacy_path) {
-            log::warn!("[memory] could not remove legacy memory store: {e}");
-        }
+        std::fs::remove_file(path)
+            .map_err(|e| format!("Could not remove migrated {label}: {e}"))?;
+        log::info!(
+            "[memory] migrated {label} from {:?} into agent-state.db",
+            path
+        );
+        Ok(())
     }
 }
 
-impl MemoryBackend for FileBackend {
+impl MemoryBackend for SqliteBackend {
     fn load(&self) -> MemoryStore {
-        self.migrate_legacy();
-        if !self.path.exists() {
-            return MemoryStore::default();
+        let conn = match self.connect() {
+            Ok(conn) => conn,
+            Err(err) => {
+                log::warn!("[memory] could not open memory database: {err}");
+                return MemoryStore::default();
+            }
+        };
+        if let Err(err) = self.migrate_json_files(&conn) {
+            log::warn!("[memory] could not migrate memory JSON store: {err}");
         }
-        std::fs::read_to_string(&self.path)
-            .ok()
-            .and_then(|data| serde_json::from_str(&data).ok())
-            .unwrap_or_default()
+        load_store_from_conn(&conn).unwrap_or_else(|err| {
+            log::warn!("[memory] could not load memory store: {err}");
+            MemoryStore::default()
+        })
     }
 
     fn save(&self, store: &MemoryStore) -> Result<(), String> {
-        self.migrate_legacy();
-        if let Some(parent) = self.path.parent() {
-            std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-        }
-        let json = serde_json::to_string_pretty(store).map_err(|e| e.to_string())?;
-        std::fs::write(&self.path, json).map_err(|e| e.to_string())
+        let conn = self.connect()?;
+        self.migrate_json_files(&conn)?;
+        save_store_to_conn(&conn, store)
     }
+}
+
+fn load_store_from_conn(conn: &Connection) -> Result<MemoryStore, String> {
+    let mut stmt = conn
+        .prepare(&format!(
+            "SELECT entry_json FROM {AGENT_MEMORIES_TABLE} ORDER BY position ASC"
+        ))
+        .map_err(|e| format!("Could not prepare memory load query: {e}"))?;
+    let rows = stmt
+        .query_map([], |row| row.get::<_, String>(0))
+        .map_err(|e| format!("Could not query memories: {e}"))?;
+
+    let mut memories = Vec::new();
+    for row in rows {
+        let json = row.map_err(|e| format!("Could not read memory row: {e}"))?;
+        memories.push(
+            serde_json::from_str::<MemoryEntry>(&json)
+                .map_err(|e| format!("Could not parse memory row: {e}"))?,
+        );
+    }
+    Ok(MemoryStore { memories })
+}
+
+fn save_store_to_conn(conn: &Connection, store: &MemoryStore) -> Result<(), String> {
+    conn.execute("BEGIN IMMEDIATE", [])
+        .map_err(|e| format!("Could not begin memory save transaction: {e}"))?;
+    let result = (|| {
+        conn.execute(&format!("DELETE FROM {AGENT_MEMORIES_TABLE}"), [])
+            .map_err(|e| format!("Could not clear existing memories: {e}"))?;
+        for (position, memory) in store.memories.iter().enumerate() {
+            insert_memory_row(conn, position, memory)?;
+        }
+        Ok::<(), String>(())
+    })();
+
+    match result {
+        Ok(()) => conn
+            .execute("COMMIT", [])
+            .map(|_| ())
+            .map_err(|e| format!("Could not commit memory save transaction: {e}")),
+        Err(err) => {
+            let _ = conn.execute("ROLLBACK", []);
+            Err(err)
+        }
+    }
+}
+
+fn insert_memory_row(
+    conn: &Connection,
+    position: usize,
+    memory: &MemoryEntry,
+) -> Result<(), String> {
+    let category = memory_category_name(&memory.category)?;
+    let tags_json = serde_json::to_string(&memory.tags).map_err(|e| e.to_string())?;
+    let entry_json = serde_json::to_string(memory).map_err(|e| e.to_string())?;
+    conn.execute(
+        &format!(
+            "INSERT INTO {AGENT_MEMORIES_TABLE}
+                (position, category, content, tags_json, created_at, entry_json)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)"
+        ),
+        params![
+            position as i64,
+            category,
+            memory.content,
+            tags_json,
+            memory.created_at,
+            entry_json,
+        ],
+    )
+    .map_err(|e| format!("Could not insert memory row: {e}"))?;
+    Ok(())
+}
+
+fn memory_category_name(category: &MemoryCategory) -> Result<String, String> {
+    serde_json::to_value(category)
+        .map_err(|e| e.to_string())?
+        .as_str()
+        .map(ToOwned::to_owned)
+        .ok_or_else(|| "Memory category did not serialize to a string".to_string())
 }
 
 // ---------------------------------------------------------------------------
@@ -102,7 +189,13 @@ impl MemoryBackend for FileBackend {
 
 /// Load the memory store from disk.
 pub fn load(project_root: &Path) -> MemoryStore {
-    FileBackend::new(project_root).load()
+    match SqliteBackend::new(project_root) {
+        Ok(backend) => backend.load(),
+        Err(err) => {
+            log::warn!("[memory] could not initialize memory backend: {err}");
+            MemoryStore::default()
+        }
+    }
 }
 
 /// Save a memory entry with dedup + capacity management, then persist.
@@ -112,7 +205,7 @@ pub fn save_memory(
     content: &str,
     tags: Vec<String>,
 ) -> Result<(), String> {
-    let backend = FileBackend::new(project_root);
+    let backend = SqliteBackend::new(project_root)?;
     let mut store = backend.load();
     store.save(category, content, tags);
     backend.save(&store)
@@ -144,7 +237,7 @@ pub fn format_recall_results(results: &[MemoryEntry]) -> String {
 
 /// Save an archival session summary.
 pub fn archive_session(project_root: &Path, summary: &str, session_id: &str) -> Result<(), String> {
-    let backend = FileBackend::new(project_root);
+    let backend = SqliteBackend::new(project_root)?;
     let mut store = backend.load();
     store.archive_session(summary, session_id);
     backend.save(&store)
@@ -152,7 +245,7 @@ pub fn archive_session(project_root: &Path, summary: &str, session_id: &str) -> 
 
 /// Delete a memory by index.
 pub fn delete_memory(project_root: &Path, index: usize) -> Result<(), String> {
-    let backend = FileBackend::new(project_root);
+    let backend = SqliteBackend::new(project_root)?;
     let mut store = backend.load();
     store.delete(index).ok_or_else(|| {
         format!(
@@ -166,7 +259,7 @@ pub fn delete_memory(project_root: &Path, index: usize) -> Result<(), String> {
 
 /// Update a memory's content by index.
 pub fn update_memory(project_root: &Path, index: usize, content: &str) -> Result<(), String> {
-    let backend = FileBackend::new(project_root);
+    let backend = SqliteBackend::new(project_root)?;
     let mut store = backend.load();
     if !store.update(index, content) {
         return Err(format!(
@@ -183,7 +276,7 @@ pub fn clear_memories(
     project_root: &Path,
     category: Option<MemoryCategory>,
 ) -> Result<usize, String> {
-    let backend = FileBackend::new(project_root);
+    let backend = SqliteBackend::new(project_root)?;
     let mut store = backend.load();
     let removed = store.clear(category);
     backend.save(&store)?;
@@ -198,6 +291,15 @@ pub fn clear_memories(
 mod tests {
     use super::*;
     use tempfile::TempDir;
+
+    fn memory_row_count(root: &Path) -> usize {
+        let db_path = crate::engine::agent_state::AgentStateStore::database_path_for_project(root);
+        let conn = Connection::open(db_path).unwrap();
+        conn.query_row("SELECT COUNT(*) FROM agent_memories", [], |row| {
+            row.get::<_, usize>(0)
+        })
+        .unwrap()
+    }
 
     #[test]
     fn save_and_load_roundtrip() {
@@ -222,7 +324,9 @@ mod tests {
         let store = load(root);
         assert_eq!(store.memories.len(), 2);
         assert_eq!(store.memories[0].content, "User prefers short narration");
-        assert!(root.join(".git/cutready/memory.json").exists());
+        assert!(root.join(".git/cutready/agent-state.db").exists());
+        assert_eq!(memory_row_count(root), 2);
+        assert!(!root.join(".git/cutready/memory.json").exists());
         assert!(!root.join(".cutready/memory.json").exists());
     }
 
@@ -323,7 +427,42 @@ mod tests {
     }
 
     #[test]
-    fn load_migrates_legacy_memory_store() {
+    fn update_delete_and_clear_preserve_memory_crud_behavior() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+
+        save_memory(
+            root,
+            MemoryCategory::Core,
+            "Use precise narration",
+            vec!["style".into()],
+        )
+        .unwrap();
+        save_memory(
+            root,
+            MemoryCategory::Insight,
+            "Dashboard demo needs charts",
+            vec!["dashboard".into()],
+        )
+        .unwrap();
+
+        update_memory(root, 0, "Use concise narration").unwrap();
+        let store = load(root);
+        assert_eq!(store.memories[0].content, "Use concise narration");
+
+        delete_memory(root, 1).unwrap();
+        let store = load(root);
+        assert_eq!(store.memories.len(), 1);
+        assert_eq!(store.memories[0].content, "Use concise narration");
+
+        let removed = clear_memories(root, Some(MemoryCategory::Core)).unwrap();
+        assert_eq!(removed, 1);
+        assert!(load(root).memories.is_empty());
+        assert_eq!(memory_row_count(root), 0);
+    }
+
+    #[test]
+    fn load_migrates_legacy_project_memory_store_into_database() {
         let tmp = TempDir::new().unwrap();
         let root = tmp.path();
         let legacy_path = root.join(".cutready/memory.json");
@@ -339,6 +478,29 @@ mod tests {
         assert_eq!(store.memories.len(), 1);
         assert_eq!(store.memories[0].content, "Use concise narration");
         assert!(!legacy_path.exists());
-        assert!(root.join(".git/cutready/memory.json").exists());
+        assert!(root.join(".git/cutready/agent-state.db").exists());
+        assert!(!root.join(".git/cutready/memory.json").exists());
+        assert_eq!(memory_row_count(root), 1);
+    }
+
+    #[test]
+    fn load_migrates_current_local_memory_store_into_database() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        let local_path = root.join(".git/cutready/memory.json");
+        std::fs::create_dir_all(local_path.parent().unwrap()).unwrap();
+        std::fs::write(
+            &local_path,
+            r#"{"memories":[{"category":"insight","content":"Charts should animate in","tags":["visual"],"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z","access_count":2}]}"#,
+        )
+        .unwrap();
+
+        let store = load(root);
+
+        assert_eq!(store.memories.len(), 1);
+        assert_eq!(store.memories[0].content, "Charts should animate in");
+        assert!(!local_path.exists());
+        assert!(root.join(".git/cutready/agent-state.db").exists());
+        assert_eq!(memory_row_count(root), 1);
     }
 }

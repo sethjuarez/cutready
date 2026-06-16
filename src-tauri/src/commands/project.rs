@@ -403,7 +403,7 @@ pub async fn get_agent_state_database_preview(
     state: State<'_, AppState>,
 ) -> Result<DatabasePreview, String> {
     let project_root = project_root(&state)?;
-    let abs_path = AgentStateStore::prepare_database_path_for_project(&project_root)?;
+    let abs_path = AgentStateStore::ensure_database_for_project(&project_root)?;
     read_database_preview(abs_path, "agent-state.db".to_string())
 }
 
