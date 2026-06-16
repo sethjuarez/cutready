@@ -17,7 +17,7 @@ use chrono::{DateTime, Utc};
 use rusqlite::{params, Connection, OpenFlags, OptionalExtension, Row};
 
 const AGENT_STATE_FILENAME: &str = "agent-state.db";
-const SCHEMA_VERSION: i32 = 1;
+const SCHEMA_VERSION: i32 = 2;
 const BUSY_TIMEOUT: Duration = Duration::from_millis(750);
 const MAX_COMPLETED_RUNS: usize = 100;
 const MAX_EVENTS_PER_RUN: usize = 1_000;
@@ -145,6 +145,16 @@ impl AgentStateStore {
                 .map_err(|e| format!("Could not create CutReady agent state directory: {e}"))?;
         }
         migrate_legacy_project_database(project_root, &db_path)?;
+        Ok(db_path)
+    }
+
+    pub fn ensure_database_for_project(project_root: &Path) -> Result<PathBuf, String> {
+        let db_path = Self::prepare_database_path_for_project(project_root)?;
+        let conn = Connection::open(&db_path)
+            .map_err(|e| format!("Could not open CutReady agent state database: {e}"))?;
+        conn.busy_timeout(BUSY_TIMEOUT)
+            .map_err(|e| format!("Could not configure agent state database timeout: {e}"))?;
+        initialize_schema(&conn)?;
         Ok(db_path)
     }
 
@@ -884,6 +894,16 @@ fn initialize_schema(conn: &Connection) -> Result<(), String> {
         );
         CREATE INDEX IF NOT EXISTS idx_memory_promotions_run
             ON memory_promotions (run_id, id);
+        CREATE TABLE IF NOT EXISTS agent_memories (
+            position INTEGER PRIMARY KEY,
+            category TEXT NOT NULL,
+            content TEXT NOT NULL,
+            tags_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            entry_json TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_agent_memories_category
+            ON agent_memories (category, position);
         ",
     )
     .map_err(|e| format!("Could not initialize agent state schema: {e}"))?;

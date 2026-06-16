@@ -25,6 +25,7 @@ const friendlyTableNames: Record<string, string> = {
   checkpoints: "Checkpoints",
   resume_contexts: "Resume Context",
   verification_results: "Verification",
+  agent_memories: "Memory",
 };
 
 export function AgentStateDatabasePanel() {
