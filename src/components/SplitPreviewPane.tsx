@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { invoke } from "../services/tauri";
-import { X, Sparkles, Pencil, Lock } from "lucide-react";
+import { X, Sparkles, Pencil, Lock, MoreHorizontal, Search } from "lucide-react";
 import { shouldSuppressEditorFlush, useAppStore } from "../stores/appStore";
 import type { EditorTab } from "../stores/appStore";
 import type { Sketch, Storyboard } from "../types/sketch";
@@ -9,9 +10,8 @@ import { ScriptTable } from "./ScriptTable";
 import { MarkdownEditor } from "./MarkdownEditor";
 import { SafeMarkdown } from "./SafeMarkdown";
 import { SketchIcon, StoryboardIcon, NoteIcon } from "./Icons";
-import { SketchForm } from "./SketchForm";
-import { NoteEditor } from "./NoteEditor";
-import { StoryboardView } from "./StoryboardView";
+import { usePopover } from "../hooks/usePopover";
+import { getClampedPopoverPosition } from "./TabBar";
 
 /**
  * SplitTabBar — compact tab bar for the split pane, rendered beside the main TabBar.
@@ -20,6 +20,7 @@ import { StoryboardView } from "./StoryboardView";
 export function SplitTabBar() {
   const splitTabs = useAppStore((s) => s.splitTabs);
   const splitActiveTabId = useAppStore((s) => s.splitActiveTabId);
+  const openTabs = useAppStore((s) => s.openTabs);
   const activeEditorGroup = useAppStore((s) => s.activeEditorGroup);
   const setActiveSplitTab = useAppStore((s) => s.setActiveSplitTab);
   const closeTabInSplit = useAppStore((s) => s.closeTabInSplit);
@@ -27,18 +28,34 @@ export function SplitTabBar() {
   const moveTabToSplit = useAppStore((s) => s.moveTabToSplit);
   const closeSplit = useAppStore((s) => s.closeSplit);
   const [isDragOver, setIsDragOver] = useState(false);
+  const [tabSearch, setTabSearch] = useState("");
+  const { state: tabMenu, ref: tabMenuRef, openAt: openTabMenu, close: closeTabMenu, position: tabMenuPos } = usePopover();
+
+  const filteredTabs = tabSearch.trim()
+    ? splitTabs.filter((tab) => `${tab.title} ${tab.path} ${tab.type}`.toLowerCase().includes(tabSearch.trim().toLowerCase()))
+    : splitTabs;
+
+  const closeOtherSplitTabs = (tabId: string) => {
+    splitTabs.filter((tab) => tab.id !== tabId).forEach((tab) => closeTabInSplit(tab.id));
+    setActiveSplitTab(tabId);
+    setActiveEditorGroup("split");
+  };
 
   if (splitTabs.length === 0) return null;
 
   return (
     <div
-      className={`no-select flex items-stretch bg-[rgb(var(--color-surface-alt))] border-b border-[rgb(var(--color-border))] border-l shrink-0 overflow-x-auto ${
+      className={`no-select flex items-stretch bg-[rgb(var(--color-surface-alt))] border-b border-[rgb(var(--color-border))] border-l shrink-0 ${
         isDragOver ? "border-b-[2px] border-b-[rgb(var(--color-accent))]" : ""
       }`}
-      style={{ scrollbarWidth: "none" }}
       onMouseDown={() => setActiveEditorGroup("split")}
       onDragOver={(e) => {
         if (e.dataTransfer.types.includes("application/x-cutready-tab")) {
+          if (openTabs.length < 2) {
+            e.dataTransfer.dropEffect = "none";
+            setIsDragOver(false);
+            return;
+          }
           e.preventDefault();
           e.dataTransfer.dropEffect = "move";
           setIsDragOver(true);
@@ -59,26 +76,92 @@ export function SplitTabBar() {
         } catch { /* ignore */ }
       }}
     >
-      {splitTabs.map((tab) => (
-        <SplitTab
-          key={tab.id}
-          tab={tab}
-          isActive={tab.id === splitActiveTabId}
-          isGroupFocused={activeEditorGroup === "split"}
-          onSelect={() => { setActiveSplitTab(tab.id); setActiveEditorGroup("split"); }}
-          onClose={() => closeTabInSplit(tab.id)}
-        />
-      ))}
-      <div className="flex-1" />
-      <div className="self-stretch flex items-center">
+      <div className="flex min-w-0 flex-1 overflow-x-auto" style={{ scrollbarWidth: "none" }}>
+        {splitTabs.map((tab) => (
+          <SplitTab
+            key={tab.id}
+            tab={tab}
+            isActive={tab.id === splitActiveTabId}
+            isGroupFocused={activeEditorGroup === "split"}
+            onSelect={() => { setActiveSplitTab(tab.id); setActiveEditorGroup("split"); }}
+            onClose={() => closeTabInSplit(tab.id)}
+          />
+        ))}
+        <div className="min-w-6 flex-1" />
+      </div>
+      <div className="relative z-sticky self-stretch flex shrink-0 items-center border-l border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] shadow-[-12px_0_18px_-18px_rgb(var(--color-text))]">
         <button
-          className="flex items-center justify-center w-8 h-full text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors"
-          title="Close Split Pane"
-          onClick={closeSplit}
+          className="flex items-center justify-center w-8 h-full text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface))] transition-colors"
+          title="Show split tabs"
+          onClick={(e) => {
+            setTabSearch("");
+            const rect = e.currentTarget.getBoundingClientRect();
+            openTabMenu(getClampedPopoverPosition({ x: rect.right - 280, y: rect.bottom + 4 }, 280));
+          }}
         >
-          <X className="w-3 h-3" />
+          <MoreHorizontal className="w-3.5 h-3.5" />
         </button>
       </div>
+      {tabMenu && createPortal(
+        <div
+          ref={tabMenuRef}
+          className="fixed z-dropdown flex max-h-[70vh] w-[280px] flex-col rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] shadow-xl"
+          style={{ left: tabMenuPos?.x, top: tabMenuPos?.y }}
+        >
+          <div className="border-b border-[rgb(var(--color-border))] p-2">
+            <div className="flex items-center gap-2 rounded-lg border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-alt))] px-2 py-1.5">
+              <Search className="h-3.5 w-3.5 text-[rgb(var(--color-text-secondary))]" />
+              <input
+                autoFocus
+                value={tabSearch}
+                onChange={(e) => setTabSearch(e.target.value)}
+                placeholder="Find split tab..."
+                className="min-w-0 flex-1 bg-transparent text-[12px] text-[rgb(var(--color-text))] outline-none placeholder:text-[rgb(var(--color-text-secondary))]"
+              />
+            </div>
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto p-1">
+            {filteredTabs.length === 0 ? (
+              <div className="px-3 py-6 text-center text-[11px] text-[rgb(var(--color-text-secondary))]">No matching tabs.</div>
+            ) : (
+              filteredTabs.map((tab) => (
+                <SplitTabMenuItem
+                  key={tab.id}
+                  tab={tab}
+                  active={tab.id === splitActiveTabId}
+                  onSelect={() => {
+                    setActiveSplitTab(tab.id);
+                    setActiveEditorGroup("split");
+                    closeTabMenu();
+                  }}
+                  onClose={() => closeTabInSplit(tab.id)}
+                />
+              ))
+            )}
+          </div>
+          <div className="flex gap-1 border-t border-[rgb(var(--color-border))] p-1">
+            <button
+              className="flex-1 rounded-lg px-2 py-1.5 text-[11px] text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
+              onClick={() => {
+                if (splitActiveTabId) closeOtherSplitTabs(splitActiveTabId);
+                closeTabMenu();
+              }}
+            >
+              Close others
+            </button>
+            <button
+              className="flex-1 rounded-lg px-2 py-1.5 text-[11px] text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
+              onClick={() => {
+                closeSplit();
+                closeTabMenu();
+              }}
+            >
+              Close all
+            </button>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }
@@ -91,9 +174,6 @@ export function SplitPaneContent() {
   const splitTabs = useAppStore((s) => s.splitTabs);
   const splitActiveTabId = useAppStore((s) => s.splitActiveTabId);
   const setActiveEditorGroup = useAppStore((s) => s.setActiveEditorGroup);
-  const activeSketchPath = useAppStore((s) => s.activeSketchPath);
-  const activeNotePath = useAppStore((s) => s.activeNotePath);
-  const activeStoryboardPath = useAppStore((s) => s.activeStoryboardPath);
   const editorReloadKey = useAppStore((s) => s.editorReloadKey);
   const editorReloadPath = useAppStore((s) => s.editorReloadPath);
 
@@ -104,21 +184,14 @@ export function SplitPaneContent() {
       {/* Content — all tabs mounted, inactive hidden to preserve pending saves */}
       <div className="flex-1 min-h-0 relative">
         {splitTabs.map((tab) => {
-          // When the split tab shows the same file as the main pane, render the real
-          // component so it has identical functionality (reads same global store state).
-          const isActiveMain =
-            (tab.type === "sketch" && tab.path === activeSketchPath) ||
-            (tab.type === "note" && tab.path === activeNotePath) ||
-            (tab.type === "storyboard" && tab.path === activeStoryboardPath);
-
           return (
             <div
               key={`${tab.id}:${tab.path === editorReloadPath ? editorReloadKey : 0}`}
               className={`absolute inset-0 overflow-y-auto ${tab.id !== splitActiveTabId ? "hidden" : ""}`}
             >
-              {tab.type === "sketch" && (isActiveMain ? <SketchForm /> : <SketchSplitEditor path={tab.path} />)}
-              {tab.type === "note" && (isActiveMain ? <NoteEditor /> : <NoteSplitEditor path={tab.path} />)}
-              {tab.type === "storyboard" && (isActiveMain ? <StoryboardView /> : <StoryboardPreviewContent path={tab.path} />)}
+              {tab.type === "sketch" && <SketchSplitEditor path={tab.path} />}
+              {tab.type === "note" && <NoteSplitEditor path={tab.path} />}
+              {tab.type === "storyboard" && <StoryboardPreviewContent path={tab.path} />}
             </div>
           );
         })}
@@ -146,6 +219,7 @@ function SplitTab({
   onSelect: () => void;
   onClose: () => void;
 }) {
+  const tabRef = useRef<HTMLDivElement>(null);
   const typeClasses =
     tab.type === "sketch"
       ? { bar: "bg-[rgb(var(--color-accent))]", icon: "text-[rgb(var(--color-accent))]" }
@@ -158,14 +232,20 @@ function SplitTab({
     : tab.type === "storyboard" ? StoryboardIcon
     : NoteIcon;
 
+  useEffect(() => {
+    if (!isActive) return;
+    tabRef.current?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [isActive]);
+
   return (
     <div
+      ref={tabRef}
       draggable={true}
       onDragStart={(e) => {
         e.dataTransfer.setData("application/x-cutready-tab", JSON.stringify({ tabId: tab.id, source: "split" }));
         e.dataTransfer.effectAllowed = "move";
       }}
-      className={`group relative flex items-center gap-1.5 pl-2.5 pr-1.5 h-[32px] text-[11px] cursor-pointer shrink-0 select-none transition-colors ${
+      className={`group relative flex items-center gap-1.5 pl-3 pr-2 h-[40px] text-[12px] cursor-pointer shrink-0 select-none transition-colors ${
         isActive
           ? "bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text))]"
           : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))]"
@@ -177,13 +257,13 @@ function SplitTab({
         <span className={`absolute top-0 left-0 right-0 h-[2px] ${typeClasses.bar} ${isGroupFocused ? "" : "opacity-40"}`} />
       )}
       <span className={`shrink-0 ${isActive ? typeClasses.icon : "opacity-60"}`}>
-        <TabIcon size={11} />
+        <TabIcon size={13} />
       </span>
-      <span className={`truncate max-w-[120px] ${isActive ? "font-medium" : ""}`}>
+      <span className={`truncate max-w-[140px] ${isActive ? "font-medium" : ""}`}>
         {tab.title}
       </span>
       <button
-        className={`flex items-center justify-center w-[16px] h-[16px] rounded transition-all shrink-0 ${
+        className={`flex items-center justify-center w-[20px] h-[20px] rounded transition-all shrink-0 ${
           isActive
             ? "opacity-60 hover:opacity-100 hover:bg-[rgb(var(--color-surface-alt))]"
             : "opacity-0 group-hover:opacity-60 hover:!opacity-100 hover:bg-[rgb(var(--color-surface))]"
@@ -194,7 +274,45 @@ function SplitTab({
           onClose();
         }}
       >
-        <X className="w-2 h-2" />
+        <X className="w-2.5 h-2.5" />
+      </button>
+    </div>
+  );
+}
+
+function SplitTabMenuItem({
+  tab,
+  active,
+  onSelect,
+  onClose,
+}: {
+  tab: EditorTab;
+  active: boolean;
+  onSelect: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <div
+      className={`group flex items-center gap-2 rounded-lg px-2 py-1.5 transition-colors ${
+        active ? "bg-[rgb(var(--color-accent))]/10" : "hover:bg-[rgb(var(--color-surface-alt))]"
+      }`}
+    >
+      <button className="min-w-0 flex-1 text-left" onClick={onSelect}>
+        <div className="truncate text-[12px] font-medium text-[rgb(var(--color-text))]">{tab.title}</div>
+        <div className="mt-0.5 truncate font-mono text-[10px] text-[rgb(var(--color-text-secondary))]">{tab.path}</div>
+      </button>
+      <span className="rounded-full bg-[rgb(var(--color-surface-alt))] px-1.5 py-0.5 text-[9px] uppercase tracking-[0.08em] text-[rgb(var(--color-text-secondary))]">
+        {tab.type}
+      </span>
+      <button
+        className="flex h-6 w-6 items-center justify-center rounded-md text-[rgb(var(--color-text-secondary))] opacity-60 transition-colors hover:bg-[rgb(var(--color-surface))] hover:text-[rgb(var(--color-text))] group-hover:opacity-100"
+        title="Close tab"
+        onClick={(e) => {
+          e.stopPropagation();
+          onClose();
+        }}
+      >
+        <X className="h-3 w-3" />
       </button>
     </div>
   );

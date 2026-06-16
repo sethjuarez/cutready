@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Database, RefreshCw, Table2 } from "lucide-react";
 import { invoke } from "../services/tauri";
 import { useAppStore } from "../stores/appStore";
+import { useToastStore } from "../stores/toastStore";
 import { AGENT_STATE_DATABASE_PATH, databaseTabPath } from "./DatabaseViewer";
 
 const AGENT_STATE_DB = AGENT_STATE_DATABASE_PATH;
@@ -18,6 +19,13 @@ interface DatabaseTablePreview {
   row_count: number;
 }
 
+interface AgentStateMaintenanceResult {
+  deleted_runs: number;
+  deleted_rows: number;
+  size_before: number;
+  size_after: number;
+}
+
 const friendlyTableNames: Record<string, string> = {
   agent_runs: "Runs",
   trajectory_events: "Events",
@@ -31,18 +39,26 @@ const friendlyTableNames: Record<string, string> = {
 export function AgentStateDatabasePanel() {
   const [preview, setPreview] = useState<DatabasePreview | null>(null);
   const [loading, setLoading] = useState(true);
+  const [compacting, setCompacting] = useState(false);
+  const [hasActiveAgentRun, setHasActiveAgentRun] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const activeTab = useAppStore((state) => state.openTabs.find((tab) => tab.id === state.activeTabId) ?? null);
   const openDatabase = useAppStore((state) => state.openDatabase);
+  const showToast = useToastStore((state) => state.show);
 
   const loadPreview = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const nextPreview = await invoke<DatabasePreview>("get_agent_state_database_preview");
+      const [nextPreview, activeAgentRun] = await Promise.all([
+        invoke<DatabasePreview>("get_agent_state_database_preview"),
+        invoke<boolean>("has_active_agent_run"),
+      ]);
       setPreview(nextPreview);
+      setHasActiveAgentRun(activeAgentRun);
     } catch (err) {
       setPreview(null);
+      setHasActiveAgentRun(false);
       setError(String(err));
     } finally {
       setLoading(false);
@@ -52,6 +68,26 @@ export function AgentStateDatabasePanel() {
   useEffect(() => {
     void loadPreview();
   }, [loadPreview]);
+
+  const compactDatabase = useCallback(async () => {
+    if (hasActiveAgentRun) {
+      showToast("Wait for the active agent run to finish before compacting the database.", 4000, "warning");
+      return;
+    }
+    if (!window.confirm("Compact the local agent-state database now?\n\nThis runs SQLite VACUUM after run cleanup. It may briefly lock the local runtime database.")) {
+      return;
+    }
+    setCompacting(true);
+    try {
+      const result = await invoke<AgentStateMaintenanceResult>("compact_agent_state_database");
+      showToast(`Compacted database: ${formatBytes(result.size_before)} → ${formatBytes(result.size_after)}`, 3500, "success");
+      await loadPreview();
+    } catch (err) {
+      showToast(`Could not compact database: ${String(err)}`, 5000, "error");
+    } finally {
+      setCompacting(false);
+    }
+  }, [hasActiveAgentRun, loadPreview, showToast]);
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-[rgb(var(--color-surface))]">
@@ -83,6 +119,14 @@ export function AgentStateDatabasePanel() {
             </p>
           </div>
         </div>
+        <button
+          className="mt-3 w-full rounded-lg border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-alt))] px-2 py-1.5 text-[11px] text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface))] hover:text-[rgb(var(--color-text))] disabled:cursor-not-allowed disabled:opacity-50"
+          onClick={() => void compactDatabase()}
+          disabled={compacting || hasActiveAgentRun}
+          title={hasActiveAgentRun ? "Wait for the active agent run to finish before compacting" : "Vacuum the local agent-state database"}
+        >
+          {compacting ? "Compacting..." : "Compact database"}
+        </button>
       </div>
 
       <div className="flex-1 overflow-y-auto py-1">

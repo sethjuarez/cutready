@@ -62,6 +62,19 @@ pub struct AgentRunSummary {
     pub verification_result_count: usize,
 }
 
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+pub struct AgentStateMaintenanceResult {
+    pub deleted_runs: usize,
+    pub deleted_rows: usize,
+    pub size_before: u64,
+    pub size_after: u64,
+}
+
+struct AgentStateCleanupResult {
+    deleted_runs: usize,
+    deleted_rows: usize,
+}
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct AgentTrajectoryEventRecord {
     pub id: i64,
@@ -288,6 +301,98 @@ impl AgentStateStore {
         }))
     }
 
+    pub fn delete_run(
+        project_root: &Path,
+        run_id: &str,
+    ) -> Result<AgentStateMaintenanceResult, String> {
+        let db_path = Self::ensure_database_for_project(project_root)?;
+        let size_before = database_size(&db_path);
+        let conn = Self::connect_project_database_for_write(project_root)?;
+        let status = conn
+            .query_row(
+                "SELECT status FROM agent_runs WHERE run_id = ?1",
+                params![run_id],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()
+            .map_err(|e| format!("Could not inspect agent run before deletion: {e}"))?;
+        if status
+            .as_deref()
+            .is_some_and(|value| value.eq_ignore_ascii_case("running"))
+        {
+            return Err("Cannot delete an agent run while it is still running".into());
+        }
+        let deleted_rows = delete_runs_matching(
+            &conn,
+            "SELECT run_id FROM agent_runs WHERE run_id = ?1",
+            params![run_id],
+        )?;
+        Ok(AgentStateMaintenanceResult {
+            deleted_runs: deleted_rows.deleted_runs,
+            deleted_rows: deleted_rows.deleted_rows,
+            size_before,
+            size_after: database_size(&db_path),
+        })
+    }
+
+    pub fn prune_completed_runs_for_project(
+        project_root: &Path,
+        keep_recent: usize,
+    ) -> Result<AgentStateMaintenanceResult, String> {
+        let db_path = Self::ensure_database_for_project(project_root)?;
+        let size_before = database_size(&db_path);
+        let conn = Self::connect_project_database_for_write(project_root)?;
+        let keep_recent = keep_recent.clamp(1, MAX_COMPLETED_RUNS);
+        let cleanup = prune_completed_runs_keep(&conn, keep_recent)?;
+        Ok(AgentStateMaintenanceResult {
+            deleted_runs: cleanup.deleted_runs,
+            deleted_rows: cleanup.deleted_rows,
+            size_before,
+            size_after: database_size(&db_path),
+        })
+    }
+
+    pub fn compact_project_database(
+        project_root: &Path,
+    ) -> Result<AgentStateMaintenanceResult, String> {
+        let db_path = Self::ensure_database_for_project(project_root)?;
+        let size_before = database_size(&db_path);
+        let conn = Self::connect_project_database_for_write(project_root)?;
+        conn.execute_batch("VACUUM;")
+            .map_err(|e| format!("Could not compact agent state database: {e}"))?;
+        Ok(AgentStateMaintenanceResult {
+            deleted_runs: 0,
+            deleted_rows: 0,
+            size_before,
+            size_after: database_size(&db_path),
+        })
+    }
+
+    pub fn reconcile_abandoned_runs_for_project(
+        project_root: &Path,
+        active_run_ids: &[String],
+    ) -> Result<usize, String> {
+        let conn = Self::connect_project_database_for_write(project_root)?;
+        let now = Utc::now().to_rfc3339();
+        let mut sql =
+            "UPDATE agent_runs SET status = 'interrupted', completed_at = ?1 WHERE status = 'running'"
+                .to_string();
+        let mut values = vec![now];
+        if !active_run_ids.is_empty() {
+            let placeholders = (0..active_run_ids.len())
+                .map(|index| format!("?{}", index + 2))
+                .collect::<Vec<_>>()
+                .join(", ");
+            sql.push_str(" AND run_id NOT IN (");
+            sql.push_str(&placeholders);
+            sql.push(')');
+            values.extend(active_run_ids.iter().cloned());
+        }
+
+        conn.execute(&sql, rusqlite::params_from_iter(values.iter()))
+            .map_err(|e| format!("Could not reconcile abandoned agent runs: {e}"))
+    }
+
     pub fn insert_run(
         &self,
         parent_run_id: Option<&str>,
@@ -335,6 +440,16 @@ impl AgentStateStore {
             ));
         }
         Ok(Some(conn))
+    }
+
+    fn connect_project_database_for_write(project_root: &Path) -> Result<Connection, String> {
+        let db_path = Self::ensure_database_for_project(project_root)?;
+        let conn = Connection::open(db_path)
+            .map_err(|e| format!("Could not open CutReady agent state database: {e}"))?;
+        conn.busy_timeout(BUSY_TIMEOUT)
+            .map_err(|e| format!("Could not configure agent state database timeout: {e}"))?;
+        initialize_schema(&conn)?;
+        Ok(conn)
     }
 
     fn read_run_summary(row: &Row<'_>) -> rusqlite::Result<AgentRunSummary> {
@@ -1043,77 +1158,86 @@ fn insert_memory_promotion(
 }
 
 fn prune_completed_runs(conn: &Connection) -> Result<(), String> {
-    conn.execute(
-        "DELETE FROM trajectory_events WHERE run_id IN (
-            SELECT run_id FROM agent_runs
-            WHERE status != 'running' AND completed_at IS NOT NULL
-            ORDER BY datetime(completed_at) DESC, started_at DESC
-            LIMIT -1 OFFSET ?1
-        )",
-        params![MAX_COMPLETED_RUNS as i64],
-    )
-    .map_err(|e| format!("Could not prune old trajectory events: {e}"))?;
-    conn.execute(
-        "DELETE FROM checkpoints WHERE run_id IN (
-            SELECT run_id FROM agent_runs
-            WHERE status != 'running' AND completed_at IS NOT NULL
-            ORDER BY datetime(completed_at) DESC, started_at DESC
-            LIMIT -1 OFFSET ?1
-        )",
-        params![MAX_COMPLETED_RUNS as i64],
-    )
-    .map_err(|e| format!("Could not prune old checkpoints: {e}"))?;
-    conn.execute(
-        "DELETE FROM resume_contexts WHERE run_id IN (
-            SELECT run_id FROM agent_runs
-            WHERE status != 'running' AND completed_at IS NOT NULL
-            ORDER BY datetime(completed_at) DESC, started_at DESC
-            LIMIT -1 OFFSET ?1
-        )",
-        params![MAX_COMPLETED_RUNS as i64],
-    )
-    .map_err(|e| format!("Could not prune old resume contexts: {e}"))?;
-    conn.execute(
-        "DELETE FROM touched_resources WHERE run_id IN (
-            SELECT run_id FROM agent_runs
-            WHERE status != 'running' AND completed_at IS NOT NULL
-            ORDER BY datetime(completed_at) DESC, started_at DESC
-            LIMIT -1 OFFSET ?1
-        )",
-        params![MAX_COMPLETED_RUNS as i64],
-    )
-    .map_err(|e| format!("Could not prune old touched resources: {e}"))?;
-    conn.execute(
-        "DELETE FROM verification_results WHERE run_id IN (
-            SELECT run_id FROM agent_runs
-            WHERE status != 'running' AND completed_at IS NOT NULL
-            ORDER BY datetime(completed_at) DESC, started_at DESC
-            LIMIT -1 OFFSET ?1
-        )",
-        params![MAX_COMPLETED_RUNS as i64],
-    )
-    .map_err(|e| format!("Could not prune old verification results: {e}"))?;
-    conn.execute(
-        "DELETE FROM memory_promotions WHERE run_id IN (
-            SELECT run_id FROM agent_runs
-            WHERE status != 'running' AND completed_at IS NOT NULL
-            ORDER BY datetime(completed_at) DESC, started_at DESC
-            LIMIT -1 OFFSET ?1
-        )",
-        params![MAX_COMPLETED_RUNS as i64],
-    )
-    .map_err(|e| format!("Could not prune old memory promotions: {e}"))?;
-    conn.execute(
-        "DELETE FROM agent_runs WHERE run_id IN (
-            SELECT run_id FROM agent_runs
-            WHERE status != 'running' AND completed_at IS NOT NULL
-            ORDER BY datetime(completed_at) DESC, started_at DESC
-            LIMIT -1 OFFSET ?1
-        )",
-        params![MAX_COMPLETED_RUNS as i64],
-    )
-    .map_err(|e| format!("Could not prune old agent runs: {e}"))?;
+    prune_completed_runs_keep(conn, MAX_COMPLETED_RUNS)?;
     Ok(())
+}
+
+fn prune_completed_runs_keep(
+    conn: &Connection,
+    keep_recent: usize,
+) -> Result<AgentStateCleanupResult, String> {
+    delete_runs_matching(
+        conn,
+        "SELECT run_id FROM agent_runs
+         WHERE status != 'running' AND completed_at IS NOT NULL
+         ORDER BY datetime(completed_at) DESC, started_at DESC
+         LIMIT -1 OFFSET ?1",
+        params![keep_recent as i64],
+    )
+}
+
+fn delete_runs_matching<P: rusqlite::Params>(
+    conn: &Connection,
+    run_id_query: &str,
+    params: P,
+) -> Result<AgentStateCleanupResult, String> {
+    conn.execute("BEGIN IMMEDIATE", [])
+        .map_err(|e| format!("Could not begin agent state cleanup: {e}"))?;
+    let result = (|| {
+        let mut stmt = conn
+            .prepare(run_id_query)
+            .map_err(|e| format!("Could not prepare run cleanup query: {e}"))?;
+        let rows = stmt
+            .query_map(params, |row| row.get::<_, String>(0))
+            .map_err(|e| format!("Could not query runs for cleanup: {e}"))?;
+        let mut run_ids = Vec::new();
+        for row in rows {
+            run_ids.push(row.map_err(|e| format!("Could not read run cleanup row: {e}"))?);
+        }
+        drop(stmt);
+
+        let mut deleted_rows = 0usize;
+        for run_id in &run_ids {
+            for table in [
+                "trajectory_events",
+                "checkpoints",
+                "resume_contexts",
+                "touched_resources",
+                "verification_results",
+                "memory_promotions",
+                "agent_runs",
+            ] {
+                deleted_rows += conn
+                    .execute(
+                        &format!("DELETE FROM {table} WHERE run_id = ?1"),
+                        params![run_id],
+                    )
+                    .map_err(|e| format!("Could not delete {table} rows for run {run_id}: {e}"))?;
+            }
+        }
+        Ok::<AgentStateCleanupResult, String>(AgentStateCleanupResult {
+            deleted_runs: run_ids.len(),
+            deleted_rows,
+        })
+    })();
+
+    match result {
+        Ok(cleanup) => {
+            conn.execute("COMMIT", [])
+                .map_err(|e| format!("Could not commit agent state cleanup: {e}"))?;
+            Ok(cleanup)
+        }
+        Err(err) => {
+            let _ = conn.execute("ROLLBACK", []);
+            Err(err)
+        }
+    }
+}
+
+fn database_size(path: &Path) -> u64 {
+    std::fs::metadata(path)
+        .map(|metadata| metadata.len())
+        .unwrap_or(0)
 }
 
 fn prune_by_run_limit(
@@ -1454,6 +1578,115 @@ mod tests {
         assert!(AgentStateStore::get_run_detail(&project_root, "missing")
             .unwrap()
             .is_none());
+    }
+
+    #[test]
+    fn delete_run_removes_associated_runtime_rows() {
+        let project_root = tempfile::tempdir().unwrap().keep();
+        let store = AgentStateStore::for_project(&project_root, "run-delete").unwrap();
+        store
+            .insert_run(None, "openai", "gpt-4o", serde_json::json!({}))
+            .unwrap();
+        store
+            .record(TrajectoryEvent::TurnStarted {
+                metadata: TrajectoryMetadata::new().with_run_id("run-delete"),
+                goal: "Delete this run".into(),
+            })
+            .unwrap();
+        store
+            .record_verification_result(&VerificationResult::new(
+                "delete check",
+                VerificationStatus::Passed,
+                "ok",
+            ))
+            .unwrap();
+        store.finish_run("completed").unwrap();
+
+        let result = AgentStateStore::delete_run(&project_root, "run-delete").unwrap();
+
+        assert_eq!(result.deleted_runs, 1);
+        assert!(result.deleted_rows >= 3);
+        assert!(AgentStateStore::get_run_detail(&project_root, "run-delete")
+            .unwrap()
+            .is_none());
+    }
+
+    #[test]
+    fn delete_run_rejects_running_run() {
+        let project_root = tempfile::tempdir().unwrap().keep();
+        let store = AgentStateStore::for_project(&project_root, "run-active").unwrap();
+        store
+            .insert_run(None, "openai", "gpt-4o", serde_json::json!({}))
+            .unwrap();
+
+        let err = AgentStateStore::delete_run(&project_root, "run-active").unwrap_err();
+
+        assert!(err.contains("still running"));
+        assert!(AgentStateStore::get_run_detail(&project_root, "run-active")
+            .unwrap()
+            .is_some());
+    }
+
+    #[test]
+    fn prune_completed_runs_keeps_recent_and_running_runs() {
+        let project_root = tempfile::tempdir().unwrap().keep();
+        for (run_id, should_finish) in [
+            ("run-old-1", true),
+            ("run-old-2", true),
+            ("run-keep", true),
+            ("run-running", false),
+        ] {
+            let store = AgentStateStore::for_project(&project_root, run_id).unwrap();
+            store
+                .insert_run(None, "openai", "gpt-4o", serde_json::json!({}))
+                .unwrap();
+            store
+                .record(TrajectoryEvent::TurnStarted {
+                    metadata: TrajectoryMetadata::new().with_run_id(run_id),
+                    goal: run_id.into(),
+                })
+                .unwrap();
+            if should_finish {
+                store.finish_run("completed").unwrap();
+            }
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        }
+
+        let result = AgentStateStore::prune_completed_runs_for_project(&project_root, 1).unwrap();
+        let remaining = AgentStateStore::list_recent_runs(&project_root, 10).unwrap();
+        let remaining_ids: Vec<_> = remaining.iter().map(|run| run.run_id.as_str()).collect();
+
+        assert_eq!(result.deleted_runs, 2);
+        assert!(remaining_ids.contains(&"run-keep"));
+        assert!(remaining_ids.contains(&"run-running"));
+        assert!(!remaining_ids.contains(&"run-old-1"));
+        assert!(!remaining_ids.contains(&"run-old-2"));
+    }
+
+    #[test]
+    fn reconcile_abandoned_runs_interrupts_only_inactive_running_runs() {
+        let project_root = tempfile::tempdir().unwrap().keep();
+        for run_id in ["run-stale", "run-active"] {
+            let store = AgentStateStore::for_project(&project_root, run_id).unwrap();
+            store
+                .insert_run(None, "openai", "gpt-4o", serde_json::json!({}))
+                .unwrap();
+        }
+
+        let reconciled = AgentStateStore::reconcile_abandoned_runs_for_project(
+            &project_root,
+            &[String::from("run-active")],
+        )
+        .unwrap();
+
+        let stale_store = AgentStateStore::for_project(&project_root, "reader").unwrap();
+        let stale = stale_store.get_run("run-stale").unwrap().unwrap();
+        let active = stale_store.get_run("run-active").unwrap().unwrap();
+        assert_eq!(reconciled, 1);
+        assert_eq!(stale.status, "interrupted");
+        assert!(stale.completed_at.is_some());
+        assert_eq!(active.status, "running");
+        assert!(active.completed_at.is_none());
     }
 
     #[test]

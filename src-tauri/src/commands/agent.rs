@@ -4,15 +4,49 @@ use serde::Deserialize;
 
 use crate::engine::agent::llm::{self, ChatMessage, LlmConfig, LlmProvider, ModelInfo};
 use crate::engine::agent::runner::{self, AgentEvent};
-use crate::engine::agent_state::{AgentRunDetail, AgentRunSummary, AgentStateStore};
+use crate::engine::agent_state::{
+    AgentRunDetail, AgentRunSummary, AgentStateMaintenanceResult, AgentStateStore,
+};
 use crate::AppState;
 use agentive::azure_oauth::{self, AuthCodeFlowInit, DeviceCodeResponse, TokenResponse};
+use std::collections::HashSet;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tauri_plugin_auditaur::auditaur_command;
 
 const SIMPLE_CHAT_TIMEOUT: Duration = Duration::from_secs(45);
 const MIN_SIMPLE_CHAT_TIMEOUT_MS: u64 = 5_000;
 const MAX_SIMPLE_CHAT_TIMEOUT_MS: u64 = 120_000;
+
+struct ActiveAgentRunGuard {
+    run_id: String,
+    active_runs: Arc<Mutex<HashSet<String>>>,
+}
+
+impl ActiveAgentRunGuard {
+    fn register(active_runs: Arc<Mutex<HashSet<String>>>, run_id: String) -> Self {
+        match active_runs.lock() {
+            Ok(mut runs) => {
+                runs.insert(run_id.clone());
+            }
+            Err(err) => {
+                log::warn!("[agent_chat_with_tools] active run tracking unavailable: {err}");
+            }
+        }
+        Self {
+            run_id,
+            active_runs,
+        }
+    }
+}
+
+impl Drop for ActiveAgentRunGuard {
+    fn drop(&mut self) {
+        if let Ok(mut runs) = self.active_runs.lock() {
+            runs.remove(&self.run_id);
+        }
+    }
+}
 
 /// Serialisable provider config sent from the frontend.
 #[derive(Debug, Deserialize)]
@@ -212,6 +246,62 @@ pub async fn get_agent_run(
     AgentStateStore::get_run_detail(&root, &run_id)
 }
 
+#[auditaur_command(skip_all, err)]
+pub async fn has_active_agent_run(state: tauri::State<'_, AppState>) -> Result<bool, String> {
+    let active_count = state
+        .active_agent_runs
+        .lock()
+        .map_err(|e| format!("Could not inspect active agent runs: {e}"))?
+        .len();
+    Ok(active_count > 0)
+}
+
+#[auditaur_command(skip_all, err)]
+pub async fn delete_agent_run(
+    state: tauri::State<'_, AppState>,
+    run_id: String,
+) -> Result<AgentStateMaintenanceResult, String> {
+    let root = {
+        let guard = state.current_project.lock().unwrap();
+        guard.as_ref().ok_or("No project open")?.root.clone()
+    };
+    AgentStateStore::delete_run(&root, &run_id)
+}
+
+#[auditaur_command(skip_all, err)]
+pub async fn prune_agent_runs(
+    state: tauri::State<'_, AppState>,
+    keep_recent_completed: Option<usize>,
+) -> Result<AgentStateMaintenanceResult, String> {
+    let root = {
+        let guard = state.current_project.lock().unwrap();
+        guard.as_ref().ok_or("No project open")?.root.clone()
+    };
+    AgentStateStore::prune_completed_runs_for_project(
+        &root,
+        keep_recent_completed.unwrap_or(25).clamp(1, 100),
+    )
+}
+
+#[auditaur_command(skip_all, err)]
+pub async fn compact_agent_state_database(
+    state: tauri::State<'_, AppState>,
+) -> Result<AgentStateMaintenanceResult, String> {
+    let active_count = state
+        .active_agent_runs
+        .lock()
+        .map_err(|e| format!("Could not inspect active agent runs: {e}"))?
+        .len();
+    if active_count > 0 {
+        return Err("Cannot compact the agent-state database while an agent run is active".into());
+    }
+    let root = {
+        let guard = state.current_project.lock().unwrap();
+        guard.as_ref().ok_or("No project open")?.root.clone()
+    };
+    AgentStateStore::compact_project_database(&root)
+}
+
 /// Agentic chat with function calling — the LLM can read/write project files.
 /// Returns the full conversation (including tool calls) and the final response.
 /// Emits `agent-event` events to the frontend for real-time streaming.
@@ -275,6 +365,8 @@ pub async fn agent_chat_with_tools(
     let provider = llm::build_provider(&llm_config, reported_context);
     let budget_chars = provider.context_budget_chars();
     let run_id = uuid::Uuid::new_v4().to_string();
+    let _active_run_guard =
+        ActiveAgentRunGuard::register(state.active_agent_runs.clone(), run_id.clone());
     let agent_state = match crate::engine::agent_state::AgentStateStore::for_project(
         &project_root,
         run_id.clone(),

@@ -308,6 +308,14 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
           { id: 2, criterion: "No parse errors", status: "passed", created_at: new Date(Date.now() - 1000 * 60 * 21).toISOString(), result: { details: "Updated plan remained valid JSON" } },
         ],
       };
+    case "has_active_agent_run":
+      return false;
+    case "delete_agent_run":
+      return { deleted_runs: 1, deleted_rows: 8, size_before: 49152, size_after: 49152 };
+    case "prune_agent_runs":
+      return { deleted_runs: 2, deleted_rows: 24, size_before: 49152, size_after: 49152 };
+    case "compact_agent_state_database":
+      return { deleted_runs: 0, deleted_rows: 0, size_before: 49152, size_after: 32768 };
     case "get_memory_context":
       return "";
     case "archive_chat_session":
