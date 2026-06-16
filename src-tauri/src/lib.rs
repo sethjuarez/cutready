@@ -341,6 +341,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::project::create_project_folder,
             commands::project::open_project_folder,
+            commands::project::get_startup_project_path,
             commands::project::get_current_project,
             commands::project::close_project,
             commands::project::get_recent_projects,
@@ -353,6 +354,7 @@ pub fn run() {
             commands::project::set_workspace_state,
             commands::project::list_all_files,
             commands::project::get_database_preview,
+            commands::project::get_agent_state_database_preview,
             commands::project::list_projects,
             commands::project::is_multi_project,
             commands::project::switch_project,

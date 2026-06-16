@@ -460,11 +460,6 @@ function ChatTab() {
   const [streamingThinking, setStreamingThinking] = useState<string>("");
   const [streamingStatus, setStreamingStatus] = useState<string>("");
 
-  // Auto-create a session path on first mount if none exists
-  useEffect(() => {
-    if (!chatSessionPath) newChatSession();
-  }, [chatSessionPath, newChatSession]);
-
   // Listen for streaming agent events from the backend
   const streamingRef = useRef("");
   const thinkingRef = useRef("");
@@ -2480,7 +2475,7 @@ function ChatHistory({ onOpenSession }: { onOpenSession: () => void }) {
             <IconHistory size={24} />
             <span className="text-[12px] text-[rgb(var(--color-text-secondary))]">No chat sessions yet</span>
             <span className="text-[11px] text-[rgb(var(--color-text-secondary))]/60">
-              Start a conversation and it will appear here
+              New conversations are saved in Runs; legacy chat files appear here.
             </span>
           </div>
         ) : (

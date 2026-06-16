@@ -7,11 +7,12 @@ use rusqlite::{types::ValueRef, Connection, OpenFlags};
 use tauri::State;
 use tauri_plugin_store::StoreExt;
 
-use crate::engine::{project, versioning};
+use crate::engine::{agent_state::AgentStateStore, project, versioning};
 use crate::models::script::{ProjectEntry, ProjectView, RecentProject, RepoView};
 use crate::AppState;
 
 const STORE_FILE: &str = "recent-projects.json";
+const STARTUP_PROJECT_ENV: &str = "CUTREADY_PROJECT";
 
 /// Helper: get the project root from current state.
 fn project_root(state: &AppState) -> Result<std::path::PathBuf, String> {
@@ -27,6 +28,46 @@ fn project_and_repo_root(
     let current = state.current_project.lock().map_err(|e| e.to_string())?;
     let view = current.as_ref().ok_or("No project is currently open")?;
     Ok((view.root.clone(), view.repo_root.clone()))
+}
+
+/// Project folder requested on the command line.
+///
+/// Supports `--project <path>`, `--project=<path>`, `--open-project <path>`,
+/// and `CUTREADY_PROJECT=<path>` for dev smoke tests and scripted launches.
+#[tauri::command]
+pub async fn get_startup_project_path() -> Result<Option<String>, String> {
+    Ok(startup_project_path_from_args(std::env::args_os()).or_else(|| {
+        std::env::var(STARTUP_PROJECT_ENV)
+            .ok()
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty())
+    }))
+}
+
+fn startup_project_path_from_args<I>(args: I) -> Option<String>
+where
+    I: IntoIterator<Item = std::ffi::OsString>,
+{
+    let mut args = args.into_iter();
+    while let Some(arg) = args.next() {
+        let value = arg.to_string_lossy();
+        if value == "--project" || value == "--open-project" {
+            return args
+                .next()
+                .map(|path| path.to_string_lossy().to_string())
+                .filter(|path| !path.trim().is_empty());
+        }
+        if let Some(path) = value
+            .strip_prefix("--project=")
+            .or_else(|| value.strip_prefix("--open-project="))
+        {
+            let path = path.trim().to_string();
+            if !path.is_empty() {
+                return Some(path);
+            }
+        }
+    }
+    None
 }
 
 /// Initialize a new project in the given folder.
@@ -90,6 +131,9 @@ pub async fn open_project_folder(
     {
         let mut current = state.current_project.lock().map_err(|e| e.to_string())?;
         *current = Some(view.clone());
+    }
+    if let Err(err) = project::migrate_legacy_chat_sessions(&view.repo_root, &view.root) {
+        log::warn!("[project] could not archive legacy chat sessions: {err}");
     }
 
     // Auto-add to recent projects, preserving the active project
@@ -350,6 +394,23 @@ pub async fn get_database_preview(
     } else {
         project::safe_resolve(&repo_root, &relative_path).map_err(|e| e.to_string())?
     };
+    read_database_preview(abs_path, relative_path)
+}
+
+/// Return a read-only preview of the local agent-state database.
+#[tauri::command]
+pub async fn get_agent_state_database_preview(
+    state: State<'_, AppState>,
+) -> Result<DatabasePreview, String> {
+    let project_root = project_root(&state)?;
+    let abs_path = AgentStateStore::prepare_database_path_for_project(&project_root)?;
+    read_database_preview(abs_path, "agent-state.db".to_string())
+}
+
+fn read_database_preview(
+    abs_path: std::path::PathBuf,
+    display_path: String,
+) -> Result<DatabasePreview, String> {
     let metadata = std::fs::metadata(&abs_path).map_err(|e| e.to_string())?;
 
     let conn = Connection::open_with_flags(
@@ -394,7 +455,7 @@ pub async fn get_database_preview(
     }
 
     Ok(DatabasePreview {
-        path: relative_path,
+        path: display_path,
         size: metadata.len(),
         tables,
     })
@@ -472,6 +533,34 @@ fn sqlite_value_to_preview(value: ValueRef<'_>) -> DatabaseCellPreview {
             kind: "blob".to_string(),
             value: Some(format!("<blob: {} bytes>", value.len())),
         },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::ffi::OsString;
+
+    use super::startup_project_path_from_args;
+
+    #[test]
+    fn startup_project_path_parses_space_separated_flag() {
+        let path = startup_project_path_from_args([
+            OsString::from("cutready.exe"),
+            OsString::from("--project"),
+            OsString::from("D:\\cutready\\start-2026"),
+        ]);
+
+        assert_eq!(path.as_deref(), Some("D:\\cutready\\start-2026"));
+    }
+
+    #[test]
+    fn startup_project_path_parses_equals_flag() {
+        let path = startup_project_path_from_args([
+            OsString::from("cutready.exe"),
+            OsString::from("--open-project=D:\\cutready\\build-2026"),
+        ]);
+
+        assert_eq!(path.as_deref(), Some("D:\\cutready\\build-2026"));
     }
 }
 

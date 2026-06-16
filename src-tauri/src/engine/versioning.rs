@@ -349,15 +349,17 @@ pub fn has_unsaved_changes_in_scope(
             continue;
         }
         // Skip paths that build_tree_from_dir would never commit:
-        // dotfiles/dotdirs at the root level (except .cutready/, .chats/, .gitignore).
+        // dotfiles/dotdirs at the root level (except .cutready/ and .gitignore).
         if let Some(path) = entry.path() {
             if !path_is_in_scope(path, scope_path) {
+                continue;
+            }
+            if is_chat_exhaust_path(path) || is_legacy_agent_state_path(path) {
                 continue;
             }
             let top_segment = path.split('/').next().unwrap_or(path);
             if top_segment.starts_with('.')
                 && top_segment != ".cutready"
-                && top_segment != ".chats"
                 && top_segment != ".gitignore"
             {
                 continue;
@@ -1228,13 +1230,13 @@ fn diff_working_tree_in_scope_inner(
         if !path_is_in_scope(&path, scope_path) {
             continue;
         }
+        if is_chat_exhaust_path(&path) || is_legacy_agent_state_path(&path) {
+            continue;
+        }
 
         // Skip dotfiles that are never committed (same rule as build_tree_from_dir)
         let top_segment = path.split('/').next().unwrap_or(&path);
-        if top_segment.starts_with('.')
-            && top_segment != ".cutready"
-            && top_segment != ".chats"
-            && top_segment != ".gitignore"
+        if top_segment.starts_with('.') && top_segment != ".cutready" && top_segment != ".gitignore"
         {
             continue;
         }
@@ -1948,16 +1950,16 @@ fn build_tree_from_dir(
         let path = fs_entry.path();
         let name = fs_entry.file_name().to_string_lossy().to_string();
 
-        if is_local_recording_asset(root, &path) {
+        if is_local_recording_asset(root, &path)
+            || relative_path_string(root, &path)
+                .as_deref()
+                .is_some_and(|rel| is_chat_exhaust_path(rel) || is_legacy_agent_state_path(rel))
+        {
             continue;
         }
 
         // Skip .git and other dotfiles/dirs, but include project-essential ones
-        if name == ".git"
-            || (name.starts_with('.')
-                && name != ".cutready"
-                && name != ".chats"
-                && name != ".gitignore")
+        if name == ".git" || (name.starts_with('.') && name != ".cutready" && name != ".gitignore")
         {
             continue;
         }
@@ -1995,6 +1997,20 @@ fn build_tree_from_dir(
     Ok(tree_id)
 }
 
+fn relative_path_string(root: &Path, path: &Path) -> Option<String> {
+    path.strip_prefix(root)
+        .ok()
+        .map(|rel| rel.to_string_lossy().replace('\\', "/"))
+}
+
+fn is_chat_exhaust_path(path: &str) -> bool {
+    path.split('/').any(|segment| segment == ".chats")
+}
+
+fn is_legacy_agent_state_path(path: &str) -> bool {
+    path == ".cutready/agent-state.db" || path.ends_with("/.cutready/agent-state.db")
+}
+
 fn is_local_recording_asset(root: &Path, path: &Path) -> bool {
     let Ok(rel) = path.strip_prefix(root) else {
         return false;
@@ -2029,8 +2045,8 @@ fn clean_working_dir(project_dir: &Path) -> Result<(), VersioningError> {
     for entry in std::fs::read_dir(project_dir).map_err(|e| VersioningError::Io(e.to_string()))? {
         let entry = entry.map_err(|e| VersioningError::Io(e.to_string()))?;
         let name = entry.file_name().to_string_lossy().to_string();
-        // Skip .git but clean .cutready (screenshots, metadata) and .chats (chat sessions)
-        if name == ".git" || (name.starts_with('.') && name != ".cutready" && name != ".chats") {
+        // Skip .git but clean tracked project metadata in .cutready.
+        if name == ".git" || (name.starts_with('.') && name != ".cutready") {
             continue;
         }
         let path = entry.path();
@@ -3701,6 +3717,76 @@ mod tests {
         assert!(
             has_unsaved_changes(tmp.path()).unwrap(),
             ".cutready/ changes should trigger dirty state"
+        );
+    }
+
+    #[test]
+    fn chat_exhaust_and_legacy_agent_state_do_not_dirty_project() {
+        let tmp = setup_project_dir();
+        init_project_repo(tmp.path()).unwrap();
+
+        std::fs::write(tmp.path().join("a.sk"), "content").unwrap();
+        commit_snapshot(tmp.path(), "init", None).unwrap();
+
+        std::fs::create_dir_all(tmp.path().join(".chats")).unwrap();
+        std::fs::write(tmp.path().join(".chats").join("chat.chat"), "{}").unwrap();
+        std::fs::write(tmp.path().join(".cutready").join("agent-state.db"), "").unwrap();
+
+        assert!(
+            !has_unsaved_changes(tmp.path()).unwrap(),
+            "Runtime chat/session artifacts should not dirty the project"
+        );
+        assert!(
+            diff_working_tree_in_scope(tmp.path(), None)
+                .unwrap()
+                .is_empty(),
+            "Runtime chat/session artifacts should not appear in changed files"
+        );
+    }
+
+    #[test]
+    fn scoped_chat_exhaust_does_not_dirty_project() {
+        let tmp = setup_project_dir();
+        init_project_repo(tmp.path()).unwrap();
+
+        std::fs::create_dir_all(tmp.path().join("demo/.chats")).unwrap();
+        std::fs::create_dir_all(tmp.path().join("demo/.cutready")).unwrap();
+        std::fs::write(tmp.path().join("demo/a.sk"), "content").unwrap();
+        std::fs::write(tmp.path().join("demo/.chats/chat.chat"), "{}").unwrap();
+        std::fs::write(tmp.path().join("demo/.cutready/agent-state.db"), "").unwrap();
+
+        let repo = git2::Repository::open(tmp.path()).unwrap();
+        let mut index = repo.index().unwrap();
+        index.add_path(Path::new("demo/a.sk")).unwrap();
+        index.add_path(Path::new("demo/.chats/chat.chat")).unwrap();
+        index.add_path(Path::new("demo/.cutready/agent-state.db")).unwrap();
+        index.write().unwrap();
+        let tree_id = index.write_tree().unwrap();
+        let tree = repo.find_tree(tree_id).unwrap();
+        let signature = git2::Signature::now("Legacy", "legacy@example.com").unwrap();
+        repo.commit(
+            Some("HEAD"),
+            &signature,
+            &signature,
+            "legacy tracked runtime state",
+            &tree,
+            &[],
+        )
+        .unwrap();
+        drop(tree);
+
+        std::fs::remove_file(tmp.path().join("demo/.chats/chat.chat")).unwrap();
+        std::fs::remove_file(tmp.path().join("demo/.cutready/agent-state.db")).unwrap();
+
+        assert!(
+            !has_unsaved_changes_in_scope(tmp.path(), Some("demo")).unwrap(),
+            "Scoped runtime chat/session artifacts should not dirty the project"
+        );
+        assert!(
+            diff_working_tree_in_scope(tmp.path(), Some("demo"))
+                .unwrap()
+                .is_empty(),
+            "Scoped runtime chat/session artifacts should not appear in changed files"
         );
     }
 

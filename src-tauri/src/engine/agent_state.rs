@@ -16,7 +16,7 @@ use agentive::{
 use chrono::{DateTime, Utc};
 use rusqlite::{params, Connection, OpenFlags, OptionalExtension, Row};
 
-const AGENT_STATE_RELATIVE_PATH: &str = ".cutready/agent-state.db";
+const AGENT_STATE_FILENAME: &str = "agent-state.db";
 const SCHEMA_VERSION: i32 = 1;
 const BUSY_TIMEOUT: Duration = Duration::from_millis(750);
 const MAX_COMPLETED_RUNS: usize = 100;
@@ -120,11 +120,7 @@ pub struct AgentRunDetail {
 
 impl AgentStateStore {
     pub fn for_project(project_root: &Path, run_id: impl Into<String>) -> Result<Self, String> {
-        let db_path = project_root.join(AGENT_STATE_RELATIVE_PATH);
-        if let Some(parent) = db_path.parent() {
-            std::fs::create_dir_all(parent)
-                .map_err(|e| format!("Could not create CutReady agent state directory: {e}"))?;
-        }
+        let db_path = Self::prepare_database_path_for_project(project_root)?;
 
         let store = Self {
             db_path: Arc::new(db_path),
@@ -132,6 +128,24 @@ impl AgentStateStore {
         };
         store.initialize()?;
         Ok(store)
+    }
+
+    pub fn database_path_for_project(project_root: &Path) -> PathBuf {
+        let repo_root = git2::Repository::discover(project_root)
+            .ok()
+            .and_then(|repo| repo.workdir().map(Path::to_path_buf))
+            .unwrap_or_else(|| project_root.to_path_buf());
+        crate::engine::project::git_state_dir(&repo_root, project_root).join(AGENT_STATE_FILENAME)
+    }
+
+    pub fn prepare_database_path_for_project(project_root: &Path) -> Result<PathBuf, String> {
+        let db_path = Self::database_path_for_project(project_root);
+        if let Some(parent) = db_path.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| format!("Could not create CutReady agent state directory: {e}"))?;
+        }
+        migrate_legacy_project_database(project_root, &db_path)?;
+        Ok(db_path)
     }
 
     #[cfg(test)]
@@ -294,7 +308,7 @@ impl AgentStateStore {
     fn connect_existing_project_database(
         project_root: &Path,
     ) -> Result<Option<Connection>, String> {
-        let db_path = project_root.join(AGENT_STATE_RELATIVE_PATH);
+        let db_path = Self::prepare_database_path_for_project(project_root)?;
         if !db_path.exists() {
             return Ok(None);
         }
@@ -666,6 +680,27 @@ impl AgentStateStore {
             .map_err(|e| format!("Could not configure agent state database timeout: {e}"))?;
         Ok(conn)
     }
+}
+
+fn migrate_legacy_project_database(project_root: &Path, db_path: &Path) -> Result<(), String> {
+    if db_path.exists() {
+        return Ok(());
+    }
+    let legacy_path = project_root.join(".cutready").join(AGENT_STATE_FILENAME);
+    if !legacy_path.exists() {
+        return Ok(());
+    }
+    if let Some(parent) = db_path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("Could not create CutReady agent state directory: {e}"))?;
+    }
+    std::fs::rename(&legacy_path, db_path)
+        .or_else(|_| {
+            std::fs::copy(&legacy_path, db_path)?;
+            std::fs::remove_file(&legacy_path)
+        })
+        .map_err(|e| format!("Could not migrate legacy CutReady agent state database: {e}"))?;
+    Ok(())
 }
 
 impl TrajectorySink for AgentStateStore {
@@ -1199,6 +1234,28 @@ mod tests {
 
         let err = AgentStateStore::for_database_path(db_path, "run-newer-schema").unwrap_err();
         assert!(err.contains("newer than this CutReady build supports"));
+    }
+
+    #[test]
+    fn for_project_uses_local_git_state_and_migrates_legacy_database() {
+        let project_root = tempfile::tempdir().unwrap().keep();
+        crate::engine::versioning::init_project_repo(&project_root).unwrap();
+
+        let legacy_path = project_root.join(".cutready").join("agent-state.db");
+        std::fs::create_dir_all(legacy_path.parent().unwrap()).unwrap();
+        drop(Connection::open(&legacy_path).unwrap());
+
+        let store = AgentStateStore::for_project(&project_root, "run-local-state").unwrap();
+
+        assert_eq!(
+            store.db_path(),
+            project_root
+                .join(".git")
+                .join("cutready")
+                .join("agent-state.db")
+        );
+        assert!(store.db_path().exists());
+        assert!(!legacy_path.exists());
     }
 
     #[test]

@@ -55,7 +55,8 @@ function isDocumentTab(tab: EditorTab): tab is EditorTab & { type: "sketch" | "s
 }
 
 function isDatabasePath(path: string): boolean {
-  return /\.(db|sqlite|sqlite3)$/i.test(path.split("#", 1)[0]);
+  const databasePath = path.split("#", 1)[0];
+  return databasePath === "cutready://agent-state" || /\.(db|sqlite|sqlite3)$/i.test(databasePath);
 }
 
 function nextActiveTabIdAfterFiltering(previousTabs: EditorTab[], nextTabs: EditorTab[], activeTabId: string | null): string | null {
@@ -839,7 +840,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     return { sidebarPosition: pos };
   }),
 
-  // Persist workspace state (tabs + chat session) to .cutready/workspace.json
+  // Persist workspace state (tabs + chat session) to local repo state.
   _persistTabs: () => {
     const { openTabs, activeTabId, chatSessionPath } = get();
     invoke("set_workspace_state", {
@@ -1824,11 +1825,9 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       }
     }
 
-    const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
-    const sessionPath = `.chats/chat-${ts}.chat`;
     set({
       chatMessages: [],
-      chatSessionPath: sessionPath,
+      chatSessionPath: null,
       chatLoading: false,
       chatError: null,
       activityLog: [],

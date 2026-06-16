@@ -7,6 +7,7 @@ import { StatusBar } from "./components/StatusBar";
 import { AppLayout } from "./components/AppLayout";
 import { ToastContainer } from "./components/ToastContainer";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import { invoke } from "./services/tauri";
 
 import { useAppStore } from "./stores/appStore";
 import { useUpdateStore } from "./stores/updateStore";
@@ -28,9 +29,12 @@ function App() {
       if (cancelled) return;
       if (deepLinkUrl) return;
 
-      const lastProject = localStorage.getItem("cutready:lastProject");
-      if (lastProject) {
-        useAppStore.getState().openProject(lastProject);
+      const startupProject = await invoke<string | null>("get_startup_project_path").catch(() => null);
+      if (cancelled) return;
+
+      const projectToOpen = startupProject || localStorage.getItem("cutready:lastProject");
+      if (projectToOpen) {
+        useAppStore.getState().openProject(projectToOpen);
       } else {
         useAppStore.getState().loadRecentProjects();
       }
