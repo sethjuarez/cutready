@@ -4,14 +4,18 @@ import {
   CheckCircle2,
   CircleDashed,
   Clock3,
+  Database,
   FileStack,
   GitCommitHorizontal,
+  MoreHorizontal,
   RefreshCw,
   ShieldCheck,
+  Trash2,
   XCircle,
 } from "lucide-react";
 import { invoke } from "../services/tauri";
 import { useAppStore } from "../stores/appStore";
+import { useToastStore } from "../stores/toastStore";
 
 type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
 
@@ -81,12 +85,25 @@ interface AgentRunDetail {
   verification_results: AgentVerificationResultRecord[];
 }
 
+interface AgentStateMaintenanceResult {
+  deleted_runs: number;
+  deleted_rows: number;
+  size_before: number;
+  size_after: number;
+}
+
 export function AgentRunInspector() {
   const [runs, setRuns] = useState<AgentRunSummary[]>([]);
   const [loadingRuns, setLoadingRuns] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [busyRunId, setBusyRunId] = useState<string | null>(null);
+  const [maintenanceBusy, setMaintenanceBusy] = useState(false);
   const activeTab = useAppStore((state) => state.openTabs.find((tab) => tab.id === state.activeTabId) ?? null);
+  const openTabs = useAppStore((state) => state.openTabs);
   const openTab = useAppStore((state) => state.openTab);
+  const closeTab = useAppStore((state) => state.closeTab);
+  const showToast = useToastStore((state) => state.show);
+  const hasRunningRun = useMemo(() => runs.some((run) => run.status.toLowerCase() === "running"), [runs]);
 
   const loadRuns = useCallback(async () => {
     setLoadingRuns(true);
@@ -105,6 +122,60 @@ export function AgentRunInspector() {
     void loadRuns();
   }, [loadRuns]);
 
+  const deleteRun = useCallback(async (run: AgentRunSummary) => {
+    if (!window.confirm(`Delete run ${shortId(run.run_id)} and its runtime records?\n\nThis only removes local agent trajectory data. It will not delete sketches, notes, visuals, or accepted project content.`)) {
+      return;
+    }
+    setBusyRunId(run.run_id);
+    try {
+      const result = await invoke<AgentStateMaintenanceResult>("delete_agent_run", { runId: run.run_id });
+      const tabPath = agentRunTabPath(run.run_id);
+      const runTab = openTabs.find((tab) => tab.type === "agent-run" && tab.path === tabPath);
+      if (runTab) closeTab(runTab.id);
+      showToast(`Deleted ${result.deleted_rows} run record${result.deleted_rows === 1 ? "" : "s"}`, 3000, "success");
+      await loadRuns();
+    } catch (err) {
+      showToast(`Could not delete run: ${String(err)}`, 5000, "error");
+    } finally {
+      setBusyRunId(null);
+    }
+  }, [closeTab, loadRuns, openTabs, showToast]);
+
+  const pruneRuns = useCallback(async () => {
+    if (!window.confirm("Prune completed agent runs, keeping the 25 most recent completed runs?\n\nRunning runs and agent memory are preserved. This only removes older local trajectory/checkpoint/resource records.")) {
+      return;
+    }
+    setMaintenanceBusy(true);
+    try {
+      const result = await invoke<AgentStateMaintenanceResult>("prune_agent_runs", { keepRecentCompleted: 25 });
+      showToast(`Pruned ${result.deleted_runs} run${result.deleted_runs === 1 ? "" : "s"} (${result.deleted_rows} rows)`, 3500, "success");
+      await loadRuns();
+    } catch (err) {
+      showToast(`Could not prune runs: ${String(err)}`, 5000, "error");
+    } finally {
+      setMaintenanceBusy(false);
+    }
+  }, [loadRuns, showToast]);
+
+  const compactDatabase = useCallback(async () => {
+    if (hasRunningRun) {
+      showToast("Wait for the active agent run to finish before compacting the database.", 4000, "warning");
+      return;
+    }
+    if (!window.confirm("Compact the local agent-state database now?\n\nThis runs SQLite VACUUM after cleanup. It may briefly lock the local runtime database.")) {
+      return;
+    }
+    setMaintenanceBusy(true);
+    try {
+      const result = await invoke<AgentStateMaintenanceResult>("compact_agent_state_database");
+      showToast(`Compacted database: ${formatBytes(result.size_before)} → ${formatBytes(result.size_after)}`, 3500, "success");
+    } catch (err) {
+      showToast(`Could not compact database: ${String(err)}`, 5000, "error");
+    } finally {
+      setMaintenanceBusy(false);
+    }
+  }, [hasRunningRun, showToast]);
+
   return (
     <div className="flex h-full min-h-0 flex-col bg-[rgb(var(--color-surface))]">
       <div className="flex h-[38px] items-center gap-2 border-b border-[rgb(var(--color-border))] px-3">
@@ -120,6 +191,27 @@ export function AgentRunInspector() {
           title="Refresh runs"
         >
           <RefreshCw className={`h-3.5 w-3.5 ${loadingRuns ? "animate-spin" : ""}`} />
+        </button>
+      </div>
+
+      <div className="flex items-center gap-1 border-b border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]/45 px-2 py-1.5">
+        <button
+          className="flex flex-1 items-center justify-center gap-1 rounded-lg px-2 py-1.5 text-[11px] text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface))] hover:text-[rgb(var(--color-text))] disabled:cursor-not-allowed disabled:opacity-50"
+          onClick={() => void pruneRuns()}
+          disabled={maintenanceBusy || loadingRuns}
+          title="Keep the 25 most recent completed runs and remove older completed runtime records"
+        >
+          <MoreHorizontal className="h-3 w-3" />
+          Prune old
+        </button>
+        <button
+          className="flex flex-1 items-center justify-center gap-1 rounded-lg px-2 py-1.5 text-[11px] text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface))] hover:text-[rgb(var(--color-text))] disabled:cursor-not-allowed disabled:opacity-50"
+          onClick={() => void compactDatabase()}
+          disabled={maintenanceBusy || hasRunningRun}
+          title={hasRunningRun ? "Wait for the active agent run to finish before compacting" : "Vacuum the local agent-state database"}
+        >
+          <Database className="h-3 w-3" />
+          Compact
         </button>
       </div>
 
@@ -141,6 +233,8 @@ export function AgentRunInspector() {
                 path: agentRunTabPath(run.run_id),
                 title: `Run ${shortId(run.run_id)}`,
               })}
+              onDelete={() => void deleteRun(run)}
+              deleting={busyRunId === run.run_id}
             />
           ))
         )}
@@ -188,41 +282,57 @@ function RunListItem({
   run,
   active,
   onSelect,
+  onDelete,
+  deleting,
 }: {
   run: AgentRunSummary;
   active: boolean;
   onSelect: () => void;
+  onDelete: () => void;
+  deleting: boolean;
 }) {
   const status = statusTone(run.status);
   const preview = run.initial_goal?.trim() || failedRunHint(run.status);
+  const isRunning = run.status.toLowerCase() === "running";
   return (
-    <button
+    <div
       className={`group w-full border-l-2 px-3 py-2.5 text-left transition-colors ${
         active
           ? "border-[rgb(var(--color-accent))] bg-[rgb(var(--color-accent))]/10"
           : "border-transparent hover:bg-[rgb(var(--color-surface-alt))]"
       }`}
-      onClick={onSelect}
     >
-      <div className="flex items-center gap-2">
-        <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${status.bg} ${status.text}`}>
-          {statusIcon(run.status)}
-        </span>
-        <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-[rgb(var(--color-text))]">
-          {run.model || "Unknown model"}
-        </span>
-        <span className="text-[10px] text-[rgb(var(--color-text-secondary))]">{formatRelative(run.started_at)}</span>
-      </div>
-      <div className="mt-1 flex items-center gap-1.5 pl-7 text-[10px] text-[rgb(var(--color-text-secondary))]">
-        <span className={`rounded-full px-1.5 py-0.5 font-medium ${status.bg} ${status.text}`}>
-          {run.status}
-        </span>
-        <span className="truncate">{run.provider}</span>
-        <span className="opacity-50">·</span>
-        <span className="font-mono">{shortId(run.run_id)}</span>
-      </div>
-      <div className="mt-1 truncate pl-7 text-[11px] leading-5 text-[rgb(var(--color-text-secondary))]" title={preview}>
-        {preview}
+      <div className="flex items-start gap-2">
+        <button className="min-w-0 flex-1 text-left" onClick={onSelect}>
+          <div className="flex items-center gap-2">
+            <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${status.bg} ${status.text}`}>
+              {statusIcon(run.status)}
+            </span>
+            <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-[rgb(var(--color-text))]">
+              {run.model || "Unknown model"}
+            </span>
+            <span className="text-[10px] text-[rgb(var(--color-text-secondary))]">{formatRelative(run.started_at)}</span>
+          </div>
+          <div className="mt-1 flex items-center gap-1.5 pl-7 text-[10px] text-[rgb(var(--color-text-secondary))]">
+            <span className={`rounded-full px-1.5 py-0.5 font-medium ${status.bg} ${status.text}`}>
+              {run.status}
+            </span>
+            <span className="truncate">{run.provider}</span>
+            <span className="opacity-50">·</span>
+            <span className="font-mono">{shortId(run.run_id)}</span>
+          </div>
+          <div className="mt-1 truncate pl-7 text-[11px] leading-5 text-[rgb(var(--color-text-secondary))]" title={preview}>
+            {preview}
+          </div>
+        </button>
+        <button
+          className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[rgb(var(--color-text-secondary))] opacity-0 transition-colors hover:bg-error/10 hover:text-error group-hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-[rgb(var(--color-text-secondary))]"
+          onClick={onDelete}
+          disabled={deleting || isRunning}
+          title={isRunning ? "Running runs cannot be deleted" : "Delete run records"}
+        >
+          {deleting ? <CircleDashed className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+        </button>
       </div>
       <div className="mt-2 grid grid-cols-4 gap-1 pl-7">
         <MiniCount label="events" value={run.trajectory_event_count} />
@@ -230,7 +340,7 @@ function RunListItem({
         <MiniCount label="checks" value={run.verification_result_count} />
         <MiniCount label="saves" value={run.checkpoint_count} />
       </div>
-    </button>
+    </div>
   );
 }
 
@@ -611,6 +721,12 @@ function formatDateTime(iso: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return iso;
   return date.toLocaleString();
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function formatRelative(iso: string): string {

@@ -89,6 +89,7 @@ pub async fn create_project_folder(
         let mut current = state.current_project.lock().map_err(|e| e.to_string())?;
         *current = Some(view.clone());
     }
+    reconcile_abandoned_agent_runs(&state, &view);
 
     // Auto-add to recent projects
     let _ = add_to_recent_projects(&app, &path, None);
@@ -132,6 +133,7 @@ pub async fn open_project_folder(
         let mut current = state.current_project.lock().map_err(|e| e.to_string())?;
         *current = Some(view.clone());
     }
+    reconcile_abandoned_agent_runs(&state, &view);
     if let Err(err) = project::migrate_legacy_chat_sessions(&view.repo_root, &view.root) {
         log::warn!("[project] could not archive legacy chat sessions: {err}");
     }
@@ -624,6 +626,8 @@ pub async fn switch_project(
 
     let mut current = state.current_project.lock().map_err(|e| e.to_string())?;
     *current = Some(view.clone());
+    drop(current);
+    reconcile_abandoned_agent_runs(&state, &view);
 
     // Persist the active project so it's restored on next open
     let repo_path = root.to_string_lossy().to_string();
@@ -635,6 +639,31 @@ pub async fn switch_project(
     let _ = update_last_active_project(&app, &repo_path, active);
 
     Ok(view)
+}
+
+fn reconcile_abandoned_agent_runs(state: &AppState, view: &ProjectView) {
+    let active_run_ids = {
+        let active_runs = match state.active_agent_runs.lock() {
+            Ok(runs) => runs,
+            Err(err) => {
+                log::warn!("[project] could not inspect active agent runs: {err}");
+                return;
+            }
+        };
+        active_runs.iter().cloned().collect::<Vec<_>>()
+    };
+    match AgentStateStore::reconcile_abandoned_runs_for_project(&view.root, &active_run_ids) {
+        Ok(count) if count > 0 => {
+            log::info!(
+                "[project] marked {count} abandoned agent run(s) interrupted for {}",
+                view.root.display()
+            );
+        }
+        Ok(_) => {}
+        Err(err) => {
+            log::warn!("[project] could not reconcile abandoned agent runs: {err}");
+        }
+    }
 }
 
 /// Create a new project within the current repo.

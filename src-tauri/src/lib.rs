@@ -1,4 +1,5 @@
 use std::{
+    collections::HashSet,
     fs,
     sync::{Arc, Mutex},
 };
@@ -142,6 +143,8 @@ pub struct AppState {
     pub browser: Arc<tokio::sync::Mutex<Option<BrowserConnection>>>,
     /// Steering handle for injecting messages into a running agent loop.
     pub steering: agentive::Steering,
+    /// Agent-state run IDs that are actively owned by this process.
+    pub active_agent_runs: Arc<Mutex<HashSet<String>>>,
     /// Last chat session summary (updated by frontend, archived on window close).
     pub last_chat_summary: Mutex<Option<(String, String)>>, // (session_id, summary)
 }
@@ -177,6 +180,7 @@ pub fn run() {
         current_project: Mutex::new(None),
         browser: Arc::new(tokio::sync::Mutex::new(None)),
         steering: agentive::Steering::new(),
+        active_agent_runs: Arc::new(Mutex::new(HashSet::new())),
         last_chat_summary: Mutex::new(None),
     };
 
@@ -506,6 +510,10 @@ pub fn run() {
             commands::agent::push_pending_chat_message,
             commands::agent::list_agent_runs,
             commands::agent::get_agent_run,
+            commands::agent::has_active_agent_run,
+            commands::agent::delete_agent_run,
+            commands::agent::prune_agent_runs,
+            commands::agent::compact_agent_state_database,
             commands::agent::fetch_url_content,
             commands::agent::list_chat_sessions,
             commands::agent::get_chat_session,

@@ -4,6 +4,7 @@
 //! This module adds CutReady-specific persistence in `.git/cutready/agent-state.db`.
 
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 
 use rusqlite::{params, Connection};
 
@@ -16,6 +17,7 @@ pub use agentive::memory::{MemoryBackend, MemoryCategory, MemoryEntry, MemorySto
 
 const AGENT_MEMORIES_TABLE: &str = "agent_memories";
 const LEGACY_MEMORY_PATH: &str = ".cutready/memory.json";
+static MEMORY_BACKEND_LOCK: Mutex<()> = Mutex::new(());
 
 /// Persists the memory store in the local agent-state database.
 struct SqliteBackend {
@@ -189,6 +191,10 @@ fn memory_category_name(category: &MemoryCategory) -> Result<String, String> {
 
 /// Load the memory store from disk.
 pub fn load(project_root: &Path) -> MemoryStore {
+    let Ok(_guard) = MEMORY_BACKEND_LOCK.lock() else {
+        log::warn!("[memory] memory backend lock is poisoned");
+        return MemoryStore::default();
+    };
     match SqliteBackend::new(project_root) {
         Ok(backend) => backend.load(),
         Err(err) => {
@@ -205,6 +211,9 @@ pub fn save_memory(
     content: &str,
     tags: Vec<String>,
 ) -> Result<(), String> {
+    let _guard = MEMORY_BACKEND_LOCK
+        .lock()
+        .map_err(|e| format!("Could not lock memory backend: {e}"))?;
     let backend = SqliteBackend::new(project_root)?;
     let mut store = backend.load();
     store.save(category, content, tags);
@@ -237,6 +246,9 @@ pub fn format_recall_results(results: &[MemoryEntry]) -> String {
 
 /// Save an archival session summary.
 pub fn archive_session(project_root: &Path, summary: &str, session_id: &str) -> Result<(), String> {
+    let _guard = MEMORY_BACKEND_LOCK
+        .lock()
+        .map_err(|e| format!("Could not lock memory backend: {e}"))?;
     let backend = SqliteBackend::new(project_root)?;
     let mut store = backend.load();
     store.archive_session(summary, session_id);
@@ -245,6 +257,9 @@ pub fn archive_session(project_root: &Path, summary: &str, session_id: &str) -> 
 
 /// Delete a memory by index.
 pub fn delete_memory(project_root: &Path, index: usize) -> Result<(), String> {
+    let _guard = MEMORY_BACKEND_LOCK
+        .lock()
+        .map_err(|e| format!("Could not lock memory backend: {e}"))?;
     let backend = SqliteBackend::new(project_root)?;
     let mut store = backend.load();
     store.delete(index).ok_or_else(|| {
@@ -259,6 +274,9 @@ pub fn delete_memory(project_root: &Path, index: usize) -> Result<(), String> {
 
 /// Update a memory's content by index.
 pub fn update_memory(project_root: &Path, index: usize, content: &str) -> Result<(), String> {
+    let _guard = MEMORY_BACKEND_LOCK
+        .lock()
+        .map_err(|e| format!("Could not lock memory backend: {e}"))?;
     let backend = SqliteBackend::new(project_root)?;
     let mut store = backend.load();
     if !store.update(index, content) {
@@ -276,6 +294,9 @@ pub fn clear_memories(
     project_root: &Path,
     category: Option<MemoryCategory>,
 ) -> Result<usize, String> {
+    let _guard = MEMORY_BACKEND_LOCK
+        .lock()
+        .map_err(|e| format!("Could not lock memory backend: {e}"))?;
     let backend = SqliteBackend::new(project_root)?;
     let mut store = backend.load();
     let removed = store.clear(category);

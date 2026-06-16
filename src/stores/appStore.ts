@@ -1013,6 +1013,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     const { openTabs, activeTabId, splitTabs } = get();
     const tab = openTabs.find((t) => t.id === tabId);
     if (!tab) return;
+    if (openTabs.length < 2) return;
     // Guard: only splittable types
     if (tab.type === "history" || tab.type === "asset" || tab.type === "agent-run" || tab.type === "diff" || tab.type === "database") return;
 

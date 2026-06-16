@@ -3,8 +3,18 @@ import type { EditorTab } from "../stores/appStore";
 import { useToastStore } from "../stores/toastStore";
 import { AgentRunIcon, DatabaseIcon, SketchIcon, StoryboardIcon, NoteIcon, HistoryIcon, ImageIcon, VisualIcon, DiffIcon } from "./Icons";
 import { usePopover } from "../hooks/usePopover";
-import React, { useCallback, useRef, useState } from "react";
-import { Copy, LayoutGrid, X } from "lucide-react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { Copy, LayoutGrid, MoreHorizontal, Search, X } from "lucide-react";
+
+export function getClampedPopoverPosition(position: { x: number; y: number }, width: number) {
+  const margin = 8;
+  const maxX = Math.max(margin, window.innerWidth - width - margin);
+  return {
+    x: Math.min(Math.max(margin, position.x), maxX),
+    y: Math.max(margin, position.y),
+  };
+}
 
 /**
  * Return the project-relative path that should be copied for a tab, or null
@@ -56,37 +66,41 @@ export function TabBar() {
   const closeTabsToRight = useAppStore((s) => s.closeTabsToRight);
   const closeTabsToLeft = useAppStore((s) => s.closeTabsToLeft);
   const closeAllTabs = useAppStore((s) => s.closeAllTabs);
-  const openTabInSplit = useAppStore((s) => s.openTabInSplit);
+  const moveTabToSplit = useAppStore((s) => s.moveTabToSplit);
 
   const setActiveEditorGroup = useAppStore((s) => s.setActiveEditorGroup);
   const moveTabFromSplit = useAppStore((s) => s.moveTabFromSplit);
   const reorderTabs = useAppStore((s) => s.reorderTabs);
   const [isDragOver, setIsDragOver] = useState(false);
+  const [tabSearch, setTabSearch] = useState("");
 
   const { state: contextMenu, ref: menuRef, openAt: openContextMenu, close: closeContextMenu, position: menuPos } = usePopover();
+  const { state: tabMenu, ref: tabMenuRef, openAt: openTabMenu, close: closeTabMenu, position: tabMenuPos } = usePopover();
   const contextTabIdRef = useRef<string>("");
 
   const handleTabContextMenu = useCallback((e: React.MouseEvent, tabId: string) => {
     e.preventDefault();
     contextTabIdRef.current = tabId;
-    openContextMenu({ x: e.clientX, y: e.clientY });
+    openContextMenu(getClampedPopoverPosition({ x: e.clientX, y: e.clientY }, 200));
   }, [openContextMenu]);
 
   if (openTabs.length === 0) return null;
 
   const contextTab = openTabs.find((t) => t.id === contextTabIdRef.current);
-  const canSplit = contextTab && contextTab.type !== "history" && contextTab.type !== "asset" && contextTab.type !== "agent-run" && contextTab.type !== "diff" && contextTab.type !== "database";
+  const canSplit = contextTab && openTabs.length > 1 && contextTab.type !== "history" && contextTab.type !== "asset" && contextTab.type !== "agent-run" && contextTab.type !== "diff" && contextTab.type !== "database";
   const copyablePath = getTabCopyPath(contextTab);
   const isAlreadyInSplit = contextTab
     ? splitTabs.some((st) => st.path === contextTab.path && st.type === contextTab.type)
     : false;
+  const filteredTabs = tabSearch.trim()
+    ? openTabs.filter((tab) => `${tab.title} ${tab.path} ${tab.type}`.toLowerCase().includes(tabSearch.trim().toLowerCase()))
+    : openTabs;
 
   return (
     <div
-      className={`no-select flex items-stretch bg-[rgb(var(--color-surface-alt))] shrink-0 overflow-x-auto border-b border-[rgb(var(--color-border))] ${
+      className={`no-select flex items-stretch bg-[rgb(var(--color-surface-alt))] shrink-0 border-b border-[rgb(var(--color-border))] ${
         isDragOver ? "border-b-[2px] border-b-[rgb(var(--color-accent))]" : ""
       }`}
-      style={{ scrollbarWidth: "none" }}
       onMouseDown={() => setActiveEditorGroup("main")}
       onDragOver={(e) => {
         if (e.dataTransfer.types.includes("application/x-cutready-tab")) {
@@ -116,36 +130,102 @@ export function TabBar() {
         } catch { /* ignore malformed data */ }
       }}
     >
-      {openTabs.map((tab) => (
-        <Tab
-          key={tab.id}
-          tab={tab}
-          isActive={tab.id === activeTabId}
-          isGroupFocused={activeEditorGroup === "main"}
-          isSplit={splitTabs.some((st) => st.path === tab.path && st.type === tab.type)}
-          onSelect={() => setActiveTab(tab.id)}
-          onClose={() => closeTab(tab.id)}
-          onContextMenu={(e) => handleTabContextMenu(e, tab.id)}
-        />
-      ))}
-      {/* Fill remaining space */}
-      <div className="flex-1" />
+      <div className="flex min-w-0 flex-1 overflow-x-auto" style={{ scrollbarWidth: "none" }}>
+        {openTabs.map((tab) => (
+          <Tab
+            key={tab.id}
+            tab={tab}
+            isActive={tab.id === activeTabId}
+            isGroupFocused={activeEditorGroup === "main"}
+            isSplit={splitTabs.some((st) => st.path === tab.path && st.type === tab.type)}
+            onSelect={() => setActiveTab(tab.id)}
+            onClose={() => closeTab(tab.id)}
+            onContextMenu={(e) => handleTabContextMenu(e, tab.id)}
+          />
+        ))}
+        {/* Fill remaining space inside the scrollable tab lane. */}
+        <div className="min-w-6 flex-1" />
+      </div>
 
-      {/* Close All Tabs button */}
+      {/* Tab navigator */}
       {openTabs.length > 0 && (
-        <div className="self-stretch flex items-center">
+        <div className="relative z-sticky self-stretch flex shrink-0 items-center border-l border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] shadow-[-12px_0_18px_-18px_rgb(var(--color-text))]">
           <button
-            className="flex items-center justify-center w-8 h-full text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors"
-            title="Close All Tabs"
-            onClick={() => closeAllTabs()}
+            className="flex items-center justify-center w-8 h-full text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface))] transition-colors"
+            title="Show open tabs"
+            onClick={(e) => {
+              setTabSearch("");
+              const rect = e.currentTarget.getBoundingClientRect();
+              openTabMenu(getClampedPopoverPosition({ x: rect.right - 280, y: rect.bottom + 4 }, 280));
+            }}
           >
-            <X className="w-3 h-3" />
+            <MoreHorizontal className="w-3.5 h-3.5" />
           </button>
         </div>
       )}
 
+      {tabMenu && createPortal(
+        <div
+          ref={tabMenuRef}
+          className="fixed z-dropdown flex max-h-[70vh] w-[280px] flex-col rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] shadow-xl"
+          style={{ left: tabMenuPos?.x, top: tabMenuPos?.y }}
+        >
+          <div className="border-b border-[rgb(var(--color-border))] p-2">
+            <div className="flex items-center gap-2 rounded-lg border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-alt))] px-2 py-1.5">
+              <Search className="h-3.5 w-3.5 text-[rgb(var(--color-text-secondary))]" />
+              <input
+                autoFocus
+                value={tabSearch}
+                onChange={(e) => setTabSearch(e.target.value)}
+                placeholder="Find open tab..."
+                className="min-w-0 flex-1 bg-transparent text-[12px] text-[rgb(var(--color-text))] outline-none placeholder:text-[rgb(var(--color-text-secondary))]"
+              />
+            </div>
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto p-1">
+            {filteredTabs.length === 0 ? (
+              <div className="px-3 py-6 text-center text-[11px] text-[rgb(var(--color-text-secondary))]">No matching tabs.</div>
+            ) : (
+              filteredTabs.map((tab) => (
+                <TabMenuItem
+                  key={tab.id}
+                  tab={tab}
+                  active={tab.id === activeTabId}
+                  onSelect={() => {
+                    setActiveTab(tab.id);
+                    closeTabMenu();
+                  }}
+                  onClose={() => closeTab(tab.id)}
+                />
+              ))
+            )}
+          </div>
+          <div className="flex gap-1 border-t border-[rgb(var(--color-border))] p-1">
+            <button
+              className="flex-1 rounded-lg px-2 py-1.5 text-[11px] text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
+              onClick={() => {
+                if (activeTabId) closeOtherTabs(activeTabId);
+                closeTabMenu();
+              }}
+            >
+              Close others
+            </button>
+            <button
+              className="flex-1 rounded-lg px-2 py-1.5 text-[11px] text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
+              onClick={() => {
+                closeAllTabs();
+                closeTabMenu();
+              }}
+            >
+              Close all
+            </button>
+          </div>
+        </div>,
+        document.body
+      )}
+
       {/* Tab context menu */}
-      {contextMenu && (
+      {contextMenu && createPortal(
         <div
           ref={menuRef}
           className="fixed z-dropdown py-1 min-w-[200px] bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-lg shadow-lg"
@@ -154,10 +234,10 @@ export function TabBar() {
           {canSplit && (
             <button
               className="flex items-center gap-2 w-full px-3 py-1.5 text-[12px] text-left text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))] transition-colors"
-              onClick={() => { openTabInSplit(contextTabIdRef.current); closeContextMenu(); }}
+              onClick={() => { moveTabToSplit(contextTabIdRef.current); closeContextMenu(); }}
             >
               <LayoutGrid className="w-3.5 h-3.5" />
-              {isAlreadyInSplit ? "Focus in Split" : "Open to the Side"}
+              {isAlreadyInSplit ? "Move to Split" : "Open to the Side"}
             </button>
           )}
           <button
@@ -206,8 +286,47 @@ export function TabBar() {
             <X className="w-3.5 h-3.5" />
             Close All
           </button>
-        </div>
+        </div>,
+        document.body
       )}
+    </div>
+  );
+}
+
+function TabMenuItem({
+  tab,
+  active,
+  onSelect,
+  onClose,
+}: {
+  tab: EditorTab;
+  active: boolean;
+  onSelect: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <div
+      className={`group flex items-center gap-2 rounded-lg px-2 py-1.5 transition-colors ${
+        active ? "bg-[rgb(var(--color-accent))]/10" : "hover:bg-[rgb(var(--color-surface-alt))]"
+      }`}
+    >
+      <button className="min-w-0 flex-1 text-left" onClick={onSelect}>
+        <div className="truncate text-[12px] font-medium text-[rgb(var(--color-text))]">{tab.title}</div>
+        <div className="mt-0.5 truncate font-mono text-[10px] text-[rgb(var(--color-text-secondary))]">{tab.path}</div>
+      </button>
+      <span className="rounded-full bg-[rgb(var(--color-surface-alt))] px-1.5 py-0.5 text-[9px] uppercase tracking-[0.08em] text-[rgb(var(--color-text-secondary))]">
+        {tab.type}
+      </span>
+      <button
+        className="flex h-6 w-6 items-center justify-center rounded-md text-[rgb(var(--color-text-secondary))] opacity-60 transition-colors hover:bg-[rgb(var(--color-surface))] hover:text-[rgb(var(--color-text))] group-hover:opacity-100"
+        title="Close tab"
+        onClick={(e) => {
+          e.stopPropagation();
+          onClose();
+        }}
+      >
+        <X className="h-3 w-3" />
+      </button>
     </div>
   );
 }
@@ -229,8 +348,14 @@ function Tab({
   onClose: () => void;
   onContextMenu: (e: React.MouseEvent) => void;
 }) {
+  const tabRef = useRef<HTMLDivElement>(null);
   const isImage = tab.type === "asset" && tab.path.includes("/screenshots/");
   const isVisual = tab.type === "asset" && !isImage;
+
+  useEffect(() => {
+    if (!isActive) return;
+    tabRef.current?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [isActive]);
 
   const typeLabel =
     tab.type === "sketch" ? "Sketch"
@@ -276,6 +401,7 @@ function Tab({
 
   return (
     <div
+      ref={tabRef}
       draggable={true}
       onDragStart={(e) => {
         e.dataTransfer.setData("application/x-cutready-tab", JSON.stringify({ tabId: tab.id, source: "main" }));
