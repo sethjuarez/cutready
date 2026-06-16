@@ -184,4 +184,3 @@ export function Sidebar({ onFeedback }: { onFeedback?: () => void }) {
     </>
   );
 }
-

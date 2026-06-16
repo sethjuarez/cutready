@@ -3,6 +3,7 @@
 use std::path::PathBuf;
 
 use chrono::Utc;
+use rusqlite::{types::ValueRef, Connection, OpenFlags};
 use tauri::State;
 use tauri_plugin_store::StoreExt;
 
@@ -303,6 +304,179 @@ pub async fn set_workspace_state(
 pub async fn list_all_files(state: State<'_, AppState>) -> Result<Vec<project::FileEntry>, String> {
     let root = project_root(&state)?;
     project::scan_all_files(&root).map_err(|e| e.to_string())
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct DatabasePreview {
+    pub path: String,
+    pub size: u64,
+    pub tables: Vec<DatabaseTablePreview>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct DatabaseTablePreview {
+    pub name: String,
+    pub table_type: String,
+    pub row_count: u64,
+    pub columns: Vec<DatabaseColumnPreview>,
+    pub rows: Vec<Vec<DatabaseCellPreview>>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct DatabaseColumnPreview {
+    pub name: String,
+    pub data_type: String,
+    pub not_null: bool,
+    pub primary_key: bool,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct DatabaseCellPreview {
+    pub kind: String,
+    pub value: Option<String>,
+}
+
+/// Return a read-only preview of a project SQLite database.
+#[tauri::command]
+pub async fn get_database_preview(
+    relative_path: String,
+    state: State<'_, AppState>,
+) -> Result<DatabasePreview, String> {
+    let (project_root, repo_root) = project_and_repo_root(&state)?;
+    let project_path =
+        project::safe_resolve(&project_root, &relative_path).map_err(|e| e.to_string())?;
+    let abs_path = if project_path.exists() {
+        project_path
+    } else {
+        project::safe_resolve(&repo_root, &relative_path).map_err(|e| e.to_string())?
+    };
+    let metadata = std::fs::metadata(&abs_path).map_err(|e| e.to_string())?;
+
+    let conn = Connection::open_with_flags(
+        &abs_path,
+        OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+    )
+    .map_err(|e| format!("Failed to open SQLite database: {e}"))?;
+
+    let mut schema_stmt = conn
+        .prepare(
+            "SELECT name, type FROM sqlite_schema \
+             WHERE type IN ('table', 'view') AND name NOT LIKE 'sqlite_%' \
+             ORDER BY name COLLATE NOCASE",
+        )
+        .map_err(|e| e.to_string())?;
+    let schema_rows = schema_stmt
+        .query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })
+        .map_err(|e| e.to_string())?;
+
+    let mut tables = Vec::new();
+    for schema_row in schema_rows {
+        let (name, table_type) = schema_row.map_err(|e| e.to_string())?;
+        let quoted_name = quote_sqlite_identifier(&name);
+        let columns = load_database_columns(&conn, &quoted_name)?;
+        let row_count = conn
+            .query_row(&format!("SELECT COUNT(*) FROM {quoted_name}"), [], |row| {
+                row.get::<_, i64>(0)
+            })
+            .map(|count| count.max(0) as u64)
+            .map_err(|e| e.to_string())?;
+        let rows = load_database_rows(&conn, &quoted_name)?;
+
+        tables.push(DatabaseTablePreview {
+            name,
+            table_type,
+            row_count,
+            columns,
+            rows,
+        });
+    }
+
+    Ok(DatabasePreview {
+        path: relative_path,
+        size: metadata.len(),
+        tables,
+    })
+}
+
+fn load_database_columns(
+    conn: &Connection,
+    quoted_name: &str,
+) -> Result<Vec<DatabaseColumnPreview>, String> {
+    let mut stmt = conn
+        .prepare(&format!("PRAGMA table_info({quoted_name})"))
+        .map_err(|e| e.to_string())?;
+    let columns = stmt
+        .query_map([], |row| {
+            Ok(DatabaseColumnPreview {
+                name: row.get(1)?,
+                data_type: row.get(2)?,
+                not_null: row.get::<_, i64>(3)? != 0,
+                primary_key: row.get::<_, i64>(5)? != 0,
+            })
+        })
+        .map_err(|e| e.to_string())?;
+
+    let mut result = Vec::new();
+    for column in columns {
+        result.push(column.map_err(|e| e.to_string())?);
+    }
+    Ok(result)
+}
+
+fn load_database_rows(
+    conn: &Connection,
+    quoted_name: &str,
+) -> Result<Vec<Vec<DatabaseCellPreview>>, String> {
+    let mut stmt = conn
+        .prepare(&format!("SELECT * FROM {quoted_name} LIMIT 25"))
+        .map_err(|e| e.to_string())?;
+    let column_count = stmt.column_count();
+    let rows = stmt
+        .query_map([], |row| {
+            let mut cells = Vec::with_capacity(column_count);
+            for index in 0..column_count {
+                cells.push(sqlite_value_to_preview(row.get_ref(index)?));
+            }
+            Ok(cells)
+        })
+        .map_err(|e| e.to_string())?;
+
+    let mut result = Vec::new();
+    for row in rows {
+        result.push(row.map_err(|e| e.to_string())?);
+    }
+    Ok(result)
+}
+
+fn sqlite_value_to_preview(value: ValueRef<'_>) -> DatabaseCellPreview {
+    match value {
+        ValueRef::Null => DatabaseCellPreview {
+            kind: "null".to_string(),
+            value: None,
+        },
+        ValueRef::Integer(value) => DatabaseCellPreview {
+            kind: "integer".to_string(),
+            value: Some(value.to_string()),
+        },
+        ValueRef::Real(value) => DatabaseCellPreview {
+            kind: "real".to_string(),
+            value: Some(value.to_string()),
+        },
+        ValueRef::Text(value) => DatabaseCellPreview {
+            kind: "text".to_string(),
+            value: Some(String::from_utf8_lossy(value).into_owned()),
+        },
+        ValueRef::Blob(value) => DatabaseCellPreview {
+            kind: "blob".to_string(),
+            value: Some(format!("<blob: {} bytes>", value.len())),
+        },
+    }
+}
+
+fn quote_sqlite_identifier(identifier: &str) -> String {
+    format!("\"{}\"", identifier.replace('"', "\"\""))
 }
 
 // ── Multi-project commands ────────────────────────────────────────

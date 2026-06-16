@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "../services/tauri";
 import { useAppStore } from "../stores/appStore";
-import { NoteIcon, SketchIcon, StoryboardIcon } from "./Icons";
+import { DatabaseIcon, NoteIcon, SketchIcon, StoryboardIcon } from "./Icons";
 import { ChevronRight, Folder, FileText } from "lucide-react";
 
 // ── Types ────────────────────────────────────────────────────────
@@ -86,6 +86,10 @@ function fileIcon(ext: string) {
       return <StoryboardIcon className="shrink-0" />;
     case "md":
       return <NoteIcon className="shrink-0" />;
+    case "db":
+    case "sqlite":
+    case "sqlite3":
+      return <DatabaseIcon className="shrink-0" />;
     default:
       return (
         <FileText className="w-3.5 h-3.5 shrink-0 opacity-50" />
@@ -111,6 +115,7 @@ export function FileTreeView() {
   const openStoryboard = useAppStore((s) => s.openStoryboard);
   const closeStoryboard = useAppStore((s) => s.closeStoryboard);
   const openNote = useAppStore((s) => s.openNote);
+  const openDatabase = useAppStore((s) => s.openDatabase);
 
   // Reload whenever the categorized lists change (signals a file was created/deleted)
   const sketchCount = useAppStore((s) => s.sketches.length);
@@ -137,9 +142,11 @@ export function FileTreeView() {
         openStoryboard(node.path);
       } else if (node.ext === "md") {
         openNote(node.path);
+      } else if (["db", "sqlite", "sqlite3"].includes(node.ext)) {
+        openDatabase(node.path);
       }
     },
-    [openSketch, openStoryboard, closeStoryboard, openNote],
+    [openSketch, openStoryboard, closeStoryboard, openNote, openDatabase],
   );
 
   const tree = buildTree(files);
@@ -203,7 +210,7 @@ function TreeNodeRow({
     (node.ext === "sb" && node.path === activeStoryboardPath) ||
     (node.ext === "md" && node.path === activeNotePath);
 
-  const isClickable = !node.is_dir && ["sk", "sb", "md"].includes(node.ext);
+  const isClickable = !node.is_dir && ["sk", "sb", "md", "db", "sqlite", "sqlite3"].includes(node.ext);
 
   if (node.is_dir) {
     return (

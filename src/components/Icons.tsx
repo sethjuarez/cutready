@@ -12,6 +12,7 @@ import {
   Sparkles,
   FileDiff,
   Bot,
+  Database,
 } from "lucide-react";
 
 interface IconProps {
@@ -62,4 +63,9 @@ export function DiffIcon({ size = 14, className = "" }: IconProps) {
 /** Agent run icon — bot, representing a persisted AI run. */
 export function AgentRunIcon({ size = 14, className = "" }: IconProps) {
   return <Bot width={size} height={size} className={className} />;
+}
+
+/** Database icon — cylinder, representing an inspectable SQLite store. */
+export function DatabaseIcon({ size = 14, className = "" }: IconProps) {
+  return <Database width={size} height={size} className={className} />;
 }

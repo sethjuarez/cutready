@@ -1,7 +1,7 @@
 import { useAppStore } from "../stores/appStore";
 import type { EditorTab } from "../stores/appStore";
 import { useToastStore } from "../stores/toastStore";
-import { AgentRunIcon, SketchIcon, StoryboardIcon, NoteIcon, HistoryIcon, ImageIcon, VisualIcon, DiffIcon } from "./Icons";
+import { AgentRunIcon, DatabaseIcon, SketchIcon, StoryboardIcon, NoteIcon, HistoryIcon, ImageIcon, VisualIcon, DiffIcon } from "./Icons";
 import { usePopover } from "../hooks/usePopover";
 import React, { useCallback, useRef, useState } from "react";
 import { Copy, LayoutGrid, X } from "lucide-react";
@@ -75,7 +75,7 @@ export function TabBar() {
   if (openTabs.length === 0) return null;
 
   const contextTab = openTabs.find((t) => t.id === contextTabIdRef.current);
-  const canSplit = contextTab && contextTab.type !== "history" && contextTab.type !== "asset" && contextTab.type !== "agent-run" && contextTab.type !== "diff";
+  const canSplit = contextTab && contextTab.type !== "history" && contextTab.type !== "asset" && contextTab.type !== "agent-run" && contextTab.type !== "diff" && contextTab.type !== "database";
   const copyablePath = getTabCopyPath(contextTab);
   const isAlreadyInSplit = contextTab
     ? splitTabs.some((st) => st.path === contextTab.path && st.type === contextTab.type)
@@ -238,6 +238,7 @@ function Tab({
     : tab.type === "history" ? "History"
     : tab.type === "diff" ? "Diff"
     : tab.type === "agent-run" ? "Agent Run"
+    : tab.type === "database" ? "Database"
     : isImage ? "Image"
     : isVisual ? "Visual"
     : "Note";
@@ -254,6 +255,8 @@ function Tab({
             ? { bar: "bg-orange-500", icon: "text-orange-500", tint: "bg-orange-500" }
               : tab.type === "agent-run"
                 ? { bar: "bg-[rgb(var(--color-accent))]", icon: "text-[rgb(var(--color-accent))]", tint: "bg-[rgb(var(--color-accent))]" }
+              : tab.type === "database"
+                ? { bar: "bg-[rgb(var(--color-accent))]", icon: "text-[rgb(var(--color-accent))]", tint: "bg-[rgb(var(--color-accent))]" }
               : isImage
                 ? { bar: "bg-violet-500", icon: "text-violet-500", tint: "bg-violet-500" }
               : isVisual
@@ -266,6 +269,7 @@ function Tab({
     : tab.type === "history" ? HistoryIcon
     : tab.type === "diff" ? DiffIcon
     : tab.type === "agent-run" ? AgentRunIcon
+    : tab.type === "database" ? DatabaseIcon
     : isImage ? ImageIcon
     : isVisual ? VisualIcon
     : NoteIcon;

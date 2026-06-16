@@ -352,6 +352,7 @@ pub fn run() {
             commands::project::get_workspace_state,
             commands::project::set_workspace_state,
             commands::project::list_all_files,
+            commands::project::get_database_preview,
             commands::project::list_projects,
             commands::project::is_multi_project,
             commands::project::switch_project,

@@ -6,6 +6,7 @@ import { NoteEditor } from "./NoteEditor";
 import { AssetViewer } from "./AssetViewer";
 import { DiffViewer } from "./DiffViewer";
 import { ChatPanel } from "./ChatPanel";
+import { DatabaseViewer } from "./DatabaseViewer";
 import { ResizeHandle } from "./ResizeHandle";
 import { TabBar } from "./TabBar";
 import { HistoryGraphTab } from "./HistoryGraphTab";
@@ -40,6 +41,7 @@ export function StoryboardPanel() {
   const isAssetTab = activeTab?.type === "asset";
   const isDiffTab = activeTab?.type === "diff";
   const isAgentRunTab = activeTab?.type === "agent-run";
+  const isDatabaseTab = activeTab?.type === "database";
   const activeEditorReloadKey = activeTab?.path === editorReloadPath ? editorReloadKey : 0;
 
   const [splitWidth, setSplitWidth] = useState<number | null>(null);
@@ -110,6 +112,8 @@ export function StoryboardPanel() {
               <DiffViewer filePath={activeTab.path} />
             ) : isAgentRunTab && activeTab ? (
               <AgentRunTab runId={agentRunIdFromTabPath(activeTab.path)} />
+            ) : isDatabaseTab && activeTab ? (
+              <DatabaseViewer path={activeTab.path} />
             ) : isAssetTab && activeTab ? (
               <AssetViewer assetPath={activeTab.path} />
             ) : activeSketch ? (
