@@ -381,13 +381,14 @@ export function AppLayout() {
         onToggleSecondary={toggleSecondaryPanel}
       />
       <div
+        data-testid="app-content-shell"
         className={
           chatFocusMode
             ? "hidden"
             : "flex flex-col w-full flex-1 min-h-0"
         }
         style={{
-          paddingTop: isMac ? "0" : "var(--titlebar-height)",
+          paddingTop: isMac ? undefined : "var(--titlebar-height)",
           paddingBottom: "var(--statusbar-height)",
         }}
       >
@@ -433,9 +434,10 @@ export function AppLayout() {
 
       {chatFocusMode && (
         <div
+          data-testid="chat-focus-shell"
           className="fixed left-0 right-0 z-20 overflow-hidden border-y border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-inset))] shadow-2xl"
           style={{
-            top: isMac ? "0" : "var(--titlebar-height)",
+            top: isMac ? 0 : "var(--titlebar-height)",
             bottom: "var(--statusbar-height)",
           }}
           role="dialog"
