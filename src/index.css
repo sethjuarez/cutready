@@ -25,6 +25,7 @@
   --color-media-control-bg: 0 0 0;
   --color-media-control-fg: 255 255 255;
   --titlebar-height: 46px;
+  --macos-traffic-light-space: 92px;
   --statusbar-height: 28px;
   --z-sticky: 10;
   --z-dropdown: 20;
@@ -544,5 +545,3 @@ body.recording-prompter-root #root {
   color: rgb(var(--color-text-secondary));
   text-decoration: line-through;
 }
-
-

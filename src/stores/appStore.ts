@@ -31,6 +31,32 @@ import type {
 } from "../types/sketch";
 
 const suppressedEditorFlushPaths = new Set<string>();
+const LOCAL_CHAT_SESSION_PREFIX = "cutready://legacy-chats/";
+
+function randomSessionSuffix(): string {
+  if (globalThis.crypto?.randomUUID) {
+    return globalThis.crypto.randomUUID().slice(0, 8);
+  }
+  return Math.random().toString(36).slice(2, 10);
+}
+
+export function createLocalChatSessionPath(now = new Date()): string {
+  const timestamp = now.toISOString()
+    .replace(/\.\d{3}Z$/, "Z")
+    .replace(/[:.]/g, "-");
+  return `${LOCAL_CHAT_SESSION_PREFIX}chat-${timestamp}-${randomSessionSuffix()}.chat`;
+}
+
+function chatMessagePreviewContent(message: ChatMessage): string {
+  if (typeof message.content === "string") return message.content;
+  if (Array.isArray(message.content)) {
+    return message.content
+      .filter((part) => part.type === "text" && part.text)
+      .map((part) => part.text)
+      .join("\n");
+  }
+  return "";
+}
 
 export function suppressEditorFlush(relativePath: string) {
   suppressedEditorFlushPaths.add(normalizeRelativePath(relativePath));
@@ -256,6 +282,8 @@ interface AppStoreState {
   chatLoading: boolean;
   /** Last chat error message. */
   chatError: string | null;
+  /** Current unsent chat input text, shared between normal and focus mode. */
+  chatInputDraft: string;
   /** A prompt queued from outside the chat (e.g. sparkle buttons). ChatPanel picks this up and sends it. */
   pendingChatPrompt: { text: string; silent?: boolean; agent?: string } | null;
   /** Whether chat is occupying the main work area as an intentional focus mode. */
@@ -518,6 +546,8 @@ interface AppStoreState {
   setChatLoading: (loading: boolean) => void;
   /** Set chat error. */
   setChatError: (error: string | null) => void;
+  /** Set current unsent chat input text. */
+  setChatInputDraft: (draft: string) => void;
   /** Queue a prompt to be sent by the chat panel. */
   sendChatPrompt: (prompt: string, opts?: { silent?: boolean; agent?: string }) => void;
   /** Enter or exit chat focus mode. */
@@ -763,6 +793,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   chatSessionPath: null,
   chatLoading: false,
   chatError: null,
+  chatInputDraft: "",
   pendingChatPrompt: null,
   chatFocusMode: false,
   activityLog: [],
@@ -1804,7 +1835,12 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   // ── Chat actions ──────────────────────────────────────────
 
   setChatMessages: (messages) => {
-    set({ chatMessages: messages, chatError: null });
+    const existingSessionPath = get().chatSessionPath;
+    const chatSessionPath = existingSessionPath ?? (messages.length > 0 ? createLocalChatSessionPath() : null);
+    set({ chatMessages: messages, chatSessionPath, chatError: null });
+    if (chatSessionPath !== existingSessionPath) {
+      get()._persistTabs();
+    }
     // Auto-save after a short delay
     const state = get();
     if (state.chatSessionPath && messages.length > 0) {
@@ -1817,7 +1853,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     const { chatMessages, chatSessionPath } = get();
     if (chatSessionPath && chatMessages.length > 1) {
       const userMsgs = chatMessages.filter((m) => m.role === "user");
-      const summary = userMsgs.map((m) => m.content?.slice(0, 100)).filter(Boolean).join("; ");
+      const summary = userMsgs.map((m) => chatMessagePreviewContent(m).slice(0, 100)).filter(Boolean).join("; ");
       if (summary) {
         invoke("archive_chat_session", {
           sessionId: chatSessionPath,
@@ -1831,6 +1867,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       chatSessionPath: null,
       chatLoading: false,
       chatError: null,
+      chatInputDraft: "",
       activityLog: [],
     });
     get()._persistTabs();
@@ -1866,7 +1903,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     if (!chatSessionPath || chatMessages.length === 0) return;
     // Derive title from first user message
     const firstUser = chatMessages.find((m) => m.role === "user");
-    const title = firstUser?.content?.slice(0, 80) || "Chat session";
+    const title = firstUser ? chatMessagePreviewContent(firstUser).slice(0, 80) : "Chat session";
     const now = new Date().toISOString();
     try {
       await invoke("save_chat_session", {
@@ -1885,6 +1922,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
 
   setChatLoading: (loading) => set({ chatLoading: loading }),
   setChatError: (error) => set({ chatError: error }),
+  setChatInputDraft: (draft) => set({ chatInputDraft: draft }),
   sendChatPrompt: (prompt, opts) => set({ pendingChatPrompt: { text: prompt, silent: opts?.silent, agent: opts?.agent } }),
   setChatFocusMode: (enabled) => set({ chatFocusMode: enabled }),
   addActivityEntries: (entries) => {

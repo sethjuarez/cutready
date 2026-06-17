@@ -153,7 +153,7 @@ describe("AppLayout titlebar spacing", () => {
     });
   });
 
-  it("does not offset chat focus mode below a second titlebar on macOS", () => {
+  it("keeps chat focus mode below the native traffic light toolbar on macOS", () => {
     platform.isMac = true;
     act(() =>
       useAppStore.setState({
@@ -165,7 +165,7 @@ describe("AppLayout titlebar spacing", () => {
     render(<AppLayout />);
 
     expect(screen.getByTestId("chat-focus-shell")).toHaveStyle({
-      top: "0px",
+      top: "var(--titlebar-height)",
       bottom: "var(--statusbar-height)",
     });
   });

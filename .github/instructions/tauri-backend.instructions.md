@@ -15,7 +15,7 @@ applyTo: "src-tauri/**"
 ## Tauri Configuration
 
 - App identifier: `com.cutready.app`
-- Frameless window: `decorations: false`, `shadow: true`, 1280×800 default, 800×600 minimum.
+- Main window: `decorations: true`, `shadow: true`, 1280×800 default, 800×600 minimum. macOS uses native traffic lights with `titleBarStyle: "Overlay"`, `hiddenTitle: true`, and an explicit `trafficLightPosition`; Windows removes decorations at runtime for the custom titlebar.
 - Dev server: Vite on `http://localhost:1420`.
 - Frontend dist directory: `../dist` (relative to src-tauri).
 - Capabilities defined in `capabilities/default.json`.
