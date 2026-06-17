@@ -9,6 +9,14 @@
 Covector manages this changelog. Do not edit manually.
 Each release section is generated from `.changes/*.md` files.
 
+## [1.12.3](https://github.com/sethjuarez/cutready/compare/v1.12.2...v1.12.3) (2026-06-17)
+
+
+### Bug Fixes
+
+* refine mac chrome and chat session UX ([44bad00](https://github.com/sethjuarez/cutready/commit/44bad009ccee7f7371a837c9190e4e6dd69615f3))
+* refine mac chrome and chat session UX ([985042a](https://github.com/sethjuarez/cutready/commit/985042a10fa3ebdefdd0201d4c611a8105612ff3))
+
 ## [1.12.2](https://github.com/sethjuarez/cutready/compare/v1.12.1...v1.12.2) (2026-06-17)
 
 
