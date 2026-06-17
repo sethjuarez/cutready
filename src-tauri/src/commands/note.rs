@@ -245,7 +245,7 @@ pub async fn read_project_image(
     state: State<'_, AppState>,
 ) -> Result<String, String> {
     let root = project_root(&state)?;
-    let abs_path = root.join(&relative_path);
+    let abs_path = project::safe_resolve(&root, &relative_path).map_err(|e| e.to_string())?;
 
     if !abs_path.exists() {
         return Err(format!("Image not found: {relative_path}"));

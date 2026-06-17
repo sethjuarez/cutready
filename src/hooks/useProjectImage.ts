@@ -1,10 +1,10 @@
 import { useState, useEffect } from "react";
-import { convertFileSrc, invoke } from "../services/tauri";
+import { fetchProjectImageDataUrl } from "../utils/projectImage";
 
 /**
  * Hook that resolves a project-relative image path to a displayable src URL.
- * Tries the asset protocol first; on load failure, falls back to a data URL
- * served by the backend (works on macOS where asset protocol is unreliable).
+ * Resolves through the backend image command to avoid asset-protocol scope
+ * differences across macOS, Windows, and Linux.
  */
 export function useProjectImage(projectRoot: string | null, relativePath: string | null | undefined): string | null {
   const [src, setSrc] = useState<string | null>(null);
@@ -16,26 +16,19 @@ export function useProjectImage(projectRoot: string | null, relativePath: string
     }
 
     let cancelled = false;
-    const assetUrl = convertFileSrc(`${projectRoot}/${relativePath}`);
-
-    // Try loading via asset protocol first
-    const img = new Image();
-    img.onload = () => {
-      if (!cancelled) setSrc(assetUrl);
-    };
-    img.onerror = async () => {
-      // Fallback: read via backend command
-      if (cancelled) return;
-      try {
-        const dataUrl = await invoke<string>("read_project_image", { relativePath });
+    setSrc(null);
+    fetchProjectImageDataUrl(relativePath)
+      .then((dataUrl) => {
         if (!cancelled) setSrc(dataUrl);
-      } catch {
+      })
+      .catch((error: unknown) => {
+        console.error("[useProjectImage] failed to load project image", { relativePath, error });
         if (!cancelled) setSrc(null);
-      }
-    };
-    img.src = assetUrl;
+      });
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [projectRoot, relativePath]);
 
   return src;

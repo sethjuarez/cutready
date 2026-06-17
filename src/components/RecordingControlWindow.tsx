@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { convertFileSrc, invoke, emit, listen } from "../services/tauri";
+import { invoke, emit, listen } from "../services/tauri";
 import { getCurrentWindow, LogicalPosition, LogicalSize, PhysicalPosition } from "@tauri-apps/api/window";
 import { Eye, FileText, Keyboard, Mic, Monitor, Square, Video, Volume2, X } from "lucide-react";
 import { useRecordingDevices } from "../hooks/useRecordingDevices";
 import { useSettings } from "../hooks/useSettings";
 import { isMac } from "../utils/platform";
+import { fetchProjectImageDataUrl } from "../utils/projectImage";
 import type { ProjectView } from "../types/project";
 import type { CameraFormatInfo, CaptureArea, PrompterScript, RecorderSettings, RecordingDeviceInfo, RecordingPlatformCapabilities, RecordingScope, RecordingTake } from "../types/recording";
 
@@ -321,7 +322,7 @@ export function RecordingControlWindow() {
     try {
       await stopSourcePreview();
       const path = await invoke<string>("capture_fullscreen", { monitorId: selectedMonitor.id });
-      const src = projectRoot ? convertFileSrc(`${projectRoot}/${path}`) : path;
+      const src = projectRoot ? await fetchProjectImageDataUrl(path) : path;
       setSourcePreview({
         kind: "screen",
         title: `${selectedMonitor.name || `Screen ${selectedMonitor.id + 1}`} - ${selectedMonitor.width}x${selectedMonitor.height}`,

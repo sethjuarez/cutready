@@ -7,8 +7,8 @@
  * inactivity to keep the view clean during recording.
  */
 import { useCallback, useEffect, useRef, useState, lazy, Suspense } from "react";
-import { convertFileSrc } from "../../services/tauri";
 import { X, MonitorPlay, Layout, Image as ImageIcon } from "lucide-react";
+import { useProjectImage } from "../../hooks/useProjectImage";
 import type { PreviewSlide, PresentationMode } from "./types";
 
 const VisualCell = lazy(() => import("../VisualCell"));
@@ -88,10 +88,7 @@ export function SlideOnlyView({
 
   const isTitle = slide.type === "title";
   const row = slide.type === "row" ? slide.row : null;
-  const screenshotSrc =
-    row?.screenshot && projectRoot
-      ? convertFileSrc(`${projectRoot}/${row.screenshot}`)
-      : null;
+  const screenshotSrc = useProjectImage(projectRoot, row?.screenshot);
 
   // Click halves: left half = prev, right half = next. Anywhere advances if
   // already on first slide. This matches the typical fullscreen-presentation

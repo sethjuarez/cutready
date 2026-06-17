@@ -5,9 +5,9 @@
  * from existing project images instead of the OS file dialog.
  */
 import { useEffect, useMemo, useState } from "react";
-import { convertFileSrc } from "../services/tauri";
 import { X, Image as ImageIcon, Search } from "lucide-react";
 import { useAppStore, type AssetInfo } from "../stores/appStore";
+import { ProjectImage } from "./ProjectImage";
 
 interface ProjectImagePickerProps {
   onSelect: (asset: AssetInfo) => void;
@@ -102,8 +102,6 @@ export function ProjectImagePicker({ onSelect, onCancel }: ProjectImagePickerPro
               {images.map((asset) => {
                 const filename = asset.path.split("/").pop() ?? asset.path;
                 const isSelected = selected === asset.path;
-                const src = projectRoot ? convertFileSrc(`${projectRoot}/${asset.path}`) : asset.path;
-
                 return (
                   <button
                     key={asset.path}
@@ -117,8 +115,9 @@ export function ProjectImagePicker({ onSelect, onCancel }: ProjectImagePickerPro
                   >
                     {/* Thumbnail */}
                     <div className="aspect-video bg-[rgb(var(--color-surface-alt))] flex items-center justify-center overflow-hidden">
-                      <img
-                        src={src}
+                      <ProjectImage
+                        relativePath={asset.path}
+                        projectRoot={projectRoot}
                         alt={filename}
                         className="w-full h-full object-cover"
                         loading="lazy"

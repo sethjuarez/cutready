@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Monitor, LayoutGrid, ArrowLeft } from "lucide-react";
-import { invoke, convertFileSrc, emit } from "../services/tauri";
+import { invoke, emit } from "../services/tauri";
+import { useProjectImage } from "../hooks/useProjectImage";
 
 type Phase = "loading" | "choose-mode" | "select-region";
 
@@ -49,9 +50,7 @@ export function CaptureWindow() {
   const bgRelPath = params?.bg_path ?? "";
   const projectRoot = params?.project_root ?? "";
 
-  const bgImage = bgRelPath && projectRoot
-    ? convertFileSrc(projectRoot + "/" + bgRelPath)
-    : null;
+  const bgImage = useProjectImage(projectRoot || null, bgRelPath || null);
 
   const finish = useCallback(async (path: string) => {
     console.log("[CaptureWindow] finish:", path);

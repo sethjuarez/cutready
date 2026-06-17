@@ -8,7 +8,6 @@
  */
 import { memo, lazy, Suspense, useState, useCallback, useRef } from "react";
 import type { ComponentType } from "react";
-import { convertFileSrc } from "../services/tauri";
 import "@elucim/editor/style.css";
 import type { BrowseImageResult, ElucimEditorProps } from "@elucim/editor";
 import type { CutReadyElucimDocument } from "../types/elucim";
@@ -18,6 +17,7 @@ import { useElucimImageResolver } from "../hooks/useElucimImageResolver";
 import { useSettings } from "../hooks/useSettings";
 import { useTheme } from "../hooks/useTheme";
 import { useAppStore, type AssetInfo } from "../stores/appStore";
+import { fetchProjectImageDataUrl } from "../utils/projectImage";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { ProjectImagePicker } from "./ProjectImagePicker";
 
@@ -62,15 +62,22 @@ export default memo(function EditorWrapper({
     });
   }, []);
 
-  const handlePickerSelect = useCallback((asset: AssetInfo) => {
+  const handlePickerSelect = useCallback(async (asset: AssetInfo) => {
     const displayName = asset.path.split("/").pop() ?? asset.path;
-    pickerResolver.current?.({
-      ref: asset.path,
-      src: projectRoot ? convertFileSrc(`${projectRoot}/${asset.path}`) : asset.path,
-      displayName,
-    });
-    pickerResolver.current = null;
-    setPickerOpen(false);
+    try {
+      const src = projectRoot ? await fetchProjectImageDataUrl(asset.path) : asset.path;
+      pickerResolver.current?.({
+        ref: asset.path,
+        src,
+        displayName,
+      });
+    } catch (error) {
+      console.error("[EditorWrapper] failed to load selected image", { path: asset.path, error });
+      pickerResolver.current?.(null);
+    } finally {
+      pickerResolver.current = null;
+      setPickerOpen(false);
+    }
   }, [projectRoot]);
 
   const handlePickerCancel = useCallback(() => {

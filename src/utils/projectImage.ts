@@ -1,17 +1,22 @@
-import { invoke, convertFileSrc } from "../services/tauri";
+import { invoke } from "../services/tauri";
 
-/**
- * Resolve a project-relative image path to a displayable URL.
- *
- * Strategy:
- * 1. Try the asset protocol via convertFileSrc (works on Windows).
- * 2. If on macOS or asset protocol fails, fall back to reading
- *    the image via a Tauri command and returning a data URL.
- *
- * Use this instead of raw convertFileSrc for project images.
- */
-export function resolveProjectImageUrl(projectRoot: string, relativePath: string): string {
-  return convertFileSrc(`${projectRoot}/${relativePath}`);
+const URI_SCHEME_RE = /^[a-zA-Z][a-zA-Z\d+.-]*:/;
+const WINDOWS_DRIVE_RE = /^[a-zA-Z]:[\\/]/;
+
+export function isProjectRelativeImagePath(path: string): boolean {
+  const trimmed = path.trim();
+  return (
+    trimmed.length > 0 &&
+    !URI_SCHEME_RE.test(trimmed) &&
+    !trimmed.startsWith("/") &&
+    !WINDOWS_DRIVE_RE.test(trimmed)
+  );
+}
+
+export function projectRelativeScreenshotPath(src: string): string | null {
+  const marker = ".cutready/screenshots/";
+  const index = src.indexOf(marker);
+  return index === -1 ? null : src.slice(index);
 }
 
 /**

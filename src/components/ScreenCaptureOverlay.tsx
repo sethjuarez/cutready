@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { invoke, convertFileSrc, listen } from "../services/tauri";
+import { invoke, listen } from "../services/tauri";
+import { fetchProjectImageDataUrl } from "../utils/projectImage";
 
 interface MonitorInfo {
   id: number;
@@ -93,7 +94,6 @@ export function ScreenCaptureOverlay({ onCapture, onCancel }: ScreenCaptureOverl
 
         // Capture preview of each monitor
         console.info("[Overlay] Multi-monitor - capturing previews (parallel)");
-        const project = await invoke<{ root: string }>("get_current_project");
         const ids = mons.map((m) => m.id);
         const pathMap = await invoke<Record<number, string>>("capture_all_monitors", { monitorIds: ids });
         const previews = new Map<number, string>();
@@ -101,7 +101,7 @@ export function ScreenCaptureOverlay({ onCapture, onCancel }: ScreenCaptureOverl
         for (const m of mons) {
           const relPath = pathMap[m.id];
           if (relPath) {
-            previews.set(m.id, convertFileSrc(`${project.root}/${relPath}`));
+            previews.set(m.id, await fetchProjectImageDataUrl(relPath));
             paths.set(m.id, relPath);
           }
         }

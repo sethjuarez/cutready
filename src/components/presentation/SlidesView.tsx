@@ -5,7 +5,6 @@
  * and drives mode switches through onSwitchMode (Teleprompter, Slide-only).
  */
 import { useCallback, useEffect, useState, useRef, lazy, Suspense } from "react";
-import { convertFileSrc } from "../../services/tauri";
 import {
   Clock,
   RefreshCw,
@@ -21,6 +20,7 @@ import {
 } from "lucide-react";
 import { SafeMarkdown } from "../SafeMarkdown";
 import { ResizeHandle } from "../ResizeHandle";
+import { useProjectImage } from "../../hooks/useProjectImage";
 import type { VisualControlHandle } from "../VisualCell";
 import type { PreviewSlide, PresentationMode } from "./types";
 
@@ -170,10 +170,7 @@ export function SlidesView({
   const contextLabel = slide.context;
   const hasVisual = !!row?.visual;
 
-  const screenshotSrc =
-    row?.screenshot && projectRoot
-      ? convertFileSrc(`${projectRoot}/${row.screenshot}`)
-      : null;
+  const screenshotSrc = useProjectImage(projectRoot, row?.screenshot);
 
   return (
     <div className="fixed inset-0 z-modal bg-[rgb(var(--color-surface))] flex flex-col select-none">

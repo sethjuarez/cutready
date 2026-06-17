@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { convertFileSrc } from "../services/tauri";
 import {
   ChevronLeft,
   ChevronRight,
@@ -10,6 +9,7 @@ import {
   Image as ImageIcon,
 } from "lucide-react";
 import { SafeMarkdown } from "./SafeMarkdown";
+import { useProjectImage } from "../hooks/useProjectImage";
 import type { PreviewSlide } from "./presentation/types";
 
 const PREFS_KEY = "cutready:teleprompter:v2";
@@ -259,12 +259,13 @@ export function TeleprompterView({ slides, projectRoot, initialIndex, onExit }: 
 
   // Tiny thumbnail source for current slide (screenshot only — visuals are
   // animated and would distract). Only shown when present.
-  const thumbnailSrc = useMemo(() => {
+  const thumbnailPath = useMemo(() => {
     if (!slide || slide.type !== "row") return null;
     const ss = slide.row.screenshot;
     if (!ss || !frozenProjectRoot) return null;
-    return convertFileSrc(`${frozenProjectRoot}/${ss}`);
+    return ss;
   }, [slide, frozenProjectRoot]);
+  const thumbnailSrc = useProjectImage(frozenProjectRoot, thumbnailPath);
 
   // Peek text (first ~80 chars of next slide's narrative or heading).
   const peekText = useMemo(() => {

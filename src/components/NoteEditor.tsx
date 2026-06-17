@@ -4,11 +4,13 @@ import { SafeMarkdown } from "./SafeMarkdown";
 import { shouldSuppressEditorFlush, useAppStore } from "../stores/appStore";
 import { useSettings } from "../hooks/useSettings";
 import { MarkdownEditor } from "./MarkdownEditor";
-import { invoke, convertFileSrc } from "../services/tauri";
+import { invoke } from "../services/tauri";
 import { exportNoteToWord } from "../utils/exportToWord";
 import { ExportWordButton } from "./ExportWordButton";
 import { agentChat } from "../services/agentChat";
 import { isAiProviderConfigured } from "../utils/providerConfig";
+import { ProjectImage } from "./ProjectImage";
+import { projectRelativeScreenshotPath } from "../utils/projectImage";
 
 const AI_NOTE_CLEANUP_PROMPT = `You are a document editor. Clean up and improve the following Markdown note.
 
@@ -345,8 +347,9 @@ export function NoteEditor() {
                 components={{
                   img: ({ src, alt, ...props }) => {
                     let resolvedSrc = src ?? "";
-                    if (projectRoot && resolvedSrc.includes(".cutready/screenshots/")) {
-                      resolvedSrc = convertFileSrc(`${projectRoot}/${resolvedSrc}`);
+                    const relativePath = projectRelativeScreenshotPath(resolvedSrc);
+                    if (projectRoot && relativePath) {
+                      return <ProjectImage relativePath={relativePath} projectRoot={projectRoot} alt={alt ?? ""} {...props} className="max-w-full rounded" />;
                     }
                     return <img src={resolvedSrc} alt={alt ?? ""} {...props} className="max-w-full rounded" />;
                   },

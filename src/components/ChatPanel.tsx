@@ -1,8 +1,10 @@
 import { Children, isValidElement, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type UIEvent } from "react";
-import { invoke, convertFileSrc, listen } from "../services/tauri";
+import { invoke, listen } from "../services/tauri";
 import { SafeMarkdown } from "./SafeMarkdown";
 import { AgentRunInspector } from "./AgentRunInspector";
 import { AgentStateDatabasePanel } from "./AgentStateDatabasePanel";
+import { ProjectImage } from "./ProjectImage";
+import { projectRelativeScreenshotPath } from "../utils/projectImage";
 
 import { clearSuppressedEditorFlush, suppressEditorFlush, useAppStore } from "../stores/appStore";
 import { useSettings, type AgentPreset } from "../hooks/useSettings";
@@ -2144,8 +2146,9 @@ function MarkdownContent({ content, projectRoot }: { content: string; projectRoo
         ),
         img: ({ src, alt, ...props }) => {
           let resolvedSrc = src ?? "";
-          if (projectRoot && resolvedSrc.includes(".cutready/screenshots/")) {
-            resolvedSrc = convertFileSrc(`${projectRoot}/${resolvedSrc}`);
+          const relativePath = projectRelativeScreenshotPath(resolvedSrc);
+          if (projectRoot && relativePath) {
+            return <ProjectImage relativePath={relativePath} projectRoot={projectRoot} alt={alt ?? ""} {...props} className="my-3 max-w-full rounded-xl border border-[rgb(var(--color-border-subtle))]" />;
           }
           return <img src={resolvedSrc} alt={alt ?? ""} {...props} className="my-3 max-w-full rounded-xl border border-[rgb(var(--color-border-subtle))]" />;
         },

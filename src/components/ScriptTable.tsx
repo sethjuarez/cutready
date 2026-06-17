@@ -16,7 +16,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { convertFileSrc, invoke } from "../services/tauri";
+import { invoke } from "../services/tauri";
 import {
   Eye,
   X,
@@ -35,6 +35,7 @@ import type { PlanningCellField, PlanningRow } from "../types/sketch";
 import { normalizeDocument } from "@elucim/dsl";
 import type { CutReadyElucimDocument } from "../types/elucim";
 import { ErrorBoundary } from "./ErrorBoundary";
+import { useProjectImage } from "../hooks/useProjectImage";
 
 
 const VisualCell = lazy(() => import("./VisualCell"));
@@ -672,6 +673,8 @@ function SortableRow({
   const narrativeLocked = isCellLocked(row, "narrative");
   const actionsLocked = isCellLocked(row, "demo_actions");
   const mediaLocked = isCellLocked(row, "screenshot") || isCellLocked(row, "visual");
+  const screenshotSrc = useProjectImage(projectRoot ?? null, row.screenshot);
+  const displayScreenshotSrc = projectRoot ? screenshotSrc : row.screenshot;
   const {
     attributes,
     listeners,
@@ -857,8 +860,7 @@ function SortableRow({
         ) : row.screenshot ? (
           <div className="relative group/ss w-40 h-24 rounded-md bg-[rgb(var(--color-surface-alt))] border border-[rgb(var(--color-border))] overflow-hidden cursor-pointer"
             onClick={() => {
-              const src = projectRoot ? convertFileSrc(`${projectRoot}/${row.screenshot}`) : row.screenshot!;
-              onImageClick(src);
+              if (displayScreenshotSrc) onImageClick(displayScreenshotSrc);
             }}
           >
             {!readOnly && !rowLocked && onCellLockChange && (
@@ -866,18 +868,19 @@ function SortableRow({
                 <CellLockButton locked={mediaLocked} onClick={() => onCellLockChange(idx, "screenshot", !mediaLocked)} className="bg-[rgb(var(--color-media-control-bg)/0.2)] text-[rgb(var(--color-media-control-fg))] hover:bg-[rgb(var(--color-media-control-bg)/0.4)]" />
               </div>
             )}
-            <img
-              src={projectRoot ? convertFileSrc(`${projectRoot}/${row.screenshot}`) : row.screenshot}
-              alt=""
-              className="w-full h-full object-cover"
-            />
+            {displayScreenshotSrc && (
+              <img
+                src={displayScreenshotSrc}
+                alt=""
+                className="w-full h-full object-cover"
+              />
+            )}
             {!readOnly && !mediaLocked && (
               <div className="absolute inset-0 bg-[rgb(var(--color-media-control-bg)/0.5)] opacity-0 group-hover/ss:opacity-100 transition-opacity flex items-center justify-center gap-1.5" onClick={(e) => e.stopPropagation()}>
                 {/* View */}
                 <button
                   onClick={() => {
-                    const src = projectRoot ? convertFileSrc(`${projectRoot}/${row.screenshot}`) : row.screenshot!;
-                    onImageClick(src);
+                    if (displayScreenshotSrc) onImageClick(displayScreenshotSrc);
                   }}
                   className="p-1 rounded-full bg-[rgb(var(--color-media-control-bg)/0.2)] text-[rgb(var(--color-media-control-fg))] hover:bg-[rgb(var(--color-media-control-bg)/0.3)]"
                   title="View image"

@@ -1,5 +1,7 @@
 import type { CapturedAction } from "../types/recording";
 import { convertFileSrc } from "../services/tauri";
+import { isProjectRelativeImagePath } from "../utils/projectImage";
+import { ProjectImage } from "./ProjectImage";
 
 /** Human-readable labels for action types. */
 const actionLabels: Record<string, string> = {
@@ -107,14 +109,21 @@ export function ActionCard({ action, index }: ActionCardProps) {
       </div>
 
       {/* Screenshot thumbnail */}
-      {screenshot && (
+      {screenshot && isProjectRelativeImagePath(screenshot) ? (
+        <ProjectImage
+          relativePath={screenshot}
+          alt={`Step ${index + 1}`}
+          className="h-14 w-24 shrink-0 rounded-lg border border-[rgb(var(--color-border))] object-cover"
+          loading="lazy"
+        />
+      ) : screenshot ? (
         <img
           src={convertFileSrc(screenshot)}
           alt={`Step ${index + 1}`}
           className="h-14 w-24 shrink-0 rounded-lg border border-[rgb(var(--color-border))] object-cover"
           loading="lazy"
         />
-      )}
+      ) : null}
     </div>
   );
 }

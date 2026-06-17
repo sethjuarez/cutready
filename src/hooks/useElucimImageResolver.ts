@@ -4,12 +4,11 @@
  * Elucim 0.14.0 added `imageResolver` — a callback that converts an opaque
  * `ref` string stored in an ImageNode into a renderable URL. CutReady stores
  * image refs as project-relative paths (e.g. ".cutready/screenshots/abc.png"),
- * so the resolver joins them with the project root and converts to a Tauri
- * asset URL via `convertFileSrc`.
+ * so the resolver loads them through the backend image command.
  */
 import { useCallback } from "react";
-import { convertFileSrc } from "../services/tauri";
 import { useAppStore } from "../stores/appStore";
+import { fetchProjectImageDataUrl, isProjectRelativeImagePath } from "../utils/projectImage";
 import type { ImageResolverFn } from "@elucim/core";
 
 /** Returns a stable imageResolver callback for DslRenderer / ElucimEditor. */
@@ -19,11 +18,10 @@ export function useElucimImageResolver(): ImageResolverFn | undefined {
   const resolver: ImageResolverFn = useCallback(
     (ref: string) => {
       if (!projectRoot) return ref;
-      // If ref is already absolute or a URL, pass through
-      if (ref.startsWith("http") || ref.startsWith("file:") || ref.startsWith("/")) {
+      if (!isProjectRelativeImagePath(ref)) {
         return ref;
       }
-      return convertFileSrc(`${projectRoot}/${ref}`);
+      return fetchProjectImageDataUrl(ref);
     },
     [projectRoot],
   );
