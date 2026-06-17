@@ -181,9 +181,6 @@ fn run_inner<'a>(
             trajectory_sink: agent_state
                 .clone()
                 .map(|store| Arc::new(store) as Arc<dyn agentive::TrajectorySink>),
-            checkpoint_store: agent_state
-                .clone()
-                .map(|store| Arc::new(store) as Arc<dyn agentive::CheckpointStore>),
             memory_promotion_hook: agent_state
                 .clone()
                 .map(|store| Arc::new(store) as Arc<dyn agentive::MemoryPromotionHook>),
@@ -441,9 +438,6 @@ fn run_inner<'a>(
                     trajectory_sink: agent_state
                         .clone()
                         .map(|store| Arc::new(store) as Arc<dyn agentive::TrajectorySink>),
-                    checkpoint_store: agent_state
-                        .clone()
-                        .map(|store| Arc::new(store) as Arc<dyn agentive::CheckpointStore>),
                     memory_promotion_hook: agent_state
                         .clone()
                         .map(|store| Arc::new(store) as Arc<dyn agentive::MemoryPromotionHook>),
@@ -1179,7 +1173,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn cutready_runner_persists_checkpoints_and_compaction_to_agent_state_store() {
+    async fn cutready_runner_persists_trajectory_to_agent_state_store() {
         let project = tempfile::tempdir().unwrap();
         let run_id = "cutready-runner-checkpoint-test".to_string();
         let store = AgentStateStore::for_project(project.path(), run_id.clone()).unwrap();
@@ -1220,21 +1214,13 @@ mod tests {
         assert_eq!(result.response, "Created the checkpoint integration note.");
         assert!(project.path().join("harness-ci.md").exists());
 
-        let checkpoints = agentive::CheckpointStore::list_checkpoints(&store, &run_id).unwrap();
-        let stages = checkpoints
-            .iter()
-            .filter_map(|checkpoint| checkpoint.metadata.get("stage").map(String::as_str))
-            .collect::<Vec<_>>();
-        assert!(stages.contains(&"run_start"));
-        assert!(stages.contains(&"after_tool_round"));
-        assert!(stages.contains(&"before_compaction"));
-        assert!(stages.contains(&"after_compaction"));
-        assert!(stages.contains(&"completion"));
-
-        assert!(event_count(store.db_path(), &run_id, "checkpoint_created") >= 5);
-        assert_eq!(event_count(store.db_path(), &run_id, "compaction_started"), 1);
-        assert_eq!(event_count(store.db_path(), &run_id, "compaction_completed"), 1);
+        assert_eq!(event_count(store.db_path(), &run_id, "turn_started"), 1);
+        assert!(event_count(store.db_path(), &run_id, "model_call_started") >= 1);
+        assert!(event_count(store.db_path(), &run_id, "model_call_completed") >= 1);
+        assert_eq!(event_count(store.db_path(), &run_id, "tool_call_started"), 1);
+        assert_eq!(event_count(store.db_path(), &run_id, "tool_call_completed"), 1);
         assert_eq!(event_count(store.db_path(), &run_id, "resource_touched"), 1);
         assert_eq!(event_count(store.db_path(), &run_id, "verification_recorded"), 1);
+        assert_eq!(event_count(store.db_path(), &run_id, "turn_completed"), 1);
     }
 }

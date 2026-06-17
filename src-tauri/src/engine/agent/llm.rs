@@ -85,12 +85,7 @@ pub fn build_provider(
 }
 
 /// List available models from the provider via agentive discovery.
-///
-/// For Anthropic, returns a hardcoded list (no discovery API).
 pub async fn list_models(config: &LlmConfig) -> Result<Vec<ModelInfo>, String> {
-    if config.provider == LlmProvider::Anthropic {
-        return Ok(anthropic_models());
-    }
     let auth = resolve_auth(config);
     agentive::discovery::list_models(effective_endpoint(config), &auth)
         .await
@@ -99,11 +94,14 @@ pub async fn list_models(config: &LlmConfig) -> Result<Vec<ModelInfo>, String> {
 
 fn effective_endpoint(config: &LlmConfig) -> &str {
     let endpoint = config.endpoint.trim_end_matches('/');
-    if endpoint.is_empty() && config.provider == LlmProvider::Openai {
-        "https://api.openai.com"
-    } else {
-        endpoint
+    if endpoint.is_empty() {
+        return match config.provider {
+            LlmProvider::Openai => "https://api.openai.com",
+            LlmProvider::Anthropic => "https://api.anthropic.com",
+            _ => endpoint,
+        };
     }
+    endpoint
 }
 
 fn effective_model(config: &LlmConfig) -> &str {
@@ -183,29 +181,6 @@ fn normalize_model_info(mut model: ModelInfo) -> ModelInfo {
     }
     model.capabilities = Some(caps);
     model
-}
-
-/// Known Anthropic models (no discovery API available).
-fn anthropic_models() -> Vec<ModelInfo> {
-    [
-        ("claude-sonnet-4-6", 1_000_000, true),
-        ("claude-opus-4-8", 1_000_000, true),
-        ("claude-haiku-4-5", 200_000, true),
-    ]
-    .into_iter()
-    .map(|(id, ctx, vision)| {
-        let mut caps = std::collections::HashMap::new();
-        if vision {
-            caps.insert("vision".into(), "true".into());
-        }
-        ModelInfo {
-            id: id.into(),
-            owned_by: Some("Anthropic".into()),
-            capabilities: Some(caps),
-            context_length: Some(ctx),
-        }
-    })
-    .collect()
 }
 
 #[cfg(test)]
@@ -332,37 +307,16 @@ mod tests {
         assert!(matches!(auth, agentive::AuthStrategy::ApiKey(ref k) if k == "foundry-key"));
     }
 
-    // ── anthropic_models ─────────────────────────────────────────
-
     #[test]
-    fn anthropic_models_have_context_length() {
-        let models = anthropic_models();
-        assert_eq!(models.len(), 3);
-        let context_lengths: std::collections::HashMap<_, _> = models
-            .iter()
-            .map(|m| (m.id.as_str(), m.context_length))
-            .collect();
-        assert_eq!(context_lengths["claude-sonnet-4-6"], Some(1_000_000));
-        assert_eq!(context_lengths["claude-opus-4-8"], Some(1_000_000));
-        assert_eq!(context_lengths["claude-haiku-4-5"], Some(200_000));
-    }
-
-    #[test]
-    fn anthropic_models_have_vision_capability() {
-        let models = anthropic_models();
-        for m in &models {
-            let caps = m.capabilities.as_ref().unwrap();
-            assert_eq!(caps.get("vision").map(|s| s.as_str()), Some("true"));
-        }
-    }
-
-    #[test]
-    fn anthropic_models_have_expected_ids() {
-        let models = anthropic_models();
-        let ids: Vec<&str> = models.iter().map(|m| m.id.as_str()).collect();
-        assert!(ids.contains(&"claude-sonnet-4-6"));
-        assert!(ids.contains(&"claude-opus-4-8"));
-        assert!(ids.contains(&"claude-haiku-4-5"));
+    fn effective_endpoint_defaults_anthropic() {
+        let config = LlmConfig {
+            provider: LlmProvider::Anthropic,
+            endpoint: String::new(),
+            api_key: "sk-ant-test".into(),
+            model: "claude-sonnet-4-6".into(),
+            bearer_token: None,
+        };
+        assert_eq!(effective_endpoint(&config), "https://api.anthropic.com");
     }
 
     #[test]
@@ -421,18 +375,4 @@ mod tests {
     }
 
     // ── list_models ──────────────────────────────────────────────
-
-    #[tokio::test]
-    async fn list_models_returns_anthropic_hardcoded() {
-        let config = LlmConfig {
-            provider: LlmProvider::Anthropic,
-            endpoint: String::new(),
-            api_key: String::new(),
-            model: String::new(),
-            bearer_token: None,
-        };
-        let result = list_models(&config).await;
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap().len(), 3);
-    }
 }
