@@ -156,7 +156,7 @@ export function ProjectSwitcher({ variant = "sidebar" }: ProjectSwitcherProps) {
         onClick={() => setIsOpen(!isOpen)}
         className={
           isTitle
-            ? "flex max-w-[320px] min-w-0 items-center gap-1.5 rounded px-1.5 py-0.5 text-left text-sm text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
+            ? "flex h-[22px] max-w-[320px] min-w-0 items-center gap-1.5 rounded px-1.5 text-left text-sm leading-none text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
             : "flex items-center gap-2 w-full px-3 py-1.5 text-left hover:bg-[rgb(var(--color-surface))] transition-colors"
         }
         title={isTitle ? "Switch project" : undefined}
@@ -189,7 +189,7 @@ export function ProjectSwitcher({ variant = "sidebar" }: ProjectSwitcherProps) {
         <div
           className={
             isTitle
-              ? "absolute left-0 top-full z-dropdown mt-1 w-[260px] overflow-hidden rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] shadow-lg"
+              ? "absolute left-0 top-full z-[var(--z-modal)] mt-1 w-[260px] overflow-hidden rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] shadow-lg"
               : "absolute left-0 right-0 top-full z-dropdown bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-b-lg shadow-lg overflow-hidden"
           }
         >

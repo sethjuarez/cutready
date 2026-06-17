@@ -1297,7 +1297,7 @@ dependencies = [
 
 [[package]]
 name = "cutready"
-version = "1.12.1"
+version = "1.12.2"
 dependencies = [
  "agentive",
  "anyhow",

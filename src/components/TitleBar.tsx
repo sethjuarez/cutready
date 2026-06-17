@@ -59,7 +59,7 @@ export function TitleBar({
   const handleClose = useCallback(() => appWindow?.close(), [appWindow]);
   const handleTitleBarMouseDown = useCallback(
     (event: MouseEvent<HTMLElement>) => {
-      if (isMac || event.button !== 0 || !appWindow) return;
+      if (event.button !== 0 || !appWindow) return;
       const target = event.target as HTMLElement;
       if (target.closest("button, input, textarea, select, a, [role='button']")) return;
 
@@ -74,12 +74,21 @@ export function TitleBar({
     [appWindow],
   );
 
-  // macOS uses native window chrome — render only the toolbar controls
+  // macOS uses native overlay traffic lights; reserve the left control cluster.
   if (isMac) {
     return (
-      <div className="flex items-center justify-between bg-[rgb(var(--color-surface))] border-b border-[rgb(var(--color-border))] px-3 h-10 shrink-0">
+      <div
+        className="no-select relative z-chrome flex items-center justify-between bg-[rgba(var(--color-surface),0.92)] border-b border-[rgb(var(--color-border))] pr-3 shrink-0 backdrop-blur-md"
+        style={{
+          height: "var(--titlebar-height)",
+          paddingLeft: "var(--macos-traffic-light-space)",
+        }}
+        data-tauri-drag-region
+        onMouseDown={handleTitleBarMouseDown}
+      >
         {/* Left: workspace/project breadcrumb */}
         <div className="flex items-center gap-2 shrink-0">
+          <span className="flex h-[22px] items-center text-sm font-semibold leading-none tracking-tight">CutReady</span>
           {currentProject && <ProjectSwitcher variant="title" />}
         </div>
 
@@ -309,6 +318,3 @@ export function TitleBar({
     </div>
   );
 }
-
-
-

@@ -164,6 +164,19 @@ export interface ChatMessage {
   tool_call_id?: string;
   /** Frontend-only: marks a message as queued while the agent is busy. */
   pending?: boolean;
+  /** Frontend-only: CutReady display metadata preserved in chat session files. */
+  cutready?: ChatMessageMetadata;
+}
+
+export interface ChatMessageMetadata {
+  workingNotes?: ChatWorkingNotes;
+}
+
+export interface ChatWorkingNotes {
+  /** Assistant prose that streamed before a tool-round reset. */
+  drafts?: string[];
+  /** Provider reasoning/thinking text streamed during the run. */
+  thinking?: string;
 }
 
 export interface ToolCall {

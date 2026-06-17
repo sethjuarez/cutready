@@ -437,7 +437,7 @@ export function AppLayout() {
           data-testid="chat-focus-shell"
           className="fixed left-0 right-0 z-20 overflow-hidden border-y border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-inset))] shadow-2xl"
           style={{
-            top: isMac ? 0 : "var(--titlebar-height)",
+            top: "var(--titlebar-height)",
             bottom: "var(--statusbar-height)",
           }}
           role="dialog"

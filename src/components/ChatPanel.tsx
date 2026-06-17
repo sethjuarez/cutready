@@ -11,7 +11,7 @@ import { useSettings, type AgentPreset } from "../hooks/useSettings";
 import { BUILT_IN_AGENTS, resolveAgentPrompt } from "../agents/builtInAgents";
 import { buildProviderConfig, isAiProviderConfigured } from "../utils/providerConfig";
 import { SketchIcon, StoryboardIcon, NoteIcon } from "./Icons";
-import type { ChatMessage, ChatSessionSummary, ToolCall } from "../types/sketch";
+import type { ChatMessage, ChatSessionSummary, ChatWorkingNotes, ToolCall } from "../types/sketch";
 import {
   Sparkles,
   Clock,
@@ -44,6 +44,24 @@ export function isChatScrolledNearBottom(
   thresholdPx = CHAT_AUTO_SCROLL_THRESHOLD_PX,
 ): boolean {
   return scrollState.scrollHeight - scrollState.scrollTop - scrollState.clientHeight <= thresholdPx;
+}
+
+export function applyStreamingDeltaReset(state: { buffer: string; visible: string; drafts?: string[] }) {
+  const segment = state.buffer.trim();
+  const drafts = segment && !state.drafts?.includes(segment)
+    ? [...(state.drafts ?? []), segment]
+    : (state.drafts ?? []);
+  return { ...state, buffer: "", drafts };
+}
+
+export function buildChatWorkingNotes(input: { drafts: string[]; thinking: string }): ChatWorkingNotes | undefined {
+  const drafts = input.drafts.map((draft) => draft.trim()).filter(Boolean);
+  const thinking = input.thinking.trim();
+  if (drafts.length === 0 && !thinking) return undefined;
+  return {
+    ...(drafts.length > 0 ? { drafts } : {}),
+    ...(thinking ? { thinking } : {}),
+  };
 }
 
 /**
@@ -198,6 +216,7 @@ export function reconcileMessagesForDisplay(
   } = {},
 ): ChatMessage[] {
   const nonSystemMessages = backendMessages.filter((m) => m.role !== "system");
+  const displayNonSystemMessages = displayMessages.filter((m) => m.role !== "system");
   const displayUsers = displayMessages.filter((m) => m.role === "user");
   const lastUserMsgIdx = nonSystemMessages.reduce((idx, m, i) => m.role === "user" ? i : idx, -1);
   let userOrdinal = 0;
@@ -207,7 +226,13 @@ export function reconcileMessagesForDisplay(
   return nonSystemMessages
     .map((message, index) => {
       if (options.silent && index === lastUserMsgIdx) return null;
-      if (message.role !== "user") return message;
+      const displayMessage = displayNonSystemMessages[index];
+      if (message.role !== "user") {
+        if (displayMessage?.role === message.role && displayMessage.cutready) {
+          return { ...message, cutready: displayMessage.cutready };
+        }
+        return message;
+      }
 
       const displayUser = displayUsers[userOrdinal++];
       const backendText = textContent(message.content);
@@ -236,7 +261,7 @@ export function reconcileMessagesForDisplay(
         });
       }
 
-      return { ...message, content: restoredContent };
+      return { ...message, content: restoredContent, cutready: displayUser?.cutready };
     })
     .filter((message): message is ChatMessage => message !== null);
 }
@@ -436,6 +461,8 @@ function ChatTab() {
   const setChatLoading = useAppStore((s) => s.setChatLoading);
   const error = useAppStore((s) => s.chatError);
   const setChatError = useAppStore((s) => s.setChatError);
+  const input = useAppStore((s) => s.chatInputDraft);
+  const setInput = useAppStore((s) => s.setChatInputDraft);
   const addActivityEntries = useAppStore((s) => s.addActivityEntries);
   const chatSessionPath = useAppStore((s) => s.chatSessionPath);
   const newChatSession = useAppStore((s) => s.newChatSession);
@@ -449,7 +476,6 @@ function ChatTab() {
   const openStoryboard = useAppStore((s) => s.openStoryboard);
   const pendingChatPrompt = useAppStore((s) => s.pendingChatPrompt);
 
-  const [input, setInput] = useState("");
   const [references, setReferences] = useState<FileReference[]>([]);
   const [showAutocomplete, setShowAutocomplete] = useState(false);
   const [autocompleteFilter, setAutocompleteFilter] = useState("");
@@ -462,10 +488,12 @@ function ChatTab() {
   const [streamingText, setStreamingText] = useState<string>("");
   const [streamingThinking, setStreamingThinking] = useState<string>("");
   const [streamingStatus, setStreamingStatus] = useState<string>("");
+  const [streamingDrafts, setStreamingDrafts] = useState<string[]>([]);
 
   // Listen for streaming agent events from the backend
   const streamingRef = useRef("");
   const thinkingRef = useRef("");
+  const workingDraftsRef = useRef<string[]>([]);
   const abortedRef = useRef(false);
   const pendingToolArgsRef = useRef<Record<string, string[]>>({});
   const handledSketchMutationsRef = useRef<Map<string, number>>(new Map());
@@ -508,8 +536,16 @@ function ChatTab() {
           setStreamingText(streamingRef.current);
           break;
         case "delta_reset":
-          streamingRef.current = "";
-          setStreamingText("");
+          // Anthropic can stream pre-tool prose, then reset for a new tool round.
+          // Keep the visible draft stable while clearing only the next-token buffer.
+          const resetState = applyStreamingDeltaReset({
+            buffer: streamingRef.current,
+            visible: "",
+            drafts: workingDraftsRef.current,
+          });
+          streamingRef.current = resetState.buffer;
+          workingDraftsRef.current = resetState.drafts;
+          setStreamingDrafts(resetState.drafts);
           break;
         case "thinking":
           thinkingRef.current += ev.content ?? "";
@@ -835,9 +871,11 @@ function ChatTab() {
     handledSketchMutationsRef.current.clear();
     streamingRef.current = "";
     thinkingRef.current = "";
+    workingDraftsRef.current = [];
     setStreamingText("");
     setStreamingThinking("");
     setStreamingStatus("Connecting…");
+    setStreamingDrafts([]);
     // Log the send to activity
     addActivityEntries([{
       id: crypto.randomUUID(),
@@ -910,6 +948,29 @@ function ChatTab() {
         assistantResponse: result.response,
         logger: (message, details) => console.warn(`[chat] ${message}`, details),
       });
+      const workingNotes = buildChatWorkingNotes({
+        drafts: workingDraftsRef.current,
+        thinking: thinkingRef.current,
+      });
+      if (workingNotes) {
+        let finalAssistantIndex = -1;
+        for (let i = backendMessages.length - 1; i >= 0; i -= 1) {
+          if (backendMessages[i].role === "assistant" && textContent(backendMessages[i].content).trim() === result.response.trim()) {
+            finalAssistantIndex = i;
+            break;
+          }
+        }
+        if (finalAssistantIndex >= 0) {
+          const finalAssistant = backendMessages[finalAssistantIndex];
+          backendMessages[finalAssistantIndex] = {
+            ...finalAssistant,
+            cutready: {
+              ...finalAssistant.cutready,
+              workingNotes,
+            },
+          };
+        }
+      }
 
       // Log response to activity
       const toolCallCount = backendMessages.filter(
@@ -963,8 +1024,10 @@ function ChatTab() {
       setStreamingText("");
       setStreamingThinking("");
       setStreamingStatus("");
+      setStreamingDrafts([]);
       streamingRef.current = "";
       thinkingRef.current = "";
+      workingDraftsRef.current = [];
     }
   }, [input, loading, messages, references, systemPrompt, buildConfig, setChatMessages, setChatLoading, setChatError, addActivityEntries, settings, selectedAgent, memoryContext, activeSketchPath, activeStoryboardPath, activeNotePath, refreshSketchAfterMutation, refreshStoryboardAfterMutation, scrollMessagesToBottom, updateSetting]);
 
@@ -1291,17 +1354,7 @@ function ChatTab() {
         ))}
 
         {loading && (
-          <div className="px-3.5 py-2">
-            {streamingThinking && (
-              <details className="mb-2 text-xs border border-[rgb(var(--color-border))] rounded-md overflow-hidden">
-                <summary className="px-2.5 py-1.5 cursor-pointer text-[rgb(var(--color-text-secondary))] bg-[rgb(var(--color-surface-alt))] hover:bg-[rgb(var(--color-border))] select-none flex items-center gap-1.5">
-                  <span className="opacity-60">💭</span> Thinking{!streamingText && <span className="inline-block w-1 h-3 bg-[rgb(var(--color-accent))] animate-pulse ml-1 rounded-sm" />}
-                </summary>
-                <div className="px-2.5 py-2 text-[rgb(var(--color-text-secondary))] leading-[1.5] whitespace-pre-wrap max-h-48 overflow-y-auto">
-                  {streamingThinking}
-                </div>
-              </details>
-            )}
+          <div className={chatFocusMode ? "mx-auto w-full max-w-5xl px-3.5 py-2" : "px-3.5 py-2"}>
             {streamingText ? (
               <div className="w-full max-w-[70ch] min-w-0 rounded-2xl border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))]/80 shadow-sm">
                 <div className="flex items-center gap-2 border-b border-[rgb(var(--color-border-subtle))] px-4 py-2 text-[10px] font-medium uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))]">
@@ -1317,6 +1370,15 @@ function ChatTab() {
               </div>
             ) : (
               <span className="text-xs text-[rgb(var(--color-text-secondary))] italic">{streamingStatus || "Thinking…"}</span>
+            )}
+            {buildChatWorkingNotes({ drafts: streamingDrafts, thinking: streamingThinking }) && (
+              <div className="mt-2 w-full max-w-[70ch]">
+                <WorkingNotesInline
+                  notes={buildChatWorkingNotes({ drafts: streamingDrafts, thinking: streamingThinking })!}
+                  defaultOpen
+                  live
+                />
+              </div>
             )}
           </div>
         )}
@@ -1878,6 +1940,9 @@ function MessageRow({
             <div className="px-5 py-[1.125rem] text-[14px] leading-[1.78] text-[rgb(var(--color-text)_/_0.92)]">
               <MarkdownContent content={textContent(message.content)} projectRoot={projectRoot} />
             </div>
+            {message.cutready?.workingNotes && (
+              <WorkingNotesInline notes={message.cutready.workingNotes} />
+            )}
           </div>
         </div>
       </div>
@@ -1885,6 +1950,66 @@ function MessageRow({
   }
 
   return null;
+}
+
+function WorkingNotesInline({ notes, defaultOpen = false, live = false }: { notes: ChatWorkingNotes; defaultOpen?: boolean; live?: boolean }) {
+  const [expanded, setExpanded] = useState(defaultOpen);
+  const drafts = notes.drafts ?? [];
+  const itemCount = drafts.length + (notes.thinking ? 1 : 0);
+  if (itemCount === 0) return null;
+
+  return (
+    <div
+      className={`overflow-hidden border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-alt))]/20 ${live ? "rounded-2xl border shadow-sm" : "border-t"}`}
+    >
+      <button
+        type="button"
+        aria-expanded={expanded}
+        onClick={() => setExpanded((value) => !value)}
+        className="flex w-full cursor-pointer select-none items-center gap-2 px-4 py-2.5 text-left text-[11px] text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))]/55"
+      >
+        <span className="flex h-5 w-5 items-center justify-center rounded-full border border-[rgb(var(--color-accent))]/20 bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))]">
+          <Activity className="h-3 w-3" />
+        </span>
+        <span className="font-medium">{live ? "Working notes live" : "Working notes"}</span>
+        <span className="rounded-full border border-[rgb(var(--color-border-subtle))] px-1.5 py-0.5 text-[10px] tabular-nums text-[rgb(var(--color-text-secondary))]/80">
+          {itemCount}
+        </span>
+        <ChevronDown className={`ml-auto h-3 w-3 transition-transform ${expanded ? "rotate-180" : ""}`} />
+      </button>
+      {expanded && <div className="space-y-3 px-4 pb-4">
+        {drafts.length > 0 && (
+          <div className="rounded-xl border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-alt))]/45">
+            <div className="border-b border-[rgb(var(--color-border-subtle))] px-3 py-2 text-[10px] font-medium uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))]/80">
+              Drafts before tool rounds
+            </div>
+            <div className="divide-y divide-[rgb(var(--color-border-subtle))]">
+              {drafts.map((draft, index) => (
+                <div key={`${index}-${draft.slice(0, 24)}`} className="px-3 py-2.5">
+                  <div className="mb-1 text-[10px] font-medium text-[rgb(var(--color-text-secondary))]/75">
+                    Draft {index + 1}
+                  </div>
+                  <div className="text-[12px] leading-[1.6] text-[rgb(var(--color-text-secondary))]">
+                    <MarkdownContent content={draft} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        {notes.thinking && (
+          <div className="rounded-xl border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-alt))]/45">
+            <div className="border-b border-[rgb(var(--color-border-subtle))] px-3 py-2 text-[10px] font-medium uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))]/80">
+              Thinking stream
+            </div>
+            <pre className="max-h-56 overflow-auto whitespace-pre-wrap px-3 py-2.5 text-[11px] leading-[1.55] text-[rgb(var(--color-text-secondary))]">
+              {notes.thinking}
+            </pre>
+          </div>
+        )}
+      </div>}
+    </div>
+  );
 }
 
 // ── Tool Call Row ────────────────────────────────────────────────

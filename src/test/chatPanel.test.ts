@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { isChatScrolledNearBottom, reconcileMessagesForDisplay } from "../components/ChatPanel";
+import { applyStreamingDeltaReset, buildChatWorkingNotes, isChatScrolledNearBottom, reconcileMessagesForDisplay } from "../components/ChatPanel";
 import type { ChatMessage } from "../types/sketch";
 
 describe("reconcileMessagesForDisplay", () => {
@@ -93,6 +93,26 @@ backend-only scraped page text`,
       expect.objectContaining({ index: 1 }),
     );
   });
+
+  it("preserves CutReady assistant metadata across backend reconciliation", () => {
+    const displayMessages: ChatMessage[] = [
+      { role: "user", content: "Question" },
+      {
+        role: "assistant",
+        content: "Answer",
+        cutready: { workingNotes: { drafts: ["I will inspect this first."] } },
+      },
+    ];
+    const backendMessages: ChatMessage[] = [
+      { role: "system", content: "system prompt" },
+      { role: "user", content: "Question" },
+      { role: "assistant", content: "Answer" },
+    ];
+
+    const reconciled = reconcileMessagesForDisplay(backendMessages, displayMessages);
+
+    expect(reconciled[1].cutready?.workingNotes?.drafts).toEqual(["I will inspect this first."]);
+  });
 });
 
 describe("isChatScrolledNearBottom", () => {
@@ -110,5 +130,35 @@ describe("isChatScrolledNearBottom", () => {
       scrollTop: 300,
       clientHeight: 500,
     } satisfies Pick<HTMLElement, "scrollHeight" | "scrollTop" | "clientHeight">)).toBe(false);
+  });
+});
+
+describe("applyStreamingDeltaReset", () => {
+  it("clears the next-turn buffer and captures the reset draft", () => {
+    expect(applyStreamingDeltaReset({
+      buffer: "I will check the sketches",
+      visible: "I will check the sketches",
+      drafts: [],
+    })).toEqual({
+      buffer: "",
+      visible: "I will check the sketches",
+      drafts: ["I will check the sketches"],
+    });
+  });
+});
+
+describe("buildChatWorkingNotes", () => {
+  it("omits empty notes", () => {
+    expect(buildChatWorkingNotes({ drafts: ["  "], thinking: "  " })).toBeUndefined();
+  });
+
+  it("keeps draft and thinking artifacts for final rendering", () => {
+    expect(buildChatWorkingNotes({
+      drafts: [" I will inspect first. "],
+      thinking: "Considering tool choice.",
+    })).toEqual({
+      drafts: ["I will inspect first."],
+      thinking: "Considering tool choice.",
+    });
   });
 });
