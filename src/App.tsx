@@ -8,6 +8,7 @@ import { AppLayout } from "./components/AppLayout";
 import { ToastContainer } from "./components/ToastContainer";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { invoke } from "./services/tauri";
+import { isMac } from "./utils/platform";
 
 import { useAppStore } from "./stores/appStore";
 import { useUpdateStore } from "./stores/updateStore";
@@ -65,7 +66,7 @@ function App() {
         </div>
       }
     >
-      <div className="h-full bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text))]">
+      <div className={`h-full bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text))]${isMac ? " mac-window-shell" : ""}`}>
         <AppLayout />
         <StatusBar />
         <ToastContainer />

@@ -26,6 +26,12 @@
   --color-media-control-fg: 255 255 255;
   --titlebar-height: 46px;
   --macos-traffic-light-space: 92px;
+  --macos-traffic-light-close: #ff5f57;
+  --macos-traffic-light-close-border: #e2463f;
+  --macos-traffic-light-minimize: #ffbd2e;
+  --macos-traffic-light-minimize-border: #dfa123;
+  --macos-traffic-light-maximize: #28c840;
+  --macos-traffic-light-maximize-border: #1dad34;
   --statusbar-height: 28px;
   --z-sticky: 10;
   --z-dropdown: 20;
@@ -96,17 +102,26 @@ html {
   transition:
     background-color 0.2s ease,
     color 0.2s ease;
+  background: transparent;
   height: 100%;
 }
 
 body {
+  background: transparent;
   height: 100%;
   margin: 0;
   overflow: hidden;
 }
 
 #root {
+  background: transparent;
   height: 100%;
+}
+
+.mac-window-shell {
+  border-radius: 12px;
+  overflow: hidden;
+  transform: translateZ(0);
 }
 
 html.recording-overlay-root,
