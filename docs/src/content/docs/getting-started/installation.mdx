@@ -23,13 +23,28 @@ release from [GitHub Releases](https://github.com/sethjuarez/cutready/releases/l
     3. Launch CutReady from the Start Menu
 
     <Aside type="note">
-      Windows builds are not yet code-signed. You may see a SmartScreen warning — 
+      Windows builds are not yet code-signed. You may see a SmartScreen warning —
       click "More info" → "Run anyway" to proceed.
     </Aside>
   </TabItem>
 
   <TabItem label="macOS">
-    Download the `.dmg` file for your architecture:
+    Install with Homebrew:
+
+    ```bash
+    brew tap sethjuarez/cutready https://github.com/sethjuarez/cutready
+    brew install --cask cutready
+    ```
+
+    To upgrade later:
+
+    ```bash
+    brew update
+    brew upgrade --cask cutready
+    ```
+
+    Or download the `.dmg` file for your architecture:
+
     - **Apple Silicon** (M1/M2/M3): `CutReady_x.x.x_aarch64.dmg`
     - **Intel**: `CutReady_x.x.x_x64.dmg`
 
@@ -53,11 +68,52 @@ release from [GitHub Releases](https://github.com/sethjuarez/cutready/releases/l
     ```
 
     <Aside type="tip">
-      The Linux build requires PipeWire and GBM libraries for screen capture. 
+      The Linux build requires PipeWire and GBM libraries for screen capture.
       On Ubuntu 24.04+, these are typically pre-installed.
     </Aside>
   </TabItem>
 </Tabs>
+
+## macOS Homebrew install
+
+The recommended macOS install path is the CutReady Homebrew tap:
+
+```bash
+brew tap sethjuarez/cutready https://github.com/sethjuarez/cutready
+brew install --cask cutready
+```
+
+This installs the notarized macOS build into `/Applications`. The cask chooses
+the right download for your Mac automatically:
+
+- **Apple Silicon** Macs use `CutReady_aarch64.dmg`
+- **Intel** Macs use `CutReady_x64.dmg`
+
+If you already installed CutReady from the `.dmg`, quit the app before installing
+or upgrading with Homebrew.
+
+### Troubleshooting Homebrew
+
+If Homebrew cannot find the cask, refresh the tap and try again:
+
+```bash
+brew untap sethjuarez/cutready
+brew tap sethjuarez/cutready https://github.com/sethjuarez/cutready
+brew install --cask cutready
+```
+
+If the download fails with a missing asset, install the latest `.dmg` from
+[GitHub Releases](https://github.com/sethjuarez/cutready/releases/latest). The
+Homebrew cask depends on the latest release publishing both macOS assets:
+
+- `CutReady_aarch64.dmg`
+- `CutReady_x64.dmg`
+
+To remove CutReady and its local app data:
+
+```bash
+brew uninstall --zap --cask cutready
+```
 
 ## Prerequisites
 

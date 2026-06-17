@@ -202,6 +202,7 @@ jobs:
       - name: Stage release assets
         run: |
           node <<'NODE'
+          const crypto = require('node:crypto');
           const fs = require('node:fs');
           const path = require('node:path');
 
@@ -249,6 +250,38 @@ jobs:
             }
             fs.copyFileSync(file, dest);
           }
+
+          for (const file of walk(sourceDir)) {
+            const normalized = file.replaceAll(path.sep, '/');
+            const base = path.basename(file);
+            let homebrewName = null;
+            if (base.endsWith('.dmg') && normalized.includes('macos-silicon')) {
+              homebrewName = 'CutReady_aarch64.dmg';
+            } else if (base.endsWith('.dmg') && normalized.includes('macos-intel')) {
+              homebrewName = 'CutReady_x64.dmg';
+            }
+            if (!homebrewName) {
+              continue;
+            }
+            fs.copyFileSync(file, path.join(outputDir, homebrewName));
+          }
+
+          const homebrewAssets = ['CutReady_aarch64.dmg', 'CutReady_x64.dmg'];
+          for (const asset of homebrewAssets) {
+            if (!fs.existsSync(path.join(outputDir, asset))) {
+              throw new Error(`Missing Homebrew release asset: ${asset}`);
+            }
+          }
+
+          const dmgChecksums = fs.readdirSync(outputDir)
+            .filter((name) => name.startsWith('CutReady_') && name.endsWith('.dmg'))
+            .sort()
+            .map((name) => {
+              const file = path.join(outputDir, name);
+              const hash = crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+              return `${hash}  ${name}`;
+            });
+          fs.writeFileSync(path.join(outputDir, 'CutReady_dmg_SHA256SUMS.txt'), `${dmgChecksums.join('\n')}\n`);
 
           console.log(fs.readdirSync(outputDir).sort().join('\n'));
           NODE
