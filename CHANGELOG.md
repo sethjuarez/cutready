@@ -9,6 +9,15 @@
 Covector manages this changelog. Do not edit manually.
 Each release section is generated from `.changes/*.md` files.
 
+## [1.12.2](https://github.com/sethjuarez/cutready/compare/v1.12.1...v1.12.2) (2026-06-17)
+
+
+### Bug Fixes
+
+* **agent:** use agentive model discovery ([e14314a](https://github.com/sethjuarez/cutready/commit/e14314ac8d61fbc72994fbf87e6d4d3f2c4867ae))
+* **images:** load project images through backend ([dc519d2](https://github.com/sethjuarez/cutready/commit/dc519d25607424071033594aa5ff9a342afff2b3))
+* **ui:** avoid duplicate macOS titlebar spacing ([859ec25](https://github.com/sethjuarez/cutready/commit/859ec255f8ea3408f3b1e3bbdc6597d9a630821f))
+
 ## [1.12.1](https://github.com/sethjuarez/cutready/compare/v1.12.0...v1.12.1) (2026-06-16)
 
 
