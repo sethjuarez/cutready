@@ -9,6 +9,14 @@
 Covector manages this changelog. Do not edit manually.
 Each release section is generated from `.changes/*.md` files.
 
+## [1.12.4](https://github.com/sethjuarez/cutready/compare/v1.12.3...v1.12.4) (2026-06-17)
+
+
+### Bug Fixes
+
+* align macos window chrome ([d5d4db7](https://github.com/sethjuarez/cutready/commit/d5d4db72728b82cc6347263a592e49c9c4e3f712))
+* align macos window chrome ([230a579](https://github.com/sethjuarez/cutready/commit/230a57950c28282f1dac08caeec9aaccb039abe2))
+
 ## [1.12.3](https://github.com/sethjuarez/cutready/compare/v1.12.2...v1.12.3) (2026-06-17)
 
 
