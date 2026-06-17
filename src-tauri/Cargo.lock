@@ -1297,7 +1297,7 @@ dependencies = [
 
 [[package]]
 name = "cutready"
-version = "1.12.2"
+version = "1.12.3"
 dependencies = [
  "agentive",
  "anyhow",
@@ -1310,6 +1310,8 @@ dependencies = [
  "gix",
  "image",
  "log",
+ "objc2-app-kit",
+ "objc2-quartz-core",
  "openssl-sys",
  "pdf-extract",
  "quick-xml 0.37.5",
