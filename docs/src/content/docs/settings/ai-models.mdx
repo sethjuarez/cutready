@@ -35,7 +35,7 @@ its API calls accordingly.
 - At least one model deployed in your project (e.g., `gpt-4o`)
 - If you use Azure OAuth, your signed-in user must have access to both the
   Foundry project and the backing model resource:
-  - **Azure AI Foundry User** on the Foundry project
+  - **Foundry User** on the Foundry project
   - **Cognitive Services OpenAI User** on the Azure AI Services/OpenAI resource
 
 ### Setup Steps
@@ -85,7 +85,7 @@ its API calls accordingly.
    - CutReady will obtain and refresh tokens automatically
 
    The signed-in user must have the required Azure RBAC roles. For a shared
-   Foundry project, grant **Azure AI Foundry User** on the project and
+   Foundry project, grant **Foundry User** on the project and
    **Cognitive Services OpenAI User** on the backing Azure AI Services/OpenAI
    resource. Project access alone may let the user see the project but still
    fail model calls.
