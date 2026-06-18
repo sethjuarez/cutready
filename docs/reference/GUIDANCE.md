@@ -6,17 +6,19 @@
 
 ## Overview
 
-CutReady supports two entry points into the demo production workflow. The **sketch-first** path — authoring a structured plan before recording — is the promoted primary workflow. The **record-first** path — jumping straight into a demo walkthrough — remains fully supported for quick iterations or when the user already knows exactly what to demonstrate.
+CutReady supports two entry points into the demo production workflow. The **sketch-first** path — authoring a structured plan before recording — is the promoted primary workflow. The **record-first** path — jumping straight into a demo walkthrough — is planned for quick iterations or when the user already knows exactly what to demonstrate.
+
+> **Status note:** This guide describes the full intended workflow. Sketch authoring, storyboards, notes, AI chat/refinement, visuals, version history, remote sync, import, and Word export are available today. Recording, automation replay, animation video export, and FCPXML packaging are still in development or planned.
 
 The workflow phases are:
 
-0. [Sketch](#phase-0-sketch)
-1. [Record](#phase-1-record)
-2. [Refine (Agent)](#phase-2-refine-agent)
-3. [Review & Edit](#phase-3-review--edit)
-4. [Produce (Replay + Recording)](#phase-4-produce-replay--recording)
-5. [Motion Animations](#phase-5-motion-animations)
-6. [Export & Packaging](#phase-6-export--packaging)
+0. [Sketch](#phase-0-sketch) — available
+1. [Record](#phase-1-record) — in development
+2. [Refine (Agent)](#phase-2-refine-agent) — available for sketches/notes; recording refinement planned
+3. [Review & Edit](#phase-3-review--edit) — available for sketch planning tables; full script editing planned
+4. [Produce (Replay + Recording)](#phase-4-produce-replay--recording) — planned
+5. [Motion Animations](#phase-5-motion-animations) — planned
+6. [Export & Packaging](#phase-6-export--packaging) — planned
 
 ---
 
@@ -74,6 +76,8 @@ This bridge ensures the recording is guided by the plan rather than ad-hoc.
 
 ## Phase 1: Record
 
+> **Status:** In development.
+
 The user performs the demo manually while CutReady observes and captures every interaction as a structured, replayable action sequence.
 
 ### Two Recording Modes
@@ -119,7 +123,7 @@ For each interaction, CutReady records:
 
 ## Phase 2: Refine (Agent)
 
-After recording, an AI agent analyzes the raw session and produces a refined script. Each refinement task generates suggestions the user can accept, reject, or edit.
+Today, AI agents refine sketches, notes, narratives, descriptions, and visual plans. After recording lands, an AI agent will also analyze raw sessions and produce refined scripts. Each refinement task generates suggestions the user can accept, reject, or edit.
 
 ### Refinement Tasks
 
@@ -164,7 +168,7 @@ After recording, an AI agent analyzes the raw session and produces a refined scr
 
 ## Phase 3: Review & Edit
 
-The script table is the central artifact. After recording and refinement, the user reviews and fine-tunes it.
+The planning table is the central artifact today. After recording and refinement land, the script table becomes the production artifact the user reviews and fine-tunes.
 
 ### The Script Table
 
@@ -188,6 +192,8 @@ The script table is the central artifact. After recording and refinement, the us
 ---
 
 ## Phase 4: Produce (Replay + Recording)
+
+> **Status:** Planned.
 
 The finalized script drives an automated replay of the demo while the user reads the voiceover.
 
@@ -223,6 +229,8 @@ The finalized script drives an automated replay of the demo while the user reads
 
 ## Phase 5: Motion Animations
 
+> **Status:** Planned.
+
 Generate programmatic animations for concept explanations — architecture diagrams, data flow visualizations, process illustrations.
 
 ### Workflow
@@ -251,6 +259,8 @@ Generate programmatic animations for concept explanations — architecture diagr
 ---
 
 ## Phase 6: Export & Packaging
+
+> **Status:** Planned.
 
 CutReady produces an organized, edit-ready package.
 
@@ -296,7 +306,7 @@ project-name/
 
 ## Alternative Entry Point: Record-First
 
-For users who prefer to skip the planning phase and jump straight into recording:
+Record-first is planned for users who prefer to skip the planning phase and jump straight into recording:
 
 - Start a new project and click **Record Steps** directly — no sketch document required.
 - CutReady captures interactions into a new script table, just as in Phase 1.

@@ -33,6 +33,10 @@ its API calls accordingly.
 - An Azure subscription
 - An AI Foundry hub and project ([create one here](https://ai.azure.com))
 - At least one model deployed in your project (e.g., `gpt-4o`)
+- If you use Azure OAuth, your signed-in user must have access to both the
+  Foundry project and the backing model resource:
+  - **Azure AI Foundry User** on the Foundry project
+  - **Cognitive Services OpenAI User** on the Azure AI Services/OpenAI resource
 
 ### Setup Steps
 
@@ -80,6 +84,12 @@ its API calls accordingly.
    - Complete the login in your browser and return to CutReady
    - CutReady will obtain and refresh tokens automatically
 
+   The signed-in user must have the required Azure RBAC roles. For a shared
+   Foundry project, grant **Azure AI Foundry User** on the project and
+   **Cognitive Services OpenAI User** on the backing Azure AI Services/OpenAI
+   resource. Project access alone may let the user see the project but still
+   fail model calls.
+
    </TabItem>
    </Tabs>
 
@@ -108,8 +118,9 @@ CutReady automatically detects Foundry endpoints by checking if the URL contains
 - Filters to chat-capable models when populating the model dropdown
 - Stores context length and vision support for the selected model when available
 
-No special configuration is needed — just paste the Foundry endpoint and CutReady
-handles the rest.
+No special endpoint configuration is needed — just paste the Foundry endpoint and
+CutReady handles the Foundry API paths. If you use Azure OAuth, your signed-in
+account still needs the RBAC roles listed in the prerequisites above.
 
 ## Azure OpenAI (Standard)
 
@@ -125,6 +136,10 @@ For standard Azure OpenAI resources (not Foundry):
 5. Click **Refresh** to load deployed models and select one
 
 </Steps>
+
+For shared Azure OpenAI resources using Azure OAuth, make sure your signed-in
+user has **Cognitive Services OpenAI User** on the Azure OpenAI resource so
+CutReady can invoke deployed models.
 
 ## OpenAI (Direct)
 

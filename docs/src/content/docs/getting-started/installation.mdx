@@ -33,6 +33,7 @@ release from [GitHub Releases](https://github.com/sethjuarez/cutready/releases/l
 
     ```bash
     brew tap sethjuarez/cutready https://github.com/sethjuarez/cutready
+    brew trust --cask sethjuarez/cutready/cutready
     brew install --cask cutready
     ```
 
@@ -80,6 +81,7 @@ The recommended macOS install path is the CutReady Homebrew tap:
 
 ```bash
 brew tap sethjuarez/cutready https://github.com/sethjuarez/cutready
+brew trust --cask sethjuarez/cutready/cutready
 brew install --cask cutready
 ```
 
@@ -92,6 +94,9 @@ the right download for your Mac automatically:
 If you already installed CutReady from the `.dmg`, quit the app before installing
 or upgrading with Homebrew.
 
+The `brew trust` command allows Homebrew to install the cask from the CutReady
+tap. Run it after adding the tap and before installing the cask.
+
 ### Troubleshooting Homebrew
 
 If Homebrew cannot find the cask, refresh the tap and try again:
@@ -99,6 +104,7 @@ If Homebrew cannot find the cask, refresh the tap and try again:
 ```bash
 brew untap sethjuarez/cutready
 brew tap sethjuarez/cutready https://github.com/sethjuarez/cutready
+brew trust --cask sethjuarez/cutready/cutready
 brew install --cask cutready
 ```
 
@@ -149,6 +155,7 @@ npm run tauri build
 - **Tauri CLI v2** (`npm install -g @tauri-apps/cli`)
 
 For Linux, you'll also need:
+
 ```bash
 sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev \
   librsvg2-dev patchelf libpipewire-0.3-dev libgbm-dev

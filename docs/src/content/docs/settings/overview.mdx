@@ -64,6 +64,9 @@ For Microsoft AI Foundry (recommended for Azure users):
 - **API Endpoint** — Your Foundry project URL (e.g.,
   `https://your-hub.services.ai.azure.com/api/projects/your-project`)
 - **Authentication** — API Key or Azure OAuth sign-in
+- **Azure OAuth permissions** — Shared-project users need **Azure AI Foundry
+  User** on the Foundry project and **Cognitive Services OpenAI User** on the
+  backing Azure AI Services/OpenAI resource
 - **Model** — Choose from deployed models (use **Refresh** to load them)
 - **Capability tags** — When available, fetched models show context window,
   vision support, and Responses API support
@@ -82,6 +85,8 @@ For Azure OpenAI:
   - **API Key** — Paste your Azure OpenAI API key directly
 - **Tenant ID** — Your Azure AD tenant identifier (for OAuth)
 - **Client ID** — Your Azure AD application client ID (for OAuth)
+- **Azure RBAC roles** — For shared Azure OpenAI resources, OAuth users need
+  **Cognitive Services OpenAI User** on the resource
 - **Model** — The deployed model name (e.g., `gpt-4o`, `gpt-4o-mini`)
 
 ### OpenAI Setup
