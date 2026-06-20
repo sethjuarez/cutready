@@ -964,6 +964,8 @@ fn timeline_ref_name(timeline: &str) -> String {
         timeline.to_string()
     } else if timeline.starts_with("timeline/") {
         format!("refs/heads/{}", timeline)
+    } else if timeline.contains('/') {
+        format!("refs/remotes/{}", timeline)
     } else {
         format!("{}{}", TIMELINE_PREFIX, timeline)
     }
@@ -1393,6 +1395,53 @@ mod tests {
     }
 
     #[test]
+    fn apply_merge_resolution_accepts_remote_shorthand_source() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().join("proj");
+        setup_project(&dir);
+
+        create_fork(&dir, "remote-main");
+        let remote_oid = commit_on_branch(
+            &dir,
+            "remote-main",
+            &[(
+                "sketches/intro.sk",
+                r#"{"title":"Remote version","description":"from origin"}"#,
+            )],
+            "Edit on remote",
+        );
+
+        let repo = git2::Repository::open(&dir).unwrap();
+        repo.reference("refs/remotes/origin/main", remote_oid, true, "test remote")
+            .unwrap();
+        drop(repo);
+
+        commit_on_branch(
+            &dir,
+            "main",
+            &[(
+                "sketches/intro.sk",
+                r#"{"title":"Local version","description":"from local"}"#,
+            )],
+            "Edit on main",
+        );
+
+        let result = merge_timelines(&dir, "origin/main", "main").unwrap();
+        assert!(matches!(result, MergeResult::Conflicts { .. }));
+
+        let resolutions = vec![FileResolution {
+            path: "sketches/intro.sk".to_string(),
+            content: r#"{"title":"Merged remote shorthand","description":"resolved"}"#.to_string(),
+        }];
+
+        let commit_id = apply_merge_resolution(&dir, "origin/main", "main", resolutions).unwrap();
+        assert!(!commit_id.is_empty());
+
+        let content = fs::read_to_string(dir.join("sketches/intro.sk")).unwrap();
+        assert!(content.contains("Merged remote shorthand"));
+    }
+
+    #[test]
     fn merge_note_text_conflict() {
         let tmp = tempfile::tempdir().unwrap();
         let dir = tmp.path().join("proj");
@@ -1560,6 +1609,14 @@ mod tests {
         assert_eq!(
             timeline_ref_name("timeline/fork-123"),
             "refs/heads/timeline/fork-123"
+        );
+        assert_eq!(
+            timeline_ref_name("origin/main"),
+            "refs/remotes/origin/main"
+        );
+        assert_eq!(
+            timeline_ref_name("refs/remotes/origin/main"),
+            "refs/remotes/origin/main"
         );
         assert_eq!(timeline_ref_name("refs/heads/custom"), "refs/heads/custom");
     }

@@ -66,6 +66,12 @@ export interface GlobalSettings {
   displayFontFamily: string;
   /** Theme palette: token set applied across light/dark modes. */
   displayThemePalette: string;
+  /** Terminal font stack; use a Nerd Font to render Powerline glyphs. */
+  displayTerminalFontFamily: string;
+  /** Terminal text size in px. */
+  displayTerminalFontSize: number;
+  /** Terminal color mode: "console" | "app". */
+  displayTerminalColorMode: "console" | "app";
   /** API-reported context window (tokens) for the selected model. */
   aiContextLength: number;
   /** Vision mode: "off", "notes", or "notes_and_sketches". */
@@ -152,6 +158,9 @@ const defaultGlobalSettings: GlobalSettings = {
   displayEditorWidth: "centered",
   displayFontFamily: "system",
   displayThemePalette: "cutready",
+  displayTerminalFontFamily: '"CaskaydiaCove Nerd Font", "CaskaydiaMono Nerd Font", "Cascadia Code PL", "Cascadia Code", Consolas, monospace',
+  displayTerminalFontSize: 12,
+  displayTerminalColorMode: "console",
   aiContextLength: 0,
   aiVisionMode: "notes_and_sketches",
   aiModelSupportsVision: "",

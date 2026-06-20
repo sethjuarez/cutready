@@ -58,6 +58,7 @@ tauri-plugin-stronghold = "2"
 
 # Shared agentic substrate
 agentive = { version = "0.4.0", features = ["tracing"] }
+portable-pty = "0.9.0"
 
 # Vendor OpenSSL on macOS to support cross-compilation (ARM → Intel)
 [target.'cfg(target_os = "macos")'.dependencies]

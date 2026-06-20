@@ -56,6 +56,7 @@ export function AppLayout() {
   const outputHeight = useAppStore((s) => s.outputHeight);
   const setOutputHeight = useAppStore((s) => s.setOutputHeight);
   const toggleOutput = useAppStore((s) => s.toggleOutput);
+  const showOutputTab = useAppStore((s) => s.showOutputTab);
   const toggleSecondaryPanel = useAppStore((s) => s.toggleSecondaryPanel);
   const showSecondaryPanel = useAppStore((s) => s.showSecondaryPanel);
   const chatFocusMode = useAppStore((s) => s.chatFocusMode);
@@ -97,6 +98,17 @@ export function AppLayout() {
         keybinding: "Ctrl+`",
         icon: <Terminal className="w-4 h-4" />,
         handler: () => toggleOutput(),
+      },
+      {
+        id: "terminal.openWorkspace",
+        title: "Open Workspace Terminal",
+        category: "View",
+        icon: <Terminal className="w-4 h-4" />,
+        handler: () => {
+          const { currentProject } = useAppStore.getState();
+          if (currentProject) setView("project");
+          showOutputTab("terminal");
+        },
       },
       {
         id: "view.toggleSidebarPosition",
@@ -240,7 +252,7 @@ export function AppLayout() {
         },
       },
     ]);
-  }, [setView, toggleSidebar, toggleSidebarPosition, toggleOutput, toggleSecondaryPanel, toggleTheme]);
+  }, [setView, showOutputTab, toggleSidebar, toggleSidebarPosition, toggleOutput, toggleSecondaryPanel, toggleTheme]);
 
   // Global keyboard shortcuts
   useEffect(() => {
@@ -412,10 +424,14 @@ export function AppLayout() {
             </div>
 
             {/* Lower: output panel (hidden on home, settings, and chat views) */}
-            {view !== "home" && view !== "settings" && view !== "chat" && outputVisible && (
+            {view !== "home" && view !== "settings" && view !== "chat" && (
               <>
-                <ResizeHandle direction="vertical" onResize={handleOutputResize} />
-                <div className="shrink-0 overflow-hidden" style={{ height: outputHeight }}>
+                {outputVisible && <ResizeHandle direction="vertical" onResize={handleOutputResize} />}
+                <div
+                  className={outputVisible ? "shrink-0 overflow-hidden" : "h-0 shrink-0 overflow-hidden"}
+                  style={{ height: outputVisible ? outputHeight : 0 }}
+                  aria-hidden={!outputVisible}
+                >
                   <OutputPanel
                     onCollapse={toggleOutput}
                   />

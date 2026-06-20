@@ -22,6 +22,8 @@ export function MergeConflictPanel() {
   // Track resolved content per file path
   const [resolutions, setResolutions] = useState<Record<string, string>>({});
   const [applying, setApplying] = useState(false);
+  const sourceLabel = formatMergeLabel(mergeSource ?? "source");
+  const targetLabel = formatMergeLabel(mergeTarget ?? "target");
 
   const updateResolution = useCallback((path: string, content: string) => {
     setResolutions((prev) => ({ ...prev, [path]: content }));
@@ -55,8 +57,8 @@ export function MergeConflictPanel() {
           </div>
           <div>
             <h2 className="text-sm font-semibold text-[rgb(var(--color-text))]">
-              Merging <span className="text-[rgb(var(--color-accent))]">{mergeSource}</span> into{" "}
-              <span className="text-[rgb(var(--color-accent))]">{mergeTarget}</span>
+              Merging <span className="text-[rgb(var(--color-accent))]">{sourceLabel}</span> into{" "}
+              <span className="text-[rgb(var(--color-accent))]">{targetLabel}</span>
             </h2>
             <p className="text-[10px] text-[rgb(var(--color-text-secondary))]">
               {resolvedCount === mergeConflicts.length
@@ -101,13 +103,20 @@ export function MergeConflictPanel() {
             conflict={conflict}
             resolved={resolutions[conflict.path]}
             onResolve={(content) => updateResolution(conflict.path, content)}
-            sourceLabel={mergeSource ?? "source"}
-            targetLabel={mergeTarget ?? "target"}
+            sourceLabel={sourceLabel}
+            targetLabel={targetLabel}
           />
         ))}
       </div>
     </div>
   );
+}
+
+function formatMergeLabel(refName: string): string {
+  if (refName.startsWith("refs/remotes/")) return refName.slice("refs/remotes/".length);
+  if (refName.startsWith("refs/heads/timeline/")) return refName.slice("refs/heads/timeline/".length);
+  if (refName.startsWith("refs/heads/")) return refName.slice("refs/heads/".length);
+  return refName;
 }
 
 // ── ConflictCard ────────────────────────────────────────────────

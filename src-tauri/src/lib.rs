@@ -230,6 +230,7 @@ pub fn run() {
         .manage(commands::screenshot::RecordingPrompterState(Mutex::new(
             None,
         )))
+        .manage(commands::terminal::TerminalState::default())
         .manage(commands::recording::RecordingCaptureState(
             tokio::sync::Mutex::new(None),
         ))
@@ -573,6 +574,10 @@ pub fn run() {
             commands::feedback::delete_feedback,
             commands::feedback::export_logs,
             commands::feedback::create_github_issue,
+            commands::terminal::terminal_open,
+            commands::terminal::terminal_write,
+            commands::terminal::terminal_resize,
+            commands::terminal::terminal_close,
         ])
         .on_window_event(|window, event| {
             match event {
@@ -596,6 +601,9 @@ pub fn run() {
                 tauri::WindowEvent::Destroyed if window.label() == "main" => {
                     // Close preview and capture windows when main window closes
                     let app = window.app_handle();
+                    if let Some(terminals) = app.try_state::<commands::terminal::TerminalState>() {
+                        terminals.close_all();
+                    }
                     for label in &["preview", "capture"] {
                         if let Some(w) = app.get_webview_window(label) {
                             let _ = w.destroy();

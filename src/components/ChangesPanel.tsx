@@ -14,11 +14,13 @@ import {
   MoreHorizontal,
   Trash2,
   Share2,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
 import { useAppStore } from "../stores/appStore";
 import { SnapshotGraph } from "./SnapshotGraph";
 import { SnapshotDiffPanel } from "./SnapshotDiffPanel";
-import { SyncBar } from "./SyncBar";
+import { IncomingPreview, SyncBar } from "./SyncBar";
 import { TimelineSelector } from "./TimelineSelector";
 import type { DiffEntry } from "../types/sketch";
 
@@ -39,6 +41,8 @@ export function ChangesPanel() {
   const loadTimelines = useAppStore((s) => s.loadTimelines);
   const squashSnapshots = useAppStore((s) => s.squashSnapshots);
   const currentRemote = useAppStore((s) => s.currentRemote);
+  const syncStatus = useAppStore((s) => s.syncStatus);
+  const incomingCommits = useAppStore((s) => s.incomingCommits);
   const shareChanges = useAppStore((s) => s.shareChanges);
   const saving = useAppStore((s) => s.saving);
   const currentProject = useAppStore((s) => s.currentProject);
@@ -59,6 +63,8 @@ export function ChangesPanel() {
   const [squashError, setSquashError] = useState<string | null>(null);
   const [squashing, setSquashing] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showIncoming, setShowIncoming] = useState(false);
+  const [showOutgoing, setShowOutgoing] = useState(false);
 
   const activeTimeline = timelines.find((t) => t.is_active);
   const activeNodes = (() => {
@@ -201,49 +207,49 @@ export function ChangesPanel() {
   const activeProjectName = currentProject?.name ?? "project";
   const remoteUrl = currentRemote?.url ?? null;
   const remoteLabel = remoteUrl ? formatRemoteLabel(remoteUrl) : null;
+  const ahead = syncStatus?.ahead ?? 0;
+  const behind = syncStatus?.behind ?? 0;
 
   return (
-    <div className="flex h-full flex-col overflow-hidden bg-[rgb(var(--color-surface-inset))]">
-      <div className="flex min-h-10 shrink-0 items-center justify-between gap-2 border-b border-[rgb(var(--color-border))] px-3 py-1">
-        <div className="min-w-0">
-          <div className="text-[11px] font-semibold uppercase tracking-wider text-[rgb(var(--color-text-secondary))]">
-            Changes
-          </div>
-          {remoteLabel && (
-            <div
-              className="flex min-w-0 items-center gap-1 text-[9px] leading-tight text-[rgb(var(--color-text-secondary))]/60"
-              title={remoteUrl ?? undefined}
+    <div className="flex h-full min-h-0 flex-col overflow-visible bg-[rgb(var(--color-surface-inset))]">
+      <div className="flex shrink-0 flex-col gap-1.5 border-b border-[rgb(var(--color-border))] px-3 py-2">
+        <button
+          onClick={() => setChangesExpanded(!changesExpanded)}
+          className="flex min-w-0 items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-[rgb(var(--color-text-secondary))] transition-colors hover:text-[rgb(var(--color-text))]"
+        >
+          {changesExpanded ? <ChevronDown className="h-3 w-3 shrink-0" /> : <ChevronRight className="h-3 w-3 shrink-0" />}
+          <span className="shrink-0 truncate">Changes</span>
+          {isMultiProject && (
+            <span
+              className="min-w-0 max-w-full shrink truncate rounded-full border border-[rgb(var(--color-border))] px-1.5 py-0 text-left text-[9px] font-medium normal-case tracking-normal text-[rgb(var(--color-text-secondary))]/80"
+              title={`Active project: ${activeProjectName}`}
             >
-              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-success" />
-              <span className="truncate">{remoteLabel}</span>
-            </div>
+              {activeProjectName}
+            </span>
           )}
-        </div>
-        <div className="flex min-w-0 items-center gap-1">
+          {changedFiles.length > 0 && (
+            <span className="ml-1 shrink-0 rounded-full bg-[rgb(var(--color-accent))]/15 px-1 py-0 text-[9px] font-medium text-[rgb(var(--color-accent))]">
+              {changedFiles.length}
+            </span>
+          )}
+        </button>
+        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
           <SyncBar variant="compact" />
           {currentRemote && (
             <button
               onClick={() => shareChanges()}
               disabled={saving}
-              className="rounded p-1 text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))] disabled:pointer-events-none disabled:opacity-30"
-              title="Share changes safely"
+              className="flex h-6 shrink-0 items-center gap-1 rounded-md px-2 text-[10px] font-medium text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))] disabled:pointer-events-none disabled:opacity-30"
+              title="Push changes and copy a share link"
             >
               <Share2 className="h-3 w-3" />
-            </button>
-          )}
-          {isDirty && !pendingNavTarget && (
-            <button
-              onClick={() => setConfirmDiscard(true)}
-              className="rounded p-1 text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-error/10 hover:text-error"
-              title="Discard active project changes"
-            >
-              <Trash2 className="h-3 w-3" />
+              Share
             </button>
           )}
           <button
             onClick={() => promptSnapshot()}
             disabled={!isDirty || saving}
-            className="rounded p-1 text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))] disabled:pointer-events-none disabled:opacity-30"
+            className="flex h-6 shrink-0 items-center gap-1 rounded-md px-2 text-[10px] font-medium text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))] disabled:pointer-events-none disabled:opacity-30"
             title="Take Snapshot (Ctrl+S)"
           >
             {saving ? (
@@ -254,18 +260,70 @@ export function ChangesPanel() {
             ) : (
               <Save className="h-3 w-3" />
             )}
+            Save
           </button>
+          {isDirty && !pendingNavTarget && (
+            <button
+              onClick={() => setConfirmDiscard(true)}
+              className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-error/10 hover:text-error"
+              title="Discard active project changes"
+            >
+              <Trash2 className="h-3 w-3" />
+            </button>
+          )}
         </div>
+        {(remoteLabel || ahead > 0 || behind > 0) && (
+          <div className="flex min-w-0 items-center gap-1.5 text-[9px] leading-tight text-[rgb(var(--color-text-secondary))]/60">
+            {ahead > 0 && (
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowOutgoing((value) => !value);
+                    setShowIncoming(false);
+                  }}
+                  className="flex h-4 items-center gap-0.5 rounded-full bg-[rgb(var(--color-accent))]/10 px-1.5 text-[10px] font-semibold text-[rgb(var(--color-accent))] transition-colors hover:bg-[rgb(var(--color-accent))]/15"
+                  title={`${ahead} outgoing snapshot${ahead !== 1 ? "s" : ""} ready to share`}
+                >
+                  <ArrowUp className="h-2.5 w-2.5" />
+                  {ahead}
+                </button>
+                {showOutgoing && (
+                  <OutgoingPreview count={ahead} />
+                )}
+              </div>
+            )}
+            {behind > 0 && (
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowIncoming((value) => !value);
+                    setShowOutgoing(false);
+                  }}
+                  className="flex h-4 items-center gap-0.5 rounded-full bg-warning/10 px-1.5 text-[10px] font-semibold text-warning transition-colors hover:bg-warning/15"
+                  title={`${behind} incoming collaborator snapshot${behind !== 1 ? "s" : ""}`}
+                >
+                  <ArrowDown className="h-2.5 w-2.5" />
+                  {behind}
+                </button>
+                {showIncoming && (
+                  <IncomingPreview commits={incomingCommits} align="left" />
+                )}
+              </div>
+            )}
+            {remoteLabel && (
+              <div
+                className="flex min-w-0 items-center gap-1"
+                title={remoteUrl ?? undefined}
+              >
+                <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-success" />
+                <span className="truncate">{remoteLabel}</span>
+              </div>
+            )}
+          </div>
+        )}
       </div>
-
-      <SectionHeader
-        title="Project"
-        count={changedFiles.length}
-        scope={isMultiProject ? activeProjectName : undefined}
-        scopeTitle={isMultiProject ? `Active project: ${activeProjectName}` : undefined}
-        expanded={changesExpanded}
-        onToggle={() => setChangesExpanded(!changesExpanded)}
-      />
 
       {confirmDiscard && (
         <div className="border-b border-error/20 bg-error/5 px-3 py-2">
@@ -496,6 +554,26 @@ export function ChangesPanel() {
       )}
 
       <SnapshotDiffPanel />
+    </div>
+  );
+}
+
+function OutgoingPreview({ count }: { count: number }) {
+  return (
+    <div className="absolute left-0 top-full z-[999] mt-1 w-64 rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] shadow-lg">
+      <div className="py-1">
+        <div className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-[rgb(var(--color-text-secondary))]">
+          Outgoing work
+        </div>
+        <div className="border-t border-[rgb(var(--color-border))]/60 px-2 py-1.5">
+          <div className="text-[11px] font-medium text-[rgb(var(--color-text))]">
+            {count} snapshot{count === 1 ? "" : "s"} ready to share
+          </div>
+          <div className="mt-0.5 text-[9px] leading-relaxed text-[rgb(var(--color-text-secondary))]">
+            Use Share changes or Sync to publish these workspace updates.
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

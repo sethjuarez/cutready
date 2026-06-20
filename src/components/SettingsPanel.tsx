@@ -299,6 +299,13 @@ const fontSizes = [
   { value: 18, label: "XL (18px)" },
 ];
 
+const terminalFontSizes = [
+  { value: 11, label: "Small (11px)" },
+  { value: 12, label: "Medium (12px)" },
+  { value: 14, label: "Large (14px)" },
+  { value: 16, label: "XL (16px)" },
+];
+
 function tokenRgb(value: string): string {
   return `rgb(${value})`;
 }
@@ -725,6 +732,64 @@ function DisplayTab({ settings, updateSetting }: {
           ))}
         </select>
         <p className="text-xs text-[rgb(var(--color-text-secondary))]">Text size for the chat panel.</p>
+      </fieldset>
+
+      {/* Terminal appearance */}
+      <fieldset className="flex flex-col gap-3 rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]/40 p-4">
+        <div>
+          <label className="text-sm font-medium">Terminal Appearance</label>
+          <p className="mt-1 text-xs text-[rgb(var(--color-text-secondary))]">
+            Use a Nerd Font or Powerline-patched font for prompt icons and branch glyphs.
+          </p>
+        </div>
+
+        <label className="flex flex-col gap-1.5">
+          <span className="text-xs font-medium text-[rgb(var(--color-text-secondary))]">Terminal Font Family</span>
+          <input
+            value={settings.displayTerminalFontFamily}
+            onChange={(e) => updateSetting("displayTerminalFontFamily", e.target.value)}
+            className={inputClass}
+            spellCheck={false}
+            placeholder={'"CaskaydiaCove Nerd Font", "Cascadia Code", Consolas, monospace'}
+          />
+        </label>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="flex flex-col gap-1.5">
+            <span className="text-xs font-medium text-[rgb(var(--color-text-secondary))]">Terminal Text Size</span>
+            <select
+              value={settings.displayTerminalFontSize}
+              onChange={(e) => updateSetting("displayTerminalFontSize", Number(e.target.value))}
+              className={inputClass}
+            >
+              {terminalFontSizes.map((s) => (
+                <option key={s.value} value={s.value}>{s.label}</option>
+              ))}
+            </select>
+          </label>
+
+          <div className="flex flex-col gap-1.5">
+            <span className="text-xs font-medium text-[rgb(var(--color-text-secondary))]">Terminal Colors</span>
+            <div className="flex gap-2">
+              {([
+                { id: "console", label: "Console dark" },
+                { id: "app", label: "App surface" },
+              ] as const).map((mode) => (
+                <button
+                  key={mode.id}
+                  onClick={() => updateSetting("displayTerminalColorMode", mode.id)}
+                  className={`flex-1 rounded-lg border px-3 py-2 text-xs font-medium transition-colors ${
+                    settings.displayTerminalColorMode === mode.id
+                      ? "border-[rgb(var(--color-accent))] bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))]"
+                      : "border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))]"
+                  }`}
+                >
+                  {mode.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
       </fieldset>
 
       {/* Row density */}

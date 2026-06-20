@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { invoke } from "../services/tauri";
 import { useAppStore, type ActivityEntry } from "../stores/appStore";
+import { TerminalPanel } from "./TerminalPanel";
 import {
   BarChart2,
   Bug,
@@ -233,8 +234,6 @@ function formatUnixNanos(value: string) {
   return new Date(millis).toLocaleTimeString();
 }
 
-type OutputTab = "activity" | "debug" | "terminal";
-
 type AuditaurDiagnosticsSummary = {
   session: {
     session_id: string;
@@ -277,16 +276,15 @@ interface OutputPanelProps {
  * OutputPanel — bottom panel with tabs for AI activity and problems.
  */
 export function OutputPanel({ onCollapse }: OutputPanelProps) {
-  const [activeTab, setActiveTab] = useState<OutputTab>("activity");
+  const activeTab = useAppStore((s) => s.outputActiveTab);
+  const setActiveTab = useAppStore((s) => s.showOutputTab);
   const outputs = useAppStore((s) => s.activityLog);
   const debugEntries = useAppStore((s) => s.debugLog);
   const clearActivityLog = useAppStore((s) => s.clearActivityLog);
-  const currentProject = useAppStore((s) => s.currentProject);
   const [auditaurSummary, setAuditaurSummary] = useState<AuditaurDiagnosticsSummary | null>(null);
   const [debugLoading, setDebugLoading] = useState(false);
   const [debugError, setDebugError] = useState<string | null>(null);
-  const scrollRef = useRef<HTMLDivElement>(null);
-  // No auto-scroll needed — newest entries render at top via flex-col-reverse
+  const [terminalActivated, setTerminalActivated] = useState(false);
 
   const loadAuditaurDiagnostics = useCallback(async () => {
     setDebugLoading(true);
@@ -303,6 +301,10 @@ export function OutputPanel({ onCollapse }: OutputPanelProps) {
   useEffect(() => {
     if (activeTab === "debug") void loadAuditaurDiagnostics();
   }, [activeTab, loadAuditaurDiagnostics]);
+
+  useEffect(() => {
+    if (activeTab === "terminal") setTerminalActivated(true);
+  }, [activeTab]);
 
   return (
     <div className="flex flex-col h-full bg-[rgb(var(--color-surface-inset))] border-t border-[rgb(var(--color-border))]">
@@ -361,8 +363,8 @@ export function OutputPanel({ onCollapse }: OutputPanelProps) {
       </div>
 
       {/* Content — auto-scrolls to latest */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto p-2 text-xs font-mono">
-        {activeTab === "activity" && (
+      <div className="flex-1 min-h-0 text-xs font-mono">
+        <div className={activeTab === "activity" ? "h-full overflow-y-auto p-2" : "hidden"}>
           <>
             {outputs.length === 0 ? (
               <div className="text-center text-[rgb(var(--color-text-secondary))] py-8">
@@ -374,32 +376,18 @@ export function OutputPanel({ onCollapse }: OutputPanelProps) {
               ))
             )}
           </>
-        )}
-        {activeTab === "debug" && (
+        </div>
+        <div className={activeTab === "debug" ? "h-full overflow-y-auto p-2" : "hidden"}>
           <AuditaurDebugView
             summary={auditaurSummary}
             loading={debugLoading}
             error={debugError}
             legacyDebugEntries={debugEntries}
           />
-        )}
-        {activeTab === "terminal" && (
-          <div className="flex flex-col items-center justify-center h-full gap-3 text-center px-4">
-            <SquareTerminal className="w-6 h-6 text-[rgb(var(--color-text-secondary))]/40" />
-            <div>
-              <p className="text-[rgb(var(--color-text-secondary))] text-xs mb-0.5">
-                {currentProject ? currentProject.root : "No project open"}
-              </p>
-              {currentProject && (
-                <button
-                  onClick={() => invoke("open_in_terminal", { path: currentProject.root })}
-                  className="mt-2 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-[rgb(var(--color-surface-alt))] border border-[rgb(var(--color-border))] text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:border-[rgb(var(--color-text-secondary))]/40 transition-colors mx-auto"
-                >
-                  <SquareTerminal className="w-3 h-3" />
-                  Open in Terminal
-                </button>
-              )}
-            </div>
+        </div>
+        {terminalActivated && (
+          <div className={activeTab === "terminal" ? "h-full min-h-0 overflow-hidden" : "hidden"}>
+            <TerminalPanel active={activeTab === "terminal"} />
           </div>
         )}
       </div>

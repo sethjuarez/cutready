@@ -77,12 +77,18 @@ export function SyncBar({ variant = "full" }: { variant?: "full" | "compact" }) 
 
   // Determine primary action label
   let actionLabel = "Sync";
+  let compactActionLabel = "Sync";
+  let compactButtonLabel = "Sync";
   let actionFn = syncWithRemote;
   if (ahead > 0 && behind === 0) {
     actionLabel = "Push";
+    compactActionLabel = "Share changes";
+    compactButtonLabel = "Send";
     actionFn = pushToRemote;
   } else if (behind > 0 && ahead === 0) {
     actionLabel = "Pull";
+    compactActionLabel = "Get updates";
+    compactButtonLabel = "Get";
     actionFn = pullFromRemote;
   }
   const ActionIcon = isSyncing
@@ -92,7 +98,7 @@ export function SyncBar({ variant = "full" }: { variant?: "full" | "compact" }) 
       : actionLabel === "Pull"
         ? ArrowDown
         : RefreshCw;
-  const actionTitle = isSyncing ? "Sharing workspace changes" : `${actionLabel} workspace changes`;
+  const actionTitle = isSyncing ? "Syncing with collaborators" : `${compactActionLabel} with collaborators`;
 
   // Compute PR URL — only for non-main branches with a GitHub remote
   const prUrl = (() => {
@@ -105,56 +111,29 @@ export function SyncBar({ variant = "full" }: { variant?: "full" | "compact" }) 
 
   if (variant === "compact") {
     return (
-      <div className="relative flex min-w-0 items-center gap-1.5">
-        {syncStatus && (
-          <div className="flex items-center gap-1 text-[10px]">
-            {isUpToDate ? (
-              <span className="flex items-center gap-0.5 text-success" title="Remote is up to date">
-                <Check className="h-2.5 w-2.5" />
-              </span>
-            ) : (
-              <>
-                {ahead > 0 && (
-                  <span className="flex items-center gap-0.5 text-[rgb(var(--color-accent))]" title={`${ahead} snapshot${ahead !== 1 ? "s" : ""} ready to share`}>
-                    <ArrowUp className="h-2.5 w-2.5" />
-                    {ahead}
-                  </span>
-                )}
-                {behind > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => setShowIncoming((value) => !value)}
-                    className="flex items-center gap-0.5 rounded text-warning hover:bg-warning/10"
-                    title={`${behind} incoming collaborator snapshot${behind !== 1 ? "s" : ""}`}
-                  >
-                    <ArrowDown className="h-2.5 w-2.5" />
-                    {behind}
-                  </button>
-                )}
-              </>
-            )}
-          </div>
-        )}
-        <button
-          onClick={() => fetchFromRemote()}
-          disabled={isSyncing}
-          className="grid h-5 w-5 place-items-center rounded-md text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))] disabled:opacity-40"
-          title="Check for collaborator updates"
-          aria-label="Check for collaborator updates"
-        >
-          <RefreshCw className="h-3 w-3" />
-        </button>
+      <div className="relative flex min-w-0 shrink-0 items-center gap-1.5">
         {!isUpToDate && syncStatus && (
           <button
             onClick={() => actionFn()}
             disabled={isSyncing}
-            className="grid h-5 w-5 place-items-center rounded-md text-[rgb(var(--color-accent))] transition-colors hover:bg-[rgb(var(--color-accent))]/10 disabled:opacity-50"
+            className="flex h-6 shrink-0 items-center gap-1 rounded-md border border-[rgb(var(--color-accent))]/20 bg-[rgb(var(--color-accent))]/8 px-2 text-[10px] font-semibold text-[rgb(var(--color-accent))] transition-colors hover:bg-[rgb(var(--color-accent))]/14 disabled:opacity-50"
             title={actionTitle}
             aria-label={actionTitle}
           >
             <ActionIcon className={`h-3 w-3 ${isSyncing ? "animate-spin" : ""}`} />
+            {isSyncing ? "Syncing" : compactButtonLabel}
           </button>
         )}
+        <button
+          onClick={() => fetchFromRemote()}
+          disabled={isSyncing}
+          className="flex h-6 shrink-0 items-center gap-1 rounded-md px-2 text-[10px] font-medium text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))] disabled:opacity-40"
+          title="Check for updates without changing your files"
+          aria-label="Check for updates without changing your files"
+        >
+          <RefreshCw className="h-3 w-3" />
+          Refresh
+        </button>
         {currentRemote?.url && prUrl && (
           <button
             onClick={() => window.open(prUrl, "_blank")}
@@ -164,9 +143,6 @@ export function SyncBar({ variant = "full" }: { variant?: "full" | "compact" }) 
           >
             PR
           </button>
-        )}
-        {showIncoming && behind > 0 && (
-          <IncomingPreview commits={incomingCommits} />
         )}
       </div>
     );
@@ -231,9 +207,9 @@ export function SyncBar({ variant = "full" }: { variant?: "full" | "compact" }) 
           onClick={() => fetchFromRemote()}
           disabled={isSyncing}
           className="px-2 py-0.5 rounded text-[10px] text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-border))]/50 transition-colors disabled:opacity-40"
-          title="Check for collaborator updates"
+          title="Check for updates without changing your files"
         >
-          Fetch
+          Check updates
         </button>
 
         {/* Primary action: Sync / Push / Pull */}
@@ -245,7 +221,7 @@ export function SyncBar({ variant = "full" }: { variant?: "full" | "compact" }) 
             title={actionTitle}
           >
             <ActionIcon className={`w-2.5 h-2.5 ${isSyncing ? "animate-spin" : ""}`} />
-            {!isSyncing && actionLabel}
+            {!isSyncing && compactActionLabel}
           </button>
         )}
 
@@ -308,9 +284,10 @@ export function SyncBar({ variant = "full" }: { variant?: "full" | "compact" }) 
   );
 }
 
-function IncomingPreview({
+export function IncomingPreview({
   commits,
   inline = false,
+  align = "right",
 }: {
   commits: Array<{
     id: string;
@@ -321,6 +298,7 @@ function IncomingPreview({
     projects: string[];
   }>;
   inline?: boolean;
+  align?: "left" | "right";
 }) {
   const body = (
     <div className="max-h-64 overflow-y-auto py-1">
@@ -361,7 +339,11 @@ function IncomingPreview({
   }
 
   return (
-    <div className="absolute right-0 top-full z-dropdown mt-1 w-64 rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] shadow-lg">
+    <div
+      className={`absolute top-full z-[999] mt-1 w-72 max-w-[calc(100vw-2rem)] rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] shadow-lg ${
+        align === "left" ? "left-0" : "right-0"
+      }`}
+    >
       {body}
     </div>
   );

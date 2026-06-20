@@ -73,6 +73,9 @@ const mockSettingsStore: Record<string, unknown> = {
   aiSelectedAgent: "planner",
   aiAgents: [],
   aiAgentModelOverrides: {},
+  displayTerminalFontFamily: '"CaskaydiaCove Nerd Font", "CaskaydiaMono Nerd Font", "Cascadia Code PL", "Cascadia Code", Consolas, monospace',
+  displayTerminalFontSize: 12,
+  displayTerminalColorMode: "console",
 };
 
 /**
@@ -435,6 +438,16 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
       return null; // no-op in dev mock
     case "open_in_terminal":
       console.log("[devMock] open_in_terminal", args);
+      return null;
+    case "terminal_open": {
+      const channel = (args as { onOutput?: { onmessage?: (data: number[]) => void } })?.onOutput;
+      const message = "CutReady web-shim terminal: embedded PTY is available in the Tauri desktop app.\\r\\n";
+      setTimeout(() => channel?.onmessage?.(Array.from(new TextEncoder().encode(message))), 0);
+      return { session_id: "mock-terminal", cwd: MOCK_PROJECT.repo_root, shell: "web-shim" };
+    }
+    case "terminal_write":
+    case "terminal_resize":
+    case "terminal_close":
       return null;
     case "get_workspace_settings":
       return {};

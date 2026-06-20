@@ -142,6 +142,9 @@ export type AppView = "home" | "project" | "sketch" | "assets" | "editor" | "rec
 /** Sidebar position. */
 export type SidebarPosition = "left" | "right";
 
+/** Output panel tabs. */
+export type OutputTab = "activity" | "debug" | "terminal";
+
 /** Activity log entry for the output panel. */
 export interface ActivityEntry {
   id: string;
@@ -214,6 +217,8 @@ interface AppStoreState {
   sidebarVisible: boolean;
   /** Whether the output/activity panel is visible. */
   outputVisible: boolean;
+  /** Active output panel tab. */
+  outputActiveTab: OutputTab;
   /** Height of the output panel in pixels. */
   outputHeight: number;
   /** Width of the secondary chat/history panel in pixels. */
@@ -393,6 +398,8 @@ interface AppStoreState {
   toggleSidebar: () => void;
   /** Toggle output panel visibility. */
   toggleOutput: () => void;
+  /** Show the output panel with a specific active tab. */
+  showOutputTab: (tab: OutputTab) => void;
   /** Set output panel height. */
   setOutputHeight: (height: number) => void;
   /** Set secondary chat/history panel width. */
@@ -765,6 +772,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   sidebarWidth: clampSidebarWidth(savedLayout.sidebarWidth ?? 240),
   sidebarVisible: savedLayout.sidebarVisible ?? true,
   outputVisible: savedLayout.outputVisible ?? false,
+  outputActiveTab: "activity",
   outputHeight: clampOutputHeight(savedLayout.outputHeight ?? 200),
   secondaryWidth: clampSecondaryWidth(savedLayout.secondaryWidth ?? 420),
   sidebarPosition: savedLayout.sidebarPosition ?? "left",
@@ -854,6 +862,10 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     saveLayout({ outputVisible: !s.outputVisible });
     return { outputVisible: !s.outputVisible };
   }),
+  showOutputTab: (tab) => {
+    saveLayout({ outputVisible: true });
+    set({ outputVisible: true, outputActiveTab: tab });
+  },
   setOutputHeight: (height) => {
     const h = clampOutputHeight(height);
     set({ outputHeight: h });
@@ -2502,7 +2514,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         // Pull resulted in merge conflicts — enter merge mode
         set({
           isMerging: true,
-          mergeSource: `${currentRemote.name}/${active.name}`,
+          mergeSource: `refs/remotes/${currentRemote.name}/${active.name}`,
           mergeTarget: active.name,
           mergeConflicts: result.conflicts,
           syncError: null,
