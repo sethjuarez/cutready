@@ -1,6 +1,6 @@
 //! Tauri commands for project operations (folder-based).
 
-use std::path::PathBuf;
+use std::path::{Component, Path, PathBuf};
 
 use chrono::Utc;
 use rusqlite::{types::ValueRef, Connection, OpenFlags};
@@ -588,6 +588,25 @@ fn snapshot_workspace_structure(repo_root: &std::path::Path, message: &str) -> R
     Ok(())
 }
 
+fn safe_project_manifest_path(project_path: &str) -> Result<&Path, String> {
+    if project_path == "." {
+        return Ok(Path::new(project_path));
+    }
+    let path = Path::new(project_path);
+    if path.as_os_str().is_empty() || path.is_absolute() {
+        return Err("Invalid project path".into());
+    }
+    if path.components().any(|component| {
+        matches!(
+            component,
+            Component::ParentDir | Component::RootDir | Component::Prefix(_) | Component::CurDir
+        )
+    }) {
+        return Err("Invalid project path".into());
+    }
+    Ok(path)
+}
+
 /// List all projects in the current repo.
 #[tauri::command]
 pub async fn list_projects(state: State<'_, AppState>) -> Result<Vec<ProjectEntry>, String> {
@@ -689,22 +708,24 @@ pub async fn delete_project(
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let root = repo_root(&state)?;
+    let safe_path = safe_project_manifest_path(&project_path)?;
 
     // Remove from manifest
     if let Some(mut manifest) = project::read_manifest(&root) {
+        if !manifest.projects.iter().any(|p| p.path == project_path) {
+            return Err(format!("Project '{}' not found in repo", project_path));
+        }
         manifest.projects.retain(|p| p.path != project_path);
         project::write_manifest(&root, &manifest).map_err(|e| e.to_string())?;
     }
 
     // Optionally delete the files
     if delete_files && project_path != "." {
-        let dir = root.join(&project_path);
+        let dir = root.join(safe_path);
         if dir.exists() {
             std::fs::remove_dir_all(&dir).map_err(|e| e.to_string())?;
         }
     }
-
-    snapshot_workspace_structure(&root, "Remove project from workspace")?;
 
     // If deleted project was active, clear it
     {
