@@ -1950,11 +1950,17 @@ function MessageRow({
 
   if (message.role === "assistant") {
     const assistantText = textContent(message.content).trim();
-    if (!assistantText && inlineToolActivity.length === 0) return null;
+    const workingNotes = message.cutready?.workingNotes;
+    if (!assistantText && inlineToolActivity.length === 0 && !workingNotes) return null;
 
     return (
       <div className="px-3.5 py-2.5">
         <div className="w-full max-w-[70ch] min-w-0">
+          {workingNotes && (
+            <div className={assistantText || inlineToolActivity.length > 0 ? "mb-2" : ""}>
+              <WorkingNotesInline notes={workingNotes} />
+            </div>
+          )}
           {assistantText && (
             <>
               <div className="mb-1.5 flex items-center gap-2 text-[10px] font-medium uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))]/85">
@@ -1967,9 +1973,6 @@ function MessageRow({
                 <div className="px-5 py-[1.125rem] text-[14px] leading-[1.78] text-[rgb(var(--color-text)_/_0.92)]">
                   <MarkdownContent content={assistantText} projectRoot={projectRoot} />
                 </div>
-                {message.cutready?.workingNotes && (
-                  <WorkingNotesInline notes={message.cutready.workingNotes} />
-                )}
               </div>
             </>
           )}
@@ -1994,7 +1997,7 @@ function WorkingNotesInline({ notes, defaultOpen = false, live = false }: { note
 
   return (
     <div
-      className={`overflow-hidden border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-alt))]/20 ${live ? "rounded-2xl border shadow-sm" : "border-t"}`}
+      className={`overflow-hidden border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-alt))]/20 shadow-sm ${live ? "rounded-2xl" : "rounded-2xl rounded-tl-sm"}`}
     >
       <button
         type="button"
