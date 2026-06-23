@@ -9,6 +9,14 @@
 Covector manages this changelog. Do not edit manually.
 Each release section is generated from `.changes/*.md` files.
 
+## [1.15.0](https://github.com/sethjuarez/cutready/compare/v1.14.0...v1.15.0) (2026-06-23)
+
+
+### Features
+
+* **settings:** add interchangeable AI providers ([7ba1481](https://github.com/sethjuarez/cutready/commit/7ba1481e8bb8c5b058ca2eeeb56a026c2eb12643))
+* **settings:** add interchangeable AI providers ([5f876ce](https://github.com/sethjuarez/cutready/commit/5f876ce4471b58e098e675daccf73e85f71c4af3))
+
 ## [1.14.0](https://github.com/sethjuarez/cutready/compare/v1.13.0...v1.14.0) (2026-06-23)
 
 
