@@ -634,6 +634,11 @@ function StoryboardPreviewContent({ path }: { path: string }) {
                 Section · {item.sketches.length} sketches
               </span>
             )}
+            {item.type === "section" && item.description && (
+              <span className="text-xs text-[rgb(var(--color-text-secondary))] truncate">
+                {item.description}
+              </span>
+            )}
           </div>
         ))}
       </div>

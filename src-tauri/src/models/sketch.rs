@@ -7,7 +7,7 @@
 //! Storyboards are stored as `.sb` files; they reference sketches by relative path.
 
 use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
 /// Lock state for editable planning row cells.
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
@@ -209,9 +209,10 @@ impl SketchSummary {
 /// A storyboard — an ordered sequence of sketches with optional sections.
 ///
 /// Stored as a `.sb` file. The file path is the identity (no internal ID).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Storyboard {
     pub title: String,
+    #[serde(default)]
     pub description: String,
     /// Whether the whole storyboard is protected from edits.
     #[serde(default)]
@@ -235,6 +236,77 @@ impl Storyboard {
             updated_at: now,
         }
     }
+
+    pub fn sketch_paths(&self) -> Vec<String> {
+        self.items
+            .iter()
+            .flat_map(|item| item.sketch_paths())
+            .map(str::to_owned)
+            .collect()
+    }
+
+    pub fn sketch_count(&self) -> usize {
+        self.items.iter().map(StoryboardItem::sketch_count).sum()
+    }
+
+    pub fn references_sketch(&self, sketch_path: &str) -> bool {
+        self.items
+            .iter()
+            .any(|item| item.sketch_paths().iter().any(|path| *path == sketch_path))
+    }
+
+    pub fn remove_sketch_references(&mut self, sketch_path: &str) -> usize {
+        let before = self.sketch_count();
+        self.items.retain(|item| match item {
+            StoryboardItem::SketchRef { path } => path != sketch_path,
+            StoryboardItem::Section { .. } => true,
+        });
+        for item in &mut self.items {
+            if let StoryboardItem::Section { sketches, .. } = item {
+                sketches.retain(|path| path != sketch_path);
+            }
+        }
+        before.saturating_sub(self.sketch_count())
+    }
+}
+
+impl<'de> Deserialize<'de> for Storyboard {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        struct StoryboardShape {
+            title: String,
+            #[serde(default)]
+            description: String,
+            #[serde(default)]
+            locked: bool,
+            items: Option<Vec<StoryboardItem>>,
+            #[serde(default)]
+            sketches: Vec<String>,
+            created_at: DateTime<Utc>,
+            updated_at: DateTime<Utc>,
+        }
+
+        let shape = StoryboardShape::deserialize(deserializer)?;
+        let items = shape.items.unwrap_or_else(|| {
+            shape
+                .sketches
+                .into_iter()
+                .map(|path| StoryboardItem::SketchRef { path })
+                .collect()
+        });
+
+        Ok(Self {
+            title: shape.title,
+            description: shape.description,
+            locked: shape.locked,
+            items,
+            created_at: shape.created_at,
+            updated_at: shape.updated_at,
+        })
+    }
 }
 
 /// An item in a storyboard's sequence.
@@ -246,8 +318,28 @@ pub enum StoryboardItem {
     /// A named section grouping multiple sketch paths.
     Section {
         title: String,
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        description: String,
         sketches: Vec<String>,
     },
+}
+
+impl StoryboardItem {
+    pub fn sketch_paths(&self) -> Vec<&str> {
+        match self {
+            StoryboardItem::SketchRef { path } => vec![path.as_str()],
+            StoryboardItem::Section { sketches, .. } => {
+                sketches.iter().map(String::as_str).collect()
+            }
+        }
+    }
+
+    pub fn sketch_count(&self) -> usize {
+        match self {
+            StoryboardItem::SketchRef { .. } => 1,
+            StoryboardItem::Section { sketches, .. } => sketches.len(),
+        }
+    }
 }
 
 /// Lightweight summary for listing storyboards.
@@ -265,19 +357,11 @@ pub struct StoryboardSummary {
 impl StoryboardSummary {
     /// Create a summary from a storyboard and its relative path.
     pub fn from_storyboard(sb: &Storyboard, path: impl Into<String>) -> Self {
-        let sketch_count = sb
-            .items
-            .iter()
-            .map(|item| match item {
-                StoryboardItem::SketchRef { .. } => 1,
-                StoryboardItem::Section { sketches, .. } => sketches.len(),
-            })
-            .sum();
         Self {
             path: path.into(),
             title: sb.title.clone(),
             locked: sb.locked,
-            sketch_count,
+            sketch_count: sb.sketch_count(),
             created_at: sb.created_at,
             updated_at: sb.updated_at,
         }
@@ -530,6 +614,7 @@ mod tests {
                 },
                 StoryboardItem::Section {
                     title: "Getting Started".into(),
+                    description: "Connect the first flow.".into(),
                     sketches: vec!["setup.sk".into(), "first-run.sk".into()],
                 },
             ],
@@ -547,8 +632,13 @@ mod tests {
             _ => panic!("Expected SketchRef"),
         }
         match &parsed.items[1] {
-            StoryboardItem::Section { title, sketches } => {
+            StoryboardItem::Section {
+                title,
+                description,
+                sketches,
+            } => {
                 assert_eq!(title, "Getting Started");
+                assert_eq!(description, "Connect the first flow.");
                 assert_eq!(sketches.len(), 2);
                 assert_eq!(sketches[0], "setup.sk");
             }
@@ -567,6 +657,7 @@ mod tests {
 
         let item = StoryboardItem::Section {
             title: "Intro".into(),
+            description: String::new(),
             sketches: vec![],
         };
         let json = serde_json::to_string(&item).unwrap();
@@ -581,6 +672,7 @@ mod tests {
         });
         sb.items.push(StoryboardItem::Section {
             title: "Core".into(),
+            description: String::new(),
             sketches: vec!["b.sk".into(), "c.sk".into()],
         });
 
@@ -599,6 +691,83 @@ mod tests {
         let parsed: StoryboardSummary = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed.path, "roundtrip.sb");
         assert_eq!(parsed.sketch_count, 0);
+    }
+
+    #[test]
+    fn storyboard_legacy_sketches_field_converts_to_items() {
+        let json = r#"{
+            "title": "Legacy Board",
+            "description": "Old shape",
+            "sketches": ["intro.sk", "demo.sk"],
+            "created_at": "2025-01-01T00:00:00Z",
+            "updated_at": "2025-01-01T00:00:00Z"
+        }"#;
+
+        let storyboard: Storyboard = serde_json::from_str(json).unwrap();
+
+        assert_eq!(storyboard.title, "Legacy Board");
+        assert_eq!(storyboard.sketch_paths(), vec!["intro.sk", "demo.sk"]);
+        assert_eq!(storyboard.sketch_count(), 2);
+        assert!(storyboard.references_sketch("demo.sk"));
+    }
+
+    #[test]
+    fn storyboard_section_description_defaults_for_existing_sections() {
+        let json = r#"{
+            "type": "section",
+            "title": "Observe",
+            "sketches": ["performance.sk"]
+        }"#;
+
+        let item: StoryboardItem = serde_json::from_str(json).unwrap();
+
+        match item {
+            StoryboardItem::Section {
+                title,
+                description,
+                sketches,
+            } => {
+                assert_eq!(title, "Observe");
+                assert!(description.is_empty());
+                assert_eq!(sketches, vec!["performance.sk"]);
+            }
+            _ => panic!("Expected Section"),
+        }
+    }
+
+    #[test]
+    fn storyboard_removes_sketch_references_from_items_and_sections() {
+        let now = Utc::now();
+        let mut storyboard = Storyboard {
+            title: "Demo".into(),
+            description: String::new(),
+            locked: false,
+            items: vec![
+                StoryboardItem::SketchRef {
+                    path: "intro.sk".into(),
+                },
+                StoryboardItem::SketchRef {
+                    path: "delete-me.sk".into(),
+                },
+                StoryboardItem::Section {
+                    title: "Build".into(),
+                    description: String::new(),
+                    sketches: vec![
+                        "delete-me.sk".into(),
+                        "keep-me.sk".into(),
+                        "delete-me.sk".into(),
+                    ],
+                },
+            ],
+            created_at: now,
+            updated_at: now,
+        };
+
+        let removed = storyboard.remove_sketch_references("delete-me.sk");
+
+        assert_eq!(removed, 3);
+        assert_eq!(storyboard.sketch_paths(), vec!["intro.sk", "keep-me.sk"]);
+        assert!(!storyboard.references_sketch("delete-me.sk"));
     }
 
     #[test]

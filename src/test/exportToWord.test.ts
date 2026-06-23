@@ -196,7 +196,12 @@ describe("exportStoryboardToWord", () => {
       description: "End-to-end walkthrough",
       items: [
         { type: "sketch_ref", path: "sketches/intro.sk" },
-        { type: "section", title: "Main Content", sketches: ["sketches/demo.sk"] },
+        {
+          type: "section",
+          title: "Main Content",
+          description: "Show the core workflow.",
+          sketches: ["sketches/demo.sk"],
+        },
       ],
       created_at: "2025-01-01T00:00:00Z",
       updated_at: "2025-01-01T00:00:00Z",
@@ -218,6 +223,7 @@ describe("exportStoryboardToWord", () => {
     );
     expect(mockWriteFile).toHaveBeenCalledTimes(1);
     expect(mockWriteFile.mock.calls[0][0]).toBe("/tmp/test.docx");
+    expect(writtenDocumentXml()).toContain("Show the core workflow.");
   }, 15_000);
 
   it("handles storyboard with no items", async () => {

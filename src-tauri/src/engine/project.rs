@@ -577,14 +577,54 @@ fn read_sketch_inner(path: &Path, project_root: Option<&Path>) -> Result<Sketch,
     Ok(sketch)
 }
 
-/// Delete an unlocked sketch file and auto-commit.
-pub fn delete_sketch(path: &Path, _project_root: &Path) -> Result<(), ProjectError> {
+/// Delete an unlocked sketch file and remove storyboard references to it.
+pub fn delete_sketch(path: &Path, project_root: &Path) -> Result<(), ProjectError> {
     if path.exists() {
         let sketch = read_sketch(path)?;
         ensure_sketch_has_no_locked_content(&sketch)?;
+        let sketch_rel_path = relative_project_path(path, project_root)?;
+        let storyboard_updates = storyboards_with_sketch_removed(project_root, &sketch_rel_path)?;
+
         std::fs::remove_file(path).map_err(|e| ProjectError::Io(e.to_string()))?;
+        for (storyboard_path, storyboard) in storyboard_updates {
+            write_storyboard(&storyboard, &storyboard_path, project_root)?;
+        }
     }
     Ok(())
+}
+
+fn storyboards_with_sketch_removed(
+    project_root: &Path,
+    sketch_rel_path: &str,
+) -> Result<Vec<(PathBuf, Storyboard)>, ProjectError> {
+    let mut updates = Vec::new();
+    let mut locked_error = None;
+    scan_files_recursive(
+        project_root,
+        project_root,
+        "sb",
+        &mut |_rel_path, abs_path| {
+            if let Ok(data) = std::fs::read_to_string(abs_path) {
+                if let Ok(mut storyboard) = serde_json::from_str::<Storyboard>(&data) {
+                    if storyboard.remove_sketch_references(sketch_rel_path) > 0 {
+                        if storyboard.locked {
+                            locked_error = Some(ProjectError::Locked(format!(
+                                "Storyboard \"{}\" references this sketch. Unlock it before deleting the sketch.",
+                                storyboard.title
+                            )));
+                        } else {
+                            storyboard.updated_at = chrono::Utc::now();
+                            updates.push((abs_path.to_path_buf(), storyboard));
+                        }
+                    }
+                }
+            }
+        },
+    )?;
+    if let Some(err) = locked_error {
+        return Err(err);
+    }
+    Ok(updates)
 }
 
 fn relative_project_path(path: &Path, project_root: &Path) -> Result<String, ProjectError> {
@@ -748,15 +788,7 @@ pub fn storyboards_referencing_sketch(
         &mut |_rel_path, abs_path| {
             if let Ok(data) = std::fs::read_to_string(abs_path) {
                 if let Ok(sb) = serde_json::from_str::<Storyboard>(&data) {
-                    let refs_sketch = sb.items.iter().any(|item| match item {
-                        crate::models::sketch::StoryboardItem::SketchRef { path } => {
-                            path == sketch_rel_path
-                        }
-                        crate::models::sketch::StoryboardItem::Section { sketches, .. } => {
-                            sketches.iter().any(|s| s == sketch_rel_path)
-                        }
-                    });
-                    if refs_sketch {
+                    if sb.references_sketch(sketch_rel_path) {
                         titles.push(sb.title.clone());
                     }
                 }
@@ -1851,6 +1883,75 @@ mod tests {
 
         delete_sketch(&path, root).unwrap();
         assert!(!path.exists());
+    }
+
+    #[test]
+    fn delete_sketch_removes_storyboard_references() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        let sketch = Sketch::new("Delete Me");
+        let sketch_path = root.join("delete-me.sk");
+        write_sketch(&sketch, &sketch_path, root).unwrap();
+
+        let now = chrono::Utc::now();
+        let storyboard_path = root.join("demo.sb");
+        let storyboard = Storyboard {
+            title: "Demo".into(),
+            description: String::new(),
+            locked: false,
+            items: vec![
+                crate::models::sketch::StoryboardItem::SketchRef {
+                    path: "intro.sk".into(),
+                },
+                crate::models::sketch::StoryboardItem::SketchRef {
+                    path: "delete-me.sk".into(),
+                },
+                crate::models::sketch::StoryboardItem::Section {
+                    title: "Build".into(),
+                    description: String::new(),
+                    sketches: vec!["delete-me.sk".into(), "keep-me.sk".into()],
+                },
+            ],
+            created_at: now,
+            updated_at: now,
+        };
+        write_storyboard(&storyboard, &storyboard_path, root).unwrap();
+
+        delete_sketch(&sketch_path, root).unwrap();
+
+        let updated_storyboard = read_storyboard(&storyboard_path).unwrap();
+        assert!(!sketch_path.exists());
+        assert_eq!(
+            updated_storyboard.sketch_paths(),
+            vec!["intro.sk", "keep-me.sk"]
+        );
+    }
+
+    #[test]
+    fn delete_sketch_rejects_locked_referencing_storyboard() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        let sketch = Sketch::new("Delete Me");
+        let sketch_path = root.join("delete-me.sk");
+        write_sketch(&sketch, &sketch_path, root).unwrap();
+
+        let mut storyboard = Storyboard::new("Locked Board");
+        storyboard.locked = true;
+        storyboard
+            .items
+            .push(crate::models::sketch::StoryboardItem::SketchRef {
+                path: "delete-me.sk".into(),
+            });
+        let storyboard_path = root.join("locked.sb");
+        write_storyboard(&storyboard, &storyboard_path, root).unwrap();
+
+        let err = delete_sketch(&sketch_path, root).unwrap_err();
+
+        assert!(matches!(err, ProjectError::Locked(_)));
+        assert!(sketch_path.exists());
+        assert!(read_storyboard(&storyboard_path)
+            .unwrap()
+            .references_sketch("delete-me.sk"));
     }
 
     #[test]

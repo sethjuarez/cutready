@@ -63,7 +63,7 @@ export interface Storyboard {
 /** An item in a storyboard's sequence. */
 export type StoryboardItem =
   | { type: "sketch_ref"; path: string }
-  | { type: "section"; title: string; sketches: string[] };
+  | { type: "section"; title: string; description?: string; sketches: string[] };
 
 /** Lightweight summary for listing storyboards. */
 export interface StoryboardSummary {

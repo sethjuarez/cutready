@@ -29,6 +29,7 @@ import { openPath } from "@tauri-apps/plugin-opener";
 import { invoke } from "../services/tauri";
 import type { Sketch, Storyboard } from "../types/sketch";
 import { getElucimDocumentSize } from "./elucimDocument";
+import { getUniqueStoryboardSketchPaths } from "./storyboard";
 
 // ── Markdown → docx primitives ──────────────────────────────────
 
@@ -148,17 +149,23 @@ const cellMargins = {
   right: convertInchesToTwip(0.08),
 };
 
-function headerCell(text: string): TableCell {
+const TABLE_WIDTH_DXA = convertInchesToTwip(8.6);
+const PLANNING_COLUMNS_NO_MEDIA = [convertInchesToTwip(0.8), convertInchesToTwip(3.9), convertInchesToTwip(3.9)];
+const PLANNING_COLUMNS_WITH_MEDIA = [convertInchesToTwip(0.75), convertInchesToTwip(3.0), convertInchesToTwip(3.0), convertInchesToTwip(1.85)];
+
+function headerCell(text: string, width?: number): TableCell {
   return new TableCell({
     children: [new Paragraph({ children: [new TextRun({ text, bold: true })] })],
     margins: cellMargins,
+    width: width ? { size: width, type: WidthType.DXA } : undefined,
   });
 }
 
-function bodyCell(text: string): TableCell {
+function bodyCell(text: string, width?: number): TableCell {
   return new TableCell({
     children: markdownToParagraphs(text),
     margins: cellMargins,
+    width: width ? { size: width, type: WidthType.DXA } : undefined,
   });
 }
 
@@ -273,30 +280,40 @@ async function captureVisualLastFrame(visualPath: string): Promise<ImageRun | nu
   }
 }
 
-function screenshotCell(image: ImageRun | null): TableCell {
+function screenshotCell(image: ImageRun | null, width?: number): TableCell {
   return new TableCell({
     children: [new Paragraph(image ? { children: [image] } : { text: "—" })],
     margins: cellMargins,
+    width: width ? { size: width, type: WidthType.DXA } : undefined,
   });
 }
 
 async function buildPlanningTable(rows: Sketch["rows"], projectRoot: string): Promise<Table> {
   const hasMedia = rows.some((r) => r.screenshot || r.visual);
+  const columnWidths = hasMedia ? PLANNING_COLUMNS_WITH_MEDIA : PLANNING_COLUMNS_NO_MEDIA;
 
-  const headerCells = [headerCell("Time"), headerCell("Narrative"), headerCell("Demo Actions")];
-  if (hasMedia) headerCells.push(headerCell("Visual / Screenshot"));
+  const headerCells = [
+    headerCell("Time", columnWidths[0]),
+    headerCell("Narrative", columnWidths[1]),
+    headerCell("Demo Actions", columnWidths[2]),
+  ];
+  if (hasMedia) headerCells.push(headerCell("Visual / Screenshot", columnWidths[3]));
 
   const header = new TableRow({ children: headerCells, tableHeader: true });
 
   const dataRows = await Promise.all(rows.map(async (row) => {
-    const cells = [bodyCell(row.time), bodyCell(row.narrative), bodyCell(row.demo_actions)];
+    const cells = [
+      bodyCell(row.time, columnWidths[0]),
+      bodyCell(row.narrative, columnWidths[1]),
+      bodyCell(row.demo_actions, columnWidths[2]),
+    ];
     if (hasMedia) {
       if (row.visual) {
         const img = await captureVisualLastFrame(row.visual);
-        cells.push(screenshotCell(img));
+        cells.push(screenshotCell(img, columnWidths[3]));
       } else {
         const img = row.screenshot ? await readScreenshot(projectRoot, row.screenshot, THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT) : null;
-        cells.push(screenshotCell(img));
+        cells.push(screenshotCell(img, columnWidths[3]));
       }
     }
     return new TableRow({ children: cells });
@@ -304,7 +321,8 @@ async function buildPlanningTable(rows: Sketch["rows"], projectRoot: string): Pr
 
   return new Table({
     rows: [header, ...dataRows],
-    width: { size: 100, type: WidthType.PERCENTAGE },
+    width: { size: TABLE_WIDTH_DXA, type: WidthType.DXA },
+    columnWidths,
     borders: tableBorder,
   });
 }
@@ -648,13 +666,7 @@ export async function exportStoryboardToWord(
   resolveSketches: (paths: string[]) => Promise<Map<string, Sketch>>,
   orientation: WordOrientation = "landscape",
 ): Promise<void> {
-  const paths: string[] = [];
-  for (const item of storyboard.items) {
-    if (item.type === "sketch_ref") paths.push(item.path);
-    else if (item.type === "section") paths.push(...item.sketches);
-  }
-
-  const sketchMap = await resolveSketches([...new Set(paths)]);
+  const sketchMap = await resolveSketches(getUniqueStoryboardSketchPaths(storyboard));
   const children: (Paragraph | Table)[] = [];
 
   // Title + subtitle
@@ -680,6 +692,9 @@ export async function exportStoryboardToWord(
   for (const item of storyboard.items) {
     if (item.type === "section") {
       children.push(new Paragraph({ text: item.title, heading: HeadingLevel.HEADING_1 }));
+      if (item.description?.trim()) {
+        children.push(...markdownToParagraphs(item.description));
+      }
       for (const spath of item.sketches) {
         const sk = sketchMap.get(spath);
         if (sk) children.push(...await buildSketchContent(sk, projectRoot, HeadingLevel.HEADING_2));

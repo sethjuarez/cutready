@@ -12,7 +12,7 @@ use serde_json::{json, Value};
 
 use crate::engine::agent::llm::{ContentPart, ImageUrl, Tool, ToolCall};
 use crate::engine::project;
-use crate::models::sketch::{PlanningRow, Sketch, StoryboardItem};
+use crate::models::sketch::{PlanningRow, Sketch};
 
 // ---------------------------------------------------------------------------
 // Image extraction and encoding for vision-capable models
@@ -448,6 +448,7 @@ pub fn all_tools(web_search_enabled: bool, project_workspace_tools_enabled: bool
                                     "properties": {
                                         "type": { "type": "string", "enum": ["section"] },
                                         "title": { "type": "string", "description": "Section heading" },
+                                        "description": { "type": "string", "description": "Optional section setup or chapter framing" },
                                         "sketches": {
                                             "type": "array",
                                             "items": { "type": "string" },
@@ -1498,14 +1499,7 @@ fn ensure_can_write_target(target_abs: &Path, overwrite: bool) -> Result<(), Str
 }
 
 fn storyboard_sketch_paths(storyboard: &crate::models::sketch::Storyboard) -> Vec<String> {
-    let mut paths = Vec::new();
-    for item in &storyboard.items {
-        match item {
-            StoryboardItem::SketchRef { path } => paths.push(path.clone()),
-            StoryboardItem::Section { sketches, .. } => paths.extend(sketches.iter().cloned()),
-        }
-    }
-    paths
+    storyboard.sketch_paths()
 }
 
 fn sketch_asset_paths(sketch: &Sketch) -> Vec<String> {
@@ -1749,13 +1743,20 @@ pub(crate) fn format_storyboard_for_agent(
             crate::models::sketch::StoryboardItem::SketchRef { path } => {
                 append_storyboard_sketch_summary(&mut out, root, i + 1, path);
             }
-            crate::models::sketch::StoryboardItem::Section { title, sketches } => {
+            crate::models::sketch::StoryboardItem::Section {
+                title,
+                description,
+                sketches,
+            } => {
                 out.push_str(&format!(
                     "{}. Section: \"{}\" ({} sketches)\n",
                     i + 1,
                     title,
                     sketches.len()
                 ));
+                if !description.trim().is_empty() {
+                    out.push_str(&format!("   Description: {}\n", description.trim()));
+                }
                 for (j, sketch_path) in sketches.iter().enumerate() {
                     append_storyboard_sketch_summary(&mut out, root, j + 1, sketch_path);
                 }
@@ -4343,17 +4344,17 @@ fn exec_write_storyboard(root: &Path, args: &Value) -> String {
                         Some(t) if !t.trim().is_empty() => t.to_string(),
                         _ => return format!("Error: items[{i}] section is missing 'title'"),
                     };
+                    let description = item
+                        .get("description")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or_default()
+                        .to_string();
                     let sketches: Vec<String> =
                         match item.get("sketches").and_then(|v| v.as_array()) {
-                            Some(arr) if !arr.is_empty() => arr
+                            Some(arr) => arr
                                 .iter()
                                 .filter_map(|v| v.as_str().map(|s| s.to_string()))
                                 .collect(),
-                            Some(_) => {
-                                return format!(
-                                "Error: items[{i}] section '{title}' must have at least one sketch"
-                            )
-                            }
                             None => {
                                 return format!(
                                 "Error: items[{i}] section '{title}' is missing 'sketches' array"
@@ -4365,8 +4366,11 @@ fn exec_write_storyboard(root: &Path, args: &Value) -> String {
                             return format!("Error: items[{i}] section sketch path must end with .sk (got '{sp}')");
                         }
                     }
-                    new_items
-                        .push(crate::models::sketch::StoryboardItem::Section { title, sketches });
+                    new_items.push(crate::models::sketch::StoryboardItem::Section {
+                        title,
+                        description,
+                        sketches,
+                    });
                 }
                 other => {
                     return format!(
@@ -5207,7 +5211,7 @@ mod tests {
         project::write_sketch(&sketch, &source_root.join("intro.sk"), &source_root).unwrap();
 
         let mut storyboard = crate::models::sketch::Storyboard::new("Demo");
-        storyboard.items = vec![StoryboardItem::SketchRef {
+        storyboard.items = vec![crate::models::sketch::StoryboardItem::SketchRef {
             path: "intro.sk".into(),
         }];
         project::write_storyboard(&storyboard, &source_root.join("demo.sb"), &source_root).unwrap();

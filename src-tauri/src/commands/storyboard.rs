@@ -3,7 +3,6 @@
 //! Storyboards are `.sb` files, identified by relative path from project root.
 
 use chrono::Utc;
-use std::collections::BTreeSet;
 use std::path::Path;
 use tauri::State;
 
@@ -18,23 +17,12 @@ fn project_root(state: &AppState) -> Result<std::path::PathBuf, String> {
     Ok(view.root.clone())
 }
 
-fn storyboard_sketch_paths(storyboard: &Storyboard) -> BTreeSet<String> {
-    storyboard
-        .items
-        .iter()
-        .flat_map(|item| match item {
-            StoryboardItem::SketchRef { path } => vec![path.clone()],
-            StoryboardItem::Section { sketches, .. } => sketches.clone(),
-        })
-        .collect()
-}
-
 fn set_referenced_sketches_lock(
     root: &Path,
     storyboard: &Storyboard,
     locked: bool,
 ) -> Result<(), String> {
-    for sketch_path in storyboard_sketch_paths(storyboard) {
+    for sketch_path in storyboard.sketch_paths() {
         let abs_path = match project::safe_resolve(root, &sketch_path) {
             Ok(path) => path,
             Err(err) => {
@@ -222,6 +210,7 @@ pub async fn remove_sketch_from_storyboard(
 pub async fn add_section_to_storyboard(
     storyboard_path: String,
     title: String,
+    description: Option<String>,
     position: Option<usize>,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
@@ -233,6 +222,7 @@ pub async fn add_section_to_storyboard(
 
     let item = StoryboardItem::Section {
         title,
+        description: description.unwrap_or_default(),
         sketches: Vec::new(),
     };
 
@@ -284,6 +274,7 @@ mod tests {
             locked: false,
             items: vec![StoryboardItem::Section {
                 title: "Section".into(),
+                description: String::new(),
                 sketches: vec!["intro.sk".into()],
             }],
             created_at: Utc::now(),

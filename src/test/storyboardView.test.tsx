@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { StoryboardView } from "../components/StoryboardView";
 import { useAppStore } from "../stores/appStore";
-import type { Storyboard } from "../types/sketch";
+import type { Storyboard, StoryboardItem } from "../types/sketch";
 
 const mockInvoke = vi.fn();
 
@@ -18,12 +18,12 @@ vi.mock("../utils/exportToWord", () => ({
   exportStoryboardToWord: vi.fn(),
 }));
 
-function activeStoryboard(description = "Original description", locked = false): Storyboard {
+function activeStoryboard(description = "Original description", locked = false, items: StoryboardItem[] = []): Storyboard {
   return {
     title: "Demo Storyboard",
     description,
     locked,
-    items: [],
+    items,
     created_at: "2026-01-01T00:00:00Z",
     updated_at: "2026-01-01T00:00:00Z",
   };
@@ -134,6 +134,44 @@ describe("StoryboardView", () => {
     expect(mockInvoke).toHaveBeenCalledWith("set_storyboard_lock", {
       relativePath: "demo.sb",
       locked: false,
+    });
+  });
+
+  it("saves section title and description together", async () => {
+    const section: StoryboardItem = {
+      type: "section",
+      title: "Build",
+      description: "Original section framing",
+      sketches: [],
+    };
+    useAppStore.setState({
+      activeStoryboard: activeStoryboard("Original description", false, [section]),
+    });
+
+    render(<StoryboardView />);
+
+    const description = screen.getByDisplayValue("Original section framing");
+    const title = screen.getByDisplayValue("Build");
+    fireEvent.focus(description);
+    fireEvent.change(description, {
+      target: { value: "Updated section framing" },
+    });
+    fireEvent.focus(title);
+    fireEvent.change(title, {
+      target: { value: "Build chapter" },
+    });
+    await act(async () => {
+      fireEvent.blur(title);
+      await Promise.resolve();
+    });
+
+    expect(mockInvoke).toHaveBeenCalledWith("reorder_storyboard_items", {
+      storyboardPath: "demo.sb",
+      items: [expect.objectContaining({
+        type: "section",
+        title: "Build chapter",
+        description: "Updated section framing",
+      })],
     });
   });
 });

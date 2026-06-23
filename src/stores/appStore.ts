@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { invoke, Channel } from "../services/tauri";
 import { recordActivityEntries } from "../services/telemetry";
 import { useToastStore } from "./toastStore";
+import { getStoryboardSketchPaths } from "../utils/storyboard";
 import type { ProjectView, ProjectEntry, RecentProject } from "../types/project";
 import type {
   BrowserProfile,
@@ -125,15 +126,6 @@ function scopedPathVariants(filePath: string, currentProject: ProjectView | null
     return { repoPath: normalized, projectPath: normalized.slice(scopePrefix.length) };
   }
   return { repoPath: `${scopePrefix}${normalized}`, projectPath: normalized };
-}
-
-function collectStoryboardSketchPaths(storyboard: Storyboard): string[] {
-  const paths: string[] = [];
-  for (const item of storyboard.items) {
-    if (item.type === "sketch_ref") paths.push(item.path);
-    else paths.push(...item.sketches);
-  }
-  return paths;
 }
 
 /** The panels / views available in the app. */
@@ -1497,7 +1489,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   deleteSketch: async (sketchPath) => {
     try {
       await invoke("delete_sketch", { relativePath: sketchPath });
-      const { activeSketchPath, openTabs } = get();
+      const { activeSketchPath, activeStoryboardPath, openTabs } = get();
       if (activeSketchPath === sketchPath) {
         set({ activeSketchPath: null, activeSketch: null });
       }
@@ -1506,6 +1498,13 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       if (tab) get().closeTab(tab.id);
       get()._removeSplitTabByPath("sketch", sketchPath);
       await get().loadSketches();
+      await get().loadStoryboards();
+      if (activeStoryboardPath) {
+        const storyboard = await invoke<Storyboard>("get_storyboard", { relativePath: activeStoryboardPath });
+        set({ activeStoryboard: storyboard });
+      }
+      set({ isDirty: true });
+      await get().refreshChangedFiles();
     } catch (err) {
       console.error("Failed to delete sketch:", err);
     }
@@ -1582,7 +1581,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       set({ activeStoryboard: storyboard });
       await get().loadStoryboards();
       await get().loadSketches();
-      const sketchPaths = collectStoryboardSketchPaths(storyboard);
+      const sketchPaths = getStoryboardSketchPaths(storyboard);
       const { activeSketchPath } = get();
       if (activeSketchPath && sketchPaths.includes(activeSketchPath)) {
         await get().openSketch(activeSketchPath);
@@ -1655,10 +1654,12 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await invoke("add_section_to_storyboard", {
         storyboardPath: activeStoryboardPath,
         title,
+        description: null,
         position: position ?? null,
       });
       const storyboard = await invoke<Storyboard>("get_storyboard", { relativePath: activeStoryboardPath });
       set({ activeStoryboard: storyboard });
+      await get().loadStoryboards();
       set({ isDirty: true });
       await get().refreshChangedFiles();
     } catch (err) {

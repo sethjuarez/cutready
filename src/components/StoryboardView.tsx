@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import {
   DndContext,
   closestCenter,
@@ -34,9 +34,16 @@ import { ScriptTable } from "./ScriptTable";
 import { useConfirmDialog } from "./ConfirmDialog";
 import { exportStoryboardToWord, type WordOrientation } from "../utils/exportToWord";
 import { DocumentToolbar, documentToolbarIcons, type DocumentToolbarAction } from "./DocumentToolbar";
-import type { Sketch, SketchSummary, Storyboard } from "../types/sketch";
+import type { Sketch, SketchSummary, StoryboardItem } from "../types/sketch";
 import type { RecordingTake } from "../types/recording";
 import type { PreviewSlide, PresentationMode } from "./presentation/types";
+import {
+  appendSketchToSection,
+  getStoryboardItemRenderKey,
+  getStoryboardSketchPaths,
+  removeSketchFromSection,
+  updateStoryboardSection,
+} from "../utils/storyboard";
 
 interface MonitorInfo {
   id: number;
@@ -50,16 +57,16 @@ interface MonitorInfo {
 
 const PREVIEW_DATA_KEY = "cutready:preview-data";
 
-function collectStoryboardSketchPaths(storyboard: Storyboard): string[] {
-  const paths: string[] = [];
-  for (const item of storyboard.items) {
-    if (item.type === "sketch_ref") {
-      paths.push(item.path);
-    } else {
-      paths.push(...item.sketches);
-    }
-  }
-  return paths;
+type PickerTarget =
+  | { type: "top"; position?: number }
+  | { type: "section"; sectionIndex: number };
+
+function getTopLevelCollapseKey(index: number): string {
+  return `storyboard-item:${index}`;
+}
+
+function getNestedSketchCollapseKey(sectionIndex: number, sketchIndex: number): string {
+  return `storyboard-item:${sectionIndex}:sketch:${sketchIndex}`;
 }
 
 /**
@@ -75,6 +82,7 @@ export function StoryboardView() {
   const createSketch = useAppStore((s) => s.createSketch);
   const addSketchToStoryboard = useAppStore((s) => s.addSketchToStoryboard);
   const removeFromStoryboard = useAppStore((s) => s.removeFromStoryboard);
+  const addSectionToStoryboard = useAppStore((s) => s.addSectionToStoryboard);
   const reorderStoryboardItems = useAppStore((s) => s.reorderStoryboardItems);
   const updateStoryboard = useAppStore((s) => s.updateStoryboard);
   const setStoryboardLocked = useAppStore((s) => s.setStoryboardLocked);
@@ -82,14 +90,14 @@ export function StoryboardView() {
   const loadSketches = useAppStore((s) => s.loadSketches);
   const sendChatPrompt = useAppStore((s) => s.sendChatPrompt);
 
-  const [showPicker, setShowPicker] = useState<number | null>(null);
+  const [pickerTarget, setPickerTarget] = useState<PickerTarget | null>(null);
   const [pickerSearch, setPickerSearch] = useState("");
   const { confirm, confirmationDialog } = useConfirmDialog();
 
   // Cache of full sketch data keyed by path
   const [sketchCache, setSketchCache] = useState<Map<string, Sketch>>(new Map());
   const loadingRef = useRef<Set<string>>(new Set());
-  const [collapsedItems, setCollapsedItems] = useState<Set<number>>(new Set());
+  const [collapsedItems, setCollapsedItems] = useState<Set<string>>(new Set());
   const [showMonitorPicker, setShowMonitorPicker] = useState(false);
   const [editingDesc, setEditingDesc] = useState(false);
   const [localDesc, setLocalDesc] = useState(activeStoryboard?.description ?? "");
@@ -157,7 +165,7 @@ export function StoryboardView() {
   // Eagerly load all referenced sketches
   useEffect(() => {
     if (!activeStoryboard) return;
-    for (const path of collectStoryboardSketchPaths(activeStoryboard)) {
+    for (const path of getStoryboardSketchPaths(activeStoryboard)) {
       if (sketchCache.has(path) || loadingRef.current.has(path)) continue;
       loadingRef.current.add(path);
       invoke<Sketch>("get_sketch", { relativePath: path })
@@ -205,7 +213,7 @@ export function StoryboardView() {
         slides.push({
           type: "title",
           heading: item.title,
-          subtitle: "",
+          subtitle: item.description ?? "",
           context: sbTitle,
         });
         for (const path of item.sketches) {
@@ -219,7 +227,7 @@ export function StoryboardView() {
   const resolvePreviewSketches = useCallback(async () => {
     if (!activeStoryboard) return sketchCache;
     const nextCache = new Map(sketchCache);
-    const missingPaths = collectStoryboardSketchPaths(activeStoryboard).filter((path) => !nextCache.has(path));
+    const missingPaths = getStoryboardSketchPaths(activeStoryboard).filter((path) => !nextCache.has(path));
     if (missingPaths.length === 0) return nextCache;
 
     const loaded = await Promise.all(missingPaths.map(async (path) => {
@@ -304,28 +312,36 @@ export function StoryboardView() {
   }, [activeStoryboard, reorderStoryboardItems, storyboardLocked]);
 
   const handleAddNewSketch = useCallback(
-    async (position?: number) => {
+    async (target?: PickerTarget) => {
       const title = `Sketch ${sketches.length + 1}`;
       if (storyboardLocked) return;
       await createSketch(title);
       // The created sketch is now active; get its path from the store
       const { activeSketchPath } = useAppStore.getState();
       if (activeSketchPath) {
-        await addSketchToStoryboard(activeSketchPath, position);
+        if (target?.type === "section" && activeStoryboard) {
+          await reorderStoryboardItems(appendSketchToSection(activeStoryboard.items, target.sectionIndex, activeSketchPath));
+        } else {
+          await addSketchToStoryboard(activeSketchPath, target?.type === "top" ? target.position : undefined);
+        }
         await loadSketches();
       }
     },
-    [sketches.length, createSketch, addSketchToStoryboard, loadSketches, storyboardLocked],
+    [activeStoryboard, sketches.length, createSketch, addSketchToStoryboard, loadSketches, reorderStoryboardItems, storyboardLocked],
   );
 
   const handlePickExisting = useCallback(
-    async (sketchPath: string, position?: number) => {
+    async (sketchPath: string, target?: PickerTarget) => {
       if (storyboardLocked) return;
-      await addSketchToStoryboard(sketchPath, position);
-      setShowPicker(null);
+      if (target?.type === "section" && activeStoryboard) {
+        await reorderStoryboardItems(appendSketchToSection(activeStoryboard.items, target.sectionIndex, sketchPath));
+      } else {
+        await addSketchToStoryboard(sketchPath, target?.type === "top" ? target.position : undefined);
+      }
+      setPickerTarget(null);
       setPickerSearch("");
     },
-    [addSketchToStoryboard, storyboardLocked],
+    [activeStoryboard, addSketchToStoryboard, reorderStoryboardItems, storyboardLocked],
   );
 
   const confirmRemoveFromStoryboard = useCallback(async (index: number) => {
@@ -337,6 +353,31 @@ export function StoryboardView() {
     });
     if (confirmed) removeFromStoryboard(index);
   }, [confirm, removeFromStoryboard]);
+
+  const confirmRemoveFromSection = useCallback(async (sectionIndex: number, sketchIndex: number) => {
+    if (!activeStoryboard) return;
+    const confirmed = await confirm({
+      title: "Remove sketch?",
+      message: "Remove this sketch from the section?",
+      confirmLabel: "Remove",
+      variant: "warning",
+    });
+    if (confirmed) {
+      await reorderStoryboardItems(removeSketchFromSection(activeStoryboard.items, sectionIndex, sketchIndex));
+    }
+  }, [activeStoryboard, confirm, reorderStoryboardItems]);
+
+  const handleAddSection = useCallback((position?: number) => {
+    if (storyboardLocked) return;
+    addSectionToStoryboard("New Section", position);
+  }, [addSectionToStoryboard, storyboardLocked]);
+
+  const handleUpdateSection = useCallback((sectionIndex: number, update: { title?: string; description?: string }) => {
+    if (storyboardLocked) return;
+    const storyboard = useAppStore.getState().activeStoryboard;
+    if (!storyboard) return;
+    reorderStoryboardItems(updateStoryboardSection(storyboard.items, sectionIndex, update));
+  }, [reorderStoryboardItems, storyboardLocked]);
 
   const handleExportWord = useCallback((orientation: WordOrientation) => {
     if (!activeStoryboard) return;
@@ -390,12 +431,49 @@ export function StoryboardView() {
     };
   }, [activeStoryboard, activeStoryboardPath]);
 
-  if (!activeStoryboard) return null;
-
+  const storyboardItems = activeStoryboard?.items ?? [];
   const filteredSketches = sketches.filter((s) =>
     s.title.toLowerCase().includes(pickerSearch.toLowerCase()),
   );
-  const hasStoryboardItems = activeStoryboard.items.length > 0;
+  const hasStoryboardItems = storyboardItems.length > 0;
+  const sectionCollapseKeys = useMemo(
+    () => storyboardItems.flatMap((item, index) =>
+      item.type === "section" ? [getTopLevelCollapseKey(index)] : [],
+    ),
+    [storyboardItems],
+  );
+  const sketchCollapseKeys = useMemo(() => storyboardItems.flatMap((item, index) => {
+    if (item.type === "sketch_ref") return [getTopLevelCollapseKey(index)];
+    return item.sketches.map((_, sketchIndex) => getNestedSketchCollapseKey(index, sketchIndex));
+  }), [storyboardItems]);
+  const canCollapseOutline = sketchCollapseKeys.some((key) => !collapsedItems.has(key))
+    || sectionCollapseKeys.some((key) => !collapsedItems.has(key));
+  const canExpandOutline = sectionCollapseKeys.some((key) => collapsedItems.has(key))
+    || sketchCollapseKeys.some((key) => collapsedItems.has(key));
+  const expandOutlineLevel = useCallback(() => {
+    setCollapsedItems((prev) => {
+      const next = new Set(prev);
+      const collapsedSections = sectionCollapseKeys.filter((key) => next.has(key));
+      if (collapsedSections.length > 0) {
+        collapsedSections.forEach((key) => next.delete(key));
+        return next;
+      }
+      sketchCollapseKeys.forEach((key) => next.delete(key));
+      return next;
+    });
+  }, [sectionCollapseKeys, sketchCollapseKeys]);
+  const collapseOutlineLevel = useCallback(() => {
+    setCollapsedItems((prev) => {
+      const hasExpandedSketches = sketchCollapseKeys.some((key) => !prev.has(key));
+      if (hasExpandedSketches) {
+        return new Set([...prev, ...sketchCollapseKeys]);
+      }
+      return new Set([...prev, ...sectionCollapseKeys]);
+    });
+  }, [sectionCollapseKeys, sketchCollapseKeys]);
+
+  if (!activeStoryboard) return null;
+
   const canRecord = hasStoryboardItems && !!activeStoryboardPath;
   const presentActions: DocumentToolbarAction[] = hasStoryboardItems ? [
     {
@@ -563,20 +641,51 @@ export function StoryboardView() {
 
         <div className="mb-8" />
 
+        {hasStoryboardItems && (
+          <div className="mb-4 flex items-center justify-between border-y border-[rgb(var(--color-border-subtle))] py-2">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[rgb(var(--color-text-secondary))]/60">
+              Outline
+            </span>
+            <div className="flex gap-1">
+              <button
+                onClick={expandOutlineLevel}
+                disabled={!canExpandOutline}
+                title="Expand one outline level"
+                aria-label="Expand one outline level"
+                className="rounded-full px-3 py-1 text-[10px] font-medium uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))] disabled:cursor-default disabled:opacity-35 disabled:hover:bg-transparent disabled:hover:text-[rgb(var(--color-text-secondary))]"
+              >
+                Expand level
+              </button>
+              <button
+                onClick={collapseOutlineLevel}
+                disabled={!canCollapseOutline}
+                title="Collapse one outline level"
+                aria-label="Collapse one outline level"
+                className="rounded-full px-3 py-1 text-[10px] font-medium uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))] disabled:cursor-default disabled:opacity-35 disabled:hover:bg-transparent disabled:hover:text-[rgb(var(--color-text-secondary))]"
+              >
+                Collapse level
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Items */}
         {activeStoryboard.items.length === 0 ? (
           <EmptyState
             onAddNew={() => handleAddNewSketch()}
-            onPickExisting={() => setShowPicker(0)}
+            onPickExisting={() => setPickerTarget({ type: "top", position: 0 })}
+            onAddSection={() => handleAddSection()}
             locked={storyboardLocked}
           />
         ) : (
           <>
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
             <SortableContext items={activeStoryboard.items.map((_, i) => i)} strategy={verticalListSortingStrategy}>
-              <div className="divide-y divide-[rgb(var(--color-border))]">
-                {activeStoryboard.items.map((item, idx) => (
-                  <div key={idx} className="py-6 first:pt-0">
+              <div className="space-y-7">
+                {activeStoryboard.items.map((item, idx) => {
+                  const itemKey = getTopLevelCollapseKey(idx);
+                  return (
+                  <div key={getStoryboardItemRenderKey(item, idx)} className="group/story-item">
                     <SortableStoryboardItem id={idx} disabled={storyboardLocked}>
                       {(dragListeners) => item.type === "sketch_ref" ? (
                         <ExpandableSketchCard
@@ -587,18 +696,37 @@ export function StoryboardView() {
                           projectRoot={currentProject?.root}
                           dragListeners={dragListeners}
                           locked={storyboardLocked}
-                          collapsed={collapsedItems.has(idx)}
+                          outlineLevel="top"
+                          collapsed={collapsedItems.has(itemKey)}
                           onToggleCollapse={() => setCollapsedItems((prev) => {
                             const next = new Set(prev);
-                            if (next.has(idx)) next.delete(idx); else next.add(idx);
+                            if (next.has(itemKey)) next.delete(itemKey); else next.add(itemKey);
                             return next;
                           })}
                         />
                       ) : (
-                        /* Legacy section — render title only */
-                        <div className="text-xs font-medium text-[rgb(var(--color-text-secondary))] uppercase tracking-wider py-2">
-                          {item.title}
-                        </div>
+                        <StoryboardSectionBlock
+                          item={item}
+                          index={idx}
+                          sketchMap={sketchMap}
+                          sketchCache={sketchCache}
+                          projectRoot={currentProject?.root}
+                          dragListeners={dragListeners}
+                          locked={storyboardLocked}
+                          collapsed={collapsedItems.has(itemKey)}
+                          onToggleCollapse={() => setCollapsedItems((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(itemKey)) next.delete(itemKey); else next.add(itemKey);
+                            return next;
+                          })}
+                          collapsedItems={collapsedItems}
+                          setCollapsedItems={setCollapsedItems}
+                          onOpenSketch={openSketch}
+                          onRemoveSketch={(sketchIndex) => void confirmRemoveFromSection(idx, sketchIndex)}
+                          onUpdateSection={handleUpdateSection}
+                          onAddNewSketch={() => handleAddNewSketch({ type: "section", sectionIndex: idx })}
+                          onPickExisting={() => setPickerTarget({ type: "section", sectionIndex: idx })}
+                        />
                       )}
                     </SortableStoryboardItem>
 
@@ -607,8 +735,9 @@ export function StoryboardView() {
                       <AddItemButton
                         position={idx + 1}
                         onAddNew={handleAddNewSketch}
-                        showPicker={showPicker}
-                        setShowPicker={setShowPicker}
+                        onAddSection={handleAddSection}
+                        pickerTarget={pickerTarget}
+                        setPickerTarget={setPickerTarget}
                         filteredSketches={filteredSketches}
                         pickerSearch={pickerSearch}
                         setPickerSearch={setPickerSearch}
@@ -616,7 +745,8 @@ export function StoryboardView() {
                       />
                     )}
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </SortableContext>
           </DndContext>
@@ -625,31 +755,41 @@ export function StoryboardView() {
           {!storyboardLocked && (
             <AddBar
               onAddNew={() => handleAddNewSketch()}
-              onPickExisting={() => setShowPicker(-1)}
+              onPickExisting={() => setPickerTarget({ type: "top" })}
+              onAddSection={() => handleAddSection()}
             />
           )}
 
           {/* Picker/section input for the bottom bar */}
-          {showPicker === -1 && !storyboardLocked && (
+          {pickerTarget?.type === "top" && pickerTarget.position === undefined && !storyboardLocked && (
             <SketchPicker
               sketches={filteredSketches}
               search={pickerSearch}
               onSearchChange={setPickerSearch}
-              onSelect={(path) => handlePickExisting(path)}
-              onClose={() => { setShowPicker(null); setPickerSearch(""); }}
+              onSelect={(path) => handlePickExisting(path, pickerTarget)}
+              onClose={() => { setPickerTarget(null); setPickerSearch(""); }}
+            />
+          )}
+          {pickerTarget?.type === "section" && !storyboardLocked && (
+            <SketchPicker
+              sketches={filteredSketches}
+              search={pickerSearch}
+              onSearchChange={setPickerSearch}
+              onSelect={(path) => handlePickExisting(path, pickerTarget)}
+              onClose={() => { setPickerTarget(null); setPickerSearch(""); }}
             />
           )}
         </>
         )}
 
         {/* Picker overlay (when shown at a position) */}
-        {showPicker !== null && activeStoryboard.items.length === 0 && !storyboardLocked && (
+        {pickerTarget !== null && activeStoryboard.items.length === 0 && !storyboardLocked && (
           <SketchPicker
             sketches={filteredSketches}
             search={pickerSearch}
             onSearchChange={setPickerSearch}
-            onSelect={(path) => handlePickExisting(path, showPicker)}
-            onClose={() => { setShowPicker(null); setPickerSearch(""); }}
+            onSelect={(path) => handlePickExisting(path, pickerTarget)}
+            onClose={() => { setPickerTarget(null); setPickerSearch(""); }}
           />
         )}
 
@@ -687,13 +827,6 @@ function SortableStoryboardItem({ id, disabled, children }: { id: number; disabl
 
 /* ── Expandable sketch card with inline read-only preview ─ */
 
-const stateLabels: Record<string, string> = {
-  draft: "Draft",
-  recording_enriched: "Recording",
-  refined: "Refined",
-  final: "Final",
-};
-
 function ExpandableSketchCard({
   sketch,
   fullSketch,
@@ -702,6 +835,7 @@ function ExpandableSketchCard({
   projectRoot,
   dragListeners,
   locked,
+  outlineLevel = "top",
   collapsed,
   onToggleCollapse,
 }: {
@@ -710,23 +844,24 @@ function ExpandableSketchCard({
   onOpen: () => void;
   onRemove: () => void;
   projectRoot?: string;
-  dragListeners: Record<string, any>;
+  dragListeners?: Record<string, any>;
   locked?: boolean;
+  outlineLevel?: "top" | "nested";
   collapsed: boolean;
   onToggleCollapse: () => void;
 }) {
+  const isTopLevel = outlineLevel === "top";
+
   return (
-    <div className="group/sketch">
-      {/* Title row — document sub-heading style */}
-      <div className="flex items-center gap-2 py-1">
-        {/* Drag handle — grip dots before title */}
-        {!locked && (
+    <div className={`group/sketch ${isTopLevel ? "rounded-2xl border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))]/35 p-3" : "rounded-xl bg-[rgb(var(--color-surface))]/35 px-3 py-2"}`}>
+      <div className={`flex items-start gap-3 ${isTopLevel ? "" : "py-1"}`}>
+        {!locked && dragListeners && (
           <div
             {...dragListeners}
-            className="shrink-0 cursor-grab active:cursor-grabbing opacity-30 hover:opacity-100 transition-opacity"
+            className="mt-1 shrink-0 cursor-grab text-[rgb(var(--color-text-secondary))]/25 opacity-0 transition-opacity hover:text-[rgb(var(--color-text-secondary))]/60 hover:opacity-100 active:cursor-grabbing group-hover/sketch:opacity-100"
             title="Drag to reorder"
           >
-            <svg width="8" height="14" viewBox="0 0 8 14" fill="currentColor" className="text-[rgb(var(--color-text-secondary))]">
+            <svg width="8" height="14" viewBox="0 0 8 14" fill="currentColor">
               <circle cx="2" cy="2" r="1.2" />
               <circle cx="6" cy="2" r="1.2" />
               <circle cx="2" cy="7" r="1.2" />
@@ -737,84 +872,275 @@ function ExpandableSketchCard({
           </div>
         )}
 
-        {/* Collapse toggle */}
-        <button
-          onClick={onToggleCollapse}
-          className="shrink-0 text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] transition-colors"
-          title={collapsed ? "Show table" : "Hide table"}
-        >
-          <ChevronRight className={`w-3.5 h-3.5 transition-transform ${collapsed ? "" : "rotate-90"}`} />
-        </button>
+        <div className="min-w-0 flex-1">
+          {isTopLevel && (
+            <div className="mb-1 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-[rgb(var(--color-text-secondary))]/60">
+              <span>Sketch</span>
+              <span className="h-px w-5 bg-[rgb(var(--color-border))]" />
+              <span className="tracking-[0.14em]">
+                {sketch.row_count} {sketch.row_count === 1 ? "row" : "rows"}
+              </span>
+            </div>
+          )}
 
-        <h3 className="text-base font-semibold text-[rgb(var(--color-text))] truncate">
-          {sketch.title}
-        </h3>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onToggleCollapse}
+              className="shrink-0 text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] transition-colors"
+              title={collapsed ? "Show table" : "Hide table"}
+            >
+              <ChevronRight className={`w-3.5 h-3.5 transition-transform ${collapsed ? "" : "rotate-90"}`} />
+            </button>
 
-        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))] shrink-0">
-          {stateLabels[sketch.state] ?? sketch.state}
-        </span>
+            <h3 className="text-base font-semibold text-[rgb(var(--color-text))] truncate">
+              {sketch.title}
+            </h3>
 
-        <span className="text-[10px] text-[rgb(var(--color-text-secondary))] shrink-0">
-          {sketch.row_count} {sketch.row_count === 1 ? "row" : "rows"}
-        </span>
+            <span className={`text-[10px] text-[rgb(var(--color-text-secondary))] shrink-0 ${isTopLevel ? "hidden" : ""}`}>
+              {sketch.row_count} {sketch.row_count === 1 ? "row" : "rows"}
+            </span>
 
-        {/* Edit pencil */}
-        <button
-          onClick={onOpen}
-          className="shrink-0 p-1 rounded text-[rgb(var(--color-text-secondary))] opacity-0 group-hover/sketch:opacity-100 hover:text-[rgb(var(--color-accent))] transition-all"
-          title="Open in editor"
-        >
-          <Pencil className="w-3.5 h-3.5" />
-        </button>
+            <button
+              onClick={onOpen}
+              className="shrink-0 p-1 rounded text-[rgb(var(--color-text-secondary))] opacity-0 group-hover/sketch:opacity-100 hover:text-[rgb(var(--color-accent))] transition-all"
+              title="Open in editor"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+            </button>
 
-        {/* Remove */}
+            {!locked && (
+              <button
+                onClick={onRemove}
+                className="shrink-0 p-1 rounded text-[rgb(var(--color-text-secondary))] opacity-0 group-hover/sketch:opacity-100 hover:text-error transition-all"
+                title="Remove from storyboard"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            )}
+          </div>
+
+          {fullSketch && typeof fullSketch.description === "string" && fullSketch.description.trim() && (
+            <div className="prose-desc text-sm text-[rgb(var(--color-text-secondary))] mb-2 leading-relaxed">
+              <SafeMarkdown>{fullSketch.description}</SafeMarkdown>
+            </div>
+          )}
+
+          {!collapsed && (fullSketch ? (
+            fullSketch.rows.length > 0 ? (
+              <ScriptTable
+                rows={fullSketch.rows}
+                onChange={() => {}}
+                readOnly
+                projectRoot={projectRoot}
+              />
+            ) : (
+              <p className="text-xs text-[rgb(var(--color-text-secondary))] py-2">No rows yet</p>
+            )
+          ) : (
+            <div className="flex items-center gap-2 py-3">
+              <div className="w-3 h-3 border-2 border-[rgb(var(--color-text-secondary))]/30 border-t-[rgb(var(--color-accent))] rounded-full animate-spin" />
+              <span className="text-xs text-[rgb(var(--color-text-secondary))]">Loading sketch…</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StoryboardSectionBlock({
+  item,
+  index,
+  sketchMap,
+  sketchCache,
+  projectRoot,
+  dragListeners,
+  locked,
+  collapsed,
+  onToggleCollapse,
+  collapsedItems,
+  setCollapsedItems,
+  onOpenSketch,
+  onRemoveSketch,
+  onUpdateSection,
+  onAddNewSketch,
+  onPickExisting,
+}: {
+  item: Extract<StoryboardItem, { type: "section" }>;
+  index: number;
+  sketchMap: Map<string, SketchSummary>;
+  sketchCache: Map<string, Sketch>;
+  projectRoot?: string;
+  dragListeners: Record<string, any>;
+  locked?: boolean;
+  collapsed: boolean;
+  onToggleCollapse: () => void;
+  collapsedItems: Set<string>;
+  setCollapsedItems: Dispatch<SetStateAction<Set<string>>>;
+  onOpenSketch: (path: string) => void;
+  onRemoveSketch: (sketchIndex: number) => void;
+  onUpdateSection: (sectionIndex: number, update: { title?: string; description?: string }) => void;
+  onAddNewSketch: () => void;
+  onPickExisting: () => void;
+}) {
+  const [draftTitle, setDraftTitle] = useState(item.title);
+  const [draftDescription, setDraftDescription] = useState(item.description ?? "");
+  const titleInputRef = useRef<HTMLInputElement>(null);
+  const descriptionInputRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    const activeElement = document.activeElement;
+    if (activeElement === titleInputRef.current || activeElement === descriptionInputRef.current) {
+      return;
+    }
+    setDraftTitle(item.title);
+    setDraftDescription(item.description ?? "");
+  }, [item.title, item.description]);
+
+  useEffect(() => {
+    const textarea = descriptionInputRef.current;
+    if (!textarea) return;
+    textarea.style.height = "auto";
+    textarea.style.height = `${textarea.scrollHeight}px`;
+  }, [draftDescription]);
+
+  const flushSectionDraft = useCallback(() => {
+    if (locked) return;
+    const currentTitle = titleInputRef.current?.value ?? draftTitle;
+    const title = currentTitle.trim() || item.title;
+    const description = descriptionInputRef.current?.value ?? draftDescription;
+    if (title !== currentTitle) setDraftTitle(title);
+    if (title !== item.title || description !== (item.description ?? "")) {
+      onUpdateSection(index, { title, description });
+    }
+  }, [draftDescription, draftTitle, index, item.description, item.title, locked, onUpdateSection]);
+  const sketchCount = item.sketches.length;
+
+  return (
+    <section className="group/section rounded-2xl border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))]/35 px-4 py-3">
+      <div
+        {...(!locked ? dragListeners : {})}
+        className={`${locked ? "" : "cursor-grab active:cursor-grabbing"}`}
+        title={locked ? undefined : "Drag to reorder section"}
+      >
+        <div className="flex items-start gap-3">
         {!locked && (
-          <button
-            onClick={onRemove}
-            className="shrink-0 p-1 rounded text-[rgb(var(--color-text-secondary))] opacity-0 group-hover/sketch:opacity-100 hover:text-error transition-all"
-            title="Remove from storyboard"
-          >
-            <X className="w-3 h-3" />
-          </button>
+          <div className="mt-1 shrink-0 text-[rgb(var(--color-text-secondary))]/25 opacity-0 transition-opacity group-hover/section:opacity-100">
+            <svg width="8" height="14" viewBox="0 0 8 14" fill="currentColor" aria-hidden="true">
+              <circle cx="2" cy="2" r="1.2" />
+              <circle cx="6" cy="2" r="1.2" />
+              <circle cx="2" cy="7" r="1.2" />
+              <circle cx="6" cy="7" r="1.2" />
+              <circle cx="2" cy="12" r="1.2" />
+              <circle cx="6" cy="12" r="1.2" />
+            </svg>
+          </div>
         )}
+        <div className="min-w-0 flex-1">
+          <div className="mb-1 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-[rgb(var(--color-text-secondary))]/60">
+            <span>Section</span>
+            <span className="h-px w-5 bg-[rgb(var(--color-border))]" />
+            <span className="tracking-[0.14em]">
+              {sketchCount} {sketchCount === 1 ? "sketch" : "sketches"}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={(event) => {
+                event.stopPropagation();
+                onToggleCollapse();
+              }}
+              className="shrink-0 text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] transition-colors"
+              title={collapsed ? "Show sketches" : "Hide sketches"}
+            >
+              <ChevronRight className={`w-3.5 h-3.5 transition-transform ${collapsed ? "" : "rotate-90"}`} />
+            </button>
+            <input
+              ref={titleInputRef}
+              value={draftTitle}
+              readOnly={locked}
+              onChange={(event) => setDraftTitle(event.target.value)}
+              onBlur={flushSectionDraft}
+              className={`w-full bg-transparent text-lg font-semibold leading-tight text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/35 outline-none ${locked ? "cursor-default" : ""}`}
+              placeholder="Section title..."
+            />
+          </div>
+          <textarea
+            ref={descriptionInputRef}
+            value={draftDescription}
+            readOnly={locked}
+            onChange={(event) => setDraftDescription(event.target.value)}
+            onBlur={flushSectionDraft}
+            rows={1}
+            className="mt-2 w-full resize-none overflow-hidden bg-transparent text-sm leading-relaxed text-[rgb(var(--color-text-secondary))] placeholder:text-[rgb(var(--color-text-secondary))]/40 outline-none"
+            placeholder="Add section framing..."
+          />
+        </div>
+        </div>
       </div>
 
-      {/* Description (from full sketch if loaded) */}
-      {fullSketch && typeof fullSketch.description === "string" && fullSketch.description.trim() && (
-        <div className="prose-desc text-sm text-[rgb(var(--color-text-secondary))] mb-2 leading-relaxed">
-          <SafeMarkdown>{fullSketch.description}</SafeMarkdown>
-        </div>
+      {!collapsed && (
+      <div className="mt-2 space-y-2 pl-6">
+        {item.sketches.length === 0 ? (
+          <p className="rounded-xl border border-dashed border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))]/35 px-4 py-4 text-center text-xs text-[rgb(var(--color-text-secondary))]">
+            No sketches in this section yet.
+          </p>
+        ) : (
+          item.sketches.map((path, sketchIndex) => {
+            const collapseKey = getNestedSketchCollapseKey(index, sketchIndex);
+            return (
+              <ExpandableSketchCard
+                key={`${path}-${sketchIndex}`}
+                sketch={sketchMap.get(path) ?? makePlaceholder(path)}
+                fullSketch={sketchCache.get(path)}
+                onOpen={() => onOpenSketch(path)}
+                onRemove={() => onRemoveSketch(sketchIndex)}
+                projectRoot={projectRoot}
+                dragListeners={undefined}
+                locked={locked}
+                outlineLevel="nested"
+                collapsed={collapsedItems.has(collapseKey)}
+                onToggleCollapse={() => setCollapsedItems((prev) => {
+                  const next = new Set(prev);
+                  if (next.has(collapseKey)) next.delete(collapseKey); else next.add(collapseKey);
+                  return next;
+                })}
+              />
+            );
+          })
+        )}
+      </div>
       )}
 
-      {/* Table — collapsible */}
-      {!collapsed && (fullSketch ? (
-        fullSketch.rows.length > 0 ? (
-          <ScriptTable
-            rows={fullSketch.rows}
-            onChange={() => {}}
-            readOnly
-            projectRoot={projectRoot}
-          />
-        ) : (
-          <p className="text-xs text-[rgb(var(--color-text-secondary))] py-2">No rows yet</p>
-        )
-      ) : (
-        <div className="flex items-center gap-2 py-3">
-          <div className="w-3 h-3 border-2 border-[rgb(var(--color-text-secondary))]/30 border-t-[rgb(var(--color-accent))] rounded-full animate-spin" />
-          <span className="text-xs text-[rgb(var(--color-text-secondary))]">Loading sketch…</span>
+      {!collapsed && !locked && (
+        <div className="mt-2 flex gap-2 pl-6">
+          <button
+            onClick={onAddNewSketch}
+            className="rounded-full border border-[rgb(var(--color-border-subtle))] px-3 py-1 text-[10px] font-medium uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))] hover:border-[rgb(var(--color-accent))]/45 hover:text-[rgb(var(--color-accent))] transition-colors"
+          >
+            New sketch
+          </button>
+          <button
+            onClick={onPickExisting}
+            className="rounded-full border border-transparent px-3 py-1 text-[10px] font-medium uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))] transition-colors"
+          >
+            Add existing sketch
+          </button>
         </div>
-      ))}
-    </div>
+      )}
+    </section>
   );
 }
 
 function EmptyState({
   onAddNew,
   onPickExisting,
+  onAddSection,
   locked,
 }: {
   onAddNew: () => void;
   onPickExisting: () => void;
+  onAddSection: () => void;
   locked?: boolean;
 }) {
   return (
@@ -841,6 +1167,12 @@ function EmptyState({
           >
             Add Existing
           </button>
+          <button
+            onClick={onAddSection}
+            className="flex items-center gap-2 px-4 py-2.5 text-xs font-medium rounded-xl border border-[rgb(var(--color-border))] text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:border-[rgb(var(--color-accent))]/40 transition-colors"
+          >
+            Section
+          </button>
         </div>
       )}
     </div>
@@ -850,49 +1182,62 @@ function EmptyState({
 function AddItemButton({
   position,
   onAddNew,
-  showPicker,
-  setShowPicker,
+  onAddSection,
+  pickerTarget,
+  setPickerTarget,
   filteredSketches,
   pickerSearch,
   setPickerSearch,
   onPickExisting,
 }: {
   position: number;
-  onAddNew: (pos: number) => void;
-  showPicker: number | null;
-  setShowPicker: (v: number | null) => void;
+  onAddNew: (target: PickerTarget) => void;
+  onAddSection: (position: number) => void;
+  pickerTarget: PickerTarget | null;
+  setPickerTarget: (v: PickerTarget | null) => void;
   filteredSketches: import("../types/sketch").SketchSummary[];
   pickerSearch: string;
   setPickerSearch: (v: string) => void;
-  onPickExisting: (path: string, pos: number) => void;
+  onPickExisting: (path: string, target: PickerTarget) => void;
 }) {
+  const target: PickerTarget = { type: "top", position };
+  const isOpen = pickerTarget?.type === "top" && pickerTarget.position === position;
+
   return (
-    <div className="relative flex items-center justify-center py-1">
-      <div className="flex gap-1 opacity-0 hover:opacity-100 focus-within:opacity-100 transition-opacity">
+    <div className="relative -mb-1 mt-2 flex h-9 items-center justify-center">
+      <div className="absolute inset-x-12 top-1/2 h-px -translate-y-1/2 bg-gradient-to-r from-transparent via-[rgb(var(--color-border-subtle))] to-transparent opacity-0 transition-opacity group-hover/story-item:opacity-100" />
+      <div className="relative left-1/2 flex -translate-x-1/2 gap-1 rounded-full border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))]/95 px-1 py-0.5 opacity-0 shadow-sm backdrop-blur-sm transition-opacity hover:opacity-100 focus-within:opacity-100 group-hover/story-item:opacity-100">
         <button
-          onClick={() => onAddNew(position)}
-          className="px-2 py-1 text-[10px] rounded-md text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10 transition-colors"
+          onClick={() => onAddNew(target)}
+          className="rounded-full px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.12em] text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))] transition-colors"
           title="New sketch"
         >
           + Sketch
         </button>
         <button
-          onClick={() => setShowPicker(showPicker === position ? null : position)}
-          className="px-2 py-1 text-[10px] rounded-md text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10 transition-colors"
+          onClick={() => setPickerTarget(isOpen ? null : target)}
+          className="rounded-full px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.12em] text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))] transition-colors"
           title="Add existing sketch"
         >
           + Existing
         </button>
+        <button
+          onClick={() => onAddSection(position)}
+          className="rounded-full px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.12em] text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))] transition-colors"
+          title="Add section"
+        >
+          + Section
+        </button>
       </div>
 
-      {showPicker === position && (
+      {isOpen && (
         <div className="absolute top-full left-1/2 -translate-x-1/2 z-10 mt-1">
           <SketchPicker
             sketches={filteredSketches}
             search={pickerSearch}
             onSearchChange={setPickerSearch}
-            onSelect={(path) => onPickExisting(path, position)}
-            onClose={() => { setShowPicker(null); setPickerSearch(""); }}
+            onSelect={(path) => onPickExisting(path, target)}
+            onClose={() => { setPickerTarget(null); setPickerSearch(""); }}
           />
         </div>
       )}
@@ -944,9 +1289,11 @@ function SketchPicker({
 function AddBar({
   onAddNew,
   onPickExisting,
+  onAddSection,
 }: {
   onAddNew: () => void;
   onPickExisting: () => void;
+  onAddSection: () => void;
 }) {
   return (
     <div className="flex items-center gap-2 pt-4 pb-2">
@@ -965,6 +1312,12 @@ function AddBar({
         >
           <FileText className="w-3 h-3" />
           Add Existing
+        </button>
+        <button
+          onClick={onAddSection}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-[rgb(var(--color-border))] text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:border-[rgb(var(--color-accent))]/40 transition-colors"
+        >
+          Section
         </button>
       </div>
       <div className="h-px flex-1 bg-[rgb(var(--color-border))]" />

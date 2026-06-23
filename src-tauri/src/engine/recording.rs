@@ -724,7 +724,9 @@ pub fn build_prompter_script(
                             prompter_script_for_sketch_path(project_root, path, None)?.steps,
                         );
                     }
-                    StoryboardItem::Section { title, sketches } => {
+                    StoryboardItem::Section {
+                        title, sketches, ..
+                    } => {
                         for sketch_path in sketches {
                             steps.extend(
                                 prompter_script_for_sketch_path(
