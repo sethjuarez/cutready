@@ -51,6 +51,10 @@ impl Drop for ActiveAgentRunGuard {
 /// Serialisable provider config sent from the frontend.
 #[derive(Debug, Deserialize)]
 pub struct ProviderConfig {
+    #[serde(default)]
+    pub provider_id: Option<String>,
+    #[serde(default)]
+    pub provider_name: Option<String>,
     pub provider: String,
     pub endpoint: String,
     pub api_key: String,
@@ -91,8 +95,88 @@ impl From<ProviderConfig> for LlmConfig {
 /// List available models for the configured provider.
 #[auditaur_command(skip_all, err)]
 pub async fn list_models(config: ProviderConfig) -> Result<Vec<ModelInfo>, String> {
+    let provider = config.provider.clone();
+    let provider_id = config.provider_id.clone();
+    let provider_name = config.provider_name.clone();
+    let model = config.model.clone();
+    let auth_mode = if config.bearer_token.is_some() {
+        "bearer"
+    } else {
+        "api_key"
+    };
+    let endpoint_present = !config.endpoint.trim().is_empty();
+    let api_key_present = !config.api_key.trim().is_empty();
+    let bearer_token_present = config.bearer_token.as_deref().is_some_and(|token| !token.trim().is_empty());
+    log::info!(
+        "[list_models] start provider={} provider_id={:?} provider_name={:?} auth={} endpoint_present={} api_key_present={} bearer_token_present={} model={}",
+        provider,
+        provider_id,
+        provider_name,
+        auth_mode,
+        endpoint_present,
+        api_key_present,
+        bearer_token_present,
+        model,
+    );
+    crate::util::trace::emit(
+        "list_models_start",
+        "agent",
+        serde_json::json!({
+            "provider": provider,
+            "provider_id": &provider_id,
+            "provider_name": &provider_name,
+            "auth_mode": auth_mode,
+            "endpoint_present": endpoint_present,
+            "api_key_present": api_key_present,
+            "bearer_token_present": bearer_token_present,
+            "model": model,
+        }),
+    );
     let llm_config: LlmConfig = config.into();
-    llm::list_models(&llm_config).await
+    match llm::list_models(&llm_config).await {
+        Ok(models) => {
+            log::info!(
+                "[list_models] success provider={} provider_id={:?} model_count={}",
+                provider,
+                provider_id,
+                models.len()
+            );
+            crate::util::trace::emit(
+                "list_models_success",
+                "agent",
+                serde_json::json!({
+                    "provider": provider,
+                    "provider_id": &provider_id,
+                    "provider_name": &provider_name,
+                    "model_count": models.len(),
+                }),
+            );
+            Ok(models)
+        }
+        Err(err) => {
+            log::warn!(
+                "[list_models] error provider={} provider_id={:?} api_key_present={} bearer_token_present={} error={}",
+                provider,
+                provider_id,
+                api_key_present,
+                bearer_token_present,
+                err
+            );
+            crate::util::trace::emit(
+                "list_models_error",
+                "agent",
+                serde_json::json!({
+                    "provider": provider,
+                    "provider_id": &provider_id,
+                    "provider_name": &provider_name,
+                    "api_key_present": api_key_present,
+                    "bearer_token_present": bearer_token_present,
+                    "error": err.to_string(),
+                }),
+            );
+            Err(err.to_string())
+        }
+    }
 }
 
 /// A single chat turn (non-streaming) for quick operations like ✨ field fill.
@@ -113,6 +197,8 @@ pub async fn agent_chat(
     }
     let message_chars = agentive::context::estimate_chars(&messages);
     let provider_name = config.provider.clone();
+    let configured_provider_name = config.provider_name.clone();
+    let configured_provider_id = config.provider_id.clone();
     let model = config.model.clone();
     let timeout = timeout_ms
         .map(|ms| ms.clamp(MIN_SIMPLE_CHAT_TIMEOUT_MS, MAX_SIMPLE_CHAT_TIMEOUT_MS))
@@ -135,6 +221,8 @@ pub async fn agent_chat(
         "agent",
         serde_json::json!({
             "provider": provider_name,
+            "provider_id": &configured_provider_id,
+            "provider_name": &configured_provider_name,
             "model": model,
             "messages": messages.len(),
             "chars": message_chars,
@@ -352,6 +440,8 @@ pub async fn agent_chat_with_tools(
     let discovered_vision_support = config.model_supports_vision;
     let search_enabled = config.web_access.as_deref() == Some("enabled");
     let provider_name = config.provider.clone();
+    let configured_provider_name = config.provider_name.clone();
+    let configured_provider_id = config.provider_id.clone();
     let model = config.model.clone();
     let llm_config: LlmConfig = config.into();
 
@@ -380,6 +470,8 @@ pub async fn agent_chat_with_tools(
                 &model,
                 serde_json::json!({
                     "messages": message_count,
+                    "provider_id": &configured_provider_id,
+                    "provider_name": &configured_provider_name,
                     "chars": message_chars,
                     "budget_chars": budget_chars,
                     "reported_context": reported_context,
@@ -431,6 +523,8 @@ pub async fn agent_chat_with_tools(
         "agent",
         serde_json::json!({
             "provider": provider_name,
+            "provider_id": &configured_provider_id,
+            "provider_name": &configured_provider_name,
             "model": model,
             "run_id": &run_id,
             "messages": message_count,
@@ -898,6 +992,8 @@ mod tests {
 
     fn make_config(provider: &str) -> ProviderConfig {
         ProviderConfig {
+            provider_id: Some("provider-test".into()),
+            provider_name: Some("Provider Test".into()),
             provider: provider.into(),
             endpoint: "https://example.com".into(),
             api_key: "key".into(),

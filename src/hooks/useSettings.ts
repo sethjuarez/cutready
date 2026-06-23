@@ -2,7 +2,15 @@ import { useEffect } from "react";
 import { create } from "zustand";
 import { LazyStore } from "@tauri-apps/plugin-store";
 import { invoke } from "../services/tauri";
-import { isSecretKey, loadAllSecrets, setSecret, type SecretKey } from "./useSecretStore";
+import {
+  getProviderSecret,
+  isSecretKey,
+  loadAllSecrets,
+  setProviderSecret,
+  setSecret,
+  type ProviderSecretName,
+  type SecretKey,
+} from "./useSecretStore";
 
 export interface AgentPreset {
   id: string;
@@ -12,6 +20,27 @@ export interface AgentPreset {
   description?: string;
   /** Optional model override — if set, this agent uses a different model than the global setting. */
   modelOverride?: string;
+  /** Optional provider override — if set, this agent uses a different provider than the default. */
+  providerOverride?: string;
+}
+
+export type AiProviderKind = "microsoft_foundry" | "azure_openai" | "openai" | "anthropic";
+export type AiAuthMode = "api_key" | "azure_oauth";
+
+export interface AiProviderConfig {
+  id: string;
+  name: string;
+  provider: AiProviderKind;
+  authMode: AiAuthMode;
+  endpoint: string;
+  model: string;
+  contextLength: number;
+  modelSupportsVision: "" | "true" | "false";
+  tenantId: string;
+  clientId: string;
+  subscriptionId: string;
+  resourceGroup: string;
+  resourceName: string;
 }
 
 // ── Global settings (stored in Tauri app data) ────────────────────
@@ -80,6 +109,14 @@ export interface GlobalSettings {
   aiModelSupportsVision: string;
   /** Web search access for chat agents: "disabled" or "enabled". */
   aiWebAccess: "disabled" | "enabled";
+  /** Named AI provider configurations. Secrets are stored separately in Stronghold. */
+  aiProviders: AiProviderConfig[];
+  /** Provider used by chat/model fetching unless an override is selected. */
+  aiActiveProviderId: string;
+  /** Default provider for agents that do not override provider selection. */
+  aiDefaultProviderId: string;
+  /** Per-agent provider overrides. Empty/missing means use the default provider. */
+  aiAgentProviderOverrides: Record<string, string>;
   /** Default recording source: "full_screen", "region", or "window". */
   recorderCaptureSource: "full_screen" | "region" | "window";
   /** Default microphone device id; empty means system default. */
@@ -165,6 +202,10 @@ const defaultGlobalSettings: GlobalSettings = {
   aiVisionMode: "notes_and_sketches",
   aiModelSupportsVision: "",
   aiWebAccess: "disabled",
+  aiProviders: [],
+  aiActiveProviderId: "",
+  aiDefaultProviderId: "",
+  aiAgentProviderOverrides: {},
   recorderCaptureSource: "full_screen",
   recorderMicDeviceId: "",
   recorderMicVolume: 100,
@@ -207,6 +248,31 @@ const defaultSettings: AppSettings = {
 };
 
 const STORE_PATH = "settings.json";
+const PROVIDER_SECRET_TO_FLAT_KEY: Record<ProviderSecretName, keyof GlobalSettings> = {
+  apiKey: "aiApiKey",
+  accessToken: "aiAccessToken",
+  refreshToken: "aiRefreshToken",
+  managementToken: "aiManagementToken",
+};
+const FLAT_SECRET_TO_PROVIDER_SECRET: Partial<Record<keyof GlobalSettings, ProviderSecretName>> = {
+  aiApiKey: "apiKey",
+  aiAccessToken: "accessToken",
+  aiRefreshToken: "refreshToken",
+  aiManagementToken: "managementToken",
+};
+const FLAT_PROVIDER_FIELDS: Partial<Record<keyof GlobalSettings, keyof AiProviderConfig>> = {
+  aiProvider: "provider",
+  aiAuthMode: "authMode",
+  aiEndpoint: "endpoint",
+  aiModel: "model",
+  aiContextLength: "contextLength",
+  aiModelSupportsVision: "modelSupportsVision",
+  aiTenantId: "tenantId",
+  aiClientId: "clientId",
+  aiSubscriptionId: "subscriptionId",
+  aiResourceGroup: "resourceGroup",
+  aiResourceName: "resourceName",
+};
 
 const WORKSPACE_KEYS: (keyof WorkspaceSettings)[] = [
   "repoRemoteUrl",
@@ -215,6 +281,155 @@ const WORKSPACE_KEYS: (keyof WorkspaceSettings)[] = [
   "repoAuthorName",
   "repoAuthorEmail",
 ];
+
+function providerLabel(provider: AiProviderKind): string {
+  switch (provider) {
+    case "microsoft_foundry": return "Microsoft Foundry";
+    case "azure_openai": return "Azure OpenAI";
+    case "openai": return "OpenAI";
+    case "anthropic": return "Anthropic";
+  }
+}
+
+function normalizeProviderKind(provider: string): AiProviderKind {
+  if (provider === "microsoft_foundry" || provider === "openai" || provider === "anthropic") {
+    return provider;
+  }
+  return "azure_openai";
+}
+
+function normalizeAuthMode(authMode: string, provider: AiProviderKind): AiAuthMode {
+  if ((provider === "azure_openai" || provider === "microsoft_foundry") && authMode === "azure_oauth") {
+    return "azure_oauth";
+  }
+  return "api_key";
+}
+
+function legacyProviderId(provider: AiProviderKind): string {
+  return `legacy-${provider}`;
+}
+
+function createProviderFromFlat(settings: GlobalSettings): AiProviderConfig {
+  const provider = normalizeProviderKind(settings.aiProvider);
+  return {
+    id: settings.aiActiveProviderId || legacyProviderId(provider),
+    name: providerLabel(provider),
+    provider,
+    authMode: normalizeAuthMode(settings.aiAuthMode, provider),
+    endpoint: settings.aiEndpoint || "",
+    model: settings.aiModel || "",
+    contextLength: settings.aiContextLength || 0,
+    modelSupportsVision: settings.aiModelSupportsVision === "true" || settings.aiModelSupportsVision === "false"
+      ? settings.aiModelSupportsVision
+      : "",
+    tenantId: settings.aiTenantId || "",
+    clientId: settings.aiClientId || "",
+    subscriptionId: settings.aiSubscriptionId || "",
+    resourceGroup: settings.aiResourceGroup || "",
+    resourceName: settings.aiResourceName || "",
+  };
+}
+
+function normalizeProviderConfig(input: Partial<AiProviderConfig>, fallback: AiProviderConfig): AiProviderConfig {
+  const provider = normalizeProviderKind(input.provider || fallback.provider);
+  return {
+    id: String(input.id || fallback.id),
+    name: String(input.name || providerLabel(provider)),
+    provider,
+    authMode: normalizeAuthMode(input.authMode || fallback.authMode, provider),
+    endpoint: String(input.endpoint ?? fallback.endpoint ?? ""),
+    model: String(input.model ?? fallback.model ?? ""),
+    contextLength: Number(input.contextLength ?? fallback.contextLength ?? 0) || 0,
+    modelSupportsVision: input.modelSupportsVision === "true" || input.modelSupportsVision === "false"
+      ? input.modelSupportsVision
+      : "",
+    tenantId: String(input.tenantId ?? fallback.tenantId ?? ""),
+    clientId: String(input.clientId ?? fallback.clientId ?? ""),
+    subscriptionId: String(input.subscriptionId ?? fallback.subscriptionId ?? ""),
+    resourceGroup: String(input.resourceGroup ?? fallback.resourceGroup ?? ""),
+    resourceName: String(input.resourceName ?? fallback.resourceName ?? ""),
+  };
+}
+
+async function loadProviderSecretsIntoFlat(result: GlobalSettings, providerId: string) {
+  for (const [secretName, flatKey] of Object.entries(PROVIDER_SECRET_TO_FLAT_KEY) as Array<[ProviderSecretName, keyof GlobalSettings]>) {
+    const value = await getProviderSecret(providerId, secretName);
+    (result as unknown as Record<string, unknown>)[flatKey] = value;
+  }
+}
+
+function applyProviderToFlat(result: GlobalSettings, provider: AiProviderConfig) {
+  result.aiProvider = provider.provider;
+  result.aiAuthMode = provider.authMode;
+  result.aiEndpoint = provider.endpoint;
+  result.aiModel = provider.model;
+  result.aiContextLength = provider.contextLength;
+  result.aiModelSupportsVision = provider.modelSupportsVision;
+  result.aiTenantId = provider.tenantId;
+  result.aiClientId = provider.clientId;
+  result.aiSubscriptionId = provider.subscriptionId;
+  result.aiResourceGroup = provider.resourceGroup;
+  result.aiResourceName = provider.resourceName;
+}
+
+function providersWithUpdatedActive(
+  settings: GlobalSettings,
+  updates: Partial<AiProviderConfig>,
+): AiProviderConfig[] {
+  const fallback = createProviderFromFlat(settings);
+  const activeId = settings.aiActiveProviderId || settings.aiDefaultProviderId || fallback.id;
+  const providers = settings.aiProviders.length > 0 ? settings.aiProviders : [fallback];
+  return providers.map((provider) => {
+    if (provider.id !== activeId) return provider;
+    return normalizeProviderConfig({ ...provider, ...updates }, provider);
+  });
+}
+
+async function migrateProviderSettings(result: GlobalSettings, legacySecrets: Record<SecretKey, string>, store: LazyStore) {
+  const fallback = createProviderFromFlat(result);
+  const loadedProviders = Array.isArray(result.aiProviders) ? result.aiProviders : [];
+  const providers = loadedProviders.length > 0
+    ? loadedProviders.map((provider) => normalizeProviderConfig(provider, fallback))
+    : [fallback];
+
+  const activeProviderId = providers.some((provider) => provider.id === result.aiActiveProviderId)
+    ? result.aiActiveProviderId
+    : providers[0].id;
+  const defaultProviderId = providers.some((provider) => provider.id === result.aiDefaultProviderId)
+    ? result.aiDefaultProviderId
+    : activeProviderId;
+
+  result.aiProviders = providers;
+  result.aiActiveProviderId = activeProviderId;
+  result.aiDefaultProviderId = defaultProviderId;
+
+  if (loadedProviders.length === 0) {
+    const activeProvider = providers[0];
+    const migrations: Array<[ProviderSecretName, keyof GlobalSettings]> = [
+      ["apiKey", "aiApiKey"],
+      ["accessToken", "aiAccessToken"],
+      ["refreshToken", "aiRefreshToken"],
+      ["managementToken", "aiManagementToken"],
+    ];
+    for (const [providerSecret, flatSecret] of migrations) {
+      const legacyValue = flatSecret in legacySecrets
+        ? legacySecrets[flatSecret as SecretKey]
+        : "";
+      const value = legacyValue || (result as unknown as Record<string, unknown>)[flatSecret];
+      if (typeof value === "string" && value) {
+        await setProviderSecret(activeProvider.id, providerSecret, value);
+      }
+    }
+    await store.set("aiProviders", providers);
+    await store.set("aiActiveProviderId", activeProvider.id);
+    await store.set("aiDefaultProviderId", activeProvider.id);
+    await store.save();
+  }
+
+  const activeProvider = providers.find((provider) => provider.id === activeProviderId) ?? providers[0];
+  applyProviderToFlat(result, activeProvider);
+  await loadProviderSecretsIntoFlat(result, activeProvider.id);
+}
 
 interface SettingsStore {
   settings: AppSettings;
@@ -259,9 +474,16 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
         result.aiProvider = "azure_openai";
       }
 
+      let secrets: Record<SecretKey, string> = {
+        aiApiKey: "",
+        aiAccessToken: "",
+        aiRefreshToken: "",
+        repoToken: "",
+      };
+
       // Load secrets from Stronghold (encrypted vault)
       try {
-        const secrets = await loadAllSecrets();
+        secrets = await loadAllSecrets();
 
         // Migrate: if stronghold is empty but plain store has secrets, move them over
         let migrated = false;
@@ -288,6 +510,12 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
         // Stronghold unavailable (e.g. browser dev mode) — use plain store values
       }
 
+      try {
+        await migrateProviderSettings(result, secrets, store);
+      } catch (err) {
+        console.warn("[settings] Failed to migrate AI provider settings:", err);
+      }
+
       set({ settings: { ...get().settings, ...result }, loaded: true });
 
       // Auto-refresh OAuth token on startup if we have a refresh token
@@ -311,9 +539,9 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
             set((state) => ({ settings: { ...state.settings, ...updates } }));
             // Save refreshed tokens to vault
             try {
-              await setSecret("aiAccessToken", tokenResult.access_token);
+              await setProviderSecret(result.aiActiveProviderId, "accessToken", tokenResult.access_token);
               if (tokenResult.refresh_token) {
-                await setSecret("aiRefreshToken", tokenResult.refresh_token);
+                await setProviderSecret(result.aiActiveProviderId, "refreshToken", tokenResult.refresh_token);
               }
             } catch {
               // Vault unavailable — fall through
@@ -357,7 +585,66 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
   },
 
   updateSetting: async (key, value) => {
-    set((state) => ({ settings: { ...state.settings, [key]: value } }));
+    const current = get().settings;
+    let nextSettings: AppSettings = { ...current, [key]: value };
+    let providerSecretUpdate: [string, ProviderSecretName, string] | null = null;
+    let persistProviderList = false;
+
+    if (key === "aiProviders") {
+      const providers = Array.isArray(value) ? value as AiProviderConfig[] : [];
+      const fallback = createProviderFromFlat(current);
+      const normalized = providers.length > 0
+        ? providers.map((provider) => normalizeProviderConfig(provider, fallback))
+        : [fallback];
+      const activeId = normalized.some((provider) => provider.id === current.aiActiveProviderId)
+        ? current.aiActiveProviderId
+        : normalized[0].id;
+      const defaultId = normalized.some((provider) => provider.id === current.aiDefaultProviderId)
+        ? current.aiDefaultProviderId
+        : activeId;
+      nextSettings = {
+        ...nextSettings,
+        aiProviders: normalized,
+        aiActiveProviderId: activeId,
+        aiDefaultProviderId: defaultId,
+      };
+      applyProviderToFlat(nextSettings, normalized.find((provider) => provider.id === activeId) ?? normalized[0]);
+      persistProviderList = true;
+    } else if (key === "aiActiveProviderId") {
+      const provider = current.aiProviders.find((candidate) => candidate.id === value);
+      if (provider) {
+        nextSettings = { ...nextSettings, aiActiveProviderId: provider.id };
+        applyProviderToFlat(nextSettings, provider);
+        try {
+          for (const [secretName, flatKey] of Object.entries(PROVIDER_SECRET_TO_FLAT_KEY) as Array<[ProviderSecretName, keyof GlobalSettings]>) {
+            (nextSettings as unknown as Record<string, unknown>)[flatKey] = await getProviderSecret(provider.id, secretName);
+          }
+        } catch {
+          // Stronghold unavailable — keep existing in-memory flat secret values.
+        }
+      }
+    } else if (key === "aiDefaultProviderId") {
+      const providerId = typeof value === "string" && current.aiProviders.some((provider) => provider.id === value)
+        ? value
+        : current.aiActiveProviderId;
+      nextSettings = { ...nextSettings, aiDefaultProviderId: providerId };
+    } else if (key in FLAT_PROVIDER_FIELDS) {
+      const providerField = FLAT_PROVIDER_FIELDS[key as keyof GlobalSettings];
+      if (providerField) {
+        nextSettings.aiProviders = providersWithUpdatedActive(current, {
+          [providerField]: value,
+        } as Partial<AiProviderConfig>);
+        persistProviderList = true;
+      }
+    } else if (key in FLAT_SECRET_TO_PROVIDER_SECRET) {
+      const secretName = FLAT_SECRET_TO_PROVIDER_SECRET[key as keyof GlobalSettings];
+      const providerId = current.aiActiveProviderId || current.aiDefaultProviderId;
+      if (secretName && providerId) {
+        providerSecretUpdate = [providerId, secretName, String(value)];
+      }
+    }
+
+    set({ settings: nextSettings });
     if (key === "displayThemePalette") {
       try {
         localStorage.setItem("cutready-theme-palette", String(value));
@@ -385,6 +672,9 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
       // Global secret → save to encrypted vault
       try {
         await setSecret(key as SecretKey, value as string);
+        if (providerSecretUpdate) {
+          await setProviderSecret(providerSecretUpdate[0], providerSecretUpdate[1], providerSecretUpdate[2]);
+        }
       } catch {
         // Vault unavailable — fall back to plain store
         const store = get()._store;
@@ -398,6 +688,11 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
       const store = get()._store;
       if (store) {
         await store.set(key, value);
+        if (persistProviderList) {
+          await store.set("aiProviders", nextSettings.aiProviders);
+          await store.set("aiActiveProviderId", nextSettings.aiActiveProviderId);
+          await store.set("aiDefaultProviderId", nextSettings.aiDefaultProviderId);
+        }
         await store.save();
       }
     }

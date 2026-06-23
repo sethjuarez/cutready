@@ -8,8 +8,17 @@ import { projectRelativeScreenshotPath } from "../utils/projectImage";
 
 import { clearSuppressedEditorFlush, suppressEditorFlush, useAppStore } from "../stores/appStore";
 import { useSettings, type AgentPreset } from "../hooks/useSettings";
+import { loadProviderSecrets } from "../hooks/useSecretStore";
 import { BUILT_IN_AGENTS, resolveAgentPrompt } from "../agents/builtInAgents";
-import { buildProviderConfig, isAiProviderConfigured } from "../utils/providerConfig";
+import {
+  activeProviderInput,
+  buildProviderConfig,
+  defaultProvider,
+  isAiProviderConfigured,
+  isProviderInputConfigured,
+  providerById,
+  providerToConfigInput,
+} from "../utils/providerConfig";
 import { SketchIcon, StoryboardIcon, NoteIcon } from "./Icons";
 import type { ChatMessage, ChatSessionSummary, ChatToolActivity, ChatWorkingNotes } from "../types/sketch";
 import {
@@ -305,6 +314,13 @@ function resolveAgentModelOverride(
   overrides: Record<string, string> | undefined,
 ): string {
   return (overrides?.[agent.id] || agent.modelOverride || "").trim();
+}
+
+function resolveAgentProviderOverride(
+  agent: AgentPreset,
+  overrides: Record<string, string> | undefined,
+): string {
+  return (overrides?.[agent.id] || agent.providerOverride || "").trim();
 }
 
 // ── SVG Icons (using Heroicons) ──────────────────────────────────
@@ -768,7 +784,20 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
       .slice(0, 10);
   }, [showContextPicker, contextFilter, allFiles, references]);
 
-  const buildConfig= useCallback(() => buildProviderConfig(settings), [settings]);
+  const buildEffectiveProviderInput = useCallback(async (agent: AgentPreset) => {
+    const providerOverride = resolveAgentProviderOverride(agent, settings.aiAgentProviderOverrides);
+    const overrideProvider = providerById(settings, providerOverride);
+    const selectedProvider = overrideProvider ?? defaultProvider(settings);
+    if (!selectedProvider) return activeProviderInput(settings);
+
+    const secrets = selectedProvider.id === settings.aiActiveProviderId
+      ? { apiKey: settings.aiApiKey, accessToken: settings.aiAccessToken }
+      : await loadProviderSecrets(selectedProvider.id);
+    return providerToConfigInput(selectedProvider, settings, {
+      apiKey: secrets.apiKey,
+      accessToken: secrets.accessToken,
+    });
+  }, [settings]);
 
   // Build system prompt from selected agent
   const [memoryContext, setMemoryContext] = useState("");
@@ -944,10 +973,14 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
         ? [...BUILT_IN_AGENTS, ...(settings.aiAgents || [])].find(a => a.id === agentOverride) ?? selectedAgent
         : selectedAgent;
       const modelOverride = resolveAgentModelOverride(effectiveAgent, settings.aiAgentModelOverrides);
+      const effectiveProviderInput = await buildEffectiveProviderInput(effectiveAgent);
+      const providerConfig = buildProviderConfig(effectiveProviderInput);
+      if (!resolveAgentProviderOverride(effectiveAgent, settings.aiAgentProviderOverrides) && freshBearerToken) {
+        providerConfig.bearer_token = freshBearerToken;
+      }
       const config = {
-        ...buildConfig(),
-        bearer_token: freshBearerToken,
-        // Apply per-agent model override when configured; otherwise use the global model.
+        ...providerConfig,
+        // Apply per-agent model override when configured; otherwise use the provider model.
         ...(modelOverride ? { model: modelOverride } : {}),
       };
 
@@ -1058,7 +1091,7 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
       thinkingRef.current = "";
       workingDraftsRef.current = [];
     }
-  }, [input, loading, messages, references, systemPrompt, buildConfig, setChatMessages, setChatLoading, setChatError, addActivityEntries, settings, selectedAgent, memoryContext, activeSketchPath, activeStoryboardPath, activeNotePath, refreshSketchAfterMutation, refreshStoryboardAfterMutation, resetChatStreaming, scrollMessagesToBottom, setChatStreamingState, updateSetting]);
+  }, [input, loading, messages, references, systemPrompt, buildEffectiveProviderInput, setChatMessages, setChatLoading, setChatError, addActivityEntries, settings, selectedAgent, memoryContext, activeSketchPath, activeStoryboardPath, activeNotePath, refreshSketchAfterMutation, refreshStoryboardAfterMutation, resetChatStreaming, scrollMessagesToBottom, setChatStreamingState, updateSetting]);
 
   // Pick up prompts queued from outside the chat (e.g. sparkle buttons)
   const handleSendRef = useRef(handleSend);
@@ -1222,7 +1255,7 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
     setReferences([]);
   }, [newChatSession]);
 
-  const isConfigured = isAiProviderConfigured(settings);
+  const isConfigured = isAiProviderConfigured(settings) || isProviderInputConfigured(activeProviderInput(settings));
 
   if (!currentProject) {
     return (
