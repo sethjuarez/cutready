@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { applyStreamingDeltaReset, buildChatWorkingNotes, isChatScrolledNearBottom, reconcileMessagesForDisplay } from "../components/ChatPanel";
+import { applyStreamingDeltaReset, buildChatWorkingNotes, extractInlineToolActivity, isChatScrolledNearBottom, reconcileMessagesForDisplay } from "../components/ChatPanel";
 import type { ChatMessage } from "../types/sketch";
 
 describe("reconcileMessagesForDisplay", () => {
@@ -160,5 +160,67 @@ describe("buildChatWorkingNotes", () => {
       drafts: ["I will inspect first."],
       thinking: "Considering tool choice.",
     });
+  });
+
+});
+
+describe("extractInlineToolActivity", () => {
+  it("pairs assistant tool calls with later tool results", () => {
+    const activity = extractInlineToolActivity(
+      {
+        role: "assistant",
+        content: null,
+        tool_calls: [
+          {
+            id: "call-1",
+            call_type: "function",
+            function: { name: "read_sketch", arguments: "{\"path\":\"intro.sk\"}" },
+          },
+        ],
+      },
+      [
+        { role: "tool", content: "{\"title\":\"Intro\"}", tool_call_id: "call-1" },
+        { role: "assistant", content: "Done." },
+      ],
+    );
+
+    expect(activity).toEqual([
+      {
+        id: "call-1",
+        name: "read_sketch",
+        arguments: "{\"path\":\"intro.sk\"}",
+        result: "{\"title\":\"Intro\"}",
+      },
+    ]);
+  });
+
+  it("keeps multiple tool calls ordered by the assistant request", () => {
+    const activity = extractInlineToolActivity(
+      {
+        role: "assistant",
+        content: null,
+        tool_calls: [
+          {
+            id: "call-1",
+            call_type: "function",
+            function: { name: "read_sketch", arguments: "{\"path\":\"intro.sk\"}" },
+          },
+          {
+            id: "call-2",
+            call_type: "function",
+            function: { name: "write_sketch", arguments: "{\"path\":\"intro.sk\"}" },
+          },
+        ],
+      },
+      [
+        { role: "tool", content: "updated", tool_call_id: "call-2" },
+        { role: "tool", content: "read", tool_call_id: "call-1" },
+      ],
+    );
+
+    expect(activity.map((item) => [item.id, item.name, item.result])).toEqual([
+      ["call-1", "read_sketch", "read"],
+      ["call-2", "write_sketch", "updated"],
+    ]);
   });
 });

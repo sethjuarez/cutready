@@ -11,13 +11,14 @@ import { useSettings, type AgentPreset } from "../hooks/useSettings";
 import { BUILT_IN_AGENTS, resolveAgentPrompt } from "../agents/builtInAgents";
 import { buildProviderConfig, isAiProviderConfigured } from "../utils/providerConfig";
 import { SketchIcon, StoryboardIcon, NoteIcon } from "./Icons";
-import type { ChatMessage, ChatSessionSummary, ChatWorkingNotes } from "../types/sketch";
+import type { ChatMessage, ChatSessionSummary, ChatToolActivity, ChatWorkingNotes } from "../types/sketch";
 import {
   Sparkles,
   Clock,
   Send,
   FileText,
   Globe,
+  Wrench,
   Trash2,
   Plus,
   Paperclip,
@@ -60,6 +61,29 @@ export function buildChatWorkingNotes(input: { drafts: string[]; thinking: strin
     ...(drafts.length > 0 ? { drafts } : {}),
     ...(thinking ? { thinking } : {}),
   };
+}
+
+export function extractInlineToolActivity(message: ChatMessage, followingMessages: ChatMessage[]): ChatToolActivity[] {
+  const toolCalls = message.tool_calls ?? [];
+  if (toolCalls.length === 0) return [];
+
+  const toolResults = new Map<string, string>();
+  for (const nextMessage of followingMessages) {
+    if (nextMessage.role === "tool" && nextMessage.tool_call_id && !toolResults.has(nextMessage.tool_call_id)) {
+      toolResults.set(nextMessage.tool_call_id, textContent(nextMessage.content));
+    }
+  }
+
+  return toolCalls.map((toolCall) => ({
+    id: toolCall.id,
+    name: toolCall.function.name,
+    arguments: toolCall.function.arguments,
+    ...(toolResults.has(toolCall.id) ? { result: toolResults.get(toolCall.id) } : {}),
+  }));
+}
+
+function hasToolCalls(message: ChatMessage): boolean {
+  return (message.tool_calls?.length ?? 0) > 0;
 }
 
 /**
@@ -403,7 +427,7 @@ export function ChatPanel({ focusMode = false }: { focusMode?: boolean }) {
     return (
       <div className="flex h-full bg-[rgb(var(--color-surface-inset))]">
         <div className="flex-1 min-w-0 min-h-0">
-          <ChatTab />
+          <ChatTab focusMode />
         </div>
       </div>
     );
@@ -428,7 +452,7 @@ export function ChatPanel({ focusMode = false }: { focusMode?: boolean }) {
 
 // ── Chat Tab ─────────────────────────────────────────────────────
 
-function ChatTab() {
+function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
   const { settings, updateSetting } = useSettings();
   const chatFocusMode = useAppStore((s) => s.chatFocusMode);
   const setChatFocusMode = useAppStore((s) => s.setChatFocusMode);
@@ -469,10 +493,12 @@ function ChatTab() {
   const [showModelPicker, setShowModelPicker] = useState(false);
   const [showAgentPicker, setShowAgentPicker] = useState(false);
   const [expandedWebRef, setExpandedWebRef] = useState<string | null>(null);
-  const [streamingText, setStreamingText] = useState<string>("");
-  const [streamingThinking, setStreamingThinking] = useState<string>("");
-  const [streamingStatus, setStreamingStatus] = useState<string>("");
-  const [streamingDrafts, setStreamingDrafts] = useState<string[]>([]);
+  const streamingText = useAppStore((s) => s.chatStreamingText);
+  const streamingThinking = useAppStore((s) => s.chatStreamingThinking);
+  const streamingStatus = useAppStore((s) => s.chatStreamingStatus);
+  const streamingDrafts = useAppStore((s) => s.chatStreamingDrafts);
+  const setChatStreamingState = useAppStore((s) => s.setChatStreamingState);
+  const resetChatStreaming = useAppStore((s) => s.resetChatStreaming);
 
   // Listen for streaming agent events from the backend
   const streamingRef = useRef("");
@@ -481,6 +507,12 @@ function ChatTab() {
   const abortedRef = useRef(false);
   const pendingToolArgsRef = useRef<Record<string, string[]>>({});
   const handledSketchMutationsRef = useRef<Map<string, number>>(new Map());
+
+  useEffect(() => {
+    streamingRef.current = streamingText;
+    thinkingRef.current = streamingThinking;
+    workingDraftsRef.current = streamingDrafts;
+  }, [streamingDrafts, streamingText, streamingThinking]);
   const refreshSketchAfterMutation = useCallback((mutation: { path: string | null; rows: number[]; toolName: string }) => {
     const mutationPath = normalizeMutationPath(mutation.path);
     const fallbackPath = normalizeMutationPath(useAppStore.getState().activeSketchPath);
@@ -512,12 +544,15 @@ function ChatTab() {
     void refreshChangedFiles();
   }, [checkDirty, loadStoryboards, openStoryboard, refreshChangedFiles]);
   useEffect(() => {
+    const shouldListen = focusMode || !chatFocusMode;
+    if (!shouldListen) return;
+
     const unlisten = listen<{ type: string; content?: string; message?: string; name?: string; arguments?: string; result?: string; response?: string; agent_id?: string; task?: string }>("agent-event", (event) => {
       const ev = event.payload;
       switch (ev.type) {
         case "delta":
           streamingRef.current += ev.content ?? "";
-          setStreamingText(streamingRef.current);
+          setChatStreamingState({ chatStreamingText: streamingRef.current });
           break;
         case "delta_reset":
           // Anthropic can stream pre-tool prose, then reset for a new tool round.
@@ -529,14 +564,17 @@ function ChatTab() {
           });
           streamingRef.current = resetState.buffer;
           workingDraftsRef.current = resetState.drafts;
-          setStreamingDrafts(resetState.drafts);
+          setChatStreamingState({
+            chatStreamingText: resetState.buffer,
+            chatStreamingDrafts: resetState.drafts,
+          });
           break;
         case "thinking":
           thinkingRef.current += ev.content ?? "";
-          setStreamingThinking(thinkingRef.current);
+          setChatStreamingState({ chatStreamingThinking: thinkingRef.current });
           break;
         case "status":
-          setStreamingStatus(ev.message ?? "");
+          setChatStreamingState({ chatStreamingStatus: ev.message ?? "" });
           // Compaction status events get injected as visible system messages in chat
           if (ev.message && ev.message.startsWith("Compacting context")) {
             setChatMessages([...messages, { role: "system", content: ev.message! }]);
@@ -611,7 +649,7 @@ function ChatTab() {
             content: `🤖 Agent "${ev.agent_id}" started: ${ev.task ?? ""}`,
             level: "info",
           }]);
-          setStreamingStatus(`Agent "${ev.agent_id}" working…`);
+          setChatStreamingState({ chatStreamingStatus: `Agent "${ev.agent_id}" working…` });
           break;
         case "agent_done":
           addActivityEntries([{
@@ -637,11 +675,12 @@ function ChatTab() {
       }
     });
     return () => { unlisten.then((f) => f()); };
-  }, [addActivityEntries, loadNotes, openNote, refreshSketchAfterMutation, refreshStoryboardAfterMutation]);
+  }, [addActivityEntries, chatFocusMode, focusMode, loadNotes, openNote, refreshSketchAfterMutation, refreshStoryboardAfterMutation, setChatStreamingState]);
 
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const shouldStickToBottomRef = useRef(true);
+  const initiallyScrolledSessionRef = useRef<string | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const autocompleteRef = useRef<HTMLDivElement>(null);
   const contextPickerRef = useRef<HTMLDivElement>(null);
@@ -669,14 +708,23 @@ function ChatTab() {
     shouldStickToBottomRef.current = isChatScrolledNearBottom(event.currentTarget);
   }, []);
 
-  const scrollMessagesToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
+  const scrollMessagesToBottom = useCallback((behavior: ScrollBehavior = "auto") => {
     messagesEndRef.current?.scrollIntoView({ behavior });
   }, []);
+
+  useLayoutEffect(() => {
+    if (messages.length === 0) return;
+    const sessionKey = chatSessionPath ?? "__local__";
+    if (initiallyScrolledSessionRef.current === sessionKey) return;
+    initiallyScrolledSessionRef.current = sessionKey;
+    shouldStickToBottomRef.current = true;
+    scrollMessagesToBottom("auto");
+  }, [chatSessionPath, messages.length, scrollMessagesToBottom]);
 
   // Auto-scroll only while the user is already following the bottom of the chat.
   useEffect(() => {
     if (!shouldStickToBottomRef.current) return;
-    scrollMessagesToBottom();
+    scrollMessagesToBottom("auto");
   }, [messages, scrollMessagesToBottom, streamingStatus, streamingText, streamingThinking]);
 
   // Click-outside to close pickers
@@ -856,10 +904,8 @@ function ChatTab() {
     streamingRef.current = "";
     thinkingRef.current = "";
     workingDraftsRef.current = [];
-    setStreamingText("");
-    setStreamingThinking("");
-    setStreamingStatus("Connecting…");
-    setStreamingDrafts([]);
+    resetChatStreaming();
+    setChatStreamingState({ chatStreamingStatus: "Connecting…" });
     // Log the send to activity
     addActivityEntries([{
       id: crypto.randomUUID(),
@@ -937,13 +983,14 @@ function ChatTab() {
         thinking: thinkingRef.current,
       });
       if (workingNotes) {
-        let finalAssistantIndex = -1;
-        for (let i = backendMessages.length - 1; i >= 0; i -= 1) {
-          if (backendMessages[i].role === "assistant" && textContent(backendMessages[i].content).trim() === result.response.trim()) {
-            finalAssistantIndex = i;
-            break;
+        const finalAssistantIndex = (() => {
+          for (let i = backendMessages.length - 1; i >= 0; i -= 1) {
+            if (backendMessages[i].role === "assistant" && textContent(backendMessages[i].content).trim() === result.response.trim()) {
+              return i;
+            }
           }
-        }
+          return -1;
+        })();
         if (finalAssistantIndex >= 0) {
           const finalAssistant = backendMessages[finalAssistantIndex];
           backendMessages[finalAssistantIndex] = {
@@ -1005,15 +1052,12 @@ function ChatTab() {
       if (!silent) setChatMessages(newMessages);
     } finally {
       setChatLoading(false);
-      setStreamingText("");
-      setStreamingThinking("");
-      setStreamingStatus("");
-      setStreamingDrafts([]);
+      resetChatStreaming();
       streamingRef.current = "";
       thinkingRef.current = "";
       workingDraftsRef.current = [];
     }
-  }, [input, loading, messages, references, systemPrompt, buildConfig, setChatMessages, setChatLoading, setChatError, addActivityEntries, settings, selectedAgent, memoryContext, activeSketchPath, activeStoryboardPath, activeNotePath, refreshSketchAfterMutation, refreshStoryboardAfterMutation, scrollMessagesToBottom, updateSetting]);
+  }, [input, loading, messages, references, systemPrompt, buildConfig, setChatMessages, setChatLoading, setChatError, addActivityEntries, settings, selectedAgent, memoryContext, activeSketchPath, activeStoryboardPath, activeNotePath, refreshSketchAfterMutation, refreshStoryboardAfterMutation, resetChatStreaming, scrollMessagesToBottom, setChatStreamingState, updateSetting]);
 
   // Pick up prompts queued from outside the chat (e.g. sparkle buttons)
   const handleSendRef = useRef(handleSend);
@@ -1029,12 +1073,11 @@ function ChatTab() {
   const handleStop = useCallback(() => {
     abortedRef.current = true;
     setChatLoading(false);
-    setStreamingText("");
-    setStreamingThinking("");
-    setStreamingStatus("");
+    resetChatStreaming();
     streamingRef.current = "";
     thinkingRef.current = "";
-  }, [setChatLoading]);
+    workingDraftsRef.current = [];
+  }, [resetChatStreaming, setChatLoading]);
 
   const handleRetry = useCallback(() => {
     // Find the last user message text and re-send it
@@ -1327,6 +1370,7 @@ function ChatTab() {
           <div key={i} className={chatFocusMode ? "mx-auto w-full max-w-5xl" : undefined}>
             <MessageRow
               message={msg}
+              inlineToolActivity={hasToolCalls(msg) ? extractInlineToolActivity(msg, messages.slice(i + 1)) : []}
               agentName={selectedAgent.name}
               projectRoot={currentProject?.root}
               onDelete={msg.role === "user" ? () => {
@@ -1840,11 +1884,13 @@ function WebRefChip({ url }: { url: string }) {
 
 function MessageRow({
   message,
+  inlineToolActivity = [],
   agentName,
   projectRoot,
   onDelete,
 }: {
   message: ChatMessage;
+  inlineToolActivity?: ChatToolActivity[];
   agentName: string;
   projectRoot?: string;
   onDelete?: () => void;
@@ -1904,25 +1950,34 @@ function MessageRow({
 
   if (message.role === "assistant") {
     const assistantText = textContent(message.content).trim();
-    if (!assistantText) return null;
+    if (!assistantText && inlineToolActivity.length === 0) return null;
 
     return (
       <div className="px-3.5 py-2.5">
         <div className="w-full max-w-[70ch] min-w-0">
-          <div className="mb-1.5 flex items-center gap-2 text-[10px] font-medium uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))]/85">
-            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))]">
-              <IconSparkles size={11} />
-            </span>
-            {agentName}
-          </div>
-          <div className="rounded-2xl rounded-tl-sm border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))]/80 shadow-sm">
-            <div className="px-5 py-[1.125rem] text-[14px] leading-[1.78] text-[rgb(var(--color-text)_/_0.92)]">
-              <MarkdownContent content={assistantText} projectRoot={projectRoot} />
+          {assistantText && (
+            <>
+              <div className="mb-1.5 flex items-center gap-2 text-[10px] font-medium uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))]/85">
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))]">
+                  <IconSparkles size={11} />
+                </span>
+                {agentName}
+              </div>
+              <div className="rounded-2xl rounded-tl-sm border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))]/80 shadow-sm">
+                <div className="px-5 py-[1.125rem] text-[14px] leading-[1.78] text-[rgb(var(--color-text)_/_0.92)]">
+                  <MarkdownContent content={assistantText} projectRoot={projectRoot} />
+                </div>
+                {message.cutready?.workingNotes && (
+                  <WorkingNotesInline notes={message.cutready.workingNotes} />
+                )}
+              </div>
+            </>
+          )}
+          {inlineToolActivity.length > 0 && (
+            <div className={assistantText ? "mt-2" : ""}>
+              <ToolActivityTimeline activity={inlineToolActivity} />
             </div>
-            {message.cutready?.workingNotes && (
-              <WorkingNotesInline notes={message.cutready.workingNotes} />
-            )}
-          </div>
+          )}
         </div>
       </div>
     );
@@ -1989,6 +2044,78 @@ function WorkingNotesInline({ notes, defaultOpen = false, live = false }: { note
       </div>}
     </div>
   );
+}
+
+function ToolActivityTimeline({ activity }: { activity: ChatToolActivity[] }) {
+  const [expanded, setExpanded] = useState(false);
+  if (activity.length === 0) return null;
+
+  return (
+    <div className="overflow-hidden rounded-2xl border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-alt))]/25 shadow-sm">
+      <button
+        type="button"
+        aria-expanded={expanded}
+        onClick={() => setExpanded((value) => !value)}
+        className="flex w-full cursor-pointer select-none items-center gap-2 px-4 py-2.5 text-left text-[11px] text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))]/55"
+      >
+        <span className="flex h-5 w-5 items-center justify-center rounded-full border border-[rgb(var(--color-accent))]/20 bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))]">
+          <Wrench className="h-3 w-3" />
+        </span>
+        <span className="font-medium">Used tools</span>
+        <span className="rounded-full border border-[rgb(var(--color-border-subtle))] px-1.5 py-0.5 text-[10px] tabular-nums text-[rgb(var(--color-text-secondary))]/80">
+          {activity.length}
+        </span>
+        <span className="min-w-0 flex-1 truncate text-[10px] text-[rgb(var(--color-text-secondary))]/75">
+          {activity.map((item) => formatToolName(item.name)).join(" · ")}
+        </span>
+        <ChevronDown className={`ml-auto h-3 w-3 transition-transform ${expanded ? "rotate-180" : ""}`} />
+      </button>
+      {expanded && (
+        <div className="space-y-2 px-4 pb-4">
+          {activity.map((item) => (
+            <div key={item.id} className="rounded-xl border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-alt))]/45">
+              <div className="flex items-center gap-2 border-b border-[rgb(var(--color-border-subtle))] px-3 py-2 text-[10px] font-medium uppercase tracking-[0.12em] text-[rgb(var(--color-text-secondary))]/80">
+                <span className="truncate">{formatToolName(item.name)}</span>
+                {item.result !== undefined && (
+                  <span className="ml-auto rounded-full border border-[rgb(var(--color-border-subtle))] px-1.5 py-0.5 text-[9px] normal-case tracking-normal">
+                    completed
+                  </span>
+                )}
+              </div>
+              <div className="space-y-2 px-3 py-2.5">
+                <ToolJsonBlock label="Args" value={item.arguments} />
+                {item.result !== undefined && <ToolJsonBlock label="Result" value={item.result} />}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ToolJsonBlock({ label, value }: { label: string; value: string }) {
+  const formatted = formatMaybeJson(value);
+  return (
+    <div>
+      <div className="mb-1 text-[10px] font-medium text-[rgb(var(--color-text-secondary))]/75">{label}</div>
+      <pre className="max-h-48 overflow-auto whitespace-pre-wrap rounded-lg border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))]/70 p-2.5 text-[10px] leading-relaxed text-[rgb(var(--color-text-secondary))]">
+        {formatted}
+      </pre>
+    </div>
+  );
+}
+
+function formatToolName(name: string): string {
+  return name.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function formatMaybeJson(value: string): string {
+  try {
+    return JSON.stringify(JSON.parse(value), null, 2);
+  } catch {
+    return value;
+  }
 }
 
 // ── Simple Markdown Renderer ─────────────────────────────────────

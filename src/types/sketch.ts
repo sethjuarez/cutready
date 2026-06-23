@@ -179,6 +179,13 @@ export interface ChatWorkingNotes {
   thinking?: string;
 }
 
+export interface ChatToolActivity {
+  id: string;
+  name: string;
+  arguments: string;
+  result?: string;
+}
+
 export interface ToolCall {
   id: string;
   call_type: string;
