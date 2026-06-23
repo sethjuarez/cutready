@@ -3,6 +3,7 @@
 //! Each tool maps to a project operation (read notes, read/update sketches, etc.)
 //! and is exposed to the LLM via function calling.
 
+use std::collections::BTreeSet;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -11,7 +12,7 @@ use serde_json::{json, Value};
 
 use crate::engine::agent::llm::{ContentPart, ImageUrl, Tool, ToolCall};
 use crate::engine::project;
-use crate::models::sketch::{PlanningRow, Sketch};
+use crate::models::sketch::{PlanningRow, Sketch, StoryboardItem};
 
 // ---------------------------------------------------------------------------
 // Image extraction and encoding for vision-capable models
@@ -228,7 +229,7 @@ pub fn encode_image_at_path(root: &Path, rel_path: &str) -> Option<ContentPart> 
 // ---------------------------------------------------------------------------
 
 /// All tools available to the AI assistant.
-pub fn all_tools(web_search_enabled: bool) -> Vec<Tool> {
+pub fn all_tools(web_search_enabled: bool, project_workspace_tools_enabled: bool) -> Vec<Tool> {
     let mut tools = vec![
         Tool::function(
             "list_project_files",
@@ -489,6 +490,51 @@ pub fn all_tools(web_search_enabled: bool) -> Vec<Tool> {
         agentive::memory::save_memory_tool(),
     ];
 
+    if project_workspace_tools_enabled {
+        tools.insert(
+            1,
+            Tool::function(
+                "add_items_to_project",
+                "Copy sketches, storyboards, notes, or local asset files from the current project into another project in the same workspace. Storyboards automatically copy referenced sketches; sketches automatically copy referenced screenshots and visuals. The active project is not switched. Writer-agent only.",
+                json!({
+                    "type": "object",
+                    "properties": {
+                        "target_project_path": { "type": "string", "description": "Manifest project path returned by create_project or shown in the project list." },
+                        "overwrite": { "type": "boolean", "description": "Whether to replace existing target files. Defaults to false." },
+                        "items": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "type": { "type": "string", "enum": ["sketch", "storyboard", "note", "file"], "description": "Optional item type. If omitted, inferred from the source path extension." },
+                                    "source_path": { "type": "string", "description": "Path in the current project to copy." },
+                                    "target_path": { "type": "string", "description": "Optional destination path inside the target project. Defaults to source_path." }
+                                },
+                                "required": ["source_path"]
+                            }
+                        }
+                    },
+                    "required": ["target_project_path", "items"]
+                }),
+            ),
+        );
+        tools.insert(
+            1,
+            Tool::function(
+                "create_project",
+                "Create a new project in the current multi-project workspace without switching the active project. Use this before add_items_to_project when you need to split or derive content from the current project into a new project. Writer-agent only.",
+                json!({
+                    "type": "object",
+                    "properties": {
+                        "name": { "type": "string", "description": "Display name for the new project." },
+                        "description": { "type": "string", "description": "Optional short description for the project manifest." }
+                    },
+                    "required": ["name"]
+                }),
+            ),
+        );
+    }
+
     if elucim_bridge_enabled() {
         tools.insert(
             tools.len().saturating_sub(2),
@@ -550,6 +596,13 @@ pub fn all_tools(web_search_enabled: bool) -> Vec<Tool> {
     }
 
     tools
+}
+
+pub fn all_tools_for_agent(web_search_enabled: bool, agent_id: Option<&str>) -> Vec<Tool> {
+    all_tools(
+        web_search_enabled,
+        agent_id.is_some_and(|id| id.eq_ignore_ascii_case("writer")),
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -698,6 +751,7 @@ pub fn execute_tool(
     call: &ToolCall,
     project_root: &Path,
     vision_enabled: bool,
+    project_workspace_tools_enabled: bool,
 ) -> agentive::ToolOutput {
     let args: Value = agentive::parse_tool_args(&call.function.arguments).unwrap_or(json!({}));
     let start = std::time::Instant::now();
@@ -713,6 +767,21 @@ pub fn execute_tool(
         match call.function.name.as_str() {
             "list_project_files" => {
                 agentive::ToolOutput::from(exec_list_project_files(project_root, &args))
+            }
+            "create_project" if project_workspace_tools_enabled => {
+                agentive::ToolOutput::from(exec_create_project(project_root, &args))
+            }
+            "create_project" => agentive::ToolOutput::from(
+                "Error: create_project is only available to the Writer agent",
+            ),
+            "add_items_to_project" => {
+                if project_workspace_tools_enabled {
+                    agentive::ToolOutput::from(exec_add_items_to_project(project_root, &args))
+                } else {
+                    agentive::ToolOutput::from(
+                        "Error: add_items_to_project is only available to the Writer agent",
+                    )
+                }
             }
             "read_note" => exec_read_note(project_root, &args, vision_enabled),
             "write_note" => agentive::ToolOutput::from(exec_write_note(project_root, &args)),
@@ -902,6 +971,8 @@ fn touched_resources_for_tool(tool_name: &str, args: &Value) -> Vec<agentive::To
         | "apply_row_visual_command" => agentive::ResourceOperation::Update,
         "fetch_url" => agentive::ResourceOperation::Read,
         "search_web" => agentive::ResourceOperation::Search,
+        "create_project" => agentive::ResourceOperation::Create,
+        "add_items_to_project" => agentive::ResourceOperation::Create,
         "list_project_files" => agentive::ResourceOperation::Inspect,
         _ => agentive::ResourceOperation::Execute,
     };
@@ -953,6 +1024,33 @@ fn touched_resources_for_tool(tool_name: &str, args: &Value) -> Vec<agentive::To
             operation,
             tool_name,
         ),
+        "create_project" => push_path_resource(
+            &mut resources,
+            "project",
+            args.get("name").and_then(Value::as_str),
+            operation,
+            tool_name,
+        ),
+        "add_items_to_project" => {
+            push_path_resource(
+                &mut resources,
+                "project",
+                args.get("target_project_path").and_then(Value::as_str),
+                operation,
+                tool_name,
+            );
+            if let Some(items) = args.get("items").and_then(Value::as_array) {
+                for item in items {
+                    push_path_resource(
+                        &mut resources,
+                        "project_item",
+                        item.get("source_path").and_then(Value::as_str),
+                        agentive::ResourceOperation::Read,
+                        tool_name,
+                    );
+                }
+            }
+        }
         _ => {}
     }
 
@@ -1015,6 +1113,469 @@ fn extract_json_object<'a>(
 
 fn resolve_path(project_root: &Path, rel: &str) -> PathBuf {
     project_root.join(rel)
+}
+
+fn exec_create_project(current_project_root: &Path, args: &Value) -> String {
+    let name = match args.get("name").and_then(Value::as_str).map(str::trim) {
+        Some(name) if !name.is_empty() => name,
+        _ => return "Error: missing 'name' argument".into(),
+    };
+    let description = args
+        .get("description")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+
+    let repo_root = match find_multi_project_repo_root(current_project_root) {
+        Ok(repo_root) => repo_root,
+        Err(e) => return format!("Error creating project: {e}"),
+    };
+
+    match project::create_project_in_repo(&repo_root, name, description) {
+        Ok(entry) => {
+            let root = repo_root.join(&entry.path);
+            json!({
+                "project_path": entry.path,
+                "name": entry.name,
+                "description": entry.description,
+                "root": root.to_string_lossy(),
+                "message": "Project created. Use project_path as target_project_path with add_items_to_project. Refresh projects to see the new entry in the UI."
+            })
+            .to_string()
+        }
+        Err(e) => format!("Error creating project: {e}"),
+    }
+}
+
+fn exec_add_items_to_project(current_project_root: &Path, args: &Value) -> String {
+    let target_project_path = match args
+        .get("target_project_path")
+        .and_then(Value::as_str)
+        .map(str::trim)
+    {
+        Some(path) if !path.is_empty() => path,
+        _ => return "Error: missing 'target_project_path' argument".into(),
+    };
+    let items = match args.get("items").and_then(Value::as_array) {
+        Some(items) if !items.is_empty() => items,
+        Some(_) => return "Error: 'items' must include at least one item".into(),
+        None => return "Error: missing 'items' array".into(),
+    };
+    let overwrite = args
+        .get("overwrite")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+
+    let repo_root = match find_multi_project_repo_root(current_project_root) {
+        Ok(repo_root) => repo_root,
+        Err(e) => return format!("Error adding items to project: {e}"),
+    };
+    let target_root = match resolve_manifest_project_root(&repo_root, target_project_path) {
+        Ok(root) => root,
+        Err(e) => return format!("Error adding items to project: {e}"),
+    };
+    if paths_equivalent(current_project_root, &target_root) {
+        return "Error adding items to project: target_project_path is the active project; choose a different project".into();
+    }
+
+    let mut copied = BTreeSet::new();
+    let mut lines = Vec::new();
+    for item in items {
+        let source_path = match item
+            .get("source_path")
+            .and_then(Value::as_str)
+            .map(str::trim)
+        {
+            Some(path) if !path.is_empty() => path,
+            _ => return "Error: every item must include source_path".into(),
+        };
+        let target_path = item
+            .get("target_path")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|path| !path.is_empty())
+            .unwrap_or(source_path);
+        let item_type = item
+            .get("type")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_ascii_lowercase)
+            .unwrap_or_else(|| infer_project_item_type(source_path));
+
+        let result = match item_type.as_str() {
+            "sketch" => copy_sketch_with_assets(
+                current_project_root,
+                &target_root,
+                source_path,
+                target_path,
+                overwrite,
+                &mut copied,
+            ),
+            "storyboard" => copy_storyboard_with_dependencies(
+                current_project_root,
+                &target_root,
+                source_path,
+                target_path,
+                overwrite,
+                &mut copied,
+            ),
+            "note" => copy_note_with_assets(
+                current_project_root,
+                &target_root,
+                source_path,
+                target_path,
+                overwrite,
+                &mut copied,
+            ),
+            "file" => copy_project_file(
+                current_project_root,
+                &target_root,
+                source_path,
+                target_path,
+                overwrite,
+                &mut copied,
+            ),
+            other => Err(format!(
+                "unsupported item type '{other}' for {source_path}; use sketch, storyboard, note, or file"
+            )),
+        };
+
+        match result {
+            Ok(summary) => lines.push(summary),
+            Err(e) => return format!("Error adding items to project: {e}"),
+        }
+    }
+
+    format!(
+        "Added {} requested item{} to project \"{}\".\nCopied {} file{} total:\n{}\n\nRefresh projects/files to see the new target content in the UI.",
+        items.len(),
+        if items.len() == 1 { "" } else { "s" },
+        target_project_path,
+        copied.len(),
+        if copied.len() == 1 { "" } else { "s" },
+        lines.join("\n")
+    )
+}
+
+fn find_multi_project_repo_root(current_project_root: &Path) -> Result<PathBuf, String> {
+    for candidate in current_project_root.ancestors() {
+        if project::read_manifest(candidate).is_some() {
+            return Ok(candidate.to_path_buf());
+        }
+    }
+    Err("the current workspace is not multi-project yet. Create another project from the UI first so the existing project can be safely migrated before agents copy across projects.".into())
+}
+
+fn resolve_manifest_project_root(repo_root: &Path, project_path: &str) -> Result<PathBuf, String> {
+    let manifest = project::read_manifest(repo_root)
+        .ok_or_else(|| "workspace manifest is missing".to_string())?;
+    let entry = manifest
+        .projects
+        .iter()
+        .find(|entry| entry.path == project_path)
+        .ok_or_else(|| format!("unknown target_project_path '{project_path}'"))?;
+    if entry.path == "." {
+        return Err("target_project_path cannot be '.' for cross-project copy".into());
+    }
+    project::safe_resolve(repo_root, &entry.path)
+        .map_err(|e| e.to_string())
+        .and_then(|path| {
+            if path.is_dir() {
+                Ok(path)
+            } else {
+                Err(format!(
+                    "target project directory does not exist: {}",
+                    entry.path
+                ))
+            }
+        })
+}
+
+fn infer_project_item_type(path: &str) -> String {
+    match Path::new(path)
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .map(|ext| ext.to_ascii_lowercase())
+        .as_deref()
+    {
+        Some("sk") => "sketch".into(),
+        Some("sb") => "storyboard".into(),
+        Some("md") => "note".into(),
+        _ => "file".into(),
+    }
+}
+
+fn copy_storyboard_with_dependencies(
+    source_root: &Path,
+    target_root: &Path,
+    source_path: &str,
+    target_path: &str,
+    overwrite: bool,
+    copied: &mut BTreeSet<String>,
+) -> Result<String, String> {
+    let normalized_target = normalize_rel_path(target_path);
+    if copied.contains(&normalized_target) {
+        return Ok(format!(
+            "- storyboard: {source_path} -> {target_path} (already copied)"
+        ));
+    }
+    let source_abs = project::safe_resolve(source_root, source_path).map_err(|e| e.to_string())?;
+    let target_abs = project::safe_resolve(target_root, target_path).map_err(|e| e.to_string())?;
+    ensure_can_write_target(&target_abs, overwrite)?;
+    let storyboard = project::read_storyboard(&source_abs).map_err(|e| e.to_string())?;
+
+    let mut dependency_count = 0usize;
+    for sketch_path in storyboard_sketch_paths(&storyboard) {
+        copy_sketch_with_assets(
+            source_root,
+            target_root,
+            &sketch_path,
+            &sketch_path,
+            overwrite,
+            copied,
+        )?;
+        dependency_count += 1;
+    }
+
+    project::write_storyboard(&storyboard, &target_abs, target_root).map_err(|e| e.to_string())?;
+    copied.insert(normalized_target);
+    Ok(format!(
+        "- storyboard: {source_path} -> {target_path} (with {dependency_count} sketch dependenc{})",
+        if dependency_count == 1 { "y" } else { "ies" }
+    ))
+}
+
+fn copy_sketch_with_assets(
+    source_root: &Path,
+    target_root: &Path,
+    source_path: &str,
+    target_path: &str,
+    overwrite: bool,
+    copied: &mut BTreeSet<String>,
+) -> Result<String, String> {
+    let normalized_target = normalize_rel_path(target_path);
+    if copied.contains(&normalized_target) {
+        return Ok(format!(
+            "- sketch: {source_path} -> {target_path} (already copied)"
+        ));
+    }
+    let source_abs = project::safe_resolve(source_root, source_path).map_err(|e| e.to_string())?;
+    let target_abs = project::safe_resolve(target_root, target_path).map_err(|e| e.to_string())?;
+    ensure_can_write_target(&target_abs, overwrite)?;
+    let sketch =
+        project::read_sketch_with_migration(&source_abs, source_root).map_err(|e| e.to_string())?;
+
+    let mut asset_count = 0usize;
+    let mut skipped_asset_count = 0usize;
+    for asset_path in sketch_asset_paths(&sketch) {
+        if copy_optional_project_asset(
+            source_root,
+            target_root,
+            &asset_path,
+            &asset_path,
+            overwrite,
+            copied,
+        )? {
+            asset_count += 1;
+        } else {
+            skipped_asset_count += 1;
+        }
+    }
+
+    project::write_sketch(&sketch, &target_abs, target_root).map_err(|e| e.to_string())?;
+    copied.insert(normalized_target);
+    Ok(format!(
+        "- sketch: {source_path} -> {target_path} (with {asset_count} asset{}, skipped {skipped_asset_count})",
+        if asset_count == 1 { "" } else { "s" },
+    ))
+}
+
+fn copy_note_with_assets(
+    source_root: &Path,
+    target_root: &Path,
+    source_path: &str,
+    target_path: &str,
+    overwrite: bool,
+    copied: &mut BTreeSet<String>,
+) -> Result<String, String> {
+    copy_project_file(
+        source_root,
+        target_root,
+        source_path,
+        target_path,
+        overwrite,
+        copied,
+    )?;
+    let source_abs = project::safe_resolve(source_root, source_path).map_err(|e| e.to_string())?;
+    let content = project::read_note(&source_abs).map_err(|e| e.to_string())?;
+    let mut asset_count = 0usize;
+    let mut skipped_asset_count = 0usize;
+    for asset_path in markdown_image_paths(&content) {
+        if copy_optional_project_asset(
+            source_root,
+            target_root,
+            &asset_path,
+            &asset_path,
+            overwrite,
+            copied,
+        )? {
+            asset_count += 1;
+        } else {
+            skipped_asset_count += 1;
+        }
+    }
+    Ok(format!(
+        "- note: {source_path} -> {target_path} (with {asset_count} image asset{}, skipped {skipped_asset_count})",
+        if asset_count == 1 { "" } else { "s" },
+    ))
+}
+
+fn copy_optional_project_asset(
+    source_root: &Path,
+    target_root: &Path,
+    source_path: &str,
+    target_path: &str,
+    overwrite: bool,
+    copied: &mut BTreeSet<String>,
+) -> Result<bool, String> {
+    let normalized_target = normalize_rel_path(target_path);
+    if copied.contains(&normalized_target) {
+        return Ok(false);
+    }
+    let source_abs = project::safe_resolve(source_root, source_path).map_err(|e| e.to_string())?;
+    let target_abs = project::safe_resolve(target_root, target_path).map_err(|e| e.to_string())?;
+    if !source_abs.is_file() {
+        return Ok(false);
+    }
+    if target_abs.exists() && !overwrite {
+        return Ok(false);
+    }
+    if let Some(parent) = target_abs.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    std::fs::copy(&source_abs, &target_abs).map_err(|e| e.to_string())?;
+    copied.insert(normalized_target);
+    Ok(true)
+}
+
+fn copy_project_file(
+    source_root: &Path,
+    target_root: &Path,
+    source_path: &str,
+    target_path: &str,
+    overwrite: bool,
+    copied: &mut BTreeSet<String>,
+) -> Result<String, String> {
+    let normalized_target = normalize_rel_path(target_path);
+    if copied.contains(&normalized_target) {
+        return Ok(format!(
+            "- file: {source_path} -> {target_path} (already copied)"
+        ));
+    }
+    let source_abs = project::safe_resolve(source_root, source_path).map_err(|e| e.to_string())?;
+    let target_abs = project::safe_resolve(target_root, target_path).map_err(|e| e.to_string())?;
+    if !source_abs.is_file() {
+        return Err(format!("source file not found: {source_path}"));
+    }
+    ensure_can_write_target(&target_abs, overwrite)?;
+    if let Some(parent) = target_abs.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    std::fs::copy(&source_abs, &target_abs).map_err(|e| e.to_string())?;
+    copied.insert(normalized_target);
+    Ok(format!("- file: {source_path} -> {target_path}"))
+}
+
+fn ensure_can_write_target(target_abs: &Path, overwrite: bool) -> Result<(), String> {
+    if target_abs.exists() && !overwrite {
+        return Err(format!(
+            "target already exists: {} (pass overwrite: true to replace it)",
+            target_abs.display()
+        ));
+    }
+    Ok(())
+}
+
+fn storyboard_sketch_paths(storyboard: &crate::models::sketch::Storyboard) -> Vec<String> {
+    let mut paths = Vec::new();
+    for item in &storyboard.items {
+        match item {
+            StoryboardItem::SketchRef { path } => paths.push(path.clone()),
+            StoryboardItem::Section { sketches, .. } => paths.extend(sketches.iter().cloned()),
+        }
+    }
+    paths
+}
+
+fn sketch_asset_paths(sketch: &Sketch) -> Vec<String> {
+    let mut paths = BTreeSet::new();
+    for row in &sketch.rows {
+        if let Some(path) = row.screenshot.as_deref().map(str::trim) {
+            if !path.is_empty() {
+                paths.insert(normalize_rel_path(path));
+            }
+        }
+        if let Some(path) = row.visual.as_ref().and_then(Value::as_str).map(str::trim) {
+            if !path.is_empty() {
+                paths.insert(normalize_rel_path(path));
+            }
+        }
+    }
+    paths.into_iter().collect()
+}
+
+fn markdown_image_paths(markdown: &str) -> Vec<String> {
+    let mut paths = BTreeSet::new();
+    for line in markdown.lines() {
+        let mut rest = line;
+        while let Some(start) = rest.find("![") {
+            let Some(open_paren) = rest[start..].find("](").map(|idx| start + idx + 2) else {
+                break;
+            };
+            let Some(close_paren) = rest[open_paren..].find(')').map(|idx| open_paren + idx) else {
+                break;
+            };
+            let path = normalize_markdown_image_target(rest[open_paren..close_paren].trim());
+            if is_local_project_asset_path(&path) {
+                paths.insert(normalize_rel_path(&path));
+            }
+            rest = &rest[close_paren + 1..];
+        }
+
+        fn normalize_markdown_image_target(target: &str) -> String {
+            let target = target.trim();
+            let target = target
+                .strip_prefix('<')
+                .and_then(|value| value.strip_suffix('>'))
+                .unwrap_or(target);
+            for quote in ['"', '\''] {
+                if let Some((path, _title)) = target.split_once(&format!(" {quote}")) {
+                    return path.trim().to_string();
+                }
+            }
+            target.to_string()
+        }
+    }
+    paths.into_iter().collect()
+}
+
+fn is_local_project_asset_path(path: &str) -> bool {
+    !path.is_empty()
+        && !path.starts_with("http://")
+        && !path.starts_with("https://")
+        && !path.starts_with("data:")
+        && !Path::new(path).is_absolute()
+}
+
+fn normalize_rel_path(path: &str) -> String {
+    path.trim().replace('\\', "/")
+}
+
+fn paths_equivalent(left: &Path, right: &Path) -> bool {
+    let left = left.canonicalize().unwrap_or_else(|_| left.to_path_buf());
+    let right = right.canonicalize().unwrap_or_else(|_| right.to_path_buf());
+    left == right
 }
 
 pub async fn exec_search_web(args: &Value) -> Result<String, String> {
@@ -4495,7 +5056,7 @@ mod tests {
     fn elucim_agent_operation_schema_advertises_catalog_operations() {
         let previous = std::env::var_os("CUTREADY_ELUCIM_BRIDGE");
         std::env::set_var("CUTREADY_ELUCIM_BRIDGE", "1");
-        let tools = all_tools(false);
+        let tools = all_tools(false, false);
         if let Some(value) = previous {
             std::env::set_var("CUTREADY_ELUCIM_BRIDGE", value);
         } else {
@@ -4534,6 +5095,188 @@ mod tests {
                 "schema should include {expected}: {ops:?}"
             );
         }
+    }
+
+    #[test]
+    fn project_workspace_tools_are_writer_only() {
+        let planner_tools = all_tools_for_agent(false, Some("planner"));
+        let writer_tools = all_tools_for_agent(false, Some("writer"));
+
+        let has_project_tool = |tools: &[Tool], name: &str| {
+            tools
+                .iter()
+                .map(|tool| serde_json::to_value(tool).unwrap())
+                .any(|tool| tool.pointer("/function/name").and_then(Value::as_str) == Some(name))
+        };
+
+        assert!(!has_project_tool(&planner_tools, "create_project"));
+        assert!(!has_project_tool(&planner_tools, "add_items_to_project"));
+        assert!(has_project_tool(&writer_tools, "create_project"));
+        assert!(has_project_tool(&writer_tools, "add_items_to_project"));
+    }
+
+    #[test]
+    fn non_writer_execution_rejects_project_workspace_tools() {
+        let tmp = TempDir::new().unwrap();
+        let call = ToolCall {
+            id: "call-1".into(),
+            call_type: "function".into(),
+            function: agentive::FunctionCall {
+                name: "create_project".into(),
+                arguments: json!({ "name": "Derived" }).to_string(),
+            },
+        };
+
+        let output = execute_tool(&call, tmp.path(), false, false);
+
+        assert!(output.text().contains("only available to the Writer agent"));
+    }
+
+    #[test]
+    fn create_project_tool_adds_manifest_entry_for_writer() {
+        let tmp = TempDir::new().unwrap();
+        let repo_root = tmp.path();
+        project::write_manifest(
+            repo_root,
+            &crate::models::script::ProjectManifest {
+                projects: vec![crate::models::script::ProjectEntry {
+                    path: "source".into(),
+                    name: "Source".into(),
+                    description: None,
+                }],
+            },
+        )
+        .unwrap();
+        std::fs::create_dir_all(repo_root.join("source")).unwrap();
+
+        let result = exec_create_project(
+            &repo_root.join("source"),
+            &json!({ "name": "Derived Project", "description": "Split out demo" }),
+        );
+
+        assert!(
+            result.contains("\"project_path\":\"derived-project\""),
+            "{result}"
+        );
+        assert!(repo_root.join("derived-project/sketches").is_dir());
+        let manifest = project::read_manifest(repo_root).unwrap();
+        assert!(manifest
+            .projects
+            .iter()
+            .any(|entry| entry.path == "derived-project" && entry.name == "Derived Project"));
+    }
+
+    #[test]
+    fn add_items_to_project_copies_storyboard_sketches_and_assets() {
+        let tmp = TempDir::new().unwrap();
+        let repo_root = tmp.path();
+        let source_root = repo_root.join("source");
+        let target_root = repo_root.join("target");
+        std::fs::create_dir_all(source_root.join(".cutready/screenshots")).unwrap();
+        std::fs::create_dir_all(source_root.join(".cutready/visuals")).unwrap();
+        std::fs::create_dir_all(&target_root).unwrap();
+        project::write_manifest(
+            repo_root,
+            &crate::models::script::ProjectManifest {
+                projects: vec![
+                    crate::models::script::ProjectEntry {
+                        path: "source".into(),
+                        name: "Source".into(),
+                        description: None,
+                    },
+                    crate::models::script::ProjectEntry {
+                        path: "target".into(),
+                        name: "Target".into(),
+                        description: None,
+                    },
+                ],
+            },
+        )
+        .unwrap();
+
+        std::fs::write(source_root.join(".cutready/screenshots/intro.png"), b"png").unwrap();
+        std::fs::write(source_root.join(".cutready/visuals/hero.json"), "{}").unwrap();
+        let mut row = PlanningRow::new();
+        row.time = "0:10".into();
+        row.narrative = "Introduce".into();
+        row.demo_actions = "Open app".into();
+        row.screenshot = Some(".cutready/screenshots/intro.png".into());
+        row.visual = Some(Value::String(".cutready/visuals/hero.json".into()));
+        let mut sketch = Sketch::new("Intro");
+        sketch.rows = vec![row];
+        project::write_sketch(&sketch, &source_root.join("intro.sk"), &source_root).unwrap();
+
+        let mut storyboard = crate::models::sketch::Storyboard::new("Demo");
+        storyboard.items = vec![StoryboardItem::SketchRef {
+            path: "intro.sk".into(),
+        }];
+        project::write_storyboard(&storyboard, &source_root.join("demo.sb"), &source_root).unwrap();
+
+        let result = exec_add_items_to_project(
+            &source_root,
+            &json!({
+                "target_project_path": "target",
+                "items": [{ "source_path": "demo.sb" }]
+            }),
+        );
+
+        assert!(
+            result.contains("storyboard: demo.sb -> demo.sb"),
+            "{result}"
+        );
+        assert!(target_root.join("demo.sb").is_file());
+        assert!(target_root.join("intro.sk").is_file());
+        assert!(target_root
+            .join(".cutready/screenshots/intro.png")
+            .is_file());
+        assert!(target_root.join(".cutready/visuals/hero.json").is_file());
+    }
+
+    #[test]
+    fn add_items_to_project_handles_titled_and_missing_markdown_images() {
+        let tmp = TempDir::new().unwrap();
+        let repo_root = tmp.path();
+        let source_root = repo_root.join("source");
+        let target_root = repo_root.join("target");
+        std::fs::create_dir_all(source_root.join("images")).unwrap();
+        std::fs::create_dir_all(&target_root).unwrap();
+        project::write_manifest(
+            repo_root,
+            &crate::models::script::ProjectManifest {
+                projects: vec![
+                    crate::models::script::ProjectEntry {
+                        path: "source".into(),
+                        name: "Source".into(),
+                        description: None,
+                    },
+                    crate::models::script::ProjectEntry {
+                        path: "target".into(),
+                        name: "Target".into(),
+                        description: None,
+                    },
+                ],
+            },
+        )
+        .unwrap();
+        std::fs::write(source_root.join("images/logo.png"), b"png").unwrap();
+        project::write_note(
+            &source_root.join("notes.md"),
+            "![Logo](images/logo.png \"Company Logo\")\n![Missing](images/missing.png)",
+        )
+        .unwrap();
+
+        let result = exec_add_items_to_project(
+            &source_root,
+            &json!({
+                "target_project_path": "target",
+                "items": [{ "source_path": "notes.md" }]
+            }),
+        );
+
+        assert!(result.contains("note: notes.md -> notes.md"), "{result}");
+        assert!(target_root.join("notes.md").is_file());
+        assert!(target_root.join("images/logo.png").is_file());
+        assert!(!target_root.join("images/missing.png").exists());
     }
 
     #[test]

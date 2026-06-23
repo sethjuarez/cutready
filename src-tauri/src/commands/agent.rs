@@ -312,6 +312,7 @@ pub async fn agent_chat_with_tools(
     config: ProviderConfig,
     messages: Vec<ChatMessage>,
     agent_prompts: Option<std::collections::HashMap<String, String>>,
+    agent_id: Option<String>,
 ) -> Result<AgentChatResult, String> {
     use tauri::Emitter;
 
@@ -345,6 +346,7 @@ pub async fn agent_chat_with_tools(
     let steering = state.steering.clone();
 
     let prompts = agent_prompts.unwrap_or_default();
+    let agent_id = agent_id.unwrap_or_else(|| "planner".into());
     let reported_context = config.context_length;
     let vision_mode = config.vision_mode.clone().unwrap_or_else(|| "off".into());
     let discovered_vision_support = config.model_supports_vision;
@@ -384,6 +386,7 @@ pub async fn agent_chat_with_tools(
                     "vision_enabled": vision.enabled,
                     "web_search_enabled": web_access.search_enabled,
                     "agent_prompts": prompts.len(),
+                    "agent_id": &agent_id,
                 }),
             );
             match insert_result {
@@ -410,8 +413,9 @@ pub async fn agent_chat_with_tools(
         }
     };
     log::info!(
-        "[agent_chat_with_tools] start run_id={} provider={} model={} messages={} chars={} budget={}chars reported_context={:?} vision={} web_search={} prompts={}",
+        "[agent_chat_with_tools] start run_id={} agent={} provider={} model={} messages={} chars={} budget={}chars reported_context={:?} vision={} web_search={} prompts={}",
         run_id,
+        agent_id,
         provider_name,
         model,
         message_count,
@@ -436,6 +440,7 @@ pub async fn agent_chat_with_tools(
             "vision_enabled": vision.enabled,
             "web_search_enabled": web_access.search_enabled,
             "agent_prompts": prompts.len(),
+            "agent_id": &agent_id,
         }),
     );
 
@@ -446,6 +451,7 @@ pub async fn agent_chat_with_tools(
         Some(model.clone()),
         messages,
         &project_root,
+        &agent_id,
         &prompts,
         &steering,
         &vision,
