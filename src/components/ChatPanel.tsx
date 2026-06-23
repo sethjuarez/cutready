@@ -965,6 +965,7 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
             config,
             messages: fullMessages,
             agentPrompts,
+            agentId: effectiveAgent.id,
           });
 
       // Activity logging now handled by real-time agent-event listener
