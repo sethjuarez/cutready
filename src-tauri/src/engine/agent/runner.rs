@@ -539,7 +539,13 @@ fn run_inner<'a>(
                     format!("Agent error: {message}")
                 })?
             }
-            Err(err) => return Err(format!("Agent error: {err}")),
+            Err(err) => {
+                let message = format!("Agent error: {err}");
+                emit(AgentEvent::Error {
+                    message: message.clone(),
+                });
+                return Err(message);
+            }
         };
 
         crate::util::trace::emit(
@@ -966,7 +972,10 @@ mod tests {
         ) -> Result<(), agentive::AgentError> {
             let _call_index = self.calls.fetch_add(1, Ordering::SeqCst);
             let is_compaction_request = request.tools.as_ref().is_none_or(Vec::is_empty);
-            let has_tool_result = request.messages.iter().any(|message| message.role == "tool");
+            let has_tool_result = request
+                .messages
+                .iter()
+                .any(|message| message.role == "tool");
             let message = if is_compaction_request {
                 ChatMessage::assistant("Earlier context summarized for the tiny harness budget.")
             } else if has_tool_result {
@@ -1217,10 +1226,19 @@ mod tests {
         assert_eq!(event_count(store.db_path(), &run_id, "turn_started"), 1);
         assert!(event_count(store.db_path(), &run_id, "model_call_started") >= 1);
         assert!(event_count(store.db_path(), &run_id, "model_call_completed") >= 1);
-        assert_eq!(event_count(store.db_path(), &run_id, "tool_call_started"), 1);
-        assert_eq!(event_count(store.db_path(), &run_id, "tool_call_completed"), 1);
+        assert_eq!(
+            event_count(store.db_path(), &run_id, "tool_call_started"),
+            1
+        );
+        assert_eq!(
+            event_count(store.db_path(), &run_id, "tool_call_completed"),
+            1
+        );
         assert_eq!(event_count(store.db_path(), &run_id, "resource_touched"), 1);
-        assert_eq!(event_count(store.db_path(), &run_id, "verification_recorded"), 1);
+        assert_eq!(
+            event_count(store.db_path(), &run_id, "verification_recorded"),
+            1
+        );
         assert_eq!(event_count(store.db_path(), &run_id, "turn_completed"), 1);
     }
 }
