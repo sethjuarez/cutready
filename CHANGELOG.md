@@ -9,6 +9,27 @@
 Covector manages this changelog. Do not edit manually.
 Each release section is generated from `.changes/*.md` files.
 
+## [1.13.0](https://github.com/sethjuarez/cutready/compare/v1.12.4...v1.13.0) (2026-06-23)
+
+
+### Features
+
+* add embedded workspace terminal ([d7dda1d](https://github.com/sethjuarez/cutready/commit/d7dda1df948ba2f2aa26a39be9b7439f14b6006f))
+* **agent:** add writer project copy tools ([2b370a0](https://github.com/sethjuarez/cutready/commit/2b370a0dd0057c616190de68530d3e38d11f1b1c))
+
+
+### Bug Fixes
+
+* **agent:** emit terminal stream errors ([e67449f](https://github.com/sethjuarez/cutready/commit/e67449fabd77df74558cadb59ec01fdfeb65e46a))
+* **agent:** pin agentive anthropic stream fix ([c364b29](https://github.com/sethjuarez/cutready/commit/c364b2942a9dd4b516e186e0b787d71023873f08))
+* **agent:** pin agentive release tag ([f3e7662](https://github.com/sethjuarez/cutready/commit/f3e76625f76a6944ecc08ca0254643f584f9232f))
+* **agent:** use published agentive crate ([39f49e9](https://github.com/sethjuarez/cutready/commit/39f49e90dd1d821d3720897a60b20332d3084c07))
+* **chat:** hide intermediate tool events ([06228e7](https://github.com/sethjuarez/cutready/commit/06228e78c5a599bcbeedccbc0a239eb2e9d8e6a4))
+* **chat:** render tool activity inline ([d067dec](https://github.com/sethjuarez/cutready/commit/d067decd01ce10aa0176b96410d199753927f587))
+* **chat:** show working notes inline ([1f0bcd6](https://github.com/sethjuarez/cutready/commit/1f0bcd6a345c3bae161d5b311c14e950e5d73d70))
+* **ui:** replace browser confirmations ([4f8df90](https://github.com/sethjuarez/cutready/commit/4f8df90ab415237c1897b99a7c546a9715748d04))
+* **workspace:** polish project and changes controls ([3bb911b](https://github.com/sethjuarez/cutready/commit/3bb911b41acb8216d800ef73877b06ade34660a8))
+
 ## [1.12.4](https://github.com/sethjuarez/cutready/compare/v1.12.3...v1.12.4) (2026-06-17)
 
 
