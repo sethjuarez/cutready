@@ -363,7 +363,6 @@ describe("RecordingControlWindow", () => {
   });
 
   it("cancels an active take and emits a discard event", async () => {
-    vi.spyOn(window, "confirm").mockReturnValue(true);
     mocks.invoke.mockImplementation((command: string) => {
       if (command === "get_recording_control_params") return Promise.resolve({ document_title: "Demo storyboard", take_id: "take_bad" });
       if (command === "list_monitors") return Promise.resolve(monitors);
@@ -378,6 +377,7 @@ describe("RecordingControlWindow", () => {
 
     await screen.findByRole("button", { name: /cancel recording without saving/i });
     fireEvent.click(screen.getByRole("button", { name: /cancel recording without saving/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /^discard$/i }));
 
     await waitFor(() => expect(mocks.invoke).toHaveBeenCalledWith("discard_recording_take"));
     expect(mocks.emit).toHaveBeenCalledWith("recording-control-discarded", expect.objectContaining({ id: "take_bad" }));
