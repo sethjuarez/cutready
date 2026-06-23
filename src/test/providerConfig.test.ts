@@ -1,6 +1,14 @@
 import { describe, test, expect } from "vitest";
 import { CUTREADY_FEEDBACK_REPO } from "../components/SettingsPanel";
-import { buildProviderConfig, canFetchModelsFor, isAiProviderConfigured } from "../utils/providerConfig";
+import {
+  activeProviderInput,
+  buildProviderConfig,
+  canFetchModelsFor,
+  isAiProviderConfigured,
+  providerById,
+  providerToConfigInput,
+} from "../utils/providerConfig";
+import type { AiProviderConfig } from "../hooks/useSettings";
 
 // ── buildProviderConfig ─────────────────────────────────────────
 
@@ -84,6 +92,84 @@ describe("feedback issue target", () => {
   test("always targets the CutReady product repository", () => {
     expect(CUTREADY_FEEDBACK_REPO).toBe("sethjuarez/cutready");
   });
+
+  describe("provider list resolution", () => {
+    const openaiProvider: AiProviderConfig = {
+      id: "openai-main",
+      name: "OpenAI Main",
+      provider: "openai",
+      authMode: "api_key",
+      endpoint: "",
+      model: "gpt-4o",
+      contextLength: 128000,
+      modelSupportsVision: "true",
+      tenantId: "",
+      clientId: "",
+      subscriptionId: "",
+      resourceGroup: "",
+      resourceName: "",
+    };
+    const anthropicProvider: AiProviderConfig = {
+      ...openaiProvider,
+      id: "anthropic-main",
+      name: "Anthropic Main",
+      provider: "anthropic",
+      model: "claude-sonnet-4-6",
+      contextLength: 200000,
+      modelSupportsVision: "false",
+    };
+
+    test("activeProviderInput uses the active provider with active-provider secrets", () => {
+      const input = activeProviderInput({
+        aiProvider: "azure_openai",
+        aiEndpoint: "legacy-endpoint",
+        aiApiKey: "sk-openai",
+        aiModel: "legacy-model",
+        aiAuthMode: "api_key",
+        aiAccessToken: "",
+        aiProviders: [openaiProvider, anthropicProvider],
+        aiActiveProviderId: "openai-main",
+        aiDefaultProviderId: "anthropic-main",
+      });
+
+      expect(input.provider).toBe("openai");
+      expect(input.providerId).toBe("openai-main");
+      expect(input.providerName).toBe("OpenAI Main");
+      expect(input.apiKey).toBe("sk-openai");
+      expect(input.model).toBe("gpt-4o");
+    });
+
+    test("providerToConfigInput builds a non-active provider request from scoped secrets", () => {
+      const input = providerToConfigInput(anthropicProvider, {
+        aiVisionMode: "notes",
+        aiWebAccess: "enabled",
+      }, {
+        apiKey: "sk-ant-test",
+      });
+      const config = buildProviderConfig(input);
+
+      expect(config.provider).toBe("anthropic");
+      expect(config.provider_id).toBe("anthropic-main");
+      expect(config.provider_name).toBe("Anthropic Main");
+      expect(config.api_key).toBe("sk-ant-test");
+      expect(config.model).toBe("claude-sonnet-4-6");
+      expect(config.vision_mode).toBe("notes");
+      expect(config.web_access).toBe("enabled");
+      expect(config.model_supports_vision).toBe(false);
+    });
+
+    test("providerById returns null for missing overrides", () => {
+      expect(providerById({
+        aiProvider: "openai",
+        aiEndpoint: "",
+        aiApiKey: "",
+        aiModel: "",
+        aiAuthMode: "api_key",
+        aiAccessToken: "",
+        aiProviders: [openaiProvider],
+      }, "missing")).toBeNull();
+    });
+  });
 });
 
 // ── canFetchModelsFor ───────────────────────────────────────────
@@ -105,8 +191,12 @@ describe("canFetchModelsFor", () => {
     expect(canFetchModelsFor({ ...base, aiApiKey: "sk-test" })).toBe(true);
   });
 
-  test("Anthropic: always true (hardcoded models)", () => {
-    expect(canFetchModelsFor({ ...base, aiProvider: "anthropic" })).toBe(true);
+  test("Anthropic: false when no API key", () => {
+    expect(canFetchModelsFor({ ...base, aiProvider: "anthropic" })).toBe(false);
+  });
+
+  test("Anthropic: true when API key set", () => {
+    expect(canFetchModelsFor({ ...base, aiProvider: "anthropic", aiApiKey: "sk-ant-test" })).toBe(true);
   });
 
   test("Azure OAuth: true when access token exists", () => {

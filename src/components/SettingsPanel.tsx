@@ -53,7 +53,7 @@ type SettingsTab = "ai" | "agents" | "memory" | "display" | "themes" | "recordin
 import { inputClass, tabBtnClass } from "../styles";
 import { FoundryResourcePicker } from "./FoundryResourcePicker";
 import { THEME_PALETTES, type ThemePalette } from "../theme/appThemePalettes";
-import { buildProviderConfig, canFetchModelsFor, isAiProviderConfigured } from "../utils/providerConfig";
+import { activeProvider, buildProviderConfig, canFetchModelsFor, createAiProviderConfig, isAiProviderConfigured } from "../utils/providerConfig";
 
 export function SettingsPanel() {
   const { settings, updateSetting, loaded } = useSettings();
@@ -92,12 +92,28 @@ export function SettingsPanel() {
   const fetchModels = async () => {
     setLoadingModels(true);
     setModelError("");
+    const config = buildConfig();
+    const traceDetails = {
+      type: "cutready.ai.model_fetch",
+      provider: config.provider,
+      provider_id: config.provider_id ?? null,
+      provider_name: config.provider_name ?? null,
+      auth_mode: settings.aiAuthMode,
+      endpoint_present: Boolean(config.endpoint),
+      api_key_present: Boolean(config.api_key),
+      bearer_token_present: Boolean(config.bearer_token),
+      model: config.model === "unused" ? "" : config.model,
+      can_fetch_models: canFetchModels,
+    };
+    console.info({ ...traceDetails, phase: "start" });
     try {
       const result = await invoke<ModelInfo[]>("list_models", {
-        config: buildConfig(),
+        config,
       });
+      console.info({ ...traceDetails, phase: "success", model_count: result.length });
       setModels(result);
     } catch (e) {
+      console.warn({ ...traceDetails, phase: "error", error: String(e) });
       setModelError(String(e));
     } finally {
       setLoadingModels(false);
@@ -164,7 +180,7 @@ export function SettingsPanel() {
     display: "Display",
     themes: "Themes",
     recording: "Recording",
-    ai: "AI Provider",
+    ai: "AI Providers",
     agents: "Agents",
     memory: "Memory",
     feedback: "Feedback",
@@ -888,21 +904,191 @@ function AIProviderTab({ settings, updateSetting, isAzure, isFoundry, isAnthropi
   startOAuthFlow: () => void;
   signOut: () => void;
 }) {
+  const providers = settings.aiProviders?.length ? settings.aiProviders : [];
+  const selectedProvider = activeProvider(settings);
+  const defaultProvider = providers.find((provider) => provider.id === settings.aiDefaultProviderId) ?? selectedProvider;
+  const providerOptions: Array<{ value: "microsoft_foundry" | "azure_openai" | "openai" | "anthropic"; label: string; description: string }> = [
+    { value: "microsoft_foundry", label: "Microsoft Foundry", description: "Entra or key-based Azure AI projects" },
+    { value: "azure_openai", label: "Azure OpenAI", description: "Azure-hosted OpenAI deployments" },
+    { value: "openai", label: "OpenAI", description: "OpenAI platform models and compatible endpoints" },
+    { value: "anthropic", label: "Anthropic", description: "Claude models through Anthropic" },
+  ];
+  const [newProviderKind, setNewProviderKind] = useState<typeof providerOptions[number]["value"]>("openai");
+  const providerLabel = (provider: string) =>
+    providerOptions.find((option) => option.value === provider)?.label ?? provider.replace(/_/g, " ");
+  const providerDescription = (provider: string) =>
+    providerOptions.find((option) => option.value === provider)?.description ?? "Custom provider connection";
+  const authStatusLabel = (provider: typeof providers[number]) => {
+    if (provider.authMode === "azure_oauth") {
+      if (provider.id !== settings.aiActiveProviderId) return "OAuth connection";
+      return settings.aiAccessToken ? "Signed in" : "Needs sign-in";
+    }
+    if (provider.id === settings.aiActiveProviderId) {
+      return settings.aiApiKey ? "Key saved" : "Needs API key";
+    }
+    return provider.provider === "microsoft_foundry" && provider.endpoint ? "Endpoint saved" : "Saved";
+  };
+  const addProvider = async (provider: "microsoft_foundry" | "azure_openai" | "openai" | "anthropic" = "openai") => {
+    const next = createAiProviderConfig(provider, providers.length + 1);
+    await updateSetting("aiProviders", [...providers, next]);
+    await updateSetting("aiActiveProviderId", next.id);
+    setModels([]);
+  };
+  const duplicateProvider = async () => {
+    if (!selectedProvider) return;
+    const next = {
+      ...selectedProvider,
+      id: crypto.randomUUID(),
+      name: `${selectedProvider.name} Copy`,
+      model: selectedProvider.model,
+    };
+    await updateSetting("aiProviders", [...providers, next]);
+    await updateSetting("aiActiveProviderId", next.id);
+    setModels([]);
+  };
+  const updateProviderName = (name: string) => {
+    if (!selectedProvider) return;
+    void updateSetting("aiProviders", providers.map((provider) =>
+      provider.id === selectedProvider.id ? { ...provider, name } : provider
+    ));
+  };
+  const deleteProvider = async () => {
+    if (!selectedProvider || providers.length <= 1) return;
+    const remaining = providers.filter((provider) => provider.id !== selectedProvider.id);
+    await updateSetting("aiProviders", remaining);
+    await updateSetting("aiActiveProviderId", remaining[0].id);
+    if (settings.aiDefaultProviderId === selectedProvider.id) {
+      await updateSetting("aiDefaultProviderId", remaining[0].id);
+    }
+    setModels([]);
+  };
+
   return (
     <div className="flex flex-col gap-4">
+      <div className="rounded-2xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]/40 p-4">
+        <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div className="max-w-xl">
+            <h3 className="text-sm font-semibold text-[rgb(var(--color-text))]">Connected AI providers</h3>
+            <p className="mt-1 text-xs leading-5 text-[rgb(var(--color-text-secondary))]">
+              Manage provider connections here. Selecting a card only edits that connection; the Default badge controls runtime routing for chat, notes, and agents.
+            </p>
+          </div>
+          <div className="flex flex-col gap-2 rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] p-2 sm:flex-row sm:items-center">
+            <select
+              value={newProviderKind}
+              onChange={(e) => setNewProviderKind(e.target.value as typeof newProviderKind)}
+              className={inputClass + " min-w-44 text-xs"}
+              aria-label="Provider type to add"
+            >
+              {providerOptions.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={() => void addProvider(newProviderKind)}
+              className="rounded-lg bg-[rgb(var(--color-accent))] px-3 py-2 text-xs font-semibold text-[rgb(var(--color-accent-fg))] transition-opacity hover:opacity-90"
+            >
+              Add provider
+            </button>
+          </div>
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-2">
+          {providers.map((provider) => {
+            const selected = provider.id === settings.aiActiveProviderId;
+            const defaultProvider = provider.id === settings.aiDefaultProviderId;
+            return (
+              <button
+                key={provider.id}
+                type="button"
+                onClick={() => {
+                  void updateSetting("aiActiveProviderId", provider.id);
+                  setModels([]);
+                }}
+                className={`rounded-xl border p-3 text-left transition-colors ${
+                  selected
+                    ? "border-[rgb(var(--color-accent))] bg-[rgb(var(--color-accent))]/10"
+                    : "border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] hover:border-[rgb(var(--color-accent))]/50"
+                }`}
+              >
+                <div className="flex items-start gap-2">
+                  <span className="truncate text-sm font-medium text-[rgb(var(--color-text))]">{provider.name}</span>
+                  <div className="flex-1" />
+                  {selected && <span className="rounded-full bg-[rgb(var(--color-accent))]/15 px-1.5 py-0.5 text-[10px] font-medium text-[rgb(var(--color-accent))]">Editing</span>}
+                  {defaultProvider && <span className="rounded-full bg-[rgb(var(--color-surface-alt))] px-1.5 py-0.5 text-[10px] text-[rgb(var(--color-text-secondary))]">Default</span>}
+                </div>
+                <div className="mt-1 text-xs text-[rgb(var(--color-text-secondary))]">
+                  {providerLabel(provider.provider)} · {provider.model || "No model selected"}
+                </div>
+                <div className="mt-2 flex items-center justify-between gap-3 text-[11px] text-[rgb(var(--color-text-secondary))]">
+                  <span>{authStatusLabel(provider)}</span>
+                  <span>{providerDescription(provider.provider)}</span>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
+        {selectedProvider && (
+          <div className="mt-4 rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] p-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+              <label className="block flex-1 space-y-1.5">
+                <span className="text-xs font-medium text-[rgb(var(--color-text-secondary))]">Connection name</span>
+                <input
+                  value={selectedProvider.name}
+                  onChange={(e) => updateProviderName(e.target.value)}
+                  className={inputClass}
+                />
+              </label>
+              <button
+                type="button"
+                onClick={() => updateSetting("aiDefaultProviderId", selectedProvider.id)}
+                disabled={settings.aiDefaultProviderId === selectedProvider.id}
+                className="rounded-lg border border-[rgb(var(--color-border))] px-3 py-2 text-xs font-medium text-[rgb(var(--color-text))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] disabled:opacity-50"
+              >
+                {settings.aiDefaultProviderId === selectedProvider.id ? "Default provider" : "Set as default"}
+              </button>
+              <button
+                type="button"
+                onClick={() => void duplicateProvider()}
+                disabled={!selectedProvider}
+                className="rounded-lg border border-[rgb(var(--color-border))] px-3 py-2 text-xs font-medium text-[rgb(var(--color-text-secondary))] transition-colors hover:text-[rgb(var(--color-text))] disabled:opacity-40"
+              >
+                Duplicate
+              </button>
+              <button
+                type="button"
+                onClick={() => void deleteProvider()}
+                disabled={providers.length <= 1}
+                className="rounded-lg border border-[rgb(var(--color-border))] px-3 py-2 text-xs font-medium text-error transition-colors hover:bg-error/10 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {defaultProvider && (
+        <div className="rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] p-3">
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-[rgb(var(--color-text-secondary))]">Runtime default</div>
+          <div className="mt-1 text-sm text-[rgb(var(--color-text))]">
+            {defaultProvider.name} <span className="text-[rgb(var(--color-text-secondary))]">· {defaultProvider.model || "No model selected"}</span>
+          </div>
+          <p className="mt-1 text-xs text-[rgb(var(--color-text-secondary))]">
+            Chat, note cleanup, and agents use this provider unless an agent override is configured.
+          </p>
+        </div>
+      )}
+
       {/* Provider Selector */}
-      <fieldset className="flex flex-col gap-2">
-        <label className="text-sm font-medium">Provider</label>
+      <fieldset className="flex flex-col gap-2 rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] p-3">
+        <label className="text-sm font-medium">Editing connection type</label>
         <select
           value={settings.aiProvider}
           onChange={(e) => {
             updateSetting("aiProvider", e.target.value);
-            updateSetting("aiAgentModelOverrides", {});
-            updateSetting("aiAgents", (settings.aiAgents || []).map((agent) => {
-              const next = { ...agent };
-              delete next.modelOverride;
-              return next;
-            }));
             setModels([]);
             if (
               e.target.value !== "azure_openai" &&
@@ -1222,6 +1408,8 @@ function AgentsTab({ settings, updateSetting, models, loadingModels, canFetchMod
   const [newPrompt, setNewPrompt] = useState("");
   const customAgents = settings.aiAgents || [];
   const agentModelOverrides = settings.aiAgentModelOverrides || {};
+  const agentProviderOverrides = settings.aiAgentProviderOverrides || {};
+  const providers = settings.aiProviders || [];
   const modelOptions = models.map((m) => m.id);
 
   const modelLabel = (model: string) => {
@@ -1251,6 +1439,48 @@ function AgentsTab({ settings, updateSetting, models, loadingModels, canFetchMod
     updateSetting("aiAgentModelOverrides", next);
   };
 
+  const updateBuiltInProvider = (id: string, providerId: string) => {
+    const nextProviders = { ...agentProviderOverrides };
+    const nextModels = { ...agentModelOverrides };
+    if (providerId) {
+      nextProviders[id] = providerId;
+    } else {
+      delete nextProviders[id];
+    }
+    delete nextModels[id];
+    updateSetting("aiAgentProviderOverrides", nextProviders);
+    updateSetting("aiAgentModelOverrides", nextModels);
+  };
+
+  const providerName = (providerId: string) =>
+    providers.find((provider) => provider.id === providerId)?.name || "default provider";
+
+  const AgentProviderSelect = ({
+    value,
+    onChange,
+  }: {
+    value: string;
+    onChange: (providerId: string) => void;
+  }) => (
+    <div className="flex flex-col gap-1.5">
+      <label className="text-[10px] font-semibold uppercase tracking-wider text-[rgb(var(--color-text-secondary))]">
+        Provider
+      </label>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className={inputClass + " text-xs"}
+      >
+        <option value="">Use default provider ({providerName(settings.aiDefaultProviderId)})</option>
+        {providers.map((provider) => (
+          <option key={provider.id} value={provider.id}>
+            {provider.name} ({provider.model || "no model"})
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+
   const AgentModelSelect = ({
     value,
     onChange,
@@ -1268,7 +1498,7 @@ function AgentsTab({ settings, updateSetting, models, loadingModels, canFetchMod
           onChange={(e) => onChange(e.target.value)}
           className={inputClass + " text-xs flex-1"}
         >
-          <option value="">Use global model ({settings.aiModel || "not selected"})</option>
+          <option value="">Use provider model ({settings.aiModel || "not selected"})</option>
           {optionValues(value).map((model) => (
             <option key={model} value={model}>{modelLabel(model)}</option>
           ))}
@@ -1319,7 +1549,7 @@ function AgentsTab({ settings, updateSetting, models, loadingModels, canFetchMod
   return (
     <div className="flex flex-col gap-6">
       <p className="text-xs text-[rgb(var(--color-text-secondary))]">
-        Agents are AI personas with different system prompts. Each agent can inherit the global model or use a dedicated model for its task.
+        Agents are AI personas with different system prompts. Each agent can inherit the default provider or use a dedicated provider and model for its task.
       </p>
       {modelError && (
         <p className="text-xs text-error">{modelError}</p>
@@ -1340,6 +1570,12 @@ function AgentsTab({ settings, updateSetting, models, loadingModels, canFetchMod
               <p className="text-xs text-[rgb(var(--color-text-secondary))] line-clamp-2">
                 {agent.prompt.split("\n").find((l) => l.trim() && !l.startsWith("#") && !l.startsWith("You are")) || agent.prompt.slice(0, 120)}
               </p>
+              <div className="mt-3">
+                <AgentProviderSelect
+                  value={agentProviderOverrides[agent.id] || ""}
+                  onChange={(providerId) => updateBuiltInProvider(agent.id, providerId)}
+                />
+              </div>
               <div className="mt-3">
                 <AgentModelSelect
                   value={agentModelOverrides[agent.id] || ""}
@@ -1374,6 +1610,10 @@ function AgentsTab({ settings, updateSetting, models, loadingModels, canFetchMod
                     onChange={(e) => updateAgent(agent.id, { prompt: e.target.value })}
                     className={inputClass + " text-xs min-h-[120px] resize-y font-mono"}
                     placeholder="System prompt..."
+                  />
+                  <AgentProviderSelect
+                    value={agent.providerOverride || ""}
+                    onChange={(providerId) => updateAgent(agent.id, { providerOverride: providerId || undefined, modelOverride: undefined })}
                   />
                   <AgentModelSelect
                     value={agent.modelOverride || ""}
@@ -1410,6 +1650,12 @@ function AgentsTab({ settings, updateSetting, models, loadingModels, canFetchMod
                   <p className="text-xs text-[rgb(var(--color-text-secondary))] line-clamp-2">
                     {agent.prompt.slice(0, 150)}{agent.prompt.length > 150 ? "…" : ""}
                   </p>
+                  <div className="mt-3">
+                    <AgentProviderSelect
+                      value={agent.providerOverride || ""}
+                      onChange={(providerId) => updateAgent(agent.id, { providerOverride: providerId || undefined, modelOverride: undefined })}
+                    />
+                  </div>
                   <div className="mt-3">
                     <AgentModelSelect
                       value={agent.modelOverride || ""}

@@ -1,6 +1,8 @@
 import { invoke } from "./tauri";
 
 export interface AgentChatConfig {
+  provider_id?: string;
+  provider_name?: string;
   provider: string;
   endpoint: string;
   api_key: string;

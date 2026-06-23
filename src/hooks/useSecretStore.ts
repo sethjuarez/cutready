@@ -16,6 +16,19 @@ export const SECRET_KEYS = [
 
 export type SecretKey = (typeof SECRET_KEYS)[number];
 
+export const PROVIDER_SECRET_NAMES = [
+  "apiKey",
+  "accessToken",
+  "refreshToken",
+  "managementToken",
+] as const;
+
+export type ProviderSecretName = (typeof PROVIDER_SECRET_NAMES)[number];
+
+export function providerSecretKey(providerId: string, name: ProviderSecretName): string {
+  return `aiProviders.${providerId}.${name}`;
+}
+
 /** Check whether a settings key is a secret that belongs in the vault. */
 export function isSecretKey(key: string): key is SecretKey {
   return (SECRET_KEYS as readonly string[]).includes(key);
@@ -84,7 +97,7 @@ async function ensureInit(): Promise<void> {
 
 // ── Public API ─────────────────────────────────────────────────────
 
-export async function getSecret(key: SecretKey): Promise<string> {
+async function getSecretValue(key: string): Promise<string> {
   await ensureInit();
   if (!_store) return memStore.get(key) ?? "";
   try {
@@ -96,7 +109,7 @@ export async function getSecret(key: SecretKey): Promise<string> {
   }
 }
 
-export async function setSecret(key: SecretKey, value: string): Promise<void> {
+async function setSecretValue(key: string, value: string): Promise<void> {
   await ensureInit();
   if (!_store) {
     memStore.set(key, value);
@@ -107,7 +120,7 @@ export async function setSecret(key: SecretKey, value: string): Promise<void> {
   await _stronghold.save();
 }
 
-export async function removeSecret(key: SecretKey): Promise<void> {
+async function removeSecretValue(key: string): Promise<void> {
   await ensureInit();
   if (!_store) {
     memStore.delete(key);
@@ -119,6 +132,38 @@ export async function removeSecret(key: SecretKey): Promise<void> {
   } catch {
     // Key didn't exist — that's fine
   }
+}
+
+export async function getSecret(key: SecretKey): Promise<string> {
+  return getSecretValue(key);
+}
+
+export async function setSecret(key: SecretKey, value: string): Promise<void> {
+  return setSecretValue(key, value);
+}
+
+export async function removeSecret(key: SecretKey): Promise<void> {
+  return removeSecretValue(key);
+}
+
+export async function getProviderSecret(providerId: string, name: ProviderSecretName): Promise<string> {
+  return getSecretValue(providerSecretKey(providerId, name));
+}
+
+export async function setProviderSecret(providerId: string, name: ProviderSecretName, value: string): Promise<void> {
+  return setSecretValue(providerSecretKey(providerId, name), value);
+}
+
+export async function removeProviderSecret(providerId: string, name: ProviderSecretName): Promise<void> {
+  return removeSecretValue(providerSecretKey(providerId, name));
+}
+
+export async function loadProviderSecrets(providerId: string): Promise<Record<ProviderSecretName, string>> {
+  const result = {} as Record<ProviderSecretName, string>;
+  for (const name of PROVIDER_SECRET_NAMES) {
+    result[name] = await getProviderSecret(providerId, name);
+  }
+  return result;
 }
 
 /** Load all secrets at once (used during settings init). */

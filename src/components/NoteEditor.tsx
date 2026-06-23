@@ -8,7 +8,8 @@ import { invoke } from "../services/tauri";
 import { exportNoteToWord } from "../utils/exportToWord";
 import { ExportWordButton } from "./ExportWordButton";
 import { agentChat } from "../services/agentChat";
-import { isAiProviderConfigured } from "../utils/providerConfig";
+import { loadProviderSecrets } from "../hooks/useSecretStore";
+import { activeProviderInput, buildProviderConfig, defaultProvider, isProviderInputConfigured, providerToConfigInput } from "../utils/providerConfig";
 import { ProjectImage } from "./ProjectImage";
 import { projectRelativeScreenshotPath } from "../utils/projectImage";
 
@@ -93,7 +94,13 @@ export function NoteEditor() {
 
   // Async getter for AI config — refreshes OAuth token on demand
   const getAiConfig = useCallback(async () => {
-    if (!isAiProviderConfigured(settings)) return undefined;
+    const selectedProvider = defaultProvider(settings);
+    const providerInput = selectedProvider
+      ? providerToConfigInput(selectedProvider, settings, selectedProvider.id === settings.aiActiveProviderId
+        ? { apiKey: settings.aiApiKey, accessToken: settings.aiAccessToken }
+        : await loadProviderSecrets(selectedProvider.id))
+      : activeProviderInput(settings);
+    if (!isProviderInputConfigured(providerInput)) return undefined;
 
     let bearerToken = settings.aiAuthMode === "azure_oauth" ? settings.aiAccessToken : null;
 
@@ -120,13 +127,9 @@ export function NoteEditor() {
       }
     }
 
-    return {
-      provider: settings.aiProvider,
-      endpoint: settings.aiEndpoint,
-      api_key: settings.aiApiKey,
-      model: settings.aiModel,
-      bearer_token: bearerToken,
-    };
+    const config = buildProviderConfig(providerInput);
+    if (bearerToken) config.bearer_token = bearerToken;
+    return config;
   }, [settings, updateSetting]);
 
   const saveTimeoutRef= useRef<ReturnType<typeof setTimeout> | null>(null);
