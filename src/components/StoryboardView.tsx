@@ -41,6 +41,7 @@ import {
   appendSketchToSection,
   getStoryboardItemRenderKey,
   getStoryboardSketchPaths,
+  removeStoryboardItem,
   removeSketchFromSection,
   updateStoryboardSection,
 } from "../utils/storyboard";
@@ -367,6 +368,23 @@ export function StoryboardView() {
     }
   }, [activeStoryboard, confirm, reorderStoryboardItems]);
 
+  const confirmRemoveSection = useCallback(async (sectionIndex: number) => {
+    if (!activeStoryboard) return;
+    const item = activeStoryboard.items[sectionIndex];
+    if (item?.type !== "section") return;
+    const confirmed = await confirm({
+      title: "Remove section?",
+      message: item.sketches.length > 0
+        ? `Remove "${item.title}" and its ${item.sketches.length} ${item.sketches.length === 1 ? "sketch reference" : "sketch references"} from the storyboard?`
+        : `Remove "${item.title}" from the storyboard?`,
+      confirmLabel: "Remove",
+      variant: "warning",
+    });
+    if (confirmed) {
+      await reorderStoryboardItems(removeStoryboardItem(activeStoryboard.items, sectionIndex));
+    }
+  }, [activeStoryboard, confirm, reorderStoryboardItems]);
+
   const handleAddSection = useCallback((position?: number) => {
     if (storyboardLocked) return;
     addSectionToStoryboard("New Section", position);
@@ -532,7 +550,7 @@ export function StoryboardView() {
 
   return (
     <div className="flex-1 overflow-y-auto">
-      <div className="max-w-3xl mx-auto px-6 py-8">
+      <div className="mx-auto px-6 py-8" style={{ maxWidth: "var(--editor-max-width, 56rem)" }}>
         {/* Storyboard header */}
         <div className="flex items-center gap-3 mb-2">
           <input
@@ -723,7 +741,14 @@ export function StoryboardView() {
                           setCollapsedItems={setCollapsedItems}
                           onOpenSketch={openSketch}
                           onRemoveSketch={(sketchIndex) => void confirmRemoveFromSection(idx, sketchIndex)}
+                          onRemoveSection={() => void confirmRemoveSection(idx)}
                           onUpdateSection={handleUpdateSection}
+                          onImproveDescription={(title, description) => sendChatPrompt(
+                            description.trim()
+                              ? `Improve the description for section "${title}" at index ${idx} in storyboard "${activeStoryboard.title}" (path: "${activeStoryboardPath}"). Current description: "${description}". Write clearer section framing that explains this part of the demo flow. Keep it concise (1-2 sentences). Use the write_storyboard tool to save only this section description and preserve the rest of the storyboard.`
+                              : `Write a description for section "${title}" at index ${idx} in storyboard "${activeStoryboard.title}" (path: "${activeStoryboardPath}"). Look at the sketches in this section and write concise framing for this part of the demo flow (1-2 sentences). Use the write_storyboard tool to save only this section description and preserve the rest of the storyboard.`,
+                            { silent: true },
+                          )}
                           onAddNewSketch={() => handleAddNewSketch({ type: "section", sectionIndex: idx })}
                           onPickExisting={() => setPickerTarget({ type: "section", sectionIndex: idx })}
                         />
@@ -962,7 +987,9 @@ function StoryboardSectionBlock({
   setCollapsedItems,
   onOpenSketch,
   onRemoveSketch,
+  onRemoveSection,
   onUpdateSection,
+  onImproveDescription,
   onAddNewSketch,
   onPickExisting,
 }: {
@@ -979,7 +1006,9 @@ function StoryboardSectionBlock({
   setCollapsedItems: Dispatch<SetStateAction<Set<string>>>;
   onOpenSketch: (path: string) => void;
   onRemoveSketch: (sketchIndex: number) => void;
+  onRemoveSection: () => void;
   onUpdateSection: (sectionIndex: number, update: { title?: string; description?: string }) => void;
+  onImproveDescription: (title: string, description: string) => void;
   onAddNewSketch: () => void;
   onPickExisting: () => void;
 }) {
@@ -1064,17 +1093,44 @@ function StoryboardSectionBlock({
               className={`w-full bg-transparent text-lg font-semibold leading-tight text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/35 outline-none ${locked ? "cursor-default" : ""}`}
               placeholder="Section title..."
             />
+            {!locked && (
+              <button
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onRemoveSection();
+                }}
+                className="shrink-0 p-1 rounded text-[rgb(var(--color-text-secondary))] opacity-0 group-hover/section:opacity-100 hover:text-error transition-all"
+                title="Remove section"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            )}
           </div>
-          <textarea
-            ref={descriptionInputRef}
-            value={draftDescription}
-            readOnly={locked}
-            onChange={(event) => setDraftDescription(event.target.value)}
-            onBlur={flushSectionDraft}
-            rows={1}
-            className="mt-2 w-full resize-none overflow-hidden bg-transparent text-sm leading-relaxed text-[rgb(var(--color-text-secondary))] placeholder:text-[rgb(var(--color-text-secondary))]/40 outline-none"
-            placeholder="Add section framing..."
-          />
+          <div className="group/section-desc relative mt-2">
+            <textarea
+              ref={descriptionInputRef}
+              value={draftDescription}
+              readOnly={locked}
+              onChange={(event) => setDraftDescription(event.target.value)}
+              onBlur={flushSectionDraft}
+              rows={1}
+              className={`w-full resize-none overflow-hidden bg-transparent text-sm leading-relaxed text-[rgb(var(--color-text-secondary))] placeholder:text-[rgb(var(--color-text-secondary))]/40 outline-none ${locked ? "" : "pr-24"}`}
+              placeholder="Add section framing..."
+            />
+            {!locked && (
+              <button
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onImproveDescription(draftTitle.trim() || item.title, draftDescription);
+                }}
+                className="absolute right-0 top-0 flex items-center gap-1 rounded p-1 text-[rgb(var(--color-accent))] opacity-0 transition-all hover:bg-[rgb(var(--color-accent))]/10 group-hover/section-desc:opacity-100 group-focus-within/section-desc:opacity-100"
+                title={draftDescription.trim() ? "Improve section description with AI" : "Generate section description with AI"}
+              >
+                <Sparkles className="h-3 w-3" />
+                <span className="text-[10px]">{draftDescription.trim() ? "Improve" : "Generate"}</span>
+              </button>
+            )}
+          </div>
         </div>
         </div>
       </div>
