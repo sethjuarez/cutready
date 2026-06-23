@@ -56,8 +56,7 @@ tauri-plugin-updater = "2"
 tauri-plugin-opener = "2.5.3"
 tauri-plugin-stronghold = "2"
 
-# Shared agentic substrate. Pin to the GitHub tag until v0.4.1 is published to crates.io.
-agentive = { git = "https://github.com/sethjuarez/agentive.git", tag = "v0.4.1", features = ["tracing"] }
+agentive = { version = "0.4.1", features = ["tracing"] }
 portable-pty = "0.9.0"
 
 # Vendor OpenSSL on macOS to support cross-compilation (ARM → Intel)
