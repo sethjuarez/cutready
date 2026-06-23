@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Dialog } from "./Dialog";
 
 interface ConfirmDialogProps {
@@ -11,6 +11,8 @@ interface ConfirmDialogProps {
   onConfirm: () => void;
   onCancel: () => void;
 }
+
+type ConfirmOptions = Omit<ConfirmDialogProps, "open" | "onConfirm" | "onCancel">;
 
 export function ConfirmDialog({
   open,
@@ -66,4 +68,38 @@ export function ConfirmDialog({
       </div>
     </Dialog>
   );
+}
+
+export function useConfirmDialog() {
+  const [options, setOptions] = useState<ConfirmOptions | null>(null);
+  const resolveRef = useRef<((confirmed: boolean) => void) | null>(null);
+
+  const close = useCallback((confirmed: boolean) => {
+    resolveRef.current?.(confirmed);
+    resolveRef.current = null;
+    setOptions(null);
+  }, []);
+
+  const confirm = useCallback((nextOptions: ConfirmOptions) => {
+    resolveRef.current?.(false);
+    return new Promise<boolean>((resolve) => {
+      resolveRef.current = resolve;
+      setOptions(nextOptions);
+    });
+  }, []);
+
+  const confirmationDialog = (
+    <ConfirmDialog
+      open={!!options}
+      title={options?.title ?? ""}
+      message={options?.message ?? ""}
+      confirmLabel={options?.confirmLabel}
+      cancelLabel={options?.cancelLabel}
+      variant={options?.variant}
+      onConfirm={() => close(true)}
+      onCancel={() => close(false)}
+    />
+  );
+
+  return { confirm, confirmationDialog };
 }

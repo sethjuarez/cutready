@@ -6,6 +6,7 @@ import { useRecordingDevices } from "../hooks/useRecordingDevices";
 import { useSettings } from "../hooks/useSettings";
 import { isMac } from "../utils/platform";
 import { fetchProjectImageDataUrl } from "../utils/projectImage";
+import { useConfirmDialog } from "./ConfirmDialog";
 import type { ProjectView } from "../types/project";
 import type { CameraFormatInfo, CaptureArea, PrompterScript, RecorderSettings, RecordingDeviceInfo, RecordingPlatformCapabilities, RecordingScope, RecordingTake } from "../types/recording";
 
@@ -88,6 +89,7 @@ export function RecordingControlWindow() {
   const { settings, updateSetting, loaded } = useSettings();
   const { microphones, cameras, loading: devicesLoading, error: devicesError, refresh } = useRecordingDevices(true);
   const currentWindow = useMemo(() => getCurrentWindow(), []);
+  const { confirm, confirmationDialog } = useConfirmDialog();
   const countdownTimerRef = useRef<number | null>(null);
   const settingsHydratedRef = useRef(false);
 
@@ -138,7 +140,15 @@ export function RecordingControlWindow() {
 
   const discardRecording = useCallback(async (confirmFirst = true) => {
     if (phase === "stopping" || phase === "discarding") return;
-    if (confirmFirst && !window.confirm("Discard this take and delete the files recorded so far?")) return;
+    if (confirmFirst) {
+      const confirmed = await confirm({
+        title: "Discard recording?",
+        message: "Discard this take and delete the files recorded so far?",
+        confirmLabel: "Discard",
+        variant: "error",
+      });
+      if (!confirmed) return;
+    }
     setPhase("discarding");
     setError(null);
     clearCountdownTimer();
@@ -155,7 +165,7 @@ export function RecordingControlWindow() {
       setError(err instanceof Error ? err.message : String(err));
       setPhase("recording");
     }
-  }, [clearCountdownTimer, closePrompter, phase]);
+  }, [clearCountdownTimer, closePrompter, confirm, phase]);
 
   const requestClose = useCallback(async () => {
     if (phase === "recording") {
@@ -653,55 +663,59 @@ export function RecordingControlWindow() {
 
   if (phase === "recording" || phase === "stopping" || phase === "discarding") {
     return (
-      <RecorderShell compact>
-        <RecorderHeader
-          title="Recording"
-          subtitle={documentTitle}
-          meta={recordingTake?.id ?? params?.take_id ?? "Active take"}
-          status="REC"
-          recording
-          onDrag={startDrag}
-          onClose={() => void requestClose()}
-        />
+      <>
+        <RecorderShell compact>
+          <RecorderHeader
+            title="Recording"
+            subtitle={documentTitle}
+            meta={recordingTake?.id ?? params?.take_id ?? "Active take"}
+            status="REC"
+            recording
+            onDrag={startDrag}
+            onClose={() => void requestClose()}
+          />
 
-        {error && <ErrorCard message={error} />}
+          {error && <ErrorCard message={error} />}
 
-        <div className="space-y-2">
-          <AudioWaveMeter level={audioLevel} enabled={!!micDeviceId} />
-          <div className="grid grid-cols-[1fr_auto] gap-2">
-            <button
-              type="button"
-              aria-label="Stop recording and save"
-              onClick={stopRecording}
-              disabled={phase === "stopping" || phase === "discarding"}
-              className="flex items-center justify-center gap-2 rounded-xl bg-[rgb(var(--color-accent))] px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-[rgb(var(--color-accent-hover))] disabled:cursor-wait disabled:opacity-70"
-            >
-              <Square className="h-3.5 w-3.5 fill-current" />
-              {phase === "stopping" ? "Saving..." : "Stop"}
-            </button>
-            <button
-              type="button"
-              aria-label="Cancel recording without saving"
-              onClick={() => void discardRecording()}
-              disabled={phase === "stopping" || phase === "discarding"}
-              className="flex items-center justify-center gap-1.5 rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] px-3 py-2 text-xs font-semibold text-[rgb(var(--color-text-secondary))] transition-colors hover:border-[rgb(var(--color-accent))]/45 hover:text-[rgb(var(--color-text))] disabled:cursor-wait disabled:opacity-60"
-            >
-              <X className="h-3.5 w-3.5" />
-              {phase === "discarding" ? "Canceling..." : "Cancel"}
-            </button>
+          <div className="space-y-2">
+            <AudioWaveMeter level={audioLevel} enabled={!!micDeviceId} />
+            <div className="grid grid-cols-[1fr_auto] gap-2">
+              <button
+                type="button"
+                aria-label="Stop recording and save"
+                onClick={stopRecording}
+                disabled={phase === "stopping" || phase === "discarding"}
+                className="flex items-center justify-center gap-2 rounded-xl bg-[rgb(var(--color-accent))] px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-[rgb(var(--color-accent-hover))] disabled:cursor-wait disabled:opacity-70"
+              >
+                <Square className="h-3.5 w-3.5 fill-current" />
+                {phase === "stopping" ? "Saving..." : "Stop"}
+              </button>
+              <button
+                type="button"
+                aria-label="Cancel recording without saving"
+                onClick={() => void discardRecording()}
+                disabled={phase === "stopping" || phase === "discarding"}
+                className="flex items-center justify-center gap-1.5 rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] px-3 py-2 text-xs font-semibold text-[rgb(var(--color-text-secondary))] transition-colors hover:border-[rgb(var(--color-accent))]/45 hover:text-[rgb(var(--color-text))] disabled:cursor-wait disabled:opacity-60"
+              >
+                <X className="h-3.5 w-3.5" />
+                {phase === "discarding" ? "Canceling..." : "Cancel"}
+              </button>
+            </div>
+            <div className="flex items-center justify-center gap-1.5 text-[10px] text-[rgb(var(--color-text-secondary))]">
+              <Keyboard className="h-3 w-3" />
+              Ctrl+Shift+R stops and saves
+            </div>
           </div>
-          <div className="flex items-center justify-center gap-1.5 text-[10px] text-[rgb(var(--color-text-secondary))]">
-            <Keyboard className="h-3 w-3" />
-            Ctrl+Shift+R stops and saves
-          </div>
-        </div>
-      </RecorderShell>
+        </RecorderShell>
+        {confirmationDialog}
+      </>
     );
   }
 
   return (
-    <RecorderShell>
-      <RecorderHeader title="CutReady Recorder" subtitle={documentTitle} status="Ready" onDrag={startDrag} onClose={() => void requestClose()} />
+    <>
+      <RecorderShell>
+        <RecorderHeader title="CutReady Recorder" subtitle={documentTitle} status="Ready" onDrag={startDrag} onClose={() => void requestClose()} />
 
       {error && <ErrorCard message={error} />}
       {sourcePreview && <SourcePreviewPanel preview={sourcePreview} onClose={() => void stopSourcePreview()} />}
@@ -885,7 +899,9 @@ export function RecordingControlWindow() {
           </button>
         </div>
       </div>
-    </RecorderShell>
+      </RecorderShell>
+      {confirmationDialog}
+    </>
   );
 }
 

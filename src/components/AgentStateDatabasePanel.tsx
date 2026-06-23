@@ -3,6 +3,7 @@ import { Database, RefreshCw, Table2 } from "lucide-react";
 import { invoke } from "../services/tauri";
 import { useAppStore } from "../stores/appStore";
 import { useToastStore } from "../stores/toastStore";
+import { useConfirmDialog } from "./ConfirmDialog";
 import { AGENT_STATE_DATABASE_PATH, databaseTabPath } from "./DatabaseViewer";
 
 const AGENT_STATE_DB = AGENT_STATE_DATABASE_PATH;
@@ -45,6 +46,7 @@ export function AgentStateDatabasePanel() {
   const activeTab = useAppStore((state) => state.openTabs.find((tab) => tab.id === state.activeTabId) ?? null);
   const openDatabase = useAppStore((state) => state.openDatabase);
   const showToast = useToastStore((state) => state.show);
+  const { confirm, confirmationDialog } = useConfirmDialog();
 
   const loadPreview = useCallback(async () => {
     setLoading(true);
@@ -74,9 +76,13 @@ export function AgentStateDatabasePanel() {
       showToast("Wait for the active agent run to finish before compacting the database.", 4000, "warning");
       return;
     }
-    if (!window.confirm("Compact the local agent-state database now?\n\nThis runs SQLite VACUUM after run cleanup. It may briefly lock the local runtime database.")) {
-      return;
-    }
+    const confirmed = await confirm({
+      title: "Compact agent database?",
+      message: "Compact the local agent-state database now?\n\nThis runs SQLite VACUUM after run cleanup. It may briefly lock the local runtime database.",
+      confirmLabel: "Compact",
+      variant: "warning",
+    });
+    if (!confirmed) return;
     setCompacting(true);
     try {
       const result = await invoke<AgentStateMaintenanceResult>("compact_agent_state_database");
@@ -87,7 +93,7 @@ export function AgentStateDatabasePanel() {
     } finally {
       setCompacting(false);
     }
-  }, [hasActiveAgentRun, loadPreview, showToast]);
+  }, [confirm, hasActiveAgentRun, loadPreview, showToast]);
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-[rgb(var(--color-surface))]">
@@ -147,6 +153,7 @@ export function AgentStateDatabasePanel() {
           ))
         )}
       </div>
+      {confirmationDialog}
     </div>
   );
 }

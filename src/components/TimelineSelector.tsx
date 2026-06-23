@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { createPortal } from "react-dom";
 import { useAppStore } from "../stores/appStore";
 import { ArrowLeftRight, ChevronDown, Check, Plus } from "lucide-react";
+import { useConfirmDialog } from "./ConfirmDialog";
 
 /**
  * TimelineSelector — dropdown for switching timelines (branches).
@@ -22,6 +23,7 @@ export function TimelineSelector() {
   const [filter, setFilter] = useState("");
   const [newName, setNewName] = useState("");
   const [showNew, setShowNew] = useState(false);
+  const { confirm, confirmationDialog } = useConfirmDialog();
   const triggerRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const filterRef = useRef<HTMLInputElement>(null);
@@ -105,36 +107,51 @@ export function TimelineSelector() {
 
   const handleDelete = useCallback(async (name: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (window.confirm(`Delete timeline "${name}"? This cannot be undone.`)) {
-      await deleteTimeline(name);
-    }
-  }, [deleteTimeline]);
+    const confirmed = await confirm({
+      title: "Delete timeline?",
+      message: `Delete timeline "${name}"? This cannot be undone.`,
+      confirmLabel: "Delete",
+      variant: "error",
+    });
+    if (!confirmed) return;
+    await deleteTimeline(name);
+  }, [confirm, deleteTimeline]);
 
   const handlePromote = useCallback(async (name: string, label: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (window.confirm(`Promote "${label}" to Main? The current Main will be preserved as a separate timeline.`)) {
-      await promoteTimeline(name);
-      setOpen(false);
-    }
-  }, [promoteTimeline]);
+    const confirmed = await confirm({
+      title: "Promote timeline?",
+      message: `Promote "${label}" to Main? The current Main will be preserved as a separate timeline.`,
+      confirmLabel: "Promote",
+      variant: "warning",
+    });
+    if (!confirmed) return;
+    await promoteTimeline(name);
+    setOpen(false);
+  }, [confirm, promoteTimeline]);
 
   const handleMerge = useCallback(async (sourceName: string, sourceLabel: string, e: React.MouseEvent) => {
     e.stopPropagation();
     const targetLabel = active?.label ?? "Main";
-    if (window.confirm(`Combine "${sourceLabel}" into "${targetLabel}"? This will merge all changes.`)) {
-      try {
-        const result = await mergeTimelines(sourceName, active?.name ?? "main");
-        if (result.status === "clean" || result.status === "fast_forward") {
-          setOpen(false);
-        } else if (result.status === "conflicts") {
-          setOpen(false);
-          // UI will show MergeConflictPanel automatically via store state
-        }
-      } catch (err) {
-        console.error("Merge failed:", err);
+    const confirmed = await confirm({
+      title: "Combine timelines?",
+      message: `Combine "${sourceLabel}" into "${targetLabel}"? This will merge all changes.`,
+      confirmLabel: "Combine",
+      variant: "warning",
+    });
+    if (!confirmed) return;
+    try {
+      const result = await mergeTimelines(sourceName, active?.name ?? "main");
+      if (result.status === "clean" || result.status === "fast_forward") {
+        setOpen(false);
+      } else if (result.status === "conflicts") {
+        setOpen(false);
+        // UI will show MergeConflictPanel automatically via store state
       }
+    } catch (err) {
+      console.error("Merge failed:", err);
     }
-  }, [mergeTimelines, active]);
+  }, [active, confirm, mergeTimelines]);
 
   // Only show if we have more than 1 timeline (or always show for discoverability)
   if (timelines.length <= 1 && !active) return null;
@@ -264,6 +281,7 @@ export function TimelineSelector() {
       </button>
 
       {dropdown}
+      {confirmationDialog}
     </div>
   );
 }

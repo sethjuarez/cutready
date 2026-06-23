@@ -31,6 +31,7 @@ import { useSettings } from "../hooks/useSettings";
 import { SketchPickerItem } from "./SketchCard";
 import { SketchPreview } from "./SketchPreview";
 import { ScriptTable } from "./ScriptTable";
+import { useConfirmDialog } from "./ConfirmDialog";
 import { exportStoryboardToWord, type WordOrientation } from "../utils/exportToWord";
 import { DocumentToolbar, documentToolbarIcons, type DocumentToolbarAction } from "./DocumentToolbar";
 import type { Sketch, SketchSummary, Storyboard } from "../types/sketch";
@@ -83,6 +84,7 @@ export function StoryboardView() {
 
   const [showPicker, setShowPicker] = useState<number | null>(null);
   const [pickerSearch, setPickerSearch] = useState("");
+  const { confirm, confirmationDialog } = useConfirmDialog();
 
   // Cache of full sketch data keyed by path
   const [sketchCache, setSketchCache] = useState<Map<string, Sketch>>(new Map());
@@ -325,6 +327,16 @@ export function StoryboardView() {
     },
     [addSketchToStoryboard, storyboardLocked],
   );
+
+  const confirmRemoveFromStoryboard = useCallback(async (index: number) => {
+    const confirmed = await confirm({
+      title: "Remove sketch?",
+      message: "Remove this sketch from the storyboard?",
+      confirmLabel: "Remove",
+      variant: "warning",
+    });
+    if (confirmed) removeFromStoryboard(index);
+  }, [confirm, removeFromStoryboard]);
 
   const handleExportWord = useCallback((orientation: WordOrientation) => {
     if (!activeStoryboard) return;
@@ -571,7 +583,7 @@ export function StoryboardView() {
                           sketch={sketchMap.get(item.path) ?? makePlaceholder(item.path)}
                           fullSketch={sketchCache.get(item.path)}
                           onOpen={() => openSketch(item.path)}
-                          onRemove={() => { if (confirm("Remove this sketch from the storyboard?")) removeFromStoryboard(idx); }}
+                          onRemove={() => void confirmRemoveFromStoryboard(idx)}
                           projectRoot={currentProject?.root}
                           dragListeners={dragListeners}
                           locked={storyboardLocked}
@@ -651,6 +663,7 @@ export function StoryboardView() {
             onClose={() => { setShowPreview(false); setPreviewMode("slides"); }}
           />
         )}
+        {confirmationDialog}
       </div>
     </div>
   );
