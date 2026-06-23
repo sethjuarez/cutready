@@ -289,6 +289,14 @@ interface AppStoreState {
   chatError: string | null;
   /** Current unsent chat input text, shared between normal and focus mode. */
   chatInputDraft: string;
+  /** Live assistant text currently streaming from the agent. */
+  chatStreamingText: string;
+  /** Live reasoning text currently streaming from the agent. */
+  chatStreamingThinking: string;
+  /** Live status text currently streaming from the agent. */
+  chatStreamingStatus: string;
+  /** Assistant drafts captured before tool-round resets. */
+  chatStreamingDrafts: string[];
   /** A prompt queued from outside the chat (e.g. sparkle buttons). ChatPanel picks this up and sends it. */
   pendingChatPrompt: { text: string; silent?: boolean; agent?: string } | null;
   /** Whether chat is occupying the main work area as an intentional focus mode. */
@@ -555,6 +563,10 @@ interface AppStoreState {
   setChatError: (error: string | null) => void;
   /** Set current unsent chat input text. */
   setChatInputDraft: (draft: string) => void;
+  /** Update live streaming chat state. */
+  setChatStreamingState: (state: Partial<Pick<AppStoreState, "chatStreamingText" | "chatStreamingThinking" | "chatStreamingStatus" | "chatStreamingDrafts">>) => void;
+  /** Clear live streaming chat state. */
+  resetChatStreaming: () => void;
   /** Queue a prompt to be sent by the chat panel. */
   sendChatPrompt: (prompt: string, opts?: { silent?: boolean; agent?: string }) => void;
   /** Enter or exit chat focus mode. */
@@ -802,6 +814,10 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   chatLoading: false,
   chatError: null,
   chatInputDraft: "",
+  chatStreamingText: "",
+  chatStreamingThinking: "",
+  chatStreamingStatus: "",
+  chatStreamingDrafts: [],
   pendingChatPrompt: null,
   chatFocusMode: false,
   activityLog: [],
@@ -1935,6 +1951,13 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   setChatLoading: (loading) => set({ chatLoading: loading }),
   setChatError: (error) => set({ chatError: error }),
   setChatInputDraft: (draft) => set({ chatInputDraft: draft }),
+  setChatStreamingState: (state) => set(state),
+  resetChatStreaming: () => set({
+    chatStreamingText: "",
+    chatStreamingThinking: "",
+    chatStreamingStatus: "",
+    chatStreamingDrafts: [],
+  }),
   sendChatPrompt: (prompt, opts) => set({ pendingChatPrompt: { text: prompt, silent: opts?.silent, agent: opts?.agent } }),
   setChatFocusMode: (enabled) => set({ chatFocusMode: enabled }),
   addActivityEntries: (entries) => {
