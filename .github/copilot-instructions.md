@@ -232,6 +232,21 @@ After the agentive `azure_oauth` module lands, CutReady's migration should also:
 - **Vitest**: `npx vitest run`
 - **E2E tests**: `npx playwright test` (uses web shim, no Tauri needed)
 - **Default app validation**: `npm run debug` (runs the real Tauri app; debug builds enable Auditaur end-to-end observability for frontend console/errors, Tauri IPC/events, and backend traces)
+- **Human-observable Auditaur startup**: when the user needs to use the app while the agent observes, do not start `npm run debug` directly. Start the app through Auditaur, preferably in a visible terminal canvas when the user wants to watch logs, or in a detached background shell when the agent owns startup:
+
+  ```bash
+  npm ci
+  auditaur debug --app cutready --active --json run --timeout-seconds 180 -- npm run debug
+  ```
+
+  In Copilot CLI, use `bash` with `mode: "async"` and `detach: true` for this command. `auditaur debug run` may report readiness and then the shell may complete; do not assume the app stopped from that notification alone. Verify the child processes and Auditaur readiness with:
+
+  ```bash
+  ps -axo pid,ppid,command | grep -E 'target/debug/cutready|tauri dev|vite' | grep -v grep
+  auditaur debug --app cutready --active --require-frontend --json status
+  ```
+
+  The app is ready only when heartbeat, telemetry database, window, backend telemetry, and frontend telemetry are `ok`. If multiple stale apps exist, always include `--active`, `--latest`, `--session-id`, or `--instance-id` instead of using an ambiguous selector. Use `auditaur logs/errors/ipc/events/traces/timeline/explain --json --session <session-id>` for follow-up investigation.
 - **Web shim mode**: `npm run dev` (Vite/devMock only; use for browser-only Playwright/docs work, not as the default app validation path)
 - **Docs site**: `cd docs && npm run build`
 
