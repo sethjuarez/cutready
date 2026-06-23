@@ -12,6 +12,7 @@ import { useToastStore } from "../stores/toastStore";
 import { useUpdateStore } from "../stores/updateStore";
 import { ReleaseNotesMarkdown } from "./UpdateAvailableButton";
 import { Dialog } from "./Dialog";
+import { useConfirmDialog } from "./ConfirmDialog";
 import { agentChat } from "../services/agentChat";
 import {
   X,
@@ -321,12 +322,17 @@ function RecordingTab({
 }) {
   const { discovery, microphones, cameras, systemAudioDevices, loading, error, refresh } = useRecordingDevices();
   const [clearingRecordings, setClearingRecordings] = useState(false);
+  const { confirm, confirmationDialog } = useConfirmDialog();
   const deviceError = error ?? (discovery.devices.length === 0 ? discovery.ffmpeg.error : null);
 
   const clearRecordings = async () => {
-    if (!window.confirm("Clear all local recording takes for this project? This cannot be undone.")) {
-      return;
-    }
+    const confirmed = await confirm({
+      title: "Clear local recordings?",
+      message: "Clear all local recording takes for this project? This cannot be undone.",
+      confirmLabel: "Clear recordings",
+      variant: "error",
+    });
+    if (!confirmed) return;
 
     setClearingRecordings(true);
     try {
@@ -528,6 +534,7 @@ function RecordingTab({
           </button>
         </div>
       </div>
+      {confirmationDialog}
     </div>
   );
 }

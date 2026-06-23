@@ -16,6 +16,7 @@ import {
 import { invoke } from "../services/tauri";
 import { useAppStore } from "../stores/appStore";
 import { useToastStore } from "../stores/toastStore";
+import { useConfirmDialog } from "./ConfirmDialog";
 
 type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
 
@@ -104,6 +105,7 @@ export function AgentRunInspector() {
   const closeTab = useAppStore((state) => state.closeTab);
   const showToast = useToastStore((state) => state.show);
   const hasRunningRun = useMemo(() => runs.some((run) => run.status.toLowerCase() === "running"), [runs]);
+  const { confirm, confirmationDialog } = useConfirmDialog();
 
   const loadRuns = useCallback(async () => {
     setLoadingRuns(true);
@@ -123,9 +125,13 @@ export function AgentRunInspector() {
   }, [loadRuns]);
 
   const deleteRun = useCallback(async (run: AgentRunSummary) => {
-    if (!window.confirm(`Delete run ${shortId(run.run_id)} and its runtime records?\n\nThis only removes local agent trajectory data. It will not delete sketches, notes, visuals, or accepted project content.`)) {
-      return;
-    }
+    const confirmed = await confirm({
+      title: "Delete agent run?",
+      message: `Delete run ${shortId(run.run_id)} and its runtime records?\n\nThis only removes local agent trajectory data. It will not delete sketches, notes, visuals, or accepted project content.`,
+      confirmLabel: "Delete run",
+      variant: "error",
+    });
+    if (!confirmed) return;
     setBusyRunId(run.run_id);
     try {
       const result = await invoke<AgentStateMaintenanceResult>("delete_agent_run", { runId: run.run_id });
@@ -139,12 +145,16 @@ export function AgentRunInspector() {
     } finally {
       setBusyRunId(null);
     }
-  }, [closeTab, loadRuns, openTabs, showToast]);
+  }, [closeTab, confirm, loadRuns, openTabs, showToast]);
 
   const pruneRuns = useCallback(async () => {
-    if (!window.confirm("Prune completed agent runs, keeping the 25 most recent completed runs?\n\nRunning runs and agent memory are preserved. This only removes older local trajectory/checkpoint/resource records.")) {
-      return;
-    }
+    const confirmed = await confirm({
+      title: "Prune old agent runs?",
+      message: "Prune completed agent runs, keeping the 25 most recent completed runs?\n\nRunning runs and agent memory are preserved. This only removes older local trajectory/checkpoint/resource records.",
+      confirmLabel: "Prune old runs",
+      variant: "warning",
+    });
+    if (!confirmed) return;
     setMaintenanceBusy(true);
     try {
       const result = await invoke<AgentStateMaintenanceResult>("prune_agent_runs", { keepRecentCompleted: 25 });
@@ -155,16 +165,20 @@ export function AgentRunInspector() {
     } finally {
       setMaintenanceBusy(false);
     }
-  }, [loadRuns, showToast]);
+  }, [confirm, loadRuns, showToast]);
 
   const compactDatabase = useCallback(async () => {
     if (hasRunningRun) {
       showToast("Wait for the active agent run to finish before compacting the database.", 4000, "warning");
       return;
     }
-    if (!window.confirm("Compact the local agent-state database now?\n\nThis runs SQLite VACUUM after cleanup. It may briefly lock the local runtime database.")) {
-      return;
-    }
+    const confirmed = await confirm({
+      title: "Compact agent database?",
+      message: "Compact the local agent-state database now?\n\nThis runs SQLite VACUUM after cleanup. It may briefly lock the local runtime database.",
+      confirmLabel: "Compact",
+      variant: "warning",
+    });
+    if (!confirmed) return;
     setMaintenanceBusy(true);
     try {
       const result = await invoke<AgentStateMaintenanceResult>("compact_agent_state_database");
@@ -174,7 +188,7 @@ export function AgentRunInspector() {
     } finally {
       setMaintenanceBusy(false);
     }
-  }, [hasRunningRun, showToast]);
+  }, [confirm, hasRunningRun, showToast]);
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-[rgb(var(--color-surface))]">
@@ -239,6 +253,7 @@ export function AgentRunInspector() {
           ))
         )}
       </div>
+      {confirmationDialog}
     </div>
   );
 }

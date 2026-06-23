@@ -2,7 +2,7 @@ import { invoke } from "../services/tauri";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAppStore } from "../stores/appStore";
 import type { ProjectEntry } from "../types/project";
-import { Folder, ChevronDown, Pencil, Check, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { Folder, ChevronDown, Pencil, Check, Plus, RefreshCw, Trash2, X } from "lucide-react";
 
 /** Compact project switcher dropdown for the title breadcrumb or sidebar. */
 interface ProjectSwitcherProps {
@@ -25,6 +25,8 @@ export function ProjectSwitcher({ variant = "sidebar" }: ProjectSwitcherProps) {
   const [migrateName, setMigrateName] = useState("");
   const [renamingPath, setRenamingPath] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
+  const [deletingPath, setDeletingPath] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const migrateInputRef = useRef<HTMLInputElement>(null);
@@ -39,6 +41,7 @@ export function ProjectSwitcher({ variant = "sidebar" }: ProjectSwitcherProps) {
         setIsCreating(false);
         setIsMigrating(false);
         setRenamingPath(null);
+        setDeletingPath(null);
       }
     };
     window.addEventListener("mousedown", handleClick);
@@ -47,18 +50,19 @@ export function ProjectSwitcher({ variant = "sidebar" }: ProjectSwitcherProps) {
 
   // Global Escape to cancel any active input state
   useEffect(() => {
-    const anyActive = isCreating || isMigrating || renamingPath;
+    const anyActive = isCreating || isMigrating || renamingPath || deletingPath;
     if (!anyActive) return;
     const handleEsc = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         setIsCreating(false); setNewName("");
         setIsMigrating(false); setMigrateName("");
         setRenamingPath(null); setRenameValue("");
+        setDeletingPath(null);
       }
     };
     window.addEventListener("keydown", handleEsc);
     return () => window.removeEventListener("keydown", handleEsc);
-  }, [isCreating, isMigrating, renamingPath]);
+  }, [deletingPath, isCreating, isMigrating, renamingPath]);
 
   // Focus input when creating, migrating, or renaming
   useEffect(() => {
@@ -127,16 +131,19 @@ export function ProjectSwitcher({ variant = "sidebar" }: ProjectSwitcherProps) {
     }
   }, [renameValue, renamingPath, loadProjects, switchProject]);
 
-  const handleDelete = useCallback(async (project: ProjectEntry, isActive: boolean) => {
-    const remove = window.confirm(`Remove "${project.name}" from the workspace project list?`);
-    if (!remove) return;
-    const deleteFiles = window.confirm(`Also delete the "${project.path}" folder and its files?\n\nCancel keeps the files on disk.`);
-    await deleteProjectFromRepo(project.path, deleteFiles);
-    const remaining = useAppStore.getState().projects.filter((p) => p.path !== project.path);
-    if (isActive && remaining.length > 0) {
-      await switchProject(remaining[0].path);
-    } else if (isActive) {
-      useAppStore.getState().closeProject();
+  const handleDelete = useCallback(async (project: ProjectEntry, isActive: boolean, deleteFiles: boolean) => {
+    setDeleting(true);
+    try {
+      await deleteProjectFromRepo(project.path, deleteFiles);
+      const remaining = useAppStore.getState().projects.filter((p) => p.path !== project.path);
+      if (isActive && remaining.length > 0) {
+        await switchProject(remaining[0].path);
+      } else if (isActive) {
+        useAppStore.getState().closeProject();
+      }
+      setDeletingPath(null);
+    } finally {
+      setDeleting(false);
     }
   }, [deleteProjectFromRepo, switchProject]);
 
@@ -240,6 +247,7 @@ export function ProjectSwitcher({ variant = "sidebar" }: ProjectSwitcherProps) {
           {projects.map((p) => {
             const isActive = activeEntry?.path === p.path;
             const isRenaming = renamingPath === p.path;
+            const isDeleting = deletingPath === p.path;
 
             if (isRenaming) {
               return (
@@ -261,6 +269,57 @@ export function ProjectSwitcher({ variant = "sidebar" }: ProjectSwitcherProps) {
                   >
                     ✓
                   </button>
+                </div>
+              );
+            }
+
+            if (isDeleting) {
+              return (
+                <div
+                  key={p.path}
+                  className="border-y border-error/20 bg-error/5 px-3 py-2"
+                >
+                  <div className="mb-2 flex items-start gap-2">
+                    <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-error/10 text-error">
+                      <Trash2 className="h-3 w-3" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[11px] font-medium text-[rgb(var(--color-text))]">
+                        Remove {p.name}?
+                      </div>
+                      <div className="mt-0.5 text-[10px] leading-relaxed text-[rgb(var(--color-text-secondary))]">
+                        Removing from the list keeps files on disk. Deleting files will show them as pending deletions in Changes.
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setDeletingPath(null)}
+                      disabled={deleting}
+                      className="rounded p-0.5 text-[rgb(var(--color-text-secondary))] transition-colors hover:text-[rgb(var(--color-text))] disabled:opacity-40"
+                      title="Cancel"
+                      aria-label="Cancel remove project"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                  <div className="flex gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(p, isActive, false)}
+                      disabled={deleting}
+                      className="flex-1 rounded-md border border-[rgb(var(--color-border))] px-2 py-1 text-[10px] font-medium text-[rgb(var(--color-text-secondary))] transition-colors hover:border-[rgb(var(--color-accent))]/40 hover:text-[rgb(var(--color-accent))] disabled:pointer-events-none disabled:opacity-40"
+                    >
+                      Remove from list
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(p, isActive, true)}
+                      disabled={deleting}
+                      className="flex-1 rounded-md bg-error px-2 py-1 text-[10px] font-medium text-accent-fg transition-colors hover:bg-error/80 disabled:pointer-events-none disabled:opacity-40"
+                    >
+                      {deleting ? "Deleting..." : "Delete files"}
+                    </button>
+                  </div>
                 </div>
               );
             }
@@ -295,7 +354,8 @@ export function ProjectSwitcher({ variant = "sidebar" }: ProjectSwitcherProps) {
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      void handleDelete(p, isActive);
+                      setRenamingPath(null);
+                      setDeletingPath(p.path);
                     }}
                     className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-[rgb(var(--color-text-secondary))] hover:bg-error/10 hover:text-error transition-opacity"
                     title="Delete project"
