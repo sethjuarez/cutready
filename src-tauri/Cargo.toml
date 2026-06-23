@@ -1,6 +1,6 @@
 [package]
 name = "cutready"
-version = "1.12.4"
+version = "1.13.0"
 edition = "2021"
 description = "Product demo video authoring tool"
 
