@@ -11,19 +11,17 @@ import { useSettings, type AgentPreset } from "../hooks/useSettings";
 import { BUILT_IN_AGENTS, resolveAgentPrompt } from "../agents/builtInAgents";
 import { buildProviderConfig, isAiProviderConfigured } from "../utils/providerConfig";
 import { SketchIcon, StoryboardIcon, NoteIcon } from "./Icons";
-import type { ChatMessage, ChatSessionSummary, ChatWorkingNotes, ToolCall } from "../types/sketch";
+import type { ChatMessage, ChatSessionSummary, ChatWorkingNotes } from "../types/sketch";
 import {
   Sparkles,
   Clock,
   Send,
   FileText,
   Globe,
-  Wrench,
   Trash2,
   Plus,
   Paperclip,
   ChevronDown,
-  ChevronRight,
   Check,
   User,
   X,
@@ -315,10 +313,6 @@ function IconGlobe({ size = 12 }: { size?: number }) {
   return <Globe width={size} height={size} />;
 }
 
-function IconWrench({ size = 12 }: { size?: number }) {
-  return <Wrench width={size} height={size} />;
-}
-
 function IconTrash({ size = 12 }: { size?: number }) {
   return <Trash2 width={size} height={size} />;
 }
@@ -334,16 +328,6 @@ function IconPaperclip({ size = 14 }: { size?: number }) {
 
 function IconChevronDown({ size = 10 }: { size?: number }) {
   return <ChevronDown width={size} height={size} />;
-}
-
-function IconChevron({ size = 10, expanded = false }: { size?: number; expanded?: boolean }) {
-  return (
-    <ChevronRight
-      width={size}
-      height={size}
-      style={{ transform: expanded ? "rotate(90deg)" : "rotate(0deg)", transition: "transform 0.15s" }}
-    />
-  );
 }
 
 function IconCheck({ size = 12 }: { size?: number }) {
@@ -1902,14 +1886,6 @@ function MessageRow({
     );
   }
 
-  if (message.role === "assistant" && message.tool_calls && message.tool_calls.length > 0) {
-    return (
-      <div className="px-4 py-1">
-        <ToolCallsRow toolCalls={message.tool_calls} />
-      </div>
-    );
-  }
-
   if (message.role === "tool") {
     return null;
   }
@@ -1927,6 +1903,9 @@ function MessageRow({
   }
 
   if (message.role === "assistant") {
+    const assistantText = textContent(message.content).trim();
+    if (!assistantText) return null;
+
     return (
       <div className="px-3.5 py-2.5">
         <div className="w-full max-w-[70ch] min-w-0">
@@ -1938,7 +1917,7 @@ function MessageRow({
           </div>
           <div className="rounded-2xl rounded-tl-sm border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))]/80 shadow-sm">
             <div className="px-5 py-[1.125rem] text-[14px] leading-[1.78] text-[rgb(var(--color-text)_/_0.92)]">
-              <MarkdownContent content={textContent(message.content)} projectRoot={projectRoot} />
+              <MarkdownContent content={assistantText} projectRoot={projectRoot} />
             </div>
             {message.cutready?.workingNotes && (
               <WorkingNotesInline notes={message.cutready.workingNotes} />
@@ -2008,66 +1987,6 @@ function WorkingNotesInline({ notes, defaultOpen = false, live = false }: { note
           </div>
         )}
       </div>}
-    </div>
-  );
-}
-
-// ── Tool Call Row ────────────────────────────────────────────────
-
-function ToolCallsRow({ toolCalls }: { toolCalls: ToolCall[] }) {
-  const [expanded, setExpanded] = useState(false);
-
-  // Determine dominant type color from the tool names
-  function toolTypeColor(name: string): string {
-    if (name.includes("note")) return "note";
-    if (name.includes("sketch") || name.includes("planning")) return "sketch";
-    if (name.includes("storyboard")) return "storyboard";
-    if (name.includes("fetch_url")) return "web";
-    return "";
-  }
-
-  // Build compact one-line summary
-  const names = toolCalls.map((tc) => {
-    const name = tc.function.name.replace(/_/g, " ");
-    let summary = name;
-    try {
-      const args = JSON.parse(tc.function.arguments);
-      if (args.path) summary += ` → ${args.path}`;
-      else if (args.index !== undefined) summary += ` → row ${args.index}`;
-    } catch { /* ignore */ }
-    return summary;
-  });
-  const label = toolCalls.length === 1 ? names[0] : `${toolCalls.length} tool calls`;
-  const dominantType = toolTypeColor(toolCalls[0]?.function.name ?? "");
-  const c = typeColors(dominantType);
-
-  return (
-    <div>
-      <button
-        className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] transition-colors max-w-full ${c.bg} ${c.text} ${c.border} opacity-85 hover:opacity-100 hover:brightness-110`}
-        onClick={() => setExpanded(!expanded)}
-      >
-        <span className="opacity-70"><IconWrench size={11} /></span>
-        <span className="font-medium truncate">{label}</span>
-        <IconChevron size={9} expanded={expanded} />
-      </button>
-      {expanded && (
-        <div className="mt-1.5 space-y-1.5 pl-2">
-          {toolCalls.map((tc) => {
-            const name = tc.function.name.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-            let parsed = "{}";
-            try { parsed = JSON.stringify(JSON.parse(tc.function.arguments), null, 2); } catch { /* ignore */ }
-            return (
-              <div key={tc.id} className="text-[11px]">
-                <div className="font-medium text-[rgb(var(--color-text-secondary))]">{name}</div>
-                <pre className="mt-1 max-h-48 overflow-auto rounded-lg border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-alt))]/70 p-2.5 text-[10px] leading-relaxed text-[rgb(var(--color-text-secondary))]">
-                  {parsed}
-                </pre>
-              </div>
-            );
-          })}
-        </div>
-      )}
     </div>
   );
 }
