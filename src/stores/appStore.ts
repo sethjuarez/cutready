@@ -1413,6 +1413,9 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     try {
       await invoke("delete_project", { projectPath, deleteFiles });
       await get().loadProjects();
+      await get().checkDirty();
+      await get().refreshChangedFiles();
+      await get().loadGraphData();
     } catch (err) {
       console.error("Failed to delete project:", err);
       set({ error: String(err) });
@@ -2237,27 +2240,33 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       // Clear active editors FIRST to cancel pending debounced saves
       set({ activeSketch: null, activeSketchPath: null, activeStoryboard: null, activeStoryboardPath: null, isDirty: false });
       await invoke("navigate_to_snapshot", { commitId });
-      // Reload file lists
+      // Reload project and file lists from the checked-out snapshot.
+      await get().loadProjects();
       await get().loadSketches();
       await get().loadStoryboards();
+      await get().loadNotes();
+      await get().loadSidebarOrder();
       // Restore editor state saved with this snapshot
       const raw = await invoke<string | null>("load_editor_state", { commitId });
       if (raw) {
         try {
           const saved = JSON.parse(raw) as { openTabs?: EditorTab[]; activeTabId?: string | null };
-          const { sketches, storyboards } = get();
+          const { sketches, storyboards, notes } = get();
           // Only restore tabs whose files still exist in this snapshot
-          const validTabs = (saved.openTabs ?? []).filter((t) =>
-            t.type === "sketch"
-              ? sketches.some((s) => s.path === t.path)
-              : storyboards.some((s) => s.path === t.path),
-          );
+          const validTabs = (saved.openTabs ?? []).filter((t) => {
+            if (t.type === "sketch") return sketches.some((s) => s.path === t.path);
+            if (t.type === "storyboard") return storyboards.some((s) => s.path === t.path);
+            if (t.type === "note") return notes.some((n) => n.path === t.path);
+            if (t.type === "database") return isDatabasePath(t.path);
+            return false;
+          });
           set({ openTabs: validTabs, activeTabId: saved.activeTabId ?? null });
           // Open the active tab's content
           const active = validTabs.find((t) => t.id === saved.activeTabId);
           if (active) {
             if (active.type === "sketch") await get().openSketch(active.path);
-            else await get().openStoryboard(active.path);
+            else if (active.type === "storyboard") await get().openStoryboard(active.path);
+            else if (active.type === "note") await get().openNote(active.path);
           }
         } catch { /* ignore parse errors */ }
       } else {
@@ -2269,6 +2278,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await get().loadGraphData();
       await get().checkDirty();
       await get().checkRewound();
+      await get().refreshChangedFiles();
     } catch (err) {
       console.error("Failed to navigate to snapshot:", err);
     }
@@ -2550,6 +2560,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await get().refreshIncomingCommits();
       await get().checkDirty();
       await get().refreshChangedFiles();
+      await get().loadProjects();
       await get().loadGraphData();
       await get().loadTimelines();
       await get().loadVersions();
@@ -2584,8 +2595,11 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         branch,
       });
       await get().loadTimelines();
+      await get().loadProjects();
       await get().loadSketches();
       await get().loadStoryboards();
+      await get().loadNotes();
+      await get().loadSidebarOrder();
       await get().loadGraphData();
       await get().loadVersions();
     } catch (err) {

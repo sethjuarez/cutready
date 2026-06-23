@@ -207,6 +207,7 @@ export function ChangesPanel() {
   const activeProjectName = currentProject?.name ?? "project";
   const remoteUrl = currentRemote?.url ?? null;
   const remoteLabel = remoteUrl ? formatRemoteLabel(remoteUrl) : null;
+  const repoLabel = remoteLabel ?? workspaceName;
   const ahead = syncStatus?.ahead ?? 0;
   const behind = syncStatus?.behind ?? 0;
 
@@ -219,60 +220,60 @@ export function ChangesPanel() {
         >
           {changesExpanded ? <ChevronDown className="h-3 w-3 shrink-0" /> : <ChevronRight className="h-3 w-3 shrink-0" />}
           <span className="shrink-0 truncate">Changes</span>
-          {isMultiProject && (
-            <span
-              className="min-w-0 max-w-full shrink truncate rounded-full border border-[rgb(var(--color-border))] px-1.5 py-0 text-left text-[9px] font-medium normal-case tracking-normal text-[rgb(var(--color-text-secondary))]/80"
-              title={`Active project: ${activeProjectName}`}
-            >
-              {activeProjectName}
-            </span>
-          )}
+          <span
+            className="min-w-0 max-w-full shrink truncate rounded-full border border-[rgb(var(--color-border))] px-1.5 py-0 text-left text-[9px] font-medium normal-case tracking-normal text-[rgb(var(--color-text-secondary))]/80"
+            title={remoteUrl ?? currentProject?.repo_root}
+          >
+            {repoLabel}
+          </span>
           {changedFiles.length > 0 && (
             <span className="ml-1 shrink-0 rounded-full bg-[rgb(var(--color-accent))]/15 px-1 py-0 text-[9px] font-medium text-[rgb(var(--color-accent))]">
               {changedFiles.length}
             </span>
           )}
         </button>
-        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-          <SyncBar variant="compact" />
-          {currentRemote && (
-            <button
-              onClick={() => shareChanges()}
-              disabled={saving}
-              className="flex h-6 shrink-0 items-center gap-1 rounded-md px-2 text-[10px] font-medium text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))] disabled:pointer-events-none disabled:opacity-30"
-              title="Push changes and copy a share link"
-            >
-              <Share2 className="h-3 w-3" />
-              Share
-            </button>
-          )}
-          <button
-            onClick={() => promptSnapshot()}
-            disabled={!isDirty || saving}
-            className="flex h-6 shrink-0 items-center gap-1 rounded-md px-2 text-[10px] font-medium text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))] disabled:pointer-events-none disabled:opacity-30"
-            title="Take Snapshot (Ctrl+S)"
-          >
-            {saving ? (
-              <svg className="h-3 w-3 animate-spin text-[rgb(var(--color-accent))]" viewBox="0 0 24 24" fill="none">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-              </svg>
-            ) : (
-              <Save className="h-3 w-3" />
+        {changesExpanded && (
+          <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+            <SyncBar variant="compact" />
+            {currentRemote && (
+              <button
+                onClick={() => shareChanges()}
+                disabled={saving}
+                className="flex h-6 shrink-0 items-center gap-1 rounded-md px-2 text-[10px] font-medium text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))] disabled:pointer-events-none disabled:opacity-30"
+                title="Push changes and copy a share link"
+              >
+                <Share2 className="h-3 w-3" />
+                Share
+              </button>
             )}
-            Save
-          </button>
-          {isDirty && !pendingNavTarget && (
             <button
-              onClick={() => setConfirmDiscard(true)}
-              className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-error/10 hover:text-error"
-              title="Discard active project changes"
+              onClick={() => promptSnapshot()}
+              disabled={!isDirty || saving}
+              className="flex h-6 shrink-0 items-center gap-1 rounded-md px-2 text-[10px] font-medium text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))] disabled:pointer-events-none disabled:opacity-30"
+              title="Take Snapshot (Ctrl+S)"
             >
-              <Trash2 className="h-3 w-3" />
+              {saving ? (
+                <svg className="h-3 w-3 animate-spin text-[rgb(var(--color-accent))]" viewBox="0 0 24 24" fill="none">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+              ) : (
+                <Save className="h-3 w-3" />
+              )}
+              Save
             </button>
-          )}
-        </div>
-        {(remoteLabel || ahead > 0 || behind > 0) && (
+            {isDirty && !pendingNavTarget && (
+              <button
+                onClick={() => setConfirmDiscard(true)}
+                className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-error/10 hover:text-error"
+                title="Discard active project changes"
+              >
+                <Trash2 className="h-3 w-3" />
+              </button>
+            )}
+          </div>
+        )}
+        {changesExpanded && (ahead > 0 || behind > 0) && (
           <div className="flex min-w-0 items-center gap-1.5 text-[9px] leading-tight text-[rgb(var(--color-text-secondary))]/60">
             {ahead > 0 && (
               <div className="relative">
@@ -312,20 +313,11 @@ export function ChangesPanel() {
                 )}
               </div>
             )}
-            {remoteLabel && (
-              <div
-                className="flex min-w-0 items-center gap-1"
-                title={remoteUrl ?? undefined}
-              >
-                <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-success" />
-                <span className="truncate">{remoteLabel}</span>
-              </div>
-            )}
           </div>
         )}
       </div>
 
-      {confirmDiscard && (
+      {changesExpanded && confirmDiscard && (
         <div className="border-b border-error/20 bg-error/5 px-3 py-2">
           <div className="mb-1.5 text-[10px] font-medium text-error">
             Discard changes in {isMultiProject ? activeProjectName : "this project"} since the last snapshot?
@@ -348,7 +340,7 @@ export function ChangesPanel() {
         </div>
       )}
 
-      {pendingNavTarget && (
+      {changesExpanded && pendingNavTarget && (
         <div className="border-b border-warning/20 bg-warning/5 px-3 py-2">
           <div className="mb-1.5 text-[10px] font-medium text-warning">
             You have unsaved changes

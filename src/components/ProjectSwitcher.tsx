@@ -2,7 +2,7 @@ import { invoke } from "../services/tauri";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAppStore } from "../stores/appStore";
 import type { ProjectEntry } from "../types/project";
-import { Folder, ChevronDown, Pencil, Check, Plus } from "lucide-react";
+import { Folder, ChevronDown, Pencil, Check, Plus, RefreshCw, Trash2 } from "lucide-react";
 
 /** Compact project switcher dropdown for the title breadcrumb or sidebar. */
 interface ProjectSwitcherProps {
@@ -15,6 +15,7 @@ export function ProjectSwitcher({ variant = "sidebar" }: ProjectSwitcherProps) {
   const isMultiProject = useAppStore((s) => s.isMultiProject);
   const switchProject = useAppStore((s) => s.switchProject);
   const createProjectInRepo = useAppStore((s) => s.createProjectInRepo);
+  const deleteProjectFromRepo = useAppStore((s) => s.deleteProjectFromRepo);
   const loadProjects = useAppStore((s) => s.loadProjects);
 
   const [isOpen, setIsOpen] = useState(false);
@@ -65,6 +66,12 @@ export function ProjectSwitcher({ variant = "sidebar" }: ProjectSwitcherProps) {
     if (isMigrating) migrateInputRef.current?.focus();
     if (renamingPath) renameInputRef.current?.focus();
   }, [isCreating, isMigrating, renamingPath]);
+
+  const handleToggleOpen = useCallback(() => {
+    const nextOpen = !isOpen;
+    setIsOpen(nextOpen);
+    if (nextOpen) void loadProjects();
+  }, [isOpen, loadProjects]);
 
   const handleSwitch = useCallback(
     (path: string) => {
@@ -120,6 +127,19 @@ export function ProjectSwitcher({ variant = "sidebar" }: ProjectSwitcherProps) {
     }
   }, [renameValue, renamingPath, loadProjects, switchProject]);
 
+  const handleDelete = useCallback(async (project: ProjectEntry, isActive: boolean) => {
+    const remove = window.confirm(`Remove "${project.name}" from the workspace project list?`);
+    if (!remove) return;
+    const deleteFiles = window.confirm(`Also delete the "${project.path}" folder and its files?\n\nCancel keeps the files on disk.`);
+    await deleteProjectFromRepo(project.path, deleteFiles);
+    const remaining = useAppStore.getState().projects.filter((p) => p.path !== project.path);
+    if (isActive && remaining.length > 0) {
+      await switchProject(remaining[0].path);
+    } else if (isActive) {
+      useAppStore.getState().closeProject();
+    }
+  }, [deleteProjectFromRepo, switchProject]);
+
   const handleNewProjectClick = useCallback(() => {
     if (!isMultiProject) {
       // Single-project workspace: need to migrate first
@@ -153,7 +173,7 @@ export function ProjectSwitcher({ variant = "sidebar" }: ProjectSwitcherProps) {
     >
       {/* Trigger */}
       <button
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={handleToggleOpen}
         className={
           isTitle
             ? "flex h-[22px] max-w-[320px] min-w-0 items-center gap-1.5 rounded px-1.5 text-left text-sm leading-none text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
@@ -203,6 +223,20 @@ export function ProjectSwitcher({ variant = "sidebar" }: ProjectSwitcherProps) {
               </div>
             </div>
           )}
+          <div className="flex items-center justify-between border-b border-[rgb(var(--color-border))] px-3 py-1.5">
+            <span className="text-[10px] font-medium uppercase tracking-wider text-[rgb(var(--color-text-secondary))]">
+              Projects
+            </span>
+            <button
+              type="button"
+              onClick={() => loadProjects()}
+              className="grid h-5 w-5 place-items-center rounded text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
+              title="Refresh projects"
+              aria-label="Refresh projects"
+            >
+              <RefreshCw className="h-3 w-3" />
+            </button>
+          </div>
           {projects.map((p) => {
             const isActive = activeEntry?.path === p.path;
             const isRenaming = renamingPath === p.path;
@@ -257,6 +291,19 @@ export function ProjectSwitcher({ variant = "sidebar" }: ProjectSwitcherProps) {
                 >
                   <Pencil className="w-2.5 h-2.5" />
                 </button>
+                {p.path !== "." && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void handleDelete(p, isActive);
+                    }}
+                    className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-[rgb(var(--color-text-secondary))] hover:bg-error/10 hover:text-error transition-opacity"
+                    title="Delete project"
+                    aria-label={`Delete ${p.name}`}
+                  >
+                    <Trash2 className="w-2.5 h-2.5" />
+                  </button>
+                )}
                 {isActive && (
                   <Check className="shrink-0 w-3 h-3" />
                 )}
