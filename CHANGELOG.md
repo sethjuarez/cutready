@@ -9,6 +9,13 @@
 Covector manages this changelog. Do not edit manually.
 Each release section is generated from `.changes/*.md` files.
 
+## [1.14.0](https://github.com/sethjuarez/cutready/compare/v1.13.0...v1.14.0) (2026-06-23)
+
+
+### Features
+
+* **storyboard:** add sectioned outline editing ([6bee956](https://github.com/sethjuarez/cutready/commit/6bee956e3a56f2167e0a337d1c333d7e5eb53166))
+
 ## [1.13.0](https://github.com/sethjuarez/cutready/compare/v1.12.4...v1.13.0) (2026-06-23)
 
 
