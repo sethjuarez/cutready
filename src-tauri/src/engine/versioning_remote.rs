@@ -47,7 +47,10 @@ pub enum RemoteError {
     Other(String),
 }
 
-fn ensure_safety_snapshot(project_dir: &Path, operation: &str) -> Result<Option<String>, RemoteError> {
+fn ensure_safety_snapshot(
+    project_dir: &Path,
+    operation: &str,
+) -> Result<Option<String>, RemoteError> {
     if !versioning::has_unsaved_changes(project_dir)
         .map_err(|e| RemoteError::Other(e.to_string()))?
     {
@@ -292,7 +295,10 @@ pub fn push_remote(
     local_branch: &str,
     token: Option<&str>,
 ) -> Result<(), RemoteError> {
-    ensure_safety_snapshot(project_dir, &format!("push to {}/{}", remote_name, local_branch))?;
+    ensure_safety_snapshot(
+        project_dir,
+        &format!("push to {}/{}", remote_name, local_branch),
+    )?;
     let token_owned = token.map(|t| t.to_string()).or_else(gh_token);
     let push_target = build_authed_url(project_dir, remote_name, token_owned.as_deref())
         .unwrap_or_else(|| remote_name.to_string());
@@ -378,7 +384,10 @@ pub fn pull_remote(
     branch: &str,
     token: Option<&str>,
 ) -> Result<PullResult, RemoteError> {
-    ensure_safety_snapshot(project_dir, &format!("pull from {}/{}", remote_name, branch))?;
+    ensure_safety_snapshot(
+        project_dir,
+        &format!("pull from {}/{}", remote_name, branch),
+    )?;
     // Step 1: fetch
     fetch_remote(project_dir, remote_name, token)?;
 
@@ -884,7 +893,10 @@ mod tests {
             other => panic!("Expected safe merge or fast-forward, got {:?}", other),
         }
 
-        assert_eq!(fs::read_to_string(&local_note).unwrap(), "unsaved collaborator notes");
+        assert_eq!(
+            fs::read_to_string(&local_note).unwrap(),
+            "unsaved collaborator notes"
+        );
         let repo = Repository::open(clone_dir.path()).unwrap();
         let mut revwalk = repo.revwalk().unwrap();
         revwalk.push_head().unwrap();
@@ -893,7 +905,9 @@ mod tests {
             .filter_map(|oid| repo.find_commit(oid).ok())
             .filter_map(|commit| commit.summary().map(str::to_string))
             .collect();
-        assert!(messages.iter().any(|message| message.starts_with("Auto-snapshot before pull")));
+        assert!(messages
+            .iter()
+            .any(|message| message.starts_with("Auto-snapshot before pull")));
     }
 
     #[test]

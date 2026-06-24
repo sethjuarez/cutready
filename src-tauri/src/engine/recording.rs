@@ -591,7 +591,8 @@ fn parse_avfoundation_devices(stderr: &str) -> Vec<RecordingDeviceInfo> {
         };
 
         // Screen capture devices show as "Capture screen N" — treat as system resource
-        if current_section == Section::Video && name.to_ascii_lowercase().contains("capture screen") {
+        if current_section == Section::Video && name.to_ascii_lowercase().contains("capture screen")
+        {
             devices.push(RecordingDeviceInfo {
                 id: format!("screen:{screen_index}"),
                 label: name,
@@ -616,7 +617,10 @@ fn parse_avfoundation_devices(stderr: &str) -> Vec<RecordingDeviceInfo> {
     }
 
     // Mark first mic as default
-    if let Some(first_mic) = devices.iter_mut().find(|d| d.kind == RecordingDeviceKind::Microphone) {
+    if let Some(first_mic) = devices
+        .iter_mut()
+        .find(|d| d.kind == RecordingDeviceKind::Microphone)
+    {
         first_mic.is_default = true;
     }
 
@@ -632,7 +636,15 @@ fn parse_avfoundation_devices(stderr: &str) -> Vec<RecordingDeviceInfo> {
 #[cfg(target_os = "macos")]
 fn find_avfoundation_screen_index(display_index: usize) -> Option<u32> {
     let output = std::process::Command::new("ffmpeg")
-        .args(["-hide_banner", "-f", "avfoundation", "-list_devices", "true", "-i", ""])
+        .args([
+            "-hide_banner",
+            "-f",
+            "avfoundation",
+            "-list_devices",
+            "true",
+            "-i",
+            "",
+        ])
         .output()
         .ok()?;
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -1497,7 +1509,10 @@ fn spawn_system_audio_capture(
             .filter(|d| d.kind == RecordingDeviceKind::Microphone)
             .position(|d| d.id == loopback_device)
             .ok_or_else(|| {
-                anyhow::anyhow!("Loopback device '{}' not found in device list", loopback_device)
+                anyhow::anyhow!(
+                    "Loopback device '{}' not found in device list",
+                    loopback_device
+                )
             })?;
 
         let mut args = vec![

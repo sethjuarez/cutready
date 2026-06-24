@@ -85,11 +85,15 @@ The app uses a **VS Code-inspired** layout:
 - Import window-specific APIs such as `getCurrentWindow`, `LogicalPosition`, and `LogicalSize` directly from `@tauri-apps/api/window`.
 - Use `invoke()` for Commands, `Channel` for streaming data, `listen()` for events, and the telemetry-aware wrappers for frontend Tauri events.
 - Type all IPC payloads with TypeScript interfaces.
+- Do not send token-returning or secret-returning commands through Auditaur invoke instrumentation. Route them through raw Tauri invoke in `src/services/tauri.ts` so IPC `resultSummary` cannot capture credential-shaped values. Current sensitive commands include `azure_browser_auth_complete`, `azure_device_code_poll`, `azure_token_refresh`, and `get_github_token`.
 
 ## Telemetry
 
 - Use Auditaur as the canonical diagnostics substrate. Frontend Activity entries remain curated user-facing breadcrumbs, but `appStore.addActivityEntries()` also records structured `cutready.activity` console logs for Auditaur.
 - Default to running the real Tauri app with `npm run debug` for UI, IPC, and workflow validation. Debug builds enable Auditaur end-to-end observability across frontend console/errors, Tauri IPC/events, and backend tracing; inspect the Debug output panel or `get_auditaur_diagnostics` instead of relying only on browser console output.
+- Auditaur wraps the normal Tauri runner; it does not replace it. Ensure dependencies are installed (`npm ci`) before wrapper mode, then start via `auditaur debug --app cutready --active --cdp-port 9222 --require-frontend --json run --timeout-seconds 180 -- $env:ComSpec /c npm run debug` from PowerShell. `npm run debug` expands to `tauri dev`; `npm run tauri -- dev` is the explicit equivalent.
+- When multiple or stale Auditaur discovery records exist, prefer concrete selectors over a bare `--active`: `debug` and `drive` use `--session-id <id>`, while telemetry readers such as `ipc`, `errors`, `logs`, and `timeline` use `--session <id>`. Always check readiness with `auditaur debug --app cutready --latest --cdp-port 9222 --require-frontend --json status` before interpreting logs.
+- For smoke tests, inspect IPC summaries without printing raw `resultSummary` fields. Summarize counts, command names, failed IPC, and whether sensitive commands appear; do not dump token-returning IPC records.
 - Full Auditaur diagnostics are controlled from Settings > Feedback. Packaged builds should default to diagnostics off unless the persisted Feedback setting is enabled for the next launch or the app is started with `CUTREADY_DIAGNOSTICS=1`.
 - The Debug output panel should summarize Auditaur data (exceptions, failed IPC, failed traces, warn/error logs) instead of maintaining a separate in-memory debug log.
 - Feedback and Export Logs should include compact Auditaur diagnostics and scoped current-session Auditaur data, not the shared global Auditaur root.

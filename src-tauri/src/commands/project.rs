@@ -36,12 +36,14 @@ fn project_and_repo_root(
 /// and `CUTREADY_PROJECT=<path>` for dev smoke tests and scripted launches.
 #[tauri::command]
 pub async fn get_startup_project_path() -> Result<Option<String>, String> {
-    Ok(startup_project_path_from_args(std::env::args_os()).or_else(|| {
-        std::env::var(STARTUP_PROJECT_ENV)
-            .ok()
-            .map(|value| value.trim().to_string())
-            .filter(|value| !value.is_empty())
-    }))
+    Ok(
+        startup_project_path_from_args(std::env::args_os()).or_else(|| {
+            std::env::var(STARTUP_PROJECT_ENV)
+                .ok()
+                .map(|value| value.trim().to_string())
+                .filter(|value| !value.is_empty())
+        }),
+    )
 }
 
 fn startup_project_path_from_args<I>(args: I) -> Option<String>

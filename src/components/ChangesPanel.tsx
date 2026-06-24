@@ -9,7 +9,6 @@ import {
   Search,
   Clock,
   Save,
-  GitPullRequestArrow,
   X,
   MoreHorizontal,
   Trash2,
@@ -393,7 +392,7 @@ export function ChangesPanel() {
         onToggle={() => setHistoryExpanded(!historyExpanded)}
         actions={historyExpanded ? (
           <>
-            {timelines.length > 1 && <TimelineSelector />}
+            <TimelineSelector />
             <button
               onClick={() => {
                 setShowSearch(!showSearch);
@@ -426,16 +425,6 @@ export function ChangesPanel() {
           >
             <Clock className="h-3 w-3" />
             Open full history
-          </button>
-          <button
-            onClick={() => {
-              setSquashMode(true);
-              setShowAdvanced(false);
-            }}
-            className="flex w-full items-center gap-1.5 rounded px-2 py-1 text-[10px] text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
-          >
-            <GitPullRequestArrow className="h-3 w-3" />
-            Squash snapshots
           </button>
           {historyAuthors.length > 1 && (
             <label className="flex items-center gap-1.5 rounded px-2 py-1 text-[10px] text-[rgb(var(--color-text-secondary))]">

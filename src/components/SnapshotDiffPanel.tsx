@@ -7,11 +7,14 @@ import { useAppStore } from "../stores/appStore";
 export function SnapshotDiffPanel() {
   const diffResult = useAppStore((s) => s.diffResult);
   const diffSelection = useAppStore((s) => s.diffSelection);
+  const restoreSnapshotAsNewSave = useAppStore((s) => s.restoreSnapshotAsNewSave);
 
   if (!diffResult || !diffSelection) return null;
 
   const totalAdded = diffResult.reduce((s, e) => s + e.additions, 0);
   const totalRemoved = diffResult.reduce((s, e) => s + e.deletions, 0);
+  const canRestorePreview = diffSelection.to === "preview";
+  const restoreLabel = `Restore ${diffSelection.from.slice(0, 7)}`;
 
   return (
     <div className="border-t border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))]">
@@ -22,6 +25,15 @@ export function SnapshotDiffPanel() {
             : `Diff: ${diffSelection.from.slice(0, 7)} → ${diffSelection.to.slice(0, 7)}`}
         </span>
         <div className="flex items-center gap-2">
+          {canRestorePreview && (
+            <button
+              data-testid="restore-snapshot-as-new-save"
+              onClick={() => void restoreSnapshotAsNewSave(diffSelection.from, restoreLabel)}
+              className="rounded px-2 py-0.5 text-[10px] font-medium bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))] hover:bg-[rgb(var(--color-accent-hover))] transition-colors"
+            >
+              Restore as new save
+            </button>
+          )}
           <span className="text-[10px] text-success">+{totalAdded}</span>
           <span className="text-[10px] text-error">-{totalRemoved}</span>
           <button

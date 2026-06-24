@@ -698,7 +698,10 @@ pub fn resolve_conflict_file(
         }
         ConflictFileType::Other => {
             // Whole-file: any theirs choice means use theirs
-            if choices.text_choices.values().any(|c| *c == ConflictSide::Theirs)
+            if choices
+                .text_choices
+                .values()
+                .any(|c| *c == ConflictSide::Theirs)
                 || choices
                     .field_choices
                     .values()
@@ -730,9 +733,9 @@ fn resolve_text_conflict(
     // gets replaced by a theirs hunk, or is part of a conflict (user chooses).
     #[derive(Debug, Clone)]
     enum Action<'a> {
-        Keep,                    // Use ancestor line
-        Replace(Vec<&'a str>),   // Non-conflicting hunk
-        Conflict(usize),         // Conflict region index — user picks
+        Keep,                  // Use ancestor line
+        Replace(Vec<&'a str>), // Non-conflicting hunk
+        Conflict(usize),       // Conflict region index — user picks
     }
 
     // Map ancestor line index → action
@@ -752,12 +755,10 @@ fn resolve_text_conflict(
                 }
             }
             if o_hunk.ancestor_count > 0 {
-                actions[o_hunk.ancestor_start] =
-                    Action::Replace(o_hunk.new_lines.clone());
+                actions[o_hunk.ancestor_start] = Action::Replace(o_hunk.new_lines.clone());
             } else if o_hunk.ancestor_start <= actions.len() {
                 // Pure insertion at a position
-                actions[o_hunk.ancestor_start] =
-                    Action::Replace(o_hunk.new_lines.clone());
+                actions[o_hunk.ancestor_start] = Action::Replace(o_hunk.new_lines.clone());
             }
         }
     }
@@ -782,11 +783,9 @@ fn resolve_text_conflict(
                 }
             }
             if t_hunk.ancestor_count > 0 {
-                actions[t_hunk.ancestor_start] =
-                    Action::Replace(t_hunk.new_lines.clone());
+                actions[t_hunk.ancestor_start] = Action::Replace(t_hunk.new_lines.clone());
             } else if t_hunk.ancestor_start <= actions.len() {
-                actions[t_hunk.ancestor_start] =
-                    Action::Replace(t_hunk.new_lines.clone());
+                actions[t_hunk.ancestor_start] = Action::Replace(t_hunk.new_lines.clone());
             }
         }
     }
@@ -846,9 +845,8 @@ fn resolve_json_conflict(
     conflict: &ConflictFile,
     field_choices: &std::collections::HashMap<String, ConflictSide>,
 ) -> Result<String, VersioningError> {
-    let mut base: serde_json::Value = serde_json::from_str(&conflict.ours).map_err(|e| {
-        VersioningError::Git(format!("Failed to parse ours JSON: {}", e))
-    })?;
+    let mut base: serde_json::Value = serde_json::from_str(&conflict.ours)
+        .map_err(|e| VersioningError::Git(format!("Failed to parse ours JSON: {}", e)))?;
     let ancestor: serde_json::Value =
         serde_json::from_str(&conflict.ancestor).unwrap_or(serde_json::Value::Null);
     let theirs: serde_json::Value =
@@ -887,16 +885,17 @@ fn resolve_json_conflict(
 
     // Apply user choices for conflict fields
     for fc in &conflict.field_conflicts {
-        let choice = field_choices.get(&fc.field_path).unwrap_or(&ConflictSide::Ours);
+        let choice = field_choices
+            .get(&fc.field_path)
+            .unwrap_or(&ConflictSide::Ours);
         if *choice == ConflictSide::Theirs {
             set_json_value(&mut base, &fc.field_path, &fc.theirs);
         }
         // Ours is already the default from the base
     }
 
-    let serialized = serde_json::to_string_pretty(&base).map_err(|e| {
-        VersioningError::Git(format!("Failed to serialize merged JSON: {}", e))
-    })?;
+    let serialized = serde_json::to_string_pretty(&base)
+        .map_err(|e| VersioningError::Git(format!("Failed to serialize merged JSON: {}", e)))?;
 
     // Round-trip validation: parse the result to ensure it's valid JSON.
     // This catches any corruption from the merge process.
@@ -1610,10 +1609,7 @@ mod tests {
             timeline_ref_name("timeline/fork-123"),
             "refs/heads/timeline/fork-123"
         );
-        assert_eq!(
-            timeline_ref_name("origin/main"),
-            "refs/remotes/origin/main"
-        );
+        assert_eq!(timeline_ref_name("origin/main"), "refs/remotes/origin/main");
         assert_eq!(
             timeline_ref_name("refs/remotes/origin/main"),
             "refs/remotes/origin/main"
@@ -1636,11 +1632,7 @@ mod tests {
         }
     }
 
-    fn make_json_conflict(
-        ancestor: &str,
-        ours: &str,
-        theirs: &str,
-    ) -> ConflictFile {
+    fn make_json_conflict(ancestor: &str, ours: &str, theirs: &str) -> ConflictFile {
         let field_conflicts = json_field_diff(ancestor, ours, theirs);
         ConflictFile {
             path: "test.sk".to_string(),
@@ -1655,7 +1647,11 @@ mod tests {
 
     #[test]
     fn text_resolve_all_ours() {
-        let conflict = make_text_conflict("line1\nold\nline3", "line1\nours\nline3", "line1\ntheirs\nline3");
+        let conflict = make_text_conflict(
+            "line1\nold\nline3",
+            "line1\nours\nline3",
+            "line1\ntheirs\nline3",
+        );
         let choices = ConflictChoices {
             text_choices: [(0, ConflictSide::Ours)].into(),
             field_choices: Default::default(),
@@ -1667,7 +1663,11 @@ mod tests {
 
     #[test]
     fn text_resolve_all_theirs() {
-        let conflict = make_text_conflict("line1\nold\nline3", "line1\nours\nline3", "line1\ntheirs\nline3");
+        let conflict = make_text_conflict(
+            "line1\nold\nline3",
+            "line1\nours\nline3",
+            "line1\ntheirs\nline3",
+        );
         let choices = ConflictChoices {
             text_choices: [(0, ConflictSide::Theirs)].into(),
             field_choices: Default::default(),
@@ -1686,7 +1686,11 @@ mod tests {
         let theirs = "header\ntheirs-conflict\nshared\ntheirs-line4\nold-line5";
 
         let conflict = make_text_conflict(ancestor, ours, theirs);
-        assert_eq!(conflict.text_conflicts.len(), 1, "should have exactly 1 conflict region");
+        assert_eq!(
+            conflict.text_conflicts.len(),
+            1,
+            "should have exactly 1 conflict region"
+        );
 
         // Pick theirs for the conflict
         let choices = ConflictChoices {
@@ -1696,11 +1700,20 @@ mod tests {
         let result = resolve_conflict_file(&conflict, &choices).unwrap();
 
         // Should have theirs' conflict choice
-        assert!(result.contains("theirs-conflict"), "should pick theirs for conflict");
+        assert!(
+            result.contains("theirs-conflict"),
+            "should pick theirs for conflict"
+        );
         // Should preserve theirs' non-conflicting edit
-        assert!(result.contains("theirs-line4"), "should preserve theirs non-conflicting edit");
+        assert!(
+            result.contains("theirs-line4"),
+            "should preserve theirs non-conflicting edit"
+        );
         // Should preserve ours' non-conflicting edit
-        assert!(result.contains("ours-line5"), "should preserve ours non-conflicting edit");
+        assert!(
+            result.contains("ours-line5"),
+            "should preserve ours non-conflicting edit"
+        );
     }
 
     #[test]
@@ -1711,7 +1724,10 @@ mod tests {
 
         let conflict = make_json_conflict(ancestor, ours, theirs);
         // title should be a conflict, version should be theirs-only non-conflicting
-        assert!(conflict.field_conflicts.iter().any(|fc| fc.field_path == "title"));
+        assert!(conflict
+            .field_conflicts
+            .iter()
+            .any(|fc| fc.field_path == "title"));
 
         let choices = ConflictChoices {
             text_choices: Default::default(),
@@ -1719,8 +1735,14 @@ mod tests {
         };
         let result = resolve_conflict_file(&conflict, &choices).unwrap();
         let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
-        assert_eq!(parsed["title"], "ours-title", "should pick ours for conflict");
-        assert_eq!(parsed["version"], 2, "should preserve theirs non-conflicting edit");
+        assert_eq!(
+            parsed["title"], "ours-title",
+            "should pick ours for conflict"
+        );
+        assert_eq!(
+            parsed["version"], 2,
+            "should preserve theirs non-conflicting edit"
+        );
     }
 
     #[test]
@@ -1737,7 +1759,8 @@ mod tests {
             field_choices: [
                 ("title".to_string(), ConflictSide::Theirs),
                 ("description".to_string(), ConflictSide::Ours),
-            ].into(),
+            ]
+            .into(),
         };
         let result = resolve_conflict_file(&conflict, &choices).unwrap();
         let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
@@ -1788,7 +1811,10 @@ mod tests {
         };
         let result = resolve_conflict_file(&conflict, &choices).unwrap();
         assert!(result.contains("ours-2"), "should pick ours for conflict");
-        assert!(result.contains("theirs-5"), "should preserve theirs non-conflicting");
+        assert!(
+            result.contains("theirs-5"),
+            "should preserve theirs non-conflicting"
+        );
     }
 
     #[test]
@@ -1900,7 +1926,10 @@ mod tests {
         commit_on_branch(
             &dir,
             "main",
-            &[("sketches/intro.sk", r#"{"title":"main-title","description":"initial"}"#)],
+            &[(
+                "sketches/intro.sk",
+                r#"{"title":"main-title","description":"initial"}"#,
+            )],
             "main edits title",
         );
 
@@ -1908,14 +1937,18 @@ mod tests {
         commit_on_branch(
             &dir,
             "fork-a",
-            &[("sketches/intro.sk", r#"{"title":"Hello","description":"fork-desc"}"#)],
+            &[(
+                "sketches/intro.sk",
+                r#"{"title":"Hello","description":"fork-desc"}"#,
+            )],
             "fork edits desc",
         );
 
         // Checkout main (required for working dir operations)
         let repo = git2::Repository::open(&dir).unwrap();
         repo.set_head("refs/heads/main").unwrap();
-        repo.checkout_head(Some(git2::build::CheckoutBuilder::new().force())).unwrap();
+        repo.checkout_head(Some(git2::build::CheckoutBuilder::new().force()))
+            .unwrap();
         drop(repo);
 
         // Merge fork-a into main
@@ -1924,7 +1957,10 @@ mod tests {
         match result {
             MergeResult::Conflicts { conflicts } => {
                 assert!(!conflicts.is_empty(), "should have conflicts");
-                let sk_conflict = conflicts.iter().find(|c| c.path.contains("intro.sk")).unwrap();
+                let sk_conflict = conflicts
+                    .iter()
+                    .find(|c| c.path.contains("intro.sk"))
+                    .unwrap();
 
                 // Resolve: pick ours (main) for title
                 let choices = ConflictChoices {

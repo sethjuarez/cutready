@@ -106,7 +106,10 @@ pub async fn list_models(config: ProviderConfig) -> Result<Vec<ModelInfo>, Strin
     };
     let endpoint_present = !config.endpoint.trim().is_empty();
     let api_key_present = !config.api_key.trim().is_empty();
-    let bearer_token_present = config.bearer_token.as_deref().is_some_and(|token| !token.trim().is_empty());
+    let bearer_token_present = config
+        .bearer_token
+        .as_deref()
+        .is_some_and(|token| !token.trim().is_empty());
     log::info!(
         "[list_models] start provider={} provider_id={:?} provider_name={:?} auth={} endpoint_present={} api_key_present={} bearer_token_present={} model={}",
         provider,

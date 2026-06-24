@@ -773,9 +773,21 @@ pub async fn open_preview_window(
         let s = m.scale_factor();
         let size = m.size();
         let pos = m.position();
-        (s, size.width as f64 / s, size.height as f64 / s, pos.x as f64 / s, pos.y as f64 / s)
+        (
+            s,
+            size.width as f64 / s,
+            size.height as f64 / s,
+            pos.x as f64 / s,
+            pos.y as f64 / s,
+        )
     } else if phys_w > 0 {
-        (1.0, phys_w as f64, phys_h as f64, phys_x as f64, phys_y as f64)
+        (
+            1.0,
+            phys_w as f64,
+            phys_h as f64,
+            phys_x as f64,
+            phys_y as f64,
+        )
     } else {
         (1.0, 1920.0, 1080.0, 0.0, 0.0)
     };
@@ -788,40 +800,41 @@ pub async fn open_preview_window(
     #[cfg(target_os = "macos")]
     {
         // macOS: use native fullscreen for PowerPoint-style presentation
-        let win =
-            WebviewWindowBuilder::new(&app, "preview", WebviewUrl::App("index.html".into()))
-                .initialization_script("window.__IS_PREVIEW = true;")
-                .title("CutReady Preview")
-                .inner_size(logical_w, logical_h)
-                .position(logical_x, logical_y)
-                .focused(true)
-                .build()
-                .map_err(|e| {
-                    eprintln!("[PREVIEW] build FAILED: {}", e);
-                    e.to_string()
-                })?;
+        let win = WebviewWindowBuilder::new(&app, "preview", WebviewUrl::App("index.html".into()))
+            .initialization_script("window.__IS_PREVIEW = true;")
+            .title("CutReady Preview")
+            .inner_size(logical_w, logical_h)
+            .position(logical_x, logical_y)
+            .focused(true)
+            .build()
+            .map_err(|e| {
+                eprintln!("[PREVIEW] build FAILED: {}", e);
+                e.to_string()
+            })?;
         win.set_fullscreen(true).map_err(|e| e.to_string())?;
-        eprintln!("[PREVIEW] macOS fullscreen window created OK, label={}", win.label());
+        eprintln!(
+            "[PREVIEW] macOS fullscreen window created OK, label={}",
+            win.label()
+        );
     }
 
     #[cfg(not(target_os = "macos"))]
     {
-        let win =
-            WebviewWindowBuilder::new(&app, "preview", WebviewUrl::App("index.html".into()))
-                .initialization_script("window.__IS_PREVIEW = true;")
-                .title("CutReady Preview")
-                .inner_size(logical_w, logical_h)
-                .position(logical_x, logical_y)
-                .decorations(false)
-                .shadow(false)
-                .resizable(false)
-                .focused(true)
-                .skip_taskbar(true)
-                .build()
-                .map_err(|e| {
-                    eprintln!("[PREVIEW] build FAILED: {}", e);
-                    e.to_string()
-                })?;
+        let win = WebviewWindowBuilder::new(&app, "preview", WebviewUrl::App("index.html".into()))
+            .initialization_script("window.__IS_PREVIEW = true;")
+            .title("CutReady Preview")
+            .inner_size(logical_w, logical_h)
+            .position(logical_x, logical_y)
+            .decorations(false)
+            .shadow(false)
+            .resizable(false)
+            .focused(true)
+            .skip_taskbar(true)
+            .build()
+            .map_err(|e| {
+                eprintln!("[PREVIEW] build FAILED: {}", e);
+                e.to_string()
+            })?;
         fit_window_extended_frame_to_physical_bounds(&win, phys_x, phys_y, phys_w, phys_h);
         eprintln!("[PREVIEW] window created OK, label={}", win.label());
     }

@@ -5491,6 +5491,84 @@ mod tests {
     }
 
     #[test]
+    fn set_row_visual_tool_only_updates_target_row() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        let rel = "demo.sk";
+        let mut sketch = Sketch::new("Row Scope Test");
+        let mut row_0 = PlanningRow::new();
+        row_0.time = "0:00".into();
+        row_0.narrative = "Keep first row narrative".into();
+        row_0.demo_actions = "Keep first row action".into();
+        row_0.visual = Some(json!(".cutready/visuals/existing-first.json"));
+        let mut row_1 = PlanningRow::new();
+        row_1.time = "0:10".into();
+        row_1.narrative = "Target this row".into();
+        row_1.demo_actions = "Generate a visual here".into();
+        row_1.screenshot = Some("screenshots/target.png".into());
+        let mut row_2 = PlanningRow::new();
+        row_2.time = "0:20".into();
+        row_2.narrative = "Keep third row narrative".into();
+        row_2.demo_actions = "Keep third row action".into();
+        row_2.screenshot = Some("screenshots/third.png".into());
+        sketch.rows = vec![row_0.clone(), row_1, row_2.clone()];
+        project::write_sketch(&sketch, &root.join(rel), root).unwrap();
+
+        let result = exec_set_row_visual(
+            root,
+            &json!({
+                "path": rel,
+                "index": 1,
+                "visual": {
+                    "version": "2.0",
+                    "scene": {
+                        "type": "player",
+                        "width": 960,
+                        "height": 540,
+                        "fps": 30,
+                        "durationInFrames": 90,
+                        "background": "$background",
+                        "children": ["title"]
+                    },
+                    "elements": {
+                        "title": {
+                            "id": "title",
+                            "type": "text",
+                            "props": {
+                                "type": "text",
+                                "content": "Target Row",
+                                "x": 480,
+                                "y": 120,
+                                "fontSize": 44,
+                                "fill": "$title",
+                                "textAnchor": "middle"
+                            }
+                        }
+                    }
+                }
+            }),
+        );
+
+        assert!(result.contains("Visual saved"), "{result}");
+        let saved = project::read_sketch(&root.join(rel)).unwrap();
+        assert_eq!(saved.rows.len(), 3);
+        assert_eq!(saved.rows[0].time, row_0.time);
+        assert_eq!(saved.rows[0].narrative, row_0.narrative);
+        assert_eq!(saved.rows[0].demo_actions, row_0.demo_actions);
+        assert_eq!(saved.rows[0].screenshot, row_0.screenshot);
+        assert_eq!(saved.rows[0].visual, row_0.visual);
+        assert_eq!(saved.rows[2].time, row_2.time);
+        assert_eq!(saved.rows[2].narrative, row_2.narrative);
+        assert_eq!(saved.rows[2].demo_actions, row_2.demo_actions);
+        assert_eq!(saved.rows[2].screenshot, row_2.screenshot);
+        assert_eq!(saved.rows[2].visual, row_2.visual);
+        assert!(saved.rows[1].visual.is_some());
+        assert_eq!(saved.rows[1].screenshot, None);
+        assert_eq!(saved.rows[1].narrative, "Target this row");
+        assert_eq!(saved.rows[1].demo_actions, "Generate a visual here");
+    }
+
+    #[test]
     fn set_row_visual_tool_migrates_v1_visuals_to_v2() {
         let tmp = TempDir::new().unwrap();
         let root = tmp.path();

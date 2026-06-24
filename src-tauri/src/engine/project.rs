@@ -1387,8 +1387,7 @@ pub fn scan_chat_sessions(
             if path.extension().is_some_and(|ext| ext == "chat") {
                 if let Ok(data) = std::fs::read_to_string(&path) {
                     if let Ok(session) = serde_json::from_str::<ChatSession>(&data) {
-                        if let Some(file_name) =
-                            path.file_name().map(|name| name.to_string_lossy())
+                        if let Some(file_name) = path.file_name().map(|name| name.to_string_lossy())
                         {
                             let session_path = format!("{LEGACY_CHAT_URI_PREFIX}{file_name}");
                             summaries.push(ChatSessionSummary {
@@ -1650,11 +1649,7 @@ pub fn read_workspace_state(repo_root: &Path, project_root: &Path) -> WorkspaceS
     WorkspaceState::default()
 }
 
-fn sanitize_workspace_chat_session(
-    repo_root: &Path,
-    project_root: &Path,
-    ws: &mut WorkspaceState,
-) {
+fn sanitize_workspace_chat_session(repo_root: &Path, project_root: &Path, ws: &mut WorkspaceState) {
     let Some(session_path) = ws.chat_session_path.as_deref() else {
         return;
     };
@@ -2729,13 +2724,9 @@ Some text
             Some("grace@example.com")
         );
 
-        let migrated = read_chat_session(&resolve_chat_session_path(
-            root,
-            root,
-            ".chats/chat.chat",
-        )
-        .unwrap())
-        .unwrap();
+        let migrated =
+            read_chat_session(&resolve_chat_session_path(root, root, ".chats/chat.chat").unwrap())
+                .unwrap();
         assert_eq!(migrated.author_name.as_deref(), Some("Grace Hopper"));
         assert_eq!(migrated.author_email.as_deref(), Some("grace@example.com"));
     }

@@ -43,6 +43,25 @@ const MOCK_STORYBOARDS: StoryboardSummary[] = [
   { path: "storyboards/full-demo.sb", title: "Full Demo Flow", locked: false, sketch_count: 2, created_at: "2025-01-15T09:00:00Z", updated_at: "2025-01-15T12:30:00Z" },
 ];
 
+function mockDraftlineVersions() {
+  return [
+    {
+      id: "def456def456def456def456def456def456def4",
+      label: "Added feature section",
+      author: { name: "You", email: "dev@example.com" },
+      savedBy: { name: "You", email: "dev@example.com" },
+      timeSeconds: Math.floor(new Date("2025-01-15T11:00:00Z").getTime() / 1000),
+    },
+    {
+      id: "abc123abc123abc123abc123abc123abc123abc1",
+      label: "Initial draft",
+      author: { name: "You", email: "dev@example.com" },
+      savedBy: { name: "You", email: "dev@example.com" },
+      timeSeconds: Math.floor(new Date("2025-01-15T10:00:00Z").getTime() / 1000),
+    },
+  ];
+}
+
 const MOCK_NOTE_CONTENT = `# Script Draft
 
 ## Introduction
@@ -200,10 +219,47 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
     case "rename_storyboard":
       return null;
     case "list_versions":
+    case "draftline_list_versions":
+      if (cmd === "draftline_list_versions") return mockDraftlineVersions();
       return [
         { id: "abc123", message: "Initial draft", timestamp: "2025-01-15T10:00:00Z", summary: "Created demo introduction" },
         { id: "def456", message: "Added feature section", timestamp: "2025-01-15T11:00:00Z", summary: "Added deep dive section" },
       ];
+    case "draftline_workspace_summary":
+      return {
+        activeVariation: { id: "main", name: "main", displayLabel: "main", isCurrent: true },
+        variations: [{ id: "main", name: "main", displayLabel: "main", isCurrent: true }],
+        versions: mockDraftlineVersions(),
+        dirtyFiles: [],
+        isDirty: false,
+        recovery: null,
+        stateMayBeInconsistent: false,
+      };
+    case "draftline_full_history":
+      return [
+        {
+          version: mockDraftlineVersions()[0],
+          variationTips: ["main"],
+          isHead: true,
+          parentIds: ["abc123abc123abc123abc123abc123abc123abc1"],
+        },
+        {
+          version: mockDraftlineVersions()[1],
+          variationTips: [],
+          isHead: false,
+          parentIds: [],
+        },
+      ];
+    case "draftline_list_variations":
+      return [{ id: "main", name: "main", displayLabel: "main", isCurrent: true }];
+    case "draftline_variation_summaries":
+      return [{
+        variation: { id: "main", name: "main", displayLabel: "main", isCurrent: true },
+        headVersion: mockDraftlineVersions()[0],
+        reachableVersionCount: 2,
+      }];
+    case "draftline_current_variation":
+      return "main";
     case "list_timelines":
       return [{ name: "main", label: "main", is_active: true, snapshot_count: 2, color_index: 0 }];
     case "get_graph":
@@ -214,6 +270,25 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
       ];
     case "has_unsaved_changes":
       return false;
+    case "draftline_inspect_changes":
+      return { files: [], diff: null };
+    case "draftline_diff_versions":
+    case "draftline_diff_version_to_workspace":
+      return {
+        fromVersion: (args as { from?: string; version?: string })?.from ?? (args as { version?: string })?.version ?? null,
+        toVersion: (args as { to?: string })?.to ?? null,
+        files: [{ path: "sketches/demo-introduction.sk", kind: "modified", isBinary: false, isLarge: false }],
+        patch: null,
+      };
+    case "draftline_preview_version":
+      return {
+        id: (args as { version?: string })?.version ?? "def456def456def456def456def456def456def4",
+        files: [
+          { path: "sketches/demo-introduction.sk", content: JSON.stringify(MOCK_SKETCH), isBinary: false },
+        ],
+      };
+    case "draftline_preview_version_file":
+      return { path: (args as { path?: string })?.path ?? "sketches/demo-introduction.sk", content: JSON.stringify(MOCK_SKETCH), isBinary: false };
     case "diff_working_tree":
       return [];
     case "discard_file":
@@ -230,6 +305,48 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
       return "new-snapshot-id";
     case "save_with_label":
       return "mock-commit-id";
+    case "draftline_save_version":
+      return {
+        id: "fff456fff456fff456fff456fff456fff456fff4",
+        label: (args as { label?: string })?.label ?? "Saved draft",
+        author: { name: "You", email: "dev@example.com" },
+        savedBy: { name: "You", email: "dev@example.com" },
+        timeSeconds: Math.floor(Date.now() / 1000),
+      };
+    case "draftline_create_variation_from":
+      return {
+        id: (args as { name?: string })?.name ?? "variation",
+        name: (args as { name?: string })?.name ?? "variation",
+        label: (args as { metadata?: { label?: string } })?.metadata?.label ?? null,
+        slug: (args as { metadata?: { slug?: string } })?.metadata?.slug ?? null,
+        displayLabel: (args as { name?: string })?.name ?? "variation",
+        isCurrent: false,
+      };
+    case "draftline_switch_variation":
+      return {
+        id: (args as { variation?: string })?.variation ?? "main",
+        name: (args as { variation?: string })?.variation ?? "main",
+        label: null,
+        slug: null,
+        displayLabel: (args as { variation?: string })?.variation ?? "main",
+        isCurrent: true,
+      };
+    case "draftline_restore_version_as_new_save":
+      return {
+        id: "restore456restore456restore456restore456rest",
+        label: (args as { label?: string })?.label ?? "Restored draft",
+        author: { name: "You", email: "dev@example.com" },
+        savedBy: { name: "You", email: "dev@example.com" },
+        timeSeconds: Math.floor(Date.now() / 1000),
+      };
+    case "draftline_squash_versions":
+      return {
+        id: "squash456squash456squash456squash456squa",
+        label: (args as { label?: string })?.label ?? "Squashed draft",
+        author: { name: "You", email: "dev@example.com" },
+        savedBy: { name: "You", email: "dev@example.com" },
+        timeSeconds: Math.floor(Date.now() / 1000),
+      };
     case "squash_snapshots":
       return "mock-squashed-commit-id";
     case "get_sidebar_order":
@@ -765,17 +882,50 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
       };
     // Remote/versioning commands
     case "add_git_remote":
+      return null;
+    case "draftline_add_remote":
+      return {
+        name: (args as { name?: string })?.name ?? "origin",
+        url: (args as { url?: string })?.url ?? "https://github.com/example/cutready-demo.git",
+      };
     case "remove_git_remote":
       return null;
     case "list_git_remotes":
+    case "draftline_list_remotes":
       return [];
     case "detect_git_remote":
       return null;
     case "fetch_git_remote":
+    case "draftline_fetch_remote":
+    case "draftline_apply_incoming":
     case "push_git_remote":
-      return null;
+    case "draftline_publish_changes":
+      return cmd === "draftline_apply_incoming" ? { appliedCount: 0 } : null;
     case "get_sync_status":
       return { ahead: 0, behind: 0 };
+    case "draftline_sync_status":
+      return {
+        remote: (args as { remote?: string })?.remote ?? "origin",
+        variation: "main",
+        ahead: 0,
+        behind: 0,
+        state: "upToDate",
+        incoming: [],
+      };
+    case "draftline_preflight_apply_incoming":
+      return {
+        syncStatus: {
+          remote: (args as { remote?: string })?.remote ?? "origin",
+          variation: "main",
+          ahead: 0,
+          behind: 0,
+          state: "upToDate",
+          incoming: [],
+        },
+        dirtyFiles: [],
+        isFastForward: false,
+        canProceed: false,
+      };
     case "list_incoming_commits":
       return [
         {

@@ -20,6 +20,13 @@ import { getAuditaurClient, initializeAuditaur } from "./auditaur";
 
 type AuditaurInvokeArgs = Record<string, unknown>;
 
+const SENSITIVE_INVOKE_COMMANDS = new Set([
+  "azure_browser_auth_complete",
+  "azure_device_code_poll",
+  "azure_token_refresh",
+  "get_github_token",
+]);
+
 function isTauriRuntime() {
   return typeof window !== "undefined" && Boolean((window as any).__TAURI_INTERNALS__);
 }
@@ -36,6 +43,10 @@ async function getAuditaur() {
 }
 
 export async function invoke<T>(cmd: string, args?: InvokeArgs, options?: InvokeOptions): Promise<T> {
+  if (SENSITIVE_INVOKE_COMMANDS.has(cmd)) {
+    return options ? rawInvoke<T>(cmd, args, options) : rawInvoke<T>(cmd, args);
+  }
+
   if (!canUseAuditaurInvoke(args, options)) {
     return options ? rawInvoke<T>(cmd, args, options) : rawInvoke<T>(cmd, args);
   }
