@@ -72,3 +72,7 @@ export function removeSketchFromSection(
     };
   });
 }
+
+export function removeStoryboardItem(items: StoryboardItem[], itemIndex: number): StoryboardItem[] {
+  return items.filter((_, index) => index !== itemIndex);
+}

@@ -6,6 +6,7 @@ import {
   getStoryboardSketchCount,
   getStoryboardSketchPaths,
   getUniqueStoryboardSketchPaths,
+  removeStoryboardItem,
   removeSketchFromSection,
   updateStoryboardSection,
 } from "../utils/storyboard";
@@ -52,5 +53,7 @@ describe("storyboard helpers", () => {
       type: "section",
       sketches: ["deploy.sk", "deploy.sk"],
     });
+
+    expect(removeStoryboardItem(items, 1)).toEqual([{ type: "sketch_ref", path: "intro.sk" }]);
   });
 });

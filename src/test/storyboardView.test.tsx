@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { StoryboardView } from "../components/StoryboardView";
 import { useAppStore } from "../stores/appStore";
@@ -173,5 +173,61 @@ describe("StoryboardView", () => {
         description: "Updated section framing",
       })],
     });
+  });
+
+  it("removes a storyboard section", async () => {
+    const items: StoryboardItem[] = [
+      { type: "sketch_ref", path: "intro.sk" },
+      {
+        type: "section",
+        title: "Build",
+        description: "Original section framing",
+        sketches: ["prototype.sk", "deploy.sk"],
+      },
+    ];
+    useAppStore.setState({
+      activeStoryboard: activeStoryboard("Original description", false, items),
+    });
+
+    render(<StoryboardView />);
+
+    fireEvent.click(screen.getByTitle("Remove section"));
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText("Remove section?")).toBeInTheDocument();
+    await act(async () => {
+      fireEvent.click(within(dialog).getByText("Remove"));
+      await Promise.resolve();
+    });
+
+    expect(mockInvoke).toHaveBeenCalledWith("reorder_storyboard_items", {
+      storyboardPath: "demo.sb",
+      items: [{ type: "sketch_ref", path: "intro.sk" }],
+    });
+  });
+
+  it("offers AI improvement for section descriptions", async () => {
+    const sendChatPrompt = vi.fn();
+    const section: StoryboardItem = {
+      type: "section",
+      title: "Build",
+      description: "Original section framing",
+      sketches: [],
+    };
+    useAppStore.setState({
+      activeStoryboard: activeStoryboard("Original description", false, [section]),
+      sendChatPrompt,
+    });
+
+    render(<StoryboardView />);
+
+    await act(async () => {
+      fireEvent.click(screen.getByTitle("Improve section description with AI"));
+      await Promise.resolve();
+    });
+
+    expect(sendChatPrompt).toHaveBeenCalledWith(
+      expect.stringContaining('Improve the description for section "Build" at index 0'),
+      { silent: true },
+    );
   });
 });
