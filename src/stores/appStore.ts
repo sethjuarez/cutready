@@ -1,5 +1,26 @@
 import { create } from "zustand";
 import { invoke, Channel } from "../services/tauri";
+import {
+  applyDraftlineIncoming,
+  createDraftlineVariation,
+  diffDraftlineVersions,
+  fetchDraftlineRemote,
+  getDraftlineSyncStatus,
+  hasDraftlineChanges,
+  listDraftlineIncomingCommits,
+  listDraftlineChangedFiles,
+  listDraftlineGraphNodes,
+  listDraftlineRemotes,
+  listDraftlineTimelines,
+  listDraftlineVersions,
+  previewDraftlineVersion,
+  preflightDraftlineIncoming,
+  publishDraftlineChanges,
+  restoreDraftlineVersionAsNewSave,
+  saveDraftlineVersion,
+  squashDraftlineVersions,
+  switchDraftlineVariation,
+} from "../services/draftlineVersioning";
 import { recordActivityEntries } from "../services/telemetry";
 import { useToastStore } from "./toastStore";
 import { getStoryboardSketchPaths } from "../utils/storyboard";
@@ -600,6 +621,8 @@ interface AppStoreState {
   checkRewound: () => Promise<void>;
   /** Navigate to any snapshot. Defers fork until commit. */
   navigateToSnapshot: (commitId: string) => Promise<void>;
+  /** Restore a snapshot as a new Draftline save. */
+  restoreSnapshotAsNewSave: (commitId: string, label: string) => Promise<void>;
   /** Create a new timeline from a snapshot. */
   createTimeline: (fromCommitId: string, name: string) => Promise<void>;
   /** Load all timelines. */
@@ -1993,7 +2016,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
 
   loadVersions: async () => {
     try {
-      const versions = await invoke<VersionEntry[]>("list_versions");
+      const versions = await listDraftlineVersions();
       set({ versions });
       await get().checkDirty();
     } catch (err) {
@@ -2003,7 +2026,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
 
   checkDirty: async () => {
     try {
-      const isDirty = await invoke<boolean>("has_unsaved_changes");
+      const isDirty = await hasDraftlineChanges();
       set({ isDirty });
       // Also refresh the changed files list
       get().refreshChangedFiles();
@@ -2015,23 +2038,17 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
 
   refreshChangedFiles: async () => {
     try {
-      const files = await invoke<DiffEntry[]>("diff_working_tree");
+      const files = await listDraftlineChangedFiles();
       set({ changedFiles: files });
     } catch {
       set({ changedFiles: [] });
     }
   },
 
-  saveVersion: async (label, forkLabel?) => {
+  saveVersion: async (label, _forkLabel?) => {
     try {
-      const commitId = await invoke<string>("save_with_label", {
-        label,
-        forkLabel: forkLabel || null,
-      });
+      await saveDraftlineVersion(label);
       set({ isDirty: false, isRewound: false, changedFiles: [] });
-      const { openTabs, activeTabId } = get();
-      const editorState = JSON.stringify({ openTabs, activeTabId });
-      await invoke("save_editor_state", { commitId, editorState }).catch(() => {});
       await get().loadVersions();
       await get().loadTimelines();
       await get().loadGraphData();
@@ -2228,77 +2245,45 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   },
 
   checkRewound: async () => {
-    try {
-      const isRewound = await invoke<boolean>("is_rewound");
-      set({ isRewound });
-    } catch (err) {
-      set({ isRewound: false });
-    }
+    set({ isRewound: false });
   },
 
   navigateToSnapshot: async (commitId) => {
     try {
-      // Clear active editors FIRST to cancel pending debounced saves
-      set({ activeSketch: null, activeSketchPath: null, activeStoryboard: null, activeStoryboardPath: null, isDirty: false });
-      await invoke("navigate_to_snapshot", { commitId });
-      // Reload project and file lists from the checked-out snapshot.
-      await get().loadProjects();
+      const entries = await previewDraftlineVersion(commitId);
+      set({ diffResult: entries, diffSelection: { from: commitId, to: "preview" } });
+      useToastStore.getState().show(
+        "Previewed snapshot contents without changing your workspace.",
+        5000,
+        "info",
+      );
+    } catch (err) {
+      console.error("Failed to preview snapshot:", err);
+      useToastStore.getState().show(`Snapshot preview failed: ${err}`, 5000, "error");
+    }
+  },
+
+  restoreSnapshotAsNewSave: async (commitId, label) => {
+    try {
+      await restoreDraftlineVersionAsNewSave(commitId, label);
+      set({ diffResult: null, diffSelection: null, isDirty: false, changedFiles: [] });
       await get().loadSketches();
       await get().loadStoryboards();
       await get().loadNotes();
-      await get().loadSidebarOrder();
-      // Restore editor state saved with this snapshot
-      const raw = await invoke<string | null>("load_editor_state", { commitId });
-      if (raw) {
-        try {
-          const saved = JSON.parse(raw) as { openTabs?: EditorTab[]; activeTabId?: string | null };
-          const { sketches, storyboards, notes } = get();
-          // Only restore tabs whose files still exist in this snapshot
-          const validTabs = (saved.openTabs ?? []).filter((t) => {
-            if (t.type === "sketch") return sketches.some((s) => s.path === t.path);
-            if (t.type === "storyboard") return storyboards.some((s) => s.path === t.path);
-            if (t.type === "note") return notes.some((n) => n.path === t.path);
-            if (t.type === "database") return isDatabasePath(t.path);
-            return false;
-          });
-          set({ openTabs: validTabs, activeTabId: saved.activeTabId ?? null });
-          // Open the active tab's content
-          const active = validTabs.find((t) => t.id === saved.activeTabId);
-          if (active) {
-            if (active.type === "sketch") await get().openSketch(active.path);
-            else if (active.type === "storyboard") await get().openStoryboard(active.path);
-            else if (active.type === "note") await get().openNote(active.path);
-          }
-        } catch { /* ignore parse errors */ }
-      } else {
-        // No saved state — clear tabs
-        set({ openTabs: [], activeTabId: null });
-      }
       await get().loadVersions();
       await get().loadTimelines();
       await get().loadGraphData();
       await get().checkDirty();
-      await get().checkRewound();
-      await get().refreshChangedFiles();
+      useToastStore.getState().show("Restored snapshot as a new save.", 4000, "success");
     } catch (err) {
-      console.error("Failed to navigate to snapshot:", err);
+      console.error("Failed to restore snapshot:", err);
+      useToastStore.getState().show(`Restore failed: ${err}`, 5000, "error");
     }
   },
 
   createTimeline: async (fromCommitId, name) => {
     try {
-      await invoke("create_timeline", { fromCommitId, name });
-      await get().loadSketches();
-      await get().loadStoryboards();
-      const { activeSketchPath, sketches } = get();
-      if (activeSketchPath) {
-        const stillExists = sketches.some((s) => s.path === activeSketchPath);
-        if (stillExists) {
-          await get().openSketch(activeSketchPath);
-        } else {
-          set({ activeSketch: null, activeSketchPath: null });
-        }
-      }
+      await createDraftlineVariation(fromCommitId, name);
       await get().loadTimelines();
       await get().loadVersions();
       await get().loadGraphData();
@@ -2309,7 +2294,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
 
   loadTimelines: async () => {
     try {
-      const timelines = await invoke<TimelineInfo[]>("list_timelines");
+      const timelines = await listDraftlineTimelines();
       set({ timelines });
     } catch (err) {
       console.error("Failed to load timelines:", err);
@@ -2318,9 +2303,10 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
 
   switchTimeline: async (name) => {
     try {
-      await invoke("switch_timeline", { name });
+      await switchDraftlineVariation(name);
       await get().loadSketches();
       await get().loadStoryboards();
+      await get().loadNotes();
       const { activeSketchPath, sketches } = get();
       if (activeSketchPath) {
         const stillExists = sketches.some((s) => s.path === activeSketchPath);
@@ -2333,40 +2319,26 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await get().loadTimelines();
       await get().loadVersions();
       await get().loadGraphData();
+      await get().checkDirty();
     } catch (err) {
       console.error("Failed to switch timeline:", err);
+      useToastStore.getState().show(`Switch failed: ${err}`, 5000, "error");
     }
   },
 
   deleteTimeline: async (name) => {
-    try {
-      await invoke("delete_timeline", { name });
-      await get().loadTimelines();
-      await get().loadGraphData();
-    } catch (err) {
-      console.error("Failed to delete timeline:", err);
-    }
+    console.warn("Draftline variation deletion is not available yet:", name);
+    useToastStore.getState().show("Draftline does not support deleting variations yet.", 5000, "info");
   },
 
   promoteTimeline: async (name) => {
-    try {
-      await invoke("promote_timeline", { name });
-      await get().loadSketches();
-      await get().loadStoryboards();
-      await get().loadNotes();
-      await get().loadTimelines();
-      await get().loadVersions();
-      await get().loadGraphData();
-      await get().checkDirty();
-      await get().checkRewound();
-    } catch (err) {
-      console.error("Failed to promote timeline:", err);
-    }
+    console.warn("Draftline variation promotion is not available yet:", name);
+    useToastStore.getState().show("Draftline does not support promoting variations yet.", 5000, "info");
   },
 
   loadGraphData: async () => {
     try {
-      const graphNodes = await invoke<GraphNode[]>("get_timeline_graph");
+      const graphNodes = await listDraftlineGraphNodes();
       set({ graphNodes });
     } catch (err) {
       console.error("Failed to load graph data:", err);
@@ -2402,20 +2374,24 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   },
 
   squashSnapshots: async (oldestCommitId, newestCommitId, label) => {
+    const { graphNodes } = get();
+    const headIndex = graphNodes.findIndex((node) => node.id === newestCommitId);
+    const oldestIndex = graphNodes.findIndex((node) => node.id === oldestCommitId);
+    if (headIndex < 0 || oldestIndex < 0 || oldestIndex < headIndex) {
+      useToastStore.getState().show("Select a contiguous range ending at the current snapshot to squash.", 5000, "error");
+      return;
+    }
+
     try {
-      await invoke<string>("squash_snapshots", {
-        oldestCommitId,
-        newestCommitId,
-        label,
-      });
+      await squashDraftlineVersions(oldestIndex - headIndex + 1, label);
+      await get().loadVersions();
       await get().loadGraphData();
       await get().loadTimelines();
-      await get().loadVersions();
       await get().checkDirty();
-      await get().checkRewound();
+      useToastStore.getState().show("Snapshots squashed safely.", 4000, "success");
     } catch (err) {
       console.error("Failed to squash snapshots:", err);
-      throw err;
+      useToastStore.getState().show(`Squash failed: ${err}`, 5000, "error");
     }
   },
 
@@ -2423,7 +2399,8 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
 
   detectRemote: async () => {
     try {
-      const info = await invoke<RemoteInfo | null>("detect_git_remote");
+      const remotes = await listDraftlineRemotes();
+      const info = remotes[0] ?? null;
       set({ currentRemote: info ?? null });
       if (info) {
         await get().refreshSyncStatus();
@@ -2443,10 +2420,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       try {
         token = await invoke<string | null>("get_github_token");
       } catch { /* ignore */ }
-      await invoke("fetch_git_remote", {
-        remoteName: currentRemote.name,
-        token,
-      });
+      await fetchDraftlineRemote(currentRemote.name, token);
       await get().refreshSyncStatus();
       await get().refreshIncomingCommits();
       await get().loadGraphData();
@@ -2477,11 +2451,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       try {
         token = await invoke<string | null>("get_github_token");
       } catch { /* ignore */ }
-      await invoke("push_git_remote", {
-        remoteName: currentRemote.name,
-        branch: active.name,
-        token,
-      });
+      await publishDraftlineChanges(currentRemote.name, token);
       await get().refreshSyncStatus();
       await get().checkDirty();
       await get().refreshChangedFiles();
@@ -2530,44 +2500,37 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   },
 
   pullFromRemote: async () => {
-    const { currentRemote, timelines } = get();
+    const { currentRemote } = get();
     if (!currentRemote) return;
-    const active = timelines.find((t) => t.is_active);
-    if (!active) return;
     set({ isSyncing: true, syncError: null });
     try {
+      const preflight = await preflightDraftlineIncoming(currentRemote.name);
+      if (!preflight.canProceed) {
+        const state = preflight.syncStatus.state;
+        const reason = preflight.dirtyFiles.length > 0
+          ? "Save or discard local changes before applying incoming saves."
+          : state === "needsMerge"
+            ? "Incoming saves require a merge workflow that Draftline has not exposed yet."
+            : "Incoming saves cannot be applied safely right now.";
+        set({ syncError: reason, syncStatus: { ahead: preflight.syncStatus.ahead, behind: preflight.syncStatus.behind } });
+        return;
+      }
+
       let token: string | null = null;
       try {
         token = await invoke<string | null>("get_github_token");
       } catch { /* ignore */ }
-      const result = await invoke<{ type: string; ahead?: number; behind?: number; commits?: number; commit_id?: string; conflicts?: any[] }>(
-        "pull_git_remote",
-        { remoteName: currentRemote.name, branch: active.name, token },
-      );
-      if (result.type === "Conflicts" && result.conflicts) {
-        // Pull resulted in merge conflicts — enter merge mode
-        set({
-          isMerging: true,
-          mergeSource: `refs/remotes/${currentRemote.name}/${active.name}`,
-          mergeTarget: active.name,
-          mergeConflicts: result.conflicts,
-          syncError: null,
-        });
-      } else if (result.type === "Diverged") {
-        set({ syncError: `Your changes and remote changes can't be merged automatically (${result.ahead} local, ${result.behind} remote snapshots). Try taking a snapshot first, then pull again.` });
-      }
-      // Merged and FastForward are handled automatically
-      await get().refreshSyncStatus();
-      await get().refreshIncomingCommits();
-      await get().checkDirty();
-      await get().refreshChangedFiles();
-      await get().loadProjects();
-      await get().loadGraphData();
-      await get().loadTimelines();
-      await get().loadVersions();
+      await applyDraftlineIncoming(currentRemote.name, token);
       await get().loadSketches();
       await get().loadStoryboards();
       await get().loadNotes();
+      await get().refreshSyncStatus();
+      await get().refreshIncomingCommits();
+      await get().loadVersions();
+      await get().loadGraphData();
+      await get().loadTimelines();
+      await get().checkDirty();
+      useToastStore.getState().show("Incoming saves applied.", 4000, "success");
     } catch (err) {
       set({ syncError: String(err) });
     } finally {
@@ -2576,36 +2539,12 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   },
 
   loadRemoteBranches: async () => {
-    const { currentRemote } = get();
-    if (!currentRemote) return [];
-    try {
-      return await invoke<string[]>("list_remote_branches", {
-        remoteName: currentRemote.name,
-      });
-    } catch {
-      return [];
-    }
+    return [];
   },
 
   checkoutRemoteTimeline: async (branch: string) => {
-    const { currentRemote } = get();
-    if (!currentRemote) return;
-    try {
-      await invoke("checkout_remote_branch", {
-        remoteName: currentRemote.name,
-        branch,
-      });
-      await get().loadTimelines();
-      await get().loadProjects();
-      await get().loadSketches();
-      await get().loadStoryboards();
-      await get().loadNotes();
-      await get().loadSidebarOrder();
-      await get().loadGraphData();
-      await get().loadVersions();
-    } catch (err) {
-      console.error("Failed to checkout remote timeline:", err);
-    }
+    console.warn("Draftline remote branch checkout is not available yet:", branch);
+    useToastStore.getState().show("Draftline does not expose remote branch checkout yet.", 5000, "info");
   },
 
   publishTimeline: async () => {
@@ -2619,11 +2558,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       try {
         token = await invoke<string | null>("get_github_token");
       } catch { /* ignore */ }
-      await invoke("push_git_remote", {
-        remoteName: currentRemote.name,
-        branch: active.name,
-        token,
-      });
+      await publishDraftlineChanges(currentRemote.name, token);
       await get().refreshSyncStatus();
     } catch (err) {
       set({ syncError: String(err) });
@@ -2633,18 +2568,10 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   },
 
   refreshSyncStatus: async () => {
-    const { currentRemote, timelines } = get();
+    const { currentRemote } = get();
     if (!currentRemote) return;
-    const active = timelines.find((t) => t.is_active);
-    if (!active) {
-      set({ syncStatus: null });
-      return;
-    }
     try {
-      const status = await invoke<SyncStatus>("get_sync_status", {
-        branch: active.name,
-        remoteName: currentRemote.name,
-      });
+      const status = await getDraftlineSyncStatus(currentRemote.name);
       set({ syncStatus: status });
     } catch {
       set({ syncStatus: null });
@@ -2652,22 +2579,13 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   },
 
   refreshIncomingCommits: async () => {
-    const { currentRemote, timelines, syncStatus } = get();
+    const { currentRemote, syncStatus } = get();
     if (!currentRemote || !syncStatus || syncStatus.behind === 0) {
       set({ incomingCommits: [] });
       return;
     }
-    const active = timelines.find((t) => t.is_active);
-    if (!active) {
-      set({ incomingCommits: [] });
-      return;
-    }
     try {
-      const incoming = await invoke<IncomingCommit[]>("list_incoming_commits", {
-        remoteName: currentRemote.name,
-        branch: active.name,
-        limit: 10,
-      });
+      const incoming = await listDraftlineIncomingCommits(currentRemote.name);
       set({ incomingCommits: incoming });
     } catch {
       set({ incomingCommits: [] });
@@ -2678,7 +2596,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
 
   diffSnapshots: async (fromCommit, toCommit) => {
     try {
-      const entries = await invoke<DiffEntry[]>("diff_snapshots", { fromCommit, toCommit });
+      const entries = await diffDraftlineVersions(fromCommit, toCommit);
       set({ diffResult: entries, diffSelection: { from: fromCommit, to: toCommit } });
       return entries;
     } catch (err) {
@@ -2689,7 +2607,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
 
   diffWorkingTree: async () => {
     try {
-      const entries = await invoke<DiffEntry[]>("diff_working_tree");
+      const entries = await listDraftlineChangedFiles();
       set({ diffResult: entries, diffSelection: { from: "HEAD", to: "working" } });
       return entries;
     } catch (err) {
@@ -2729,34 +2647,9 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   // ── Merge actions ─────────────────────────────────────────
 
   mergeTimelines: async (source, target) => {
-    try {
-      const result = await invoke<MergeResult>("merge_timelines", {
-        sourceTimeline: source,
-        targetTimeline: target,
-      });
-
-      if (result.status === "conflicts") {
-        // Enter merge mode with conflicts for user resolution
-        set({
-          isMerging: true,
-          mergeSource: source,
-          mergeTarget: target,
-          mergeConflicts: result.conflicts,
-        });
-      } else if (result.status === "clean" || result.status === "fast_forward") {
-        // Merge succeeded — refresh everything
-        await get().loadTimelines();
-        await get().loadGraphData();
-        await get().loadSketches();
-        await get().loadStoryboards();
-        await get().loadNotes();
-      }
-
-      return result;
-    } catch (err) {
-      console.error("Merge failed:", err);
-      throw err;
-    }
+    console.warn("Draftline variation merge is not available yet:", source, target);
+    useToastStore.getState().show("Draftline does not support merging variations yet.", 5000, "info");
+    return { status: "conflicts", conflicts: [] };
   },
 
   applyMergeResolution: async (resolutions) => {

@@ -76,11 +76,7 @@ pub fn detect_browser_profiles() -> Vec<BrowserProfile> {
         };
         let app_support = home.join("Library").join("Application Support");
         vec![
-            (
-                "msedge",
-                "Edge",
-                app_support.join("Microsoft Edge"),
-            ),
+            ("msedge", "Edge", app_support.join("Microsoft Edge")),
             (
                 "chrome",
                 "Chrome",

@@ -39,7 +39,6 @@ export function SketchForm() {
   const activeSketchPath = useAppStore((s) => s.activeSketchPath);
   const activeStoryboard = useAppStore((s) => s.activeStoryboard);
   const updateSketch = useAppStore((s) => s.updateSketch);
-  const updateSketchTitle = useAppStore((s) => s.updateSketchTitle);
   const closeSketch = useAppStore((s) => s.closeSketch);
   const { settings } = useSettings();
 
@@ -83,25 +82,68 @@ export function SketchForm() {
   const pendingTitleRef = useRef<string | null>(null);
   const pendingPathRef = useRef<string | null>(null);
 
+  const saveSketchEditsForPath = useCallback(
+    async (
+      path: string,
+      title: string | null,
+      rows: PlanningRow[] | null,
+      reason: string,
+    ) => {
+      if (shouldSuppressEditorFlush(path)) return;
+      try {
+        if (title !== null) {
+          await invoke("update_sketch_title", { relativePath: path, title });
+        }
+        if (rows !== null) {
+          await invoke("update_sketch", { relativePath: path, rows });
+        }
+        const store = useAppStore.getState();
+        await store.loadSketches();
+        if (store.activeSketchPath === path) {
+          const sketch = await invoke<Sketch>("get_sketch", { relativePath: path });
+          useAppStore.setState({ activeSketch: sketch });
+        }
+        await store.checkDirty();
+        await store.refreshChangedFiles();
+      } catch (err) {
+        console.error(`[SketchForm] Failed to save pending sketch edits (${reason}):`, err);
+        useToastStore.getState().show("Failed to save pending sketch changes", 5000, "error");
+      }
+    },
+    [],
+  );
+
+  const flushPendingSketchEdits = useCallback(
+    (reason: string) => {
+      const path = pendingPathRef.current;
+      const title = pendingTitleRef.current;
+      const rows = pendingRowsRef.current;
+      if (titleTimeoutRef.current) {
+        clearTimeout(titleTimeoutRef.current);
+        titleTimeoutRef.current = null;
+      }
+      if (rowsTimeoutRef.current) {
+        clearTimeout(rowsTimeoutRef.current);
+        rowsTimeoutRef.current = null;
+      }
+      pendingPathRef.current = null;
+      pendingTitleRef.current = null;
+      pendingRowsRef.current = null;
+      if (!path || (title === null && rows === null)) return;
+      void saveSketchEditsForPath(path, title, rows, reason);
+    },
+    [saveSketchEditsForPath],
+  );
+
   // Reset local state when switching to a different sketch
-  // Cancel any pending debounced saves so stale data isn't written over the new file
+  // Flush pending debounced saves by their captured path before showing another sketch.
   useEffect(() => {
+    flushPendingSketchEdits("sketch switch");
     setLocalTitle(activeSketch?.title ?? "");
     setLocalRows(activeSketch?.rows ?? []);
     setLocalDesc(typeof activeSketch?.description === "string" ? activeSketch.description : "");
     setEditingDesc(false);
-    // Cancel pending debounced writes — they belong to the previous sketch/version
-    if (titleTimeoutRef.current) {
-      clearTimeout(titleTimeoutRef.current);
-      titleTimeoutRef.current = null;
-    }
-    if (rowsTimeoutRef.current) {
-      clearTimeout(rowsTimeoutRef.current);
-      rowsTimeoutRef.current = null;
-    }
-    pendingRowsRef.current = null;
-    pendingTitleRef.current = null;
-  }, [activeSketchPath, activeSketch]);
+  }, [activeSketchPath, activeSketch, flushPendingSketchEdits]);
 
   // Listen for AI sketch updates — snapshot current rows for diffing
   useEffect(() => {
@@ -197,32 +239,35 @@ export function SketchForm() {
       if (sketchLocked) return;
       setLocalTitle(value);
       if (!activeSketch || !activeSketchPath) return;
+      const path = activeSketchPath;
       pendingTitleRef.current = value;
-      pendingPathRef.current = activeSketchPath;
+      pendingPathRef.current = path;
       if (titleTimeoutRef.current) clearTimeout(titleTimeoutRef.current);
       titleTimeoutRef.current = setTimeout(() => {
         pendingTitleRef.current = null;
-        if (shouldSuppressEditorFlush(activeSketchPath)) return;
-        updateSketchTitle(activeSketchPath, value);
+        titleTimeoutRef.current = null;
+        void saveSketchEditsForPath(path, value, null, "title debounce");
       }, 500);
     },
-    [activeSketch, activeSketchPath, updateSketchTitle, sketchLocked],
+    [activeSketch, activeSketchPath, saveSketchEditsForPath, sketchLocked],
   );
 
   const handleRowsChange = useCallback(
     (rows: PlanningRow[]) => {
       if (sketchLocked) return;
       setLocalRows(rows);
+      const path = activeSketchPath;
       pendingRowsRef.current = rows;
-      pendingPathRef.current = activeSketchPath;
+      pendingPathRef.current = path;
       if (rowsTimeoutRef.current) clearTimeout(rowsTimeoutRef.current);
       rowsTimeoutRef.current = setTimeout(() => {
         pendingRowsRef.current = null;
-        if (shouldSuppressEditorFlush(activeSketchPath)) return;
-        updateSketch({ rows });
+        rowsTimeoutRef.current = null;
+        if (!path) return;
+        void saveSketchEditsForPath(path, null, rows, "rows debounce");
       }, 500);
     },
-    [updateSketch, activeSketchPath, sketchLocked],
+    [activeSketchPath, saveSketchEditsForPath, sketchLocked],
   );
 
   const applySketchFromLockCommand = useCallback((sketch: Sketch) => {
@@ -274,26 +319,11 @@ export function SketchForm() {
   }, [activeSketchPath, applySketchFromLockCommand]);
 
   // Flush pending debounced saves on unmount (e.g., tab close)
-  // Skip flush if navigation cleared the active sketch (path is null in store)
   useEffect(() => {
     return () => {
-      // If navigation cleared the active sketch, don't flush stale data
-      if (!useAppStore.getState().activeSketchPath) return;
-      const path = pendingPathRef.current;
-      if (titleTimeoutRef.current) {
-        clearTimeout(titleTimeoutRef.current);
-        if (pendingTitleRef.current !== null && path && !shouldSuppressEditorFlush(path)) {
-          invoke("update_sketch_title", { relativePath: path, title: pendingTitleRef.current }).catch(() => {});
-        }
-      }
-      if (rowsTimeoutRef.current) {
-        clearTimeout(rowsTimeoutRef.current);
-        if (pendingRowsRef.current !== null && path && !shouldSuppressEditorFlush(path)) {
-          invoke("update_sketch", { relativePath: path, rows: pendingRowsRef.current }).catch(() => {});
-        }
-      }
+      flushPendingSketchEdits("unmount");
     };
-  }, []);
+  }, [flushPendingSketchEdits]);
 
   const handleCaptureScreenshot = useCallback((rowIndex: number) => {
     setCaptureRowIdx(rowIndex);
@@ -305,7 +335,7 @@ export function SketchForm() {
     const instructions = visualInstructions.trim();
     let prompt: string;
     if (instructions) {
-      prompt = `Generate an animated framing visual for sketch "${activeSketchPath ?? "current"}", row index ${visualPromptRow} (0-based).
+      prompt = `Generate an animated framing visual ONLY for sketch "${activeSketchPath ?? "current"}", row index ${visualPromptRow} (0-based).
 
 **USER INSTRUCTIONS (HIGHEST PRIORITY — follow these exactly):**
 ${instructions}
@@ -314,15 +344,15 @@ Row context:
 - **Narrative:** ${row?.narrative || "(empty)"}
 - **Actions:** ${row?.demo_actions || "(empty)"}
 
-The Actions describe what happens on screen — use them as visual design hints. Read the sketch with read_sketch for full context, then design_plan, then set_row_visual (960×540 canvas). The user instructions above override any defaults.`;
+The Actions describe what happens on screen — use them as visual design hints. You may read the sketch for context, but the only persistent edit allowed is set_row_visual for row index ${visualPromptRow}. Do not call write_sketch, update_planning_row, write_storyboard, or set_row_visual for any other row. Do not create, remove, reorder, or rewrite rows. If validation fails, fix the visual and retry set_row_visual for this same row only. Use a 960×540 canvas. The user instructions above override any defaults.`;
     } else {
-      prompt = `Generate an animated framing visual for sketch "${activeSketchPath ?? "current"}", row index ${visualPromptRow} (0-based).
+      prompt = `Generate an animated framing visual ONLY for sketch "${activeSketchPath ?? "current"}", row index ${visualPromptRow} (0-based).
 
 Row context:
 - **Narrative:** ${row?.narrative || "(empty)"}
 - **Actions:** ${row?.demo_actions || "(empty)"}
 
-The Actions describe what happens on screen — use them as visual design hints. Read the full sketch first with read_sketch to understand the overall context. Then call design_plan, then generate and save the visual with set_row_visual (960×540 canvas).`;
+The Actions describe what happens on screen — use them as visual design hints. You may read the sketch for context, then call design_plan, but the only persistent edit allowed is set_row_visual for row index ${visualPromptRow}. Do not call write_sketch, update_planning_row, write_storyboard, or set_row_visual for any other row. Do not create, remove, reorder, or rewrite rows. If validation fails, fix the visual and retry set_row_visual for this same row only. Use a 960×540 canvas.`;
     }
     sendChatPrompt(prompt, { silent: true, agent: "designer" });
     setVisualPromptRow(null);
@@ -546,31 +576,8 @@ The Actions describe what happens on screen — use them as visual design hints.
           </div>
         )}
 
-        {/* Title + sketch actions */}
-        <div className="flex items-center gap-3 mb-4">
-          <div className="relative flex-1 group/title">
-            <input
-              type="text"
-              value={localTitle}
-              onChange={(e) => handleTitleChange(e.target.value)}
-              readOnly={sketchLocked}
-              placeholder="Sketch title..."
-              className={`w-full text-2xl font-semibold bg-transparent text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/40 outline-none border-none ${localTitle && !sketchLocked ? "pr-24" : ""} ${sketchLocked ? "cursor-default" : ""}`}
-            />
-            {localTitle && !sketchLocked && (
-              <button
-                onClick={() => sendChatPrompt(
-                  `Improve the title of sketch "${activeSketchPath ?? "current"}". Current title: "${localTitle}". Suggest a more compelling, concise title. IMPORTANT: Only update the title — do NOT change the description or any rows. Use write_sketch with the improved title but keep the existing description and all rows exactly as they are.`,
-                  { silent: true }
-                )}
-                className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover/title:opacity-100 p-1 rounded text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10 transition-all"
-                title="Improve title with AI"
-              >
-                <Sparkles className="w-3.5 h-3.5" />
-                <span className="text-[10px]">Improve</span>
-              </button>
-            )}
-          </div>
+        {/* Sketch actions */}
+        <div className="mb-3 flex justify-end">
           <div className="relative">
             <DocumentToolbar
               canRecord={canRecord}
@@ -614,6 +621,33 @@ The Actions describe what happens on screen — use them as visual design hints.
                   </div>
                 </div>
               </>
+            )}
+          </div>
+        </div>
+
+        {/* Title */}
+        <div className="mb-4">
+          <div className="relative group/title">
+            <input
+              type="text"
+              value={localTitle}
+              onChange={(e) => handleTitleChange(e.target.value)}
+              readOnly={sketchLocked}
+              placeholder="Sketch title..."
+              className={`w-full text-2xl font-semibold bg-transparent text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/40 outline-none border-none ${localTitle && !sketchLocked ? "pr-24" : ""} ${sketchLocked ? "cursor-default" : ""}`}
+            />
+            {localTitle && !sketchLocked && (
+              <button
+                onClick={() => sendChatPrompt(
+                  `Improve the title of sketch "${activeSketchPath ?? "current"}". Current title: "${localTitle}". Suggest a more compelling, concise title. IMPORTANT: Only update the title — do NOT change the description or any rows. Use write_sketch with the improved title but keep the existing description and all rows exactly as they are.`,
+                  { silent: true }
+                )}
+                className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover/title:opacity-100 p-1 rounded text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10 transition-all"
+                title="Improve title with AI"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span className="text-[10px]">Improve</span>
+              </button>
             )}
           </div>
         </div>
@@ -687,7 +721,7 @@ The Actions describe what happens on screen — use them as visual design hints.
             }}
             onNudgeVisual={(rowIndex, instruction) => {
               const row = localRows[rowIndex];
-              const prompt = `Modify the existing visual for sketch "${activeSketchPath ?? "current"}", row index ${rowIndex} (0-based).
+              const prompt = `Modify the existing visual ONLY for sketch "${activeSketchPath ?? "current"}", row index ${rowIndex} (0-based).
 
 **USER INSTRUCTIONS (HIGHEST PRIORITY):**
 ${instruction}
@@ -696,7 +730,7 @@ Row context:
 - **Narrative:** ${row?.narrative || "(empty)"}
 - **Actions:** ${row?.demo_actions || "(empty)"}
 
-The row already has a visual and design_plan. Read the sketch with read_sketch first, then call set_row_visual with the MODIFIED visual. Keep the existing design but apply the requested changes. Do NOT redesign from scratch.`;
+The row already has a visual and design_plan. You may read the sketch for context, but the only persistent edit allowed is set_row_visual for row index ${rowIndex}. Do not call write_sketch, update_planning_row, write_storyboard, or set_row_visual for any other row. Do not create, remove, reorder, or rewrite rows. Keep the existing design but apply the requested changes. Do NOT redesign from scratch.`;
               sendChatPrompt(prompt, { silent: true, agent: "designer" });
             }}
             projectRoot={projectRoot}

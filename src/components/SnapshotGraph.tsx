@@ -396,6 +396,9 @@ export function SnapshotGraph({
               )}
               {/* Dot */}
               <button className="absolute rounded-full transition-colors"
+                data-testid="snapshot-graph-node"
+                data-snapshot-id={node.id}
+                data-snapshot-head={node.is_head ? "true" : "false"}
                 style={{
                   left: x - r, top: "50%", transform: "translateY(-50%)",
                   width: r * 2, height: r * 2,

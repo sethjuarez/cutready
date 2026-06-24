@@ -238,6 +238,7 @@ export function SettingsPanel() {
             key={tab}
             className={tabBtnClass(activeTab === tab)}
             onClick={() => setActiveTab(tab)}
+            data-testid={`settings-tab-${tab}`}
           >
             {tabLabels[tab]}
           </button>
@@ -2295,10 +2296,10 @@ function RepositoryTab({ settings, updateSetting }: {
   const [detectedRemote, setDetectedRemote] = useState<{ name: string; url: string } | null>(null);
 
   useEffect(() => {
-    invoke("detect_git_remote")
-      .then((info) => {
-        if (info && typeof info === "object" && "url" in (info as Record<string, unknown>)) {
-          const remote = info as { name: string; url: string };
+    invoke("draftline_list_remotes")
+      .then((remotes) => {
+        if (Array.isArray(remotes) && remotes.length > 0) {
+          const remote = remotes[0] as { name: string; url: string };
           setDetectedRemote(remote);
           if (!settings.repoRemoteUrl) {
             updateSetting("repoRemoteUrl", remote.url);
@@ -2312,13 +2313,13 @@ function RepositoryTab({ settings, updateSetting }: {
     setTestStatus("testing");
     setTestMessage("");
     try {
-      const remotes = await invoke("list_git_remotes") as { name: string; url: string }[];
+      const remotes = await invoke("draftline_list_remotes") as { name: string; url: string }[];
       const hasOrigin = remotes.some((r) => r.name === "origin");
       if (hasOrigin) {
         setTestStatus("success");
         setTestMessage("Remote is configured and accessible.");
       } else if (settings.repoRemoteUrl) {
-        await invoke("add_git_remote", { name: "origin", url: settings.repoRemoteUrl });
+        await invoke("draftline_add_remote", { name: "origin", url: settings.repoRemoteUrl });
         setTestStatus("success");
         setTestMessage("Remote 'origin' added successfully.");
       } else {
@@ -2803,6 +2804,7 @@ function ExperimentalTab({ settings, updateSetting }: {
             className="h-4 w-4 accent-[rgb(var(--color-accent))]"
           />
         </label>
+
       </fieldset>
     </div>
   );

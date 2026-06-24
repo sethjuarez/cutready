@@ -26,6 +26,15 @@ const restoredSketch: Sketch = {
   updated_at: "2026-01-01T00:00:00Z",
 };
 
+const cleanDraftlineSummary = {
+  activeVariation: { id: "main", name: "main", displayLabel: "main", isCurrent: true },
+  variations: [{ id: "main", name: "main", displayLabel: "main", isCurrent: true }],
+  versions: [],
+  dirtyFiles: [],
+  isDirty: false,
+  stateMayBeInconsistent: false,
+};
+
 describe("discardFile", () => {
   afterEach(() => {
     vi.useRealTimers();
@@ -70,6 +79,8 @@ describe("discardFile", () => {
           return Promise.resolve(restoredSketch);
         case "has_unsaved_changes":
           return Promise.resolve(false);
+        case "draftline_workspace_summary":
+          return Promise.resolve(cleanDraftlineSummary);
         case "diff_working_tree":
           return Promise.resolve([]);
         case "set_workspace_state":
@@ -120,6 +131,8 @@ describe("discardFile", () => {
           return Promise.resolve(restoredSketch);
         case "has_unsaved_changes":
           return Promise.resolve(false);
+        case "draftline_workspace_summary":
+          return Promise.resolve(cleanDraftlineSummary);
         case "diff_working_tree":
           return Promise.resolve([]);
         case "set_workspace_state":
@@ -173,6 +186,8 @@ describe("discardFile", () => {
           return Promise.resolve([]);
         case "has_unsaved_changes":
           return Promise.resolve(false);
+        case "draftline_workspace_summary":
+          return Promise.resolve(cleanDraftlineSummary);
         case "diff_working_tree":
           return Promise.resolve([]);
         case "set_workspace_state":
@@ -218,6 +233,8 @@ describe("discardFile", () => {
           return Promise.resolve([]);
         case "has_unsaved_changes":
           return Promise.resolve(false);
+        case "draftline_workspace_summary":
+          return Promise.resolve(cleanDraftlineSummary);
         case "set_workspace_state":
           return Promise.resolve();
         default:
@@ -261,6 +278,8 @@ describe("discardFile", () => {
           return Promise.resolve([]);
         case "has_unsaved_changes":
           return Promise.resolve(false);
+        case "draftline_workspace_summary":
+          return Promise.resolve(cleanDraftlineSummary);
         default:
           return Promise.resolve(null);
       }

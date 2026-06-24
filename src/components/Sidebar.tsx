@@ -60,6 +60,7 @@ export function Sidebar({ onFeedback }: { onFeedback?: () => void }) {
               key={item.id}
               onClick={() => !isDisabled && setView(item.id)}
               disabled={isDisabled}
+              data-testid={`activity-${item.id}`}
               className={`
                 flex items-center justify-center w-10 h-10 rounded-lg transition-colors relative
                 ${
@@ -110,6 +111,7 @@ export function Sidebar({ onFeedback }: { onFeedback?: () => void }) {
                 }
               `}
               title="Home"
+              data-testid="activity-home"
             >
               <House className="w-4 h-4" />
               {isActive && (
@@ -127,6 +129,7 @@ export function Sidebar({ onFeedback }: { onFeedback?: () => void }) {
             onClick={onFeedback}
             className="flex items-center justify-center w-10 h-10 rounded-lg transition-colors relative text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
             title="Send Feedback"
+            data-testid="activity-feedback"
           >
             <MessageSquare className="w-4 h-4" />
           </button>
@@ -147,6 +150,7 @@ export function Sidebar({ onFeedback }: { onFeedback?: () => void }) {
                 }
               `}
               title="Settings"
+              data-testid="activity-settings"
             >
               <SlidersHorizontal className="w-4 h-4" />
               {isActive && (

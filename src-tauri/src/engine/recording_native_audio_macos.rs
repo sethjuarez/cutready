@@ -31,10 +31,7 @@ pub struct NativeMacAudioRecording {
 impl NativeMacAudioRecording {
     /// Start capturing system audio via ScreenCaptureKit.
     /// Writes PCM WAV to the specified output path.
-    pub fn start_system_audio(
-        volume: u8,
-        output_path: &Path,
-    ) -> anyhow::Result<Self> {
+    pub fn start_system_audio(volume: u8, output_path: &Path) -> anyhow::Result<Self> {
         start_sck_audio_recording("system_audio", volume, output_path)
     }
 
@@ -146,11 +143,9 @@ fn start_sck_audio_recording(
         anyhow::bail!("No displays found for ScreenCaptureKit audio capture");
     }
 
-    let handle = thread::Builder::new()
-        .name(format!("sck-{name}"))
-        .spawn(move || -> anyhow::Result<()> {
-            run_sck_audio_capture(&stop_clone, &output, volume)
-        })?;
+    let handle = thread::Builder::new().name(format!("sck-{name}")).spawn(
+        move || -> anyhow::Result<()> { run_sck_audio_capture(&stop_clone, &output, volume) },
+    )?;
 
     // Brief startup check
     std::thread::sleep(std::time::Duration::from_millis(300));
@@ -169,11 +164,7 @@ fn start_sck_audio_recording(
     })
 }
 
-fn run_sck_audio_capture(
-    stop: &AtomicBool,
-    output_path: &Path,
-    volume: u8,
-) -> anyhow::Result<()> {
+fn run_sck_audio_capture(stop: &AtomicBool, output_path: &Path, volume: u8) -> anyhow::Result<()> {
     let content = SCShareableContent::get()
         .map_err(|e| anyhow::anyhow!("ScreenCaptureKit access denied: {e}"))?;
     let display = content
