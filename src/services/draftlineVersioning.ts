@@ -65,6 +65,8 @@ interface DraftlineSyncStatusDto {
 interface DraftlineChangedFileDto {
   path: string;
   kind: "added" | "modified" | "deleted" | "renamed" | "conflicted" | "typeChanged";
+  isBinary: boolean;
+  isLarge: boolean;
 }
 
 interface DraftlineChangeSetDto {
@@ -162,6 +164,10 @@ export async function createDraftlineVariation(fromVersion: string, name: string
   });
 }
 
+export async function deleteDraftlineVariation(variation: string): Promise<void> {
+  await invoke("draftline_delete_variation", { variation });
+}
+
 export async function switchDraftlineVariation(variation: string, saveFirstLabel?: string): Promise<void> {
   await invoke<DraftlineVariationDto>("draftline_switch_variation", {
     variation,
@@ -242,6 +248,13 @@ export async function listDraftlineChangedFiles(): Promise<DiffEntry[]> {
   return versionDiffToDiffEntries(
     await invoke<DraftlineVersionDiffDto>("draftline_diff_version_to_workspace", { version: head }),
   );
+}
+
+export async function listDraftlineLargeChangedFiles(): Promise<string[]> {
+  const summary = await getDraftlineWorkspaceSummary();
+  return summary.dirtyFiles
+    .filter((file) => file.isLarge)
+    .map((file) => file.path);
 }
 
 export async function saveDraftlineVersion(label: string): Promise<string> {

@@ -26,6 +26,7 @@ const EXCLUDED_RUNTIME_PATHS: &[&str] = &[
 
 const CUTREADY_CONTENT_EXTENSIONS: &[&str] = &["sk", "sb", "md"];
 const CUTREADY_ASSET_ROOTS: &[&str] = &[".cutready/visuals", "screenshots"];
+const CUTREADY_LARGE_FILE_THRESHOLD_BYTES: u64 = 50 * 1024 * 1024;
 
 /// Small CutReady-facing wrapper around a Draftline workspace.
 pub struct CutReadyDraftlineAdapter {
@@ -57,6 +58,17 @@ impl CutReadyDraftlineAdapter {
 
     pub fn inspect_changes(&self) -> DraftlineResult<ChangeSet> {
         self.workspace.changes()
+    }
+
+    pub fn discard_changes(&self) -> DraftlineResult<ChangeSet> {
+        self.workspace.discard_changes()
+    }
+
+    pub fn discard_file(
+        &self,
+        path: impl AsRef<Path>,
+    ) -> DraftlineResult<Option<draftline::ChangedFile>> {
+        self.workspace.discard_file(path)
     }
 
     pub fn workspace_summary(&self) -> DraftlineResult<WorkspaceSummary> {
@@ -136,6 +148,10 @@ impl CutReadyDraftlineAdapter {
     ) -> DraftlineResult<Variation> {
         self.workspace
             .set_variation_metadata(variation, cutready_variation_metadata(label, slug))
+    }
+
+    pub fn delete_variation(&self, variation: &VariationId) -> DraftlineResult<()> {
+        self.workspace.delete_variation(variation)
     }
 
     pub fn preflight_switch_variation(
@@ -225,6 +241,7 @@ pub fn cutready_content_policy() -> DraftlineResult<ContentPolicy> {
         .include_paths(CUTREADY_ASSET_ROOTS)?
         .include_extensions(CUTREADY_CONTENT_EXTENSIONS)?
         .exclude_paths(EXCLUDED_RUNTIME_PATHS)
+        .map(|policy| policy.with_large_file_threshold(CUTREADY_LARGE_FILE_THRESHOLD_BYTES))
 }
 
 pub fn cutready_variation_metadata(label: Option<&str>, slug: Option<&str>) -> VariationMetadata {
@@ -454,6 +471,57 @@ mod tests {
     }
 
     #[test]
+    fn discard_changes_preserves_excluded_runtime_state() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        write(root.join("intro.sk"), r#"{"title":"Base"}"#);
+        write(root.join(".cutready/ui-state.json"), r#"{"panel":"base"}"#);
+
+        let adapter = CutReadyDraftlineAdapter::open_project(root).unwrap();
+        adapter.save_version("Base").unwrap();
+
+        write(root.join("intro.sk"), r#"{"title":"Dirty"}"#);
+        write(root.join("planning.md"), "# new tracked note\n");
+        write(root.join(".cutready/ui-state.json"), r#"{"panel":"dirty"}"#);
+
+        let discarded = adapter.discard_changes().unwrap();
+        let discarded_paths: Vec<_> = discarded
+            .files
+            .iter()
+            .map(|file| file.path.as_path())
+            .collect();
+
+        assert!(discarded_paths.contains(&Path::new("intro.sk")));
+        assert!(discarded_paths.contains(&Path::new("planning.md")));
+        assert_eq!(read(root.join("intro.sk")), r#"{"title":"Base"}"#);
+        assert!(!root.join("planning.md").exists());
+        assert_eq!(
+            read(root.join(".cutready/ui-state.json")),
+            r#"{"panel":"dirty"}"#
+        );
+    }
+
+    #[test]
+    fn discard_file_resets_only_requested_tracked_content() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        write(root.join("intro.sk"), r#"{"title":"Base intro"}"#);
+        write(root.join("demo.sb"), r#"{"title":"Base demo"}"#);
+
+        let adapter = CutReadyDraftlineAdapter::open_project(root).unwrap();
+        adapter.save_version("Base").unwrap();
+
+        write(root.join("intro.sk"), r#"{"title":"Dirty intro"}"#);
+        write(root.join("demo.sb"), r#"{"title":"Dirty demo"}"#);
+
+        let discarded = adapter.discard_file("intro.sk").unwrap().unwrap();
+
+        assert_eq!(discarded.path.as_path(), Path::new("intro.sk"));
+        assert_eq!(read(root.join("intro.sk")), r#"{"title":"Base intro"}"#);
+        assert_eq!(read(root.join("demo.sb")), r#"{"title":"Dirty demo"}"#);
+    }
+
+    #[test]
     fn created_variation_is_listed_after_reopening_workspace() {
         let temp = tempfile::tempdir().unwrap();
         let root = temp.path();
@@ -482,6 +550,34 @@ mod tests {
             names.iter().any(|name| name == "persistent-alt"),
             "created variation should survive reopening; got {names:?}"
         );
+    }
+
+    #[test]
+    fn delete_variation_removes_non_current_variation() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        write(root.join("intro.sk"), r#"{"title":"Base"}"#);
+
+        let adapter = CutReadyDraftlineAdapter::open_project(root).unwrap();
+        let base = adapter.save_version("Base").unwrap();
+        let alternate = adapter
+            .create_variation_from_with_metadata(
+                base.id(),
+                "delete-me",
+                Some("Delete me"),
+                Some("delete-me"),
+            )
+            .unwrap();
+
+        adapter.delete_variation(alternate.id()).unwrap();
+        let names: Vec<_> = adapter
+            .variations()
+            .unwrap()
+            .into_iter()
+            .map(|variation| variation.name)
+            .collect();
+
+        assert!(!names.iter().any(|name| name == "delete-me"));
     }
 
     #[test]

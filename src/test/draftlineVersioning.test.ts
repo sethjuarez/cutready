@@ -9,8 +9,10 @@ vi.mock("../services/tauri", () => ({
 import {
   diffDraftlineVersions,
   hasDraftlineChanges,
+  deleteDraftlineVariation,
   listDraftlineChangedFiles,
   listDraftlineGraphNodes,
+  listDraftlineLargeChangedFiles,
   listDraftlineTimelines,
   listDraftlineVersions,
   previewDraftlineVersion,
@@ -185,6 +187,30 @@ describe("draftlineVersioning", () => {
       { name: "main", label: "Main", is_active: true, snapshot_count: 1, color_index: 0 },
       { name: "alt", label: "Alternative", is_active: false, snapshot_count: 3, color_index: 1 },
     ]);
+  });
+
+  it("deletes a Draftline variation by typed id string", async () => {
+    mockInvoke.mockResolvedValueOnce(undefined);
+
+    await expect(deleteDraftlineVariation("alt")).resolves.toBeUndefined();
+    expect(mockInvoke).toHaveBeenCalledWith("draftline_delete_variation", { variation: "alt" });
+  });
+
+  it("reports large changed files from the Draftline content policy", async () => {
+    mockInvoke.mockResolvedValueOnce({
+      activeVariation: { id: "main", name: "main", displayLabel: "main", isCurrent: true },
+      variations: [{ id: "main", name: "main", displayLabel: "main", isCurrent: true }],
+      versions: [],
+      dirtyFiles: [
+        { path: "intro.sk", kind: "modified", isBinary: false, isLarge: false },
+        { path: "screenshots/demo.png", kind: "added", isBinary: true, isLarge: true },
+      ],
+      isDirty: true,
+      stateMayBeInconsistent: false,
+    });
+
+    await expect(listDraftlineLargeChangedFiles()).resolves.toEqual(["screenshots/demo.png"]);
+    expect(mockInvoke).toHaveBeenCalledWith("draftline_workspace_summary");
   });
 
   it("maps Draftline version diffs to diff entries", async () => {

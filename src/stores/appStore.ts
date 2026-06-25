@@ -3,6 +3,7 @@ import { invoke, Channel } from "../services/tauri";
 import {
   applyDraftlineIncoming,
   createDraftlineVariation,
+  deleteDraftlineVariation,
   diffDraftlineVersions,
   fetchDraftlineRemote,
   getDraftlineSyncStatus,
@@ -10,6 +11,7 @@ import {
   listDraftlineIncomingCommits,
   listDraftlineChangedFiles,
   listDraftlineGraphNodes,
+  listDraftlineLargeChangedFiles,
   listDraftlineRemotes,
   listDraftlineTimelines,
   listDraftlineVersions,
@@ -2327,8 +2329,16 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   },
 
   deleteTimeline: async (name) => {
-    console.warn("Draftline variation deletion is not available yet:", name);
-    useToastStore.getState().show("Draftline does not support deleting variations yet.", 5000, "info");
+    try {
+      await deleteDraftlineVariation(name);
+      await get().loadTimelines();
+      await get().loadGraphData();
+      await get().loadVersions();
+      useToastStore.getState().show("Branch deleted.", 4000, "success");
+    } catch (err) {
+      console.error("Failed to delete timeline:", err);
+      useToastStore.getState().show(`Delete failed: ${err}`, 5000, "error");
+    }
   },
 
   promoteTimeline: async (name) => {
@@ -2443,7 +2453,9 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       // Large-file check before push
       const largeFiles = await get().checkLargeFiles();
       if (largeFiles.length > 0) {
-        const names = largeFiles.map(([p, s]) => `${p} (${(s / 1024 / 1024).toFixed(1)} MB)`).join(", ");
+        const names = largeFiles
+          .map(([p, s]) => s > 0 ? `${p} (${(s / 1024 / 1024).toFixed(1)} MB)` : p)
+          .join(", ");
         set({ syncError: `Large files detected: ${names}. Remove or add to .gitignore before pushing.`, isSyncing: false });
         return;
       }
@@ -2618,7 +2630,8 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
 
   checkLargeFiles: async () => {
     try {
-      return await invoke<Array<[string, number]>>("check_large_files", { thresholdMb: 50 });
+      const paths = await listDraftlineLargeChangedFiles();
+      return paths.map((path): [string, number] => [path, 0]);
     } catch {
       return [];
     }

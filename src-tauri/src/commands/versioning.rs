@@ -2,7 +2,10 @@
 
 use tauri::State;
 
-use crate::engine::{project, versioning, versioning_remote};
+use crate::engine::{
+    draftline_adapter::{cutready_remote_options, CutReadyDraftlineAdapter},
+    project, versioning, versioning_remote,
+};
 use crate::models::script::ProjectView;
 use crate::models::sketch::VersionEntry;
 use crate::{AppState, ProjectLock};
@@ -39,6 +42,38 @@ fn active_project_scope(state: &AppState) -> Result<Option<String>, String> {
     } else {
         Ok(Some(relative))
     }
+}
+
+fn active_project_adapter_and_scope(
+    state: &AppState,
+) -> Result<(CutReadyDraftlineAdapter, Option<String>), String> {
+    let view = current_project_view(state)?;
+    let scope = if view.root == view.repo_root {
+        None
+    } else {
+        Some(
+            view.root
+                .strip_prefix(&view.repo_root)
+                .map_err(|e| e.to_string())?
+                .to_string_lossy()
+                .replace('\\', "/"),
+        )
+    };
+    let adapter =
+        CutReadyDraftlineAdapter::open_project(view.root).map_err(|error| error.to_string())?;
+    Ok((adapter, scope))
+}
+
+fn project_relative_from_repo_path(path: &str, scope: Option<&str>) -> Result<String, String> {
+    let Some(scope) = scope else {
+        return Ok(path.to_string());
+    };
+    if path == scope {
+        return Err("File path is the active project directory, not a file".into());
+    }
+    path.strip_prefix(&format!("{scope}/"))
+        .map(str::to_string)
+        .ok_or_else(|| "File is outside the active project".into())
 }
 
 fn path_in_scope(path: &str, scope: Option<&str>) -> bool {
@@ -188,9 +223,10 @@ pub async fn discard_changes(
     lock: State<'_, ProjectLock>,
 ) -> Result<(), String> {
     let _guard = lock.0.lock().await;
-    let root = versioning_root(&state)?;
-    let scope = active_project_scope(&state)?;
-    versioning::discard_changes_in_scope(&root, scope.as_deref()).map_err(|e| e.to_string())?;
+    let (adapter, _) = active_project_adapter_and_scope(&state)?;
+    adapter
+        .discard_changes()
+        .map_err(|error| error.to_string())?;
 
     refresh_current_project(&state)?;
 
@@ -204,12 +240,14 @@ pub async fn discard_file(
     lock: State<'_, ProjectLock>,
 ) -> Result<(), String> {
     let _guard = lock.0.lock().await;
-    let root = versioning_root(&state)?;
-    let scope = active_project_scope(&state)?;
+    let (adapter, scope) = active_project_adapter_and_scope(&state)?;
     if !path_in_scope(&file_path, scope.as_deref()) {
         return Err("File is outside the active project".into());
     }
-    versioning::discard_file(&root, &file_path).map_err(|e| e.to_string())?;
+    let relative_path = project_relative_from_repo_path(&file_path, scope.as_deref())?;
+    adapter
+        .discard_file(relative_path)
+        .map_err(|error| error.to_string())?;
     refresh_current_project(&state)?;
     Ok(())
 }
@@ -607,8 +645,28 @@ pub async fn clone_from_url(
     dest: String,
     token: Option<String>,
 ) -> Result<(), String> {
+    reject_remote_url_credentials(&url)?;
     let dest_path = std::path::PathBuf::from(&dest);
-    versioning_remote::clone_from_url(&url, &dest_path, token.as_deref()).map_err(|e| e.to_string())
+    let token = resolve_token(token);
+    let mut options = cutready_remote_options(token);
+    CutReadyDraftlineAdapter::clone_project_with_options(&url, &dest_path, &mut options)
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
+fn reject_remote_url_credentials(url: &str) -> Result<(), String> {
+    let Ok(parsed) = reqwest::Url::parse(url) else {
+        return Ok(());
+    };
+
+    if !parsed.username().is_empty() || parsed.password().is_some() {
+        return Err(
+            "Remote URLs must not include credentials. Use the token field for authentication."
+                .to_string(),
+        );
+    }
+
+    Ok(())
 }
 
 // ─── Merge operations ───────────────────────────────────────────

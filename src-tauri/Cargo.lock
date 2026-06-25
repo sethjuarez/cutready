@@ -1677,9 +1677,9 @@ dependencies = [
 
 [[package]]
 name = "draftline"
-version = "0.1.7"
+version = "0.1.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "af8a01ad0693e7ee9ba625c48822ad2a9a133d05bb9b24b7d56ce9cf60e31771"
+checksum = "2ff23de7f89083f415644492a96c7914a94008c4e6d37aeb075a2e7176d2c66e"
 dependencies = [
  "git2",
  "serde",
