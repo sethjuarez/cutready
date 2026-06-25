@@ -105,6 +105,7 @@ pub fn detect_remote(project_dir: &Path) -> Result<Option<RemoteInfo>, RemoteErr
 
 /// Build remote callbacks with credential support.
 /// Tries: provided token (for HTTPS), then SSH agent, then git credential helpers.
+#[allow(dead_code)]
 fn make_callbacks(token: Option<&str>) -> RemoteCallbacks<'_> {
     let mut callbacks = RemoteCallbacks::new();
     let token_owned = token.map(|t| t.to_string());
@@ -620,6 +621,7 @@ pub fn checkout_remote_branch(
 // ─── Clone from URL ─────────────────────────────────────────────
 
 /// Clone a repository from a URL into the given destination directory.
+#[allow(dead_code)]
 pub fn clone_from_url(url: &str, dest: &Path, token: Option<&str>) -> Result<(), RemoteError> {
     // If no explicit token, try to get one from `gh auth token`
     let gh_token: Option<String> = if token.is_none() {

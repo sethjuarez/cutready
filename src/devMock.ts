@@ -260,6 +260,8 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
       }];
     case "draftline_current_variation":
       return "main";
+    case "draftline_delete_variation":
+      return null;
     case "list_timelines":
       return [{ name: "main", label: "main", is_active: true, snapshot_count: 2, color_index: 0 }];
     case "get_graph":

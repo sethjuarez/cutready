@@ -488,6 +488,7 @@ pub fn run() {
             commands::draftline::draftline_list_variations,
             commands::draftline::draftline_variation_summaries,
             commands::draftline::draftline_create_variation_from,
+            commands::draftline::draftline_delete_variation,
             commands::draftline::draftline_preflight_switch_variation,
             commands::draftline::draftline_switch_variation,
             commands::draftline::draftline_restore_version_as_new_save,

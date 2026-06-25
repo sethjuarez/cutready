@@ -636,6 +636,19 @@ pub async fn draftline_create_variation_from(
 }
 
 #[auditaur_command(skip_all, err)]
+pub async fn draftline_delete_variation(
+    variation: VariationId,
+    state: State<'_, AppState>,
+    lock: State<'_, ProjectLock>,
+) -> Result<(), String> {
+    let _guard = lock.0.lock().await;
+    let adapter = open_adapter(&state)?;
+    adapter
+        .delete_variation(&variation)
+        .map_err(|error| error.to_string())
+}
+
+#[auditaur_command(skip_all, err)]
 pub async fn draftline_preflight_switch_variation(
     variation: VariationId,
     state: State<'_, AppState>,
@@ -861,9 +874,8 @@ mod tests {
 
     #[test]
     fn typed_version_id_boundary_rejects_uppercase_hex() {
-        let error =
-            version_id_from_input("0123456789ABCDEF0123456789abcdef01234567".to_string())
-                .unwrap_err();
+        let error = version_id_from_input("0123456789ABCDEF0123456789abcdef01234567".to_string())
+            .unwrap_err();
 
         assert!(!error.is_empty());
     }

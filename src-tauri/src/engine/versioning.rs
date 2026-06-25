@@ -286,6 +286,7 @@ pub fn is_rewound(project_dir: &Path) -> bool {
 }
 
 /// Discard changes under a repo-relative path without touching other workspace projects.
+#[allow(dead_code)]
 pub fn discard_changes_in_scope(
     project_dir: &Path,
     scope_path: Option<&str>,
@@ -302,6 +303,7 @@ pub fn discard_changes_in_scope(
 }
 
 /// Discard changes for one repo-relative file or folder path.
+#[allow(dead_code)]
 pub fn discard_file(project_dir: &Path, file_path: &str) -> Result<(), VersioningError> {
     validate_repo_relative_path(file_path)?;
     discard_changes_in_scope(project_dir, Some(file_path))
@@ -1619,6 +1621,7 @@ fn resolve_commit_id(project_dir: &Path, short_id: &str) -> Result<String, Versi
     Ok(obj.id().to_string())
 }
 
+#[allow(dead_code)]
 fn checkout_builder_for_discard(scope_path: Option<&str>) -> git2::build::CheckoutBuilder<'static> {
     let mut checkout = git2::build::CheckoutBuilder::new();
     checkout
@@ -1676,6 +1679,7 @@ fn path_is_in_scope(path: &str, scope_path: Option<&str>) -> bool {
     path == scope || path.starts_with(&format!("{scope}/"))
 }
 
+#[allow(dead_code)]
 fn remove_untracked_in_scope(
     repo: &git2::Repository,
     project_dir: &Path,
