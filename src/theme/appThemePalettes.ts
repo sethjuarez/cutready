@@ -47,17 +47,180 @@ export interface ThemePalette {
   dark: ThemeColorTokens;
 }
 
+type Rgb = [number, number, number];
+
+function tokenToRgb(token: string): Rgb {
+  const parts = token.split(/\s+/).map(Number);
+  return [parts[0] ?? 0, parts[1] ?? 0, parts[2] ?? 0];
+}
+
+function rgbToToken([r, g, b]: Rgb): string {
+  return `${Math.round(r)} ${Math.round(g)} ${Math.round(b)}`;
+}
+
+function clampChannel(value: number): number {
+  return Math.max(0, Math.min(255, value));
+}
+
+function mixRgb(from: Rgb, to: Rgb, amount: number): Rgb {
+  return [
+    clampChannel(from[0] + (to[0] - from[0]) * amount),
+    clampChannel(from[1] + (to[1] - from[1]) * amount),
+    clampChannel(from[2] + (to[2] - from[2]) * amount),
+  ];
+}
+
+function linearize(channel: number): number {
+  const value = channel / 255;
+  return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+}
+
+function relativeLuminance(rgb: Rgb): number {
+  const [r, g, b] = rgb.map(linearize) as Rgb;
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+function contrastRatio(a: Rgb, b: Rgb): number {
+  const [lighter, darker] = [relativeLuminance(a), relativeLuminance(b)].sort((x, y) => y - x);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+function toOklab(rgb: Rgb): Rgb {
+  const [r, g, b] = rgb.map(linearize) as Rgb;
+  const l = 0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b;
+  const m = 0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b;
+  const s = 0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b;
+  const lRoot = Math.cbrt(l);
+  const mRoot = Math.cbrt(m);
+  const sRoot = Math.cbrt(s);
+
+  return [
+    0.2104542553 * lRoot + 0.793617785 * mRoot - 0.0040720468 * sRoot,
+    1.9779984951 * lRoot - 2.428592205 * mRoot + 0.4505937099 * sRoot,
+    0.0259040371 * lRoot + 0.7827717662 * mRoot - 0.808675766 * sRoot,
+  ];
+}
+
+function oklabDistance(a: Rgb, b: Rgb): number {
+  const first = toOklab(a);
+  const second = toOklab(b);
+  return Math.hypot(
+    (first[0] - second[0]) * 100,
+    (first[1] - second[1]) * 100,
+    (first[2] - second[2]) * 100
+  );
+}
+
+function adjustToward(
+  value: Rgb,
+  target: Rgb,
+  passes: (candidate: Rgb) => boolean,
+): Rgb {
+  let best = value;
+
+  for (let step = 1; step <= 12; step += 1) {
+    const candidate = mixRgb(value, target, step / 12);
+    best = candidate;
+    if (passes(candidate)) {
+      break;
+    }
+  }
+
+  return best;
+}
+
+function ensureContrast(value: Rgb, background: Rgb, target: Rgb, minimum: number): Rgb {
+  if (contrastRatio(value, background) >= minimum) return value;
+  return adjustToward(value, target, (candidate) => contrastRatio(candidate, background) >= minimum);
+}
+
+function ensureDistance(value: Rgb, reference: Rgb, target: Rgb, minimum: number): Rgb {
+  if (oklabDistance(value, reference) >= minimum) return value;
+  return adjustToward(value, target, (candidate) => oklabDistance(candidate, reference) >= minimum);
+}
+
+function ensureHoverState(value: Rgb, accent: Rgb, surface: Rgb, text: Rgb): Rgb {
+  if (contrastRatio(value, surface) >= 4.5 && oklabDistance(value, accent) >= 6) {
+    return value;
+  }
+
+  const ink: Rgb = [24, 22, 20];
+  const paper: Rgb = [255, 255, 255];
+  const targets = [text, surface, ink, paper].sort(
+    (a, b) => oklabDistance(b, accent) - oklabDistance(a, accent)
+  );
+  let best = value;
+  let bestScore = Math.min(contrastRatio(value, surface) / 4.5, oklabDistance(value, accent) / 6);
+
+  for (const target of targets) {
+    for (let step = 1; step <= 16; step += 1) {
+      const candidate = mixRgb(value, target, step / 16);
+      const contrast = contrastRatio(candidate, surface);
+      const distance = oklabDistance(candidate, accent);
+      const score = Math.min(contrast / 4.5, distance / 6);
+
+      if (score > bestScore) {
+        best = candidate;
+        bestScore = score;
+      }
+
+      if (contrast >= 4.5 && distance >= 6) {
+        return candidate;
+      }
+    }
+  }
+
+  return best;
+}
+
+function bestAccentForeground(accent: Rgb): string {
+  const white: Rgb = [255, 255, 255];
+  const ink: Rgb = [24, 22, 20];
+  return rgbToToken(contrastRatio(white, accent) >= contrastRatio(ink, accent) ? white : ink);
+}
+
+function polishTokens(tokens: ThemeColorTokens): ThemeColorTokens {
+  const surface = tokenToRgb(tokens.surface);
+  const text = tokenToRgb(tokens.text);
+  const accentTarget = text;
+  const borderTarget = text;
+
+  const accent = ensureContrast(tokenToRgb(tokens.accent), surface, accentTarget, 4.5);
+  const accentHover = ensureHoverState(tokenToRgb(tokens.accentHover), accent, surface, text);
+  const border = ensureDistance(tokenToRgb(tokens.border), surface, borderTarget, 8);
+  const borderSubtle = ensureDistance(tokenToRgb(tokens.borderSubtle), surface, borderTarget, 5);
+  const textSecondary = ensureContrast(tokenToRgb(tokens.textSecondary), surface, text, 4.5);
+
+  return {
+    ...tokens,
+    accent: rgbToToken(accent),
+    accentHover: rgbToToken(accentHover),
+    border: rgbToToken(border),
+    borderSubtle: rgbToToken(borderSubtle),
+    textSecondary: rgbToToken(textSecondary),
+    accentFg: bestAccentForeground(accent),
+  };
+}
+
+function polishThemePalette(palette: ThemePalette): ThemePalette {
+  return {
+    ...palette,
+    light: polishTokens(palette.light),
+    dark: polishTokens(palette.dark),
+  };
+}
+
 const cutreadyLight: ThemeColorTokens = {
-  surface: "250 249 247",
-  surfaceAlt: "240 238 235",
-  surfaceInset: "234 231 226",
-  surfaceToolbar: "224 221 215",
-  accent: "107 92 231",
-  accentHover: "90 75 214",
-  border: "221 217 211",
-  borderSubtle: "232 229 224",
+  surface: "251 250 248",
+  surfaceAlt: "243 240 236",
+  surfaceInset: "236 231 225",
+  surfaceToolbar: "228 222 214",
+  accent: "111 99 232",
+  accentHover: "91 79 209",
+  border: "222 216 207",
+  borderSubtle: "235 229 222",
   text: "44 41 37",
-  textSecondary: "138 133 125",
+  textSecondary: "112 106 98",
   secondary: "124 58 237",
   tertiary: "219 39 119",
   success: "22 163 74",
@@ -71,16 +234,16 @@ const cutreadyLight: ThemeColorTokens = {
 };
 
 const cutreadyDark: ThemeColorTokens = {
-  surface: "43 41 38",
-  surfaceAlt: "53 50 48",
-  surfaceInset: "37 34 32",
-  surfaceToolbar: "30 28 26",
-  accent: "164 154 250",
-  accentHover: "139 127 245",
-  border: "62 59 56",
-  borderSubtle: "53 50 48",
-  text: "232 228 223",
-  textSecondary: "155 150 142",
+  surface: "39 36 33",
+  surfaceAlt: "49 45 41",
+  surfaceInset: "33 31 29",
+  surfaceToolbar: "27 25 23",
+  accent: "170 160 255",
+  accentHover: "145 133 246",
+  border: "73 67 61",
+  borderSubtle: "58 53 47",
+  text: "238 233 226",
+  textSecondary: "180 172 162",
   secondary: "167 139 250",
   tertiary: "244 114 182",
   success: "52 211 153",
@@ -93,7 +256,7 @@ const cutreadyDark: ThemeColorTokens = {
   mediaControlFg: "255 255 255",
 };
 
-export const THEME_PALETTES: ThemePalette[] = [
+const rawThemePalettes: ThemePalette[] = [
   {
     id: "cutready",
     name: "CutReady",
@@ -609,6 +772,8 @@ export const THEME_PALETTES: ThemePalette[] = [
     },
   },
 ];
+
+export const THEME_PALETTES: ThemePalette[] = rawThemePalettes.map(polishThemePalette);
 
 export function getThemePalette(id: string): ThemePalette {
   return THEME_PALETTES.find((palette) => palette.id === id) ?? THEME_PALETTES[0];

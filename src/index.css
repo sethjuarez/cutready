@@ -4,16 +4,16 @@
 
 :root {
   color-scheme: light;
-  --color-surface: 250 249 247;
-  --color-surface-alt: 240 238 235;
-  --color-surface-inset: 234 231 226;
-  --color-surface-toolbar: 224 221 215;
-  --color-accent: 107 92 231;
-  --color-accent-hover: 90 75 214;
-  --color-border: 221 217 211;
-  --color-border-subtle: 232 229 224;
+  --color-surface: 251 250 248;
+  --color-surface-alt: 243 240 236;
+  --color-surface-inset: 236 231 225;
+  --color-surface-toolbar: 228 222 214;
+  --color-accent: 111 99 232;
+  --color-accent-hover: 91 79 209;
+  --color-border: 222 216 207;
+  --color-border-subtle: 235 229 222;
   --color-text: 44 41 37;
-  --color-text-secondary: 138 133 125;
+  --color-text-secondary: 112 106 98;
   --color-secondary: 124 58 237;
   --color-tertiary: 219 39 119;
   --color-success: 22 163 74;
@@ -51,16 +51,16 @@
 
 .dark {
   color-scheme: dark;
-  --color-surface: 43 41 38;
-  --color-surface-alt: 53 50 48;
-  --color-surface-inset: 37 34 32;
-  --color-surface-toolbar: 30 28 26;
-  --color-accent: 164 154 250;
-  --color-accent-hover: 139 127 245;
-  --color-border: 62 59 56;
-  --color-border-subtle: 53 50 48;
-  --color-text: 232 228 223;
-  --color-text-secondary: 155 150 142;
+  --color-surface: 39 36 33;
+  --color-surface-alt: 49 45 41;
+  --color-surface-inset: 33 31 29;
+  --color-surface-toolbar: 27 25 23;
+  --color-accent: 170 160 255;
+  --color-accent-hover: 145 133 246;
+  --color-border: 73 67 61;
+  --color-border-subtle: 58 53 47;
+  --color-text: 238 233 226;
+  --color-text-secondary: 180 172 162;
   --color-secondary: 167 139 250;
   --color-tertiary: 244 114 182;
   --color-success: 52 211 153;
