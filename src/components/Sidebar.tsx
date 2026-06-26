@@ -4,6 +4,7 @@ import type { AppView } from "../stores/appStore";
 import { useAppStore } from "../stores/appStore";
 import { usePopover } from "../hooks/usePopover";
 import { UpdateAvailableButton } from "./UpdateAvailableButton";
+import { activityButtonClass } from "./shellStyles";
 
 const navItems: { id: AppView; label: string; icon: ReactNode }[] = [
   {
@@ -45,8 +46,8 @@ export function Sidebar({ onFeedback }: { onFeedback?: () => void }) {
   return (
     <>
       <nav
-        className={`no-select flex flex-col w-12 bg-[rgb(var(--color-surface))] items-center py-3 gap-1.5 ${
-          isRight ? "border-l border-[rgb(var(--color-border))]" : "border-r border-[rgb(var(--color-border))]"
+        className={`no-select flex w-12 flex-col items-center gap-1.5 bg-[rgb(var(--color-surface))] px-1.5 py-3 ${
+          isRight ? "border-l border-[rgb(var(--color-border-subtle))]" : "border-r border-[rgb(var(--color-border-subtle))]"
         }`}
         onContextMenu={handleContextMenu}
       >
@@ -61,16 +62,7 @@ export function Sidebar({ onFeedback }: { onFeedback?: () => void }) {
               onClick={() => !isDisabled && setView(item.id)}
               disabled={isDisabled}
               data-testid={`activity-${item.id}`}
-              className={`
-                flex items-center justify-center w-10 h-10 rounded-lg transition-colors relative
-                ${
-                  isActive
-                    ? "bg-[rgb(var(--color-accent))]/15 text-[rgb(var(--color-accent))]"
-                    : isDisabled
-                      ? "text-[rgb(var(--color-text-secondary))]/40 cursor-not-allowed"
-                      : "text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
-                }
-              `}
+              className={activityButtonClass(isActive, isDisabled)}
               title={item.label}
             >
               {item.icon}
@@ -82,8 +74,8 @@ export function Sidebar({ onFeedback }: { onFeedback?: () => void }) {
               )}
               {/* Active indicator bar */}
               {isActive && (
-                <span className={`absolute top-1/4 h-1/2 w-[2px] rounded-full bg-[rgb(var(--color-accent))] ${
-                  isRight ? "right-[-6px]" : "left-[-6px]"
+                <span className={`absolute top-1/2 h-4 w-[2px] -translate-y-1/2 bg-[rgb(var(--color-accent))] ${
+                  isRight ? "right-[-8px]" : "left-[-8px]"
                 }`} />
               )}
 
@@ -102,21 +94,14 @@ export function Sidebar({ onFeedback }: { onFeedback?: () => void }) {
           return (
             <button
               onClick={() => setView("home")}
-              className={`
-                flex items-center justify-center w-10 h-10 rounded-lg transition-colors relative
-                ${
-                  isActive
-                    ? "bg-[rgb(var(--color-accent))]/15 text-[rgb(var(--color-accent))]"
-                    : "text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
-                }
-              `}
+              className={activityButtonClass(isActive)}
               title="Home"
               data-testid="activity-home"
             >
               <House className="w-4 h-4" />
               {isActive && (
-                <span className={`absolute top-1/4 h-1/2 w-[2px] rounded-full bg-[rgb(var(--color-accent))] ${
-                  isRight ? "right-[-6px]" : "left-[-6px]"
+                <span className={`absolute top-1/2 h-4 w-[2px] -translate-y-1/2 bg-[rgb(var(--color-accent))] ${
+                  isRight ? "right-[-8px]" : "left-[-8px]"
                 }`} />
               )}
             </button>
@@ -127,7 +112,7 @@ export function Sidebar({ onFeedback }: { onFeedback?: () => void }) {
         {onFeedback && (
           <button
             onClick={onFeedback}
-            className="flex items-center justify-center w-10 h-10 rounded-lg transition-colors relative text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
+            className={activityButtonClass(false)}
             title="Send Feedback"
             data-testid="activity-feedback"
           >
@@ -141,21 +126,14 @@ export function Sidebar({ onFeedback }: { onFeedback?: () => void }) {
           return (
             <button
               onClick={() => setView("settings")}
-              className={`
-                flex items-center justify-center w-10 h-10 rounded-lg transition-colors relative
-                ${
-                  isActive
-                    ? "bg-[rgb(var(--color-accent))]/15 text-[rgb(var(--color-accent))]"
-                    : "text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
-                }
-              `}
+              className={activityButtonClass(isActive)}
               title="Settings"
               data-testid="activity-settings"
             >
               <SlidersHorizontal className="w-4 h-4" />
               {isActive && (
-                <span className={`absolute top-1/4 h-1/2 w-[2px] rounded-full bg-[rgb(var(--color-accent))] ${
-                  isRight ? "right-[-6px]" : "left-[-6px]"
+                <span className={`absolute top-1/2 h-4 w-[2px] -translate-y-1/2 bg-[rgb(var(--color-accent))] ${
+                  isRight ? "right-[-8px]" : "left-[-8px]"
                 }`} />
               )}
             </button>

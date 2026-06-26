@@ -49,6 +49,36 @@ function sectionBodyStyle(
   };
 }
 
+function documentItemClass(active: boolean) {
+  return `group/item relative flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-left text-[12px] outline-none transition-colors focus-visible:bg-[rgb(var(--color-surface-alt))] ${
+    active
+      ? "bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))]"
+      : "text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))]"
+  }`;
+}
+
+function documentItemMetaClass(active: boolean) {
+  return active ? "text-[rgb(var(--color-accent))]/70" : "text-[rgb(var(--color-text-secondary))]/80";
+}
+
+function ActiveDocumentMarker({ active }: { active: boolean }) {
+  if (!active) return null;
+  return <span className="absolute left-0 top-1 bottom-1 w-0.5 rounded-r bg-[rgb(var(--color-accent))]" />;
+}
+
+function DocumentItemText({ title, meta, active }: { title: string; meta?: string; active: boolean }) {
+  return (
+    <div className="min-w-0 flex-1 py-0.5 leading-tight">
+      <div className="truncate text-[12px] font-medium leading-4" title={title}>{title}</div>
+      {meta && (
+        <div className={`mt-0.5 truncate text-[10px] leading-3 ${documentItemMetaClass(active)}`} title={meta}>
+          {meta}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /** Wrapper that makes a sidebar list item draggable. */
 function SortableSidebarItem({ id, children }: { id: string; children: React.ReactNode }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
@@ -687,14 +717,11 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                           if (e.key === "F2") { e.preventDefault(); startRename("storyboard", sb.path); }
                           else if (e.key === "Enter" || e.key === " ") { if (!renamingItem) openStoryboard(sb.path); }
                         }}
-                        className={`group/item flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-left text-[12px] transition-colors ${
-                          sb.path === activeStoryboardPath
-                            ? "bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))]"
-                            : "text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))]"
-                        }`}
+                        className={documentItemClass(sb.path === activeStoryboardPath)}
                       >
-                        <StoryboardIcon className="shrink-0" />
-                        <div className="flex-1 min-w-0">
+                        <ActiveDocumentMarker active={sb.path === activeStoryboardPath} />
+                        <StoryboardIcon className="shrink-0 opacity-80" />
+                        <div className="min-w-0 flex-1">
                           {renamingItem?.path === sb.path ? (
                             <input
                               ref={renameInputRef}
@@ -710,12 +737,11 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                               className="w-full px-1 py-0.5 text-xs font-medium bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-accent))]/40 rounded focus:outline-none focus:ring-1 focus:ring-[rgb(var(--color-accent))]/40 text-[rgb(var(--color-text))]"
                             />
                           ) : (
-                            <>
-                              <div className="truncate text-[12px] font-medium">{sb.title}</div>
-                              <div className="text-[10px] text-[rgb(var(--color-text-secondary))]">
-                                {sb.sketch_count} {sb.sketch_count === 1 ? "sketch" : "sketches"}
-                              </div>
-                            </>
+                            <DocumentItemText
+                              title={sb.title}
+                              meta={`${sb.sketch_count} ${sb.sketch_count === 1 ? "sketch" : "sketches"}`}
+                              active={sb.path === activeStoryboardPath}
+                            />
                           )}
                         </div>
                         {renamingItem?.path !== sb.path && (
@@ -724,7 +750,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                               e.stopPropagation();
                               requestDelete("storyboard", sb.path, sb.title);
                             }}
-                            className="opacity-0 group-hover/item:opacity-100 p-0.5 rounded text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] transition-all"
+                            className="shrink-0 rounded p-0.5 text-[rgb(var(--color-text-secondary))] opacity-0 transition-all hover:text-[rgb(var(--color-text))] focus-visible:opacity-100 group-hover/item:opacity-100"
                             title="Delete storyboard"
                           >
                             <Trash2 className="w-3 h-3" />
@@ -821,14 +847,11 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                           if (e.key === "F2") { e.preventDefault(); startRename("sketch", sk.path); }
                           else if (e.key === "Enter" || e.key === " ") { if (!renamingItem) handleOpenSketchStandalone(sk.path); }
                         }}
-                        className={`group/item flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-left text-[12px] transition-colors ${
-                          sk.path === activeSketchPath
-                            ? "bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))]"
-                            : "text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))]"
-                        }`}
+                        className={documentItemClass(sk.path === activeSketchPath)}
                       >
-                        <SketchIcon className="shrink-0" />
-                        <div className="flex-1 min-w-0">
+                        <ActiveDocumentMarker active={sk.path === activeSketchPath} />
+                        <SketchIcon className="shrink-0 opacity-80" />
+                        <div className="min-w-0 flex-1">
                           {renamingItem?.path === sk.path ? (
                             <input
                               ref={renameInputRef}
@@ -844,12 +867,11 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                               className="w-full px-1 py-0.5 text-xs font-medium bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-accent))]/40 rounded focus:outline-none focus:ring-1 focus:ring-[rgb(var(--color-accent))]/40 text-[rgb(var(--color-text))]"
                             />
                           ) : (
-                            <>
-                              <div className="truncate text-[12px] font-medium">{sk.title}</div>
-                              <div className="text-[10px] text-[rgb(var(--color-text-secondary))]">
-                                {sk.row_count} {sk.row_count === 1 ? "row" : "rows"}
-                              </div>
-                            </>
+                            <DocumentItemText
+                              title={sk.title}
+                              meta={`${sk.row_count} ${sk.row_count === 1 ? "row" : "rows"}`}
+                              active={sk.path === activeSketchPath}
+                            />
                           )}
                         </div>
                         {renamingItem?.path !== sk.path && (
@@ -858,7 +880,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                               e.stopPropagation();
                               requestDelete("sketch", sk.path, sk.title);
                             }}
-                            className="opacity-0 group-hover/item:opacity-100 p-0.5 rounded text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] transition-all"
+                            className="shrink-0 rounded p-0.5 text-[rgb(var(--color-text-secondary))] opacity-0 transition-all hover:text-[rgb(var(--color-text))] focus-visible:opacity-100 group-hover/item:opacity-100"
                             title="Delete sketch"
                           >
                             <Trash2 className="w-3 h-3" />
@@ -968,14 +990,11 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                           if (e.key === "F2") { e.preventDefault(); startRename("note", note.path); }
                           else if (e.key === "Enter" || e.key === " ") { if (!renamingItem) openNote(note.path); }
                         }}
-                        className={`group/item flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-left text-[12px] transition-colors ${
-                          note.path === activeNotePath
-                            ? "bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))]"
-                            : "text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))]"
-                        }`}
+                        className={documentItemClass(note.path === activeNotePath)}
                       >
-                        <NoteIcon className="shrink-0" />
-                        <div className="flex-1 min-w-0">
+                        <ActiveDocumentMarker active={note.path === activeNotePath} />
+                        <NoteIcon className="shrink-0 opacity-80" />
+                        <div className="min-w-0 flex-1">
                           {renamingItem?.path === note.path ? (
                             <input
                               ref={renameInputRef}
@@ -991,7 +1010,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                               className="w-full px-1 py-0.5 text-xs font-medium bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-accent))]/40 rounded focus:outline-none focus:ring-1 focus:ring-[rgb(var(--color-accent))]/40 text-[rgb(var(--color-text))]"
                             />
                           ) : (
-                            <div className="text-xs font-medium truncate">{note.title}</div>
+                            <DocumentItemText title={note.title} meta={note.path} active={note.path === activeNotePath} />
                           )}
                         </div>
                         {renamingItem?.path !== note.path && (
@@ -1000,7 +1019,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                               e.stopPropagation();
                               requestDelete("note", note.path, note.title);
                             }}
-                            className="opacity-0 group-hover/item:opacity-100 p-0.5 rounded text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] transition-all"
+                            className="shrink-0 rounded p-0.5 text-[rgb(var(--color-text-secondary))] opacity-0 transition-all hover:text-[rgb(var(--color-text))] focus-visible:opacity-100 group-hover/item:opacity-100"
                             title="Delete note"
                           >
                             <Trash2 className="w-3 h-3" />

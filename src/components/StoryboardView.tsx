@@ -18,7 +18,6 @@ import { SafeMarkdown } from "./SafeMarkdown";
 import {
   Play,
   Monitor,
-  Sparkles,
   ChevronRight,
   Pencil,
   X,
@@ -33,7 +32,11 @@ import { SketchPreview } from "./SketchPreview";
 import { ScriptTable } from "./ScriptTable";
 import { useConfirmDialog } from "./ConfirmDialog";
 import { exportStoryboardToWord, type WordOrientation } from "../utils/exportToWord";
+import { DocumentHeader } from "./DocumentHeader";
 import { DocumentToolbar, documentToolbarIcons, type DocumentToolbarAction } from "./DocumentToolbar";
+import { FieldAiButton } from "./FieldAiButton";
+import { LockedDocumentBanner } from "./LockedDocumentBanner";
+import { StoryboardIcon } from "./Icons";
 import type { Sketch, SketchSummary, StoryboardItem } from "../types/sketch";
 import type { RecordingTake } from "../types/recording";
 import type { PreviewSlide, PresentationMode } from "./presentation/types";
@@ -551,59 +554,81 @@ export function StoryboardView() {
   return (
     <div className="flex-1 overflow-y-auto">
       <div className="mx-auto px-6 py-8" style={{ maxWidth: "var(--editor-max-width, 56rem)" }}>
-        {/* Storyboard header */}
-        <div className="flex items-center gap-3 mb-2">
-          <input
-            type="text"
-            defaultValue={activeStoryboard.title}
-            readOnly={storyboardLocked}
-            onBlur={(e) => {
-              const val = e.target.value.trim();
-              if (!storyboardLocked && val && val !== activeStoryboard.title) {
-                updateStoryboard({ title: val });
-              }
-            }}
-            className={`flex-1 text-2xl font-semibold bg-transparent text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/40 outline-none border-none ${storyboardLocked ? "cursor-default" : ""}`}
-            placeholder="Storyboard title..."
-          />
-          <div className="relative">
-            <DocumentToolbar
-              canRecord={canRecord}
-              onRecord={handleRecord}
-              showRecord={settings.featureRecording}
-              presentActions={presentActions}
-              aiActions={aiActions}
-              exportActions={exportActions}
-              locked={storyboardLocked}
-              onToggleLock={() => setStoryboardLocked(!storyboardLocked)}
-              lockLabel="Lock storyboard"
-              unlockLabel="Unlock storyboard"
-            />
-            {showMonitorPicker && (
-              <>
-                <div className="fixed inset-0 z-dropdown" onClick={() => setShowMonitorPicker(false)} />
-                <div className="absolute right-0 top-full mt-2 z-modal bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-lg shadow-lg py-1 min-w-[200px]">
-                  <div className="px-3 py-2 text-xs font-medium text-[rgb(var(--color-text-secondary))] uppercase tracking-wider border-b border-[rgb(var(--color-border))]">
-                    Present on
+        <DocumentHeader
+          icon={<StoryboardIcon size={20} />}
+          toolbar={
+            <div className="relative">
+              <DocumentToolbar
+                canRecord={canRecord}
+                onRecord={handleRecord}
+                showRecord={settings.featureRecording}
+                presentActions={presentActions}
+                aiActions={aiActions}
+                exportActions={exportActions}
+                locked={storyboardLocked}
+                onToggleLock={() => setStoryboardLocked(!storyboardLocked)}
+                lockLabel="Lock storyboard"
+                unlockLabel="Unlock storyboard"
+              />
+              {showMonitorPicker && (
+                <>
+                  <div className="fixed inset-0 z-dropdown" onClick={() => setShowMonitorPicker(false)} />
+                  <div className="absolute right-0 top-full z-modal mt-2 min-w-[200px] rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] py-1 shadow-lg">
+                    <div className="border-b border-[rgb(var(--color-border))] px-3 py-2 text-xs font-medium uppercase tracking-wider text-[rgb(var(--color-text-secondary))]">
+                      Present on
+                    </div>
+                    {availableMonitors.map((m) => (
+                      <button
+                        key={m.id}
+                        onClick={() => launchPreviewOnMonitor(m, previewMode, previewSlides)}
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-[rgb(var(--color-text))] transition-colors hover:bg-[rgb(var(--color-surface-alt))]"
+                      >
+                        <Monitor className="h-3.5 w-3.5" />
+                        <span>{m.name || `Monitor ${m.id}`}</span>
+                        {m.is_primary && (
+                          <span className="ml-auto text-[10px] font-medium text-[rgb(var(--color-accent))]">Primary</span>
+                        )}
+                      </button>
+                    ))}
                   </div>
-                  {availableMonitors.map((m) => (
-                    <button
-                      key={m.id}
-                      onClick={() => launchPreviewOnMonitor(m, previewMode, previewSlides)}
-                      className="w-full px-3 py-2 text-left text-sm text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors flex items-center gap-2"
-                    >
-                      <Monitor className="w-3.5 h-3.5" />
-                      <span>{m.name || `Monitor ${m.id}`}</span>
-                      {m.is_primary && (
-                        <span className="text-[10px] text-[rgb(var(--color-accent))] font-medium ml-auto">Primary</span>
-                      )}
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
-        </div>
+                </>
+              )}
+            </div>
+          }
+          title={
+            <div className="group/title relative min-w-0">
+              <input
+                type="text"
+                defaultValue={activeStoryboard.title}
+                readOnly={storyboardLocked}
+                onBlur={(e) => {
+                  const val = e.target.value.trim();
+                  if (!storyboardLocked && val && val !== activeStoryboard.title) {
+                    updateStoryboard({ title: val });
+                  }
+                }}
+                title={activeStoryboard.title}
+                className={`min-w-0 w-full truncate border-none bg-transparent text-2xl font-semibold text-[rgb(var(--color-text))] outline-none placeholder:text-[rgb(var(--color-text-secondary))]/40 ${activeStoryboard.title && !storyboardLocked ? "pr-8" : ""} ${storyboardLocked ? "cursor-default" : ""}`}
+                placeholder="Storyboard title..."
+              />
+              {activeStoryboard.title && !storyboardLocked && (
+                <FieldAiButton
+                  onClick={() => sendChatPrompt(
+                    `Improve the title of storyboard "${activeStoryboardPath ?? "current"}". Current title: "${activeStoryboard.title}". Suggest a more compelling, concise title. IMPORTANT: Only update the storyboard title - do NOT change its description, sections, or sketches. Use write_storyboard with the improved title and keep everything else exactly as it is.`,
+                    { silent: true },
+                  )}
+                  className="absolute right-0 top-1/2 -translate-y-1/2 group-hover/title:opacity-100"
+                  label="Improve title with AI"
+                  title="Improve title with AI"
+                />
+              )}
+            </div>
+          }
+          className="mb-2"
+        />
+        {storyboardLocked && (
+          <LockedDocumentBanner message="Storyboard is locked. Unlock it to edit sections, reorder sketches, or use AI suggestions." />
+        )}
         {/* Description — markdown preview, click to edit */}
         <div className="relative group/desc mb-2">
           {editingDesc ? (
@@ -626,7 +651,7 @@ export function StoryboardView() {
                tabIndex={0}
               onClick={() => { if (!storyboardLocked) setEditingDesc(true); }}
               onFocus={() => { if (!storyboardLocked) setEditingDesc(true); }}
-              className={`min-h-[2rem] rounded-lg px-3 py-2 text-sm border border-transparent hover:border-[rgb(var(--color-border))] transition-colors ${!storyboardLocked ? "pr-24 cursor-text" : "cursor-default"}`}
+              className={`min-h-[2rem] rounded-lg px-3 py-2 text-sm border border-transparent hover:border-[rgb(var(--color-border))] transition-colors ${!storyboardLocked ? "pr-10 cursor-text" : "cursor-default"}`}
             >
               {localDesc ? (
                 <div className="prose-desc text-[rgb(var(--color-text))] leading-relaxed">
@@ -641,19 +666,18 @@ export function StoryboardView() {
           )}
           {/* Description sparkle */}
           {!editingDesc && !storyboardLocked && (
-            <button
+            <FieldAiButton
               onClick={() => sendChatPrompt(
                 localDesc
                   ? `Improve the description of the storyboard "${activeStoryboard.title}" (path: "${activeStoryboardPath}"). Current description: "${localDesc}". Write a clearer, more compelling description that summarizes the demo flow. Keep it concise (2-3 sentences). Use the write_storyboard tool to save the new description.`
                   : `Write a description for the storyboard "${activeStoryboard.title}" (path: "${activeStoryboardPath}"). Look at the sketches to understand the demo flow and write a concise (2-3 sentence) description. Use the write_storyboard tool to save the description.`,
                 { silent: true }
               )}
-              className="absolute right-2 top-2 flex items-center gap-1 opacity-0 group-hover/desc:opacity-100 group-focus-within/desc:opacity-100 p-1 rounded text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10 transition-all"
+              className="absolute right-2 top-2 group-hover/desc:opacity-100 group-focus-within/desc:opacity-100"
+              label={localDesc ? "Improve description with AI" : "Generate description with AI"}
               title={localDesc ? "Improve description with AI" : "Generate description with AI"}
-            >
-              <Sparkles className="w-3 h-3" />
-              <span className="text-[10px]">{localDesc ? "Improve" : "Generate"}</span>
-            </button>
+              iconClassName="h-3 w-3"
+            />
           )}
         </div>
 
@@ -699,7 +723,7 @@ export function StoryboardView() {
           <>
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
             <SortableContext items={activeStoryboard.items.map((_, i) => i)} strategy={verticalListSortingStrategy}>
-              <div className="space-y-7">
+              <div className="space-y-5">
                 {activeStoryboard.items.map((item, idx) => {
                   const itemKey = getTopLevelCollapseKey(idx);
                   return (
@@ -878,7 +902,7 @@ function ExpandableSketchCard({
   const isTopLevel = outlineLevel === "top";
 
   return (
-    <div className={`group/sketch ${isTopLevel ? "rounded-2xl border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))]/35 p-3" : "rounded-xl bg-[rgb(var(--color-surface))]/35 px-3 py-2"}`}>
+    <div className={`group/sketch ${isTopLevel ? "rounded-xl border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))]/25 px-3 py-2.5" : "rounded-lg bg-[rgb(var(--color-surface))]/25 px-3 py-1.5"}`}>
       <div className={`flex items-start gap-3 ${isTopLevel ? "" : "py-1"}`}>
         {!locked && dragListeners && (
           <div
@@ -899,7 +923,7 @@ function ExpandableSketchCard({
 
         <div className="min-w-0 flex-1">
           {isTopLevel && (
-            <div className="mb-1 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-[rgb(var(--color-text-secondary))]/60">
+            <div className="mb-1 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-[rgb(var(--color-text-secondary))]/60">
               <span>Sketch</span>
               <span className="h-px w-5 bg-[rgb(var(--color-border))]" />
               <span className="tracking-[0.14em]">
@@ -917,11 +941,11 @@ function ExpandableSketchCard({
               <ChevronRight className={`w-3.5 h-3.5 transition-transform ${collapsed ? "" : "rotate-90"}`} />
             </button>
 
-            <h3 className="text-base font-semibold text-[rgb(var(--color-text))] truncate">
+            <h3 className={`truncate font-semibold text-[rgb(var(--color-text))] ${isTopLevel ? "text-[15px]" : "text-[13px]"}`}>
               {sketch.title}
             </h3>
 
-            <span className={`text-[10px] text-[rgb(var(--color-text-secondary))] shrink-0 ${isTopLevel ? "hidden" : ""}`}>
+            <span className={`shrink-0 text-[10px] text-[rgb(var(--color-text-secondary))]/85 ${isTopLevel ? "hidden" : ""}`}>
               {sketch.row_count} {sketch.row_count === 1 ? "row" : "rows"}
             </span>
 
@@ -945,7 +969,7 @@ function ExpandableSketchCard({
           </div>
 
           {fullSketch && typeof fullSketch.description === "string" && fullSketch.description.trim() && (
-            <div className="prose-desc text-sm text-[rgb(var(--color-text-secondary))] mb-2 leading-relaxed">
+            <div className="prose-desc mb-2 text-sm leading-relaxed text-[rgb(var(--color-text-secondary))]">
               <SafeMarkdown>{fullSketch.description}</SafeMarkdown>
             </div>
           )}
@@ -1046,7 +1070,7 @@ function StoryboardSectionBlock({
   const sketchCount = item.sketches.length;
 
   return (
-    <section className="group/section rounded-2xl border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))]/35 px-4 py-3">
+    <section className="group/section rounded-xl border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))]/25 px-3 py-2.5">
       <div
         {...(!locked ? dragListeners : {})}
         className={`${locked ? "" : "cursor-grab active:cursor-grabbing"}`}
@@ -1066,7 +1090,7 @@ function StoryboardSectionBlock({
           </div>
         )}
         <div className="min-w-0 flex-1">
-          <div className="mb-1 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-[rgb(var(--color-text-secondary))]/60">
+          <div className="mb-1 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-[rgb(var(--color-text-secondary))]/60">
             <span>Section</span>
             <span className="h-px w-5 bg-[rgb(var(--color-border))]" />
             <span className="tracking-[0.14em]">
@@ -1090,7 +1114,7 @@ function StoryboardSectionBlock({
               readOnly={locked}
               onChange={(event) => setDraftTitle(event.target.value)}
               onBlur={flushSectionDraft}
-              className={`w-full bg-transparent text-lg font-semibold leading-tight text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/35 outline-none ${locked ? "cursor-default" : ""}`}
+              className={`w-full bg-transparent text-base font-semibold leading-tight text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/35 outline-none ${locked ? "cursor-default" : ""}`}
               placeholder="Section title..."
             />
             {!locked && (
@@ -1114,21 +1138,20 @@ function StoryboardSectionBlock({
               onChange={(event) => setDraftDescription(event.target.value)}
               onBlur={flushSectionDraft}
               rows={1}
-              className={`w-full resize-none overflow-hidden bg-transparent text-sm leading-relaxed text-[rgb(var(--color-text-secondary))] placeholder:text-[rgb(var(--color-text-secondary))]/40 outline-none ${locked ? "" : "pr-24"}`}
+              className={`w-full resize-none overflow-hidden bg-transparent text-sm leading-relaxed text-[rgb(var(--color-text-secondary))] placeholder:text-[rgb(var(--color-text-secondary))]/40 outline-none ${locked ? "" : "pr-10"}`}
               placeholder="Add section framing..."
             />
             {!locked && (
-              <button
+              <FieldAiButton
                 onClick={(event) => {
                   event.stopPropagation();
                   onImproveDescription(draftTitle.trim() || item.title, draftDescription);
                 }}
-                className="absolute right-0 top-0 flex items-center gap-1 rounded p-1 text-[rgb(var(--color-accent))] opacity-0 transition-all hover:bg-[rgb(var(--color-accent))]/10 group-hover/section-desc:opacity-100 group-focus-within/section-desc:opacity-100"
+                className="absolute right-0 top-0 group-hover/section-desc:opacity-100 group-focus-within/section-desc:opacity-100"
+                label={draftDescription.trim() ? "Improve section description with AI" : "Generate section description with AI"}
                 title={draftDescription.trim() ? "Improve section description with AI" : "Generate section description with AI"}
-              >
-                <Sparkles className="h-3 w-3" />
-                <span className="text-[10px]">{draftDescription.trim() ? "Improve" : "Generate"}</span>
-              </button>
+                iconClassName="h-3 w-3"
+              />
             )}
           </div>
         </div>
@@ -1136,7 +1159,7 @@ function StoryboardSectionBlock({
       </div>
 
       {!collapsed && (
-      <div className="mt-2 space-y-2 pl-6">
+      <div className="mt-2 space-y-1.5 pl-6">
         {item.sketches.length === 0 ? (
           <p className="rounded-xl border border-dashed border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))]/35 px-4 py-4 text-center text-xs text-[rgb(var(--color-text-secondary))]">
             No sketches in this section yet.

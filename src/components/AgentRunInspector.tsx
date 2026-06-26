@@ -208,7 +208,7 @@ export function AgentRunInspector() {
         </button>
       </div>
 
-      <div className="flex items-center gap-1 border-b border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]/45 px-2 py-1.5">
+      <div className="flex items-center gap-1 border-b border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-inset))] px-2 py-1.5">
         <button
           className="flex flex-1 items-center justify-center gap-1 rounded-lg px-2 py-1.5 text-[11px] text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface))] hover:text-[rgb(var(--color-text))] disabled:cursor-not-allowed disabled:opacity-50"
           onClick={() => void pruneRuns()}

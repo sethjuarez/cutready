@@ -10,12 +10,16 @@ import { ScriptTable } from "./ScriptTable";
 import { ProjectImage } from "./ProjectImage";
 import { ScreenCaptureOverlay } from "./ScreenCaptureOverlay";
 import { SketchPreview } from "./SketchPreview";
+import { DocumentHeader } from "./DocumentHeader";
+import { FieldAiButton } from "./FieldAiButton";
+import { LockedDocumentBanner } from "./LockedDocumentBanner";
 import type { PresentationMode } from "./presentation/types";
 import VisualCell from "./VisualCell";
 import { exportSketchToWord, type WordOrientation } from "../utils/exportToWord";
 import type { PlanningRow, Sketch } from "../types/sketch";
 import { diffRow, type RowDiff } from "../utils/textDiff";
 import { DocumentToolbar, documentToolbarIcons, type DocumentToolbarAction } from "./DocumentToolbar";
+import { SketchIcon } from "./Icons";
 import type { RecordingTake } from "../types/recording";
 
 interface MonitorInfo {
@@ -576,81 +580,84 @@ The Actions describe what happens on screen — use them as visual design hints.
           </div>
         )}
 
-        {/* Sketch actions */}
-        <div className="mb-3 flex justify-end">
-          <div className="relative">
-            <DocumentToolbar
-              canRecord={canRecord}
-              onRecord={handleRecord}
-              showRecord={settings.featureRecording}
-              presentActions={presentActions}
-              aiActions={aiActions}
-              exportActions={exportActions}
-              locked={sketchLocked}
-              onToggleLock={() => handleSketchLockChange(!sketchLocked)}
-              lockLabel="Lock sketch"
-              unlockLabel="Unlock sketch"
-            />
-            {showMonitorPicker && (
-              <>
-                <div className="fixed inset-0 z-dropdown" onClick={() => setShowMonitorPicker(false)} />
-                <div className="absolute right-0 top-full mt-2 z-modal bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-lg shadow-lg py-1 min-w-[200px]">
-                  <div className="px-3 py-2 text-xs font-medium text-[rgb(var(--color-text-secondary))] uppercase tracking-wider border-b border-[rgb(var(--color-border))]">
-                    Present on
+        <DocumentHeader
+          icon={<SketchIcon size={20} />}
+          toolbar={
+            <div className="relative">
+              <DocumentToolbar
+                canRecord={canRecord}
+                onRecord={handleRecord}
+                showRecord={settings.featureRecording}
+                presentActions={presentActions}
+                aiActions={aiActions}
+                exportActions={exportActions}
+                locked={sketchLocked}
+                onToggleLock={() => handleSketchLockChange(!sketchLocked)}
+                lockLabel="Lock sketch"
+                unlockLabel="Unlock sketch"
+              />
+              {showMonitorPicker && (
+                <>
+                  <div className="fixed inset-0 z-dropdown" onClick={() => setShowMonitorPicker(false)} />
+                  <div className="absolute right-0 top-full mt-2 z-modal min-w-[200px] rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] py-1 shadow-lg">
+                    <div className="border-b border-[rgb(var(--color-border))] px-3 py-2 text-xs font-medium uppercase tracking-wider text-[rgb(var(--color-text-secondary))]">
+                      Present on
+                    </div>
+                    {availableMonitors.map((m) => (
+                      <button
+                        key={m.id}
+                        onClick={() => launchPreviewOnMonitor(m, previewMode)}
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-[rgb(var(--color-text))] transition-colors hover:bg-[rgb(var(--color-surface-alt))]"
+                      >
+                        <Monitor className="h-3.5 w-3.5" />
+                        <span>{m.name || `Monitor ${m.id}`}</span>
+                        {m.is_primary && (
+                          <span className="ml-auto text-[10px] font-medium text-[rgb(var(--color-accent))]">Primary</span>
+                        )}
+                      </button>
+                    ))}
+                    <div className="border-t border-[rgb(var(--color-border))]">
+                      <button
+                        onClick={() => { setShowMonitorPicker(false); setShowPreview(true); }}
+                        className="w-full px-3 py-2 text-left text-xs text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))]"
+                      >
+                        Preview in window instead
+                      </button>
+                    </div>
                   </div>
-                  {availableMonitors.map((m) => (
-                    <button
-                      key={m.id}
-                      onClick={() => launchPreviewOnMonitor(m, previewMode)}
-                      className="w-full px-3 py-2 text-left text-sm text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors flex items-center gap-2"
-                    >
-                      <Monitor className="w-3.5 h-3.5" />
-                      <span>{m.name || `Monitor ${m.id}`}</span>
-                      {m.is_primary && (
-                        <span className="text-[10px] text-[rgb(var(--color-accent))] font-medium ml-auto">Primary</span>
-                      )}
-                    </button>
-                  ))}
-                  <div className="border-t border-[rgb(var(--color-border))]">
-                    <button
-                      onClick={() => { setShowMonitorPicker(false); setShowPreview(true); }}
-                      className="w-full px-3 py-2 text-left text-xs text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors"
-                    >
-                      Preview in window instead
-                    </button>
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* Title */}
-        <div className="mb-4">
-          <div className="relative group/title">
+                </>
+              )}
+            </div>
+          }
+          title={
+            <div className="relative min-w-0 group/title">
             <input
               type="text"
               value={localTitle}
               onChange={(e) => handleTitleChange(e.target.value)}
               readOnly={sketchLocked}
               placeholder="Sketch title..."
-              className={`w-full text-2xl font-semibold bg-transparent text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/40 outline-none border-none ${localTitle && !sketchLocked ? "pr-24" : ""} ${sketchLocked ? "cursor-default" : ""}`}
+              title={localTitle}
+              className={`min-w-0 w-full truncate border-none bg-transparent text-2xl font-semibold text-[rgb(var(--color-text))] outline-none placeholder:text-[rgb(var(--color-text-secondary))]/40 ${localTitle && !sketchLocked ? "pr-8" : ""} ${sketchLocked ? "cursor-default" : ""}`}
             />
             {localTitle && !sketchLocked && (
-              <button
+              <FieldAiButton
                 onClick={() => sendChatPrompt(
                   `Improve the title of sketch "${activeSketchPath ?? "current"}". Current title: "${localTitle}". Suggest a more compelling, concise title. IMPORTANT: Only update the title — do NOT change the description or any rows. Use write_sketch with the improved title but keep the existing description and all rows exactly as they are.`,
                   { silent: true }
                 )}
-                className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover/title:opacity-100 p-1 rounded text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10 transition-all"
+                className="absolute right-0 top-1/2 -translate-y-1/2 group-hover/title:opacity-100"
+                label="Improve title with AI"
                 title="Improve title with AI"
-              >
-                <Sparkles className="w-3.5 h-3.5" />
-                <span className="text-[10px]">Improve</span>
-              </button>
+              />
             )}
-          </div>
-        </div>
+            </div>
+          }
+        />
+
+        {sketchLocked && (
+          <LockedDocumentBanner message="Sketch is locked. Unlock it to edit fields, rows, media, or AI suggestions." />
+        )}
 
         {/* Description — markdown preview, click to edit */}
         <div className="relative group/desc mb-8">
@@ -674,7 +681,7 @@ The Actions describe what happens on screen — use them as visual design hints.
               tabIndex={0}
               onClick={() => { if (!sketchLocked) setEditingDesc(true); }}
               onFocus={() => { if (!sketchLocked) setEditingDesc(true); }}
-              className={`min-h-[2rem] rounded-lg px-3 py-2 text-sm border border-transparent hover:border-[rgb(var(--color-border))] transition-colors ${!sketchLocked ? "pr-24" : ""} ${sketchLocked ? "cursor-default" : "cursor-text"}`}
+              className={`min-h-[2rem] rounded-lg px-3 py-2 text-sm border border-transparent hover:border-[rgb(var(--color-border))] transition-colors ${!sketchLocked ? "pr-10" : ""} ${sketchLocked ? "cursor-default" : "cursor-text"}`}
             >
               {localDesc ? (
                 <div className="prose-desc text-[rgb(var(--color-text))] leading-relaxed">
@@ -688,19 +695,18 @@ The Actions describe what happens on screen — use them as visual design hints.
             </div>
           )}
           {!editingDesc && !sketchLocked && (
-            <button
+            <FieldAiButton
               onClick={() => sendChatPrompt(
                 localDesc
                   ? `Improve the description of sketch "${activeSketchPath ?? "current"}". Current description: "${localDesc}". Make it clearer and more informative. IMPORTANT: Only update the description — do NOT change the title or any rows. Use write_sketch with the improved description but keep the existing title and all rows exactly as they are.`
                   : `Write a description for sketch "${activeSketchPath ?? "current"}" titled "${localTitle}". Look at the planning rows to understand what the sketch covers and write a concise description. IMPORTANT: Only update the description — do NOT change the title or any rows. Use write_sketch with the new description but keep the existing title and all rows exactly as they are.`,
                 { silent: true }
               )}
-              className="absolute right-2 top-2 flex items-center gap-1 opacity-0 group-hover/desc:opacity-100 p-1 rounded text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10 transition-all"
+              className="absolute right-2 top-2 group-hover/desc:opacity-100 group-focus-within/desc:opacity-100"
+              label={localDesc ? "Improve description with AI" : "Generate description with AI"}
               title={localDesc ? "Improve description with AI" : "Generate description with AI"}
-            >
-              <Sparkles className="w-3 h-3" />
-              <span className="text-[10px]">{localDesc ? "Improve" : "Generate"}</span>
-            </button>
+              iconClassName="h-3 w-3"
+            />
           )}
         </div>
 
@@ -751,23 +757,24 @@ The row already has a visual and design_plan. You may read the sketch for contex
               setTimeout(() => { setHighlightedRows(new Set()); setRowDiffs([]); }, 10_000);
             }}
           />
-          {/* Always-visible add row button */}
-          <button
-            onClick={() => {
-              const newRow: PlanningRow = {
-                time: "",
-                narrative: "",
-                demo_actions: "",
-                screenshot: null,
-              };
-              const updated = [...localRows, newRow];
-              handleRowsChange(updated);
-            }}
-            className="flex items-center gap-1.5 mt-3 px-3 py-2 text-xs text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] border border-dashed border-[rgb(var(--color-border))] hover:border-[rgb(var(--color-accent))]/40 rounded-lg transition-colors w-full justify-center"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            Add Row
-          </button>
+          {!sketchLocked && (
+            <button
+              onClick={() => {
+                const newRow: PlanningRow = {
+                  time: "",
+                  narrative: "",
+                  demo_actions: "",
+                  screenshot: null,
+                };
+                const updated = [...localRows, newRow];
+                handleRowsChange(updated);
+              }}
+              className="flex items-center gap-1.5 mt-3 px-3 py-2 text-xs text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] border border-dashed border-[rgb(var(--color-border))] hover:border-[rgb(var(--color-accent))]/40 rounded-lg transition-colors w-full justify-center"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Add Row
+            </button>
+          )}
         </div>
       </div>
 

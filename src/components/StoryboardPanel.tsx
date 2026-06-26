@@ -43,6 +43,11 @@ export function StoryboardPanel() {
   const isAgentRunTab = activeTab?.type === "agent-run";
   const isDatabaseTab = activeTab?.type === "database";
   const activeEditorReloadKey = activeTab?.path === editorReloadPath ? editorReloadKey : 0;
+  const isEditorTabLoading =
+    activeTab?.type === "sketch" ||
+    activeTab?.type === "storyboard" ||
+    activeTab?.type === "note" ||
+    (openTabs.length > 0 && !activeTab);
 
   const [splitWidth, setSplitWidth] = useState<number | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -122,26 +127,10 @@ export function StoryboardPanel() {
               <StoryboardView key={`storyboard:${activeTab?.path ?? ""}:${activeEditorReloadKey}`} />
             ) : activeNotePath ? (
               <NoteEditor key={`note:${activeTab?.path ?? ""}:${activeEditorReloadKey}`} />
+            ) : isEditorTabLoading ? (
+              <QuietEditorState title="Loading document" description="Restoring the active tab..." />
             ) : (
-              <div className="flex-1 flex items-center justify-center">
-                <div className="flex flex-col items-center gap-3">
-                  <div className="relative w-12 h-12">
-                    <div
-                      className="absolute inset-0 rounded-xl blur-xl opacity-30"
-                      style={{ background: "linear-gradient(135deg, rgb(var(--color-accent)), #e879a8)" }}
-                    />
-                    <img
-                      src="/cutready.svg"
-                      alt=""
-                      className="relative w-12 h-12 drop-shadow-md opacity-50"
-                      draggable={false}
-                    />
-                  </div>
-                  <p className="text-sm text-[rgb(var(--color-text-secondary))]">
-                    Create a sketch or storyboard to get started
-                  </p>
-                </div>
-              </div>
+              <QuietEditorState title="No document selected" description="Choose a sketch, storyboard, or note from Documents." />
             )}
           </div>
 
@@ -165,4 +154,15 @@ export function StoryboardPanel() {
 
 function agentRunIdFromTabPath(path: string): string {
   return path.startsWith("__agent_run/") ? path.slice("__agent_run/".length) : path;
+}
+
+function QuietEditorState({ title, description }: { title: string; description: string }) {
+  return (
+    <div className="flex flex-1 items-center justify-center bg-[rgb(var(--color-surface))] px-6 text-center">
+      <div className="max-w-sm border-l border-[rgb(var(--color-border))] pl-4 text-left">
+        <p className="text-sm font-medium text-[rgb(var(--color-text))]">{title}</p>
+        <p className="mt-1 text-xs leading-relaxed text-[rgb(var(--color-text-secondary))]">{description}</p>
+      </div>
+    </div>
+  );
 }

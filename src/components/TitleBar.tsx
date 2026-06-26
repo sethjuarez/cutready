@@ -5,6 +5,7 @@ import { Search, X, LayoutGrid } from "lucide-react";
 import { useAppStore } from "../stores/appStore";
 import { isMac, formatKeybinding } from "../utils/platform";
 import { ProjectSwitcher } from "./ProjectSwitcher";
+import { titlebarButtonClass, titlebarToggleClass } from "./shellStyles";
 
 interface TitleBarProps {
   onCommandPaletteOpen?: () => void;
@@ -78,7 +79,7 @@ export function TitleBar({
   if (isMac) {
     return (
       <div
-        className="no-select relative z-chrome flex items-center justify-between bg-[rgba(var(--color-surface),0.92)] border-b border-[rgb(var(--color-border))] pr-3 shrink-0 backdrop-blur-md"
+        className="no-select relative z-chrome flex shrink-0 items-center justify-between border-b border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))] pr-3"
         style={{
           height: "var(--titlebar-height)",
           paddingLeft: "var(--macos-traffic-light-space)",
@@ -93,20 +94,20 @@ export function TitleBar({
         />
         {/* Left: workspace/project breadcrumb */}
         <div className="flex items-center gap-2 shrink-0">
-          <span className="flex h-[22px] items-center text-sm font-semibold leading-none tracking-tight">CutReady</span>
+          <span className="flex h-[22px] items-center text-sm font-semibold leading-none tracking-tight text-[rgb(var(--color-text))]">CutReady</span>
           {currentProject && <ProjectSwitcher variant="title" />}
         </div>
 
         {/* Center: Command palette */}
         <div className="flex-1 flex items-center justify-center min-w-0 px-4">
           <button
-            className="flex items-center gap-1.5 w-full max-w-[380px] h-[22px] px-2.5 bg-[rgb(var(--color-surface-alt))] border border-[rgb(var(--color-border))] rounded-md text-[rgb(var(--color-text-secondary))] text-[12px] cursor-pointer hover:border-[rgb(var(--color-text-secondary))] transition-colors"
+            className="flex h-7 w-full max-w-[420px] cursor-pointer items-center gap-2 rounded-md border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-alt))]/75 px-3 text-[12px] text-[rgb(var(--color-text-secondary))] transition-colors hover:border-[rgb(var(--color-border))] hover:bg-[rgb(var(--color-surface-alt))]"
             onClick={onCommandPaletteOpen}
             title={`Command Palette (${formatKeybinding("Ctrl+Shift+P")})`}
           >
             <Search className="w-3.5 h-3.5" />
             <span className="flex-1 text-left truncate">Search commands…</span>
-            <kbd className="text-[10px] px-1 py-px rounded bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] text-[rgb(var(--color-text-secondary))] font-[inherit]">
+            <kbd className="rounded border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))]/80 px-1.5 py-px font-[inherit] text-[10px] text-[rgb(var(--color-text-secondary))]">
               {formatKeybinding("Ctrl+Shift+P")}
             </kbd>
           </button>
@@ -115,7 +116,7 @@ export function TitleBar({
         {/* Right: Panel toggles */}
         <div className="flex items-center gap-0.5">
           <button
-            className="flex items-center justify-center w-6 h-5 rounded transition-colors text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))]"
+            className={titlebarButtonClass}
             onClick={onToggleSidebarPosition}
             title={`Move Sidebar to the ${sidebarPosition === "left" ? "Right" : "Left"}`}
           >
@@ -123,11 +124,7 @@ export function TitleBar({
           </button>
           <div className="w-px h-3 bg-[rgb(var(--color-border))] mx-0.5 shrink-0" />
           <button
-            className={`flex items-center justify-center w-6 h-5 rounded transition-colors ${
-              (sidebarPosition === "left" ? sidebarVisible : secondaryVisible)
-                ? "text-[rgb(var(--color-accent))]"
-                : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))]"
-            } hover:bg-[rgb(var(--color-surface-alt))]`}
+            className={titlebarToggleClass(sidebarPosition === "left" ? sidebarVisible : secondaryVisible)}
             onClick={sidebarPosition === "left" ? onToggleSidebar : onToggleSecondary}
             title={sidebarPosition === "left" ? formatKeybinding("Toggle Sidebar (Ctrl+B)") : formatKeybinding("Toggle Secondary Panel (Ctrl+Shift+B)")}
           >
@@ -137,11 +134,7 @@ export function TitleBar({
             </svg>
           </button>
           <button
-            className={`flex items-center justify-center w-6 h-5 rounded transition-colors ${
-              outputVisible
-                ? "text-[rgb(var(--color-accent))]"
-                : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))]"
-            } hover:bg-[rgb(var(--color-surface-alt))]`}
+            className={titlebarToggleClass(outputVisible)}
             onClick={onToggleOutput}
             title={formatKeybinding("Toggle Activity Panel (Ctrl+`)")}
           >
@@ -151,11 +144,7 @@ export function TitleBar({
             </svg>
           </button>
           <button
-            className={`flex items-center justify-center w-6 h-5 rounded transition-colors ${
-              (sidebarPosition === "right" ? sidebarVisible : secondaryVisible)
-                ? "text-[rgb(var(--color-accent))]"
-                : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))]"
-            } hover:bg-[rgb(var(--color-surface-alt))]`}
+            className={titlebarToggleClass(sidebarPosition === "right" ? sidebarVisible : secondaryVisible)}
             onClick={sidebarPosition === "right" ? onToggleSidebar : onToggleSecondary}
             title={sidebarPosition === "right" ? formatKeybinding("Toggle Sidebar (Ctrl+B)") : formatKeybinding("Toggle Secondary Panel (Ctrl+Shift+B)")}
           >
@@ -242,7 +231,7 @@ export function TitleBar({
 
   return (
     <div
-      className="no-select fixed top-0 left-0 right-0 z-chrome flex items-center justify-between bg-[rgb(var(--color-surface))] border-b border-[rgb(var(--color-border))]"
+      className="no-select fixed left-0 right-0 top-0 z-chrome flex items-center justify-between border-b border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))]"
       style={{ height: "var(--titlebar-height)" }}
       data-tauri-drag-region
       onMouseDown={handleTitleBarMouseDown}
@@ -270,7 +259,7 @@ export function TitleBar({
           <path d="M48 68 L88 84 L48 100Z" fill="rgb(var(--color-accent))" />
         </svg>
         <span
-          className="text-sm font-semibold tracking-tight"
+          className="text-sm font-semibold tracking-tight text-[rgb(var(--color-text))]"
         >
           CutReady
         </span>
@@ -280,13 +269,13 @@ export function TitleBar({
       {/* Center: Command center */}
       <div className="flex-1 flex items-center justify-center min-w-0 px-4">
         <button
-          className="flex items-center gap-1.5 w-full max-w-[380px] h-[22px] px-2.5 bg-[rgb(var(--color-surface-alt))] border border-[rgb(var(--color-border))] rounded-md text-[rgb(var(--color-text-secondary))] text-[12px] cursor-pointer hover:border-[rgb(var(--color-text-secondary))] transition-colors"
+          className="flex h-7 w-full max-w-[420px] cursor-pointer items-center gap-2 rounded-md border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-alt))]/75 px-3 text-[12px] text-[rgb(var(--color-text-secondary))] transition-colors hover:border-[rgb(var(--color-border))] hover:bg-[rgb(var(--color-surface-alt))]"
           onClick={onCommandPaletteOpen}
           title={`Command Palette (${formatKeybinding("Ctrl+Shift+P")})`}
         >
           <Search className="w-3.5 h-3.5" />
           <span className="flex-1 text-left truncate">Search commands…</span>
-          <kbd className="text-[10px] px-1 py-px rounded bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] text-[rgb(var(--color-text-secondary))] font-[inherit]">
+          <kbd className="rounded border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))]/80 px-1.5 py-px font-[inherit] text-[10px] text-[rgb(var(--color-text-secondary))]">
             {formatKeybinding("Ctrl+Shift+P")}
           </kbd>
         </button>
@@ -298,7 +287,7 @@ export function TitleBar({
         <div className="flex items-center gap-0.5 px-2">
           {/* Move sidebar to other side — leftmost so it's clearly separate from the layout toggles */}
           <button
-            className="flex items-center justify-center w-6 h-5 rounded transition-colors text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))]"
+            className={titlebarButtonClass}
             onClick={onToggleSidebarPosition}
             title={`Move Sidebar to the ${sidebarPosition === "left" ? "Right" : "Left"}`}
           >
@@ -307,11 +296,7 @@ export function TitleBar({
           <div className="w-px h-3 bg-[rgb(var(--color-border))] mx-0.5 shrink-0" />
           {/* Left panel (sidebar) */}
           <button
-            className={`flex items-center justify-center w-6 h-5 rounded transition-colors ${
-              (sidebarPosition === "left" ? sidebarVisible : secondaryVisible)
-                ? "text-[rgb(var(--color-accent))]"
-                : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))]"
-            } hover:bg-[rgb(var(--color-surface-alt))]`}
+            className={titlebarToggleClass(sidebarPosition === "left" ? sidebarVisible : secondaryVisible)}
             onClick={sidebarPosition === "left" ? onToggleSidebar : onToggleSecondary}
             title={sidebarPosition === "left" ? formatKeybinding("Toggle Sidebar (Ctrl+B)") : formatKeybinding("Toggle Secondary Panel (Ctrl+Shift+B)")}
           >
@@ -322,11 +307,7 @@ export function TitleBar({
           </button>
           {/* Bottom panel (output/activity) */}
           <button
-            className={`flex items-center justify-center w-6 h-5 rounded transition-colors ${
-              outputVisible
-                ? "text-[rgb(var(--color-accent))]"
-                : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))]"
-            } hover:bg-[rgb(var(--color-surface-alt))]`}
+            className={titlebarToggleClass(outputVisible)}
             onClick={onToggleOutput}
             title={formatKeybinding("Toggle Activity Panel (Ctrl+`)")}
           >
@@ -337,11 +318,7 @@ export function TitleBar({
           </button>
           {/* Right panel (secondary/version history) */}
           <button
-            className={`flex items-center justify-center w-6 h-5 rounded transition-colors ${
-              (sidebarPosition === "right" ? sidebarVisible : secondaryVisible)
-                ? "text-[rgb(var(--color-accent))]"
-                : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))]"
-            } hover:bg-[rgb(var(--color-surface-alt))]`}
+            className={titlebarToggleClass(sidebarPosition === "right" ? sidebarVisible : secondaryVisible)}
             onClick={sidebarPosition === "right" ? onToggleSidebar : onToggleSecondary}
             title={sidebarPosition === "right" ? formatKeybinding("Toggle Sidebar (Ctrl+B)") : formatKeybinding("Toggle Secondary Panel (Ctrl+Shift+B)")}
           >
