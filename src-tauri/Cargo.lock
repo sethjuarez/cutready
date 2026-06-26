@@ -60,9 +60,9 @@ dependencies = [
 
 [[package]]
 name = "agentive"
-version = "0.4.3"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a2423a0f88eee9279079e3cd0c41ebb30d068aac72034410b10b9e6f0b0d42b8"
+checksum = "bc999bacdf51e10b5b960bc9192514e07536dc34f8d811b4d9ae9380847ebb9f"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
