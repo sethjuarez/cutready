@@ -57,7 +57,7 @@ my-demo-project/
 | Drag-and-drop | **dnd-kit** | Sketch reordering in storyboards, tab reordering |
 | Versioning | **gix** (gitoxide) 0.70 | Pure-Rust git: commit, log, diff, restore, branch, merge |
 | Screen recording | **FFmpeg** (sidecar) | FFV1 lossless codec in MKV, multi-track audio |
-| Browser automation | **Playwright** (Node.js sidecar) | Headful mode, CDP event observation, E2E testing |
+| Browser automation | **Playwright** (Node.js sidecar) | Headful mode, browser event observation, E2E testing |
 | LLM | **Microsoft Foundry** | Chat Completions + Responses API, multi-agent system |
 | Visuals | **Elucim DSL** (`@elucim/dsl`) | SVG-based framing visuals with semantic color tokens |
 | Word export | **docx** | Export sketches/storyboards/notes to .docx |
@@ -246,7 +246,7 @@ After the agentive `azure_oauth` module lands, CutReady's migration should also:
   auditaur debug --app cutready --active --require-frontend --json status
   ```
 
-  The app is ready only when heartbeat, telemetry database, window, backend telemetry, and frontend telemetry are `ok`. If multiple stale apps exist, always include `--active`, `--latest`, `--session-id`, or `--instance-id` instead of using an ambiguous selector. Use `auditaur logs/errors/ipc/events/traces/timeline/explain --json --session <session-id>` for follow-up investigation.
+  The app is ready only when heartbeat, telemetry database, window, backend telemetry, and frontend telemetry are `ok`. If multiple stale apps exist, always include `--active`, `--latest`, `--session-id`, or `--instance-id` instead of using an ambiguous selector. Use `auditaur drive` without CDP/WebView2 flags because CutReady debug builds enable Auditaur's Tauri-native drive bridge. Use `auditaur logs/errors/ipc/events/traces/timeline/explain --json --session <session-id>` for follow-up investigation.
 - **Web shim mode**: `npm run dev` (Vite/devMock only; use for browser-only Playwright/docs work, not as the default app validation path)
 - **Docs site**: `cd docs && npm run build`
 

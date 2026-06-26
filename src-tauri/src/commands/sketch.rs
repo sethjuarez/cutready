@@ -3,6 +3,7 @@
 //! Sketches are `.sk` files in the project folder, identified by relative path.
 
 use tauri::State;
+use tauri_plugin_auditaur::auditaur_command;
 
 use crate::engine::{agent::tools::normalize_visual_document_for_save, project};
 use crate::models::sketch::{PlanningCellLocks, Sketch, SketchSummary};
@@ -102,7 +103,7 @@ pub async fn sketch_used_by_storyboards(
     project::storyboards_referencing_sketch(&root, &relative_path).map_err(|e| e.to_string())
 }
 
-#[tauri::command]
+#[auditaur_command(skip_all, err)]
 pub async fn list_sketches(state: State<'_, AppState>) -> Result<Vec<SketchSummary>, String> {
     let root = project_root(&state)?;
     project::scan_sketches(&root).map_err(|e| e.to_string())

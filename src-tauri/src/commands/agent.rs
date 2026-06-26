@@ -724,7 +724,7 @@ pub async fn delete_chat_session(
 // ---------------------------------------------------------------------------
 
 /// Get core memories formatted for injection into the system prompt.
-#[tauri::command]
+#[auditaur_command(skip_all, err)]
 pub async fn get_memory_context(state: tauri::State<'_, AppState>) -> Result<String, String> {
     let root = {
         let guard = state.current_project.lock().unwrap();

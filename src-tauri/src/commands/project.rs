@@ -5,6 +5,7 @@ use std::path::{Component, Path, PathBuf};
 use chrono::Utc;
 use rusqlite::{types::ValueRef, Connection, OpenFlags};
 use tauri::State;
+use tauri_plugin_auditaur::auditaur_command;
 use tauri_plugin_store::StoreExt;
 
 use crate::engine::{agent_state::AgentStateStore, project, versioning};
@@ -34,7 +35,7 @@ fn project_and_repo_root(
 ///
 /// Supports `--project <path>`, `--project=<path>`, `--open-project <path>`,
 /// and `CUTREADY_PROJECT=<path>` for dev smoke tests and scripted launches.
-#[tauri::command]
+#[auditaur_command(skip_all, err)]
 pub async fn get_startup_project_path() -> Result<Option<String>, String> {
     Ok(
         startup_project_path_from_args(std::env::args_os()).or_else(|| {
@@ -102,7 +103,7 @@ pub async fn create_project_folder(
 /// Open an existing project folder.
 /// In multi-project repos, restores the last-used project (or falls back to the first).
 /// In single-project repos, behaves exactly as before (repo root = project root).
-#[tauri::command]
+#[auditaur_command(skip_all, err)]
 pub async fn open_project_folder(
     path: String,
     app: tauri::AppHandle,
@@ -175,7 +176,7 @@ pub async fn close_project(state: State<'_, AppState>) -> Result<(), String> {
 }
 
 /// Get recent projects from the store.
-#[tauri::command]
+#[auditaur_command(skip_all, err)]
 pub async fn get_recent_projects(app: tauri::AppHandle) -> Result<Vec<RecentProject>, String> {
     let store = app.store(STORE_FILE).map_err(|e| e.to_string())?;
 
@@ -310,7 +311,7 @@ fn update_last_active_project(
 // ── Sidebar order commands ─────────────────────────────────────────
 
 /// Get the sidebar ordering manifest for the current project.
-#[tauri::command]
+#[auditaur_command(skip_all, err)]
 pub async fn get_sidebar_order(
     state: State<'_, AppState>,
 ) -> Result<project::SidebarOrder, String> {
@@ -329,7 +330,7 @@ pub async fn set_sidebar_order(
 }
 
 /// Get workspace state (open tabs, active tab, chat session) for the current project.
-#[tauri::command]
+#[auditaur_command(skip_all, err)]
 pub async fn get_workspace_state(
     state: State<'_, AppState>,
 ) -> Result<project::WorkspaceState, String> {
@@ -610,14 +611,14 @@ fn safe_project_manifest_path(project_path: &str) -> Result<&Path, String> {
 }
 
 /// List all projects in the current repo.
-#[tauri::command]
+#[auditaur_command(skip_all, err)]
 pub async fn list_projects(state: State<'_, AppState>) -> Result<Vec<ProjectEntry>, String> {
     let root = repo_root(&state)?;
     Ok(project::list_projects(&root))
 }
 
 /// Whether the current repo has multiple projects.
-#[tauri::command]
+#[auditaur_command(skip_all, err)]
 pub async fn is_multi_project(state: State<'_, AppState>) -> Result<bool, String> {
     let root = repo_root(&state)?;
     Ok(project::is_multi_project(&root))
@@ -1035,7 +1036,7 @@ pub async fn open_in_terminal(path: String) -> Result<(), String> {
 }
 
 /// Read workspace settings from the current repo's .cutready/settings.json.
-#[tauri::command]
+#[auditaur_command(skip_all, err)]
 pub async fn get_workspace_settings(
     state: State<'_, AppState>,
 ) -> Result<serde_json::Value, String> {

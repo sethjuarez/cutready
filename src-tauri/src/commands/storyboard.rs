@@ -5,6 +5,7 @@
 use chrono::Utc;
 use std::path::Path;
 use tauri::State;
+use tauri_plugin_auditaur::auditaur_command;
 
 use crate::engine::project;
 use crate::models::sketch::{Storyboard, StoryboardItem, StoryboardSummary};
@@ -143,7 +144,7 @@ pub async fn rename_storyboard(
     Ok(())
 }
 
-#[tauri::command]
+#[auditaur_command(skip_all, err)]
 pub async fn list_storyboards(
     state: State<'_, AppState>,
 ) -> Result<Vec<StoryboardSummary>, String> {

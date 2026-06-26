@@ -49,7 +49,7 @@ tauri-plugin-dialog = "2"
 tauri-plugin-store = "2"
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-window-state = "2"
-tauri-plugin-auditaur = "0.2.2"
+tauri-plugin-auditaur = "0.3.0"
 tauri-plugin-single-instance = "2"
 tauri-plugin-deep-link = "2"
 tauri-plugin-process = "2"
@@ -57,7 +57,7 @@ tauri-plugin-updater = "2"
 tauri-plugin-opener = "2.5.3"
 tauri-plugin-stronghold = "2"
 
-agentive = { version = "0.4.2", features = ["tracing"] }
+agentive = { version = "0.4.3", features = ["tracing"] }
 portable-pty = "0.9.0"
 
 # Vendor OpenSSL on macOS to support cross-compilation (ARM → Intel)
