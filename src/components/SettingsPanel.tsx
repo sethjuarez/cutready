@@ -876,7 +876,7 @@ function DisplayTab({ settings, updateSetting }: {
             </button>
           ))}
         </div>
-        <p className="text-xs text-[rgb(var(--color-text-secondary))]">Whether the sketch editor uses a max-width or expands to fill available space.</p>
+        <p className="text-xs text-[rgb(var(--color-text-secondary))]">Whether document editors use a max-width or expand to fill available space.</p>
       </fieldset>
     </div>
   );

@@ -48,7 +48,7 @@ function ImageAssetViewer({
       <MetadataBar filename={filename} asset={asset} />
 
       {/* Image viewer */}
-      <div className="flex-1 flex items-center justify-center overflow-auto p-4 bg-[rgb(var(--color-surface-alt))]">
+      <div className="flex-1 flex items-center justify-center overflow-auto p-4 bg-[rgb(var(--color-surface-inset))]">
         <ProjectImage
           relativePath={assetPath}
           projectRoot={projectRoot}
@@ -115,7 +115,7 @@ function VisualAssetViewer({
   return (
     <div className="flex flex-col h-full bg-[rgb(var(--color-surface))]">
       {/* Metadata bar with controls */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] shrink-0">
+      <div className="flex items-center justify-between px-4 py-2 border-b border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] shrink-0">
         <MetadataBar filename={filename} asset={asset} inline />
         <div className="flex items-center gap-1.5">
           <button
@@ -238,7 +238,7 @@ function MetadataBar({
   }
 
   return (
-    <div className="flex items-center gap-3 px-4 py-2 border-b border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] shrink-0 text-[12px]">
+    <div className="flex items-center gap-3 px-4 py-2 border-b border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] shrink-0 text-[12px]">
       <span className="font-medium text-[rgb(var(--color-text))]">{filename}</span>
       {sizeLabel && <span className="text-[rgb(var(--color-text-secondary))]">{sizeLabel}</span>}
       {refs.length > 0 && (

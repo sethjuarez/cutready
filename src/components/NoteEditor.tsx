@@ -1,17 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { FileText, Sparkles, Pencil, Eye, Lock, Unlock } from "lucide-react";
+import { Sparkles } from "lucide-react";
 import { SafeMarkdown } from "./SafeMarkdown";
-import { shouldSuppressEditorFlush, useAppStore } from "../stores/appStore";
+import { makeMainTabId, makeSplitTabId, shouldSuppressEditorFlush, useAppStore } from "../stores/appStore";
+import { useToastStore } from "../stores/toastStore";
 import { useSettings } from "../hooks/useSettings";
 import { MarkdownEditor } from "./MarkdownEditor";
 import { invoke } from "../services/tauri";
 import { exportNoteToWord } from "../utils/exportToWord";
-import { ExportWordButton } from "./ExportWordButton";
 import { agentChat } from "../services/agentChat";
 import { loadProviderSecrets } from "../hooks/useSecretStore";
 import { activeProviderInput, buildProviderConfig, defaultProvider, isProviderInputConfigured, providerToConfigInput } from "../utils/providerConfig";
 import { ProjectImage } from "./ProjectImage";
 import { projectRelativeScreenshotPath } from "../utils/projectImage";
+import { DocumentHeader } from "./DocumentHeader";
+import { DocumentToolbar, documentToolbarIcons, type DocumentToolbarAction } from "./DocumentToolbar";
+import { NoteIcon } from "./Icons";
+import { LockedDocumentBanner } from "./LockedDocumentBanner";
 
 const AI_NOTE_CLEANUP_PROMPT = `You are a document editor. Clean up and improve the following Markdown note.
 
@@ -24,6 +28,14 @@ Rules:
 6. Remove garbled formatting artifacts
 7. Return ONLY the cleaned Markdown — no explanations or code fences`;
 
+function noteTitleFromPath(path: string | null) {
+  return path?.replace(/\.md$/, "").split("/").pop() ?? "";
+}
+
+function slugifyNoteTitle(title: string) {
+  return title.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+}
+
 /**
  * NoteEditor — edits .md note files using the reusable MarkdownEditor.
  * Debounced auto-save on content changes.
@@ -35,9 +47,14 @@ export function NoteEditor() {
   const updateNote = useAppStore((s) => s.updateNote);
   const openNote = useAppStore((s) => s.openNote);
   const setNoteLocked = useAppStore((s) => s.setNoteLocked);
+  const loadNotes = useAppStore((s) => s.loadNotes);
   const projectRoot = useAppStore((s) => s.currentProject?.root);
   const addActivityEntries = useAppStore((s) => s.addActivityEntries);
   const setNotePreview = useAppStore((s) => s.setNotePreview);
+  const showToast = useToastStore((s) => s.show);
+  const noteTitle = noteTitleFromPath(activeNotePath);
+  const [draftTitle, setDraftTitle] = useState(noteTitle);
+  const cancelTitleCommitRef = useRef(false);
   // Read initial mode from persisted store, but keep it as local state so
   // multiple instances of NoteEditor (split pane) can be controlled independently.
   const persistedIsPreview = useAppStore((s) => activeNotePath ? s.notePreviewPaths.has(activeNotePath) : false);
@@ -46,6 +63,7 @@ export function NoteEditor() {
   // Re-initialise mode when switching to a different note tab.
   useEffect(() => {
     setModeLocal(persistedIsPreview ? "preview" : "edit");
+    setDraftTitle(noteTitleFromPath(activeNotePath));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeNotePath]);
 
@@ -163,6 +181,73 @@ export function NoteEditor() {
     };
   }, []);
 
+  const commitNoteRename = useCallback(async () => {
+    if (cancelTitleCommitRef.current) {
+      cancelTitleCommitRef.current = false;
+      return;
+    }
+    if (!activeNotePath || activeNoteLocked) {
+      setDraftTitle(noteTitleFromPath(activeNotePath));
+      return;
+    }
+
+    const slug = slugifyNoteTitle(draftTitle);
+    if (!slug) {
+      setDraftTitle(noteTitleFromPath(activeNotePath));
+      return;
+    }
+
+    const dir = activeNotePath.includes("/") ? activeNotePath.substring(0, activeNotePath.lastIndexOf("/") + 1) : "";
+    const newPath = `${dir}${slug}.md`;
+    if (newPath === activeNotePath) {
+      setDraftTitle(noteTitleFromPath(activeNotePath));
+      return;
+    }
+
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = null;
+    }
+    if (pendingContentRef.current !== null && !shouldSuppressEditorFlush(activeNotePath)) {
+      await updateNoteRef.current(pendingContentRef.current);
+      pendingContentRef.current = null;
+    }
+
+    try {
+      await invoke("rename_note", { oldPath: activeNotePath, newPath });
+      const oldMainId = makeMainTabId("note", activeNotePath);
+      const newMainId = makeMainTabId("note", newPath);
+      const oldSplitId = makeSplitTabId("note", activeNotePath);
+      const newSplitId = makeSplitTabId("note", newPath);
+      const nextTitle = noteTitleFromPath(newPath);
+      const store = useAppStore.getState();
+
+      useAppStore.setState({
+        activeNotePath: newPath,
+        openTabs: store.openTabs.map((tab) =>
+          tab.type === "note" && tab.path === activeNotePath
+            ? { ...tab, id: newMainId, path: newPath, title: nextTitle }
+            : tab,
+        ),
+        activeTabId: store.activeTabId === oldMainId ? newMainId : store.activeTabId,
+        splitTabs: store.splitTabs.map((tab) =>
+          tab.type === "note" && tab.path === activeNotePath
+            ? { ...tab, id: newSplitId, path: newPath, title: nextTitle }
+            : tab,
+        ),
+        splitActiveTabId: store.splitActiveTabId === oldSplitId ? newSplitId : store.splitActiveTabId,
+      });
+      setNotePreview(activeNotePath, false);
+      setNotePreview(newPath, mode === "preview");
+      setDraftTitle(nextTitle);
+      await loadNotes();
+      useAppStore.getState()._persistTabs();
+    } catch (err) {
+      setDraftTitle(noteTitleFromPath(activeNotePath));
+      showToast(`Rename failed: ${err}`, 4000, "error");
+    }
+  }, [activeNoteLocked, activeNotePath, draftTitle, loadNotes, mode, setNotePreview, showToast]);
+
   // AI cleanup — send note content to model for formatting improvements
   const handleAiCleanup = useCallback(async () => {
     if (!activeNoteContent || aiCleaning || activeNoteLocked) return;
@@ -211,162 +296,164 @@ export function NoteEditor() {
 
   if (!activeNotePath) return null;
 
-  const displayTitle = activeNotePath.replace(/\.md$/, "").split("/").pop() ?? activeNotePath;
+  const contentWidthStyle = { maxWidth: "var(--editor-max-width, 56rem)" };
 
   // Export note to Word
   const handleExportToWord = async (orientation: "portrait" | "landscape") => {
     if (!activeNoteContent || exporting) return;
     setExporting(true);
     try {
-      await exportNoteToWord(displayTitle, activeNoteContent, projectRoot ?? "", orientation);
+      await exportNoteToWord(draftTitle || noteTitleFromPath(activeNotePath), activeNoteContent, projectRoot ?? "", orientation);
     } catch (e) {
       console.error("[NoteEditor] Export to Word failed:", e);
     } finally {
       setExporting(false);
     }
   };
+  const modeActions: DocumentToolbarAction[] = [
+    {
+      id: "edit",
+      label: "Edit",
+      icon: documentToolbarIcons.pencil,
+      selected: mode === "edit",
+      disabled: activeNoteLocked,
+      title: activeNoteLocked ? "Unlock note to edit" : "Edit",
+      onSelect: () => setMode("edit"),
+    },
+    {
+      id: "preview",
+      label: "Preview",
+      icon: documentToolbarIcons.eye,
+      selected: mode === "preview",
+      onSelect: () => setMode("preview"),
+    },
+  ];
+  const aiActions: DocumentToolbarAction[] = [
+    {
+      id: "cleanup-note",
+      label: aiCleaning ? "Cleaning..." : "Clean up note",
+      icon: documentToolbarIcons.sparkles,
+      disabled: aiCleaning || activeNoteLocked || !settings.aiModel || !activeNoteContent,
+      title: "Clean up with AI",
+      onSelect: handleAiCleanup,
+    },
+  ];
+  const exportActions: DocumentToolbarAction[] = [
+    {
+      id: "word-portrait",
+      label: "Word - Portrait",
+      icon: documentToolbarIcons.fileText,
+      disabled: exporting || !activeNoteContent,
+      onSelect: () => handleExportToWord("portrait"),
+    },
+    {
+      id: "word-landscape",
+      label: "Word - Landscape",
+      icon: documentToolbarIcons.fileText,
+      disabled: exporting || !activeNoteContent,
+      onSelect: () => handleExportToWord("landscape"),
+    },
+  ];
 
   return (
-    <div className="flex flex-col flex-1 overflow-hidden">
-      {/* Title bar */}
-      <div className="flex items-center gap-2 px-6 py-3 border-b border-[rgb(var(--color-border))] shrink-0">
-        <FileText className="w-5 h-5 text-[rgb(var(--color-text-secondary))] shrink-0" />
-        <h1 className="text-lg font-semibold text-[rgb(var(--color-text))]">{displayTitle}</h1>
-        <span className="text-[10px] text-[rgb(var(--color-text-secondary))] px-1.5 py-0.5 rounded bg-[rgb(var(--color-surface-alt))]">.md</span>
-
-        <div className="ml-auto flex items-center gap-1">
-          <button
-            onClick={() => setNoteLocked(activeNotePath, !activeNoteLocked)}
-            className={`flex items-center justify-center w-7 h-7 rounded-md transition-colors ${
-              activeNoteLocked
-                ? "text-[rgb(var(--color-warning))] bg-[rgb(var(--color-warning))]/10 hover:bg-[rgb(var(--color-warning))]/15"
-                : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))]"
-            }`}
-            title={activeNoteLocked ? "Unlock note" : "Lock note"}
-          >
-            {activeNoteLocked ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
-          </button>
-
-          {/* Export to Word */}
-          <ExportWordButton
-            onExport={handleExportToWord}
-            disabled={exporting || !activeNoteContent}
-            defaultOrientation="portrait"
-            className="flex items-center justify-center w-7 h-7 rounded-md text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-          />
-
-          {/* AI cleanup sparkle button */}
-          <button
-            onClick={handleAiCleanup}
-            disabled={aiCleaning || activeNoteLocked || !settings.aiModel || !activeNoteContent}
-            className="flex items-center justify-center w-7 h-7 rounded-md text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-            title="Clean up with AI"
-          >
-            {aiCleaning ? (
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="animate-spin">
-                <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-              </svg>
-            ) : (
-              <Sparkles className="w-3.5 h-3.5" />
-            )}
-          </button>
-
-          <div className="w-px h-4 bg-[rgb(var(--color-border))] mx-0.5" />
-
-          {/* Edit / Preview toggle */}
-          <div className="flex items-center gap-0.5 bg-[rgb(var(--color-surface-alt))] rounded-lg p-0.5">
-            <button
-              onClick={() => { if (!activeNoteLocked) setMode("edit"); }}
-              className={`flex items-center justify-center w-7 h-7 rounded-md transition-colors ${
-                mode === "edit"
-                  ? "bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text))] shadow-sm"
-                  : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))]"
-              }`}
-              title={activeNoteLocked ? "Unlock note to edit" : "Edit"}
-            >
-              {/* Pencil icon */}
-              <Pencil className="w-3.5 h-3.5" />
-            </button>
-            <button
-              onClick={() => setMode("preview")}
-              className={`flex items-center justify-center w-7 h-7 rounded-md transition-colors ${
-                mode === "preview"
-                  ? "bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text))] shadow-sm"
-                  : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))]"
-              }`}
-              title="Preview"
-            >
-              {/* Eye icon */}
-              <Eye className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* AI updated indicator */}
-      {aiUpdatedFlash && (
-        <div className="mx-6 mb-2 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[rgb(var(--color-accent))]/10 border border-[rgb(var(--color-accent))]/20 text-xs text-[rgb(var(--color-accent))] animate-pulse">
-          <Sparkles className="w-3 h-3" />
-          Updated by AI
-        </div>
-      )}
-
-      {/* Rich paste busy indicator */}
-      {richPasteBusy && (
-        <div className="mx-6 mb-2 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-warning/10 border border-warning/20 text-xs text-warning">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="animate-spin">
-            <circle cx="12" cy="12" r="10" strokeDasharray="31.4 31.4" strokeLinecap="round" />
-          </svg>
-          Converting pasted content…
-        </div>
-      )}
-
-      {activeNoteLocked && (
-        <div className="mx-6 mb-2 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[rgb(var(--color-warning))]/10 border border-[rgb(var(--color-warning))]/20 text-xs text-[rgb(var(--color-warning))]">
-          <Lock className="w-3 h-3" />
-          Note is locked. Unlock it to edit or use AI cleanup.
-        </div>
-      )}
-
-      {/* Content */}
-      {mode === "edit" && !activeNoteLocked ? (
-        <div className="flex-1 overflow-auto px-6">
-          <div className="max-w-3xl mx-auto">
-            <MarkdownEditor
-              editorKey={activeNotePath}
-              value={activeNoteContent ?? ""}
-              onChange={handleChange}
-              placeholder="Write your notes here..."
-              getAiConfig={getAiConfig}
+    <div className="flex-1 overflow-y-auto">
+      <div className="mx-auto px-6 py-8" style={contentWidthStyle}>
+        <DocumentHeader
+          icon={<NoteIcon size={20} />}
+          title={
+            <input
+              type="text"
+              value={draftTitle}
+              onChange={(event) => setDraftTitle(event.target.value)}
+              onBlur={() => void commitNoteRename()}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") event.currentTarget.blur();
+                if (event.key === "Escape") {
+                  cancelTitleCommitRef.current = true;
+                  setDraftTitle(noteTitleFromPath(activeNotePath));
+                  event.currentTarget.blur();
+                }
+              }}
+              readOnly={activeNoteLocked}
+              title={draftTitle}
+              className={`min-w-0 w-full truncate border-none bg-transparent text-2xl font-semibold text-[rgb(var(--color-text))] outline-none placeholder:text-[rgb(var(--color-text-secondary))]/40 ${activeNoteLocked ? "cursor-default" : ""}`}
+              placeholder="Note title..."
             />
+          }
+          badge={<span className="rounded bg-[rgb(var(--color-surface-alt))] px-1.5 py-0.5 text-[10px] text-[rgb(var(--color-text-secondary))]">.md</span>}
+          toolbar={
+            <DocumentToolbar
+              canRecord={false}
+              onRecord={() => {}}
+              showRecord={false}
+              presentActions={[]}
+              modeActions={modeActions}
+              aiActions={aiActions}
+              exportActions={exportActions}
+              locked={activeNoteLocked}
+              onToggleLock={() => setNoteLocked(activeNotePath, !activeNoteLocked)}
+              lockLabel="Lock note"
+              unlockLabel="Unlock note"
+            />
+          }
+        />
+
+        {/* AI updated indicator */}
+        {aiUpdatedFlash && (
+          <div className="mb-2 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[rgb(var(--color-accent))]/10 border border-[rgb(var(--color-accent))]/20 text-xs text-[rgb(var(--color-accent))] animate-pulse">
+            <Sparkles className="w-3 h-3" />
+            Updated by AI
           </div>
-        </div>
-      ) : (
-        <div className="flex-1 overflow-auto px-6">
-          <div className="max-w-3xl mx-auto py-6">
+        )}
+
+        {/* Rich paste busy indicator */}
+        {richPasteBusy && (
+          <div className="mb-2 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-warning/10 border border-warning/20 text-xs text-warning">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="animate-spin">
+              <circle cx="12" cy="12" r="10" strokeDasharray="31.4 31.4" strokeLinecap="round" />
+            </svg>
+            Converting pasted content…
+          </div>
+        )}
+
+        {activeNoteLocked && (
+          <LockedDocumentBanner message="Note is locked. Unlock it to edit, rename, or use AI cleanup." />
+        )}
+
+        {/* Content */}
+        {mode === "edit" && !activeNoteLocked ? (
+          <MarkdownEditor
+            editorKey={activeNotePath}
+            value={activeNoteContent ?? ""}
+            onChange={handleChange}
+            placeholder="Write your notes here..."
+            getAiConfig={getAiConfig}
+          />
+        ) : (
+          <div className="py-6">
             <div className="prose-desc text-sm text-[rgb(var(--color-text))] leading-relaxed">
-            {activeNoteContent ? (
-              <SafeMarkdown
-                components={{
-                  img: ({ src, alt, ...props }) => {
-                    let resolvedSrc = src ?? "";
-                    const relativePath = projectRelativeScreenshotPath(resolvedSrc);
-                    if (projectRoot && relativePath) {
-                      return <ProjectImage relativePath={relativePath} projectRoot={projectRoot} alt={alt ?? ""} {...props} className="max-w-full rounded" />;
-                    }
-                    return <img src={resolvedSrc} alt={alt ?? ""} {...props} className="max-w-full rounded" />;
-                  },
-                }}
-              >
-                {activeNoteContent}
-              </SafeMarkdown>
-            ) : (
-              <p className="text-[rgb(var(--color-text-secondary))] italic">Nothing to preview</p>
-            )}
+              {activeNoteContent ? (
+                <SafeMarkdown
+                  components={{
+                    img: ({ src, alt, ...props }) => {
+                      let resolvedSrc = src ?? "";
+                      const relativePath = projectRelativeScreenshotPath(resolvedSrc);
+                      if (projectRoot && relativePath) {
+                        return <ProjectImage relativePath={relativePath} projectRoot={projectRoot} alt={alt ?? ""} {...props} className="max-w-full rounded" />;
+                      }
+                      return <img src={resolvedSrc} alt={alt ?? ""} {...props} className="max-w-full rounded" />;
+                    },
+                  }}
+                >
+                  {activeNoteContent}
+                </SafeMarkdown>
+              ) : (
+                <p className="text-[rgb(var(--color-text-secondary))] italic">Nothing to preview</p>
+              )}
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }

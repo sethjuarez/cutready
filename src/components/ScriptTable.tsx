@@ -319,7 +319,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
   if (rows.length === 0) return null;
 
   return (
-    <div className={`script-table-wrapper overflow-hidden${readOnly ? "" : " my-4"}`}>
+    <div className={`script-table-wrapper overflow-x-auto overflow-y-visible${readOnly ? "" : " my-4"}`}>
       {/* Re-show last AI changes button */}
       {hasLastAiDiffs && onReShowHighlights && (
         <div className="flex justify-end px-1 pb-1.5">
@@ -351,13 +351,13 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
         onDragEnd={handleDragEnd}
       >
         <SortableContext items={rowIds} strategy={verticalListSortingStrategy}>
-          <table className="w-full" style={{ tableLayout: "fixed", borderSpacing: "0 4px", borderCollapse: "separate" }}>
+          <table className="w-full min-w-[640px]" style={{ tableLayout: "fixed", borderSpacing: "0 4px", borderCollapse: "separate" }}>
             <colgroup>
               {!readOnly && <col style={{ width: 28 }} />}
               <col style={{ width: 72 }} />
               <col />
               <col />
-              <col style={{ width: 180 }} />
+              <col style={{ width: 168 }} />
               {!readOnly && <col style={{ width: 36 }} />}
             </colgroup>
             <thead>
@@ -698,7 +698,7 @@ function SortableRow({
     <tr
       ref={setNodeRef}
       style={{ ...style, backgroundColor: isHighlighted ? undefined : rowBg }}
-      className={`card-row group hover:shadow-sm ${isSorting ? "" : "transition-all"} ${isHighlighted ? "ai-highlight-row" : ""} ${rowLocked ? "ring-1 ring-[rgb(var(--color-warning))]/25" : ""}`}
+      className={`card-row group hover:shadow-sm ${isSorting ? "" : "transition-all"} ${isHighlighted ? "ai-highlight-row" : ""} ${rowLocked ? "ring-1 ring-[rgb(var(--color-warning))]/15" : ""}`}
       onKeyDown={(e) => {
         if (readOnly) return;
         // Ctrl+Enter → add row below
@@ -732,7 +732,7 @@ function SortableRow({
             {...listeners}
           >
             {/* Row number (visible by default), drag icon on hover */}
-            <span className="text-[0.625rem] font-medium opacity-40 group-hover:hidden">{rowLocked ? <Lock className="w-3 h-3" /> : idx + 1}</span>
+            <span className="text-[0.625rem] font-medium opacity-40 group-hover:hidden">{rowLocked ? <Lock className="w-3 h-3 opacity-80" /> : idx + 1}</span>
             {!hasAnyLock(row) && <svg className="hidden group-hover:block opacity-50 hover:opacity-100 transition-opacity" width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
               <circle cx="9" cy="5" r="1.5" />
               <circle cx="15" cy="5" r="1.5" />
@@ -951,7 +951,11 @@ function SortableRow({
             {onRowLockChange && (
               <button
                 onClick={() => onRowLockChange(idx, !rowLocked)}
-                className={`p-0.5 rounded transition-colors ${rowLocked ? "text-[rgb(var(--color-warning))] hover:bg-[rgb(var(--color-warning))]/10" : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))]"}`}
+                className={`inline-flex h-5 w-5 items-center justify-center rounded border transition-colors ${
+                  rowLocked
+                    ? "border-[rgb(var(--color-warning))]/25 bg-[rgb(var(--color-warning))]/10 text-[rgb(var(--color-warning))] hover:bg-[rgb(var(--color-warning))]/15"
+                    : "border-transparent text-[rgb(var(--color-text-secondary))] hover:border-[rgb(var(--color-border))] hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-accent))]"
+                }`}
                 title={rowLocked ? "Unlock row" : "Lock row"}
               >
                 {rowLocked ? <Lock className="w-3 h-3" /> : <Unlock className="w-3 h-3" />}
@@ -1427,8 +1431,13 @@ function CellLockButton({ locked, onClick, className = "" }: { locked: boolean; 
   return (
     <button
       onClick={(e) => { e.stopPropagation(); onClick(); }}
-      className={`p-0.5 rounded ${locked ? "text-[rgb(var(--color-warning))]" : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10"} ${className}`}
+      className={`inline-flex h-4 w-4 items-center justify-center rounded border transition-colors ${
+        locked
+          ? "border-[rgb(var(--color-warning))]/25 bg-[rgb(var(--color-warning))]/10 text-[rgb(var(--color-warning))]"
+          : "border-transparent text-[rgb(var(--color-text-secondary))] hover:border-[rgb(var(--color-border))] hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-accent))]"
+      } ${className}`}
       title={locked ? "Unlock cell" : "Lock cell"}
+      aria-label={locked ? "Unlock cell" : "Lock cell"}
     >
       {locked ? <Lock className="w-3 h-3" /> : <Unlock className="w-3 h-3" />}
     </button>

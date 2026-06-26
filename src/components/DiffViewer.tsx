@@ -185,7 +185,7 @@ function DiffToolbar({ filename, status, viewMode, onViewModeChange, showToggle,
                 status === "deleted" ? { label: "Deleted", cls: "bg-error/15 text-error" } :
                 { label: "Modified", cls: "bg-warning/15 text-warning" };
   return (
-    <div className="flex items-center gap-3 border-b border-[rgb(var(--color-border))] px-4 py-2 bg-[rgb(var(--color-surface-inset))]">
+    <div className="flex items-center gap-3 border-b border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-4 py-2">
       <span className="font-mono text-[12px] font-medium text-[rgb(var(--color-text))]">{filename}</span>
       <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${badge.cls}`}>{badge.label}</span>
       {additions !== undefined && additions !== 0 && (

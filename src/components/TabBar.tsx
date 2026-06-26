@@ -98,7 +98,7 @@ export function TabBar() {
 
   return (
     <div
-      className={`no-select flex items-stretch bg-[rgb(var(--color-surface-alt))] shrink-0 border-b border-[rgb(var(--color-border))] ${
+      className={`no-select flex items-stretch bg-[rgb(var(--color-surface-inset))] shrink-0 border-b border-[rgb(var(--color-border-subtle))] px-1 pt-1 ${
         isDragOver ? "border-b-[2px] border-b-[rgb(var(--color-accent))]" : ""
       }`}
       onMouseDown={() => setActiveEditorGroup("main")}
@@ -149,9 +149,9 @@ export function TabBar() {
 
       {/* Tab navigator */}
       {openTabs.length > 0 && (
-        <div className="relative z-sticky self-stretch flex shrink-0 items-center border-l border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] shadow-[-12px_0_18px_-18px_rgb(var(--color-text))]">
+        <div className="relative z-sticky flex shrink-0 items-center self-stretch border-l border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-inset))] shadow-[-12px_0_18px_-18px_rgb(var(--color-text))]">
           <button
-            className="flex items-center justify-center w-8 h-full text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface))] transition-colors"
+            className="flex h-full w-8 items-center justify-center text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
             title="Show open tabs"
             onClick={(e) => {
               setTabSearch("");
@@ -375,18 +375,18 @@ function Tab({
       : tab.type === "storyboard"
         ? { bar: "bg-success", icon: "text-success", tint: "bg-success" }
         : tab.type === "history"
-          ? { bar: "bg-sky-500", icon: "text-sky-500", tint: "bg-sky-500" }
+            ? { bar: "bg-[rgb(var(--color-accent))]", icon: "text-[rgb(var(--color-accent))]", tint: "bg-[rgb(var(--color-accent))]" }
           : tab.type === "diff"
-            ? { bar: "bg-orange-500", icon: "text-orange-500", tint: "bg-orange-500" }
+              ? { bar: "bg-warning", icon: "text-warning", tint: "bg-warning" }
               : tab.type === "agent-run"
                 ? { bar: "bg-[rgb(var(--color-accent))]", icon: "text-[rgb(var(--color-accent))]", tint: "bg-[rgb(var(--color-accent))]" }
               : tab.type === "database"
                 ? { bar: "bg-[rgb(var(--color-accent))]", icon: "text-[rgb(var(--color-accent))]", tint: "bg-[rgb(var(--color-accent))]" }
               : isImage
-                ? { bar: "bg-violet-500", icon: "text-violet-500", tint: "bg-violet-500" }
+                ? { bar: "bg-[rgb(var(--color-accent))]", icon: "text-[rgb(var(--color-accent))]", tint: "bg-[rgb(var(--color-accent))]" }
               : isVisual
-                ? { bar: "bg-amber-500", icon: "text-amber-500", tint: "bg-amber-500" }
-                : { bar: "bg-rose-500", icon: "text-rose-500", tint: "bg-rose-500" };
+                ? { bar: "bg-warning", icon: "text-warning", tint: "bg-warning" }
+                : { bar: "bg-[rgb(var(--color-accent))]", icon: "text-[rgb(var(--color-accent))]", tint: "bg-[rgb(var(--color-accent))]" };
 
   const TabIcon =
     tab.type === "sketch" ? SketchIcon
@@ -407,12 +407,12 @@ function Tab({
         e.dataTransfer.setData("application/x-cutready-tab", JSON.stringify({ tabId: tab.id, source: "main" }));
         e.dataTransfer.effectAllowed = "move";
       }}
-      className={`group relative flex items-center gap-1.5 pl-3 pr-2 h-[40px] text-[12px] cursor-pointer shrink-0 select-none transition-colors ${
+      className={`group relative mb-[-1px] flex h-[37px] shrink-0 cursor-pointer select-none items-center gap-1.5 border border-transparent pl-3 pr-2 text-[12px] transition-colors ${
         isActive
-          ? "bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text))]"
+          ? "border-[rgb(var(--color-border-subtle))] border-b-[rgb(var(--color-surface))] bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text))] shadow-sm"
           : isSplit
-            ? "bg-[rgb(var(--color-surface-inset))] text-[rgb(var(--color-text))]"
-            : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))]"
+            ? "bg-[rgb(var(--color-surface-alt))]/70 text-[rgb(var(--color-text))]"
+            : "text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-alt))]/65 hover:text-[rgb(var(--color-text))]"
       }`}
       onClick={onSelect}
       onContextMenu={onContextMenu}
@@ -420,11 +420,11 @@ function Tab({
     >
       {/* Active tab: colored bar on top — dimmed when group is not focused */}
       {isActive && (
-        <span className={`absolute top-0 left-0 right-0 h-[2px] ${typeClasses.bar} ${isGroupFocused ? "" : "opacity-40"}`} />
+        <span className={`absolute left-0 right-0 top-0 h-[2px] ${typeClasses.bar} ${isGroupFocused ? "" : "opacity-40"}`} />
       )}
       {/* Split tab: dotted bar on top */}
       {isSplit && !isActive && (
-        <span className={`absolute top-0 left-0 right-0 h-[2px] ${typeClasses.bar} opacity-50`} />
+        <span className={`absolute left-0 right-0 top-0 h-[2px] ${typeClasses.bar} opacity-50`} />
       )}
 
       {/* Hover tint for inactive tabs — type-colored wash */}
@@ -433,7 +433,7 @@ function Tab({
       )}
 
       {/* Separator between tabs */}
-      <span className={`absolute top-[8px] bottom-[8px] right-0 w-px ${
+      <span className={`absolute bottom-[8px] right-[-1px] top-[8px] w-px ${
         isActive ? "bg-transparent" : "bg-[rgb(var(--color-border))]"
       }`} />
 

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { invoke } from "../services/tauri";
-import { X, Sparkles, Pencil, Lock, MoreHorizontal, Search } from "lucide-react";
+import { X, MoreHorizontal, Search } from "lucide-react";
 import { shouldSuppressEditorFlush, useAppStore } from "../stores/appStore";
 import type { EditorTab } from "../stores/appStore";
 import type { Sketch, Storyboard } from "../types/sketch";
@@ -12,6 +12,9 @@ import { SafeMarkdown } from "./SafeMarkdown";
 import { SketchIcon, StoryboardIcon, NoteIcon } from "./Icons";
 import { usePopover } from "../hooks/usePopover";
 import { getClampedPopoverPosition } from "./TabBar";
+import { DocumentHeader } from "./DocumentHeader";
+import { FieldAiButton } from "./FieldAiButton";
+import { LockedDocumentBanner } from "./LockedDocumentBanner";
 
 /**
  * SplitTabBar — compact tab bar for the split pane, rendered beside the main TabBar.
@@ -442,32 +445,37 @@ function SketchSplitEditor({ path }: { path: string }) {
   return (
     <div className="flex-1 overflow-y-auto">
       <div className="mx-auto px-6 py-8" style={{ maxWidth: "var(--editor-max-width, 56rem)" }}>
-        {/* Title */}
-        <div className="flex items-center gap-3 mb-4">
-          <div className="relative flex-1 group/title">
+        <DocumentHeader
+          icon={<SketchIcon size={20} />}
+          title={
+          <div className="relative min-w-0 group/title">
             <input
               type="text"
               value={localTitle}
               onChange={(e) => handleTitleChange(e.target.value)}
               readOnly={sketch.locked}
               placeholder="Sketch title..."
-              className="w-full text-2xl font-semibold bg-transparent text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/40 outline-none border-none"
+              title={localTitle}
+              className={`min-w-0 w-full truncate border-none bg-transparent text-2xl font-semibold text-[rgb(var(--color-text))] outline-none placeholder:text-[rgb(var(--color-text-secondary))]/40 ${localTitle && !sketch.locked ? "pr-8" : ""} ${sketch.locked ? "cursor-default" : ""}`}
             />
             {localTitle && !sketch.locked && (
-              <button
+              <FieldAiButton
                 onClick={() => sendChatPrompt(
                   `Improve the title of sketch "${path}". Current title: "${localTitle}". Suggest a more compelling, concise title. IMPORTANT: Only update the title — do NOT change the description or any rows.`,
                   { silent: true }
                 )}
-                className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover/title:opacity-100 p-1 rounded text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10 transition-all"
+                className="absolute right-0 top-1/2 -translate-y-1/2 group-hover/title:opacity-100"
+                label="Improve title with AI"
                 title="Improve title with AI"
-              >
-                <Sparkles className="w-3.5 h-3.5" />
-                <span className="text-[10px]">Improve</span>
-              </button>
+              />
             )}
           </div>
-        </div>
+          }
+        />
+
+        {sketch.locked && (
+          <LockedDocumentBanner message="Sketch is locked. Unlock it to edit fields, rows, media, or AI suggestions." />
+        )}
 
         {/* Description — click to edit */}
         <div className="relative group/desc mb-8">
@@ -483,20 +491,33 @@ function SketchSplitEditor({ path }: { path: string }) {
             />
           ) : (
             <div
-              className="text-sm text-[rgb(var(--color-text-secondary))] cursor-text min-h-[1.5rem]"
+              tabIndex={0}
+              className={`min-h-[2rem] rounded-lg border border-transparent px-3 py-2 text-sm transition-colors hover:border-[rgb(var(--color-border))] ${!sketch.locked ? "cursor-text pr-10" : "cursor-default"}`}
               onClick={() => { if (!sketch.locked) setEditingDesc(true); }}
+              onFocus={() => { if (!sketch.locked) setEditingDesc(true); }}
             >
-              {localDesc || <span className="text-[rgb(var(--color-text-secondary))]/40">Describe what this sketch covers...</span>}
+              {localDesc ? (
+                <div className="prose-desc leading-relaxed text-[rgb(var(--color-text))]">
+                  <SafeMarkdown>{localDesc}</SafeMarkdown>
+                </div>
+              ) : (
+                <span className="text-[rgb(var(--color-text-secondary))]/40">Describe what this sketch covers...</span>
+              )}
             </div>
           )}
           {!editingDesc && !sketch.locked && (
-            <button
-              className="absolute right-0 top-0 opacity-0 group-hover/desc:opacity-100 p-1 rounded text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] transition-all"
-              onClick={() => setEditingDesc(true)}
-              title="Edit description"
-            >
-              <Pencil className="w-3 h-3" />
-            </button>
+            <FieldAiButton
+              onClick={() => sendChatPrompt(
+                localDesc
+                  ? `Improve the description of sketch "${path}". Current description: "${localDesc}". Make it clearer and more informative. IMPORTANT: Only update the description — do NOT change the title or any rows.`
+                  : `Write a description for sketch "${path}" titled "${localTitle}". Look at the planning rows to understand what the sketch covers and write a concise description. IMPORTANT: Only update the description — do NOT change the title or any rows.`,
+                { silent: true },
+              )}
+              className="absolute right-2 top-2 group-hover/desc:opacity-100 group-focus-within/desc:opacity-100"
+              label={localDesc ? "Improve description with AI" : "Generate description with AI"}
+              title={localDesc ? "Improve description with AI" : "Generate description with AI"}
+              iconClassName="h-3 w-3"
+            />
           )}
         </div>
 
@@ -579,10 +600,7 @@ function NoteSplitEditor({ path }: { path: string }) {
     <div className="px-4 h-full">
       {locked ? (
         <div className="py-4">
-          <div className="mb-3 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[rgb(var(--color-warning))]/10 border border-[rgb(var(--color-warning))]/20 text-xs text-[rgb(var(--color-warning))]">
-            <Lock className="w-3 h-3" />
-            Note is locked.
-          </div>
+          <LockedDocumentBanner message="Note is locked. Unlock it to edit this note." />
           <div className="prose-desc text-sm text-[rgb(var(--color-text))] leading-relaxed">
             <SafeMarkdown>{content}</SafeMarkdown>
           </div>
