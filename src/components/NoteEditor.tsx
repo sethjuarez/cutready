@@ -4,12 +4,10 @@ import { SafeMarkdown } from "./SafeMarkdown";
 import { makeMainTabId, makeSplitTabId, shouldSuppressEditorFlush, useAppStore } from "../stores/appStore";
 import { useToastStore } from "../stores/toastStore";
 import { useSettings } from "../hooks/useSettings";
+import { useBackgroundAgentAction } from "../hooks/useBackgroundAgentAction";
 import { MarkdownEditor } from "./MarkdownEditor";
 import { invoke } from "../services/tauri";
 import { exportNoteToWord } from "../utils/exportToWord";
-import { agentChat } from "../services/agentChat";
-import { loadProviderSecrets } from "../hooks/useSecretStore";
-import { activeProviderInput, buildProviderConfig, defaultProvider, isProviderInputConfigured, providerToConfigInput } from "../utils/providerConfig";
 import { ProjectImage } from "./ProjectImage";
 import { projectRelativeScreenshotPath } from "../utils/projectImage";
 import { DocumentHeader } from "./DocumentHeader";
@@ -71,7 +69,8 @@ export function NoteEditor() {
     setModeLocal(m);
     if (activeNotePath) setNotePreview(activeNotePath, m === "preview");
   }, [activeNotePath, setNotePreview]);
-  const { settings, updateSetting } = useSettings();
+  const { settings } = useSettings();
+  const runBackgroundAgentAction = useBackgroundAgentAction();
   const [aiCleaning, setAiCleaning] = useState(false);
   const [aiUpdatedFlash, setAiUpdatedFlash] = useState(false);
   const [richPasteBusy, setRichPasteBusy] = useState(false);
@@ -109,46 +108,6 @@ export function NoteEditor() {
     window.addEventListener("cutready:rich-paste-busy", handler);
     return () => window.removeEventListener("cutready:rich-paste-busy", handler);
   }, []);
-
-  // Async getter for AI config — refreshes OAuth token on demand
-  const getAiConfig = useCallback(async () => {
-    const selectedProvider = defaultProvider(settings);
-    const providerInput = selectedProvider
-      ? providerToConfigInput(selectedProvider, settings, selectedProvider.id === settings.aiActiveProviderId
-        ? { apiKey: settings.aiApiKey, accessToken: settings.aiAccessToken }
-        : await loadProviderSecrets(selectedProvider.id))
-      : activeProviderInput(settings);
-    if (!isProviderInputConfigured(providerInput)) return undefined;
-
-    let bearerToken = settings.aiAuthMode === "azure_oauth" ? settings.aiAccessToken : null;
-
-    // Auto-refresh OAuth token if we have a refresh token
-    if (settings.aiAuthMode === "azure_oauth" && settings.aiRefreshToken) {
-      try {
-        const tokenResult = await invoke<{ access_token: string; refresh_token?: string }>(
-          "azure_token_refresh",
-          {
-            tenantId: settings.aiTenantId || "",
-            refreshToken: settings.aiRefreshToken,
-            clientId: settings.aiClientId || null,
-          },
-        );
-        if (tokenResult.access_token) {
-          bearerToken = tokenResult.access_token;
-          await updateSetting("aiAccessToken", tokenResult.access_token);
-          if (tokenResult.refresh_token) {
-            await updateSetting("aiRefreshToken", tokenResult.refresh_token);
-          }
-        }
-      } catch {
-        // Token refresh failed — use existing token (may be stale)
-      }
-    }
-
-    const config = buildProviderConfig(providerInput);
-    if (bearerToken) config.bearer_token = bearerToken;
-    return config;
-  }, [settings, updateSetting]);
 
   const saveTimeoutRef= useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingContentRef = useRef<string | null>(null);
@@ -248,51 +207,27 @@ export function NoteEditor() {
     }
   }, [activeNoteLocked, activeNotePath, draftTitle, loadNotes, mode, setNotePreview, showToast]);
 
-  // AI cleanup — send note content to model for formatting improvements
+  // AI cleanup — run through the persisted agent runner so it appears in Runs.
   const handleAiCleanup = useCallback(async () => {
     if (!activeNoteContent || aiCleaning || activeNoteLocked) return;
-    const config = await getAiConfig();
-    if (!config) return;
-
+    if (!activeNotePath) return;
     setAiCleaning(true);
-    const logEntry = (msg: string, level: "info" | "warn" | "success") =>
-      addActivityEntries([{
-        id: `ai-clean-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-        timestamp: new Date(),
-        source: "AI Cleanup",
-        content: msg,
-        level,
-      }]);
-
-    logEntry("Cleaning up note with AI…", "info");
     try {
-      let cleaned: string | null = null;
+      await runBackgroundAgentAction(
+        `${AI_NOTE_CLEANUP_PROMPT}
 
-      const result = await agentChat(
-        config,
-        [
-          { role: "system", content: AI_NOTE_CLEANUP_PROMPT },
-          { role: "user", content: activeNoteContent },
-        ],
+Clean up the note at path "${activeNotePath}".
+
+Current Markdown:
+${activeNoteContent}
+
+Use write_note to save the cleaned Markdown back to "${activeNotePath}". Do not create or modify any other notes, sketches, storyboards, or visuals.`,
+        { agent: "editor", label: "Clean up note" },
       );
-      if (result.content && result.content.trim().length > 0) cleaned = result.content.trim();
-
-      if (cleaned) {
-        // Strip code fence wrapper
-        if (cleaned.startsWith("```markdown")) cleaned = cleaned.slice("```markdown".length);
-        else if (cleaned.startsWith("```md")) cleaned = cleaned.slice("```md".length);
-        else if (cleaned.startsWith("```")) cleaned = cleaned.slice(3);
-        if (cleaned.endsWith("```")) cleaned = cleaned.slice(0, -3);
-        cleaned = cleaned.trim();
-        updateNote(cleaned);
-        logEntry("Note cleaned up ✓", "success");
-      }
-    } catch (e) {
-      logEntry(`AI cleanup failed: ${e}`, "warn");
     } finally {
       setAiCleaning(false);
     }
-  }, [activeNoteContent, aiCleaning, activeNoteLocked, getAiConfig, updateNote, addActivityEntries]);
+  }, [activeNoteContent, activeNoteLocked, activeNotePath, aiCleaning, runBackgroundAgentAction]);
 
   if (!activeNotePath) return null;
 
@@ -427,7 +362,6 @@ export function NoteEditor() {
             value={activeNoteContent ?? ""}
             onChange={handleChange}
             placeholder="Write your notes here..."
-            getAiConfig={getAiConfig}
           />
         ) : (
           <div className="py-6">

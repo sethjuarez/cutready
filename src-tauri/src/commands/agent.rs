@@ -404,6 +404,7 @@ pub async fn agent_chat_with_tools(
     messages: Vec<ChatMessage>,
     agent_prompts: Option<std::collections::HashMap<String, String>>,
     agent_id: Option<String>,
+    emit_events: Option<bool>,
 ) -> Result<AgentChatResult, String> {
     use tauri::Emitter;
 
@@ -541,6 +542,7 @@ pub async fn agent_chat_with_tools(
         }),
     );
 
+    let should_emit_events = emit_events.unwrap_or(true);
     let emit_handle = app.clone();
     let result = match runner::run(
         provider,
@@ -556,7 +558,9 @@ pub async fn agent_chat_with_tools(
         Some(run_id.clone()),
         agent_state.clone(),
         move |event: AgentEvent| {
-            let _ = emit_handle.emit("agent-event", &event);
+            if should_emit_events {
+                let _ = emit_handle.emit("agent-event", &event);
+            }
         },
     )
     .await

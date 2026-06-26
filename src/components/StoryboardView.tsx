@@ -27,6 +27,7 @@ import {
 import { shouldSuppressEditorFlush, useAppStore } from "../stores/appStore";
 import { useToastStore } from "../stores/toastStore";
 import { useSettings } from "../hooks/useSettings";
+import { useBackgroundAgentAction } from "../hooks/useBackgroundAgentAction";
 import { SketchPickerItem } from "./SketchCard";
 import { SketchPreview } from "./SketchPreview";
 import { ScriptTable } from "./ScriptTable";
@@ -92,7 +93,7 @@ export function StoryboardView() {
   const setStoryboardLocked = useAppStore((s) => s.setStoryboardLocked);
   const { settings } = useSettings();
   const loadSketches = useAppStore((s) => s.loadSketches);
-  const sendChatPrompt = useAppStore((s) => s.sendChatPrompt);
+  const runBackgroundAgentAction = useBackgroundAgentAction();
 
   const [pickerTarget, setPickerTarget] = useState<PickerTarget | null>(null);
   const [pickerSearch, setPickerSearch] = useState("");
@@ -521,18 +522,18 @@ export function StoryboardView() {
       id: "review-flow",
       label: "Review flow",
       icon: documentToolbarIcons.sparkles,
-      onSelect: () => sendChatPrompt(
+      onSelect: () => void runBackgroundAgentAction(
         `Review the storyboard "${activeStoryboard.title}" and suggest improvements. List the current sketches, then recommend any changes to ordering, pacing, or suggest new sketches that would strengthen the demo flow. Read each sketch first to understand the content.`,
-        { silent: true },
+        { label: "Review storyboard flow" },
       ),
     },
     {
       id: "generate-sketch",
       label: "Generate sketch",
       icon: documentToolbarIcons.sparkles,
-      onSelect: () => sendChatPrompt(
+      onSelect: () => void runBackgroundAgentAction(
         `Generate a new sketch for the storyboard "${activeStoryboard.title}". Look at the existing sketches to understand the demo flow, then create a new sketch that would complement them. Pick an appropriate name and generate 3-5 planning rows.`,
-        { silent: true },
+        { label: "Generate storyboard sketch" },
       ),
     },
   ] : [];
@@ -613,9 +614,9 @@ export function StoryboardView() {
               />
               {activeStoryboard.title && !storyboardLocked && (
                 <FieldAiButton
-                  onClick={() => sendChatPrompt(
+                  onClick={() => void runBackgroundAgentAction(
                     `Improve the title of storyboard "${activeStoryboardPath ?? "current"}". Current title: "${activeStoryboard.title}". Suggest a more compelling, concise title. IMPORTANT: Only update the storyboard title - do NOT change its description, sections, or sketches. Use write_storyboard with the improved title and keep everything else exactly as it is.`,
-                    { silent: true },
+                    { label: "Improve storyboard title" },
                   )}
                   className="absolute right-0 top-1/2 -translate-y-1/2 group-hover/title:opacity-100"
                   label="Improve title with AI"
@@ -667,11 +668,11 @@ export function StoryboardView() {
           {/* Description sparkle */}
           {!editingDesc && !storyboardLocked && (
             <FieldAiButton
-              onClick={() => sendChatPrompt(
+              onClick={() => void runBackgroundAgentAction(
                 localDesc
                   ? `Improve the description of the storyboard "${activeStoryboard.title}" (path: "${activeStoryboardPath}"). Current description: "${localDesc}". Write a clearer, more compelling description that summarizes the demo flow. Keep it concise (2-3 sentences). Use the write_storyboard tool to save the new description.`
                   : `Write a description for the storyboard "${activeStoryboard.title}" (path: "${activeStoryboardPath}"). Look at the sketches to understand the demo flow and write a concise (2-3 sentence) description. Use the write_storyboard tool to save the description.`,
-                { silent: true }
+                { label: localDesc ? "Improve storyboard description" : "Generate storyboard description" }
               )}
               className="absolute right-2 top-2 group-hover/desc:opacity-100 group-focus-within/desc:opacity-100"
               label={localDesc ? "Improve description with AI" : "Generate description with AI"}
@@ -767,11 +768,11 @@ export function StoryboardView() {
                           onRemoveSketch={(sketchIndex) => void confirmRemoveFromSection(idx, sketchIndex)}
                           onRemoveSection={() => void confirmRemoveSection(idx)}
                           onUpdateSection={handleUpdateSection}
-                          onImproveDescription={(title, description) => sendChatPrompt(
+                          onImproveDescription={(title, description) => void runBackgroundAgentAction(
                             description.trim()
                               ? `Improve the description for section "${title}" at index ${idx} in storyboard "${activeStoryboard.title}" (path: "${activeStoryboardPath}"). Current description: "${description}". Write clearer section framing that explains this part of the demo flow. Keep it concise (1-2 sentences). Use the write_storyboard tool to save only this section description and preserve the rest of the storyboard.`
                               : `Write a description for section "${title}" at index ${idx} in storyboard "${activeStoryboard.title}" (path: "${activeStoryboardPath}"). Look at the sketches in this section and write concise framing for this part of the demo flow (1-2 sentences). Use the write_storyboard tool to save only this section description and preserve the rest of the storyboard.`,
-                            { silent: true },
+                            { label: description.trim() ? "Improve section description" : "Generate section description" },
                           )}
                           onAddNewSketch={() => handleAddNewSketch({ type: "section", sectionIndex: idx })}
                           onPickExisting={() => setPickerTarget({ type: "section", sectionIndex: idx })}

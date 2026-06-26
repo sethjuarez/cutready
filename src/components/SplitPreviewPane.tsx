@@ -15,6 +15,7 @@ import { getClampedPopoverPosition } from "./TabBar";
 import { DocumentHeader } from "./DocumentHeader";
 import { FieldAiButton } from "./FieldAiButton";
 import { LockedDocumentBanner } from "./LockedDocumentBanner";
+import { useBackgroundAgentAction } from "../hooks/useBackgroundAgentAction";
 
 /**
  * SplitTabBar — compact tab bar for the split pane, rendered beside the main TabBar.
@@ -330,7 +331,7 @@ function SketchSplitEditor({ path }: { path: string }) {
   const [editingDesc, setEditingDesc] = useState(false);
   const [error, setError] = useState(false);
   const projectRoot = useAppStore((s) => s.currentProject?.root ?? "");
-  const sendChatPrompt = useAppStore((s) => s.sendChatPrompt);
+  const runBackgroundAgentAction = useBackgroundAgentAction();
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const titleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const descTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -460,9 +461,9 @@ function SketchSplitEditor({ path }: { path: string }) {
             />
             {localTitle && !sketch.locked && (
               <FieldAiButton
-                onClick={() => sendChatPrompt(
+                onClick={() => void runBackgroundAgentAction(
                   `Improve the title of sketch "${path}". Current title: "${localTitle}". Suggest a more compelling, concise title. IMPORTANT: Only update the title — do NOT change the description or any rows.`,
-                  { silent: true }
+                  { label: "Improve sketch title" }
                 )}
                 className="absolute right-0 top-1/2 -translate-y-1/2 group-hover/title:opacity-100"
                 label="Improve title with AI"
@@ -507,11 +508,11 @@ function SketchSplitEditor({ path }: { path: string }) {
           )}
           {!editingDesc && !sketch.locked && (
             <FieldAiButton
-              onClick={() => sendChatPrompt(
+              onClick={() => void runBackgroundAgentAction(
                 localDesc
                   ? `Improve the description of sketch "${path}". Current description: "${localDesc}". Make it clearer and more informative. IMPORTANT: Only update the description — do NOT change the title or any rows.`
                   : `Write a description for sketch "${path}" titled "${localTitle}". Look at the planning rows to understand what the sketch covers and write a concise description. IMPORTANT: Only update the description — do NOT change the title or any rows.`,
-                { silent: true },
+                { label: localDesc ? "Improve sketch description" : "Generate sketch description" },
               )}
               className="absolute right-2 top-2 group-hover/desc:opacity-100 group-focus-within/desc:opacity-100"
               label={localDesc ? "Improve description with AI" : "Generate description with AI"}

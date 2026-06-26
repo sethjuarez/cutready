@@ -5,6 +5,7 @@ import { useAppStore } from "../stores/appStore";
 import type { Storyboard, StoryboardItem } from "../types/sketch";
 
 const mockInvoke = vi.fn();
+const mockRunBackgroundAgentAction = vi.fn();
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: (...args: unknown[]) => mockInvoke(...args),
@@ -16,6 +17,10 @@ vi.mock("@tauri-apps/api/event", () => ({
 
 vi.mock("../utils/exportToWord", () => ({
   exportStoryboardToWord: vi.fn(),
+}));
+
+vi.mock("../hooks/useBackgroundAgentAction", () => ({
+  useBackgroundAgentAction: () => mockRunBackgroundAgentAction,
 }));
 
 function activeStoryboard(description = "Original description", locked = false, items: StoryboardItem[] = []): Storyboard {
@@ -206,7 +211,6 @@ describe("StoryboardView", () => {
   });
 
   it("offers AI improvement for section descriptions", async () => {
-    const sendChatPrompt = vi.fn();
     const section: StoryboardItem = {
       type: "section",
       title: "Build",
@@ -215,7 +219,6 @@ describe("StoryboardView", () => {
     };
     useAppStore.setState({
       activeStoryboard: activeStoryboard("Original description", false, [section]),
-      sendChatPrompt,
     });
 
     render(<StoryboardView />);
@@ -225,9 +228,9 @@ describe("StoryboardView", () => {
       await Promise.resolve();
     });
 
-    expect(sendChatPrompt).toHaveBeenCalledWith(
+    expect(mockRunBackgroundAgentAction).toHaveBeenCalledWith(
       expect.stringContaining('Improve the description for section "Build" at index 0'),
-      { silent: true },
+      { label: "Improve section description" },
     );
   });
 });

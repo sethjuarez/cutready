@@ -6,6 +6,7 @@ import { ChevronLeft, Sparkles, Monitor, Plus, X, Folder } from "lucide-react";
 import { shouldSuppressEditorFlush, useAppStore } from "../stores/appStore";
 import { useToastStore } from "../stores/toastStore";
 import { useSettings } from "../hooks/useSettings";
+import { useBackgroundAgentAction } from "../hooks/useBackgroundAgentAction";
 import { ScriptTable } from "./ScriptTable";
 import { ProjectImage } from "./ProjectImage";
 import { ScreenCaptureOverlay } from "./ScreenCaptureOverlay";
@@ -77,7 +78,7 @@ export function SketchForm() {
   const rowsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const currentProject = useAppStore((s) => s.currentProject);
-  const sendChatPrompt = useAppStore((s) => s.sendChatPrompt);
+  const runBackgroundAgentAction = useBackgroundAgentAction();
   const projectRoot = currentProject?.root ?? "";
   const sketchLocked = activeSketch?.locked ?? false;
 
@@ -348,7 +349,7 @@ Row context:
 - **Narrative:** ${row?.narrative || "(empty)"}
 - **Actions:** ${row?.demo_actions || "(empty)"}
 
-The Actions describe what happens on screen — use them as visual design hints. You may read the sketch for context, but the only persistent edit allowed is set_row_visual for row index ${visualPromptRow}. Do not call write_sketch, update_planning_row, write_storyboard, or set_row_visual for any other row. Do not create, remove, reorder, or rewrite rows. If validation fails, fix the visual and retry set_row_visual for this same row only. Use a 960×540 canvas. The user instructions above override any defaults.`;
+The Actions describe what happens on screen — use them as visual design hints. You may read the sketch for context, but the only persistent edit allowed is set_row_visual for row index ${visualPromptRow}. Do not call design_plan, write_sketch, update_planning_row, write_storyboard, or set_row_visual for any other row. Do not create, remove, reorder, or rewrite rows. If validation fails, fix the visual and retry set_row_visual for this same row only. Use a 960×540 canvas. The user instructions above override any defaults.`;
     } else {
       prompt = `Generate an animated framing visual ONLY for sketch "${activeSketchPath ?? "current"}", row index ${visualPromptRow} (0-based).
 
@@ -356,12 +357,12 @@ Row context:
 - **Narrative:** ${row?.narrative || "(empty)"}
 - **Actions:** ${row?.demo_actions || "(empty)"}
 
-The Actions describe what happens on screen — use them as visual design hints. You may read the sketch for context, then call design_plan, but the only persistent edit allowed is set_row_visual for row index ${visualPromptRow}. Do not call write_sketch, update_planning_row, write_storyboard, or set_row_visual for any other row. Do not create, remove, reorder, or rewrite rows. If validation fails, fix the visual and retry set_row_visual for this same row only. Use a 960×540 canvas.`;
+The Actions describe what happens on screen — use them as visual design hints. You may read the sketch for context, but the only persistent edit allowed is set_row_visual for row index ${visualPromptRow}. Do not call design_plan, write_sketch, update_planning_row, write_storyboard, or set_row_visual for any other row. Do not create, remove, reorder, or rewrite rows. If validation fails, fix the visual and retry set_row_visual for this same row only. Use a 960×540 canvas.`;
     }
-    sendChatPrompt(prompt, { silent: true, agent: "designer" });
+    void runBackgroundAgentAction(prompt, { agent: "designer", label: "Generate visual" });
     setVisualPromptRow(null);
     setVisualInstructions("");
-  }, [visualPromptRow, localRows, activeSketchPath, visualInstructions, sendChatPrompt]);
+  }, [visualPromptRow, localRows, activeSketchPath, visualInstructions, runBackgroundAgentAction]);
 
   const handleCaptureComplete = useCallback(
     (screenshotPath: string) => {
@@ -535,11 +536,11 @@ The Actions describe what happens on screen — use them as visual design hints.
       id: "improve-sketch",
       label: localRows.length === 0 ? "Generate plan" : "Improve sketch",
       icon: documentToolbarIcons.sparkles,
-      onSelect: () => sendChatPrompt(
+      onSelect: () => void runBackgroundAgentAction(
         localRows.length === 0
           ? `Generate a complete sketch plan for "${activeSketch?.title ?? "this sketch"}". ${activeSketch?.description && typeof activeSketch.description === "string" ? `Description: ${activeSketch.description}. ` : ""}Create well-structured planning rows with time, narrative, and demo_actions.`
           : `Review and improve the entire sketch "${activeSketchPath ?? "current"}". Refine the narrative flow, tighten timing, and make demo actions more specific. Use write_sketch to apply changes.`,
-        { silent: true },
+        { label: localRows.length === 0 ? "Generate plan" : "Improve sketch" },
       ),
     },
   ] : [];
@@ -642,9 +643,9 @@ The Actions describe what happens on screen — use them as visual design hints.
             />
             {localTitle && !sketchLocked && (
               <FieldAiButton
-                onClick={() => sendChatPrompt(
+                onClick={() => void runBackgroundAgentAction(
                   `Improve the title of sketch "${activeSketchPath ?? "current"}". Current title: "${localTitle}". Suggest a more compelling, concise title. IMPORTANT: Only update the title — do NOT change the description or any rows. Use write_sketch with the improved title but keep the existing description and all rows exactly as they are.`,
-                  { silent: true }
+                  { label: "Improve sketch title" }
                 )}
                 className="absolute right-0 top-1/2 -translate-y-1/2 group-hover/title:opacity-100"
                 label="Improve title with AI"
@@ -696,11 +697,11 @@ The Actions describe what happens on screen — use them as visual design hints.
           )}
           {!editingDesc && !sketchLocked && (
             <FieldAiButton
-              onClick={() => sendChatPrompt(
+              onClick={() => void runBackgroundAgentAction(
                 localDesc
                   ? `Improve the description of sketch "${activeSketchPath ?? "current"}". Current description: "${localDesc}". Make it clearer and more informative. IMPORTANT: Only update the description — do NOT change the title or any rows. Use write_sketch with the improved description but keep the existing title and all rows exactly as they are.`
                   : `Write a description for sketch "${activeSketchPath ?? "current"}" titled "${localTitle}". Look at the planning rows to understand what the sketch covers and write a concise description. IMPORTANT: Only update the description — do NOT change the title or any rows. Use write_sketch with the new description but keep the existing title and all rows exactly as they are.`,
-                { silent: true }
+                { label: localDesc ? "Improve sketch description" : "Generate sketch description" }
               )}
               className="absolute right-2 top-2 group-hover/desc:opacity-100 group-focus-within/desc:opacity-100"
               label={localDesc ? "Improve description with AI" : "Generate description with AI"}
@@ -720,7 +721,7 @@ The Actions describe what happens on screen — use them as visual design hints.
             onCaptureScreenshot={handleCaptureScreenshot}
             onPickImage={handlePickImage}
             onBrowseImage={handleBrowseImage}
-            onSparkle={(prompt) => sendChatPrompt(prompt, { silent: true })}
+            onSparkle={(prompt) => void runBackgroundAgentAction(prompt, { label: "Improve row" })}
             onGenerateVisual={(rowIndex) => {
               setVisualPromptRow(rowIndex);
               setVisualInstructions("");
@@ -737,7 +738,7 @@ Row context:
 - **Actions:** ${row?.demo_actions || "(empty)"}
 
 The row already has a visual and design_plan. You may read the sketch for context, but the only persistent edit allowed is set_row_visual for row index ${rowIndex}. Do not call write_sketch, update_planning_row, write_storyboard, or set_row_visual for any other row. Do not create, remove, reorder, or rewrite rows. Keep the existing design but apply the requested changes. Do NOT redesign from scratch.`;
-              sendChatPrompt(prompt, { silent: true, agent: "designer" });
+              void runBackgroundAgentAction(prompt, { agent: "designer", label: "Modify visual" });
             }}
             projectRoot={projectRoot}
             sketchPath={activeSketchPath ?? undefined}
