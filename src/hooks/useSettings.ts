@@ -218,7 +218,7 @@ const defaultGlobalSettings: GlobalSettings = {
   recorderCameraDeviceId: "",
   recorderSystemAudioEnabled: false,
   recorderSystemAudioVolume: 100,
-  featureRecording: import.meta.env.DEV,
+  featureRecording: false,
   auditaurDiagnosticsEnabled: import.meta.env.DEV || import.meta.env.VITE_CUTREADY_DIAGNOSTICS === "1",
 };
 

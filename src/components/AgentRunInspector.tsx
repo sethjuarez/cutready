@@ -124,6 +124,14 @@ export function AgentRunInspector() {
     void loadRuns();
   }, [loadRuns]);
 
+  useEffect(() => {
+    const handleRunsUpdated = () => {
+      void loadRuns();
+    };
+    window.addEventListener("cutready:agent-runs-updated", handleRunsUpdated);
+    return () => window.removeEventListener("cutready:agent-runs-updated", handleRunsUpdated);
+  }, [loadRuns]);
+
   const deleteRun = useCallback(async (run: AgentRunSummary) => {
     const confirmed = await confirm({
       title: "Delete agent run?",
