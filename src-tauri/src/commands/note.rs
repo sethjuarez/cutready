@@ -3,6 +3,7 @@
 //! Notes are `.md` files in the project folder, identified by relative path.
 
 use tauri::State;
+use tauri_plugin_auditaur::auditaur_command;
 
 use crate::engine::project;
 use crate::models::sketch::NoteSummary;
@@ -96,7 +97,7 @@ pub async fn rename_note(
     Ok(())
 }
 
-#[tauri::command]
+#[auditaur_command(skip_all, err)]
 pub async fn list_notes(state: State<'_, AppState>) -> Result<Vec<NoteSummary>, String> {
     let root = project_root(&state)?;
     project::scan_notes(&root).map_err(|e| e.to_string())

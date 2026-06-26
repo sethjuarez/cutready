@@ -60,9 +60,9 @@ dependencies = [
 
 [[package]]
 name = "agentive"
-version = "0.4.2"
+version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3a6fba8adbfaf2723644028d2bc0ac365f70a9b38d338fcbad002233de2d4bfe"
+checksum = "a2423a0f88eee9279079e3cd0c41ebb30d068aac72034410b10b9e6f0b0d42b8"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -386,9 +386,9 @@ checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
 
 [[package]]
 name = "auditaur-collector"
-version = "0.2.2"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bcad9e44351bf8376810f172aae6874536f33b43f8d05f755e9c2997267d0ed4"
+checksum = "a0b0a24051abb6319fa2248905e01060197a575977d5aebfbae809aea3d34a51"
 dependencies = [
  "auditaur-core",
  "rusqlite",
@@ -399,9 +399,9 @@ dependencies = [
 
 [[package]]
 name = "auditaur-core"
-version = "0.2.2"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "24b966916176822df36bab27ea4512763519e8dac14134d644f334cd5fb12264"
+checksum = "15d46aee35fb074c15eef043cc0142ac7fede3c3360fca6552c65d125a850da7"
 dependencies = [
  "directories",
  "serde",
@@ -1357,7 +1357,7 @@ dependencies = [
  "wasapi",
  "windows 0.61.3",
  "windows-capture",
- "xcap",
+ "xcap 0.8.2",
  "zip 2.4.2",
 ]
 
@@ -1583,9 +1583,9 @@ dependencies = [
 
 [[package]]
 name = "dispatch2"
-version = "0.3.0"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "89a09f22a6c6069a18470eb92d2298acf25463f14256d24778e1230d789a2aec"
+checksum = "1e0e367e4e7da84520dedcac1901e4da967309406d1e51017ae1abfb97adbd38"
 dependencies = [
  "bitflags 2.11.0",
  "block2",
@@ -7775,12 +7775,13 @@ dependencies = [
 
 [[package]]
 name = "tauri-plugin-auditaur"
-version = "0.2.2"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8910c430331a48b39e0d752c597060286c63fd0205649fab4be793e00d4cf431"
+checksum = "1588813fedeee8ce53f43d00e0e5418a5642003ec6ee7c62deed3e7827c8c6ef"
 dependencies = [
  "auditaur-collector",
  "auditaur-core",
+ "base64 0.22.1",
  "directories",
  "serde",
  "serde_json",
@@ -7791,13 +7792,14 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uuid",
+ "xcap 0.9.6",
 ]
 
 [[package]]
 name = "tauri-plugin-auditaur-macros"
-version = "0.2.2"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d10e2fe7db2a75ec767a18cbf94deb180143d5336e6615f0fbfd241e9fb99c73"
+checksum = "c3b8b3ba799e09b050951fdc25c20a3fbd5192f9b2e48611dd76a460e80be954"
 dependencies = [
  "proc-macro-crate 3.4.0",
  "proc-macro2",
@@ -10079,6 +10081,37 @@ dependencies = [
  "url",
  "widestring",
  "windows 0.61.3",
+ "xcb",
+ "zbus",
+]
+
+[[package]]
+name = "xcap"
+version = "0.9.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b6ad471d5ba232bc276382d26a9d3b837d6853b7df389058b5bb1e94dcdd248c"
+dependencies = [
+ "dispatch2",
+ "image",
+ "libwayshot-xcap",
+ "log",
+ "objc2",
+ "objc2-app-kit",
+ "objc2-av-foundation",
+ "objc2-core-foundation",
+ "objc2-core-graphics",
+ "objc2-core-media",
+ "objc2-core-video",
+ "objc2-foundation",
+ "percent-encoding",
+ "pipewire",
+ "rand 0.9.2",
+ "scopeguard",
+ "serde",
+ "thiserror 2.0.18",
+ "url",
+ "widestring",
+ "windows 0.62.2",
  "xcb",
  "zbus",
 ]

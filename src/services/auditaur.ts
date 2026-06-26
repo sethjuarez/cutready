@@ -35,6 +35,7 @@ export function initializeAuditaur() {
       instrumentTauriInvoke: true,
       instrumentTauriEvents: true,
       captureFullPayloads: false,
+      driveBridge: policy.release_build ? false : { windowLabel: "main" },
       batchIntervalMs: 1000,
       onExportError(failure) {
         originalWarn("Auditaur export failed", failure.error);
