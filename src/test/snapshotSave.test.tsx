@@ -21,8 +21,6 @@ describe("snapshot save naming flow", () => {
     act(() => {
       useAppStore.setState({
         snapshotPromptOpen: false,
-        identityPromptOpen: false,
-        identityPromptCallback: null,
         pendingNavAfterSave: null,
         isRewound: false,
         saving: false,
@@ -32,13 +30,10 @@ describe("snapshot save naming flow", () => {
   });
 
   it("quickSave opens the naming prompt instead of creating an auto-named snapshot", async () => {
-    mockInvoke.mockResolvedValue({ name: "CutReady", email: "app@cutready.local", is_fallback: false });
-
     await useAppStore.getState().quickSave();
 
     expect(useAppStore.getState().snapshotPromptOpen).toBe(true);
-    expect(mockInvoke).toHaveBeenCalledWith("check_git_identity");
-    expect(mockInvoke).not.toHaveBeenCalledWith("save_with_label", expect.anything());
+    expect(mockInvoke).not.toHaveBeenCalled();
   });
 
   it("canceling the snapshot dialog does not save", async () => {

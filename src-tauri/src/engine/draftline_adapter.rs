@@ -1,9 +1,8 @@
-//! Feature-gated Draftline spike adapter.
+//! CutReady's Draftline-backed versioning service.
 //!
-//! This module intentionally does not replace CutReady's production project or
-//! Git engines. It exercises a narrow workflow against Draftline using a
-//! content policy that tracks user-authored CutReady files without sweeping in
-//! runtime/UI state.
+//! This module keeps CutReady's content policy, remote credential behavior, and
+//! product-facing naming in one place while Draftline owns the versioning and
+//! collaboration mechanics.
 
 #![allow(dead_code)]
 
@@ -11,9 +10,11 @@ use std::path::Path;
 
 use draftline::{
     ApplyIncomingReport, ApplyIncomingResult, ChangeSet, ContentPolicy, HistoryEntry,
+    MergeConflictResolution, MergeIncomingReport, MergeIncomingResult, MergeIncomingToken,
     PreflightReport, PreviewFile, PublishResult, RemoteCredential, RemoteEndpoint, RemoteOptions,
-    Result as DraftlineResult, SwitchPolicy, SyncStatus, Variation, VariationId, VariationMetadata,
-    VariationSummary, Version, VersionDiff, VersionId, VersionPreview, Workspace, WorkspaceSummary,
+    Result as DraftlineResult, Shelf, SwitchPolicy, SyncStatus, Variation, VariationId,
+    VariationMetadata, VariationSummary, Version, VersionDiff, VersionId, VersionPreview,
+    Workspace, WorkspaceSummary,
 };
 
 const EXCLUDED_RUNTIME_PATHS: &[&str] = &[
@@ -24,11 +25,11 @@ const EXCLUDED_RUNTIME_PATHS: &[&str] = &[
     ".cutready/locks.json",
 ];
 
-const CUTREADY_CONTENT_EXTENSIONS: &[&str] = &["sk", "sb", "md"];
+const CUTREADY_CONTENT_EXTENSIONS: &[&str] = &["sk", "sb", "md", "png", "jpg", "jpeg", "webp"];
 const CUTREADY_ASSET_ROOTS: &[&str] = &[".cutready/visuals", "screenshots"];
 const CUTREADY_LARGE_FILE_THRESHOLD_BYTES: u64 = 50 * 1024 * 1024;
 
-/// Small CutReady-facing wrapper around a Draftline workspace.
+/// CutReady-facing facade over a Draftline workspace.
 pub struct CutReadyDraftlineAdapter {
     workspace: Workspace,
 }
@@ -69,6 +70,22 @@ impl CutReadyDraftlineAdapter {
         path: impl AsRef<Path>,
     ) -> DraftlineResult<Option<draftline::ChangedFile>> {
         self.workspace.discard_file(path)
+    }
+
+    pub fn shelve_changes(&self, name: &str) -> DraftlineResult<Shelf> {
+        self.workspace.shelve_changes(name)
+    }
+
+    pub fn list_shelves(&self) -> DraftlineResult<Vec<Shelf>> {
+        self.workspace.list_shelves()
+    }
+
+    pub fn apply_shelf(&self, id: &str) -> DraftlineResult<Shelf> {
+        self.workspace.apply_shelf(id)
+    }
+
+    pub fn delete_shelf(&self, id: &str) -> DraftlineResult<()> {
+        self.workspace.delete_shelf(id)
     }
 
     pub fn workspace_summary(&self) -> DraftlineResult<WorkspaceSummary> {
@@ -226,6 +243,30 @@ impl CutReadyDraftlineAdapter {
         self.workspace.apply_incoming(remote, options)
     }
 
+    pub fn preflight_merge_incoming(&self, remote: &str) -> DraftlineResult<MergeIncomingReport> {
+        self.workspace.preflight_merge_incoming(remote)
+    }
+
+    pub fn merge_incoming_with_options(
+        &self,
+        token: MergeIncomingToken,
+        label: &str,
+        options: &mut RemoteOptions<'_>,
+    ) -> DraftlineResult<MergeIncomingResult> {
+        self.workspace.merge_incoming(token, label, options)
+    }
+
+    pub fn merge_incoming_with_resolutions_and_options(
+        &self,
+        token: MergeIncomingToken,
+        label: &str,
+        resolutions: Vec<MergeConflictResolution>,
+        options: &mut RemoteOptions<'_>,
+    ) -> DraftlineResult<MergeIncomingResult> {
+        self.workspace
+            .merge_incoming_with_resolutions(token, label, resolutions, options)
+    }
+
     pub fn publish_changes_with_options(
         &self,
         remote: &str,
@@ -276,8 +317,8 @@ pub fn cutready_remote_options(github_token: Option<String>) -> RemoteOptions<'s
     })
 }
 
-/// Adapter spike findings that should be revisited before any production UI use.
-pub fn draftline_spike_gaps() -> &'static [&'static str] {
+/// Remaining CutReady-owned integration gaps after Draftline owns versioning.
+pub fn draftline_integration_gaps() -> &'static [&'static str] {
     &[]
 }
 
@@ -411,9 +452,42 @@ mod tests {
         assert!(policy.tracks("intro.sk").unwrap());
         assert!(policy.tracks("storyboards/demo.sb").unwrap());
         assert!(policy.tracks("notes/planning.md").unwrap());
+        assert!(policy.tracks("reference.png").unwrap());
+        assert!(policy.tracks("screenshots/demo.webp").unwrap());
         assert!(policy.tracks(".cutready/visuals/frame.json").unwrap());
         assert!(!policy.tracks(".cutready/ui-state.json").unwrap());
         assert!(!policy.tracks(".cutready/locks.json").unwrap());
+    }
+
+    #[test]
+    fn shelf_lifecycle_replaces_git_stash_for_tracked_content() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        write(root.join("intro.sk"), r#"{"title":"Base"}"#);
+        write(root.join(".cutready/ui-state.json"), r#"{"panel":"base"}"#);
+
+        let adapter = CutReadyDraftlineAdapter::open_project(root).unwrap();
+        adapter.save_version("Base").unwrap();
+
+        write(root.join("intro.sk"), r#"{"title":"Shelved"}"#);
+        write(root.join(".cutready/ui-state.json"), r#"{"panel":"dirty"}"#);
+
+        let shelf = adapter.shelve_changes("cutready-stash").unwrap();
+        assert_eq!(shelf.id, "cutready-stash");
+        assert_eq!(read(root.join("intro.sk")), r#"{"title":"Base"}"#);
+        assert_eq!(
+            read(root.join(".cutready/ui-state.json")),
+            r#"{"panel":"dirty"}"#
+        );
+
+        let shelves = adapter.list_shelves().unwrap();
+        assert_eq!(shelves.len(), 1);
+        assert_eq!(shelves[0].id, "cutready-stash");
+
+        adapter.apply_shelf("cutready-stash").unwrap();
+        assert_eq!(read(root.join("intro.sk")), r#"{"title":"Shelved"}"#);
+        adapter.delete_shelf("cutready-stash").unwrap();
+        assert!(adapter.list_shelves().unwrap().is_empty());
     }
 
     #[test]

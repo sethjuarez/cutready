@@ -136,7 +136,7 @@ src-tauri/
 │   │   ├── note.rs                # Notes + image management
 │   │   ├── project.rs             # Project open/close, file scanning
 │   │   ├── screenshot.rs          # Screen capture
-│   │   ├── versioning.rs          # Git commit, log, diff, restore, merge, remote
+│   │   ├── draftline.rs           # Draftline persistence/versioning commands
 │   │   ├── feedback.rs            # User feedback submission
 │   │   ├── import.rs              # Document import (.docx/.pdf/.pptx)
 │   │   ├── recording.rs           # FFmpeg recording (placeholder)
@@ -159,9 +159,7 @@ src-tauri/
 │   │   ├── import.rs              # .docx/.pdf/.pptx import
 │   │   ├── animation.rs           # Elucim animation rendering / video export
 │   │   ├── project.rs             # Folder-based project I/O, safe_resolve()
-│   │   ├── versioning.rs          # Git operations via gix (init, commit, log, diff, restore)
-│   │   ├── versioning_merge.rs    # Three-way merge for .sk/.sb/.md
-│   │   ├── versioning_remote.rs   # Git remote sync (push/pull/fetch via gh)
+│   │   ├── draftline_adapter.rs   # Draftline-backed persistence/versioning facade
 │   │   └── export.rs              # FCPXML generation, folder assembly
 │   ├── models/                    # Core data types
 │   │   ├── action.rs              # Action enum, SelectorStrategy

@@ -15,7 +15,7 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use crate::engine::versioning;
+use crate::engine::draftline_adapter::CutReadyDraftlineAdapter;
 use crate::models::script::{ProjectEntry, ProjectManifest, ProjectView, RepoView};
 use crate::models::sketch::{NoteSummary, Sketch, SketchSummary, Storyboard, StoryboardSummary};
 
@@ -102,14 +102,14 @@ pub fn safe_resolve(root: &Path, relative_path: &str) -> Result<PathBuf, Project
 
 /// Initialize a new project in the given folder.
 ///
-/// Creates the folder if it doesn't exist, inits git, and returns a ProjectView.
+/// Creates the folder if it doesn't exist, initializes Draftline, and returns a ProjectView.
 pub fn init_project_folder(root: &Path) -> Result<ProjectView, ProjectError> {
     std::fs::create_dir_all(root).map_err(|e| ProjectError::Io(e.to_string()))?;
 
-    // Init git if not already a repo
+    // Init Draftline if not already a workspace.
     if !root.join(".git").exists() {
-        versioning::init_project_repo(root).map_err(|e| ProjectError::Io(e.to_string()))?;
-        let _ = versioning::commit_snapshot(root, "Initialize workspace", None);
+        CutReadyDraftlineAdapter::open_project(root)
+            .map_err(|e| ProjectError::Io(e.to_string()))?;
     }
 
     Ok(ProjectView::new(root.to_path_buf()))
@@ -169,10 +169,10 @@ pub fn open_repo(root: &Path) -> Result<(RepoView, Vec<ProjectEntry>), ProjectEr
         return Err(ProjectError::NotFound(root.to_string_lossy().into_owned()));
     }
 
-    // Init git if not already a repo so snapshots work
+    // Init Draftline if not already a workspace so persistence works.
     if !root.join(".git").exists() {
-        versioning::init_project_repo(root).map_err(|e| ProjectError::Io(e.to_string()))?;
-        let _ = versioning::commit_snapshot(root, "Initialize workspace", None);
+        CutReadyDraftlineAdapter::open_project(root)
+            .map_err(|e| ProjectError::Io(e.to_string()))?;
     }
 
     // Repair: move orphaned repo-level assets into the first project.
@@ -668,10 +668,6 @@ pub fn rename_file(
     }
     std::fs::rename(old_path, new_path).map_err(|e| ProjectError::Io(e.to_string()))?;
 
-    if project_root.join(".git").exists() {
-        let msg = format!("Rename {label}");
-        let _ = versioning::commit_snapshot(project_root, &msg, None);
-    }
     Ok(())
 }
 
@@ -1751,22 +1747,6 @@ pub fn write_repo_settings(
     std::fs::write(&path, data).map_err(|e| ProjectError::Io(e.to_string()))
 }
 
-// ── Versioning helpers ─────────────────────────────────────────────
-
-/// Save with a user-provided label (for named versions).
-pub fn save_with_label(
-    project_root: &Path,
-    label: &str,
-    fork_label: Option<&str>,
-) -> Result<String, ProjectError> {
-    // Auto-init git if missing so snapshots always work
-    if !project_root.join(".git").exists() {
-        versioning::init_project_repo(project_root).map_err(|e| ProjectError::Io(e.to_string()))?;
-    }
-    versioning::commit_snapshot(project_root, label, fork_label)
-        .map_err(|e| ProjectError::Io(e.to_string()))
-}
-
 // ── Internal helpers ────────────────────────────────────────────────
 
 /// Recursively find files with a given extension, skipping `.git` and hidden dirs.
@@ -1830,15 +1810,13 @@ mod tests {
     use tempfile::TempDir;
 
     #[test]
-    fn init_project_folder_creates_git() {
+    fn init_project_folder_creates_draftline_workspace() {
         let tmp = TempDir::new().unwrap();
         let root = tmp.path().join("My Demo");
 
         let view = init_project_folder(&root).unwrap();
         assert_eq!(view.name, "My Demo");
         assert!(root.join(".git").exists());
-        let versions = versioning::list_versions(&root).unwrap();
-        assert!(versions.iter().any(|v| v.message == "Initialize workspace"));
     }
 
     #[test]
@@ -2151,21 +2129,6 @@ mod tests {
         assert!(!sketch_file_exists("intro.sk", root));
         write_sketch(&Sketch::new("Intro"), &root.join("intro.sk"), root).unwrap();
         assert!(sketch_file_exists("intro.sk", root));
-    }
-
-    #[test]
-    fn save_with_label_creates_named_version() {
-        let tmp = TempDir::new().unwrap();
-        let root = tmp.path();
-
-        init_project_folder(root).unwrap();
-        write_sketch(&Sketch::new("Test"), &root.join("test.sk"), root).unwrap();
-
-        let commit_id = save_with_label(root, "v1.0 release", None).unwrap();
-        assert!(!commit_id.is_empty());
-
-        let versions = versioning::list_versions(root).unwrap();
-        assert!(versions.iter().any(|v| v.message == "v1.0 release"));
     }
 
     // ── safe_resolve tests ─────────────────────────────────

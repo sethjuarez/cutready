@@ -218,13 +218,8 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
     case "delete_storyboard":
     case "rename_storyboard":
       return null;
-    case "list_versions":
     case "draftline_list_versions":
-      if (cmd === "draftline_list_versions") return mockDraftlineVersions();
-      return [
-        { id: "abc123", message: "Initial draft", timestamp: "2025-01-15T10:00:00Z", summary: "Created demo introduction" },
-        { id: "def456", message: "Added feature section", timestamp: "2025-01-15T11:00:00Z", summary: "Added deep dive section" },
-      ];
+      return mockDraftlineVersions();
     case "draftline_workspace_summary":
       return {
         activeVariation: { id: "main", name: "main", displayLabel: "main", isCurrent: true },
@@ -262,16 +257,6 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
       return "main";
     case "draftline_delete_variation":
       return null;
-    case "list_timelines":
-      return [{ name: "main", label: "main", is_active: true, snapshot_count: 2, color_index: 0 }];
-    case "get_graph":
-    case "get_timeline_graph":
-      return [
-        { id: "def456", message: "Added feature section", timestamp: "2025-01-15T11:00:00Z", timeline: "main", parents: ["abc123"], lane: 0, is_head: true, is_branch_tip: true, is_remote_tip: false, author: "You" },
-        { id: "abc123", message: "Initial draft", timestamp: "2025-01-15T10:00:00Z", timeline: "main", parents: [], lane: 0, is_head: false, is_branch_tip: false, is_remote_tip: false, author: "You" },
-      ];
-    case "has_unsaved_changes":
-      return false;
     case "draftline_inspect_changes":
       return { files: [], diff: null };
     case "draftline_diff_versions":
@@ -291,22 +276,14 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
       };
     case "draftline_preview_version_file":
       return { path: (args as { path?: string })?.path ?? "sketches/demo-introduction.sk", content: JSON.stringify(MOCK_SKETCH), isBinary: false };
-    case "diff_working_tree":
-      return [];
-    case "discard_file":
-      return null;
-    case "is_rewound":
-      return false;
-    case "check_git_identity":
-      return { name: "Dev User", email: "dev@example.com", is_fallback: false };
-    case "set_git_identity":
-      return null;
+    case "draftline_file_diff_content":
+      return {
+        path: (args as { filePath?: string })?.filePath ?? "sketches/demo-introduction.sk",
+        headContent: JSON.stringify(MOCK_SKETCH, null, 2),
+        workingContent: JSON.stringify({ ...MOCK_SKETCH, title: "Updated demo introduction" }, null, 2),
+      };
     case "resolve_deep_link":
       return null;
-    case "create_snapshot":
-      return "new-snapshot-id";
-    case "save_with_label":
-      return "mock-commit-id";
     case "draftline_save_version":
       return {
         id: "fff456fff456fff456fff456fff456fff456fff4",
@@ -315,6 +292,41 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
         savedBy: { name: "You", email: "dev@example.com" },
         timeSeconds: Math.floor(Date.now() / 1000),
       };
+    case "draftline_discard_changes":
+      return { files: [], diff: null };
+    case "draftline_discard_file":
+      return {
+        path: (args as { path?: string })?.path ?? "intro.sk",
+        kind: "modified",
+        isBinary: false,
+        isLarge: false,
+      };
+    case "draftline_shelve_changes":
+      return {
+        id: (args as { name?: string })?.name ?? "cutready-stash",
+        version: {
+          id: "shelf456shelf456shelf456shelf456shelf456",
+          label: "Shelved changes",
+          author: { name: "You", email: "dev@example.com" },
+          savedBy: { name: "You", email: "dev@example.com" },
+          timeSeconds: Math.floor(Date.now() / 1000),
+        },
+      };
+    case "draftline_list_shelves":
+      return [];
+    case "draftline_apply_shelf":
+      return {
+        id: (args as { id?: string })?.id ?? "cutready-stash",
+        version: {
+          id: "shelf456shelf456shelf456shelf456shelf456",
+          label: "Shelved changes",
+          author: { name: "You", email: "dev@example.com" },
+          savedBy: { name: "You", email: "dev@example.com" },
+          timeSeconds: Math.floor(Date.now() / 1000),
+        },
+      };
+    case "draftline_delete_shelf":
+      return null;
     case "draftline_create_variation_from":
       return {
         id: (args as { name?: string })?.name ?? "variation",
@@ -612,7 +624,6 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
     }
     case "set_sidebar_order":
     case "set_workspace_state":
-    case "promote_timeline":
     case "update_sketch":
     case "update_sketch_title":
     case "update_storyboard":
@@ -882,29 +893,29 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
           ],
         },
       };
-    // Remote/versioning commands
-    case "add_git_remote":
-      return null;
+    // Remote/Draftline commands
     case "draftline_add_remote":
       return {
         name: (args as { name?: string })?.name ?? "origin",
         url: (args as { url?: string })?.url ?? "https://github.com/example/cutready-demo.git",
       };
-    case "remove_git_remote":
-      return null;
-    case "list_git_remotes":
     case "draftline_list_remotes":
       return [];
-    case "detect_git_remote":
-      return null;
-    case "fetch_git_remote":
     case "draftline_fetch_remote":
     case "draftline_apply_incoming":
-    case "push_git_remote":
     case "draftline_publish_changes":
       return cmd === "draftline_apply_incoming" ? { appliedCount: 0 } : null;
-    case "get_sync_status":
-      return { ahead: 0, behind: 0 };
+    case "draftline_merge_incoming":
+    case "draftline_merge_incoming_with_resolutions":
+      return {
+        version: {
+          id: "mock-merged-version",
+          label: (args as { label?: string })?.label ?? "Merge incoming saves",
+          timeSeconds: Math.floor(Date.now() / 1000),
+          author: { name: "Demo User", email: null },
+        },
+        mergedFiles: [],
+      };
     case "draftline_sync_status":
       return {
         remote: (args as { remote?: string })?.remote ?? "origin",
@@ -928,43 +939,27 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
         isFastForward: false,
         canProceed: false,
       };
-    case "list_incoming_commits":
-      return [
-        {
-          id: "abc123",
-          message: "Refine opening demo flow",
-          author: "Avery",
-          timestamp: new Date().toISOString(),
-          changed_files: [
-            { path: "sketches/demo-introduction.sk", status: "modified", additions: 0, deletions: 0 },
-            { path: "notes/script-draft.md", status: "modified", additions: 0, deletions: 0 },
-          ],
-          projects: ["sketches", "notes"],
+    case "draftline_preflight_merge_incoming":
+      return {
+        syncStatus: {
+          remote: (args as { remote?: string })?.remote ?? "origin",
+          variation: "main",
+          ahead: 0,
+          behind: 0,
+          state: "upToDate",
+          incoming: [],
         },
-      ];
-    case "get_github_token":
-      return null;
-    case "pull_git_remote":
-      return { type: "UpToDate" };
-    case "list_remote_branches":
-      return [];
-    case "checkout_remote_branch":
-      return null;
-    case "diff_snapshots":
-      return [
-        { path: "sketches/demo-introduction.sk", status: "modified", additions: 5, deletions: 2 },
-        { path: "notes/script.md", status: "added", additions: 12, deletions: 0 },
-      ];
+        dirtyFiles: [],
+        fileHazards: [],
+        conflicts: [],
+        token: null,
+        canMergeCleanly: false,
+        changedWorkspace: false,
+      };
     case "check_large_files":
       return [];
     case "clone_from_url":
       return null;
-    case "merge_timelines":
-      return { status: "clean", commit_id: "merge-abc123" };
-    case "apply_merge_resolution":
-      return "resolved-merge-abc123";
-    case "resolve_merge_conflict":
-      return (args as Record<string, any>)?.conflict?.ours ?? "";
     default:
       // Handle tauri-plugin-store commands
       if (cmd.startsWith("plugin:store|")) {

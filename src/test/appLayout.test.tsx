@@ -40,9 +40,6 @@ vi.mock("../components/CommandPalette", () => ({
 vi.mock("../components/SnapshotDialog", () => ({
   SnapshotDialog: () => null,
 }));
-vi.mock("../components/IdentityDialog", () => ({
-  IdentityDialog: () => null,
-}));
 vi.mock("../components/KeyboardShortcutsDialog", () => ({
   KeyboardShortcutsDialog: () => null,
 }));

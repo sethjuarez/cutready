@@ -65,9 +65,7 @@ The backend is organized as independent engines:
 | Engine | Module | Status | Responsibility |
 | --- | --- | --- | --- |
 | Project | `engine/project.rs` | ✅ | Folder-based project I/O, safe_resolve(), file scanning |
-| Versioning | `engine/versioning.rs` | ✅ | gix snapshots, branch, restore, stash, log |
-| Merge | `engine/versioning_merge.rs` | ✅ | Three-way merge for .sk/.sb/.md files |
-| Remote | `engine/versioning_remote.rs` | ✅ | Git remote sync (push/pull/fetch via `gh` CLI) |
+| Draftline | `engine/draftline_adapter.rs` + `commands/draftline.rs` | ✅ | Draftline-backed persistence, history, diff, save, restore, remotes, merge/apply flows |
 | Agent | `engine/agent/` | ✅ | Multi-agent AI system (runner, tools, LLM client) |
 | Import | `engine/import.rs` | ✅ | .docx/.pdf/.pptx import to sketches/notes |
 | Memory | `engine/memory.rs` | ✅ | Agent memory system (core, procedural, archival) |

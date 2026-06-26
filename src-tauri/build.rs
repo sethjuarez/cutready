@@ -10,9 +10,8 @@ fn main() {
             .unwrap_or_default();
         let xcode_path = xcode_path.trim();
         if !xcode_path.is_empty() {
-            let swift_lib = format!(
-                "{xcode_path}/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/macosx"
-            );
+            let swift_lib =
+                format!("{xcode_path}/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/macosx");
             println!("cargo:rustc-link-search=native={swift_lib}");
             println!("cargo:rustc-link-arg=-Wl,-rpath,{swift_lib}");
         }

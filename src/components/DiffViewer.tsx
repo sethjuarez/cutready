@@ -108,7 +108,7 @@ export function DiffViewer({ filePath }: { filePath: string }) {
   useEffect(() => {
     setLoading(true);
     setError(null);
-    invoke<FileDiffContent>("get_file_diff_content", { filePath })
+    invoke<FileDiffContent>("draftline_file_diff_content", { filePath })
       .then(setDiff)
       .catch((e) => setError(String(e)))
       .finally(() => setLoading(false));

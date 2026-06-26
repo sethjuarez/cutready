@@ -127,9 +127,8 @@ cutready/
 | Module | Status | Purpose |
 | --- | --- | --- |
 | engine/project.rs | ✅ Implemented | Folder-based project I/O, safe_resolve(), file scanning |
-| engine/versioning.rs | ✅ Implemented | gix snapshots, branch, restore, stash |
-| engine/versioning_merge.rs | ✅ Implemented | Three-way merge engine for .sk/.sb/.md |
-| engine/versioning_remote.rs | ✅ Implemented | Git remote sync (push/pull/fetch via `gh`) |
+| engine/draftline_adapter.rs | ✅ Implemented | Draftline-backed versioning facade, content policy, remotes, history, diff, save, restore |
+| commands/draftline.rs | ✅ Implemented | Tauri command wrappers for Draftline context, credentials, events, and collaboration operations |
 | engine/agent/ | ✅ Implemented | Multi-agent AI system (Planner, Writer, Editor, Designer) |
 | engine/agent/llm.rs | ✅ Implemented | Thin bridge: LlmConfig → agentive providers |
 | engine/agent/runner.rs | ✅ Implemented | Agentic loop (delegates to agentive::run) |

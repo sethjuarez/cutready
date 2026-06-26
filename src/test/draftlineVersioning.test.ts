@@ -15,8 +15,11 @@ import {
   listDraftlineLargeChangedFiles,
   listDraftlineTimelines,
   listDraftlineVersions,
+  hasDraftlineShelf,
+  popDraftlineShelf,
   previewDraftlineVersion,
   saveDraftlineVersion,
+  shelveDraftlineChanges,
 } from "../services/draftlineVersioning";
 
 function version(id: string, label: string, timeSeconds: number, name = "Seth") {
@@ -274,5 +277,39 @@ describe("draftlineVersioning", () => {
     await expect(saveDraftlineVersion("Save")).resolves.toBe("fedcba98765432100123456789abcdef01234567");
     expect(mockInvoke).toHaveBeenNthCalledWith(1, "draftline_workspace_summary");
     expect(mockInvoke).toHaveBeenNthCalledWith(2, "draftline_save_version", { label: "Save" });
+  });
+
+  it("uses Draftline shelves for stash-compatible operations", async () => {
+    mockInvoke
+      .mockResolvedValueOnce({
+        id: "cutready-stash",
+        version: version("3333333333333333333333333333333333333333", "Shelved changes", 1_700_000_200),
+      })
+      .mockResolvedValueOnce([
+        {
+          id: "cutready-stash",
+          version: version("3333333333333333333333333333333333333333", "Shelved changes", 1_700_000_200),
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          id: "cutready-stash",
+          version: version("3333333333333333333333333333333333333333", "Shelved changes", 1_700_000_200),
+        },
+      ])
+      .mockResolvedValueOnce({
+        id: "cutready-stash",
+        version: version("3333333333333333333333333333333333333333", "Shelved changes", 1_700_000_200),
+      })
+      .mockResolvedValueOnce(undefined);
+
+    await expect(shelveDraftlineChanges()).resolves.toBeUndefined();
+    await expect(hasDraftlineShelf()).resolves.toBe(true);
+    await expect(popDraftlineShelf()).resolves.toBe(true);
+    expect(mockInvoke).toHaveBeenNthCalledWith(1, "draftline_shelve_changes", { name: "cutready-stash" });
+    expect(mockInvoke).toHaveBeenNthCalledWith(2, "draftline_list_shelves");
+    expect(mockInvoke).toHaveBeenNthCalledWith(3, "draftline_list_shelves");
+    expect(mockInvoke).toHaveBeenNthCalledWith(4, "draftline_apply_shelf", { id: "cutready-stash" });
+    expect(mockInvoke).toHaveBeenNthCalledWith(5, "draftline_delete_shelf", { id: "cutready-stash" });
   });
 });

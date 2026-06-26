@@ -1,8 +1,7 @@
 import { useCallback, useState } from "react";
 import { ArrowLeftRight } from "lucide-react";
-import { invoke } from "../services/tauri";
 import { useAppStore } from "../stores/appStore";
-import type { ConflictFile, ConflictChoices, FieldConflict, TextConflictRegion, FileResolution } from "../types/sketch";
+import type { ConflictFile, FieldConflict, TextConflictRegion, FileResolution } from "../types/sketch";
 
 /**
  * MergeConflictPanel — shown when a merge has conflicts.
@@ -208,21 +207,10 @@ function JsonFieldResolver({
     const next = { ...choices, [fieldPath]: choice };
     setChoices(next);
 
-    // If all fields resolved, resolve via backend
     if (conflict.field_conflicts.every((fc) => next[fc.field_path] !== undefined)) {
-      const conflictChoices: ConflictChoices = {
-        text_choices: {},
-        field_choices: next,
-      };
-      invoke<string>("resolve_merge_conflict", { conflict, choices: conflictChoices })
-        .then(onResolve)
-        .catch(() => {
-          // Fallback to local resolution
-          try {
-            const merged = buildMergedJson(conflict, next);
-            onResolve(merged);
-          } catch { /* wait for all choices */ }
-        });
+      try {
+        onResolve(buildMergedJson(conflict, next));
+      } catch { /* wait for all choices */ }
     }
   };
 
@@ -237,10 +225,7 @@ function JsonFieldResolver({
               const all: Record<string, "ours" | "theirs"> = {};
               conflict.field_conflicts.forEach((fc) => { all[fc.field_path] = "ours"; });
               setChoices(all);
-              const conflictChoices: ConflictChoices = { text_choices: {}, field_choices: all };
-              invoke<string>("resolve_merge_conflict", { conflict, choices: conflictChoices })
-                .then(onResolve)
-                .catch(() => { try { onResolve(buildMergedJson(conflict, all)); } catch {} });
+              try { onResolve(buildMergedJson(conflict, all)); } catch {}
             }}
             className="text-[10px] px-2 py-0.5 rounded bg-[rgb(var(--color-border))]/30 text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-border))]/50 transition-colors"
           >
@@ -251,10 +236,7 @@ function JsonFieldResolver({
               const all: Record<string, "ours" | "theirs"> = {};
               conflict.field_conflicts.forEach((fc) => { all[fc.field_path] = "theirs"; });
               setChoices(all);
-              const conflictChoices: ConflictChoices = { text_choices: {}, field_choices: all };
-              invoke<string>("resolve_merge_conflict", { conflict, choices: conflictChoices })
-                .then(onResolve)
-                .catch(() => { try { onResolve(buildMergedJson(conflict, all)); } catch {} });
+              try { onResolve(buildMergedJson(conflict, all)); } catch {}
             }}
             className="text-[10px] px-2 py-0.5 rounded bg-[rgb(var(--color-border))]/30 text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-border))]/50 transition-colors"
           >
@@ -417,22 +399,7 @@ function TextRegionResolver({
     setChoices(next);
 
     if (conflict.text_conflicts.every((_, i) => next[i] !== undefined)) {
-      // Convert numeric keys to proper Record<number, string> for backend
-      const textChoices: Record<number, "ours" | "theirs"> = {};
-      for (const [k, v] of Object.entries(next)) {
-        textChoices[Number(k)] = v;
-      }
-      const conflictChoices: ConflictChoices = {
-        text_choices: textChoices,
-        field_choices: {},
-      };
-      invoke<string>("resolve_merge_conflict", { conflict, choices: conflictChoices })
-        .then(onResolve)
-        .catch(() => {
-          // Fallback to local resolution
-          const merged = buildMergedText(conflict, next);
-          onResolve(merged);
-        });
+      onResolve(buildMergedText(conflict, next));
     }
   };
 
@@ -447,10 +414,7 @@ function TextRegionResolver({
               const all: Record<number, "ours" | "theirs"> = {};
               conflict.text_conflicts.forEach((_, i) => { all[i] = "ours"; });
               setChoices(all);
-              const conflictChoices: ConflictChoices = { text_choices: all, field_choices: {} };
-              invoke<string>("resolve_merge_conflict", { conflict, choices: conflictChoices })
-                .then(onResolve)
-                .catch(() => onResolve(buildMergedText(conflict, all)));
+              onResolve(buildMergedText(conflict, all));
             }}
             className="text-[10px] px-2 py-0.5 rounded bg-[rgb(var(--color-border))]/30 text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-border))]/50 transition-colors"
           >
@@ -461,10 +425,7 @@ function TextRegionResolver({
               const all: Record<number, "ours" | "theirs"> = {};
               conflict.text_conflicts.forEach((_, i) => { all[i] = "theirs"; });
               setChoices(all);
-              const conflictChoices: ConflictChoices = { text_choices: all, field_choices: {} };
-              invoke<string>("resolve_merge_conflict", { conflict, choices: conflictChoices })
-                .then(onResolve)
-                .catch(() => onResolve(buildMergedText(conflict, all)));
+              onResolve(buildMergedText(conflict, all));
             }}
             className="text-[10px] px-2 py-0.5 rounded bg-[rgb(var(--color-border))]/30 text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-border))]/50 transition-colors"
           >

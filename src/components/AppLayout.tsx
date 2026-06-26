@@ -15,7 +15,6 @@ import { OutputPanel } from "./OutputPanel";
 import { CommandPalette } from "./CommandPalette";
 import { TitleBar } from "./TitleBar";
 import { SnapshotDialog } from "./SnapshotDialog";
-import { IdentityDialog } from "./IdentityDialog";
 import { KeyboardShortcutsDialog } from "./KeyboardShortcutsDialog";
 import { MergeConflictPanel } from "./MergeConflictPanel";
 import { ChatPanel } from "./ChatPanel";
@@ -471,9 +470,8 @@ export function AppLayout() {
         onExecute={handleExecuteCommand}
         recentCommands={recentCommands}
       />
-
       <SnapshotDialog />
-      <IdentityDialog />
+      <SnapshotDialog />
       <KeyboardShortcutsDialog open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
       <FeedbackDialog isOpen={feedbackOpen} onClose={() => setFeedbackOpen(false)} />
     </div>

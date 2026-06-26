@@ -8,7 +8,9 @@ use tauri::State;
 use tauri_plugin_auditaur::auditaur_command;
 use tauri_plugin_store::StoreExt;
 
-use crate::engine::{agent_state::AgentStateStore, project, versioning};
+use crate::engine::{
+    agent_state::AgentStateStore, draftline_adapter::CutReadyDraftlineAdapter, project,
+};
 use crate::models::script::{ProjectEntry, ProjectView, RecentProject, RepoView};
 use crate::AppState;
 
@@ -583,8 +585,14 @@ fn repo_root(state: &AppState) -> Result<PathBuf, String> {
 }
 
 fn snapshot_workspace_structure(repo_root: &std::path::Path, message: &str) -> Result<(), String> {
-    if versioning::has_unsaved_changes(repo_root).map_err(|e| e.to_string())? {
-        versioning::commit_snapshot(repo_root, message, None)
+    let adapter = CutReadyDraftlineAdapter::open_project(repo_root).map_err(|e| e.to_string())?;
+    if !adapter
+        .inspect_changes()
+        .map_err(|e| e.to_string())?
+        .is_empty()
+    {
+        adapter
+            .save_version(message)
             .map(|_| ())
             .map_err(|e| e.to_string())?;
     }

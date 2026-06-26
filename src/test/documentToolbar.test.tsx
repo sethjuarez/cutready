@@ -41,12 +41,18 @@ describe("DocumentToolbar", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /record/i }));
-    fireEvent.click(screen.getByRole("button", { name: /present/i }));
-    fireEvent.click(screen.getByRole("menuitem", { name: /preview/i }));
+    const recordButton = screen.getByRole("button", { name: /record/i });
+    const presentButton = screen.getByRole("button", { name: /present/i });
+
+    expect(recordButton).toBeDisabled();
+    expect(presentButton).toBeDisabled();
+
+    fireEvent.click(recordButton);
+    fireEvent.click(presentButton);
 
     expect(onRecord).not.toHaveBeenCalled();
     expect(onDisabledAction).not.toHaveBeenCalled();
+    expect(screen.queryByRole("menuitem", { name: /preview/i })).not.toBeInTheDocument();
   });
 
   it("closes an open menu with Escape and toggles lock", () => {

@@ -162,10 +162,12 @@ Created the full directory structure from ARCHITECTURE.md with type definitions 
 
 ### 2.2 Project Storage with Git Versioning ✅
 
+> Historical note: CutReady's original local git implementation was replaced by Draftline-backed persistence. The rows below describe the completed prototype path, not the current module names.
+
 | Task | Details | Test | Status |
 | --- | --- | --- | --- |
 | Add `gix` dependency | `gix` crate (pure Rust git implementation, no C/cmake deps) with minimal features for init, add, commit, log, diff. Pin version for stability | `cargo build` succeeds on Windows without cmake | ✅ Done — gix 0.70 |
-| Create `engine/versioning.rs` | `init_project_repo(project_dir)` — git init. `commit_snapshot(project_dir, message)` — stage all, commit. `list_versions(project_dir)` — walk commit log, return `Vec<VersionEntry>` with id, message, timestamp, summary. `get_version(project_dir, commit_id)` — read content at commit. `diff_versions(project_dir, from, to)` — generate diff between two commits. `restore_version(project_dir, commit_id)` — checkout historical state, commit as new version | Unit tests with temp repos: init → commit → log → diff → restore round-trip | ✅ Done — 6 tests |
+| Create original versioning engine | Prototype workspace init, snapshot commits, history listing, file preview, diff, and restore | Unit tests with temp repos: init → commit → log → diff → restore round-trip | ✅ Done, superseded by Draftline |
 | Migrate project storage format | Move from flat `{uuid}.cutready` JSON files to directory-per-project: `projects/{uuid}/` containing `project.json`, `documents/`, `screenshots/`, `.git/`. Auto-migrate old flat files on first open | Migration test: old `.cutready` file opens correctly in new format | ✅ Done |
 | Update `engine/project.rs` | `create_project` creates directory + calls `init_project_repo` + initial commit. `save_project` writes JSON + auto-commits with generated message. `load_project` reads from working directory. `save_with_label` commits with user-provided message | CRUD round-trip test with git history verification | ✅ Done — 8 tests |
 
@@ -175,7 +177,7 @@ Created the full directory structure from ARCHITECTURE.md with type definitions 
 
 | Task | Details | Test | Status |
 | --- | --- | --- | --- |
-| Create `commands/versioning.rs` | Tauri commands: `save_with_label(label)`, `list_versions()`, `preview_version(commit_id)`, `restore_version(commit_id)` | Integration tests: call each command, verify responses | ✅ Done |
+| Create original versioning commands | Prototype Tauri commands for named saves, version listing, preview, and restore | Integration tests: call each command, verify responses | ✅ Done, superseded by Draftline |
 | Create `commands/document.rs` | Tauri commands: `create_document(title)`, `update_document(id, content)`, `update_document_title(id, title)`, `delete_document(id)`, `list_documents()`, `get_document(id)` | Integration tests: CRUD cycle | ✅ Done |
 | Register commands in `lib.rs` | Add all new commands to `tauri::generate_handler![]` | App compiles and commands are callable from frontend | ✅ Done |
 

@@ -66,7 +66,7 @@ describe("discardFile", () => {
     vi.useFakeTimers();
     mockInvoke.mockImplementation((command: string) => {
       switch (command) {
-        case "discard_file":
+        case "draftline_discard_file":
           return Promise.resolve();
         case "list_sketches":
           return Promise.resolve([
@@ -77,12 +77,8 @@ describe("discardFile", () => {
           return Promise.resolve([]);
         case "get_sketch":
           return Promise.resolve(restoredSketch);
-        case "has_unsaved_changes":
-          return Promise.resolve(false);
         case "draftline_workspace_summary":
           return Promise.resolve(cleanDraftlineSummary);
-        case "diff_working_tree":
-          return Promise.resolve([]);
         case "set_workspace_state":
           return Promise.resolve();
         default:
@@ -103,7 +99,7 @@ describe("discardFile", () => {
 
     await useAppStore.getState().discardFile("demo.sk");
 
-    expect(mockInvoke).toHaveBeenCalledWith("discard_file", { filePath: "demo.sk" });
+    expect(mockInvoke).toHaveBeenCalledWith("draftline_discard_file", { path: "demo.sk" });
     expect(mockInvoke).toHaveBeenCalledWith("get_sketch", { relativePath: "demo.sk" });
     expect(useAppStore.getState().activeSketch).toEqual(restoredSketch);
     expect(useAppStore.getState().editorReloadKey).toBe(1);
@@ -118,7 +114,7 @@ describe("discardFile", () => {
     vi.useFakeTimers();
     mockInvoke.mockImplementation((command: string) => {
       switch (command) {
-        case "discard_file":
+        case "draftline_discard_file":
           return Promise.resolve();
         case "list_sketches":
           return Promise.resolve([
@@ -129,12 +125,8 @@ describe("discardFile", () => {
           return Promise.resolve([]);
         case "get_sketch":
           return Promise.resolve(restoredSketch);
-        case "has_unsaved_changes":
-          return Promise.resolve(false);
         case "draftline_workspace_summary":
           return Promise.resolve(cleanDraftlineSummary);
-        case "diff_working_tree":
-          return Promise.resolve([]);
         case "set_workspace_state":
           return Promise.resolve();
         default:
@@ -160,7 +152,7 @@ describe("discardFile", () => {
 
     await useAppStore.getState().discardFile("project-a/demo.sk");
 
-    expect(mockInvoke).toHaveBeenCalledWith("discard_file", { filePath: "project-a/demo.sk" });
+    expect(mockInvoke).toHaveBeenCalledWith("draftline_discard_file", { path: "project-a/demo.sk" });
     expect(mockInvoke).toHaveBeenCalledWith("get_sketch", { relativePath: "demo.sk" });
     expect(useAppStore.getState().activeSketch).toEqual(restoredSketch);
     expect(useAppStore.getState().editorReloadPath).toBe("demo.sk");
@@ -175,7 +167,7 @@ describe("discardFile", () => {
     vi.useFakeTimers();
     mockInvoke.mockImplementation((command: string) => {
       switch (command) {
-        case "discard_file":
+        case "draftline_discard_file":
           return Promise.resolve();
         case "list_sketches":
           return Promise.resolve([
@@ -184,12 +176,8 @@ describe("discardFile", () => {
         case "list_storyboards":
         case "list_notes":
           return Promise.resolve([]);
-        case "has_unsaved_changes":
-          return Promise.resolve(false);
         case "draftline_workspace_summary":
           return Promise.resolve(cleanDraftlineSummary);
-        case "diff_working_tree":
-          return Promise.resolve([]);
         case "set_workspace_state":
           return Promise.resolve();
         default:
@@ -224,15 +212,12 @@ describe("discardFile", () => {
     vi.useFakeTimers();
     mockInvoke.mockImplementation((command: string) => {
       switch (command) {
-        case "discard_file":
+        case "draftline_discard_file":
           return Promise.resolve();
         case "list_sketches":
         case "list_storyboards":
         case "list_notes":
-        case "diff_working_tree":
           return Promise.resolve([]);
-        case "has_unsaved_changes":
-          return Promise.resolve(false);
         case "draftline_workspace_summary":
           return Promise.resolve(cleanDraftlineSummary);
         case "set_workspace_state":
@@ -270,14 +255,12 @@ describe("discardFile", () => {
     vi.useFakeTimers();
     mockInvoke.mockImplementation((command: string) => {
       switch (command) {
-        case "discard_changes":
+        case "draftline_discard_changes":
           return Promise.resolve();
         case "list_sketches":
         case "list_storyboards":
         case "list_notes":
           return Promise.resolve([]);
-        case "has_unsaved_changes":
-          return Promise.resolve(false);
         case "draftline_workspace_summary":
           return Promise.resolve(cleanDraftlineSummary);
         default:

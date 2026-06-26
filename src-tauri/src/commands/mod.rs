@@ -14,4 +14,3 @@ pub mod screenshot;
 pub mod sketch;
 pub mod storyboard;
 pub mod terminal;
-pub mod versioning;

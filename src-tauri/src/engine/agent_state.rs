@@ -1383,7 +1383,7 @@ mod tests {
     #[test]
     fn for_project_uses_local_git_state_and_migrates_legacy_database() {
         let project_root = tempfile::tempdir().unwrap().keep();
-        crate::engine::versioning::init_project_repo(&project_root).unwrap();
+        std::fs::create_dir_all(project_root.join(".git")).unwrap();
 
         let legacy_path = project_root.join(".cutready").join("agent-state.db");
         std::fs::create_dir_all(legacy_path.parent().unwrap()).unwrap();

@@ -11,6 +11,11 @@ interface DraftlineVersionDto {
   };
 }
 
+interface DraftlineShelfDto {
+  id: string;
+  version: DraftlineVersionDto;
+}
+
 interface DraftlineVariationDto {
   id: string;
   name: string;
@@ -89,6 +94,52 @@ interface DraftlineApplyIncomingReportDto {
 
 interface DraftlineApplyIncomingResultDto {
   appliedCount: number;
+}
+
+export interface DraftlineMergeIncomingToken {
+  remote: string;
+  variation: string;
+  localOid: string;
+  remoteOid: string;
+  mergeBaseOid: string;
+}
+
+export interface DraftlineMergeConflict {
+  path: string;
+  fieldPath?: string | null;
+  label: string;
+  base?: string | null;
+  ours?: string | null;
+  theirs?: string | null;
+  resolution: "choose" | "edit" | "combine" | "delete";
+}
+
+export interface DraftlineMergeIncomingReport {
+  syncStatus: DraftlineSyncStatusDto;
+  dirtyFiles: DraftlineChangedFileDto[];
+  fileHazards: string[];
+  conflicts: DraftlineMergeConflict[];
+  token?: DraftlineMergeIncomingToken | null;
+  canMergeCleanly: boolean;
+  changedWorkspace: boolean;
+}
+
+export type DraftlineMergeResolutionChoice =
+  | { kind: "use_ours" }
+  | { kind: "use_theirs" }
+  | { kind: "use_base" }
+  | { kind: "delete" }
+  | { kind: "use_content"; content: string };
+
+export interface DraftlineMergeConflictResolution {
+  path: string;
+  fieldPath?: string | null;
+  choice: DraftlineMergeResolutionChoice;
+}
+
+interface DraftlineMergeIncomingResultDto {
+  version: DraftlineVersionDto;
+  mergedFiles: string[];
 }
 
 export async function listDraftlineVersions(): Promise<VersionEntry[]> {
@@ -192,21 +243,43 @@ export async function addDraftlineRemote(name: string, url: string): Promise<Rem
   return { name: remote.name, url: remote.url };
 }
 
-export async function fetchDraftlineRemote(remote: string, githubToken: string | null): Promise<void> {
-  await invoke("draftline_fetch_remote", { remote, githubToken });
+export async function fetchDraftlineRemote(remote: string): Promise<void> {
+  await invoke("draftline_fetch_remote", { remote });
 }
 
-export async function publishDraftlineChanges(remote: string, githubToken: string | null): Promise<void> {
-  await invoke("draftline_publish_changes", { remote, githubToken });
+export async function publishDraftlineChanges(remote: string): Promise<void> {
+  await invoke("draftline_publish_changes", { remote });
 }
 
 export async function preflightDraftlineIncoming(remote: string): Promise<DraftlineApplyIncomingReportDto> {
   return invoke<DraftlineApplyIncomingReportDto>("draftline_preflight_apply_incoming", { remote });
 }
 
-export async function applyDraftlineIncoming(remote: string, githubToken: string | null): Promise<number> {
-  const result = await invoke<DraftlineApplyIncomingResultDto>("draftline_apply_incoming", { remote, githubToken });
+export async function applyDraftlineIncoming(remote: string): Promise<number> {
+  const result = await invoke<DraftlineApplyIncomingResultDto>("draftline_apply_incoming", { remote });
   return result.appliedCount;
+}
+
+export async function preflightDraftlineMergeIncoming(remote: string): Promise<DraftlineMergeIncomingReport> {
+  return invoke<DraftlineMergeIncomingReport>("draftline_preflight_merge_incoming", { remote });
+}
+
+export async function mergeDraftlineIncoming(remote: string, label: string): Promise<string> {
+  const result = await invoke<DraftlineMergeIncomingResultDto>("draftline_merge_incoming", { remote, label });
+  return result.version.id;
+}
+
+export async function mergeDraftlineIncomingWithResolutions(
+  token: DraftlineMergeIncomingToken,
+  label: string,
+  resolutions: DraftlineMergeConflictResolution[],
+): Promise<string> {
+  const result = await invoke<DraftlineMergeIncomingResultDto>("draftline_merge_incoming_with_resolutions", {
+    token,
+    label,
+    resolutions,
+  });
+  return result.version.id;
 }
 
 export async function getDraftlineSyncStatus(remote: string): Promise<SyncStatus> {
@@ -232,6 +305,14 @@ export async function listDraftlineIncomingCommits(remote: string): Promise<Inco
 export async function inspectDraftlineChanges(): Promise<DraftlineChangeSetDto> {
   const summary = await getDraftlineWorkspaceSummary();
   return { files: summary.dirtyFiles };
+}
+
+export async function discardDraftlineChanges(): Promise<void> {
+  await invoke<DraftlineChangeSetDto>("draftline_discard_changes");
+}
+
+export async function discardDraftlineFile(path: string): Promise<void> {
+  await invoke<DraftlineChangedFileDto | null>("draftline_discard_file", { path });
 }
 
 export async function hasDraftlineChanges(): Promise<boolean> {
@@ -260,6 +341,26 @@ export async function listDraftlineLargeChangedFiles(): Promise<string[]> {
 export async function saveDraftlineVersion(label: string): Promise<string> {
   const version = await invoke<DraftlineVersionDto>("draftline_save_version", { label });
   return version.id;
+}
+
+const CUTREADY_STASH_SHELF = "cutready-stash";
+
+export async function shelveDraftlineChanges(): Promise<void> {
+  await invoke<DraftlineShelfDto>("draftline_shelve_changes", { name: CUTREADY_STASH_SHELF });
+}
+
+export async function hasDraftlineShelf(): Promise<boolean> {
+  const shelves = await invoke<DraftlineShelfDto[]>("draftline_list_shelves");
+  return shelves.some((shelf) => shelf.id === CUTREADY_STASH_SHELF);
+}
+
+export async function popDraftlineShelf(): Promise<boolean> {
+  const shelves = await invoke<DraftlineShelfDto[]>("draftline_list_shelves");
+  const shelf = shelves.find((candidate) => candidate.id === CUTREADY_STASH_SHELF);
+  if (!shelf) return false;
+  await invoke<DraftlineShelfDto>("draftline_apply_shelf", { id: shelf.id });
+  await invoke("draftline_delete_shelf", { id: shelf.id });
+  return true;
 }
 
 export async function squashDraftlineVersions(count: number, label: string): Promise<string> {

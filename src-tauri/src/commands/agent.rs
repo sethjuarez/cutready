@@ -696,12 +696,18 @@ pub async fn save_chat_session(
     let abs = crate::engine::project::resolve_chat_session_path(&repo_root, &root, &relative_path)
         .map_err(|e| e.to_string())?;
     if session.author_name.is_none() || session.author_email.is_none() {
-        let identity = crate::engine::versioning::check_git_identity(&repo_root);
         if session.author_name.is_none() {
-            session.author_name = Some(identity.name);
+            session.author_name = std::env::var("GIT_AUTHOR_NAME")
+                .ok()
+                .or_else(|| std::env::var("USERNAME").ok())
+                .or_else(|| std::env::var("USER").ok())
+                .filter(|value| !value.trim().is_empty())
+                .or_else(|| Some("CutReady User".to_string()));
         }
         if session.author_email.is_none() {
-            session.author_email = Some(identity.email);
+            session.author_email = std::env::var("GIT_AUTHOR_EMAIL")
+                .ok()
+                .filter(|value| !value.trim().is_empty());
         }
     }
     crate::engine::project::write_chat_session(&abs, &session).map_err(|e| e.to_string())

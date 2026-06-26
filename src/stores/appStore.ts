@@ -4,9 +4,12 @@ import {
   applyDraftlineIncoming,
   createDraftlineVariation,
   deleteDraftlineVariation,
+  discardDraftlineChanges,
+  discardDraftlineFile,
   diffDraftlineVersions,
   fetchDraftlineRemote,
   getDraftlineSyncStatus,
+  hasDraftlineShelf,
   hasDraftlineChanges,
   listDraftlineIncomingCommits,
   listDraftlineChangedFiles,
@@ -17,9 +20,13 @@ import {
   listDraftlineVersions,
   previewDraftlineVersion,
   preflightDraftlineIncoming,
+  preflightDraftlineMergeIncoming,
+  mergeDraftlineIncoming,
   publishDraftlineChanges,
+  popDraftlineShelf,
   restoreDraftlineVersionAsNewSave,
   saveDraftlineVersion,
+  shelveDraftlineChanges,
   squashDraftlineVersions,
   switchDraftlineVariation,
 } from "../services/draftlineVersioning";
@@ -331,10 +338,6 @@ interface AppStoreState {
   showSecondaryPanel: boolean;
   /** Whether the snapshot name prompt should be shown (triggered by Ctrl+S). */
   snapshotPromptOpen: boolean;
-  /** Whether the identity prompt dialog should be shown. */
-  identityPromptOpen: boolean;
-  /** Callback to run after identity is set (opens snapshot dialog). */
-  identityPromptCallback: (() => void) | null;
   /** After saving a snapshot, navigate to this commit ID (used by nav-save flow). */
   pendingNavAfterSave: string | null;
   /** Whether there are unsaved changes since the last snapshot. */
@@ -844,8 +847,6 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   graphNodes: [],
   showSecondaryPanel: savedLayout.showSecondaryPanel ?? false,
   snapshotPromptOpen: false,
-  identityPromptOpen: false,
-  identityPromptCallback: null,
   pendingNavAfterSave: null,
   isDirty: false,
   changedFiles: [],
@@ -1330,8 +1331,6 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       timelines: [],
       graphNodes: [],
       snapshotPromptOpen: false,
-      identityPromptOpen: false,
-      identityPromptCallback: null,
       isDirty: false,
       changedFiles: [],
       hasStash: false,
@@ -2064,7 +2063,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
 
   stashChanges: async () => {
     try {
-      await invoke("stash_changes");
+      await shelveDraftlineChanges();
       set({ hasStash: true });
     } catch (err) {
       console.error("Failed to stash changes:", err);
@@ -2090,7 +2089,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         activeNoteContent: null,
         activeNoteLocked: false,
       });
-      await invoke("discard_changes");
+      await discardDraftlineChanges();
       await get().loadSketches();
       await get().loadStoryboards();
       await get().loadNotes();
@@ -2122,7 +2121,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     };
     try {
       for (const path of suppressedPaths) suppressEditorFlush(path);
-      await invoke("discard_file", { filePath: repoPath });
+      await discardDraftlineFile(repoPath);
       await get().loadSketches();
       await get().loadStoryboards();
       await get().loadNotes();
@@ -2222,7 +2221,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
 
   popStash: async () => {
     try {
-      const hadStash = await invoke<boolean>("pop_stash");
+      const hadStash = await popDraftlineShelf();
       set({ hasStash: false, isDirty: hadStash });
       if (hadStash) {
         await get().loadSketches();
@@ -2239,7 +2238,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
 
   checkStash: async () => {
     try {
-      const hasStash = await invoke<boolean>("has_stash");
+      const hasStash = await hasDraftlineShelf();
       set({ hasStash });
     } catch (err) {
       console.error("Failed to check stash:", err);
@@ -2367,19 +2366,6 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   },
 
   promptSnapshot: async () => {
-    // Check if identity is resolved — if fallback, prompt the user first
-    try {
-      const status = await invoke<{ name: string; email: string; is_fallback: boolean }>("check_git_identity");
-      if (status.is_fallback) {
-        set({
-          identityPromptOpen: true,
-          identityPromptCallback: () => set({ snapshotPromptOpen: true }),
-        });
-        return;
-      }
-    } catch {
-      // If check fails (e.g., no project open), proceed to snapshot dialog
-    }
     set({ snapshotPromptOpen: true });
   },
 
@@ -2425,12 +2411,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     if (!currentRemote) return;
     set({ isSyncing: true, syncError: null });
     try {
-      // Try gh CLI token first, then no token (SSH/credential helper)
-      let token: string | null = null;
-      try {
-        token = await invoke<string | null>("get_github_token");
-      } catch { /* ignore */ }
-      await fetchDraftlineRemote(currentRemote.name, token);
+      await fetchDraftlineRemote(currentRemote.name);
       await get().refreshSyncStatus();
       await get().refreshIncomingCommits();
       await get().loadGraphData();
@@ -2459,11 +2440,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         set({ syncError: `Large files detected: ${names}. Remove or add to .gitignore before pushing.`, isSyncing: false });
         return;
       }
-      let token: string | null = null;
-      try {
-        token = await invoke<string | null>("get_github_token");
-      } catch { /* ignore */ }
-      await publishDraftlineChanges(currentRemote.name, token);
+      await publishDraftlineChanges(currentRemote.name);
       await get().refreshSyncStatus();
       await get().checkDirty();
       await get().refreshChangedFiles();
@@ -2519,20 +2496,36 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       const preflight = await preflightDraftlineIncoming(currentRemote.name);
       if (!preflight.canProceed) {
         const state = preflight.syncStatus.state;
+        if (state === "needsMerge" && preflight.dirtyFiles.length === 0) {
+          const mergeReport = await preflightDraftlineMergeIncoming(currentRemote.name);
+          if (mergeReport.canMergeCleanly && mergeReport.token) {
+            await mergeDraftlineIncoming(currentRemote.name, "Merge incoming saves");
+            await get().loadSketches();
+            await get().loadStoryboards();
+            await get().loadNotes();
+            await get().refreshSyncStatus();
+            await get().refreshIncomingCommits();
+            await get().loadVersions();
+            await get().loadGraphData();
+            await get().loadTimelines();
+            await get().checkDirty();
+            useToastStore.getState().show("Incoming saves merged.", 4000, "success");
+            return;
+          }
+          const reason = mergeReport.conflicts.length > 0
+            ? "Incoming saves have conflicts. Manual Draftline conflict resolution is available in the backend but the CutReady conflict UI is not wired to it yet."
+            : "Incoming saves cannot be merged safely right now.";
+          set({ syncError: reason, syncStatus: { ahead: mergeReport.syncStatus.ahead, behind: mergeReport.syncStatus.behind } });
+          return;
+        }
         const reason = preflight.dirtyFiles.length > 0
           ? "Save or discard local changes before applying incoming saves."
-          : state === "needsMerge"
-            ? "Incoming saves require a merge workflow that Draftline has not exposed yet."
-            : "Incoming saves cannot be applied safely right now.";
+          : "Incoming saves cannot be applied safely right now.";
         set({ syncError: reason, syncStatus: { ahead: preflight.syncStatus.ahead, behind: preflight.syncStatus.behind } });
         return;
       }
 
-      let token: string | null = null;
-      try {
-        token = await invoke<string | null>("get_github_token");
-      } catch { /* ignore */ }
-      await applyDraftlineIncoming(currentRemote.name, token);
+      await applyDraftlineIncoming(currentRemote.name);
       await get().loadSketches();
       await get().loadStoryboards();
       await get().loadNotes();
@@ -2566,11 +2559,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     if (!active) return;
     set({ isSyncing: true, syncError: null });
     try {
-      let token: string | null = null;
-      try {
-        token = await invoke<string | null>("get_github_token");
-      } catch { /* ignore */ }
-      await publishDraftlineChanges(currentRemote.name, token);
+      await publishDraftlineChanges(currentRemote.name);
       await get().refreshSyncStatus();
     } catch (err) {
       set({ syncError: String(err) });
@@ -2640,11 +2629,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   cloneFromUrl: async (url, destPath) => {
     set({ loading: true });
     try {
-      let token: string | null = null;
-      try {
-        token = await invoke<string | null>("get_github_token");
-      } catch { /* ignore */ }
-      await invoke("clone_from_url", { url, dest: destPath, token });
+      await invoke("clone_from_url", { url, dest: destPath });
       // Open the cloned project
       await get().openProject(destPath);
       return true;
@@ -2669,31 +2654,8 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     const { mergeSource, mergeTarget } = get();
     if (!mergeSource || !mergeTarget) throw new Error("No merge in progress");
 
-    try {
-      const commitId = await invoke<string>("apply_merge_resolution", {
-        sourceTimeline: mergeSource,
-        targetTimeline: mergeTarget,
-        resolutions,
-      });
-
-      // Exit merge mode and refresh
-      set({
-        isMerging: false,
-        mergeSource: null,
-        mergeTarget: null,
-        mergeConflicts: [],
-      });
-      await get().loadTimelines();
-      await get().loadGraphData();
-      await get().loadSketches();
-      await get().loadStoryboards();
-      await get().loadNotes();
-
-      return commitId;
-    } catch (err) {
-      console.error("Apply merge resolution failed:", err);
-      throw err;
-    }
+    void resolutions;
+    throw new Error("Draftline conflict resolution UI is not wired yet.");
   },
 
   cancelMerge: () => {

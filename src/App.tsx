@@ -7,7 +7,7 @@ import { StatusBar } from "./components/StatusBar";
 import { AppLayout } from "./components/AppLayout";
 import { ToastContainer } from "./components/ToastContainer";
 import { ErrorBoundary } from "./components/ErrorBoundary";
-import { invoke } from "./services/tauri";
+import { invoke, listen } from "./services/tauri";
 import { isMac } from "./utils/platform";
 
 import { useAppStore } from "./stores/appStore";
@@ -45,6 +45,57 @@ function App() {
     useUpdateStore.getState().checkForUpdate();
     return () => {
       cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let disposed = false;
+    let refreshing = false;
+    let rerun = false;
+
+    const refreshFromDraftlineEvent = async () => {
+      if (refreshing) {
+        rerun = true;
+        return;
+      }
+      refreshing = true;
+      try {
+        do {
+          rerun = false;
+          const store = useAppStore.getState();
+          if (store.currentProject) {
+            await Promise.all([
+              store.checkDirty(),
+              store.refreshChangedFiles(),
+              store.loadVersions(),
+              store.loadGraphData(),
+              store.loadTimelines(),
+              store.refreshSyncStatus(),
+              store.refreshIncomingCommits(),
+            ]);
+          }
+        } while (rerun && !disposed);
+      } finally {
+        refreshing = false;
+      }
+    };
+
+    let unlisten: (() => void) | undefined;
+    listen("draftline://workspace_event", () => {
+      void refreshFromDraftlineEvent();
+    }).then((off) => {
+      if (disposed) {
+        off();
+      } else {
+        unlisten = off;
+      }
+    }).catch(() => {
+      // Explicit command refreshes remain authoritative if event subscription is unavailable.
+    });
+
+    return () => {
+      disposed = true;
+      unlisten?.();
     };
   }, []);
 

@@ -77,7 +77,6 @@ export function HomePanel() {
   const [showCreate, setShowCreate] = useState(false);
   const [showClone, setShowClone] = useState(false);
   const [cloneUrl, setCloneUrl] = useState("");
-  const [cloneToken, setCloneToken] = useState("");
   const [cloning, setCloning] = useState(false);
   const [cloneError, setCloneError] = useState<{ type: "auth" | "generic"; message: string } | null>(null);
 
@@ -161,11 +160,9 @@ export function HomePanel() {
       await invoke("clone_from_url", {
         url,
         dest,
-        token: cloneToken.trim() || null,
       });
       await openProject(dest);
       setCloneUrl("");
-      setCloneToken("");
       setShowClone(false);
     } catch (err) {
       console.error("Clone failed:", err);
@@ -178,7 +175,7 @@ export function HomePanel() {
     } finally {
       setCloning(false);
     }
-  }, [cloneUrl, cloneToken, openProject]);
+  }, [cloneUrl, openProject]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -309,23 +306,11 @@ export function HomePanel() {
                 onChange={(e) => setCloneUrl(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") handleClone();
-                  if (e.key === "Escape") { setShowClone(false); setCloneUrl(""); setCloneToken(""); setCloneError(null); }
+                  if (e.key === "Escape") { setShowClone(false); setCloneUrl(""); setCloneError(null); }
                 }}
                 placeholder="https://github.com/org/repo.git"
                 autoFocus
                 className="w-full px-3 py-2 rounded-lg bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] text-sm text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/50 focus:outline-none focus:ring-2 focus:ring-[rgb(var(--color-accent))]/40 mb-2"
-              />
-              <label className="block text-xs text-[rgb(var(--color-text-secondary))] mb-1">Access token (optional, for private workspaces)</label>
-              <input
-                type="password"
-                value={cloneToken}
-                onChange={(e) => setCloneToken(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") handleClone();
-                  if (e.key === "Escape") { setShowClone(false); setCloneUrl(""); setCloneToken(""); setCloneError(null); }
-                }}
-                placeholder="ghp_..."
-                className="w-full px-3 py-2 rounded-lg bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] text-sm text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/50 focus:outline-none focus:ring-2 focus:ring-[rgb(var(--color-accent))]/40 mb-3"
               />
               <div className="flex gap-2">
                 <button
@@ -336,7 +321,7 @@ export function HomePanel() {
                   {cloning ? "Cloning..." : "Choose Folder & Clone"}
                 </button>
                 <button
-                  onClick={() => { setShowClone(false); setCloneUrl(""); setCloneToken(""); setCloneError(null); }}
+                  onClick={() => { setShowClone(false); setCloneUrl(""); setCloneError(null); }}
                   className="px-3 py-2 rounded-lg text-sm text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface))] transition-colors"
                 >
                   Cancel
@@ -353,9 +338,6 @@ export function HomePanel() {
                         <li>Run <code className="px-1 py-0.5 rounded bg-[rgb(var(--color-surface-inset))] text-[10px]">gh auth login</code> in your terminal</li>
                         <li>Restart CutReady and try again</li>
                       </ol>
-                      <p className="text-[11px] text-[rgb(var(--color-text-secondary))] mt-2">
-                        Or paste an access token in the field above.
-                      </p>
                     </div>
                   </div>
                 </div>

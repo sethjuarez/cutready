@@ -24,7 +24,6 @@ const SENSITIVE_INVOKE_COMMANDS = new Set([
   "azure_browser_auth_complete",
   "azure_device_code_poll",
   "azure_token_refresh",
-  "get_github_token",
 ]);
 
 function isTauriRuntime() {

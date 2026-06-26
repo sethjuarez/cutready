@@ -1,18 +1,25 @@
-//! Internal, feature-gated Tauri commands for the Draftline adapter spike.
+//! Internal Tauri commands for CutReady's Draftline-backed versioning service.
 
 use std::path::{Path, PathBuf};
 
+use draftline::merge::{MergeConflict, ResolutionKind};
+use draftline::tauri_contract as contract;
 use draftline::{
     ApplyIncomingReport, ApplyIncomingResult, ChangeKind, ChangeSet, ChangedFile, Contributor,
-    HistoryEntry, PreflightReport, PreviewFile, RemoteEndpoint, SyncState, SyncStatus, Variation,
-    VariationId, VariationMetadata, VariationSummary, Version, VersionDiff, VersionId,
+    ContributorProfile, HistoryEntry, MergeConflictResolution, MergeIncomingReport,
+    MergeIncomingResult, MergeIncomingToken, MergeResolutionChoice, PreflightReport, PreviewFile,
+    RemoteCredential, RemoteCredentialRequest, RemoteEndpoint, Shelf, SyncState, SyncStatus,
+    Variation, VariationId, VariationMetadata, VariationSummary, Version, VersionDiff, VersionId,
     VersionPreview, WorkspaceSummary,
 };
 use serde::{Deserialize, Serialize};
-use tauri::State;
+use tauri::{AppHandle, Emitter, State};
 use tauri_plugin_auditaur::auditaur_command;
 
-use crate::engine::draftline_adapter::{cutready_remote_options, CutReadyDraftlineAdapter};
+use crate::engine::draftline_adapter::{
+    cutready_content_policy, cutready_remote_options, CutReadyDraftlineAdapter,
+};
+use crate::engine::project;
 use crate::{AppState, ProjectLock};
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -108,6 +115,13 @@ pub struct DraftlineVersionPreviewDto {
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct DraftlineShelfDto {
+    pub id: String,
+    pub version: DraftlineVersionDto,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DraftlinePreviewFileDto {
     pub path: String,
     pub content: Option<String>,
@@ -120,6 +134,7 @@ pub struct DraftlinePreflightReportDto {
     pub operation: String,
     pub will_write_files: bool,
     pub dirty_files: Vec<DraftlineChangedFileDto>,
+    pub file_hazards: Vec<String>,
     pub untracked_assets: Vec<String>,
     pub unresolved_conflicts: Vec<String>,
     pub large_files: Vec<String>,
@@ -135,6 +150,14 @@ pub struct DraftlineVersionDiffDto {
     pub to_version: Option<VersionId>,
     pub files: Vec<DraftlineChangedFileDto>,
     pub patch: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DraftlineFileDiffContentDto {
+    pub path: String,
+    pub head_content: Option<String>,
+    pub working_content: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -180,6 +203,74 @@ pub struct DraftlineApplyIncomingResultDto {
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct DraftlineMergeIncomingReportDto {
+    pub sync_status: DraftlineSyncStatusDto,
+    pub dirty_files: Vec<DraftlineChangedFileDto>,
+    pub file_hazards: Vec<String>,
+    pub conflicts: Vec<DraftlineMergeConflictDto>,
+    pub token: Option<DraftlineMergeIncomingTokenDto>,
+    pub can_merge_cleanly: bool,
+    pub changed_workspace: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DraftlineMergeIncomingTokenDto {
+    pub remote: String,
+    pub variation: String,
+    pub local_oid: String,
+    pub remote_oid: String,
+    pub merge_base_oid: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DraftlineMergeConflictDto {
+    pub path: String,
+    pub field_path: Option<String>,
+    pub label: String,
+    pub base: Option<String>,
+    pub ours: Option<String>,
+    pub theirs: Option<String>,
+    pub resolution: DraftlineResolutionKindDto,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum DraftlineResolutionKindDto {
+    Choose,
+    Edit,
+    Combine,
+    Delete,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DraftlineMergeConflictResolutionInput {
+    pub path: String,
+    pub field_path: Option<String>,
+    pub choice: DraftlineMergeResolutionChoiceInput,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "snake_case", tag = "kind")]
+pub enum DraftlineMergeResolutionChoiceInput {
+    UseOurs,
+    UseTheirs,
+    UseBase,
+    Delete,
+    UseContent { content: String },
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DraftlineMergeIncomingResultDto {
+    pub version: DraftlineVersionDto,
+    pub merged_files: Vec<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub enum DraftlineSyncStateDto {
     UpToDate,
     LocalAhead,
@@ -220,6 +311,74 @@ fn draftline_project_root(state: &AppState) -> Result<PathBuf, String> {
 fn open_adapter(state: &AppState) -> Result<CutReadyDraftlineAdapter, String> {
     CutReadyDraftlineAdapter::open_project(draftline_project_root(state)?)
         .map_err(|error| error.to_string())
+}
+
+fn cutready_contributor_profile(_project_root: &Path) -> ContributorProfile {
+    ContributorProfile::new(
+        Contributor {
+            name: std::env::var("GIT_AUTHOR_NAME")
+                .ok()
+                .or_else(|| std::env::var("USERNAME").ok())
+                .or_else(|| std::env::var("USER").ok())
+                .filter(|value| !value.trim().is_empty())
+                .unwrap_or_else(|| "CutReady User".to_string()),
+            email: std::env::var("GIT_AUTHOR_EMAIL")
+                .ok()
+                .filter(|value| !value.trim().is_empty()),
+        },
+        Contributor {
+            name: "CutReady".to_string(),
+            email: Some("app@cutready.local".to_string()),
+        },
+    )
+}
+
+fn resolve_remote_credential(
+    request: RemoteCredentialRequest<'_>,
+) -> draftline::Result<RemoteCredential> {
+    if request.allows_username_password {
+        if let Some(token) = try_gh_token() {
+            return Ok(RemoteCredential::UsernamePassword {
+                username: "x-access-token".to_string(),
+                password: token,
+            });
+        }
+    }
+
+    if request.allows_ssh_key {
+        return Ok(RemoteCredential::SshAgent {
+            username: request.username_from_url.unwrap_or("git").to_string(),
+        });
+    }
+
+    Ok(RemoteCredential::Default)
+}
+
+fn build_draftline_context(
+    project_root: &Path,
+    app: Option<AppHandle>,
+) -> Result<contract::DraftlineCommandContext<'static>, String> {
+    let mut context = contract::DraftlineCommandContext::new()
+        .with_content_policy(cutready_content_policy().map_err(|error| error.to_string())?)
+        .with_contributor_profile(cutready_contributor_profile(project_root))
+        .with_credentials(resolve_remote_credential);
+
+    if let Some(app) = app {
+        context = context.with_event_sink(move |event| {
+            let _ = app.emit("draftline://workspace_event", event);
+        });
+    }
+
+    Ok(context)
+}
+
+fn open_draftline_context(
+    state: &AppState,
+    app: Option<AppHandle>,
+) -> Result<(PathBuf, contract::DraftlineCommandContext<'static>), String> {
+    let root = draftline_project_root(state)?;
+    let context = build_draftline_context(&root, app)?;
+    Ok((root, context))
 }
 
 fn path_to_string(path: &Path) -> String {
@@ -348,6 +507,13 @@ fn preview_to_dto(preview: VersionPreview) -> DraftlineVersionPreviewDto {
     }
 }
 
+fn shelf_to_dto(shelf: Shelf) -> DraftlineShelfDto {
+    DraftlineShelfDto {
+        id: shelf.id,
+        version: version_to_dto(shelf.version),
+    }
+}
+
 fn version_diff_to_dto(diff: VersionDiff) -> DraftlineVersionDiffDto {
     DraftlineVersionDiffDto {
         from_version: diff.from_version,
@@ -365,6 +531,11 @@ fn preflight_to_dto(report: PreflightReport) -> DraftlinePreflightReportDto {
             .dirty_files
             .into_iter()
             .map(changed_file_to_dto)
+            .collect(),
+        file_hazards: report
+            .file_hazards
+            .iter()
+            .map(|hazard| path_to_string(&hazard.path))
             .collect(),
         untracked_assets: report
             .untracked_assets
@@ -447,6 +618,105 @@ fn apply_incoming_result_to_dto(result: ApplyIncomingResult) -> DraftlineApplyIn
     }
 }
 
+fn merge_incoming_report_to_dto(report: MergeIncomingReport) -> DraftlineMergeIncomingReportDto {
+    DraftlineMergeIncomingReportDto {
+        sync_status: sync_status_to_dto(report.sync_status),
+        dirty_files: report
+            .dirty_files
+            .into_iter()
+            .map(changed_file_to_dto)
+            .collect(),
+        file_hazards: report
+            .file_hazards
+            .iter()
+            .map(|hazard| path_to_string(&hazard.path))
+            .collect(),
+        conflicts: report
+            .conflicts
+            .into_iter()
+            .map(merge_conflict_to_dto)
+            .collect(),
+        token: report.token.map(merge_token_to_dto),
+        can_merge_cleanly: report.can_merge_cleanly,
+        changed_workspace: report.changed_workspace,
+    }
+}
+
+fn merge_token_to_dto(token: MergeIncomingToken) -> DraftlineMergeIncomingTokenDto {
+    DraftlineMergeIncomingTokenDto {
+        remote: token.remote,
+        variation: token.variation,
+        local_oid: token.local_oid,
+        remote_oid: token.remote_oid,
+        merge_base_oid: token.merge_base_oid,
+    }
+}
+
+fn merge_token_from_dto(
+    token: DraftlineMergeIncomingTokenDto,
+) -> Result<MergeIncomingToken, String> {
+    serde_json::from_value(serde_json::json!({
+        "remote": token.remote,
+        "variation": token.variation,
+        "local_oid": token.local_oid,
+        "remote_oid": token.remote_oid,
+        "merge_base_oid": token.merge_base_oid,
+    }))
+    .map_err(|error| error.to_string())
+}
+
+fn merge_conflict_to_dto(conflict: MergeConflict) -> DraftlineMergeConflictDto {
+    DraftlineMergeConflictDto {
+        path: path_to_string(&conflict.path),
+        field_path: conflict.field_path,
+        label: conflict.label,
+        base: conflict.base,
+        ours: conflict.ours,
+        theirs: conflict.theirs,
+        resolution: resolution_kind_to_dto(conflict.resolution),
+    }
+}
+
+fn resolution_kind_to_dto(kind: ResolutionKind) -> DraftlineResolutionKindDto {
+    match kind {
+        ResolutionKind::Choose => DraftlineResolutionKindDto::Choose,
+        ResolutionKind::Edit => DraftlineResolutionKindDto::Edit,
+        ResolutionKind::Combine => DraftlineResolutionKindDto::Combine,
+        ResolutionKind::Delete => DraftlineResolutionKindDto::Delete,
+    }
+}
+
+fn merge_resolution_from_input(
+    resolution: DraftlineMergeConflictResolutionInput,
+) -> MergeConflictResolution {
+    let choice = match resolution.choice {
+        DraftlineMergeResolutionChoiceInput::UseOurs => MergeResolutionChoice::UseOurs,
+        DraftlineMergeResolutionChoiceInput::UseTheirs => MergeResolutionChoice::UseTheirs,
+        DraftlineMergeResolutionChoiceInput::UseBase => MergeResolutionChoice::UseBase,
+        DraftlineMergeResolutionChoiceInput::Delete => MergeResolutionChoice::Delete,
+        DraftlineMergeResolutionChoiceInput::UseContent { content } => {
+            MergeResolutionChoice::UseContent { content }
+        }
+    };
+
+    if let Some(field_path) = resolution.field_path {
+        MergeConflictResolution::with_field_path(resolution.path, field_path, choice)
+    } else {
+        MergeConflictResolution::new(resolution.path, choice)
+    }
+}
+
+fn merge_incoming_result_to_dto(result: MergeIncomingResult) -> DraftlineMergeIncomingResultDto {
+    DraftlineMergeIncomingResultDto {
+        version: version_to_dto(result.version),
+        merged_files: result
+            .merged_files
+            .iter()
+            .map(|path| path_to_string(path))
+            .collect(),
+    }
+}
+
 fn switch_policy_from_input(policy: DraftlineSwitchPolicyInput) -> draftline::SwitchPolicy {
     match policy {
         DraftlineSwitchPolicyInput::AbortIfDirty => draftline::SwitchPolicy::AbortIfDirty,
@@ -467,12 +737,45 @@ fn reject_remote_url_credentials(url: &str) -> Result<(), String> {
 
     if !parsed.username().is_empty() || parsed.password().is_some() {
         return Err(
-            "Remote URLs must not include credentials. Use the token field for authentication."
+            "Remote URLs must not include credentials. Authenticate with GitHub CLI or your system credential helper."
                 .to_string(),
         );
     }
 
     Ok(())
+}
+
+fn try_gh_token() -> Option<String> {
+    let mut cmd = std::process::Command::new("gh");
+    cmd.args(["auth", "token"]);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000);
+    }
+
+    match cmd.output() {
+        Ok(output) if output.status.success() => {
+            let token = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if token.is_empty() {
+                None
+            } else {
+                Some(token)
+            }
+        }
+        _ => None,
+    }
+}
+
+#[auditaur_command(skip_all, err)]
+pub async fn clone_from_url(url: String, dest: String) -> Result<(), String> {
+    reject_remote_url_credentials(&url)?;
+    let dest_path = PathBuf::from(&dest);
+    let token = try_gh_token();
+    let mut options = cutready_remote_options(token);
+    CutReadyDraftlineAdapter::clone_project_with_options(&url, &dest_path, &mut options)
+        .map(|_| ())
+        .map_err(|error| error.to_string())
 }
 
 fn redact_remote_url_credentials(url: &str) -> String {
@@ -501,6 +804,60 @@ pub async fn draftline_inspect_changes(
 }
 
 #[auditaur_command(skip_all, err)]
+pub async fn draftline_discard_changes(
+    state: State<'_, AppState>,
+    app: AppHandle,
+    lock: State<'_, ProjectLock>,
+) -> Result<DraftlineChangeSetDto, String> {
+    let _guard = lock.0.lock().await;
+    let (workspace_path, mut context) = open_draftline_context(&state, Some(app))?;
+    let changes = contract::get_changes_with_context(
+        &context,
+        contract::WorkspaceRequest {
+            workspace_path: workspace_path.clone(),
+        },
+    )
+    .map_err(|error| error.to_string())?;
+    let paths = changes.files.into_iter().map(|file| file.path).collect();
+    contract::selected_discard_with_context(
+        &mut context,
+        contract::SelectedDiscardRequest {
+            workspace_path,
+            paths,
+        },
+    )
+    .map(|result| change_set_to_dto(result.discarded))
+    .map_err(|error| error.to_string())
+}
+
+#[auditaur_command(skip_all, err)]
+pub async fn draftline_discard_file(
+    path: String,
+    state: State<'_, AppState>,
+    app: AppHandle,
+    lock: State<'_, ProjectLock>,
+) -> Result<Option<DraftlineChangedFileDto>, String> {
+    let _guard = lock.0.lock().await;
+    let (workspace_path, mut context) = open_draftline_context(&state, Some(app))?;
+    contract::selected_discard_with_context(
+        &mut context,
+        contract::SelectedDiscardRequest {
+            workspace_path,
+            paths: vec![PathBuf::from(path)],
+        },
+    )
+    .map(|result| {
+        result
+            .discarded
+            .files
+            .into_iter()
+            .next()
+            .map(changed_file_to_dto)
+    })
+    .map_err(|error| error.to_string())
+}
+
+#[auditaur_command(skip_all, err)]
 pub async fn draftline_workspace_summary(
     state: State<'_, AppState>,
 ) -> Result<DraftlineWorkspaceSummaryDto, String> {
@@ -515,14 +872,94 @@ pub async fn draftline_workspace_summary(
 pub async fn draftline_save_version(
     label: String,
     state: State<'_, AppState>,
+    app: AppHandle,
     lock: State<'_, ProjectLock>,
 ) -> Result<DraftlineVersionDto, String> {
     let _guard = lock.0.lock().await;
+    let (workspace_path, mut context) = open_draftline_context(&state, Some(app))?;
+    let changes = contract::get_changes_with_context(
+        &context,
+        contract::WorkspaceRequest {
+            workspace_path: workspace_path.clone(),
+        },
+    )
+    .map_err(|error| error.to_string())?;
+    let paths = changes.files.into_iter().map(|file| file.path).collect();
+    contract::selected_save_with_context(
+        &mut context,
+        contract::SelectedSaveRequest {
+            workspace_path,
+            paths,
+            label,
+        },
+    )
+    .map(|result| version_to_dto(result.version))
+    .map_err(|error| error.to_string())
+}
+
+#[auditaur_command(skip_all, err)]
+pub async fn draftline_shelve_changes(
+    name: String,
+    state: State<'_, AppState>,
+    app: AppHandle,
+    lock: State<'_, ProjectLock>,
+) -> Result<DraftlineShelfDto, String> {
+    let _guard = lock.0.lock().await;
+    let (workspace_path, mut context) = open_draftline_context(&state, Some(app))?;
+    let changes = contract::get_changes_with_context(
+        &context,
+        contract::WorkspaceRequest {
+            workspace_path: workspace_path.clone(),
+        },
+    )
+    .map_err(|error| error.to_string())?;
+    let paths = changes.files.into_iter().map(|file| file.path).collect();
+    contract::selected_shelve_with_context(
+        &mut context,
+        contract::SelectedShelveRequest {
+            workspace_path,
+            paths,
+            name,
+        },
+    )
+    .map(|result| shelf_to_dto(result.shelf))
+    .map_err(|error| error.to_string())
+}
+
+#[auditaur_command(skip_all, err)]
+pub async fn draftline_list_shelves(
+    state: State<'_, AppState>,
+) -> Result<Vec<DraftlineShelfDto>, String> {
     let adapter = open_adapter(&state)?;
     adapter
-        .save_version(&label)
-        .map(version_to_dto)
+        .list_shelves()
+        .map(|shelves| shelves.into_iter().map(shelf_to_dto).collect())
         .map_err(|error| error.to_string())
+}
+
+#[auditaur_command(skip_all, err)]
+pub async fn draftline_apply_shelf(
+    id: String,
+    state: State<'_, AppState>,
+    lock: State<'_, ProjectLock>,
+) -> Result<DraftlineShelfDto, String> {
+    let _guard = lock.0.lock().await;
+    let adapter = open_adapter(&state)?;
+    adapter
+        .apply_shelf(&id)
+        .map(shelf_to_dto)
+        .map_err(|error| error.to_string())
+}
+
+#[auditaur_command(skip_all, err)]
+pub async fn draftline_delete_shelf(
+    id: String,
+    state: State<'_, AppState>,
+    lock: State<'_, ProjectLock>,
+) -> Result<(), String> {
+    let _guard = lock.0.lock().await;
+    let adapter = open_adapter(&state)?;
+    adapter.delete_shelf(&id).map_err(|error| error.to_string())
 }
 
 #[auditaur_command(skip_all, err)]
@@ -735,6 +1172,40 @@ pub async fn draftline_diff_version_to_workspace(
 }
 
 #[auditaur_command(skip_all, err)]
+pub async fn draftline_file_diff_content(
+    file_path: String,
+    state: State<'_, AppState>,
+) -> Result<DraftlineFileDiffContentDto, String> {
+    let root = draftline_project_root(&state)?;
+    let adapter =
+        CutReadyDraftlineAdapter::open_project(&root).map_err(|error| error.to_string())?;
+    let head_content = match adapter
+        .versions()
+        .map_err(|error| error.to_string())?
+        .first()
+    {
+        Some(version) => adapter
+            .preview_version_file(version.id(), &file_path)
+            .map_err(|error| error.to_string())?
+            .and_then(|file| file.content),
+        None => None,
+    };
+
+    let abs_path = project::safe_resolve(&root, &file_path).map_err(|error| error.to_string())?;
+    let working_content = if abs_path.exists() {
+        Some(std::fs::read_to_string(&abs_path).map_err(|error| error.to_string())?)
+    } else {
+        None
+    };
+
+    Ok(DraftlineFileDiffContentDto {
+        path: file_path,
+        head_content,
+        working_content,
+    })
+}
+
+#[auditaur_command(skip_all, err)]
 pub async fn draftline_add_remote(
     name: String,
     url: String,
@@ -764,16 +1235,21 @@ pub async fn draftline_list_remotes(
 #[auditaur_command(skip_all, err)]
 pub async fn draftline_fetch_remote(
     remote: String,
-    github_token: Option<String>,
     state: State<'_, AppState>,
+    app: AppHandle,
     lock: State<'_, ProjectLock>,
 ) -> Result<(), String> {
     let _guard = lock.0.lock().await;
-    let adapter = open_adapter(&state)?;
-    let mut options = cutready_remote_options(github_token);
-    adapter
-        .fetch_remote_with_options(&remote, &mut options)
-        .map_err(|error| error.to_string())
+    let (workspace_path, mut context) = open_draftline_context(&state, Some(app))?;
+    contract::fetch_remote_with_context(
+        &mut context,
+        contract::RemoteRequest {
+            workspace_path,
+            remote,
+        },
+    )
+    .map(|_| ())
+    .map_err(|error| error.to_string())
 }
 
 #[auditaur_command(skip_all, err)]
@@ -781,47 +1257,128 @@ pub async fn draftline_preflight_apply_incoming(
     remote: String,
     state: State<'_, AppState>,
 ) -> Result<DraftlineApplyIncomingReportDto, String> {
-    let adapter = open_adapter(&state)?;
-    adapter
-        .preflight_apply_incoming(&remote)
-        .map(apply_incoming_report_to_dto)
-        .map_err(|error| error.to_string())
+    let (workspace_path, mut context) = open_draftline_context(&state, None)?;
+    contract::preflight_apply_incoming_with_context(
+        &mut context,
+        contract::RemoteRequest {
+            workspace_path,
+            remote,
+        },
+    )
+    .map(apply_incoming_report_to_dto)
+    .map_err(|error| error.to_string())
 }
 
 #[auditaur_command(skip_all, err)]
 pub async fn draftline_apply_incoming(
     remote: String,
-    github_token: Option<String>,
     state: State<'_, AppState>,
+    app: AppHandle,
     lock: State<'_, ProjectLock>,
 ) -> Result<DraftlineApplyIncomingResultDto, String> {
     let _guard = lock.0.lock().await;
-    let adapter = open_adapter(&state)?;
-    let mut options = cutready_remote_options(github_token);
-    adapter
-        .apply_incoming_with_options(&remote, &mut options)
-        .map(apply_incoming_result_to_dto)
-        .map_err(|error| error.to_string())
+    let (workspace_path, mut context) = open_draftline_context(&state, Some(app))?;
+    contract::apply_incoming_with_context(
+        &mut context,
+        contract::RemoteRequest {
+            workspace_path,
+            remote,
+        },
+    )
+    .map(|result| apply_incoming_result_to_dto(result.apply))
+    .map_err(|error| error.to_string())
+}
+
+#[auditaur_command(skip_all, err)]
+pub async fn draftline_preflight_merge_incoming(
+    remote: String,
+    state: State<'_, AppState>,
+) -> Result<DraftlineMergeIncomingReportDto, String> {
+    let (workspace_path, mut context) = open_draftline_context(&state, None)?;
+    contract::preflight_merge_incoming_with_context(
+        &mut context,
+        contract::RemoteRequest {
+            workspace_path,
+            remote,
+        },
+    )
+    .map(merge_incoming_report_to_dto)
+    .map_err(|error| error.to_string())
+}
+
+#[auditaur_command(skip_all, err)]
+pub async fn draftline_merge_incoming(
+    remote: String,
+    label: String,
+    state: State<'_, AppState>,
+    app: AppHandle,
+    lock: State<'_, ProjectLock>,
+) -> Result<DraftlineMergeIncomingResultDto, String> {
+    let _guard = lock.0.lock().await;
+    let (workspace_path, mut context) = open_draftline_context(&state, Some(app))?;
+    contract::merge_incoming_with_context(
+        &mut context,
+        contract::MergeIncomingRequest {
+            workspace_path,
+            remote,
+            label,
+        },
+    )
+    .map(|result| merge_incoming_result_to_dto(result.merge))
+    .map_err(|error| error.to_string())
+}
+
+#[auditaur_command(skip_all, err)]
+pub async fn draftline_merge_incoming_with_resolutions(
+    token: DraftlineMergeIncomingTokenDto,
+    label: String,
+    resolutions: Vec<DraftlineMergeConflictResolutionInput>,
+    state: State<'_, AppState>,
+    app: AppHandle,
+    lock: State<'_, ProjectLock>,
+) -> Result<DraftlineMergeIncomingResultDto, String> {
+    let _guard = lock.0.lock().await;
+    let (workspace_path, mut context) = open_draftline_context(&state, Some(app))?;
+    let remote = token.remote.clone();
+    contract::merge_incoming_with_resolutions_with_context(
+        &mut context,
+        contract::MergeIncomingWithResolutionsRequest {
+            workspace_path,
+            remote,
+            label,
+            token: merge_token_from_dto(token)?,
+            resolutions: resolutions
+                .into_iter()
+                .map(merge_resolution_from_input)
+                .collect(),
+        },
+    )
+    .map(|result| merge_incoming_result_to_dto(result.merge))
+    .map_err(|error| error.to_string())
 }
 
 #[auditaur_command(skip_all, err)]
 pub async fn draftline_publish_changes(
     remote: String,
-    github_token: Option<String>,
     state: State<'_, AppState>,
+    app: AppHandle,
     lock: State<'_, ProjectLock>,
 ) -> Result<DraftlinePublishResultDto, String> {
     let _guard = lock.0.lock().await;
-    let adapter = open_adapter(&state)?;
-    let mut options = cutready_remote_options(github_token);
-    adapter
-        .publish_changes_with_options(&remote, &mut options)
-        .map(|result| DraftlinePublishResultDto {
-            remote: result.remote,
-            variation: result.variation,
-            published_versions: result.published_versions,
-        })
-        .map_err(|error| error.to_string())
+    let (workspace_path, mut context) = open_draftline_context(&state, Some(app))?;
+    contract::publish_current_variation_with_context(
+        &mut context,
+        contract::PublishCurrentVariationRequest {
+            workspace_path,
+            remote,
+        },
+    )
+    .map(|result| DraftlinePublishResultDto {
+        remote: result.publish.remote,
+        variation: result.publish.variation,
+        published_versions: result.publish.published_versions,
+    })
+    .map_err(|error| error.to_string())
 }
 
 #[auditaur_command(skip_all, err)]
@@ -832,8 +1389,8 @@ pub async fn draftline_sync_status(
     let adapter = open_adapter(&state)?;
     adapter
         .sync_status(&remote)
-        .map(sync_status_to_dto)
         .map_err(|error| error.to_string())
+        .map(sync_status_to_dto)
 }
 
 #[cfg(test)]
@@ -891,6 +1448,7 @@ mod tests {
                 is_binary: false,
                 is_large: false,
             }],
+            file_hazards: Vec::new(),
             untracked_assets: vec![PathBuf::from("screenshots/frame.png")],
             unresolved_conflicts: Vec::new(),
             large_files: Vec::new(),

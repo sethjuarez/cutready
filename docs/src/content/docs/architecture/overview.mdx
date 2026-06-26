@@ -29,7 +29,7 @@ CutReady is a **Tauri v2** desktop application with a split architecture:
 │                         │  ├── screenshot.rs             │
 │                         │  ├── import.rs                  │
 │                         │  ├── agent.rs                   │
-│                         │  └── versioning.rs              │
+│                         │  └── draftline.rs               │
 │                         │                               │
 │                         │  AI Layer                       │
 │                         │  └── agentive crate             │
@@ -87,7 +87,7 @@ The Rust backend handles:
 | `screenshot.rs` | Monitor detection, screen/region capture |
 | `import.rs` | Document import (docx, pdf, pptx conversion) |
 | `agent.rs` | AI chat and agent commands |
-| `versioning.rs` | Snapshot save/restore, timeline, stash |
+| `draftline.rs` | Draftline-backed snapshot save/restore, variations, remotes, and merge/apply flows |
 
 ### Engine Layer (`src/engine/`)
 
@@ -95,7 +95,7 @@ Lower-level implementations:
 
 - **interaction.rs** — CDP browser communication, Playwright sidecar management
 - **screenshot.rs** — Native screen capture via `xcap` crate
-- **versioning.rs** — Git operations via `gix` (gitoxide, pure-Rust git) — no external git needed
+- **draftline_adapter.rs** — CutReady content policy and product-facing facade over Draftline persistence
 - **recording.rs**, **automation.rs**, **export.rs** — placeholders for future
   FFmpeg capture, replay automation, and FCPXML output
 
