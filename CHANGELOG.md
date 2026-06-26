@@ -9,6 +9,23 @@
 Covector manages this changelog. Do not edit manually.
 Each release section is generated from `.changes/*.md` files.
 
+## [1.16.0](https://github.com/sethjuarez/cutready/compare/v1.15.0...v1.16.0) (2026-06-26)
+
+
+### Features
+
+* **versioning:** complete Draftline discard integration ([c0e6a54](https://github.com/sethjuarez/cutready/commit/c0e6a541847e24d0456168f019a36719c6ade95a))
+* **versioning:** complete Draftline discard integration ([718a423](https://github.com/sethjuarez/cutready/commit/718a423fc6f7300c0abc8d0f8fa330ec7741d65f))
+* **versioning:** replace CutReady history with Draftline ([2c551b6](https://github.com/sethjuarez/cutready/commit/2c551b61521e492ff2ba095b95aca508fa11aa09))
+
+
+### Bug Fixes
+
+* **observability:** adopt auditaur native drive bridge ([71730f0](https://github.com/sethjuarez/cutready/commit/71730f081bc9697722d7c3e91f430404bafd65a0))
+* **observability:** adopt auditaur native drive bridge ([2cac22d](https://github.com/sethjuarez/cutready/commit/2cac22d16e3b823170ca6a8ef784f218696ed42c))
+* **storyboard:** support section controls ([b786dd3](https://github.com/sethjuarez/cutready/commit/b786dd36ecdf1a8f5266bf95045a003d7a70fa6b))
+* **storyboard:** support section controls ([d60cc15](https://github.com/sethjuarez/cutready/commit/d60cc15c0ec3598ad3b11aae191233a1671277a7))
+
 ## [1.15.0](https://github.com/sethjuarez/cutready/compare/v1.14.0...v1.15.0) (2026-06-23)
 
 
