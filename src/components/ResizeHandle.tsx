@@ -15,9 +15,10 @@ export function ResizeHandle({ direction, onResize, onResizeEnd }: ResizeHandleP
   const lastPos = useRef(0);
   const [isDragging, setIsDragging] = useState(false);
 
-  const handleMouseDown = useCallback(
-    (e: React.MouseEvent) => {
+  const handlePointerDown = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
       e.preventDefault();
+      e.currentTarget.setPointerCapture(e.pointerId);
       dragging.current = true;
       setIsDragging(true);
       lastPos.current = direction === "horizontal" ? e.clientX : e.clientY;
@@ -28,7 +29,7 @@ export function ResizeHandle({ direction, onResize, onResizeEnd }: ResizeHandleP
   );
 
   useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
+    const handlePointerMove = (e: PointerEvent) => {
       if (!dragging.current) return;
       const current = direction === "horizontal" ? e.clientX : e.clientY;
       const delta = current - lastPos.current;
@@ -38,7 +39,7 @@ export function ResizeHandle({ direction, onResize, onResizeEnd }: ResizeHandleP
       }
     };
 
-    const handleMouseUp = () => {
+    const handlePointerUp = () => {
       if (!dragging.current) return;
       dragging.current = false;
       setIsDragging(false);
@@ -47,11 +48,13 @@ export function ResizeHandle({ direction, onResize, onResizeEnd }: ResizeHandleP
       onResizeEnd?.();
     };
 
-    window.addEventListener("mousemove", handleMouseMove);
-    window.addEventListener("mouseup", handleMouseUp);
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+    window.addEventListener("pointercancel", handlePointerUp);
     return () => {
-      window.removeEventListener("mousemove", handleMouseMove);
-      window.removeEventListener("mouseup", handleMouseUp);
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+      window.removeEventListener("pointercancel", handlePointerUp);
     };
   }, [direction, onResize, onResizeEnd]);
 
@@ -61,25 +64,28 @@ export function ResizeHandle({ direction, onResize, onResizeEnd }: ResizeHandleP
     <div
       className={`shrink-0 relative group ${
         isHorizontal
-          ? "w-px cursor-col-resize"
-          : "h-px cursor-row-resize"
+          ? "-mx-1 w-2 cursor-col-resize"
+          : "-my-1 h-2 cursor-row-resize"
       }`}
-      onMouseDown={handleMouseDown}
+      data-testid={isHorizontal ? "resize-handle-horizontal" : "resize-handle-vertical"}
+      role="separator"
+      aria-orientation={isHorizontal ? "vertical" : "horizontal"}
+      onPointerDown={handlePointerDown}
     >
       {/* Invisible wider hit area overlapping adjacent panels */}
       <div
         className={`absolute z-sticky ${
           isHorizontal
-            ? "top-0 bottom-0 -left-[3px] w-[7px] cursor-col-resize"
-            : "left-0 right-0 -top-[3px] h-[7px] cursor-row-resize"
+            ? "inset-y-0 left-0 w-full cursor-col-resize"
+            : "inset-x-0 top-0 h-full cursor-row-resize"
         }`}
       />
       {/* Visible 1px line */}
       <div
         className={`absolute transition-colors duration-150 ${
           isHorizontal
-            ? "top-0 bottom-0 left-0 w-px"
-            : "left-0 right-0 top-0 h-px"
+            ? "top-0 bottom-0 left-1/2 w-px -translate-x-1/2"
+            : "left-0 right-0 top-1/2 h-px -translate-y-1/2"
         } ${
           isDragging
             ? "bg-[rgb(var(--color-accent))]"

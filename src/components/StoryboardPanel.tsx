@@ -10,6 +10,7 @@ import { DatabaseViewer } from "./DatabaseViewer";
 import { ResizeHandle } from "./ResizeHandle";
 import { TabBar } from "./TabBar";
 import { HistoryGraphTab } from "./HistoryGraphTab";
+import { SnapshotPreviewTab } from "./SnapshotPreviewTab";
 import { SplitTabBar, SplitPaneContent } from "./SplitPreviewPane";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { AgentRunTab } from "./AgentRunInspector";
@@ -38,6 +39,7 @@ export function StoryboardPanel() {
 
   const activeTab = openTabs.find((t) => t.id === activeTabId);
   const isHistoryTab = activeTab?.type === "history";
+  const isSnapshotPreviewTab = activeTab?.type === "snapshot-preview";
   const isAssetTab = activeTab?.type === "asset";
   const isDiffTab = activeTab?.type === "diff";
   const isAgentRunTab = activeTab?.type === "agent-run";
@@ -113,6 +115,8 @@ export function StoryboardPanel() {
               >
                 <HistoryGraphTab />
               </ErrorBoundary>
+            ) : isSnapshotPreviewTab && activeTab ? (
+              <SnapshotPreviewTab snapshotId={snapshotIdFromTabPath(activeTab.path)} />
             ) : isDiffTab && activeTab ? (
               <DiffViewer filePath={activeTab.path} />
             ) : isAgentRunTab && activeTab ? (
@@ -150,6 +154,10 @@ export function StoryboardPanel() {
       {!secondaryOnLeft && secondaryPanel}
     </div>
   );
+}
+
+function snapshotIdFromTabPath(path: string): string {
+  return path.startsWith("snapshot:") ? path.slice("snapshot:".length) : path;
 }
 
 function agentRunIdFromTabPath(path: string): string {

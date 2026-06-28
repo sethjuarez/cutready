@@ -2,6 +2,7 @@ import { useCallback, useMemo } from "react";
 import { BUILT_IN_AGENTS, resolveAgentPrompt } from "../agents/builtInAgents";
 import { clearSuppressedEditorFlush, suppressEditorFlush, useAppStore } from "../stores/appStore";
 import { useToastStore } from "../stores/toastStore";
+import { useAiApplyGateStore } from "../stores/aiApplyGateStore";
 import { useSettings, type AgentPreset } from "./useSettings";
 import { loadProviderSecrets } from "./useSecretStore";
 import { invoke } from "../services/tauri";
@@ -187,6 +188,10 @@ export function useBackgroundAgentAction() {
     const label = options.label ?? "AI action";
     const agentId = options.agent || settings.aiSelectedAgent || "planner";
     const effectiveAgent = agents.find((agent) => agent.id === agentId) ?? agents.find((agent) => agent.id === "planner") ?? BUILT_IN_AGENTS[0];
+    if (settings.aiApplyMode !== "auto") {
+      const approval = await useAiApplyGateStore.getState().requestApproval(label);
+      if (approval === "cancel") return;
+    }
 
     addActivityEntries([{
       id: crypto.randomUUID(),
@@ -239,6 +244,7 @@ export function useBackgroundAgentAction() {
         agentPrompts: buildAgentPrompts(settings.aiAgents),
         agentId: effectiveAgent.id,
         emitEvents: false,
+        allowMutationTools: true,
       });
 
       await refreshAfterResult(result);

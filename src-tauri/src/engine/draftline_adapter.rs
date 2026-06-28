@@ -344,6 +344,11 @@ mod tests {
         config.set_str("user.email", email).unwrap();
     }
 
+    fn init_bare_main_remote(path: &Path) {
+        let repo = git2::Repository::init_bare(path).unwrap();
+        repo.set_head("refs/heads/main").unwrap();
+    }
+
     #[test]
     fn narrow_cutready_flow_runs_through_draftline() {
         let temp = tempfile::tempdir().unwrap();
@@ -713,7 +718,7 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let root = temp.path().join("workspace");
         let remote = temp.path().join("remote.git");
-        git2::Repository::init_bare(&remote).unwrap();
+        init_bare_main_remote(&remote);
 
         write(root.join("intro.sk"), r#"{"title":"Intro"}"#);
         let adapter = CutReadyDraftlineAdapter::open_project(&root).unwrap();
@@ -741,7 +746,7 @@ mod tests {
     fn sync_status_reports_incoming_versions_after_fetch() {
         let temp = tempfile::tempdir().unwrap();
         let remote = temp.path().join("remote.git");
-        git2::Repository::init_bare(&remote).unwrap();
+        init_bare_main_remote(&remote);
 
         let first_root = temp.path().join("first");
         write(first_root.join("intro.sk"), r#"{"title":"One"}"#);
@@ -787,7 +792,7 @@ mod tests {
     fn publish_refuses_when_remote_has_incoming_changes() {
         let temp = tempfile::tempdir().unwrap();
         let remote = temp.path().join("remote.git");
-        git2::Repository::init_bare(&remote).unwrap();
+        init_bare_main_remote(&remote);
 
         let first_root = temp.path().join("first");
         write(first_root.join("intro.sk"), r#"{"title":"One"}"#);

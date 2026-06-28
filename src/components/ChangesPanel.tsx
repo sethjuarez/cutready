@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from "react";
+import { createPortal } from "react-dom";
 import {
   FilePlus,
   FileMinus,
@@ -12,15 +13,17 @@ import {
   X,
   MoreHorizontal,
   Trash2,
-  Share2,
   ArrowUp,
   ArrowDown,
+  Check,
+  GitBranch,
 } from "lucide-react";
 import { useAppStore } from "../stores/appStore";
 import { SnapshotGraph } from "./SnapshotGraph";
 import { SnapshotDiffPanel } from "./SnapshotDiffPanel";
 import { IncomingPreview, SyncBar } from "./SyncBar";
 import { TimelineSelector } from "./TimelineSelector";
+import { useConfirmDialog } from "./ConfirmDialog";
 import type { DiffEntry } from "../types/sketch";
 
 export function ChangesPanel() {
@@ -39,20 +42,19 @@ export function ChangesPanel() {
   const timelines = useAppStore((s) => s.timelines);
   const loadTimelines = useAppStore((s) => s.loadTimelines);
   const squashSnapshots = useAppStore((s) => s.squashSnapshots);
+  const renameLegacyMasterTimeline = useAppStore((s) => s.renameLegacyMasterTimeline);
   const currentRemote = useAppStore((s) => s.currentRemote);
   const syncStatus = useAppStore((s) => s.syncStatus);
+  const syncError = useAppStore((s) => s.syncError);
   const incomingCommits = useAppStore((s) => s.incomingCommits);
-  const shareChanges = useAppStore((s) => s.shareChanges);
   const saving = useAppStore((s) => s.saving);
   const currentProject = useAppStore((s) => s.currentProject);
   const isMultiProject = useAppStore((s) => s.isMultiProject);
+  const projects = useAppStore((s) => s.projects);
   const hasRemote = !!currentRemote;
 
   const [changesExpanded, setChangesExpanded] = useState(true);
   const [historyExpanded, setHistoryExpanded] = useState(true);
-  const [pendingNavTarget, setPendingNavTarget] = useState<string | null>(null);
-  const [confirmDiscard, setConfirmDiscard] = useState(false);
-  const [discarding, setDiscarding] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [authorFilter, setAuthorFilter] = useState("all");
   const [showSearch, setShowSearch] = useState(false);
@@ -64,8 +66,65 @@ export function ChangesPanel() {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [showIncoming, setShowIncoming] = useState(false);
   const [showOutgoing, setShowOutgoing] = useState(false);
+  const [confirmRenameMaster, setConfirmRenameMaster] = useState(false);
+  const [renamingMaster, setRenamingMaster] = useState(false);
+  const [showProjectFilterMenu, setShowProjectFilterMenu] = useState(false);
+  const [projectFilter, setProjectFilter] = useState<string>("all");
+  const projectFilterTriggerRef = useRef<HTMLDivElement>(null);
+  const projectFilterMenuRef = useRef<HTMLDivElement>(null);
+  const outgoingTriggerRef = useRef<HTMLDivElement>(null);
+  const incomingTriggerRef = useRef<HTMLDivElement>(null);
+  const projectFilterMenuStyle = useAnchoredPopover(showProjectFilterMenu, projectFilterTriggerRef, 224, "left");
+  const outgoingPreviewStyle = useAnchoredPopover(showOutgoing, outgoingTriggerRef, 256, "left");
+  const incomingPreviewStyle = useAnchoredPopover(showIncoming, incomingTriggerRef, 288, "right");
+  const { confirm, confirmationDialog } = useConfirmDialog();
+
+  useEffect(() => {
+    if (!showProjectFilterMenu) return;
+    const handle = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (
+        projectFilterTriggerRef.current?.contains(target) ||
+        projectFilterMenuRef.current?.contains(target)
+      ) {
+        return;
+      }
+      setShowProjectFilterMenu(false);
+    };
+    window.addEventListener("mousedown", handle);
+    return () => window.removeEventListener("mousedown", handle);
+  }, [showProjectFilterMenu]);
+
+  useEffect(() => {
+    if (!showIncoming && !showOutgoing) return;
+    const handleMouseDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (
+        incomingTriggerRef.current?.contains(target) ||
+        outgoingTriggerRef.current?.contains(target)
+      ) {
+        return;
+      }
+      setShowIncoming(false);
+      setShowOutgoing(false);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setShowIncoming(false);
+        setShowOutgoing(false);
+      }
+    };
+    window.addEventListener("mousedown", handleMouseDown);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("mousedown", handleMouseDown);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [showIncoming, showOutgoing]);
 
   const activeTimeline = timelines.find((t) => t.is_active);
+  const hasLegacyMasterTimeline = timelines.some((timeline) => timeline.name === "master")
+    && !timelines.some((timeline) => timeline.name === "main");
   const activeNodes = (() => {
     if (!activeTimeline) return graphNodes;
     const branchNodes = graphNodes.filter((n) => n.timeline === activeTimeline.name);
@@ -129,42 +188,32 @@ export function ChangesPanel() {
     if (isDirty && changedFiles.length > 0) setChangesExpanded(true);
   }, [isDirty, changedFiles.length]);
 
+  useEffect(() => {
+    if (projectFilter === "all") return;
+    if (!projects.some((project) => project.path === projectFilter)) {
+      setProjectFilter("all");
+    }
+  }, [projectFilter, projects]);
+
   const handleNodeClick = useCallback(async (commitId: string, isHead: boolean) => {
     if (isHead) return;
-    const dirty = useAppStore.getState().isDirty;
-    if (dirty) {
-      setPendingNavTarget(commitId);
-      return;
-    }
     await navigateToSnapshot(commitId);
     await loadGraphData();
     await loadTimelines();
   }, [navigateToSnapshot, loadGraphData, loadTimelines]);
 
-  const handleNavSave = useCallback(async () => {
-    const target = pendingNavTarget;
-    if (!target) return;
-    setPendingNavTarget(null);
-    useAppStore.setState({ pendingNavAfterSave: target, snapshotPromptOpen: true });
-  }, [pendingNavTarget]);
-
-  const handleNavDiscard = useCallback(async () => {
-    const target = pendingNavTarget;
-    if (!target) return;
-    setPendingNavTarget(null);
-    await navigateToSnapshot(target);
-    await loadGraphData();
-    await loadTimelines();
-  }, [pendingNavTarget, navigateToSnapshot, loadGraphData, loadTimelines]);
-
   const handleDiscard = useCallback(async () => {
-    setDiscarding(true);
+    const confirmed = await confirm({
+      title: "Discard all workspace changes?",
+      message: "This restores the workspace to the last saved snapshot. Unsaved edits in sketches, notes, storyboards, and visuals will be lost.",
+      confirmLabel: "Discard changes",
+      variant: "error",
+    });
+    if (!confirmed) return;
     await discardChanges();
-    setConfirmDiscard(false);
-    setDiscarding(false);
     await loadGraphData();
     await loadTimelines();
-  }, [discardChanges, loadGraphData, loadTimelines]);
+  }, [confirm, discardChanges, loadGraphData, loadTimelines]);
 
   const toggleSquashSelection = useCallback((commitId: string) => {
     setSelectedForSquash((prev) => {
@@ -198,181 +247,249 @@ export function ChangesPanel() {
     }
   }, [cancelSquash, selectedHead, selectedOldest, squashLabel, squashSnapshots]);
 
-  const added = changedFiles.filter((f) => f.status === "added");
-  const modified = changedFiles.filter((f) => f.status === "modified");
-  const deleted = changedFiles.filter((f) => f.status === "deleted");
-  const sectionBodyClass = "min-h-0 flex-1 overflow-y-auto";
+  const handleRenameMaster = useCallback(async () => {
+    if (!confirmRenameMaster) {
+      setConfirmRenameMaster(true);
+      return;
+    }
+    setRenamingMaster(true);
+    try {
+      await renameLegacyMasterTimeline();
+      setConfirmRenameMaster(false);
+    } finally {
+      setRenamingMaster(false);
+    }
+  }, [confirmRenameMaster, renameLegacyMasterTimeline]);
+
+  const selectedProjectFilter = projectFilter === "all"
+    ? null
+    : projects.find((project) => project.path === projectFilter) ?? null;
+  const filteredChangedFiles = selectedProjectFilter
+    ? changedFiles.filter((file) => fileBelongsToProject(file.path, selectedProjectFilter.path))
+    : changedFiles;
+  const added = filteredChangedFiles.filter((f) => f.status === "added");
+  const modified = filteredChangedFiles.filter((f) => f.status === "modified");
+  const deleted = filteredChangedFiles.filter((f) => f.status === "deleted");
+  const changesBodyClass = filteredChangedFiles.length === 0
+    ? "max-h-24 shrink-0 overflow-hidden"
+    : "max-h-[35%] shrink-0 overflow-y-auto";
+  const historyBodyClass = "min-h-0 flex-1 overflow-y-auto";
   const workspaceName = currentProject ? getPathBasename(currentProject.repo_root) : "workspace";
-  const activeProjectName = currentProject?.name ?? "project";
-  const remoteUrl = currentRemote?.url ?? null;
-  const remoteLabel = remoteUrl ? formatRemoteLabel(remoteUrl) : null;
-  const repoLabel = remoteLabel ?? workspaceName;
   const ahead = syncStatus?.ahead ?? 0;
   const behind = syncStatus?.behind ?? 0;
+  const projectScopeLabel = isMultiProject
+    ? (selectedProjectFilter?.name ?? "All Projects")
+    : "This project";
+  const selectableProjects = projects.length > 0 ? projects : [];
+  const otherChangeCount = changedFiles.length - filteredChangedFiles.length;
+  const projectFilterMenu = showProjectFilterMenu && projectFilterMenuStyle ? createPortal(
+    <div
+      ref={projectFilterMenuRef}
+      style={projectFilterMenuStyle}
+      className="z-[var(--z-overlay)] overflow-hidden rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] shadow-lg"
+    >
+      <div className="py-1">
+        <button
+          onClick={() => {
+            setProjectFilter("all");
+            setShowProjectFilterMenu(false);
+          }}
+          className={`group relative flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11px] transition-colors ${
+            projectFilter === "all"
+              ? "bg-[rgb(var(--color-accent))]/10 font-medium text-[rgb(var(--color-accent))]"
+              : "text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-border))]/30"
+          }`}
+          title="Show changes from every project in this workspace"
+        >
+          <span className="flex w-[10px] shrink-0 items-center justify-center">
+            {projectFilter === "all" ? (
+              <Check className="h-2.5 w-2.5" />
+            ) : (
+              <span className="h-1.5 w-1.5 rounded-full bg-[rgb(var(--color-text-secondary))]/30" />
+            )}
+          </span>
+          <span className="min-w-0 flex-1 truncate">All Projects</span>
+          <span className="shrink-0 text-[9px] text-[rgb(var(--color-text-secondary))]/70">{changedFiles.length}</span>
+        </button>
+        {selectableProjects.map((project) => {
+          const selected = projectFilter === project.path;
+          const projectChangeCount = changedFiles.filter((file) => fileBelongsToProject(file.path, project.path)).length;
+          return (
+            <button
+              key={project.path}
+              onClick={() => {
+                setProjectFilter(project.path);
+                setShowProjectFilterMenu(false);
+              }}
+              className={`group relative flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11px] transition-colors ${
+                selected
+                  ? "bg-[rgb(var(--color-accent))]/10 font-medium text-[rgb(var(--color-accent))]"
+                  : "text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-border))]/30"
+              }`}
+              title={project.path}
+            >
+              <span className="flex w-[10px] shrink-0 items-center justify-center">
+                {selected ? (
+                  <Check className="h-2.5 w-2.5" />
+                ) : (
+                  <span className="h-1.5 w-1.5 rounded-full bg-[rgb(var(--color-text-secondary))]/30" />
+                )}
+              </span>
+              <span className="min-w-0 flex-1 truncate">{project.name}</span>
+              <span className="shrink-0 text-[9px] text-[rgb(var(--color-text-secondary))]/70">{projectChangeCount}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>,
+    document.body,
+  ) : null;
+  const outgoingPreview = showOutgoing && outgoingPreviewStyle ? createPortal(
+    <OutgoingPreview count={ahead} style={outgoingPreviewStyle} />,
+    document.body,
+  ) : null;
+  const incomingPreview = showIncoming && incomingPreviewStyle ? createPortal(
+    <IncomingPreview commits={incomingCommits} style={incomingPreviewStyle} />,
+    document.body,
+  ) : null;
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-visible bg-[rgb(var(--color-surface-inset))]">
-      <div className="flex shrink-0 flex-col gap-1.5 border-b border-[rgb(var(--color-border))] px-3 py-2">
-        <button
-          onClick={() => setChangesExpanded(!changesExpanded)}
-          className="flex min-w-0 items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-[rgb(var(--color-text-secondary))] transition-colors hover:text-[rgb(var(--color-text))]"
-        >
-          {changesExpanded ? <ChevronDown className="h-3 w-3 shrink-0" /> : <ChevronRight className="h-3 w-3 shrink-0" />}
-          <span className="shrink-0 truncate">Changes</span>
-          <span
-            className="min-w-0 max-w-full shrink truncate rounded-full border border-[rgb(var(--color-border))] px-1.5 py-0 text-left text-[9px] font-medium normal-case tracking-normal text-[rgb(var(--color-text-secondary))]/80"
-            title={remoteUrl ?? currentProject?.repo_root}
-          >
-            {repoLabel}
-          </span>
-          {changedFiles.length > 0 && (
-            <span className="ml-1 shrink-0 rounded-full bg-[rgb(var(--color-accent))]/15 px-1 py-0 text-[9px] font-medium text-[rgb(var(--color-accent))]">
-              {changedFiles.length}
-            </span>
-          )}
-        </button>
-        {changesExpanded && (
-          <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-            <SyncBar variant="compact" />
-            {currentRemote && (
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[rgb(var(--color-surface-inset))]">
+      <SectionHeader
+        title="Changes"
+        count={filteredChangedFiles.length}
+        expanded={changesExpanded}
+        onToggle={() => setChangesExpanded(!changesExpanded)}
+        actions={(
+          <>
+            {isDirty && (
               <button
-                onClick={() => shareChanges()}
-                disabled={saving}
-                className="flex h-6 shrink-0 items-center gap-1 rounded-md px-2 text-[10px] font-medium text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))] disabled:pointer-events-none disabled:opacity-30"
-                title="Push changes and copy a share link"
-              >
-                <Share2 className="h-3 w-3" />
-                Share
-              </button>
-            )}
-            <button
-              onClick={() => promptSnapshot()}
-              disabled={!isDirty || saving}
-              className="flex h-6 shrink-0 items-center gap-1 rounded-md px-2 text-[10px] font-medium text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))] disabled:pointer-events-none disabled:opacity-30"
-              title="Take Snapshot (Ctrl+S)"
-            >
-              {saving ? (
-                <svg className="h-3 w-3 animate-spin text-[rgb(var(--color-accent))]" viewBox="0 0 24 24" fill="none">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                </svg>
-              ) : (
-                <Save className="h-3 w-3" />
-              )}
-              Save
-            </button>
-            {isDirty && !pendingNavTarget && (
-              <button
-                onClick={() => setConfirmDiscard(true)}
+                onClick={() => void handleDiscard()}
                 className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-error/10 hover:text-error"
-                title="Discard active project changes"
+                title="Discard workspace changes"
               >
                 <Trash2 className="h-3 w-3" />
               </button>
             )}
-          </div>
+          </>
         )}
-        {changesExpanded && (ahead > 0 || behind > 0) && (
-          <div className="flex min-w-0 items-center gap-1.5 text-[9px] leading-tight text-[rgb(var(--color-text-secondary))]/60">
-            {ahead > 0 && (
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowOutgoing((value) => !value);
-                    setShowIncoming(false);
-                  }}
-                  className="flex h-4 items-center gap-0.5 rounded-full bg-[rgb(var(--color-accent))]/10 px-1.5 text-[10px] font-semibold text-[rgb(var(--color-accent))] transition-colors hover:bg-[rgb(var(--color-accent))]/15"
-                  title={`${ahead} outgoing snapshot${ahead !== 1 ? "s" : ""} ready to share`}
-                >
-                  <ArrowUp className="h-2.5 w-2.5" />
-                  {ahead}
-                </button>
-                {showOutgoing && (
-                  <OutgoingPreview count={ahead} />
-                )}
-              </div>
-            )}
-            {behind > 0 && (
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowIncoming((value) => !value);
-                    setShowOutgoing(false);
-                  }}
-                  className="flex h-4 items-center gap-0.5 rounded-full bg-warning/10 px-1.5 text-[10px] font-semibold text-warning transition-colors hover:bg-warning/15"
-                  title={`${behind} incoming collaborator snapshot${behind !== 1 ? "s" : ""}`}
-                >
-                  <ArrowDown className="h-2.5 w-2.5" />
-                  {behind}
-                </button>
-                {showIncoming && (
-                  <IncomingPreview commits={incomingCommits} align="left" />
-                )}
-              </div>
-            )}
+      />
+      {changesExpanded && (
+        <div className="shrink-0 border-b border-[rgb(var(--color-border))] px-3 py-1.5">
+          <div className="flex min-w-0 items-center gap-1.5">
+            <div className="relative min-w-0 flex-1" ref={projectFilterTriggerRef}>
+              <button
+                onClick={() => {
+                  if (isMultiProject && selectableProjects.length > 1) setShowProjectFilterMenu((open) => !open);
+                }}
+                className="flex h-6 min-w-0 max-w-full items-center gap-1.5 rounded-md px-1.5 text-[10px] text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
+                title={isMultiProject ? "Filter visible changes by project. Save and discard still apply to the whole workspace." : "Showing changes for this project"}
+              >
+                <FileEdit className="h-3 w-3 shrink-0" />
+                <span className="truncate">{projectScopeLabel}</span>
+                {isMultiProject && selectableProjects.length > 1 && <ChevronDown className="h-2 w-2 shrink-0 opacity-50" />}
+              </button>
+              {projectFilterMenu}
+            </div>
+            <WorkspaceModeBadge remote={hasRemote} syncError={syncError} />
+            <button
+              onClick={() => promptSnapshot()}
+              disabled={!isDirty || saving}
+              className={`grid h-6 w-6 shrink-0 place-items-center rounded-md transition-colors hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))] disabled:pointer-events-none disabled:opacity-50 ${
+                isDirty ? "text-[rgb(var(--color-accent))]" : "text-[rgb(var(--color-text-secondary))]"
+              }`}
+              title="Save snapshot (Ctrl+S)"
+            >
+              {saving ? (
+                <svg className="h-3 w-3 shrink-0 animate-spin text-[rgb(var(--color-accent))]" viewBox="0 0 24 24" fill="none">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+              ) : (
+                <Save className="h-3 w-3 shrink-0" />
+              )}
+            </button>
           </div>
-        )}
-      </div>
 
-      {changesExpanded && confirmDiscard && (
-        <div className="border-b border-error/20 bg-error/5 px-3 py-2">
-          <div className="mb-1.5 text-[10px] font-medium text-error">
-            Discard changes in {isMultiProject ? activeProjectName : "this project"} since the last snapshot?
-          </div>
-          <div className="flex gap-1.5">
-            <button
-              onClick={handleDiscard}
-              disabled={discarding}
-              className="flex-1 rounded-md bg-error px-2 py-1 text-[10px] font-medium text-accent-fg transition-colors hover:bg-error/80 disabled:opacity-40"
-            >
-              {discarding ? "Discarding..." : "Discard"}
-            </button>
-            <button
-              onClick={() => setConfirmDiscard(false)}
-              className="rounded-md px-2 py-1 text-[10px] text-[rgb(var(--color-text-secondary))] transition-colors hover:text-[rgb(var(--color-text))]"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
+          {hasRemote && (
+            <div className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5 text-[9px] leading-tight text-[rgb(var(--color-text-secondary))]/60">
+              <SyncBar variant="compact" />
+              {(ahead > 0 || behind > 0) && (
+                <div className="flex shrink-0 items-center gap-1">
+                  {ahead > 0 && (
+                    <div ref={outgoingTriggerRef} className="relative">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowOutgoing((value) => !value);
+                          setShowIncoming(false);
+                        }}
+                        className="flex h-4 items-center gap-0.5 rounded-full bg-[rgb(var(--color-accent))]/10 px-1.5 text-[10px] font-semibold text-[rgb(var(--color-accent))] transition-colors hover:bg-[rgb(var(--color-accent))]/15"
+                        title={`${ahead} outgoing snapshot${ahead !== 1 ? "s" : ""} ready to share`}
+                      >
+                        <ArrowUp className="h-2.5 w-2.5" />
+                        {ahead}
+                      </button>
+                      {outgoingPreview}
+                    </div>
+                  )}
+                  {behind > 0 && (
+                    <div ref={incomingTriggerRef} className="relative">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowIncoming((value) => !value);
+                          setShowOutgoing(false);
+                        }}
+                        className="flex h-4 items-center gap-0.5 rounded-full bg-warning/10 px-1.5 text-[10px] font-semibold text-warning transition-colors hover:bg-warning/15"
+                        title={`${behind} incoming collaborator snapshot${behind !== 1 ? "s" : ""}`}
+                      >
+                        <ArrowDown className="h-2.5 w-2.5" />
+                        {behind}
+                      </button>
+                      {incomingPreview}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
-      {changesExpanded && pendingNavTarget && (
-        <div className="border-b border-warning/20 bg-warning/5 px-3 py-2">
-          <div className="mb-1.5 text-[10px] font-medium text-warning">
-            You have unsaved changes
-          </div>
-          <div className="flex gap-1.5">
-            <button
-              onClick={handleNavSave}
-              className="flex-1 rounded-md bg-[rgb(var(--color-accent))] px-2 py-1 text-[10px] font-medium text-[rgb(var(--color-accent-fg))] transition-colors hover:bg-[rgb(var(--color-accent-hover))]"
-            >
-              Save first
-            </button>
-            <button
-              onClick={handleNavDiscard}
-              className="flex-1 rounded-md border border-[rgb(var(--color-border))] px-2 py-1 text-[10px] font-medium text-[rgb(var(--color-text-secondary))] transition-colors hover:border-error/30 hover:text-error"
-            >
-              Discard
-            </button>
-            <button
-              onClick={() => setPendingNavTarget(null)}
-              className="rounded-md px-2 py-1 text-[10px] text-[rgb(var(--color-text-secondary))] transition-colors hover:text-[rgb(var(--color-text))]"
-            >
-              Cancel
-            </button>
-          </div>
+          {hasLegacyMasterTimeline && (
+            <div className="mt-1.5 rounded-lg border border-[rgb(var(--color-warning))]/30 bg-[rgb(var(--color-warning))]/10 p-2 text-[10px] leading-snug text-[rgb(var(--color-text))]">
+              <div className="flex min-w-0 items-start gap-2">
+                <GitBranch className="mt-0.5 h-3 w-3 shrink-0 text-[rgb(var(--color-warning))]" />
+                <div className="min-w-0 flex-1">
+                  <div className="font-medium">Legacy Draftline branch name detected</div>
+                  <div className="mt-0.5 text-[rgb(var(--color-text-secondary))]">
+                    The real branch is <code className="rounded bg-[rgb(var(--color-surface))]/80 px-1">master</code>.
+                    Rename it to <code className="rounded bg-[rgb(var(--color-surface))]/80 px-1">main</code> at the source instead of hiding it.
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleRenameMaster}
+                    disabled={renamingMaster}
+                    className="mt-1.5 rounded-md border border-[rgb(var(--color-warning))]/30 bg-[rgb(var(--color-surface))] px-2 py-1 font-medium text-[rgb(var(--color-text))] transition-colors hover:border-[rgb(var(--color-warning))]/60 hover:bg-[rgb(var(--color-warning))]/10 disabled:pointer-events-none disabled:opacity-60"
+                  >
+                    {renamingMaster ? "Renaming..." : confirmRenameMaster ? "Confirm rename master to main" : "Rename master to main"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
       {changesExpanded && (
-        <div className={`${sectionBodyClass} px-1 py-1`}>
-          {changedFiles.length === 0 ? (
+        <div className={`${changesBodyClass} px-1 py-1`}>
+          {filteredChangedFiles.length === 0 ? (
             <div className="flex items-center gap-2 px-2 py-3 text-[10px] text-[rgb(var(--color-text-secondary))]">
               <Camera className="h-3.5 w-3.5 opacity-40" />
-              No {isMultiProject ? "project " : ""}changes since last snapshot
+              <span>
+                {selectedProjectFilter
+                  ? `No changes in ${selectedProjectFilter.name}${otherChangeCount > 0 ? ` (${otherChangeCount} elsewhere)` : ""}`
+                  : "No workspace changes since last snapshot"}
+              </span>
             </div>
           ) : (
             <>
@@ -390,29 +507,32 @@ export function ChangesPanel() {
         scopeTitle={isMultiProject ? `Workspace history: ${workspaceName}` : undefined}
         expanded={historyExpanded}
         onToggle={() => setHistoryExpanded(!historyExpanded)}
-        actions={historyExpanded ? (
-          <>
-            <TimelineSelector />
-            <button
-              onClick={() => {
-                setShowSearch(!showSearch);
-                if (showSearch) setSearchQuery("");
-              }}
-              className={`grid h-5 w-5 place-items-center rounded-md transition-colors ${showSearch ? "text-[rgb(var(--color-accent))] bg-[rgb(var(--color-accent))]/10" : "text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"}`}
-              title="Search snapshots"
-            >
-              <Search className="h-3 w-3" />
-            </button>
-            <button
-              onClick={() => setShowAdvanced(!showAdvanced)}
-              className={`grid h-5 w-5 place-items-center rounded-md transition-colors ${showAdvanced ? "text-[rgb(var(--color-accent))] bg-[rgb(var(--color-accent))]/10" : "text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"}`}
-              title="More actions"
-            >
-              <MoreHorizontal className="h-3 w-3" />
-            </button>
-          </>
-        ) : null}
       />
+
+      {historyExpanded && (
+        <div className="flex min-w-0 shrink-0 items-center gap-1 border-b border-[rgb(var(--color-border))] px-3 py-1">
+          <div className="min-w-0 flex-1">
+            <TimelineSelector />
+          </div>
+          <button
+            onClick={() => {
+              setShowSearch(!showSearch);
+              if (showSearch) setSearchQuery("");
+            }}
+            className={`grid h-6 w-6 shrink-0 place-items-center rounded-md transition-colors ${showSearch ? "text-[rgb(var(--color-accent))] bg-[rgb(var(--color-accent))]/10" : "text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"}`}
+            title="Search snapshots"
+          >
+            <Search className="h-3 w-3" />
+          </button>
+          <button
+            onClick={() => setShowAdvanced(!showAdvanced)}
+            className={`grid h-6 w-6 shrink-0 place-items-center rounded-md transition-colors ${showAdvanced ? "text-[rgb(var(--color-accent))] bg-[rgb(var(--color-accent))]/10" : "text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"}`}
+            title="More actions"
+          >
+            <MoreHorizontal className="h-3 w-3" />
+          </button>
+        </div>
+      )}
 
       {showAdvanced && !squashMode && (
         <div className="space-y-0.5 border-b border-[rgb(var(--color-border))] px-3 py-1">
@@ -499,7 +619,7 @@ export function ChangesPanel() {
       )}
 
       {historyExpanded && (
-        <div className={sectionBodyClass}>
+        <div className={historyBodyClass}>
           {activeNodes.length === 0 ? (
             <div className="flex flex-col items-center justify-center px-4 py-8 text-center">
               <div className="mb-2 flex h-8 w-8 items-center justify-center rounded-full bg-[rgb(var(--color-accent))]/10">
@@ -535,13 +655,83 @@ export function ChangesPanel() {
       )}
 
       <SnapshotDiffPanel />
+      {confirmationDialog}
     </div>
   );
 }
 
-function OutgoingPreview({ count }: { count: number }) {
+function useAnchoredPopover(
+  open: boolean,
+  triggerRef: RefObject<HTMLElement | null>,
+  width: number,
+  align: "left" | "right",
+): CSSProperties | null {
+  const [style, setStyle] = useState<CSSProperties | null>(null);
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    const updatePosition = () => {
+      const trigger = triggerRef.current;
+      if (!trigger) return;
+      const rect = trigger.getBoundingClientRect();
+      const preferredLeft = align === "right" ? rect.right - width : rect.left;
+      const left = Math.min(preferredLeft, window.innerWidth - width - 8);
+      setStyle({
+        position: "fixed",
+        left: Math.max(8, left),
+        top: rect.bottom + 4,
+        width,
+      });
+    };
+
+    updatePosition();
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+    return () => {
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [align, open, triggerRef, width]);
+
+  return open ? style : null;
+}
+
+function WorkspaceModeBadge({ remote, syncError }: { remote: boolean; syncError: string | null }) {
+  const degraded = remote && !!syncError;
+  const label = remote ? (degraded ? "Remote issue" : "Remote") : "Local";
+  const toneClass = degraded
+    ? "border-warning/20 bg-warning/10 text-warning"
+    : remote
+      ? "border-success/20 bg-success/10 text-success"
+      : "border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] text-[rgb(var(--color-text-secondary))]";
+  const dotClass = degraded
+    ? "bg-warning"
+    : remote
+      ? "bg-success"
+      : "bg-[rgb(var(--color-text-secondary))]/50";
+  const title = degraded
+    ? `Remote project, but sync needs attention: ${syncError}`
+    : remote
+      ? "Remote project: collaboration controls are available"
+      : "Local project: changes are saved locally. Add a remote in Settings to collaborate.";
+
   return (
-    <div className="absolute left-0 top-full z-[999] mt-1 w-64 rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] shadow-lg">
+    <span
+      className={`flex h-5 shrink-0 items-center gap-1 rounded-full border px-1.5 text-[9px] font-medium ${toneClass}`}
+      title={title}
+    >
+      <span className={`h-1.5 w-1.5 rounded-full ${dotClass}`} />
+      <span className="hidden min-[250px]:inline">{label}</span>
+    </span>
+  );
+}
+
+function OutgoingPreview({ count, style }: { count: number; style?: CSSProperties }) {
+  return (
+    <div
+      style={style}
+      className={`${style ? "z-[var(--z-overlay)]" : "absolute left-0 top-full z-dropdown mt-1 w-64"} rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] shadow-lg`}
+    >
       <div className="py-1">
         <div className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-[rgb(var(--color-text-secondary))]">
           Outgoing work
@@ -551,7 +741,7 @@ function OutgoingPreview({ count }: { count: number }) {
             {count} snapshot{count === 1 ? "" : "s"} ready to share
           </div>
           <div className="mt-0.5 text-[9px] leading-relaxed text-[rgb(var(--color-text-secondary))]">
-            Use Share changes or Sync to publish these workspace updates.
+            Use Sync to publish this project's updates.
           </div>
         </div>
       </div>
@@ -598,7 +788,7 @@ function SectionHeader({
           </span>
         )}
       </button>
-      <div className="flex shrink-0 items-center gap-1">{actions}</div>
+      <div className="flex min-w-0 max-w-[58%] shrink items-center justify-end gap-1 overflow-hidden">{actions}</div>
     </div>
   );
 }
@@ -607,22 +797,26 @@ function getPathBasename(path: string): string {
   return path.split(/[\\/]/).filter(Boolean).pop() ?? path;
 }
 
-function isDatabasePath(path: string): boolean {
-  return /\.(db|sqlite|sqlite3)$/i.test(path);
+function normalizeProjectPath(path: string | undefined): string {
+  return (path ?? "").replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
 }
 
-function formatRemoteLabel(url: string): string {
-  return url
-    .replace(/^https?:\/\/(www\.)?github\.com\//, "")
-    .replace(/^git@github\.com:/, "")
-    .replace(/\.git$/, "");
+function fileBelongsToProject(filePath: string, projectPath: string): boolean {
+  const normalizedProjectPath = normalizeProjectPath(projectPath).replace(/^\.\//, "");
+  if (!normalizedProjectPath || normalizedProjectPath === ".") return true;
+  const normalizedFilePath = normalizeProjectPath(filePath).replace(/^\.\//, "");
+  return normalizedFilePath === normalizedProjectPath || normalizedFilePath.startsWith(`${normalizedProjectPath}/`);
+}
+
+function isDatabasePath(path: string): boolean {
+  return /\.(db|sqlite|sqlite3)$/i.test(path);
 }
 
 function FileGroup({ label, files, icon }: { label: string; files: DiffEntry[]; icon: ReactNode }) {
   const openTab = useAppStore((s) => s.openTab);
   const openDatabase = useAppStore((s) => s.openDatabase);
   const discardFile = useAppStore((s) => s.discardFile);
-  const [confirmPath, setConfirmPath] = useState<string | null>(null);
+  const { confirm, confirmationDialog } = useConfirmDialog();
 
   return (
     <div className="mb-1">
@@ -658,39 +852,26 @@ function FileGroup({ label, files, icon }: { label: string; files: DiffEntry[]; 
                   </span>
                 )}
               </button>
-              {confirmPath === file.path ? (
-                <div className="flex shrink-0 items-center gap-1 pr-1">
-                  <button
-                    onClick={() => {
-                      setConfirmPath(null);
-                      void discardFile(file.path);
-                    }}
-                    className="rounded bg-error px-1.5 py-0.5 text-[9px] font-medium text-[rgb(var(--color-accent-fg))] transition-colors hover:bg-error/80"
-                    title={`Discard changes to ${file.path}`}
-                  >
-                    Discard
-                  </button>
-                  <button
-                    onClick={() => setConfirmPath(null)}
-                    className="rounded px-1 py-0.5 text-[9px] text-[rgb(var(--color-text-secondary))] transition-colors hover:text-[rgb(var(--color-text))]"
-                    title="Cancel discard"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              ) : (
-                <button
-                  onClick={() => setConfirmPath(file.path)}
-                  className="shrink-0 rounded p-0.5 text-[rgb(var(--color-text-secondary))] opacity-0 transition-colors hover:text-error group-hover:opacity-100"
-                  title={`Discard changes to ${file.path}`}
-                >
-                  <X className="h-3 w-3" />
-                </button>
-              )}
+              <button
+                onClick={async () => {
+                  const confirmed = await confirm({
+                    title: "Discard file changes?",
+                    message: `Restore ${file.path} to the last saved snapshot? Unsaved edits to this file will be lost.`,
+                    confirmLabel: "Discard file",
+                    variant: "error",
+                  });
+                  if (confirmed) await discardFile(file.path);
+                }}
+                className="shrink-0 rounded p-0.5 text-[rgb(var(--color-text-secondary))] opacity-0 transition-colors hover:text-error group-hover:opacity-100"
+                title={`Discard changes to ${file.path}`}
+              >
+                <X className="h-3 w-3" />
+              </button>
             </div>
           );
         })}
       </div>
+      {confirmationDialog}
     </div>
   );
 }

@@ -1,214 +1,160 @@
-import { invoke } from "./tauri";
-import type { DiffEntry, GraphNode, IncomingCommit, RemoteInfo, SyncStatus, TimelineInfo, VersionEntry } from "../types/sketch";
+import {
+  createDraftlineClient,
+  createDraftlineHostFacade,
+  createMergeConflictViewModel,
+  createWholeFileUseContentResolutions,
+  type ApplyIncomingReport,
+  type ChangedFile,
+  type ConflictContentSource,
+  type DraftlineHostFacade,
+  type MergeConflictResolution,
+  type MergeConflictViewModel,
+  type MergeIncomingReport,
+  type MergeIncomingToken,
+  type RenameVariationResult,
+  type RestoreVersionTarget,
+  type SyncState,
+  type TargetedRestoreVersionResult,
+  type VariationRenamePreflight,
+  type VariationRenameToken,
+  type VariationSummary,
+  type Version,
+  type VersionDiff,
+} from "@draftline/client";
+import { invoke, listen } from "./tauri";
+import type { ConflictFile, DiffEntry, GraphNode, IncomingCommit, RemoteInfo, SyncStatus, TimelineInfo, VersionEntry } from "../types/sketch";
 
-interface DraftlineVersionDto {
-  id: string;
-  label: string;
-  timeSeconds: number;
-  author: {
-    name: string;
-    email?: string | null;
+export type DraftlineMergeIncomingToken = MergeIncomingToken;
+export type DraftlineMergeConflictResolution = MergeConflictResolution;
+export type DraftlineRestoreVersionTarget = RestoreVersionTarget;
+export type DraftlineVariationRenamePreflight = VariationRenamePreflight;
+export type DraftlineVariationRenameToken = VariationRenameToken;
+export type DraftlineRenameVariationResult = RenameVariationResult;
+
+export interface DraftlineMergeIncomingReport {
+  syncStatus: {
+    ahead: number;
+    behind: number;
+    state: "upToDate" | "localAhead" | "incomingAvailable" | "needsMerge" | "noRemoteVersion";
   };
+  dirtyFiles: DiffEntry[];
+  fileHazards: string[];
+  conflicts: ConflictFile[];
+  token?: MergeIncomingToken | null;
+  canMergeCleanly: boolean;
+  changedWorkspace: boolean;
+  viewModel: MergeConflictViewModel;
 }
 
-interface DraftlineShelfDto {
-  id: string;
-  version: DraftlineVersionDto;
-}
-
-interface DraftlineVariationDto {
-  id: string;
-  name: string;
-  displayLabel: string;
-  isCurrent: boolean;
-}
-
-interface DraftlineWorkspaceSummaryDto {
-  activeVariation: DraftlineVariationDto;
-  variations: DraftlineVariationDto[];
-  versions: DraftlineVersionDto[];
-  dirtyFiles: DraftlineChangedFileDto[];
-  isDirty: boolean;
-  stateMayBeInconsistent: boolean;
-}
-
-interface DraftlineHistoryEntryDto {
-  version: DraftlineVersionDto;
-  variationTips: string[];
-  isHead: boolean;
-  parentIds: string[];
-}
-
-interface DraftlineVariationSummaryDto {
-  variation: DraftlineVariationDto;
-  headVersion?: DraftlineVersionDto | null;
-  reachableVersionCount: number;
-}
-
-interface DraftlineRemoteDto {
-  name: string;
-  url: string;
-}
-
-interface DraftlineSyncStatusDto {
-  remote: string;
-  variation: string;
-  ahead: number;
-  behind: number;
-  state: "upToDate" | "localAhead" | "incomingAvailable" | "needsMerge" | "noRemoteVersion";
-  incoming: Array<{
-    id: string;
-    label: string;
-    timeSeconds: number;
-    author: {
-      name: string;
-      email?: string | null;
-    };
-  }>;
-}
-
-interface DraftlineChangedFileDto {
+export interface DraftlinePreviewFile {
   path: string;
-  kind: "added" | "modified" | "deleted" | "renamed" | "conflicted" | "typeChanged";
+  content: string | null;
   isBinary: boolean;
-  isLarge: boolean;
-}
-
-interface DraftlineChangeSetDto {
-  files: DraftlineChangedFileDto[];
-}
-
-interface DraftlineVersionDiffDto {
-  fromVersion?: string | null;
-  toVersion?: string | null;
-  files: DraftlineChangedFileDto[];
-  patch?: string | null;
 }
 
 interface DraftlineApplyIncomingReportDto {
-  syncStatus: DraftlineSyncStatusDto;
-  dirtyFiles: DraftlineChangedFileDto[];
+  syncStatus: {
+    ahead: number;
+    behind: number;
+    state: "upToDate" | "localAhead" | "incomingAvailable" | "needsMerge" | "noRemoteVersion";
+  };
+  dirtyFiles: DiffEntry[];
   isFastForward: boolean;
   canProceed: boolean;
 }
 
-interface DraftlineApplyIncomingResultDto {
-  appliedCount: number;
+let draftlineWorkspacePath: string | null = null;
+let cachedFacade: DraftlineHostFacade | null = null;
+let cachedFacadePath: string | null = null;
+
+const draftlineClient = createDraftlineClient({ invoke, listen });
+
+export function setDraftlineWorkspacePath(path: string | null) {
+  draftlineWorkspacePath = path;
+  cachedFacade = null;
+  cachedFacadePath = null;
 }
 
-export interface DraftlineMergeIncomingToken {
-  remote: string;
-  variation: string;
-  localOid: string;
-  remoteOid: string;
-  mergeBaseOid: string;
-}
-
-export interface DraftlineMergeConflict {
-  path: string;
-  fieldPath?: string | null;
-  label: string;
-  base?: string | null;
-  ours?: string | null;
-  theirs?: string | null;
-  resolution: "choose" | "edit" | "combine" | "delete";
-}
-
-export interface DraftlineMergeIncomingReport {
-  syncStatus: DraftlineSyncStatusDto;
-  dirtyFiles: DraftlineChangedFileDto[];
-  fileHazards: string[];
-  conflicts: DraftlineMergeConflict[];
-  token?: DraftlineMergeIncomingToken | null;
-  canMergeCleanly: boolean;
-  changedWorkspace: boolean;
-}
-
-export type DraftlineMergeResolutionChoice =
-  | { kind: "use_ours" }
-  | { kind: "use_theirs" }
-  | { kind: "use_base" }
-  | { kind: "delete" }
-  | { kind: "use_content"; content: string };
-
-export interface DraftlineMergeConflictResolution {
-  path: string;
-  fieldPath?: string | null;
-  choice: DraftlineMergeResolutionChoice;
-}
-
-interface DraftlineMergeIncomingResultDto {
-  version: DraftlineVersionDto;
-  mergedFiles: string[];
+function facade(): DraftlineHostFacade {
+  if (!draftlineWorkspacePath) {
+    throw new Error("No Draftline workspace is currently open");
+  }
+  if (!cachedFacade || cachedFacadePath !== draftlineWorkspacePath) {
+    cachedFacade = createDraftlineHostFacade({
+      client: draftlineClient,
+      workspacePath: draftlineWorkspacePath,
+    });
+    cachedFacadePath = draftlineWorkspacePath;
+  }
+  return cachedFacade;
 }
 
 export async function listDraftlineVersions(): Promise<VersionEntry[]> {
-  const summary = await getDraftlineWorkspaceSummary();
-  return summary.versions.map((version) => ({
-    id: version.id,
-    message: version.label,
-    timestamp: new Date(version.timeSeconds * 1000).toISOString(),
-    summary: version.label,
-  }));
+  const summary = await facade().inspect();
+  return summary.summary.versions.map(versionToEntry);
 }
 
 export async function listDraftlineGraphNodes(): Promise<GraphNode[]> {
   const [summary, history, variations] = await Promise.all([
-    getDraftlineWorkspaceSummary(),
-    invoke<DraftlineHistoryEntryDto[]>("draftline_full_history"),
-    invoke<DraftlineVariationSummaryDto[]>("draftline_variation_summaries"),
+    facade().inspect(),
+    facade().fullHistory(),
+    facade().variations(),
   ]);
   const laneByVariation = new Map(variations.map((entry, index) => [entry.variation.id, index]));
   const headVariationByVersion = new Map(
     variations
-      .filter((entry) => entry.headVersion)
-      .map((entry) => [entry.headVersion!.id, entry.variation.id]),
+      .filter((entry) => entry.head_version)
+      .map((entry) => [entry.head_version!.id, entry.variation.id]),
   );
 
   return history.map((entry) => {
-    const timeline = entry.variationTips[0]
+    const timeline = entry.variation_tips[0]
       ?? headVariationByVersion.get(entry.version.id)
-      ?? summary.activeVariation.id;
+      ?? summary.summary.active_variation.id;
     return {
       id: entry.version.id,
       message: entry.version.label,
-      timestamp: new Date(entry.version.timeSeconds * 1000).toISOString(),
+      timestamp: new Date(entry.version.time_seconds * 1000).toISOString(),
       timeline,
-      parents: entry.parentIds,
+      parents: entry.parent_ids,
       lane: laneByVariation.get(timeline) ?? 0,
-      is_head: entry.isHead,
-      is_branch_tip: entry.variationTips.length > 0,
+      is_head: entry.is_head,
+      is_branch_tip: entry.variation_tips.length > 0,
       author: entry.version.author.name,
     };
   });
 }
 
 export async function listDraftlineTimelines(): Promise<TimelineInfo[]> {
-  const variations = await invoke<DraftlineVariationSummaryDto[]>("draftline_variation_summaries");
-
-  return variations.map((summary, index) => ({
-    name: summary.variation.id,
-    label: summary.variation.displayLabel,
-    is_active: summary.variation.isCurrent,
-    snapshot_count: summary.reachableVersionCount,
-    color_index: index,
-  }));
+  const variations = await facade().variations();
+  return variations.map((summary, index) => variationToTimeline(summary, index));
 }
 
 export async function previewDraftlineVersion(version: string): Promise<DiffEntry[]> {
-  return versionDiffToDiffEntries(
-    await invoke<DraftlineVersionDiffDto>("draftline_diff_version_to_workspace", { version }),
-  );
+  return versionDiffToDiffEntries(await facade().diffVersionToWorkspace(version));
+}
+
+export async function previewDraftlineVersionFile(version: string, path: string): Promise<DraftlinePreviewFile | null> {
+  return invoke<DraftlinePreviewFile | null>("draftline_preview_version_file", { version, path });
+}
+
+export async function previewDraftlineWorkspaceFile(path: string): Promise<DraftlinePreviewFile | null> {
+  const file = await facade().previewWorkspaceFile(path);
+  return file
+    ? {
+      path: file.path,
+      content: file.content ?? null,
+      isBinary: file.is_binary,
+    }
+    : null;
 }
 
 export async function diffDraftlineVersions(from: string, to: string): Promise<DiffEntry[]> {
-  return versionDiffToDiffEntries(
-    await invoke<DraftlineVersionDiffDto>("draftline_diff_versions", { from, to }),
-  );
+  return versionDiffToDiffEntries(await facade().diffVersions(from, to));
 }
 
 export async function createDraftlineVariation(fromVersion: string, name: string): Promise<void> {
-  await invoke<DraftlineVariationDto>("draftline_create_variation_from", {
+  await invoke("draftline_create_variation_from", {
     version: fromVersion,
     name,
     metadata: { label: name, slug: name },
@@ -219,8 +165,42 @@ export async function deleteDraftlineVariation(variation: string): Promise<void>
   await invoke("draftline_delete_variation", { variation });
 }
 
+export async function preflightDraftlineRenameVariation(
+  sourceVariationId: string,
+  targetVariationId: string,
+): Promise<VariationRenamePreflight> {
+  if (!draftlineWorkspacePath) {
+    throw new Error("No Draftline workspace is currently open");
+  }
+  return invoke<VariationRenamePreflight>("preflight_rename_variation", {
+    request: {
+      workspace_path: draftlineWorkspacePath,
+      source_variation_id: sourceVariationId,
+      target_variation_id: targetVariationId,
+    },
+  });
+}
+
+export async function renameDraftlineVariation(
+  sourceVariationId: string,
+  targetVariationId: string,
+  token?: VariationRenameToken,
+): Promise<RenameVariationResult> {
+  if (!draftlineWorkspacePath) {
+    throw new Error("No Draftline workspace is currently open");
+  }
+  return invoke<RenameVariationResult>("rename_variation", {
+    request: {
+      workspace_path: draftlineWorkspacePath,
+      source_variation_id: sourceVariationId,
+      target_variation_id: targetVariationId,
+      token,
+    },
+  });
+}
+
 export async function switchDraftlineVariation(variation: string, saveFirstLabel?: string): Promise<void> {
-  await invoke<DraftlineVariationDto>("draftline_switch_variation", {
+  await invoke("draftline_switch_variation", {
     variation,
     policy: saveFirstLabel
       ? { type: "saveFirst", label: saveFirstLabel }
@@ -229,154 +209,184 @@ export async function switchDraftlineVariation(variation: string, saveFirstLabel
 }
 
 export async function restoreDraftlineVersionAsNewSave(version: string, label: string): Promise<string> {
-  const restored = await invoke<DraftlineVersionDto>("draftline_restore_version_as_new_save", { version, label });
-  return restored.id;
+  const restored = await facade().restoreAsNewSave(version, label);
+  return restored.version.id;
+}
+
+export async function restoreDraftlineVersionAsNewSaveToVariation(
+  version: string,
+  label: string,
+  target: RestoreVersionTarget,
+): Promise<TargetedRestoreVersionResult> {
+  return facade().restoreAsNewSaveToVariation(version, label, target);
 }
 
 export async function listDraftlineRemotes(): Promise<RemoteInfo[]> {
-  const remotes = await invoke<DraftlineRemoteDto[]>("draftline_list_remotes");
+  const remotes = await facade().remotes();
   return remotes.map((remote) => ({ name: remote.name, url: remote.url }));
 }
 
 export async function addDraftlineRemote(name: string, url: string): Promise<RemoteInfo> {
-  const remote = await invoke<DraftlineRemoteDto>("draftline_add_remote", { name, url });
+  const remote = await invoke<{ name: string; url: string }>("draftline_add_remote", { name, url });
   return { name: remote.name, url: remote.url };
 }
 
 export async function fetchDraftlineRemote(remote: string): Promise<void> {
-  await invoke("draftline_fetch_remote", { remote });
+  await facade().fetchRemote(remote);
 }
 
 export async function publishDraftlineChanges(remote: string): Promise<void> {
-  await invoke("draftline_publish_changes", { remote });
+  await facade().publishCurrentVariation(remote);
 }
 
 export async function preflightDraftlineIncoming(remote: string): Promise<DraftlineApplyIncomingReportDto> {
-  return invoke<DraftlineApplyIncomingReportDto>("draftline_preflight_apply_incoming", { remote });
+  return applyIncomingReportToDto(await facade().preflightApplyIncoming(remote));
 }
 
 export async function applyDraftlineIncoming(remote: string): Promise<number> {
-  const result = await invoke<DraftlineApplyIncomingResultDto>("draftline_apply_incoming", { remote });
-  return result.appliedCount;
+  const result = await facade().applyIncoming(remote);
+  return result.apply.applied_count;
 }
 
 export async function preflightDraftlineMergeIncoming(remote: string): Promise<DraftlineMergeIncomingReport> {
-  return invoke<DraftlineMergeIncomingReport>("draftline_preflight_merge_incoming", { remote });
+  return mergeIncomingReportToDto(await facade().preflightMergeIncoming(remote));
 }
 
 export async function mergeDraftlineIncoming(remote: string, label: string): Promise<string> {
-  const result = await invoke<DraftlineMergeIncomingResultDto>("draftline_merge_incoming", { remote, label });
-  return result.version.id;
+  const result = await facade().mergeIncoming(label, remote);
+  return result.merge.version.id;
 }
 
 export async function mergeDraftlineIncomingWithResolutions(
-  token: DraftlineMergeIncomingToken,
+  token: MergeIncomingToken,
   label: string,
-  resolutions: DraftlineMergeConflictResolution[],
+  resolutions: MergeConflictResolution[],
+  remote = token.remote,
 ): Promise<string> {
-  const result = await invoke<DraftlineMergeIncomingResultDto>("draftline_merge_incoming_with_resolutions", {
-    token,
-    label,
-    resolutions,
-  });
-  return result.version.id;
+  const result = await facade().mergeIncomingWithResolutions(label, token, resolutions, remote);
+  return result.merge.version.id;
+}
+
+export function createDraftlineWholeFileUseContentResolutions(
+  report: MergeIncomingReport,
+  source: ConflictContentSource,
+): MergeConflictResolution[] {
+  return createWholeFileUseContentResolutions(report, source);
 }
 
 export async function getDraftlineSyncStatus(remote: string): Promise<SyncStatus> {
-  const status = await invoke<DraftlineSyncStatusDto>("draftline_sync_status", { remote });
+  const status = await facade().preflightApplyIncoming(remote);
   return {
-    ahead: status.ahead,
-    behind: status.behind,
+    ahead: status.sync_status.ahead,
+    behind: status.sync_status.behind,
   };
 }
 
 export async function listDraftlineIncomingCommits(remote: string): Promise<IncomingCommit[]> {
-  const status = await invoke<DraftlineSyncStatusDto>("draftline_sync_status", { remote });
+  const status = (await facade().preflightApplyIncoming(remote)).sync_status;
   return status.incoming.map((version) => ({
     id: version.id,
     message: version.label,
     author: version.author.name,
-    timestamp: new Date(version.timeSeconds * 1000).toISOString(),
+    timestamp: new Date(version.time_seconds * 1000).toISOString(),
     changed_files: [],
     projects: [status.variation],
   }));
 }
 
-export async function inspectDraftlineChanges(): Promise<DraftlineChangeSetDto> {
-  const summary = await getDraftlineWorkspaceSummary();
-  return { files: summary.dirtyFiles };
+export async function inspectDraftlineChanges() {
+  return facade().changes();
 }
 
 export async function discardDraftlineChanges(): Promise<void> {
-  await invoke<DraftlineChangeSetDto>("draftline_discard_changes");
+  const changes = await facade().changes();
+  if (changes.files.length === 0) return;
+  await facade().selectedDiscard(changes.files.map((file) => file.path));
 }
 
 export async function discardDraftlineFile(path: string): Promise<void> {
-  await invoke<DraftlineChangedFileDto | null>("draftline_discard_file", { path });
+  await facade().selectedDiscard([path]);
 }
 
 export async function hasDraftlineChanges(): Promise<boolean> {
-  const changes = await inspectDraftlineChanges();
+  const changes = await facade().changes();
   return changes.files.length > 0;
 }
 
 export async function listDraftlineChangedFiles(): Promise<DiffEntry[]> {
-  const summary = await getDraftlineWorkspaceSummary();
-  const head = summary.versions[0]?.id;
+  const summary = await facade().inspect();
+  const head = summary.summary.versions[0]?.id;
   if (!head) {
-    return changedFilesToDiffEntries(summary.dirtyFiles);
+    return changedFilesToDiffEntries(summary.summary.dirty_files);
   }
-  return versionDiffToDiffEntries(
-    await invoke<DraftlineVersionDiffDto>("draftline_diff_version_to_workspace", { version: head }),
-  );
+  return versionDiffToDiffEntries(await facade().diffVersionToWorkspace(head));
 }
 
 export async function listDraftlineLargeChangedFiles(): Promise<string[]> {
-  const summary = await getDraftlineWorkspaceSummary();
-  return summary.dirtyFiles
-    .filter((file) => file.isLarge)
+  const changes = await facade().changes();
+  return changes.files
+    .filter((file) => file.is_large)
     .map((file) => file.path);
 }
 
 export async function saveDraftlineVersion(label: string): Promise<string> {
-  const version = await invoke<DraftlineVersionDto>("draftline_save_version", { label });
-  return version.id;
+  const version = await facade().save(label);
+  return version.version.id;
 }
 
 const CUTREADY_STASH_SHELF = "cutready-stash";
 
 export async function shelveDraftlineChanges(): Promise<void> {
-  await invoke<DraftlineShelfDto>("draftline_shelve_changes", { name: CUTREADY_STASH_SHELF });
+  const changes = await facade().changes();
+  if (changes.files.length === 0) return;
+  await facade().selectedShelve(changes.files.map((file) => file.path), CUTREADY_STASH_SHELF);
 }
 
 export async function hasDraftlineShelf(): Promise<boolean> {
-  const shelves = await invoke<DraftlineShelfDto[]>("draftline_list_shelves");
+  const shelves = await facade().shelves();
   return shelves.some((shelf) => shelf.id === CUTREADY_STASH_SHELF);
 }
 
 export async function popDraftlineShelf(): Promise<boolean> {
-  const shelves = await invoke<DraftlineShelfDto[]>("draftline_list_shelves");
+  const shelves = await facade().shelves();
   const shelf = shelves.find((candidate) => candidate.id === CUTREADY_STASH_SHELF);
   if (!shelf) return false;
-  await invoke<DraftlineShelfDto>("draftline_apply_shelf", { id: shelf.id });
-  await invoke("draftline_delete_shelf", { id: shelf.id });
+  await facade().applyShelf(shelf.id);
+  await invoke("delete_shelf", {
+    request: { workspace_path: draftlineWorkspacePath, shelf_id: shelf.id },
+  });
   return true;
 }
 
 export async function squashDraftlineVersions(count: number, label: string): Promise<string> {
-  const version = await invoke<DraftlineVersionDto>("draftline_squash_versions", { count, label });
+  const version = await invoke<Version>("draftline_squash_versions", { count, label });
   return version.id;
 }
 
-async function getDraftlineWorkspaceSummary(): Promise<DraftlineWorkspaceSummaryDto> {
-  return invoke<DraftlineWorkspaceSummaryDto>("draftline_workspace_summary");
+function versionToEntry(version: Version): VersionEntry {
+  return {
+    id: version.id,
+    message: version.label,
+    timestamp: new Date(version.time_seconds * 1000).toISOString(),
+    summary: version.label,
+  };
 }
 
-function versionDiffToDiffEntries(diff: DraftlineVersionDiffDto): DiffEntry[] {
+function variationToTimeline(summary: VariationSummary, index: number): TimelineInfo {
+  return {
+    name: summary.variation.id,
+    label: summary.variation.metadata.label ?? summary.variation.name,
+    is_active: summary.variation.is_current,
+    snapshot_count: summary.reachable_version_count,
+    color_index: index,
+  };
+}
+
+function versionDiffToDiffEntries(diff: VersionDiff): DiffEntry[] {
   return changedFilesToDiffEntries(diff.files);
 }
 
-function changedFilesToDiffEntries(files: DraftlineChangedFileDto[]): DiffEntry[] {
+function changedFilesToDiffEntries(files: ChangedFile[]): DiffEntry[] {
   return files.map((file) => ({
     path: file.path,
     status: changeKindToStatus(file.kind),
@@ -385,20 +395,94 @@ function changedFilesToDiffEntries(files: DraftlineChangedFileDto[]): DiffEntry[
   }));
 }
 
-function changeKindToStatus(kind: DraftlineChangedFileDto["kind"]): string {
+function changeKindToStatus(kind: ChangedFile["kind"]): string {
   switch (kind) {
-    case "added":
+    case "Added":
       return "added";
-    case "deleted":
+    case "Deleted":
       return "deleted";
-    case "renamed":
+    case "Renamed":
       return "renamed";
-    case "conflicted":
+    case "Conflicted":
       return "conflicted";
-    case "typeChanged":
+    case "TypeChanged":
       return "modified";
-    case "modified":
+    case "Modified":
     default:
       return "modified";
   }
+}
+
+function syncStateToDto(state: SyncState): DraftlineApplyIncomingReportDto["syncStatus"]["state"] {
+  switch (state) {
+    case "LocalAhead":
+      return "localAhead";
+    case "IncomingAvailable":
+      return "incomingAvailable";
+    case "NeedsMerge":
+      return "needsMerge";
+    case "NoRemoteVersion":
+      return "noRemoteVersion";
+    case "UpToDate":
+    default:
+      return "upToDate";
+  }
+}
+
+function applyIncomingReportToDto(report: ApplyIncomingReport): DraftlineApplyIncomingReportDto {
+  return {
+    syncStatus: {
+      ahead: report.sync_status.ahead,
+      behind: report.sync_status.behind,
+      state: syncStateToDto(report.sync_status.state),
+    },
+    dirtyFiles: changedFilesToDiffEntries(report.dirty_files),
+    isFastForward: report.is_fast_forward,
+    canProceed: report.can_proceed,
+  };
+}
+
+function mergeIncomingReportToDto(report: MergeIncomingReport): DraftlineMergeIncomingReport {
+  const viewModel = createMergeConflictViewModel(report);
+  return {
+    syncStatus: {
+      ahead: report.sync_status.ahead,
+      behind: report.sync_status.behind,
+      state: syncStateToDto(report.sync_status.state),
+    },
+    dirtyFiles: changedFilesToDiffEntries(report.dirty_files),
+    fileHazards: report.file_hazards.map((hazard) => hazard.path),
+    conflicts: conflictViewModelToConflictFiles(viewModel),
+    token: report.token,
+    canMergeCleanly: report.can_merge_cleanly,
+    changedWorkspace: report.changed_workspace,
+    viewModel,
+  };
+}
+
+function conflictViewModelToConflictFiles(viewModel: MergeConflictViewModel): ConflictFile[] {
+  return viewModel.files.map((file) => {
+    const wholeFile = file.whole_file_conflicts[0];
+    return {
+      path: file.path,
+      file_type: fileTypeForPath(file.path),
+      ours: wholeFile?.ours ?? "",
+      theirs: wholeFile?.theirs ?? "",
+      ancestor: wholeFile?.base ?? "",
+      field_conflicts: file.field_conflicts.flatMap((field) => field.conflicts.map((conflict) => ({
+        field_path: field.field_path,
+        ours: conflict.ours ?? null,
+        theirs: conflict.theirs ?? null,
+        ancestor: conflict.base ?? null,
+      }))),
+      text_conflicts: [],
+    };
+  });
+}
+
+function fileTypeForPath(path: string): ConflictFile["file_type"] {
+  if (path.endsWith(".sk")) return "sketch";
+  if (path.endsWith(".sb")) return "storyboard";
+  if (path.endsWith(".md")) return "note";
+  return "other";
 }

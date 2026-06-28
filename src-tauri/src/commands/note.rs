@@ -29,7 +29,7 @@ pub async fn create_note(relative_path: String, state: State<'_, AppState>) -> R
     Ok(())
 }
 
-#[tauri::command]
+#[auditaur_command(skip_all, err)]
 pub async fn get_note(relative_path: String, state: State<'_, AppState>) -> Result<String, String> {
     let root = project_root(&state)?;
     let abs_path = project::safe_resolve(&root, &relative_path).map_err(|e| e.to_string())?;
@@ -37,7 +37,7 @@ pub async fn get_note(relative_path: String, state: State<'_, AppState>) -> Resu
     project::read_note(&abs_path).map_err(|e| e.to_string())
 }
 
-#[tauri::command]
+#[auditaur_command(skip_all, err)]
 pub async fn get_note_lock(
     relative_path: String,
     state: State<'_, AppState>,
@@ -60,7 +60,7 @@ pub async fn set_note_lock(
     project::set_note_lock(&root, &relative_path, locked).map_err(|e| e.to_string())
 }
 
-#[tauri::command]
+#[auditaur_command(skip_all, err)]
 pub async fn update_note(
     relative_path: String,
     content: String,

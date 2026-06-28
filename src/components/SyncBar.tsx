@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { useAppStore } from "../stores/appStore";
 import { useSettings } from "../hooks/useSettings";
 import { Check, ArrowUp, ArrowDown, AlertTriangle, Globe, RefreshCw } from "lucide-react";
@@ -116,23 +116,23 @@ export function SyncBar({ variant = "full" }: { variant?: "full" | "compact" }) 
           <button
             onClick={() => actionFn()}
             disabled={isSyncing}
-            className="flex h-6 shrink-0 items-center gap-1 rounded-md border border-[rgb(var(--color-accent))]/20 bg-[rgb(var(--color-accent))]/8 px-2 text-[10px] font-semibold text-[rgb(var(--color-accent))] transition-colors hover:bg-[rgb(var(--color-accent))]/14 disabled:opacity-50"
+            className="flex h-6 shrink-0 items-center gap-1 rounded-md border border-[rgb(var(--color-accent))]/20 bg-[rgb(var(--color-accent))]/8 px-1.5 text-[10px] font-semibold text-[rgb(var(--color-accent))] transition-colors hover:bg-[rgb(var(--color-accent))]/14 disabled:opacity-50"
             title={actionTitle}
             aria-label={actionTitle}
           >
             <ActionIcon className={`h-3 w-3 ${isSyncing ? "animate-spin" : ""}`} />
-            {isSyncing ? "Syncing" : compactButtonLabel}
+            <span className="hidden min-[260px]:inline">{isSyncing ? "Syncing" : compactButtonLabel}</span>
           </button>
         )}
         <button
           onClick={() => fetchFromRemote()}
           disabled={isSyncing}
-          className="flex h-6 shrink-0 items-center gap-1 rounded-md px-2 text-[10px] font-medium text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))] disabled:opacity-40"
+          className="flex h-6 shrink-0 items-center gap-1 rounded-md px-1.5 text-[10px] font-medium text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))] disabled:opacity-40"
           title="Check for updates without changing your files"
           aria-label="Check for updates without changing your files"
         >
           <RefreshCw className="h-3 w-3" />
-          Refresh
+          <span className="hidden min-[260px]:inline">Refresh</span>
         </button>
         {currentRemote?.url && prUrl && (
           <button
@@ -288,6 +288,7 @@ export function IncomingPreview({
   commits,
   inline = false,
   align = "right",
+  style,
 }: {
   commits: Array<{
     id: string;
@@ -299,6 +300,7 @@ export function IncomingPreview({
   }>;
   inline?: boolean;
   align?: "left" | "right";
+  style?: CSSProperties;
 }) {
   const body = (
     <div className="max-h-64 overflow-y-auto py-1">
@@ -340,9 +342,8 @@ export function IncomingPreview({
 
   return (
     <div
-      className={`absolute top-full z-[999] mt-1 w-72 max-w-[calc(100vw-2rem)] rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] shadow-lg ${
-        align === "left" ? "left-0" : "right-0"
-      }`}
+      style={style}
+      className={`${style ? "z-[var(--z-overlay)]" : `absolute top-full z-dropdown mt-1 w-72 ${align === "left" ? "left-0" : "right-0"}`} max-w-[calc(100vw-2rem)] rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] shadow-lg`}
     >
       {body}
     </div>

@@ -15,6 +15,7 @@ import { OutputPanel } from "./OutputPanel";
 import { CommandPalette } from "./CommandPalette";
 import { TitleBar } from "./TitleBar";
 import { SnapshotDialog } from "./SnapshotDialog";
+import { AiApplyGateDialog } from "./AiApplyGateDialog";
 import { KeyboardShortcutsDialog } from "./KeyboardShortcutsDialog";
 import { MergeConflictPanel } from "./MergeConflictPanel";
 import { ChatPanel } from "./ChatPanel";
@@ -471,7 +472,7 @@ export function AppLayout() {
         recentCommands={recentCommands}
       />
       <SnapshotDialog />
-      <SnapshotDialog />
+      <AiApplyGateDialog />
       <KeyboardShortcutsDialog open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
       <FeedbackDialog isOpen={feedbackOpen} onClose={() => setFeedbackOpen(false)} />
     </div>
@@ -488,9 +489,9 @@ function PrimarySidebar() {
   const handleResize = useCallback(
     (delta: number) => {
       const adjusted = sidebarPosition === "right" ? -delta : delta;
-      setSidebarWidth(sidebarWidth + adjusted);
+      setSidebarWidth((width) => width + adjusted);
     },
-    [sidebarWidth, setSidebarWidth, sidebarPosition],
+    [setSidebarWidth, sidebarPosition],
   );
 
   return (

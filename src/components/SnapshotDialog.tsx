@@ -16,6 +16,9 @@ export function SnapshotDialog() {
   const loadTimelines = useAppStore((s) => s.loadTimelines);
   const navigateToSnapshot = useAppStore((s) => s.navigateToSnapshot);
   const pendingNavAfterSave = useAppStore((s) => s.pendingNavAfterSave);
+  const pendingTimelineAfterSave = useAppStore((s) => s.pendingTimelineAfterSave);
+  const switchTimeline = useAppStore((s) => s.switchTimeline);
+  const isMultiProject = useAppStore((s) => s.isMultiProject);
 
   const [label, setLabel] = useState("");
   const [forkLabel, setForkLabel] = useState("");
@@ -35,7 +38,7 @@ export function SnapshotDialog() {
   }, [snapshotPromptOpen]);
 
   const close = useCallback(() => {
-    useAppStore.setState({ snapshotPromptOpen: false, pendingNavAfterSave: null });
+    useAppStore.setState({ snapshotPromptOpen: false, pendingNavAfterSave: null, pendingTimelineAfterSave: null });
     setLabel("");
     setForkLabel("");
     setSaving(false);
@@ -56,6 +59,9 @@ export function SnapshotDialog() {
         await loadGraphData();
         await loadTimelines();
       }
+      if (pendingTimelineAfterSave) {
+        await switchTimeline(pendingTimelineAfterSave);
+      }
       close();
     } catch (err) {
       console.error("Snapshot save failed:", err);
@@ -63,7 +69,7 @@ export function SnapshotDialog() {
       useToastStore.getState().show(`Snapshot failed: ${err}`, 5000, "error");
       setSaving(false);
     }
-  }, [label, forkLabel, isRewound, saveVersion, loadGraphData, loadTimelines, close]);
+  }, [label, forkLabel, isRewound, saveVersion, loadGraphData, loadTimelines, pendingNavAfterSave, pendingTimelineAfterSave, navigateToSnapshot, switchTimeline, close]);
 
   // Auto-focus and select input when opened
   useEffect(() => {
@@ -90,7 +96,7 @@ export function SnapshotDialog() {
           <div>
             <h2 className="text-sm font-semibold text-[rgb(var(--color-text))]">Save Snapshot</h2>
             <p className="text-[11px] text-[rgb(var(--color-text-secondary))]">
-              Save the current state of your project
+              Save the current state of {isMultiProject ? "this workspace" : "this project"}
             </p>
           </div>
         </div>
