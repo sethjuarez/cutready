@@ -139,23 +139,57 @@ describe("draftlineVersioning", () => {
     expect(mockInvoke).toHaveBeenCalledTimes(1);
   });
 
-  it("maps Draftline full history onto graph nodes", async () => {
+  it("maps Draftline workspace graph overview onto graph nodes", async () => {
     mockInvoke
-      .mockResolvedValueOnce(diagnostics())
-      .mockResolvedValueOnce([
-        {
-          version: version("2222222222222222222222222222222222222222", "Second", 1_700_000_100, "Seth"),
-          variation_tips: ["main"],
-          is_head: true,
-          parent_ids: ["1111111111111111111111111111111111111111"],
-        },
-        {
-          version: version("1111111111111111111111111111111111111111", "First", 1_700_000_000, "Maria"),
-          variation_tips: [],
-          is_head: false,
-          parent_ids: [],
-        },
-      ])
+      .mockResolvedValueOnce({
+        workspace_id: { root: WORKSPACE },
+        current_variation: "main",
+        current_version: "2222222222222222222222222222222222222222",
+        dirty: { is_dirty: false, files: [] },
+        recovery: null,
+        state_may_be_inconsistent: false,
+        snapshot_id: "snapshot-1",
+        was_pruned: false,
+        has_more: false,
+        nodes: [
+          {
+            id: "node-2222222222222222222222222222222222222222",
+            version: version("2222222222222222222222222222222222222222", "Second", 1_700_000_100, "Seth"),
+            parent_ids: ["node-1111111111111111111111111111111111111111"],
+            parent_version_ids: ["1111111111111111111111111111111111111111"],
+            variation_tips: ["main"],
+            is_head: true,
+            is_current: true,
+            is_tip: true,
+            layout: { lane: 0, row: 0, display_label: "main" },
+          },
+          {
+            id: "node-1111111111111111111111111111111111111111",
+            version: version("1111111111111111111111111111111111111111", "First", 1_700_000_000, "Maria"),
+            parent_ids: [],
+            parent_version_ids: [],
+            variation_tips: [],
+            is_head: false,
+            is_current: false,
+            is_tip: false,
+            layout: { lane: 0, row: 1, display_label: "main" },
+          },
+        ],
+        refs: [
+          {
+            id: "refs/heads/main",
+            name: "main",
+            display_label: "Main",
+            kind: "local_variation",
+            scope: "local",
+            target: "main",
+            target_version: "2222222222222222222222222222222222222222",
+            variation: "main",
+            is_current: true,
+            is_user_facing: true,
+          },
+        ],
+      })
       .mockResolvedValueOnce([
         {
           variation: variation("main", "Main"),
@@ -174,6 +208,7 @@ describe("draftlineVersioning", () => {
         lane: 0,
         is_head: true,
         is_branch_tip: true,
+        is_remote_tip: false,
         author: "Seth",
       },
       {
@@ -185,16 +220,22 @@ describe("draftlineVersioning", () => {
         lane: 0,
         is_head: false,
         is_branch_tip: false,
+        is_remote_tip: false,
         author: "Maria",
       },
     ]);
-    expect(mockInvoke).toHaveBeenNthCalledWith(1, "inspect_workspace", {
-      request: { workspace_path: WORKSPACE },
+    expect(mockInvoke).toHaveBeenNthCalledWith(1, "get_workspace_graph_overview", {
+      request: {
+        workspace_path: WORKSPACE,
+        options: {
+          include_remotes: true,
+          include_support_refs: true,
+          max_nodes: 250,
+          recent_nodes: 80,
+        },
+      },
     });
-    expect(mockInvoke).toHaveBeenNthCalledWith(2, "get_full_history", {
-      request: { workspace_path: WORKSPACE },
-    });
-    expect(mockInvoke).toHaveBeenNthCalledWith(3, "list_variations", {
+    expect(mockInvoke).toHaveBeenNthCalledWith(2, "list_variations", {
       request: { workspace_path: WORKSPACE },
     });
   });

@@ -1,0 +1,47 @@
+{
+  "title": "Plan the demo",
+  "locked": false,
+  "description": "Show how a rough idea becomes a structured CutReady sketch.",
+  "rows": [
+    {
+      "locked": false,
+      "locks": {},
+      "time": "0:00",
+      "duration_seconds": 20,
+      "narrative": "Start with a clear promise: CutReady turns demo chaos into an editable production plan.",
+      "demo_actions": "Open the CutReady workspace and point out the project explorer, sketch list, and empty editor state.",
+      "screenshot": ".cutready/screenshots/home-overview.png",
+      "visual": ".cutready/visuals/demo-loop.json",
+      "design_plan": "Use a loop metaphor showing Plan, Capture, Refine, and Ship as a warm product workflow."
+    },
+    {
+      "locked": false,
+      "locks": {},
+      "time": "0:20",
+      "duration_seconds": 30,
+      "narrative": "The sketch is the source of truth: timing, narration, actions, screenshot, and optional visual direction live in one row.",
+      "demo_actions": "Open this sketch and scan the planning table from left to right.",
+      "screenshot": ".cutready/screenshots/sketch-table.png",
+      "visual": null
+    },
+    {
+      "locked": false,
+      "locks": {},
+      "time": "0:50",
+      "duration_seconds": 20,
+      "narrative": "Reference screenshots keep the demo grounded before any recording or replay automation exists.",
+      "demo_actions": "Open the screenshot cell preview and explain how project-relative assets stay portable.",
+      "screenshot": ".cutready/screenshots/screenshot-cell.png",
+      "visual": null
+    }
+  ],
+  "metadata": {
+    "fields": {
+      "Audience": "New CutReady users",
+      "Goal": "Explain sketch-first planning"
+    }
+  },
+  "state": "draft",
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-06-28T20:20:00Z"
+}

@@ -10,9 +10,9 @@ import Screenshot from '../../../components/Screenshot.astro';
 
 <Badge text="Available" variant="success" />
 
-The **History Graph** is a full DAG (directed acyclic graph) visualization of
-your project's complete history across all timelines. It shows every snapshot,
-fork point, and merge commit in a single interactive view.
+The **History Graph** is a Draftline workspace graph visualization of your
+project's complete history across all timelines. It shows snapshots, fork
+points, and merge snapshots in a single interactive view.
 
 <Screenshot src="/images/history-graph.png" darkSrc="/images/history-graph-dark.png" alt="History graph" caption="The History Graph showing multiple timelines with fork and merge points" />
 
@@ -47,7 +47,7 @@ Lines connecting nodes show parent-child relationships:
 
 - **Straight vertical lines** — Sequential snapshots on the same timeline
 - **Diagonal lines** — Fork points where a timeline branched off
-- **Converging lines** — Merge commits where timelines were combined
+- **Converging lines** — Merge snapshots where timelines were combined
 
 ### Labels
 

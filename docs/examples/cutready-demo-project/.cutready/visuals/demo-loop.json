@@ -1,0 +1,68 @@
+{
+  "version": "2.0",
+  "scene": {
+    "type": "player",
+    "width": 960,
+    "height": 540,
+    "fps": 30,
+    "background": "$background",
+    "children": ["title", "loop", "step-plan", "step-capture", "step-refine", "step-ship", "connector-1", "connector-2", "connector-3"]
+  },
+  "elements": {
+    "title": {
+      "id": "title",
+      "type": "text",
+      "intent": { "role": "title", "importance": "primary" },
+      "props": { "x": 64, "y": 54, "content": "Sketch-first demo loop", "fontSize": 44, "fill": "$title" }
+    },
+    "loop": {
+      "id": "loop",
+      "type": "rect",
+      "intent": { "role": "hero", "importance": "primary" },
+      "props": { "x": 58, "y": 130, "width": 844, "height": 284, "rx": 36, "fill": "$surface", "stroke": "$border", "strokeWidth": 2 }
+    },
+    "step-plan": {
+      "id": "step-plan",
+      "type": "text",
+      "intent": { "role": "step", "importance": "primary" },
+      "props": { "x": 105, "y": 220, "content": "1. Plan", "fontSize": 34, "fill": "$accent" }
+    },
+    "step-capture": {
+      "id": "step-capture",
+      "type": "text",
+      "intent": { "role": "step", "importance": "primary" },
+      "props": { "x": 315, "y": 220, "content": "2. Capture", "fontSize": 34, "fill": "$secondary" }
+    },
+    "step-refine": {
+      "id": "step-refine",
+      "type": "text",
+      "intent": { "role": "step", "importance": "primary" },
+      "props": { "x": 555, "y": 220, "content": "3. Refine", "fontSize": 34, "fill": "$success" }
+    },
+    "step-ship": {
+      "id": "step-ship",
+      "type": "text",
+      "intent": { "role": "step", "importance": "primary" },
+      "props": { "x": 700, "y": 326, "content": "4. Ship", "fontSize": 34, "fill": "$warning" }
+    },
+    "connector-1": {
+      "id": "connector-1",
+      "type": "text",
+      "intent": { "role": "connector", "importance": "supporting" },
+      "props": { "x": 245, "y": 225, "content": "→", "fontSize": 34, "fill": "$muted" }
+    },
+    "connector-2": {
+      "id": "connector-2",
+      "type": "text",
+      "intent": { "role": "connector", "importance": "supporting" },
+      "props": { "x": 505, "y": 225, "content": "→", "fontSize": 34, "fill": "$muted" }
+    },
+    "connector-3": {
+      "id": "connector-3",
+      "type": "text",
+      "intent": { "role": "connector", "importance": "supporting" },
+      "props": { "x": 675, "y": 282, "content": "↘", "fontSize": 34, "fill": "$muted" }
+    }
+  },
+  "timelines": {}
+}

@@ -1,0 +1,33 @@
+{
+  "title": "CutReady Launch Demo",
+  "description": "A concise storyboard for demonstrating sketch-first planning, storyboard organization, and release confidence.",
+  "locked": false,
+  "metadata": {
+    "fields": {
+      "Audience": "Product demo creators",
+      "Length": "3 minutes"
+    }
+  },
+  "items": [
+    {
+      "type": "section",
+      "title": "Plan",
+      "description": "Show the sketch-first authoring loop.",
+      "sketches": ["01-plan-the-demo.sk"]
+    },
+    {
+      "type": "section",
+      "title": "Organize",
+      "description": "Group scenes into a coherent story.",
+      "sketches": ["02-organize-storyboard.sk"]
+    },
+    {
+      "type": "section",
+      "title": "Validate",
+      "description": "Close with release confidence and collaboration readiness.",
+      "sketches": ["03-confidence-pass.sk"]
+    }
+  ],
+  "created_at": "2026-06-28T20:15:00Z",
+  "updated_at": "2026-06-28T20:35:00Z"
+}

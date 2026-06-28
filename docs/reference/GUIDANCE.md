@@ -24,7 +24,7 @@ The workflow phases are:
 
 ## Phase 0: Sketch
 
-Before recording, the user authors a structured plan for the demo in a Notion-style block editor powered by Lexical (Meta). This is the recommended starting point — it ensures the demo has clear structure, pacing, and narrative direction before any recording begins.
+Before recording, the user authors a structured plan for the demo in a sketch editor with inline markdown cells and planning rows. This is the recommended starting point — it ensures the demo has clear structure, pacing, and narrative direction before any recording begins.
 
 ### The Sketch Editor
 
@@ -54,7 +54,7 @@ A rich block editor that supports:
 
 ### Version History
 
-Every document save is automatically versioned via git (gix). The user never interacts with git directly — instead, they see:
+Every document save is automatically versioned through Draftline. The user never interacts with the underlying repository directly — instead, they see:
 
 - **Commit timeline** — a visual list of all saved versions with timestamps and auto-generated descriptions (e.g., _"Updated section 'API Setup'"_).
 - **Version preview** — click any version to see the document as it was at that point.

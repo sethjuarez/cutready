@@ -10,11 +10,11 @@ import Screenshot from '../../../components/Screenshot.astro';
 
 <Badge text="Available" variant="success" />
 
-CutReady includes a full version history system backed by Git. Every save
-creates a **snapshot** that you can browse, compare, and restore — and you
-can branch your work into multiple **timelines** to experiment freely.
+CutReady includes a full version history system backed by Draftline. Every save
+creates a **snapshot** that you can browse, compare, and restore — and you can
+branch your work into multiple **timelines** to experiment freely.
 
-<Screenshot src="/images/snapshots-panel.png" darkSrc="/images/snapshots-panel-dark.png" alt="Snapshots panel" caption="The Snapshots panel in the right sidebar shows your project's saved versions" />
+<Screenshot src="/images/snapshots-panel.png" darkSrc="/images/snapshots-panel-dark.png" alt="Changes and snapshots panel" caption="The Changes and History panel shows unsaved project changes and saved Draftline snapshots" />
 
 ## Snapshots
 
@@ -32,7 +32,7 @@ saving. Each save records the exact state of every project document and asset.
 
 ### Navigating History
 
-The Snapshots panel shows a **linear graph** of your saved versions:
+The History section shows a graph of your saved versions:
 
 - **Filled dots** represent saved snapshots
 - **The topmost node** is your current position (HEAD)
@@ -70,8 +70,6 @@ snapshots to a remote.
 **Timelines** let you explore different directions without losing your original
 work. When you fork from a past snapshot, CutReady creates a new timeline.
 
-<Screenshot src="/images/snapshots-with-timelines.png" darkSrc="/images/snapshots-with-timelines-dark.png" alt="Multiple timelines" caption="The timeline selector dropdown showing Main and Experiment timelines" />
-
 ### Creating a Timeline
 
 1. Navigate to any past snapshot in the graph
@@ -83,8 +81,6 @@ work. When you fork from a past snapshot, CutReady creates a new timeline.
 
 The **timeline selector** in the Snapshots panel header shows your active
 timeline. Click it to see all available timelines and switch between them.
-
-<Screenshot src="/images/timeline-selector.png" darkSrc="/images/timeline-selector-dark.png" alt="Timeline selector dropdown" caption="Switch between timelines, merge, promote, or delete from the dropdown" />
 
 Each timeline in the dropdown shows:
 
@@ -102,16 +98,16 @@ the old Main becomes a named timeline.
 ## The History Graph
 
 For a bird's-eye view of all timelines and how they relate, open the
-**History Graph** — a full DAG (directed acyclic graph) visualization.
+**History Graph** — a Draftline workspace graph visualization.
 
-<Screenshot src="/images/history-graph.png" darkSrc="/images/history-graph-dark.png" alt="History graph visualization" caption="The History Graph shows all timelines, fork points, and merge commits" />
+<Screenshot src="/images/history-graph.png" darkSrc="/images/history-graph-dark.png" alt="History graph visualization" caption="The History Graph shows timelines, fork points, and merge snapshots" />
 
 Click **History** in the Snapshots panel header to open it as a dedicated tab.
 The graph shows:
 
 - **Colored lanes** for each timeline
 - **Fork points** where timelines diverge
-- **Merge commits** where timelines were combined
+- **Merge snapshots** where timelines were combined
 - **Branch labels** at each timeline's tip
 - **Ancestry indicators** showing where a timeline originated
 
@@ -119,10 +115,10 @@ See [History Graph](/collaboration/history-graph/) for details.
 
 ## Technical Details
 
-- Snapshots are git commits in the workspace's `.git/` repository
+- Snapshots are Draftline-managed versions in the workspace's `.git/` repository
 - Each snapshot captures the project tree, including sketches, storyboards,
   notes, screenshots, and visuals
-- The graph is computed from the commit DAG using **gix** (gitoxide, pure-Rust git)
-- No external git installation required — everything is built into the app
+- The graph is computed with Draftline workspace graph helpers
+- Users do not need to run git commands — saves, branches, merges, and sync are built into the app
 - Editor state, open tabs, chat session selection, and sidebar order are stored
   separately under `.git/cutready/` so they do not create document snapshots

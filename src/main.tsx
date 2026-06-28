@@ -21,7 +21,10 @@ const isViteDevelopment = import.meta.env.MODE === "development";
 if (isViteDevelopment && !(window as any).__TAURI_INTERNALS__) {
   const { installDevMocks } = await import("./devMock");
   installDevMocks();
-  // Expose appStore for dev tooling and Playwright screenshot scripts
+}
+
+if (isViteDevelopment) {
+  // Expose appStore for dev tooling and screenshot scripts.
   const { useAppStore } = await import("./stores/appStore");
   (window as any).__appStore = useAppStore;
 }

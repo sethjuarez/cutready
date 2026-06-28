@@ -1,0 +1,36 @@
+{
+  "title": "Organize the storyboard",
+  "locked": false,
+  "description": "Turn individual sketches into a paced demo flow.",
+  "rows": [
+    {
+      "locked": false,
+      "locks": {},
+      "time": "1:10",
+      "duration_seconds": 25,
+      "narrative": "Storyboards make a demo scannable: sections describe intent while sketch cards hold the scene detail.",
+      "demo_actions": "Open the Launch Demo Storyboard and expand the Planning and Confidence sections.",
+      "screenshot": ".cutready/screenshots/storyboard-sections.png",
+      "visual": null
+    },
+    {
+      "locked": false,
+      "locks": {},
+      "time": "1:35",
+      "duration_seconds": 25,
+      "narrative": "Drag-and-drop sequencing lets you shape the story before committing to a recording pass.",
+      "demo_actions": "Drag a sketch card to show reorder affordances, then leave the storyboard unchanged.",
+      "screenshot": ".cutready/screenshots/storyboard-reorder.png",
+      "visual": null
+    }
+  ],
+  "metadata": {
+    "fields": {
+      "Audience": "Demo producers",
+      "Goal": "Show pacing and sectioning"
+    }
+  },
+  "state": "draft",
+  "created_at": "2026-06-28T20:05:00Z",
+  "updated_at": "2026-06-28T20:25:00Z"
+}

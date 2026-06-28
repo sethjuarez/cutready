@@ -8,7 +8,8 @@ sidebar:
 ## Directory Layout
 
 CutReady uses a **flat, flexible folder structure**. When you create a project,
-it initializes the folder and a `.git` directory for version snapshots.
+it initializes the folder and a `.git` directory for Draftline-managed version
+history.
 You're free to organize files however you like — in the root, in subdirectories,
 or nested as deep as you want.
 
@@ -79,10 +80,11 @@ when it reads the order.
 
 ## Version Control
 
-The `.git/` directory contains a repository managed by **gitoxide (gix)**.
-This is completely independent of any source code git repository you might
-have. Each version snapshot is a git commit with the document content as
-the tree.
+The `.git/` directory contains Draftline-managed version history plus local
+CutReady runtime state under `.git/cutready/`. This is completely independent
+of any source code repository you might have. Each snapshot captures the
+versioned project content while chat/run exhaust and local UI state stay out of
+the snapshot.
 
 ## Assets
 

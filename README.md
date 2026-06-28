@@ -19,9 +19,9 @@ Built with [Tauri v2](https://tauri.app/) (Rust + React/TypeScript).
 
 | Document | Description |
 | ---------- | ------------- |
-| [North Star](docs/NORTH_STAR.md) | The press release — the vision and "why" for CutReady |
-| [Feature Guidance](docs/GUIDANCE.md) | Everything CutReady can do, organized by workflow phase |
-| [Architecture](docs/ARCHITECTURE.md) | Technical design: Tauri, Rust backend, React frontend, engines, data model |
+| [North Star](docs/reference/NORTH_STAR.md) | The press release — the vision and "why" for CutReady |
+| [Feature Guidance](docs/reference/GUIDANCE.md) | Everything CutReady can do, organized by workflow phase |
+| [Architecture](docs/reference/ARCHITECTURE.md) | Technical design: Tauri, Rust backend, React frontend, engines, data model |
 
 ## Tech Stack
 
@@ -30,8 +30,8 @@ Built with [Tauri v2](https://tauri.app/) (Rust + React/TypeScript).
 | Desktop framework | Tauri v2 |
 | Frontend | React + TypeScript |
 | Backend | Rust |
-| Rich text editor | Lexical (Meta) |
-| Document versioning | gix (gitoxide) — pure-Rust git |
+| Sketch editor | React + CodeMirror-powered markdown cells |
+| Document versioning | Draftline — content versioning, graph helpers, sync, merge |
 | Screen recording | FFmpeg (FFV1 lossless in MKV) |
 | Browser automation | Playwright (Node.js sidecar) |
 | Native app automation | windows-rs + UI Automation |
@@ -41,4 +41,4 @@ Built with [Tauri v2](https://tauri.app/) (Rust + React/TypeScript).
 
 ## Status
 
-🚧 **Active development** — Scaffold complete (Tauri v2, frameless window, theme, navigation). Implementing the Sketch Editor & Document Versioning (Lexical + gix) next.
+🚧 **Active development** — Sketches, storyboards, notes, AI assistance, Draftline-backed versioning/collaboration, document import, Word export, and Auditaur diagnostics are implemented. Recording, automation replay, FCPXML export, and Elucim animation export remain later-phase work.

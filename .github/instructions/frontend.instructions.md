@@ -73,9 +73,8 @@ The app uses a **VS Code-inspired** layout:
 
 ## Web Shim (devMock)
 
-`src/devMock.ts` fakes the Tauri backend when running in a browser. Activated when `import.meta.env.DEV && !__TAURI_INTERNALS__`. This is a secondary browser-only path for Playwright and documentation screenshots, not the default validation path for app work. Use `npm run dev` only when intentionally testing the web shim without Tauri.
+`src/devMock.ts` fakes the Tauri backend when running in a browser. Activated when `import.meta.env.DEV && !__TAURI_INTERNALS__`. This is a secondary browser-only path for UI development and documentation screenshots, not the default validation path for app work. Use `npm run dev` only when intentionally testing the web shim without Tauri.
 
-- Playwright E2E testing without the Tauri shell.
 - Browser-based development for UI work.
 - Screenshots of the app for documentation.
 

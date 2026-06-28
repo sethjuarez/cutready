@@ -143,17 +143,17 @@ Created the full directory structure from ARCHITECTURE.md with type definitions 
 
 ## Phase 2 — Script Sketch Editor & Document Versioning
 
-> Goal: A Notion-style block editor for authoring structured demo plans before (or instead of) recording, backed by git-based document versioning. Users can start here to sketch out what a recording _might_ look like — time estimates, narrative bullets, demo action bullets, and captured screenshots — then iterate with feedback before committing to a recording session.
+> Historical goal: A Notion-style block editor for authoring structured demo plans before (or instead of) recording. Current CutReady uses sketch/storyboard/note files with inline markdown cells and Draftline-backed versioning.
 >
 > Each project can hold **multiple documents**, each representing a segment, take, or alternative approach. Documents evolve through states: Sketch → RecordingEnriched → Refined → Final.
 >
-> **Status: COMPLETE** — All sub-phases implemented. Document data model, git-backed versioning via gix, Lexical editor with slash commands, custom ScriptTable node, version history UI, navigation/store updates, and sketch-to-recording bridge.
+> **Status: COMPLETE** — All sub-phases implemented and later migrated to the current sketch/storyboard/note model with Draftline-backed versioning, graph helpers, remote sync, merge, version history UI, navigation/store updates, and sketch-to-recording bridge.
 
 ### 2.1 Data Model — Documents ✅
 
 | Task | Details | Test | Status |
 | --- | --- | --- | --- |
-| Create `models/document.rs` | `Document` struct: `id: Uuid`, `title: String`, `description: String`, `sections: Vec<DocumentSection>`, `content: serde_json::Value` (Lexical editor state JSON), `state: DocumentState`, `created_at`, `updated_at`. `DocumentSection` struct wrapping section title, description, and the script planning table rows. `DocumentState` enum: `Sketch`, `RecordingEnriched`, `Refined`, `Final`. `DocumentSummary` for listing | Serde round-trip tests for all types | ✅ Done — 12 tests |
+| Create document models | Current models include `Sketch`, `PlanningRow`, `Storyboard`, `StoryboardItem`, summaries, notes as markdown files, and project metadata. | Serde round-trip tests for all types | ✅ Done |
 | Update `Project` model | Add `documents: Vec<Document>` alongside existing `script: Script`. Keep `Script`/`ScriptRow` as the derived execution plan for replay phases. Add optional `document_id: Option<Uuid>` link on `RecordedSession` | Backward-compatible deserialization test | ✅ Done |
 | Mirror in TypeScript | `Document`, `DocumentSection`, `DocumentState`, `DocumentSummary` types in `types/document.ts`. Update `Project` type in `types/project.ts` | TypeScript compiles | ✅ Done |
 | Register in `models/mod.rs` | Add `pub mod document;` | `cargo build` succeeds | ✅ Done |
@@ -166,7 +166,7 @@ Created the full directory structure from ARCHITECTURE.md with type definitions 
 
 | Task | Details | Test | Status |
 | --- | --- | --- | --- |
-| Add `gix` dependency | `gix` crate (pure Rust git implementation, no C/cmake deps) with minimal features for init, add, commit, log, diff. Pin version for stability | `cargo build` succeeds on Windows without cmake | ✅ Done — gix 0.70 |
+| Add versioning dependency | Original local versioning dependency is now superseded by `draftline` for snapshots, remotes, graph helpers, merge, and restore flows | `cargo build` succeeds on Windows without cmake | ✅ Superseded by Draftline |
 | Create original versioning engine | Prototype workspace init, snapshot commits, history listing, file preview, diff, and restore | Unit tests with temp repos: init → commit → log → diff → restore round-trip | ✅ Done, superseded by Draftline |
 | Migrate project storage format | Move from flat `{uuid}.cutready` JSON files to directory-per-project: `projects/{uuid}/` containing `project.json`, `documents/`, `screenshots/`, `.git/`. Auto-migrate old flat files on first open | Migration test: old `.cutready` file opens correctly in new format | ✅ Done |
 | Update `engine/project.rs` | `create_project` creates directory + calls `init_project_repo` + initial commit. `save_project` writes JSON + auto-commits with generated message. `load_project` reads from working directory. `save_with_label` commits with user-provided message | CRUD round-trip test with git history verification | ✅ Done — 8 tests |
@@ -183,25 +183,24 @@ Created the full directory structure from ARCHITECTURE.md with type definitions 
 
 **Deliverable**: Frontend can manage documents and navigate version history via Tauri IPC. ✅
 
-### 2.4 Lexical Editor Integration ✅
+### 2.4 Sketch Editor Integration ✅
 
 | Task | Details | Test | Status |
 | --- | --- | --- | --- |
-| Install Lexical packages | `lexical`, `@lexical/react`, `@lexical/rich-text`, `@lexical/list`, `@lexical/table`, `@lexical/markdown`, `@lexical/history`, `@lexical/selection`, `@lexical/utils`, `@lexical/code`, `@lexical/link` | `npm run dev` builds | ✅ Done |
-| Create `SketchEditor` component | Mount `LexicalComposer` with `RichTextPlugin`, `ListPlugin`, `HistoryPlugin`, `MarkdownShortcutPlugin`. Load document content from Lexical JSON state. Auto-save via debounced `update_document` command (500ms). Serialize editor state as JSON for persistence | Editor renders, typing works, content round-trips through save/load | ✅ Done |
-| Apply CutReady theme | Override Lexical's default node styles with CSS variables (`--color-surface`, `--color-text`, `--color-border`, `--color-accent`). Warm palette, Geist Sans font, `-0.011em` letter spacing. Use `bg-[var(--color-surface)]` pattern per frontend conventions | Visual: editor matches app aesthetic in both light and dark modes | ✅ Done |
-| Slash command plugin | Custom plugin that shows a command palette on `/` keystroke: insert heading (H1/H2/H3), bullet list, numbered list, script table, divider. Styled with warm accent colors, `rounded-xl`, `backdrop-blur-md` | Type `/` → menu appears → select block type → block inserted | ✅ Done |
+| Create `SketchForm` component | Edit title, description, and planning table rows with inline markdown cells. Persist `.sk` files through project commands and Draftline snapshots. | Editor renders, typing works, content round-trips through save/load | ✅ Done |
+| Apply CutReady theme | Use CSS variables (`--color-surface`, `--color-text`, `--color-border`, `--color-accent`), warm palette, Geist Sans font, and Tailwind arbitrary-value tokens. | Visual: editor matches app aesthetic in both light and dark modes | ✅ Done |
+| Planning row controls | Add, delete, duplicate, reorder, and lock rows. Screenshot and visual cells reference external assets. | Row ops work; serialization is stable | ✅ Done |
 
-**Deliverable**: Notion-style Lexical block editor with slash commands, themed to CutReady's warm design system. ✅
+**Deliverable**: Structured sketch editor with markdown-capable planning rows, themed to CutReady's warm design system. ✅
 
-### 2.5 Custom Script Table Node ✅
+### 2.5 Planning Table Rows ✅
 
 | Task | Details | Test | Status |
 | --- | --- | --- | --- |
-| Create `ScriptTableNode` | Custom Lexical `DecoratorNode` that renders a 4-column planning table: Time, Narrative Bullets, Demo Action Bullets, Screenshot. Each cell is editable inline. Time column accepts approximate durations (`~30s`, `1:00`, `2m`). Narrative and Demo columns support multi-line editing. Node serializes to/from Lexical JSON | Insert via slash command → table appears → edit cells → save → reload → content preserved | ✅ Done |
+| Create planning table rows | Render Time, Narrative, Demo Actions, Screenshot, and optional Visual columns. Narrative and actions support markdown. | Create row → edit cells → save → reload → content preserved | ✅ Done |
 | Row operations | Buttons to add row below, delete row within the script table | Row ops work; serialization is stable | ✅ Done |
 
-**Deliverable**: Custom script planning table embedded as a Lexical block. ✅
+**Deliverable**: Planning table embedded in each `.sk` sketch file. ✅
 
 ### 2.6 Version History UI ✅
 
@@ -224,7 +223,7 @@ Created the full directory structure from ARCHITECTURE.md with type definitions 
 | Update `HomePanel` | After opening a project, navigate to sketch view. Document loading on project open | Navigation flow works correctly | ✅ Done |
 | Update `AppLayout` | Add `"sketch"` case rendering `SketchPanel` | Panel renders when view switches to sketch | ✅ Done |
 
-**Deliverable**: Complete sketch workflow accessible from sidebar — create documents, edit in Lexical, manage versions, navigate between documents. ✅
+**Deliverable**: Complete sketch workflow accessible from sidebar — create sketches, edit planning rows, manage versions, navigate between documents. ✅
 
 ### 2.8 Sketch-to-Recording Bridge ✅
 
@@ -616,7 +615,7 @@ These phases can be worked on simultaneously:
 - **Phase 4** (Agent) + **Phase 6** (FFmpeg) — independent engines
 - **Phase 8** (Native) + **Phase 9** (Animations) — independent engines
 - **Phase 7** (Teleprompter) is purely frontend and decoupled from backend work
-- **Phase 2.2** (git versioning backend) can be developed in parallel with **Phase 2.4** (Lexical editor frontend)
+- **Phase 2.2** (versioning backend) can be developed in parallel with **Phase 2.4** (editor frontend)
 
 ---
 
@@ -626,7 +625,7 @@ These phases can be worked on simultaneously:
 | --- | --- | --- |
 | 0 — Foundation | Scaffold + CRUD + plugins + shell | Small |
 | 1 — Browser Recording | Sidecar + CDP + session mgmt | Medium-Large |
-| 2 — Sketch Editor + Versioning | Lexical editor + custom blocks + gix versioning + document model + version UI | Large |
+| 2 — Sketch Editor + Versioning | Sketch/storyboard/note editors + Draftline versioning + document model + version UI | Large |
 | 3 — Script Table | Session-to-script + TanStack Table + action editor | Medium |
 | 4 — Agent/LLM | Provider + 4 pipeline stages + diff UI | Large |
 | 5 — Automation Replay | Sidecar execution + healing + controls | Medium |

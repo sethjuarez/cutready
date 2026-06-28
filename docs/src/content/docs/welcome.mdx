@@ -16,14 +16,14 @@ import Screenshot from '../../components/Screenshot.astro';
   capture, and video-editor export are coming later.
 </Aside>
 
-<Screenshot src="/images/app-home.png" darkSrc="/images/app-home-dark.png" alt="CutReady home screen" caption="CutReady home screen — create or open a workspace to get started" />
+<Screenshot src="/images/app-home.png" darkSrc="/images/app-home-dark.png" alt="CutReady workspace shell" caption="A CutReady workspace with sketches, a storyboard, notes, chat, and local changes visible" />
 
 ## What is CutReady?
 
 **CutReady** is a desktop application for producing demo videos. It provides a
 structured workflow for planning demos as sketches, refining them with AI,
 capturing browser interactions when useful, and collaborating through
-git-backed snapshots.
+Draftline-backed snapshots.
 
 The core idea: instead of treating a live screen recording as the source of
 truth, you **plan** the demo as sketches and storyboards first. CutReady then
@@ -58,9 +58,9 @@ CutReady is built on modern, cross-platform technologies:
 - **React 19 + TypeScript** — Frontend UI
 - **Rust + Tokio** — Backend with async I/O
 - **Zustand** — Centralized state management
-- **Playwright** — Browser automation engine
+- **Playwright sidecar** — Browser observation/replay infrastructure for later-phase product workflows
 - **CodeMirror** — Markdown editing
-- **gix (gitoxide)** — Pure-Rust git for version history and remote operations
+- **Draftline** — Content versioning, branch graph helpers, sync, and merge
 - **agentive** — Shared LLM provider crate (Foundry, Azure OpenAI, OpenAI, Anthropic)
 - **IOTA Stronghold** — Encrypted vault for API keys and tokens
 

@@ -218,20 +218,45 @@ fn repair_orphaned_assets(repo_root: &Path) {
 
         // Ensure destination exists
         let dest_dir = target_cutready.join(subdir);
-        let _ = std::fs::create_dir_all(&dest_dir);
+        if let Err(error) = std::fs::create_dir_all(&dest_dir) {
+            log::warn!(
+                "[project] could not create asset repair directory {}: {error}",
+                dest_dir.display()
+            );
+            continue;
+        }
 
         // Move each file (don't overwrite existing)
         if let Ok(entries) = std::fs::read_dir(&src) {
             for entry in entries.flatten() {
                 let dest_file = dest_dir.join(entry.file_name());
                 if !dest_file.exists() {
-                    let _ = std::fs::rename(entry.path(), &dest_file);
+                    if let Err(error) = std::fs::rename(entry.path(), &dest_file) {
+                        log::warn!(
+                            "[project] could not repair orphaned asset into {}: {error}",
+                            dest_file.display()
+                        );
+                    }
                 }
             }
         }
 
         // Remove the now-empty source dir
-        let _ = std::fs::remove_dir(&src);
+        match std::fs::remove_dir(&src) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::DirectoryNotEmpty => {
+                log::warn!(
+                    "[project] orphaned asset directory still contains files after repair: {}",
+                    src.display()
+                );
+            }
+            Err(error) => {
+                log::warn!(
+                    "[project] could not remove repaired asset directory {}: {error}",
+                    src.display()
+                );
+            }
+        }
     }
 }
 
@@ -1338,7 +1363,7 @@ pub struct ChatSession {
     pub author_email: Option<String>,
 }
 
-/// Move legacy `.chats/*.chat` files out of the versioned project tree.
+/// Copy legacy `.chats/*.chat` files into local repo state.
 pub fn migrate_legacy_chat_sessions(
     repo_root: &Path,
     project_root: &Path,
@@ -1360,10 +1385,12 @@ pub fn migrate_legacy_chat_sessions(
         let Some(file_name) = source.file_name() else {
             continue;
         };
-        let destination = unique_legacy_chat_path(&archive_dir, file_name);
+        let destination = archive_dir.join(file_name);
+        if destination.exists() {
+            continue;
+        }
         migrate_legacy_chat_file(project_root, &source, &destination)?;
     }
-    let _ = std::fs::remove_dir(&chats_dir);
     Ok(())
 }
 
@@ -1444,104 +1471,18 @@ fn legacy_chat_file_name(relative_path: &str) -> Result<Option<&str>, ProjectErr
     Ok(Some(file_name))
 }
 
-fn unique_legacy_chat_path(archive_dir: &Path, file_name: &std::ffi::OsStr) -> PathBuf {
-    let candidate = archive_dir.join(file_name);
-    if !candidate.exists() {
-        return candidate;
-    }
-
-    let stem = Path::new(file_name)
-        .file_stem()
-        .map(|value| value.to_string_lossy())
-        .unwrap_or_else(|| "chat".into());
-    let extension = Path::new(file_name)
-        .extension()
-        .map(|value| value.to_string_lossy())
-        .unwrap_or_else(|| "chat".into());
-    for index in 1.. {
-        let candidate = archive_dir.join(format!("{stem}-{index}.{extension}"));
-        if !candidate.exists() {
-            return candidate;
-        }
-    }
-    unreachable!("unique legacy chat path search is unbounded")
-}
-
 fn migrate_legacy_chat_file(
-    project_root: &Path,
+    _project_root: &Path,
     source: &Path,
     destination: &Path,
 ) -> Result<(), ProjectError> {
     let data = std::fs::read_to_string(source).map_err(|e| ProjectError::Io(e.to_string()))?;
     if let Ok(mut session) = serde_json::from_str::<ChatSession>(&data) {
-        let committed_author = last_committed_file_author(project_root, source).unwrap_or(None);
-        if session.author_name.is_none() {
-            session.author_name = committed_author.as_ref().map(|author| author.0.clone());
-        }
-        if session.author_email.is_none() {
-            session.author_email = committed_author.map(|author| author.1);
-        }
         write_chat_session(destination, &session)?;
     } else {
         std::fs::write(destination, data).map_err(|e| ProjectError::Io(e.to_string()))?;
     }
-    std::fs::remove_file(source).map_err(|e| ProjectError::Io(e.to_string()))
-}
-
-fn last_committed_file_author(
-    project_root: &Path,
-    file_path: &Path,
-) -> Result<Option<(String, String)>, git2::Error> {
-    let repo = git2::Repository::discover(project_root)?;
-    let workdir = match repo.workdir() {
-        Some(path) => path,
-        None => return Ok(None),
-    };
-    let canonical_workdir = workdir
-        .canonicalize()
-        .unwrap_or_else(|_| workdir.to_path_buf());
-    let canonical_file_path = file_path
-        .canonicalize()
-        .unwrap_or_else(|_| file_path.to_path_buf());
-    let relative_path = match canonical_file_path.strip_prefix(&canonical_workdir) {
-        Ok(path) => path,
-        Err(_) => return Ok(None),
-    };
-
-    let mut revwalk = repo.revwalk()?;
-    revwalk.push_head()?;
-
-    for oid in revwalk {
-        let oid = oid?;
-        let commit = repo.find_commit(oid)?;
-        let tree = commit.tree()?;
-        let changed = if commit.parent_count() == 0 {
-            tree.get_path(relative_path).is_ok()
-        } else {
-            let mut touched = false;
-            for parent in commit.parents() {
-                let parent_tree = parent.tree()?;
-                let mut options = git2::DiffOptions::new();
-                options.pathspec(relative_path);
-                let diff =
-                    repo.diff_tree_to_tree(Some(&parent_tree), Some(&tree), Some(&mut options))?;
-                if diff.deltas().len() > 0 {
-                    touched = true;
-                    break;
-                }
-            }
-            touched
-        };
-
-        if changed {
-            let author = commit.author();
-            let name = author.name().unwrap_or("Unknown").to_string();
-            let email = author.email().unwrap_or("").to_string();
-            return Ok(Some((name, email)));
-        }
-    }
-
-    Ok(None)
+    Ok(())
 }
 
 /// Read a chat session file.
@@ -1630,7 +1571,8 @@ pub fn read_workspace_state(repo_root: &Path, project_root: &Path) -> WorkspaceS
     if let Ok(data) = std::fs::read_to_string(&legacy_path) {
         if let Ok(mut ws) = serde_json::from_str::<WorkspaceState>(&data) {
             sanitize_workspace_chat_session(repo_root, project_root, &mut ws);
-            // Migrate: write to new location, remove legacy file
+            // Migrate by copying into local state. Preserve the versioned legacy file so opening
+            // older projects never dirties history by deleting tracked compatibility data.
             log::info!(
                 "[workspace] migrating workspace.json from {:?} → {:?}",
                 legacy_path,
@@ -1638,7 +1580,6 @@ pub fn read_workspace_state(repo_root: &Path, project_root: &Path) -> WorkspaceS
             );
             let _ = std::fs::create_dir_all(&state_dir);
             let _ = serde_json::to_string_pretty(&ws).map(|json| std::fs::write(&new_path, json));
-            let _ = std::fs::remove_file(&legacy_path);
             return ws;
         }
     }
@@ -1690,7 +1631,8 @@ pub fn read_sidebar_order(repo_root: &Path, project_root: &Path) -> SidebarOrder
     let legacy_path = project_root.join(".cutready-order.json");
     if let Ok(data) = std::fs::read_to_string(&legacy_path) {
         if let Ok(order) = serde_json::from_str::<SidebarOrder>(&data) {
-            // Migrate: write to new location, remove legacy file
+            // Migrate by copying into local state. Preserve the versioned legacy file so opening
+            // older projects never dirties history by deleting tracked compatibility data.
             log::info!(
                 "[workspace] migrating sidebar order from {:?} → {:?}",
                 legacy_path,
@@ -1699,7 +1641,6 @@ pub fn read_sidebar_order(repo_root: &Path, project_root: &Path) -> SidebarOrder
             let _ = std::fs::create_dir_all(&state_dir);
             let _ =
                 serde_json::to_string_pretty(&order).map(|json| std::fs::write(&new_path, json));
-            let _ = std::fs::remove_file(&legacy_path);
             return order;
         }
     }
@@ -2456,7 +2397,7 @@ Some text
     fn workspace_state_writes_to_git_dir() {
         let tmp = TempDir::new().unwrap();
         let root = tmp.path();
-        git2::Repository::init(root).unwrap();
+        std::fs::create_dir(root.join(".git")).unwrap();
 
         let ws = WorkspaceState {
             open_tabs: vec![],
@@ -2480,7 +2421,7 @@ Some text
     fn workspace_state_migrates_from_legacy() {
         let tmp = TempDir::new().unwrap();
         let root = tmp.path();
-        git2::Repository::init(root).unwrap();
+        std::fs::create_dir(root.join(".git")).unwrap();
 
         // Write state to legacy location
         let legacy_dir = root.join(".cutready");
@@ -2499,10 +2440,10 @@ Some text
             "Should read from legacy location"
         );
 
-        // Legacy file should be deleted, new file should exist
+        // Legacy file should be preserved, new local-state copy should exist
         assert!(
-            !legacy_dir.join("workspace.json").exists(),
-            "Legacy file should be deleted after migration"
+            legacy_dir.join("workspace.json").exists(),
+            "Legacy file should be preserved after migration"
         );
         assert!(
             root.join(".git/cutready/workspace.json").exists(),
@@ -2518,7 +2459,7 @@ Some text
     fn workspace_state_clears_missing_legacy_chat_session() {
         let tmp = TempDir::new().unwrap();
         let root = tmp.path();
-        git2::Repository::init(root).unwrap();
+        std::fs::create_dir(root.join(".git")).unwrap();
 
         let state_dir = root.join(".git/cutready");
         std::fs::create_dir_all(&state_dir).unwrap();
@@ -2537,7 +2478,7 @@ Some text
     fn workspace_state_keeps_existing_legacy_chat_session() {
         let tmp = TempDir::new().unwrap();
         let root = tmp.path();
-        git2::Repository::init(root).unwrap();
+        std::fs::create_dir(root.join(".git")).unwrap();
 
         let state_dir = root.join(".git/cutready");
         let chat_dir = state_dir.join("legacy-chats");
@@ -2561,7 +2502,7 @@ Some text
     fn workspace_state_returns_default_when_missing() {
         let tmp = TempDir::new().unwrap();
         let root = tmp.path();
-        git2::Repository::init(root).unwrap();
+        std::fs::create_dir(root.join(".git")).unwrap();
 
         let ws = read_workspace_state(root, root);
         assert!(ws.open_tabs.is_empty(), "Default should have empty tabs");
@@ -2575,7 +2516,7 @@ Some text
     fn sidebar_order_migrates_from_legacy() {
         let tmp = TempDir::new().unwrap();
         let root = tmp.path();
-        git2::Repository::init(root).unwrap();
+        std::fs::create_dir(root.join(".git")).unwrap();
 
         // Write to legacy location (root-level .cutready-order.json)
         let legacy_order = SidebarOrder {
@@ -2592,10 +2533,10 @@ Some text
         let order = read_sidebar_order(root, root);
         assert_eq!(order.sketches, vec!["b.sk", "a.sk"]);
 
-        // Legacy file should be deleted
+        // Legacy file should be preserved
         assert!(
-            !root.join(".cutready-order.json").exists(),
-            "Legacy order file should be deleted after migration"
+            root.join(".cutready-order.json").exists(),
+            "Legacy order file should be preserved after migration"
         );
         assert!(
             root.join(".git/cutready/order.json").exists(),
@@ -2642,15 +2583,14 @@ Some text
         );
         assert_eq!(sessions[0].author_name.as_deref(), Some("Ada Lovelace"));
         assert_eq!(sessions[0].author_email.as_deref(), Some("ada@example.com"));
-        assert!(!root.join(".chats/chat.chat").exists());
+        assert!(root.join(".chats/chat.chat").exists());
         assert!(root.join(".git/cutready/legacy-chats/chat.chat").exists());
     }
 
     #[test]
-    fn scan_chat_sessions_falls_back_to_committed_author() {
+    fn scan_chat_sessions_preserves_unknown_author_without_git_lookup() {
         let tmp = TempDir::new().unwrap();
         let root = tmp.path();
-        let repo = git2::Repository::init(root).unwrap();
         let now = chrono::Utc::now();
         let session = ChatSession {
             title: "Imported teammate chat".into(),
@@ -2663,35 +2603,16 @@ Some text
         let chat_path = root.join(".chats/chat.chat");
         write_chat_session(&chat_path, &session).unwrap();
 
-        let mut index = repo.index().unwrap();
-        index.add_path(Path::new(".chats/chat.chat")).unwrap();
-        index.write().unwrap();
-        let tree_id = index.write_tree().unwrap();
-        let tree = repo.find_tree(tree_id).unwrap();
-        let signature = git2::Signature::now("Grace Hopper", "grace@example.com").unwrap();
-        repo.commit(
-            Some("HEAD"),
-            &signature,
-            &signature,
-            "add teammate chat",
-            &tree,
-            &[],
-        )
-        .unwrap();
-        drop(tree);
-
         let sessions = scan_chat_sessions(root, root).unwrap();
         assert_eq!(sessions.len(), 1);
-        assert_eq!(sessions[0].author_name.as_deref(), Some("Grace Hopper"));
-        assert_eq!(
-            sessions[0].author_email.as_deref(),
-            Some("grace@example.com")
-        );
+        assert!(sessions[0].author_name.is_none());
+        assert!(sessions[0].author_email.is_none());
 
-        let migrated =
-            read_chat_session(&resolve_chat_session_path(root, root, ".chats/chat.chat").unwrap())
-                .unwrap();
-        assert_eq!(migrated.author_name.as_deref(), Some("Grace Hopper"));
-        assert_eq!(migrated.author_email.as_deref(), Some("grace@example.com"));
+        let migrated = read_chat_session(
+            &resolve_chat_session_path(root, root, "cutready://legacy-chats/chat.chat").unwrap(),
+        )
+        .unwrap();
+        assert!(migrated.author_name.is_none());
+        assert!(migrated.author_email.is_none());
     }
 }
