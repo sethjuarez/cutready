@@ -66,7 +66,9 @@ The UI is a single-window Tauri application with dockable/collapsible panels.
 ### Panels
 
 | Panel | Purpose |
-| ------- | --------- || **Sketch Editor** | Notion-style block editor (Lexical) for authoring demo plans before recording. Structured documents with titled sections containing 4-column planning tables (Time, Narrative Bullets, Demo Action Bullets, Screenshot). Slash commands, floating toolbar, version history via git. Multiple documents per project with lifecycle states (Sketch → RecordingEnriched → Refined → Final). || **Script Editor** | Table-based UI for authoring/viewing the script. Columns: Time, Narrative (rich text), Demo (action list), Screenshot. Supports drag-and-drop reordering, split/merge rows, inline action editing. |
+| --- | --- |
+| **Sketch Editor** | Structured sketch editor for authoring demo plans before recording. Planning rows contain time, narrative, demo actions, screenshots, and optional visuals. Draftline-backed version history tracks changes without exposing raw repository operations. |
+| **Script Editor** | Table-based UI for authoring/viewing the script. Columns: Time, Narrative (rich text), Demo (action list), Screenshot. Supports drag-and-drop reordering, split/merge rows, inline action editing. |
 | **Teleprompter** | Large-text display of the current segment's narrative during recording. Auto-advances with automation. Configurable font size, scroll speed, position. |
 | **Preview** | Inline video player for recorded footage and rendered animations. Supports frame-by-frame scrubbing. |
 | **Timeline Visualizer** | Read-only visual representation of the output package: segments on a timeline with video, audio, and animation tracks. Maps to the FCPXML structure. |
@@ -109,12 +111,10 @@ await invoke('start_recording', {
 | `@tauri-apps/api` | Core Tauri JS API (invoke, events, channels) |
 | `@tauri-apps/plugin-*` | JS bindings for Tauri plugins (fs, dialog, shell, store, etc.) |
 | React 19 + TypeScript | UI framework |
-| `lexical` + `@lexical/react` | Block-based rich text editor (sketch documents, script editing) |
-| `@lexical/rich-text` / `@lexical/list` / `@lexical/table` | Core Lexical plugins (rich text, lists, tables) |
-| `@lexical/markdown` / `@lexical/history` | Markdown shortcuts, undo/redo history |
-| TanStack Table | Script table with sorting, filtering, reordering |
-| Monaco Editor / CodeMirror | Inline code editor for Elucim DSL JSON and raw action editing |
-| Zustand or Jotai | Lightweight state management |
+| CodeMirror | Markdown note editing and inline markdown editing surfaces |
+| `@dnd-kit` | Drag-and-drop ordering for tabs, sketches, and storyboard items |
+| `@elucim/dsl` | Visual cell rendering from semantic DSL JSON |
+| Zustand | Lightweight state management |
 | Tailwind CSS | Styling |
 
 ---
@@ -298,16 +298,15 @@ struct ScriptRow {
 
 ### Document Model
 
-Documents are the primary authoring artifact in CutReady. Each project contains multiple documents that progress through lifecycle states. Document content is stored as Lexical editor JSON state, and all changes are versioned via git (gix).
+Documents are the primary authoring artifact in CutReady. Each project contains multiple documents that progress through lifecycle states. Document content is stored as portable project files, and all versioning/collaboration flows route through Draftline.
 
 ```rust
 /// A sketch/planning document within a project.
 struct Document {
     id: Uuid,
     title: String,
-    description: String,
+    description: Option<String>,
     sections: Vec<DocumentSection>,
-    content: serde_json::Value,  // Lexical editor JSON state
     state: DocumentState,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
@@ -317,7 +316,7 @@ struct Document {
 struct DocumentSection {
     id: Uuid,
     title: String,
-    table: Option<PlanningTable>,
+    rows: Vec<PlanningRow>,
 }
 
 /// The 4-column planning table used in sketch documents.
@@ -352,23 +351,26 @@ struct DocumentSummary {
 
 ### Project Storage
 
-Projects are stored as git-backed directories. Each project lives in `projects/{uuid}/` with the following structure:
+Projects are portable folders. Each project can live wherever the user chooses and follows this shape:
 
 ```text
-projects/{uuid}/
-├── project.json              # Project metadata, settings
-├── documents/
-│   ├── {doc-uuid-1}.json     # Document content (Lexical JSON state)
-│   └── {doc-uuid-2}.json
-├── screenshots/
-│   ├── {uuid}.png
-│   └── ...
-├── recordings/               # Recording metadata + media paths
-├── animations/               # Rendered animation files
-└── .git/                     # gix-managed version history
+my-demo-project/
+├── intro.sk                  # Sketch JSON
+├── demo-storyboard.sb        # Storyboard JSON
+├── planning-notes.md         # Markdown note
+├── .cutready/
+│   ├── screenshots/          # Captured/pasted screenshots
+│   ├── visuals/              # Elucim DSL visual JSON
+│   └── settings.json         # Project settings
+└── .git/
+    └── cutready/             # Local run/chat/UI state that does not dirty snapshots
 ```
 
-All changes (document edits, screenshot additions, setting changes) are committed automatically. Users can browse the commit timeline, preview any version, diff between versions, and restore previous states.
+Draftline snapshots capture versioned content (sketches, storyboards, notes,
+screenshots, visuals, and settings) while local runtime state remains outside
+normal project snapshots. Users can browse the timeline, preview any version,
+diff between versions, restore previous states as new saves, branch into
+variations, merge, and sync with remotes.
 
 ```rust
 struct Recording {
@@ -730,91 +732,54 @@ fn generate_fcpxml(project: &Project, output_dir: &Path) -> Result<String> {
 }
 ```
 
-### 7. Versioning Engine
+### 7. Draftline Versioning Engine
 
-Manages document version history via git, using the `gix` (gitoxide) crate for pure-Rust git operations with no C/cmake dependencies.
+Manages document version history, content policy, branch/variation graphs, shelves, sync, merge, and restore-as-new-save through the shared `draftline` crate. CutReady does not implement app-level git save/restore/diff paths.
 
 **Core operations**:
 
 ```rust
-use gix::Repository;
-
-/// Initialize a git repository for a new project.
-fn init_project_repo(project_dir: &Path) -> Result<()> {
-    gix::init(project_dir)?;
-    Ok(())
+fn open_project(root: impl AsRef<Path>) -> DraftlineResult<CutReadyDraftlineAdapter> {
+    let policy = cutready_content_policy()?;
+    let workspace = Workspace::init_with_policy(root, policy)?;
+    Ok(CutReadyDraftlineAdapter { workspace })
 }
 
-/// Commit all current changes with an auto-generated message.
-fn commit_snapshot(
-    repo: &Repository,
+fn save_version(adapter: &CutReadyDraftlineAdapter, message: &str) -> DraftlineResult<Version> {
+    adapter.save_version(message)
+}
+
+fn restore_as_new_save(
+    adapter: &CutReadyDraftlineAdapter,
+    version_id: &VersionId,
     message: &str,
-) -> Result<gix::ObjectId> {
-    // Stage all changes (documents, screenshots, settings)
-    // Create commit with timestamp
-    // Return commit hash
+) -> DraftlineResult<Version> {
+    adapter.restore_version_as_new_save(version_id, message)
 }
 
-/// List all commits in reverse chronological order.
-fn list_versions(repo: &Repository) -> Result<Vec<VersionEntry>> {
-    // Walk the commit graph
-    // Return commit hash, message, timestamp, changed files
-}
-
-/// Get the content of a specific file at a given commit.
-fn get_version(
-    repo: &Repository,
-    commit_id: &gix::ObjectId,
-    file_path: &str,
-) -> Result<Vec<u8>> {
-    // Resolve tree → blob for the given path
-}
-
-/// Diff two commits for a specific file.
-fn diff_versions(
-    repo: &Repository,
-    from: &gix::ObjectId,
-    to: &gix::ObjectId,
-    file_path: &str,
-) -> Result<String> {
-    // Compute unified diff between two blob versions
-}
-
-/// Restore a file to a previous version by checking out from a commit.
-fn restore_version(
-    repo: &Repository,
-    commit_id: &gix::ObjectId,
-    file_path: &str,
-    working_dir: &Path,
-) -> Result<()> {
-    // Read blob at commit, write to working directory
-    // Auto-commit the restore as a new version
+fn graph_overview(adapter: &CutReadyDraftlineAdapter) -> DraftlineResult<WorkspaceGraph> {
+    adapter.workspace_graph_overview(/* bounded options */)
 }
 ```
 
 **Design notes**:
 
-- Commits are created automatically on every document save, not manually by the user.
-- Commit messages are auto-generated with context: _"Update document 'API Walkthrough' — edited section 'Setup'"_.
-- The version history UI presents commits as a navigable timeline, not a raw git log.
-- `gix` is chosen over `git2-rs` (libgit2 bindings) to avoid cmake and C toolchain dependencies on Windows.
+- Snapshots are created automatically on user saves and explicit workspace-structure changes.
+- Draftline owns branch/variation IDs; CutReady treats IDs as opaque and uses helper APIs for graph relationships.
+- The version history UI presents Draftline graph summaries and neighborhoods, not raw git logs.
+- Legacy files such as `.chats`, `.cutready/memory.json`, `.cutready/workspace.json`, and `.cutready-order.json` are migrated non-destructively so tracked older projects do not become dirty simply by opening.
 
-**Git identity management**:
+**Content policy**:
 
-Each CutReady workspace is a self-contained git repository. The local
-`.git/config` must have `user.name` and `user.email` so `gix` can write
-reflog entries when committing snapshots. `ensure_git_identity()` resolves
-missing identity via a priority chain:
+Draftline tracks the user-authored project surface:
 
-1. **Workspace settings** (`repoAuthorName`/`repoAuthorEmail` in `.cutready/settings.json`)
-2. **Local git config** (already set from a previous resolution)
-3. **Global/system git config** (user's machine-wide identity)
-4. **GitHub CLI** (`gh api user` — uses the authenticated GitHub profile)
-5. **Frontend prompt** (one-time dialog before the first snapshot)
-6. **Fallback** ("CutReady" / `app@cutready.local` — last resort)
+1. **Documents**: `.sk`, `.sb`, and `.md`
+2. **Visual assets**: `.cutready/visuals/*.json`
+3. **Screenshot assets**: `.cutready/screenshots/*.{png,jpg,jpeg,webp}`
+4. **Project settings/metadata** that should travel with the project
 
-The resolved identity is persisted to both local git config and workspace
-settings, so subsequent operations are instant.
+Runtime state such as chat/run trajectories, locks, recordings, and local UI
+layout lives outside snapshots or is excluded by policy.
 
 **Deep link protocol**:
 
@@ -847,14 +812,14 @@ blocks using `CommandExt::creation_flags()` (std) or the inherent
 | Frontend | React + TypeScript | React 19 | Largest ecosystem, rich component libraries |
 | Backend | Rust | 2021 edition | Memory safety, async, native Windows API access |
 | Screen recording | FFmpeg (FFV1 / MKV) | 7.x | Lossless, industry standard, multi-track |
-| Browser automation | Playwright (Node.js sidecar) | Latest | Cross-browser, headful mode, mature API, CDP access |
+| Browser automation | Playwright (Node.js sidecar) | Latest | Headful browser observation and replay automation |
 | Native automation | windows-rs + UIAutomation | 0.62 | Zero external deps, direct OS integration |
 | Motion graphics | Elucim (`@elucim/core` + `@elucim/dsl`) | Latest | TypeScript/SVG, JSON DSL for AI agents, browser-native rendering, video export |
 | LLM | agentive crate (multi-provider) | Latest | 4 providers (Foundry, Azure OpenAI, OpenAI, Anthropic), streaming, agentic loops, ARM discovery |
 | Visuals | Elucim DSL (`@elucim/dsl`) | Latest | SVG-based framing visuals with semantic color tokens |
-| Document versioning | gix (gitoxide) | 0.70 | Pure-Rust git implementation, no C/cmake deps, commit/log/diff/restore |
+| Document versioning | Draftline | 0.2.5 | Content versioning, branch graph helpers, sync, merge, restore-as-new-save |
 | Timeline export | FCPXML 1.9 | — | Multi-track, markers, native DaVinci Resolve 17+ import |
-| Project storage | Git-backed directories (gix) | — | Version-controlled, browsable history, diffable, no DB dependency |
+| Project storage | Portable folders + Draftline | — | Versioned project content with local runtime state kept out of snapshots |
 
 ### Key Rust Crates
 
@@ -868,8 +833,7 @@ blocks using `CommandExt::creation_flags()` (std) or the inherent
 | `uuid` | Unique IDs for projects, rows, recordings |
 | `chrono` | Timestamps |
 | `windows` | Native Windows API access (UI Automation, input hooks, GDI) |
-| `gix` | Git operations (versioning, commit history, diff, restore) |
-| `git2` | Change detection (has_unsaved_changes status check) |
+| `draftline` | Content versioning, workspace graph helpers, shelves, remotes, sync, merge |
 | `anyhow` / `thiserror` | Error handling |
 | `tracing` / Auditaur | Structured observability, local traces, logs, frontend errors, IPC/events |
 
@@ -931,6 +895,6 @@ Tauri bundler produces a Windows NSIS installer (`.exe`) or MSI:
 ## Future Architecture Considerations
 
 - **macOS support**: Tauri is cross-platform. The native automation layer would swap `windows-rs` for macOS Accessibility APIs (`accessibility` frameworks via `objc2` crate). FFmpeg and Playwright work unchanged.
-- **Collaborative editing**: If needed, Lexical’s immutable state model pairs well with CRDT-based merging (e.g., Automerge/Yjs) or a real-time sync protocol. The git-backed storage could layer on top of CRDTs for offline support.
+- **Collaborative editing**: If needed, CutReady's portable file model could layer real-time CRDT editing (for example, Automerge/Yjs) above Draftline's snapshot, merge, and remote-sync workflow.
 - **Plugin architecture**: The engine module structure supports extracting engines into Tauri plugins for modularity and third-party extension.
-- **Document versioning extensions**: The gix-based versioning engine could support branching (e.g., “alternative script take”) and merging, leveraging git’s native capabilities. Semantic diffing of Lexical JSON state (rather than raw text diff) is a future enhancement.
+- **Document versioning extensions**: Draftline graph helpers already support branch/variation visualization, focused neighborhoods, path/common-ancestor helpers, and compare summaries. Future work should improve semantic diffing and conflict UX for richer asset previews.

@@ -43,11 +43,17 @@ impl SqliteBackend {
     }
 
     fn migrate_json_files(&self, conn: &Connection) -> Result<(), String> {
-        self.migrate_json_file(conn, &self.local_json_path, "local memory store")?;
-        self.migrate_json_file(conn, &self.legacy_json_path, "legacy memory store")
+        self.migrate_json_file(conn, &self.local_json_path, "local memory store", true)?;
+        self.migrate_json_file(conn, &self.legacy_json_path, "legacy memory store", false)
     }
 
-    fn migrate_json_file(&self, conn: &Connection, path: &Path, label: &str) -> Result<(), String> {
+    fn migrate_json_file(
+        &self,
+        conn: &Connection,
+        path: &Path,
+        label: &str,
+        remove_after_import: bool,
+    ) -> Result<(), String> {
         if !path.exists() {
             return Ok(());
         }
@@ -70,10 +76,12 @@ impl SqliteBackend {
             save_store_to_conn(conn, &merged)?;
         }
 
-        std::fs::remove_file(path)
-            .map_err(|e| format!("Could not remove migrated {label}: {e}"))?;
+        if remove_after_import {
+            std::fs::remove_file(path)
+                .map_err(|e| format!("Could not remove migrated {label}: {e}"))?;
+        }
         log::info!(
-            "[memory] migrated {label} from {:?} into agent-state.db",
+            "[memory] imported {label} from {:?} into agent-state.db",
             path
         );
         Ok(())
@@ -498,7 +506,7 @@ mod tests {
 
         assert_eq!(store.memories.len(), 1);
         assert_eq!(store.memories[0].content, "Use concise narration");
-        assert!(!legacy_path.exists());
+        assert!(legacy_path.exists());
         assert!(root.join(".git/cutready/agent-state.db").exists());
         assert!(!root.join(".git/cutready/memory.json").exists());
         assert_eq!(memory_row_count(root), 1);

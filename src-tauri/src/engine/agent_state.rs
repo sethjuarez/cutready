@@ -144,10 +144,7 @@ impl AgentStateStore {
     }
 
     pub fn database_path_for_project(project_root: &Path) -> PathBuf {
-        let repo_root = git2::Repository::discover(project_root)
-            .ok()
-            .and_then(|repo| repo.workdir().map(Path::to_path_buf))
-            .unwrap_or_else(|| project_root.to_path_buf());
+        let repo_root = Self::local_state_repo_root(project_root);
         crate::engine::project::git_state_dir(&repo_root, project_root).join(AGENT_STATE_FILENAME)
     }
 
@@ -169,6 +166,14 @@ impl AgentStateStore {
             .map_err(|e| format!("Could not configure agent state database timeout: {e}"))?;
         initialize_schema(&conn)?;
         Ok(db_path)
+    }
+
+    fn local_state_repo_root(project_root: &Path) -> PathBuf {
+        project_root
+            .ancestors()
+            .find(|ancestor| ancestor.join(".git").exists())
+            .unwrap_or(project_root)
+            .to_path_buf()
     }
 
     #[cfg(test)]

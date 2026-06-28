@@ -20,6 +20,8 @@ import {
   type VariationSummary,
   type Version,
   type VersionDiff,
+  type WorkspaceGraphNode,
+  type WorkspaceGraphRef,
 } from "@draftline/client";
 import { invoke, listen } from "./tauri";
 import type { ConflictFile, DiffEntry, GraphNode, IncomingCommit, RemoteInfo, SyncStatus, TimelineInfo, VersionEntry } from "../types/sketch";
@@ -95,32 +97,32 @@ export async function listDraftlineVersions(): Promise<VersionEntry[]> {
 }
 
 export async function listDraftlineGraphNodes(): Promise<GraphNode[]> {
-  const [summary, history, variations] = await Promise.all([
-    facade().inspect(),
-    facade().fullHistory(),
+  const [graph, variations] = await Promise.all([
+    facade().workspaceGraphOverview({
+      include_remotes: true,
+      include_support_refs: true,
+      max_nodes: 250,
+      recent_nodes: 80,
+    }),
     facade().variations(),
   ]);
   const laneByVariation = new Map(variations.map((entry, index) => [entry.variation.id, index]));
-  const headVariationByVersion = new Map(
-    variations
-      .filter((entry) => entry.head_version)
-      .map((entry) => [entry.head_version!.id, entry.variation.id]),
-  );
+  const refsByVersion = refsByTargetVersion(graph.refs);
 
-  return history.map((entry) => {
-    const timeline = entry.variation_tips[0]
-      ?? headVariationByVersion.get(entry.version.id)
-      ?? summary.summary.active_variation.id;
+  return graph.nodes.map((node) => {
+    const refs = refsByVersion.get(node.version.id) ?? [];
+    const timeline = graphNodeTimeline(node, refs, graph.current_variation ?? variations[0]?.variation.id ?? "main");
     return {
-      id: entry.version.id,
-      message: entry.version.label,
-      timestamp: new Date(entry.version.time_seconds * 1000).toISOString(),
+      id: node.version.id,
+      message: node.version.label,
+      timestamp: new Date(node.version.time_seconds * 1000).toISOString(),
       timeline,
-      parents: entry.parent_ids,
-      lane: laneByVariation.get(timeline) ?? 0,
-      is_head: entry.is_head,
-      is_branch_tip: entry.variation_tips.length > 0,
-      author: entry.version.author.name,
+      parents: node.parent_version_ids,
+      lane: laneByVariation.get(timeline) ?? node.layout.lane,
+      is_head: node.is_current || node.is_head,
+      is_branch_tip: node.is_tip || refs.some((ref) => ref.kind === "local_variation" && ref.is_user_facing),
+      is_remote_tip: refs.some((ref) => ref.kind === "remote_variation"),
+      author: node.version.author.name,
     };
   });
 }
@@ -361,6 +363,24 @@ export async function popDraftlineShelf(): Promise<boolean> {
 export async function squashDraftlineVersions(count: number, label: string): Promise<string> {
   const version = await invoke<Version>("draftline_squash_versions", { count, label });
   return version.id;
+}
+
+function refsByTargetVersion(refs: WorkspaceGraphRef[]): Map<string, WorkspaceGraphRef[]> {
+  const byVersion = new Map<string, WorkspaceGraphRef[]>();
+  for (const ref of refs) {
+    const existing = byVersion.get(ref.target_version);
+    if (existing) {
+      existing.push(ref);
+    } else {
+      byVersion.set(ref.target_version, [ref]);
+    }
+  }
+  return byVersion;
+}
+
+function graphNodeTimeline(node: WorkspaceGraphNode, refs: WorkspaceGraphRef[], fallback: string): string {
+  const localRef = refs.find((ref) => ref.kind === "local_variation" && ref.variation);
+  return localRef?.variation ?? node.variation_tips[0] ?? fallback;
 }
 
 function versionToEntry(version: Version): VersionEntry {

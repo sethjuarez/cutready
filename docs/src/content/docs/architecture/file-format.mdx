@@ -19,7 +19,6 @@ workspaces have each project in its own subdirectory:
 
 ```text
 my-workspace/
-├── project.json
 ├── .cutready/
 │   ├── screenshots/
 │   ├── visuals/
@@ -44,14 +43,12 @@ my-workspace/
 │   └── projects.json
 ├── .git/
 ├── project-alpha/
-│   ├── project.json
 │   ├── .cutready/
 │   │   ├── screenshots/
 │   │   └── visuals/
 │   ├── intro.sk
 │   └── demo-flow.sb
 └── project-beta/
-    ├── project.json
     ├── .cutready/
     │   ├── screenshots/
     │   └── visuals/
@@ -136,7 +133,7 @@ Sketch files are JSON documents containing a structured planning table:
 | --- | --- | --- |
 | `title` | string | Display name of the sketch |
 | `locked` | boolean | Protects the whole sketch from edits when true |
-| `description` | object/null | Lexical rich-text editor state, or `null` when empty |
+| `description` | string/null | Markdown-capable sketch description, or `null` when empty |
 | `rows` | array | Ordered list of planning row objects |
 | `state` | string | One of: `draft`, `recording_enriched`, `refined`, `final` |
 | `created_at` / `updated_at` | string | ISO timestamps |
@@ -212,32 +209,18 @@ new location when read.
 
 ## Version History (`.git/`)
 
-Each workspace contains an embedded git repository managed by **gitoxide (gix)**:
+Each workspace contains an embedded repository managed through **Draftline**:
 
-- Snapshots are stored as git commits
-- The full document state is committed on each save (`Ctrl+S`)
-- The commit graph powers the visual timeline in the Version History panel
-- No external git installation is required
+- Snapshots capture sketches, storyboards, notes, screenshots, and visuals
+- Runtime state under `.git/cutready/` does not dirty snapshots
+- Draftline graph helpers power the visual timeline in the Version History panel
+- Users do not need to run git commands to save, branch, merge, or sync
 
 <Aside type="tip">
   Because project files are plain JSON and markdown, you can inspect or
   edit them with any text editor. CutReady will pick up external changes
   the next time you open the project.
 </Aside>
-
-## Project Manifest (`project.json`)
-
-The root-level manifest identifies the directory as a CutReady project:
-
-```json
-{
-  "name": "Product Demo Q1",
-  "createdAt": "2025-01-15T10:30:00Z"
-}
-```
-
-CutReady checks for this file when opening a folder to confirm it's a valid
-project.
 
 ## Multi-Project Manifest (`.cutready/projects.json`)
 

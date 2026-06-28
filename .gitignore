@@ -33,7 +33,6 @@ Thumbs.db
 
 # Test artifacts
 test-results/
-e2e/screenshots/
 .playwright-mcp/
 scripts/visual-eval/reports/
 scripts/visual-eval/runs/

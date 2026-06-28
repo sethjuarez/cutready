@@ -106,12 +106,12 @@ Core types are in the `models/` module:
 
 All models derive `Serialize` + `Deserialize` for JSON IPC and file storage. Use `#[serde(default)]` for backward compatibility on new fields.
 
-## Versioning (gix)
+## Versioning (Draftline)
 
-- Uses **gix 0.70** with a tree-building approach (not index manipulation).
-- Trees built from filesystem: create blobs with `repo.write_blob()`, assemble sorted `gix::objs::tree::Entry` vectors, write tree, then commit.
-- Committer: `CutReady` / `app@cutready.local`.
-- Directories starting with `.` (including `.git`) are skipped during scanning.
+- CutReady persistence routes through `engine::draftline_adapter::CutReadyDraftlineAdapter`; do not add app-level `gix`, `git2`, or raw `git` save/restore/diff paths.
+- Draftline owns snapshots, branch/variation graph helpers, sync, merge, restore-as-new-save, shelves, and collaboration semantics.
+- CutReady owns the content policy: sketches (`.sk`), storyboards (`.sb`), notes (`.md`), `.cutready/visuals`, and `.cutready/screenshots` are versioned content.
+- Runtime state such as `.chats`, `.cutready/recordings`, `.cutready/agent-state.db`, `.cutready/memory.json`, and `.cutready/locks.json` is excluded from Draftline snapshots.
 
 ## Visuals Storage
 
@@ -169,4 +169,4 @@ cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
 
 ## Key Crates
 
-`tauri`, `tokio`, `serde`/`serde_json`, `reqwest` (LLM API), `gix` (git), `quick-xml` (FCPXML), `uuid`, `chrono`, `windows` (native automation), `anyhow`, `thiserror`, `tracing`.
+`tauri`, `tokio`, `serde`/`serde_json`, `reqwest` (LLM API), `draftline` (content versioning and collaboration), `agentive` (LLM providers/agent loop), `quick-xml` (FCPXML), `uuid`, `chrono`, `windows` (native automation), `anyhow`, `thiserror`, `tracing`.

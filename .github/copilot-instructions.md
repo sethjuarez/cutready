@@ -55,9 +55,9 @@ my-demo-project/
 | Backend | **Rust** (2021 edition) | Async via Tokio, native Windows API via windows-rs |
 | State management | **Zustand** | appStore, toastStore, updateStore |
 | Drag-and-drop | **dnd-kit** | Sketch reordering in storyboards, tab reordering |
-| Versioning | **gix** (gitoxide) 0.70 | Pure-Rust git: commit, log, diff, restore, branch, merge |
+| Versioning | **Draftline** 0.2.5 | Content versioning, collaboration, branch graph helpers, sync, merge |
 | Screen recording | **FFmpeg** (sidecar) | FFV1 lossless codec in MKV, multi-track audio |
-| Browser automation | **Playwright** (Node.js sidecar) | Headful mode, browser event observation, E2E testing |
+| Browser automation | **Playwright** (Node.js sidecar) | Headful browser observation and replay automation |
 | LLM | **Microsoft Foundry** | Chat Completions + Responses API, multi-agent system |
 | Visuals | **Elucim DSL** (`@elucim/dsl`) | SVG-based framing visuals with semantic color tokens |
 | Word export | **docx** | Export sketches/storyboards/notes to .docx |
@@ -71,7 +71,6 @@ my-demo-project/
 ```text
 cutready/
 ├── docs/                          # Astro Starlight docs site + north star docs
-├── e2e/                           # Playwright E2E tests (run against web shim)
 ├── playwright-sidecar/            # Playwright Node.js sidecar for browser automation
 ├── scripts/                       # Build/release helper scripts
 ├── src/                           # React + TypeScript frontend
@@ -99,7 +98,6 @@ cutready/
 ├── tailwind.config.ts
 ├── vite.config.ts
 ├── vitest.config.ts
-├── playwright.config.ts
 └── package.json
 ```
 
@@ -160,7 +158,7 @@ cutready/
 - Auto-updater with update banner
 - Feedback system
 - Docs site (Astro Starlight) published to GitHub Pages
-- E2E test suite via Playwright (web shim mode)
+- E2E confidence drill via Auditaur against the real Tauri app
 
 **Not yet implemented:** Recording, automation replay, FCPXML export, Elucim animation export.
 
@@ -178,7 +176,7 @@ cutready/
 - **Headless processes**: ALL subprocess spawns (`Command::new`) on Windows MUST include `creation_flags(0x08000000)` (`CREATE_NO_WINDOW`) to prevent console windows from flashing. This applies to CutReady's own code AND any SDK/library forks we maintain. Wrap the flag in `#[cfg(target_os = "windows")]` for cross-platform compatibility.
 - **LLM routing**: Auto-routes codex/pro models to Responses API, others to Chat Completions. Detection in `llm.rs`.
 - **Path safety**: All user-provided paths go through `safe_resolve()` before filesystem access.
-- **Web shim**: `devMock.ts` activated when `import.meta.env.DEV && !__TAURI_INTERNALS__`. Enables Playwright E2E testing and browser development without the Tauri shell.
+- **Web shim**: `devMock.ts` activated when `import.meta.env.DEV && !__TAURI_INTERNALS__`. Enables browser development without the Tauri shell; use Auditaur drills for E2E confidence.
 - **Command palette**: Ctrl+Shift+P — commands registered via `commandRegistry.registerMany()` in AppLayout.
 
 ## Shared Agentive Crate
@@ -229,7 +227,7 @@ After the agentive `azure_oauth` module lands, CutReady's migration should also:
 - **TypeScript check**: `npx tsc --noEmit`
 - **Rust tests**: `cd src-tauri && cargo test`
 - **Vitest**: `npx vitest run`
-- **E2E tests**: `npx playwright test` (uses web shim, no Tauri needed)
+- **E2E tests**: `npm run test:e2e` runs the Auditaur drill against the real Tauri debug app with frontend telemetry and the native drive bridge required.
 - **Default app validation**: `npm run debug` runs the real Tauri app; debug builds enable Auditaur end-to-end observability for frontend console/errors, Tauri IPC/events, backend traces, and the Tauri-native drive bridge.
 - **Repeatable Auditaur confidence validation**: prefer `auditaur drill run` for agent-owned smoke passes. It pins validation to the spawned session, requires frontend telemetry and drive-bridge responsiveness, checks frontend errors/failed IPC/`explain`, writes a JSON report, and cleans up the process tree:
 

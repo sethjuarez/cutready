@@ -1,0 +1,44 @@
+{
+  "version": "2.0",
+  "scene": {
+    "type": "player",
+    "width": 960,
+    "height": 540,
+    "fps": 30,
+    "background": "$background",
+    "children": ["title", "gate-tests", "gate-drill", "gate-review", "footer"]
+  },
+  "elements": {
+    "title": {
+      "id": "title",
+      "type": "text",
+      "intent": { "role": "title", "importance": "primary" },
+      "props": { "x": 72, "y": 64, "content": "Release confidence gates", "fontSize": 44, "fill": "$title" }
+    },
+    "gate-tests": {
+      "id": "gate-tests",
+      "type": "rect",
+      "intent": { "role": "container", "importance": "primary" },
+      "props": { "x": 72, "y": 156, "width": 236, "height": 156, "rx": 24, "fill": "$surface", "stroke": "$success", "strokeWidth": 3 }
+    },
+    "gate-drill": {
+      "id": "gate-drill",
+      "type": "rect",
+      "intent": { "role": "container", "importance": "primary" },
+      "props": { "x": 362, "y": 156, "width": 236, "height": 156, "rx": 24, "fill": "$surface", "stroke": "$accent", "strokeWidth": 3 }
+    },
+    "gate-review": {
+      "id": "gate-review",
+      "type": "rect",
+      "intent": { "role": "container", "importance": "primary" },
+      "props": { "x": 652, "y": 156, "width": 236, "height": 156, "rx": 24, "fill": "$surface", "stroke": "$warning", "strokeWidth": 3 }
+    },
+    "footer": {
+      "id": "footer",
+      "type": "text",
+      "intent": { "role": "subtitle", "importance": "secondary" },
+      "props": { "x": 96, "y": 372, "content": "Tests + Auditaur drill + rubber duck review before release", "fontSize": 30, "fill": "$subtitle" }
+    }
+  },
+  "timelines": {}
+}

@@ -26,7 +26,7 @@ const EXCLUDED_RUNTIME_PATHS: &[&str] = &[
 ];
 
 const CUTREADY_CONTENT_EXTENSIONS: &[&str] = &["sk", "sb", "md", "png", "jpg", "jpeg", "webp"];
-const CUTREADY_ASSET_ROOTS: &[&str] = &[".cutready/visuals", "screenshots"];
+const CUTREADY_ASSET_ROOTS: &[&str] = &[".cutready/visuals", ".cutready/screenshots"];
 const CUTREADY_LARGE_FILE_THRESHOLD_BYTES: u64 = 50 * 1024 * 1024;
 
 /// CutReady-facing facade over a Draftline workspace.
@@ -337,16 +337,51 @@ mod tests {
         std::fs::read_to_string(path).unwrap()
     }
 
+    #[cfg(target_os = "windows")]
+    fn hide_test_command_window(command: &mut std::process::Command) {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x08000000);
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    fn hide_test_command_window(_command: &mut std::process::Command) {}
+
+    fn run_git(root: &Path, args: &[&str]) {
+        let mut command = std::process::Command::new("git");
+        hide_test_command_window(&mut command);
+        let output = command
+            .current_dir(root)
+            .args(args)
+            .output()
+            .unwrap_or_else(|e| panic!("failed to run git {args:?}: {e}"));
+        assert!(
+            output.status.success(),
+            "git {:?} failed\nstdout:\n{}\nstderr:\n{}",
+            args,
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    fn init_legacy_git_repo(root: &Path) {
+        run_git(root, &["init", "--initial-branch=main"]);
+    }
+
     fn configure_identity(root: &Path, name: &str, email: &str) {
-        let repo = git2::Repository::open(root).unwrap();
-        let mut config = repo.config().unwrap();
-        config.set_str("user.name", name).unwrap();
-        config.set_str("user.email", email).unwrap();
+        run_git(root, &["config", "user.name", name]);
+        run_git(root, &["config", "user.email", email]);
+    }
+
+    fn commit_all(root: &Path, message: &str) {
+        run_git(root, &["add", "--all"]);
+        run_git(root, &["commit", "-m", message]);
     }
 
     fn init_bare_main_remote(path: &Path) {
-        let repo = git2::Repository::init_bare(path).unwrap();
-        repo.set_head("refs/heads/main").unwrap();
+        let parent = path.parent().unwrap_or_else(|| Path::new("."));
+        std::fs::create_dir_all(parent).unwrap();
+        let name = path.file_name().unwrap().to_string_lossy().to_string();
+        run_git(parent, &["init", "--bare", "--initial-branch=main", &name]);
     }
 
     #[test]
@@ -458,8 +493,8 @@ mod tests {
         assert!(policy.tracks("storyboards/demo.sb").unwrap());
         assert!(policy.tracks("notes/planning.md").unwrap());
         assert!(policy.tracks("reference.png").unwrap());
-        assert!(policy.tracks("screenshots/demo.webp").unwrap());
         assert!(policy.tracks(".cutready/visuals/frame.json").unwrap());
+        assert!(policy.tracks(".cutready/screenshots/demo.webp").unwrap());
         assert!(!policy.tracks(".cutready/ui-state.json").unwrap());
         assert!(!policy.tracks(".cutready/locks.json").unwrap());
     }
@@ -743,6 +778,31 @@ mod tests {
     }
 
     #[test]
+    fn existing_plain_git_project_opens_as_draftline_workspace() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        init_legacy_git_repo(root);
+        configure_identity(root, "Legacy User", "legacy@example.com");
+        write(root.join("intro.sk"), r#"{"title":"Legacy intro"}"#);
+        write(root.join("demo.sb"), r#"{"title":"Legacy board"}"#);
+        write(root.join("notes.md"), "# Legacy notes\n");
+        write(root.join(".cutready/locks.json"), r#"{"notes":{}}"#);
+        commit_all(root, "legacy cutready snapshot");
+
+        let adapter = CutReadyDraftlineAdapter::open_project(root).unwrap();
+
+        assert!(root.join(".git/draftline").exists());
+        assert!(adapter.inspect_changes().unwrap().is_empty());
+        let summary = adapter.workspace_summary().unwrap();
+        assert!(summary.versions.len() >= 1);
+
+        write(root.join("intro.sk"), r#"{"title":"Legacy intro updated"}"#);
+        let changes = adapter.inspect_changes().unwrap();
+        assert_eq!(changes.files.len(), 1);
+        assert_eq!(changes.files[0].path.as_path(), Path::new("intro.sk"));
+    }
+
+    #[test]
     fn sync_status_reports_incoming_versions_after_fetch() {
         let temp = tempfile::tempdir().unwrap();
         let remote = temp.path().join("remote.git");
@@ -835,5 +895,155 @@ mod tests {
             error,
             draftline::DraftlineError::SyncNeedsMerge(_)
         ));
+    }
+
+    #[test]
+    fn two_client_remote_conflict_drill_preserves_resolved_content_and_runtime_state() {
+        let temp = tempfile::tempdir().unwrap();
+        let remote = temp.path().join("remote.git");
+        init_bare_main_remote(&remote);
+
+        let first_root = temp.path().join("first");
+        write(
+            first_root.join("intro.sk"),
+            r#"{"title":"Intro","description":"Base","rows":[{"time":"0:00","duration_seconds":5,"narrative":"Base narration","demo_actions":"Base action","screenshot":"screenshots/base.png","visual":".cutready/visuals/base.json"}]}"#,
+        );
+        write(
+            first_root.join("demo.sb"),
+            r#"{"title":"Demo","description":"Base board","items":[{"type":"sketch","path":"intro.sk"}]}"#,
+        );
+        write(first_root.join("notes.md"), "# Demo notes\n\nBase note.\n");
+        write(
+            first_root.join(".cutready/visuals/base.json"),
+            r#"{"version":"2.0","scene":{"title":"Base"}}"#,
+        );
+        write(
+            first_root.join(".chats/legacy.chat"),
+            r#"{"title":"Legacy"}"#,
+        );
+        write(
+            first_root.join(".cutready/memory.json"),
+            r#"{"memories":[]}"#,
+        );
+        write(first_root.join(".cutready/locks.json"), r#"{"notes":{}}"#);
+
+        let first = CutReadyDraftlineAdapter::open_project(&first_root).unwrap();
+        configure_identity(&first_root, "Seth", "seth@example.com");
+        first
+            .add_remote("origin", remote.to_str().unwrap())
+            .unwrap();
+        first.save_version("Initial demo project").unwrap();
+        first
+            .publish_changes_with_options("origin", &mut cutready_remote_options(None))
+            .unwrap();
+
+        let second_root = temp.path().join("second");
+        let second = CutReadyDraftlineAdapter::clone_project_with_options(
+            remote.to_str().unwrap(),
+            &second_root,
+            &mut cutready_remote_options(None),
+        )
+        .unwrap();
+        configure_identity(&second_root, "Maria", "maria@example.com");
+
+        write(
+            second_root.join("intro.sk"),
+            r#"{"title":"Intro from remote","description":"Remote description","rows":[{"time":"0:00","duration_seconds":8,"narrative":"Remote narration","demo_actions":"Remote action","screenshot":"screenshots/remote.png","visual":".cutready/visuals/remote.json"}]}"#,
+        );
+        write(
+            second_root.join("demo.sb"),
+            r#"{"title":"Remote board","description":"Remote board description","items":[{"type":"section","title":"Remote setup"},{"type":"sketch","path":"intro.sk"}]}"#,
+        );
+        write(
+            second_root.join("notes.md"),
+            "# Demo notes\n\nRemote note.\n",
+        );
+        write(
+            second_root.join(".cutready/visuals/remote.json"),
+            r#"{"version":"2.0","scene":{"title":"Remote"}}"#,
+        );
+        second.save_version("Remote collaboration edits").unwrap();
+        second
+            .publish_changes_with_options("origin", &mut cutready_remote_options(None))
+            .unwrap();
+
+        write(
+            first_root.join("intro.sk"),
+            r#"{"title":"Intro from local","description":"Local description","rows":[{"time":"0:00","duration_seconds":13,"narrative":"Local narration","demo_actions":"Local action","screenshot":"screenshots/local.png","visual":".cutready/visuals/local.json"}]}"#,
+        );
+        write(
+            first_root.join("demo.sb"),
+            r#"{"title":"Local board","description":"Local board description","items":[{"type":"sketch","path":"intro.sk"},{"type":"section","title":"Local close"}]}"#,
+        );
+        write(first_root.join("notes.md"), "# Demo notes\n\nLocal note.\n");
+        write(
+            first_root.join(".cutready/visuals/local.json"),
+            r#"{"version":"2.0","scene":{"title":"Local"}}"#,
+        );
+        first.save_version("Local collaboration edits").unwrap();
+        first
+            .fetch_remote_with_options("origin", &mut cutready_remote_options(None))
+            .unwrap();
+
+        let report = first.preflight_merge_incoming("origin").unwrap();
+        assert!(!report.can_merge_cleanly);
+        assert!(report
+            .conflicts
+            .iter()
+            .any(|conflict| conflict.path == Path::new("intro.sk")));
+        assert!(report
+            .conflicts
+            .iter()
+            .any(|conflict| conflict.path == Path::new("demo.sb")));
+        assert!(report
+            .conflicts
+            .iter()
+            .any(|conflict| conflict.path == Path::new("notes.md")));
+        let token = report.token.unwrap();
+
+        let resolved_sketch = r#"{"title":"Resolved intro","description":"Combined description","rows":[{"time":"0:00","duration_seconds":13,"narrative":"Local narration + remote note","demo_actions":"Remote action","screenshot":"screenshots/local.png","visual":".cutready/visuals/remote.json"}]}"#;
+        let resolved_storyboard = r#"{"title":"Resolved board","description":"Combined board","items":[{"type":"section","title":"Remote setup"},{"type":"sketch","path":"intro.sk"},{"type":"section","title":"Local close"}]}"#;
+        let resolved_notes = "# Demo notes\n\nLocal note.\n\nRemote note.\n";
+        let result = first
+            .merge_incoming_with_resolutions_and_options(
+                token,
+                "Resolve collaboration drill",
+                vec![
+                    MergeConflictResolution::new(
+                        "intro.sk",
+                        draftline::MergeResolutionChoice::UseContent {
+                            content: resolved_sketch.to_string(),
+                        },
+                    ),
+                    MergeConflictResolution::new(
+                        "demo.sb",
+                        draftline::MergeResolutionChoice::UseContent {
+                            content: resolved_storyboard.to_string(),
+                        },
+                    ),
+                    MergeConflictResolution::new(
+                        "notes.md",
+                        draftline::MergeResolutionChoice::UseContent {
+                            content: resolved_notes.to_string(),
+                        },
+                    ),
+                ],
+                &mut cutready_remote_options(None),
+            )
+            .unwrap();
+
+        assert!(result
+            .merged_files
+            .iter()
+            .any(|path| path == Path::new("intro.sk")));
+        assert_eq!(read(first_root.join("intro.sk")), resolved_sketch);
+        assert_eq!(read(first_root.join("demo.sb")), resolved_storyboard);
+        assert_eq!(read(first_root.join("notes.md")), resolved_notes);
+        assert!(read(first_root.join(".cutready/visuals/local.json")).contains("Local"));
+        assert!(read(first_root.join(".cutready/visuals/remote.json")).contains("Remote"));
+        assert!(first_root.join(".chats/legacy.chat").exists());
+        assert!(first_root.join(".cutready/memory.json").exists());
+        assert!(!first_root.join(".git/cutready/locks.json").exists());
+        assert!(first.inspect_changes().unwrap().is_empty());
     }
 }

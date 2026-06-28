@@ -9,17 +9,22 @@ import { Aside, Steps } from '@astrojs/starlight/components';
 import Screenshot from '../../../components/Screenshot.astro';
 
 Every demo in CutReady lives inside a **project**, which is part of a
-**workspace**. A workspace is a git repository directory that can contain one
-or more projects. Each project holds sketches, storyboards, notes, screenshots,
-and visuals; the workspace's `.git/` directory holds version history.
+**workspace**. A workspace is a portable folder that can contain one or more
+projects. Each project holds sketches, storyboards, notes, screenshots, and
+visuals; Draftline stores version history in the workspace's `.git/` directory.
 
 <Screenshot src="/images/file-tree-view.png" darkSrc="/images/file-tree-view-dark.png" alt="Project file tree" caption="The Explorer shows all project files — sketches (.sk), storyboards (.sb), and notes (.md)" />
+
+The documentation screenshots are captured from the portable example workspace
+in `docs/examples/cutready-demo-project/`. It includes three sketches, one
+storyboard, notes, visuals, and screenshot assets without a nested `.git`
+directory, so it is safe to copy as a starting point for demos.
 
 ## Terminology
 
 | Term | Meaning |
 | --- | --- |
-| **Workspace** | A git repository directory. This is what you open or clone in CutReady. |
+| **Workspace** | A portable folder. This is what you open or clone in CutReady. |
 | **Project** | A unit of work within a workspace. Contains its own sketches, storyboards, and notes. |
 
 A workspace can operate in **single-project** mode (the default when you open
@@ -35,22 +40,22 @@ an empty git repo) or **multi-project** mode (when you add additional projects).
    folder where CutReady will initialize a workspace.
 
 3. **Name your project** — Enter a descriptive title like "Product Demo Q1".
-   CutReady initializes the folder with a `project.json` manifest and a `.git/`
-   directory for version history.
+   CutReady initializes the folder with Draftline version history and local
+   CutReady state.
 
 </Steps>
 
 ## Opening an Existing Workspace
 
 Use **"Open Workspace"** on the Home screen to browse to an existing CutReady
-workspace folder. CutReady detects the `project.json` file and loads the
-workspace.
+workspace folder. CutReady scans for sketches, storyboards, notes, and
+multi-project manifests, then initializes Draftline if needed.
 
 Your most recently used workspaces appear in the **Recent Workspaces** list on
 the Home screen for quick access.
 
 <Aside type="tip">
-  Opening an empty git repo "just works" — CutReady initializes it as a
+  Opening an empty folder "just works" — CutReady initializes it as a
   single-project workspace automatically.
 </Aside>
 
@@ -100,12 +105,11 @@ This is seamless — your existing files and version history are preserved.
 
 ```text
 my-workspace/
-├── project.json              ← Project manifest (name, metadata)
 ├── .cutready/
 │   ├── screenshots/          ← Captured and pasted images
 │   ├── visuals/              ← Elucim DSL visual files
 │   └── settings.json         ← Workspace settings overrides
-├── .git/                     ← Version history (managed by gix)
+├── .git/                     ← Draftline version history + local CutReady state
 │   └── cutready/             ← Local UI state such as ordering and open tabs
 ├── intro.sk                  ← Sketch file
 ├── demo-flow.sb              ← Storyboard file
@@ -120,14 +124,12 @@ my-workspace/
 │   └── projects.json         ← Multi-project manifest
 ├── .git/                     ← Shared version history
 ├── project-alpha/
-│   ├── project.json
 │   ├── .cutready/
 │   │   ├── screenshots/
 │   │   └── visuals/
 │   ├── intro.sk
 │   └── demo-flow.sb
 └── project-beta/
-    ├── project.json
     ├── .cutready/
     │   ├── screenshots/
     │   └── visuals/
@@ -145,12 +147,6 @@ my-workspace/
 | `.png` / `.jpg` | Screenshot | Reference images under `.cutready/screenshots/` |
 | `.json` | Visual | Elucim DSL visuals under `.cutready/visuals/` |
 
-## Project Manifest (`project.json`)
-
-The `project.json` file at the root of every project stores the project name
-and metadata. CutReady reads this file to identify a directory as a valid
-project.
-
 ## Explorer Ordering (`.git/cutready/order.json`)
 
 The `.git/cutready/order.json` file persists the order of documents in the
@@ -161,13 +157,13 @@ without adding noise to snapshots. Older workspaces may still contain
 
 ## Version History (`.git/`)
 
-Each workspace contains an embedded `.git/` directory managed by **gitoxide
-(gix)**, a pure-Rust git implementation. This is completely independent of any
-source code repositories — it's used solely for document version tracking.
+Each workspace contains an embedded `.git/` directory managed through
+**Draftline**. This is completely independent of any source code repositories —
+it's used solely for CutReady content version tracking and collaboration.
 
 <Aside type="tip">
-  You don't need git installed on your system. CutReady uses gix internally
-  to manage snapshots, so version history works out of the box.
+  You don't need to run git commands yourself. CutReady uses Draftline
+  internally to manage snapshots, branches, merges, and remote sync.
 </Aside>
 
 ## Screenshots

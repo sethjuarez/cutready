@@ -1,6 +1,6 @@
 ---
 title: Application Architecture
-description: Technical overview of CutReady's architecture — Tauri, React, Rust, and Playwright.
+description: Technical overview of CutReady's architecture — Tauri, React, Rust, Draftline, and sidecars.
 sidebar:
   order: 1
 ---
@@ -36,8 +36,8 @@ CutReady is a **Tauri v2** desktop application with a split architecture:
 │                         │      (Foundry/Azure/OpenAI/     │
 │                         │       Anthropic via reqwest)    │
 │                         │                                 │
-│                         │  Sidecar                        │
-│                         │  └── Playwright (Node.js)       │
+│                         │  Sidecars                       │
+│                         │  └── Node.js automation         │
 ├─────────────────────────┴───────────────────────────────┤
 │                    Tauri v2 Runtime                      │
 │              (WebView + Rust + IPC Bridge)               │
@@ -93,7 +93,7 @@ The Rust backend handles:
 
 Lower-level implementations:
 
-- **interaction.rs** — CDP browser communication, Playwright sidecar management
+- **interaction.rs** — browser profile detection and sidecar-backed interaction capture
 - **screenshot.rs** — Native screen capture via `xcap` crate
 - **draftline_adapter.rs** — CutReady content policy and product-facing facade over Draftline persistence
 - **recording.rs**, **automation.rs**, **export.rs** — placeholders for future
@@ -123,14 +123,14 @@ Shared data types:
 - **session.rs** — Recording session with captured actions
 - **sketch.rs** — Sketch, Storyboard, VersionEntry, GraphNode
 
-## Playwright Sidecar
+## Browser Automation Sidecar
 
 Browser interaction recording is being built around a **Node.js sidecar process**
 managed by Tauri:
 
-1. The Rust backend spawns a Playwright Node.js process
+1. The Rust backend spawns a Node.js automation process
 2. Communication happens over stdio (JSON messages)
-3. The sidecar connects to Chrome/Edge via CDP (Chrome DevTools Protocol)
+3. The sidecar connects to supported browsers for observation and replay
 4. Actions are streamed back to the Rust backend in real time
 
 This architecture isolates browser observation from the main process,

@@ -721,21 +721,26 @@ pub async fn delete_project(
     let root = repo_root(&state)?;
     let safe_path = safe_project_manifest_path(&project_path)?;
 
-    // Remove from manifest
-    if let Some(mut manifest) = project::read_manifest(&root) {
+    let mut manifest = project::read_manifest(&root);
+    if let Some(manifest) = manifest.as_ref() {
         if !manifest.projects.iter().any(|p| p.path == project_path) {
             return Err(format!("Project '{}' not found in repo", project_path));
         }
-        manifest.projects.retain(|p| p.path != project_path);
-        project::write_manifest(&root, &manifest).map_err(|e| e.to_string())?;
     }
 
-    // Optionally delete the files
+    // Delete files before mutating the manifest so a filesystem failure does not
+    // leave an orphaned project directory that is no longer listed.
     if delete_files && project_path != "." {
         let dir = root.join(safe_path);
         if dir.exists() {
             std::fs::remove_dir_all(&dir).map_err(|e| e.to_string())?;
         }
+    }
+
+    // Remove from manifest
+    if let Some(mut manifest) = manifest.take() {
+        manifest.projects.retain(|p| p.path != project_path);
+        project::write_manifest(&root, &manifest).map_err(|e| e.to_string())?;
     }
 
     // If deleted project was active, clear it
@@ -755,7 +760,7 @@ pub async fn delete_project(
         }
     }
 
-    Ok(())
+    snapshot_workspace_structure(&root, "Delete workspace project")
 }
 
 /// Rename a project. In single-project mode (path == "."), this migrates the
@@ -936,9 +941,9 @@ pub async fn transfer_asset(
             continue;
         } // already present at dest, skip
         if let Some(parent) = asset_dest.parent() {
-            let _ = std::fs::create_dir_all(parent);
+            std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
         }
-        let _ = std::fs::copy(&asset_src, &asset_dest);
+        std::fs::copy(&asset_src, &asset_dest).map_err(|e| e.to_string())?;
     }
 
     // Create parent directories at destination
@@ -962,7 +967,12 @@ pub async fn transfer_asset(
                 continue;
             }
             if project::count_asset_refs(&source_project_root, asset_rel) == 0 {
-                let _ = std::fs::remove_file(&asset_src);
+                if let Err(error) = std::fs::remove_file(&asset_src) {
+                    log::warn!(
+                        "[project] could not remove now-unreferenced asset {}: {error}",
+                        asset_src.display()
+                    );
+                }
             }
         }
     } else {
@@ -1087,19 +1097,55 @@ pub async fn resolve_deep_link(
         if !path.exists() {
             continue;
         }
-        let git_config = path.join(".git").join("config");
-        if !git_config.exists() {
-            continue;
-        }
-        if let Ok(config) = git2::Config::open(&git_config) {
-            if let Ok(url) = config.get_string("remote.origin.url") {
-                let url_clean = url.to_lowercase().trim_end_matches(".git").to_string();
-                if url_clean.contains(&target) {
-                    return Ok(Some(project.path));
-                }
+        if let Some(url) = read_origin_url_from_git_config(&path) {
+            let url_clean = url.to_lowercase().trim_end_matches(".git").to_string();
+            if url_clean.contains(&target) {
+                return Ok(Some(project.path));
             }
         }
     }
 
     Ok(None)
+}
+
+fn read_origin_url_from_git_config(project_path: &Path) -> Option<String> {
+    let git_entry = project_path.join(".git");
+    let config_path = if git_entry.is_dir() {
+        git_entry.join("config")
+    } else if git_entry.is_file() {
+        let gitdir = std::fs::read_to_string(&git_entry).ok()?;
+        let gitdir = gitdir.trim().strip_prefix("gitdir:")?.trim();
+        let gitdir_path = Path::new(gitdir);
+        let resolved = if gitdir_path.is_absolute() {
+            gitdir_path.to_path_buf()
+        } else {
+            project_path.join(gitdir_path)
+        };
+        resolved.join("config")
+    } else {
+        return None;
+    };
+
+    let config = std::fs::read_to_string(config_path).ok()?;
+    let mut in_origin_remote = false;
+
+    for line in config.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('[') && trimmed.ends_with(']') {
+            in_origin_remote =
+                trimmed == r#"[remote "origin"]"# || trimmed == r#"[remote 'origin']"#;
+            continue;
+        }
+        if !in_origin_remote {
+            continue;
+        }
+        let Some((key, value)) = trimmed.split_once('=') else {
+            continue;
+        };
+        if key.trim() == "url" {
+            return Some(value.trim().to_string());
+        }
+    }
+
+    None
 }
