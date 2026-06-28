@@ -8,6 +8,37 @@ license: MIT
 
 Use Auditaur as the first diagnostic surface for Tauri app debugging. Prefer machine-readable JSON when acting as an agent.
 
+## Repeatable CutReady confidence validation
+
+For repeatable CutReady confidence validation, prefer the first-class
+Auditaur drill runner from Auditaur v0.4.0+:
+
+```powershell
+auditaur drill run --app cutready --require-frontend --require-drive-bridge --timeout-seconds 180 --report <artifact-or-report-path> --selector body --expect-text CutReady --json -- cmd /c npm run debug
+```
+
+`npm run debug` is the real CutReady Tauri app path and expands to the
+normal Tauri dev runner. `npm run dev` is the Vite/devMock web-shim path
+only; do not use it for validating Tauri IPC, backend traces, native windows,
+or drive-bridge behavior.
+
+Use `auditaur drill run` when an agent, CI-like smoke script, or dogfood pass
+needs a reproducible app confidence check. Drill is expected to:
+
+1. Pin checks to the session spawned and owned by the drill run.
+2. Require exact readiness phases for the spawned session, including heartbeat,
+   telemetry database, window, backend telemetry, and frontend telemetry.
+3. Confirm the Tauri-native drive bridge is present and selector actions are
+   responsive.
+4. Check frontend errors, failed IPC, and `auditaur explain` output.
+5. Write a JSON report to `--report`.
+6. Clean up the spawned process tree after the run.
+
+Do not use Playwright or Chrome DevTools Protocol (CDP) for this user's
+Auditaur validation. CutReady debug builds enable Auditaur's Tauri-native drive
+bridge, so drive through `auditaur drill run` or `auditaur drive` without
+CDP/WebView2 flags.
+
 ## Readiness first
 
 Before reading logs or driving the UI, establish what is ready:
@@ -22,7 +53,7 @@ For a running app, watch until core telemetry is ready:
 auditaur debug --app <app-name> --active --json watch --until-ready --timeout-seconds 120
 ```
 
-If the task requires frontend telemetry, add `--require-frontend`. If the task requires WebView selector actions, use the Auditaur in-app drive bridge: enable `initAuditaur({ driveBridge: true })` in exactly one debug/test WebView per Auditaur session.
+If the task requires frontend telemetry, add `--require-frontend`. If the task requires WebView selector actions, use the Auditaur in-app drive bridge: enable `initAuditaur({ driveBridge: true })` in exactly one debug/test WebView per Auditaur session and add `--require-drive-bridge` to readiness watches.
 
 ```bash
 npm run tauri dev
@@ -48,10 +79,11 @@ Use wrapper mode only when the agent or a smoke script needs to own a repeatable
 | --- | --- |
 | Human local debugging | Attach to the already-running app |
 | IDE/debugger/Tauri dev workflow is already running | Attach |
-| Agent needs an end-to-end validation run | Wrapper |
-| Dogfood or CI-like local smoke pass | Wrapper |
+| Agent needs a repeatable end-to-end validation run | `auditaur drill run` |
+| Dogfood or CI-like local smoke pass | `auditaur drill run` |
+| Agent needs startup ownership without a full drill | `auditaur debug run` |
 
-If the agent should start the app, wrap the existing command:
+If the agent only needs to start and observe the app without the full drill checks, wrap the existing command:
 
 ```bash
 auditaur debug --app <app-name> --active --json run --timeout-seconds 180 -- npm run tauri dev
@@ -70,6 +102,7 @@ Inspect the `stages` array:
 - `window`: Tauri window telemetry exists.
 - `backend_telemetry`: backend/plugin logs, spans, or window rows exist.
 - `frontend_telemetry`: frontend logs/errors/IPC/events exist; required only with `--require-frontend`.
+- `drive_bridge`: Tauri-native in-app drive bridge status exists and has a fresh heartbeat; required only with `--require-drive-bridge`.
 - `cdp_endpoint`: Chrome DevTools Protocol is reachable; checked only with `--cdp-port`.
 
 If readiness is false, follow the stage messages and `hints` instead of guessing from terminal output.

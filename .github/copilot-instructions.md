@@ -230,7 +230,14 @@ After the agentive `azure_oauth` module lands, CutReady's migration should also:
 - **Rust tests**: `cd src-tauri && cargo test`
 - **Vitest**: `npx vitest run`
 - **E2E tests**: `npx playwright test` (uses web shim, no Tauri needed)
-- **Default app validation**: `npm run debug` (runs the real Tauri app; debug builds enable Auditaur end-to-end observability for frontend console/errors, Tauri IPC/events, and backend traces)
+- **Default app validation**: `npm run debug` runs the real Tauri app; debug builds enable Auditaur end-to-end observability for frontend console/errors, Tauri IPC/events, backend traces, and the Tauri-native drive bridge.
+- **Repeatable Auditaur confidence validation**: prefer `auditaur drill run` for agent-owned smoke passes. It pins validation to the spawned session, requires frontend telemetry and drive-bridge responsiveness, checks frontend errors/failed IPC/`explain`, writes a JSON report, and cleans up the process tree:
+
+  ```bash
+  npm ci
+  auditaur drill run --app cutready --require-frontend --require-drive-bridge --timeout-seconds 180 --report <artifact-or-report-path> --selector body --expect-text CutReady --json -- cmd /c npm run debug
+  ```
+
 - **Human-observable Auditaur startup**: when the user needs to use the app while the agent observes, do not start `npm run debug` directly. Start the app through Auditaur, preferably in a visible terminal canvas when the user wants to watch logs, or in a detached background shell when the agent owns startup:
 
   ```bash
@@ -246,7 +253,7 @@ After the agentive `azure_oauth` module lands, CutReady's migration should also:
   ```
 
   The app is ready only when heartbeat, telemetry database, window, backend telemetry, and frontend telemetry are `ok`. If multiple stale apps exist, always include `--active`, `--latest`, `--session-id`, or `--instance-id` instead of using an ambiguous selector. Use `auditaur drive` without CDP/WebView2 flags because CutReady debug builds enable Auditaur's Tauri-native drive bridge. Use `auditaur logs/errors/ipc/events/traces/timeline/explain --json --session <session-id>` for follow-up investigation.
-- **Web shim mode**: `npm run dev` (Vite/devMock only; use for browser-only Playwright/docs work, not as the default app validation path)
+- **Web shim mode**: `npm run dev` is Vite/devMock only; use it for browser-only docs work, not Tauri IPC/backend/native-window validation. For this user's Auditaur validation, never use Playwright or CDP; use the Tauri-native drive bridge.
 - **Docs site**: `cd docs && npm run build`
 
 ## Keeping Instructions Current
