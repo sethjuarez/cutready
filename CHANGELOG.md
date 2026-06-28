@@ -9,6 +9,34 @@
 Covector manages this changelog. Do not edit manually.
 Each release section is generated from `.changes/*.md` files.
 
+## [1.16.0](https://github.com/sethjuarez/cutready/compare/v1.15.0...v1.16.0) (2026-06-28)
+
+
+### Features
+
+* add safety gates for versioning and AI edits ([5f836a7](https://github.com/sethjuarez/cutready/commit/5f836a7f1aed86b4d7290cbcee89e4e795b7c70f))
+* harden persistence safety and semantic merges ([dfc4fb3](https://github.com/sethjuarez/cutready/commit/dfc4fb3e726c914d64d1a405bcd2a5bebe8aa13a))
+* harden persistence safety and semantic merges ([60cc4e7](https://github.com/sethjuarez/cutready/commit/60cc4e70d8856b5e81a63f8ea24fdadda58782af))
+* harden release confidence workflow ([7f314bb](https://github.com/sethjuarez/cutready/commit/7f314bb5264f96c3405d2a9e2a9a76ac0c6fa599))
+* harden release confidence workflow ([05532ff](https://github.com/sethjuarez/cutready/commit/05532ffd5d82091035840a90fa5b6f868b087dbf))
+* modernize document editing UI ([0420ffb](https://github.com/sethjuarez/cutready/commit/0420ffbdf20fe8307a3466a8d17185cfddfec7f2))
+* modernize document editing UI ([bdca7de](https://github.com/sethjuarez/cutready/commit/bdca7dea6feb98aafea74da1bf0cbbc0625b24ee))
+* **versioning:** complete Draftline discard integration ([c0e6a54](https://github.com/sethjuarez/cutready/commit/c0e6a541847e24d0456168f019a36719c6ade95a))
+* **versioning:** complete Draftline discard integration ([718a423](https://github.com/sethjuarez/cutready/commit/718a423fc6f7300c0abc8d0f8fa330ec7741d65f))
+* **versioning:** replace CutReady history with Draftline ([2c551b6](https://github.com/sethjuarez/cutready/commit/2c551b61521e492ff2ba095b95aca508fa11aa09))
+
+
+### Bug Fixes
+
+* **observability:** adopt auditaur native drive bridge ([71730f0](https://github.com/sethjuarez/cutready/commit/71730f081bc9697722d7c3e91f430404bafd65a0))
+* **observability:** adopt auditaur native drive bridge ([2cac22d](https://github.com/sethjuarez/cutready/commit/2cac22d16e3b823170ca6a8ef784f218696ed42c))
+* run sparkle actions in background ([2354519](https://github.com/sethjuarez/cutready/commit/235451936a1c2469b56ec5c0671abad09ec4697f))
+* run sparkle actions in background ([4269016](https://github.com/sethjuarez/cutready/commit/4269016423ea753275f92b5c87e9e61815bed394))
+* **storyboard:** support section controls ([b786dd3](https://github.com/sethjuarez/cutready/commit/b786dd36ecdf1a8f5266bf95045a003d7a70fa6b))
+* **storyboard:** support section controls ([d60cc15](https://github.com/sethjuarez/cutready/commit/d60cc15c0ec3598ad3b11aae191233a1671277a7))
+* **theme:** improve palette contrast ([43ca859](https://github.com/sethjuarez/cutready/commit/43ca859c248f55ca323b070dae49dd3a09ef7596))
+* **theme:** improve palette contrast ([9b5ecfc](https://github.com/sethjuarez/cutready/commit/9b5ecfcbe03bad1130e49cd6f985f117274928dc))
+
 ## [1.15.0](https://github.com/sethjuarez/cutready/compare/v1.14.0...v1.15.0) (2026-06-23)
 
 
