@@ -6,14 +6,19 @@ use tauri::State;
 use tauri_plugin_auditaur::auditaur_command;
 
 use crate::engine::{agent::tools::normalize_visual_document_for_save, project};
-use crate::models::sketch::{PlanningCellLocks, Sketch, SketchSummary};
+use crate::models::script::ProjectView;
+use crate::models::sketch::{DocumentMetadata, PlanningCellLocks, Sketch, SketchSummary};
 use crate::AppState;
 
 /// Helper: get the project root from current state.
 fn project_root(state: &AppState) -> Result<std::path::PathBuf, String> {
     let current = state.current_project.lock().map_err(|e| e.to_string())?;
     let view = current.as_ref().ok_or("No project is currently open")?;
-    Ok(view.root.clone())
+    Ok(document_root_from_project_view(view))
+}
+
+fn document_root_from_project_view(view: &ProjectView) -> std::path::PathBuf {
+    view.root.clone()
 }
 
 #[auditaur_command(skip_all, err)]
@@ -40,6 +45,7 @@ pub async fn update_sketch(
     relative_path: String,
     description: Option<serde_json::Value>,
     rows: Option<Vec<crate::models::sketch::PlanningRow>>,
+    metadata: Option<DocumentMetadata>,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let root = project_root(&state)?;
@@ -57,6 +63,10 @@ pub async fn update_sketch(
         let mut updated_rows = r;
         project::apply_locked_row_metadata(&sketch.rows, &mut updated_rows);
         sketch.rows = updated_rows;
+    }
+    if let Some(metadata) = metadata {
+        project::ensure_sketch_unlocked(&sketch).map_err(|e| e.to_string())?;
+        sketch.metadata = metadata;
     }
     sketch.updated_at = chrono::Utc::now();
 
@@ -220,4 +230,24 @@ pub async fn rename_sketch(
 
     project::rename_sketch(&old_abs, &new_abs, &root).map_err(|e| e.to_string())?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sketch_document_io_scopes_to_project_root_for_nested_projects() {
+        let view = ProjectView::in_repo(
+            std::path::PathBuf::from("D:/workspace"),
+            "demos/product-tour",
+            "Product tour".to_string(),
+        );
+
+        assert_eq!(
+            document_root_from_project_view(&view),
+            std::path::PathBuf::from("D:/workspace/demos/product-tour")
+        );
+        assert_ne!(document_root_from_project_view(&view), view.repo_root);
+    }
 }

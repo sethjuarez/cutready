@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { buildMergedJson, buildMergedText, setNestedValue } from "../components/MergeConflictPanel";
+import { buildSemanticFields, buildSemanticResolvedJson, buildSemanticResolvedText } from "../components/SemanticConflictResolver";
 import type { ConflictFile } from "../types/sketch";
 
 /** Helper to build a minimal ConflictFile for testing. */
@@ -151,6 +152,188 @@ describe("buildMergedJson", () => {
   });
 });
 
+describe("semantic sketch conflict resolution", () => {
+  it("derives document fields from a whole-file sketch conflict", () => {
+    const conflict = makeConflict({
+      ours: JSON.stringify({
+        title: "Demo",
+        description: "current description",
+        rows: [{ time: "10s", narrative: "current narration", demo_actions: "click current" }],
+      }),
+      theirs: JSON.stringify({
+        title: "Demo",
+        description: "incoming description",
+        rows: [{ time: "10s", narrative: "incoming narration", demo_actions: "click current" }],
+      }),
+      ancestor: JSON.stringify({
+        title: "Demo",
+        description: "base description",
+        rows: [{ time: "10s", narrative: "base narration", demo_actions: "click current" }],
+      }),
+    });
+
+    const fields = buildSemanticFields(conflict);
+
+    expect(fields.map((field) => field.path)).toEqual(["description", "rows[0].narrative"]);
+    expect(fields[1].label).toBe("Row 1 · Narrative");
+  });
+
+  it("builds a custom combined sketch resolution", () => {
+    const conflict = makeConflict({
+      ours: JSON.stringify({
+        title: "Demo",
+        description: "current description",
+        rows: [{ time: "10s", narrative: "current narration", demo_actions: "click current" }],
+      }),
+      theirs: JSON.stringify({
+        title: "Demo",
+        description: "incoming description",
+        rows: [{ time: "10s", narrative: "incoming narration", demo_actions: "click incoming" }],
+      }),
+      ancestor: JSON.stringify({
+        title: "Demo",
+        description: "base description",
+        rows: [{ time: "10s", narrative: "base narration", demo_actions: "click base" }],
+      }),
+    });
+    const fields = buildSemanticFields(conflict);
+
+    const resolved = JSON.parse(buildSemanticResolvedJson(conflict, fields, {
+      description: { choice: "custom", customValue: "current description plus incoming angle" },
+      "rows[0].narrative": { choice: "theirs" },
+      "rows[0].demo_actions": { choice: "ours" },
+    }));
+
+    expect(resolved.description).toBe("current description plus incoming angle");
+    expect(resolved.rows[0].narrative).toBe("incoming narration");
+    expect(resolved.rows[0].demo_actions).toBe("click current");
+  });
+
+  it("promotes added rows to a planning table sequence conflict", () => {
+    const conflict = makeConflict({
+      ours: JSON.stringify({
+        title: "Demo",
+        rows: [
+          { time: "10s", narrative: "Intro", demo_actions: "Open app" },
+          { time: "20s", narrative: "Current-only detail", demo_actions: "Click current" },
+        ],
+      }),
+      theirs: JSON.stringify({
+        title: "Demo",
+        rows: [
+          { time: "10s", narrative: "Intro", demo_actions: "Open app" },
+          { time: "25s", narrative: "Incoming-only detail", demo_actions: "Click incoming" },
+        ],
+      }),
+      ancestor: JSON.stringify({
+        title: "Demo",
+        rows: [{ time: "10s", narrative: "Intro", demo_actions: "Open app" }],
+      }),
+    });
+
+    const fields = buildSemanticFields(conflict);
+
+    expect(fields.map((field) => field.path)).toEqual(["rows"]);
+    expect(fields[0].label).toBe("Planning table sequence");
+  });
+
+  it("can resolve a planning table sequence to incoming rows", () => {
+    const incomingRows = [
+      { time: "20s", narrative: "Second", demo_actions: "Click second" },
+      { time: "10s", narrative: "First", demo_actions: "Click first" },
+    ];
+    const conflict = makeConflict({
+      ours: JSON.stringify({
+        title: "Demo",
+        rows: [
+          { time: "10s", narrative: "First", demo_actions: "Click first" },
+          { time: "20s", narrative: "Second", demo_actions: "Click second" },
+        ],
+      }),
+      theirs: JSON.stringify({ title: "Demo", rows: incomingRows }),
+      ancestor: JSON.stringify({
+        title: "Demo",
+        rows: [
+          { time: "10s", narrative: "First", demo_actions: "Click first" },
+          { time: "20s", narrative: "Second", demo_actions: "Click second" },
+        ],
+      }),
+    });
+    const fields = buildSemanticFields(conflict);
+
+    const resolved = JSON.parse(buildSemanticResolvedJson(conflict, fields, {
+      rows: { choice: "theirs" },
+    }));
+
+    expect(fields.map((field) => field.path)).toEqual(["rows"]);
+    expect(resolved.rows).toEqual(incomingRows);
+  });
+});
+
+describe("semantic storyboard conflict resolution", () => {
+  it("derives only meaningful storyboard fields from whole-file conflicts", () => {
+    const conflict = makeConflict({
+      path: "demo.sb",
+      file_type: "storyboard",
+      ours: JSON.stringify({
+        title: "Demo",
+        description: "current",
+        updated_at: "current timestamp",
+        items: [{ type: "sketch_ref", path: "intro.sk" }],
+      }),
+      theirs: JSON.stringify({
+        title: "Demo",
+        description: "incoming",
+        updated_at: "incoming timestamp",
+        items: [{ type: "sketch_ref", path: "intro.sk" }],
+      }),
+      ancestor: JSON.stringify({
+        title: "Demo",
+        description: "base",
+        updated_at: "base timestamp",
+        items: [{ type: "sketch_ref", path: "intro.sk" }],
+      }),
+    });
+
+    const fields = buildSemanticFields(conflict);
+
+    expect(fields.map((field) => field.path)).toEqual(["description"]);
+  });
+
+  it("resolves storyboard item sequence conflicts to incoming structure", () => {
+    const incomingItems = [
+      {
+        type: "section",
+        title: "Build",
+        description: "Build flow",
+        sketches: ["setup.sk", "demo.sk"],
+      },
+      { type: "sketch_ref", path: "intro.sk" },
+    ];
+    const conflict = makeConflict({
+      path: "demo.sb",
+      file_type: "storyboard",
+      ours: JSON.stringify({
+        title: "Demo",
+        items: [{ type: "sketch_ref", path: "intro.sk" }, { type: "sketch_ref", path: "setup.sk" }],
+      }),
+      theirs: JSON.stringify({ title: "Demo", items: incomingItems }),
+      ancestor: JSON.stringify({
+        title: "Demo",
+        items: [{ type: "sketch_ref", path: "intro.sk" }, { type: "sketch_ref", path: "setup.sk" }],
+      }),
+    });
+    const fields = buildSemanticFields(conflict);
+
+    const resolved = JSON.parse(buildSemanticResolvedJson(conflict, fields, {
+      items: { choice: "theirs" },
+    }));
+
+    expect(fields.map((field) => field.path)).toEqual(["items"]);
+    expect(resolved.items).toEqual(incomingItems);
+  });
+});
+
 // ── buildMergedText ────────────────────────────────────────────
 
 describe("buildMergedText", () => {
@@ -179,6 +362,52 @@ describe("buildMergedText", () => {
     const conflict = makeTextConflict();
     const result = buildMergedText(conflict, { 0: "ours" });
     expect(result).toBe("line1\nours-change\nline3");
+  });
+
+  describe("buildSemanticResolvedText", () => {
+    function makeTextConflict(overrides: Partial<ConflictFile> = {}): ConflictFile {
+      return {
+        path: "note.md",
+        file_type: "note",
+        ours: "# Demo\n\nCurrent angle\n\n## Next\n\nCurrent close",
+        theirs: "# Demo\n\nIncoming angle\n\n## Next\n\nIncoming close",
+        ancestor: "# Demo\n\nOriginal angle\n\n## Next\n\nOriginal close",
+        field_conflicts: [],
+        text_conflicts: [
+          {
+            start_line: 2,
+            ours_lines: ["Current angle"],
+            theirs_lines: ["Incoming angle"],
+            ancestor_lines: ["Original angle"],
+          },
+          {
+            start_line: 6,
+            ours_lines: ["Current close"],
+            theirs_lines: ["Incoming close"],
+            ancestor_lines: ["Original close"],
+          },
+        ],
+        ...overrides,
+      };
+    }
+
+    it("returns whole current or incoming note when all regions choose one side", () => {
+      const conflict = makeTextConflict();
+
+      expect(buildSemanticResolvedText(conflict, { 0: { choice: "ours" }, 1: { choice: "ours" } })).toBe(conflict.ours);
+      expect(buildSemanticResolvedText(conflict, { 0: { choice: "theirs" }, 1: { choice: "theirs" } })).toBe(conflict.theirs);
+    });
+
+    it("reconstructs markdown with mixed and custom region choices", () => {
+      const conflict = makeTextConflict();
+
+      const resolved = buildSemanticResolvedText(conflict, {
+        0: { choice: "custom", customValue: "Current angle with incoming detail" },
+        1: { choice: "theirs" },
+      });
+
+      expect(resolved).toBe("# Demo\n\nCurrent angle with incoming detail\n\n## Next\n\nIncoming close");
+    });
   });
 
   it("returns theirs when all choices are theirs", () => {

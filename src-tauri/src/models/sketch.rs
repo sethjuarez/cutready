@@ -8,6 +8,20 @@
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Deserializer, Serialize};
+use std::collections::BTreeMap;
+
+/// User-defined key/value metadata stored with portable documents.
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct DocumentMetadata {
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub fields: BTreeMap<String, String>,
+}
+
+impl DocumentMetadata {
+    pub fn is_empty(&self) -> bool {
+        self.fields.is_empty()
+    }
+}
 
 /// Lock state for editable planning row cells.
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
@@ -96,6 +110,9 @@ pub struct PlanningRow {
     pub locks: PlanningCellLocks,
     /// Approximate duration (e.g., "~30s", "1:00", "2m").
     pub time: String,
+    /// Concrete duration in seconds for reliable total-time summaries.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub duration_seconds: Option<u32>,
     /// Narrative bullet points for this step.
     pub narrative: String,
     /// Demo action bullet points for this step.
@@ -117,6 +134,7 @@ impl PlanningRow {
             locked: false,
             locks: PlanningCellLocks::default(),
             time: String::new(),
+            duration_seconds: None,
             narrative: String::new(),
             demo_actions: String::new(),
             screenshot: None,
@@ -153,6 +171,8 @@ pub struct Sketch {
     /// Planning table rows.
     #[serde(default)]
     pub rows: Vec<PlanningRow>,
+    #[serde(default, skip_serializing_if = "DocumentMetadata::is_empty")]
+    pub metadata: DocumentMetadata,
     pub state: SketchState,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -166,6 +186,7 @@ impl Sketch {
             locked: false,
             description: serde_json::Value::Null,
             rows: Vec::new(),
+            metadata: DocumentMetadata::default(),
             state: SketchState::Draft,
             created_at: now,
             updated_at: now,
@@ -217,6 +238,8 @@ pub struct Storyboard {
     /// Whether the whole storyboard is protected from edits.
     #[serde(default)]
     pub locked: bool,
+    #[serde(default, skip_serializing_if = "DocumentMetadata::is_empty")]
+    pub metadata: DocumentMetadata,
     /// Ordered items: loose sketch refs and/or named sections.
     #[serde(default)]
     pub items: Vec<StoryboardItem>,
@@ -231,6 +254,7 @@ impl Storyboard {
             title: title.into(),
             description: String::new(),
             locked: false,
+            metadata: DocumentMetadata::default(),
             items: Vec::new(),
             created_at: now,
             updated_at: now,
@@ -282,6 +306,8 @@ impl<'de> Deserialize<'de> for Storyboard {
             description: String,
             #[serde(default)]
             locked: bool,
+            #[serde(default)]
+            metadata: DocumentMetadata,
             items: Option<Vec<StoryboardItem>>,
             #[serde(default)]
             sketches: Vec<String>,
@@ -302,6 +328,7 @@ impl<'de> Deserialize<'de> for Storyboard {
             title: shape.title,
             description: shape.description,
             locked: shape.locked,
+            metadata: shape.metadata,
             items,
             created_at: shape.created_at,
             updated_at: shape.updated_at,
@@ -473,12 +500,17 @@ mod tests {
             locked: false,
             locks: PlanningCellLocks::default(),
             time: "~30s".into(),
+            duration_seconds: Some(30),
             narrative: "Click the button".into(),
             demo_actions: "Navigate, click CTA".into(),
             screenshot: Some("screenshots/step1.png".into()),
             visual: None,
             design_plan: None,
         });
+        sketch
+            .metadata
+            .fields
+            .insert("owner".to_string(), "Demo team".to_string());
         sketch.description = serde_json::json!({"root": {"children": []}});
 
         let json = serde_json::to_string_pretty(&sketch).unwrap();
@@ -486,6 +518,11 @@ mod tests {
         assert_eq!(sketch.title, parsed.title);
         assert_eq!(parsed.rows.len(), 1);
         assert_eq!(parsed.rows[0].time, "~30s");
+        assert_eq!(parsed.rows[0].duration_seconds, Some(30));
+        assert_eq!(
+            parsed.metadata.fields.get("owner").map(String::as_str),
+            Some("Demo team")
+        );
         assert_eq!(
             parsed.description,
             serde_json::json!({"root": {"children": []}})
@@ -536,6 +573,7 @@ mod tests {
     fn planning_row_new_defaults() {
         let row = PlanningRow::new();
         assert!(row.time.is_empty());
+        assert!(row.duration_seconds.is_none());
         assert!(row.narrative.is_empty());
         assert!(row.demo_actions.is_empty());
         assert!(row.screenshot.is_none());
@@ -547,6 +585,7 @@ mod tests {
             locked: false,
             locks: PlanningCellLocks::default(),
             time: "~30s".into(),
+            duration_seconds: Some(30),
             narrative: "Click the sign-up button".into(),
             demo_actions: "Navigate to /signup, click CTA".into(),
             screenshot: Some("screenshots/step1.png".into()),
@@ -556,6 +595,7 @@ mod tests {
         let json = serde_json::to_string(&row).unwrap();
         let parsed: PlanningRow = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed.time, "~30s");
+        assert_eq!(parsed.duration_seconds, Some(30));
         assert_eq!(parsed.screenshot, Some("screenshots/step1.png".into()));
     }
 
@@ -608,6 +648,7 @@ mod tests {
             title: "Full Demo".into(),
             description: "End-to-end product demo".into(),
             locked: false,
+            metadata: DocumentMetadata::default(),
             items: vec![
                 StoryboardItem::SketchRef {
                     path: "intro.sk".into(),
@@ -742,6 +783,7 @@ mod tests {
             title: "Demo".into(),
             description: String::new(),
             locked: false,
+            metadata: DocumentMetadata::default(),
             items: vec![
                 StoryboardItem::SketchRef {
                     path: "intro.sk".into(),

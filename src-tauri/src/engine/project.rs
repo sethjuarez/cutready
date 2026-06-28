@@ -1872,6 +1872,7 @@ mod tests {
             title: "Demo".into(),
             description: String::new(),
             locked: false,
+            metadata: crate::models::sketch::DocumentMetadata::default(),
             items: vec![
                 crate::models::sketch::StoryboardItem::SketchRef {
                     path: "intro.sk".into(),

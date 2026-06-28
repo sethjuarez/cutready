@@ -6,6 +6,7 @@ use tauri::State;
 use tauri_plugin_auditaur::auditaur_command;
 
 use crate::engine::project;
+use crate::models::script::ProjectView;
 use crate::models::sketch::NoteSummary;
 use crate::AppState;
 
@@ -13,7 +14,11 @@ use crate::AppState;
 fn project_root(state: &AppState) -> Result<std::path::PathBuf, String> {
     let current = state.current_project.lock().map_err(|e| e.to_string())?;
     let view = current.as_ref().ok_or("No project is currently open")?;
-    Ok(view.root.clone())
+    Ok(document_root_from_project_view(view))
+}
+
+fn document_root_from_project_view(view: &ProjectView) -> std::path::PathBuf {
+    view.root.clone()
 }
 
 #[tauri::command]
@@ -240,7 +245,7 @@ pub async fn import_image(
 
 /// Read a project-relative image file and return it as a data URL.
 /// Works cross-platform without relying on asset protocol.
-#[tauri::command]
+#[auditaur_command(skip_all, err)]
 pub async fn read_project_image(
     relative_path: String,
     state: State<'_, AppState>,
@@ -273,4 +278,24 @@ fn base64_decode(input: &str) -> Result<Vec<u8>, String> {
     base64::engine::general_purpose::STANDARD
         .decode(input)
         .map_err(|e| format!("Invalid base64: {e}"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn note_document_io_scopes_to_project_root_for_nested_projects() {
+        let view = ProjectView::in_repo(
+            std::path::PathBuf::from("D:/workspace"),
+            "demos/product-tour",
+            "Product tour".to_string(),
+        );
+
+        assert_eq!(
+            document_root_from_project_view(&view),
+            std::path::PathBuf::from("D:/workspace/demos/product-tour")
+        );
+        assert_ne!(document_root_from_project_view(&view), view.repo_root);
+    }
 }

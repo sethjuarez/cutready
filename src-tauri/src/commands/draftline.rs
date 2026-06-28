@@ -305,7 +305,11 @@ pub enum DraftlineSwitchPolicyInput {
 fn draftline_project_root(state: &AppState) -> Result<PathBuf, String> {
     let current = state.current_project.lock().map_err(|e| e.to_string())?;
     let view = current.as_ref().ok_or("No project is currently open")?;
-    Ok(view.repo_root.clone())
+    Ok(draftline_root_from_project_view(view))
+}
+
+fn draftline_root_from_project_view(view: &crate::models::script::ProjectView) -> PathBuf {
+    view.repo_root.clone()
 }
 
 fn open_adapter(state: &AppState) -> Result<CutReadyDraftlineAdapter, String> {
@@ -1000,10 +1004,9 @@ pub async fn restore_version_as_new_save_to_variation(
 ) -> contract::TauriCommandResult<contract::TargetedRestoreVersionCommandResult> {
     let _guard = lock.0.lock().await;
     let mut context = context_for_workspace(&request.workspace_path, app)?;
-    contract::into_tauri_result(contract::restore_version_as_new_save_to_variation_with_context(
-        &mut context,
-        request,
-    ))
+    contract::into_tauri_result(
+        contract::restore_version_as_new_save_to_variation_with_context(&mut context, request),
+    )
 }
 
 #[auditaur_command(skip_all)]
@@ -1845,12 +1848,28 @@ pub async fn draftline_sync_status(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::script::ProjectView;
 
     #[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
     #[serde(rename_all = "camelCase")]
     struct TypedIdBoundary {
         version: VersionId,
         variation: VariationId,
+    }
+
+    #[test]
+    fn draftline_commands_scope_to_repo_root_for_nested_projects() {
+        let view = ProjectView::in_repo(
+            PathBuf::from("D:/workspace"),
+            "demos/product-tour",
+            "Product tour".to_string(),
+        );
+
+        assert_eq!(
+            draftline_root_from_project_view(&view),
+            PathBuf::from("D:/workspace")
+        );
+        assert_ne!(draftline_root_from_project_view(&view), view.root);
     }
 
     #[test]

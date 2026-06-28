@@ -14,6 +14,7 @@ import { SketchPreview } from "./SketchPreview";
 import { DocumentHeader } from "./DocumentHeader";
 import { FieldAiButton } from "./FieldAiButton";
 import { LockedDocumentBanner } from "./LockedDocumentBanner";
+import { DurationBadge, MetadataEditor } from "./MetadataEditor";
 import type { PresentationMode } from "./presentation/types";
 import VisualCell from "./VisualCell";
 import { exportSketchToWord, type WordOrientation } from "../utils/exportToWord";
@@ -22,6 +23,7 @@ import { diffRow, type RowDiff } from "../utils/textDiff";
 import { DocumentToolbar, documentToolbarIcons, type DocumentToolbarAction } from "./DocumentToolbar";
 import { SketchIcon } from "./Icons";
 import type { RecordingTake } from "../types/recording";
+import { summarizeSketchDuration, type DurationDisplayMode } from "../utils/documentMetadata";
 
 interface MonitorInfo {
   id: number;
@@ -53,6 +55,7 @@ export function SketchForm() {
   const [showPreview, setShowPreview] = useState(false);
   const [previewMode, setPreviewMode] = useState<PresentationMode>("slides");
   const [showMonitorPicker, setShowMonitorPicker] = useState(false);
+  const [durationDisplayMode, setDurationDisplayMode] = useState<DurationDisplayMode>("minutes");
   const [availableMonitors, setAvailableMonitors] = useState<MonitorInfo[]>([]);
   const [editingDesc, setEditingDesc] = useState(false);
   const [aiUpdatedFlash, setAiUpdatedFlash] = useState(false);
@@ -511,6 +514,7 @@ The Actions describe what happens on screen — use them as visual design hints.
 
   const hasRows = localRows.length > 0;
   const canRecord = hasRows && !!activeSketchPath;
+  const durationSummary = summarizeSketchDuration(localRows);
   const presentActions: DocumentToolbarAction[] = hasRows ? [
     {
       id: "slide-only",
@@ -583,6 +587,13 @@ The Actions describe what happens on screen — use them as visual design hints.
 
         <DocumentHeader
           icon={<SketchIcon size={20} />}
+          badge={
+            <DurationBadge
+              summary={durationSummary}
+              mode={durationDisplayMode}
+              onModeChange={setDurationDisplayMode}
+            />
+          }
           toolbar={
             <div className="relative">
               <DocumentToolbar
@@ -661,7 +672,7 @@ The Actions describe what happens on screen — use them as visual design hints.
         )}
 
         {/* Description — markdown preview, click to edit */}
-        <div className="relative group/desc mb-8">
+        <div className="relative group/desc my-8">
           {editingDesc ? (
             <textarea
               ref={descRef}
@@ -709,6 +720,14 @@ The Actions describe what happens on screen — use them as visual design hints.
               iconClassName="h-3 w-3"
             />
           )}
+        </div>
+
+        <div className="mb-6">
+          <MetadataEditor
+            metadata={activeSketch.metadata}
+            disabled={sketchLocked}
+            onChange={(metadata) => updateSketch({ metadata })}
+          />
         </div>
 
         {/* Planning Table */}

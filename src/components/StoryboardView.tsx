@@ -37,6 +37,7 @@ import { DocumentHeader } from "./DocumentHeader";
 import { DocumentToolbar, documentToolbarIcons, type DocumentToolbarAction } from "./DocumentToolbar";
 import { FieldAiButton } from "./FieldAiButton";
 import { LockedDocumentBanner } from "./LockedDocumentBanner";
+import { DurationBadge, MetadataEditor } from "./MetadataEditor";
 import { StoryboardIcon } from "./Icons";
 import type { Sketch, SketchSummary, StoryboardItem } from "../types/sketch";
 import type { RecordingTake } from "../types/recording";
@@ -49,6 +50,13 @@ import {
   removeSketchFromSection,
   updateStoryboardSection,
 } from "../utils/storyboard";
+import {
+  formatDurationSummary,
+  summarizeSketchDuration,
+  summarizeSketchPathsDuration,
+  summarizeStoryboardDuration,
+  type DurationDisplayMode,
+} from "../utils/documentMetadata";
 
 interface MonitorInfo {
   id: number;
@@ -104,6 +112,7 @@ export function StoryboardView() {
   const loadingRef = useRef<Set<string>>(new Set());
   const [collapsedItems, setCollapsedItems] = useState<Set<string>>(new Set());
   const [showMonitorPicker, setShowMonitorPicker] = useState(false);
+  const [durationDisplayMode, setDurationDisplayMode] = useState<DurationDisplayMode>("minutes");
   const [editingDesc, setEditingDesc] = useState(false);
   const [localDesc, setLocalDesc] = useState(activeStoryboard?.description ?? "");
   const descRef = useRef<HTMLTextAreaElement>(null);
@@ -497,6 +506,7 @@ export function StoryboardView() {
   if (!activeStoryboard) return null;
 
   const canRecord = hasStoryboardItems && !!activeStoryboardPath;
+  const durationSummary = summarizeStoryboardDuration(activeStoryboard, sketchCache);
   const presentActions: DocumentToolbarAction[] = hasStoryboardItems ? [
     {
       id: "slide-only",
@@ -557,6 +567,13 @@ export function StoryboardView() {
       <div className="mx-auto px-6 py-8" style={{ maxWidth: "var(--editor-max-width, 56rem)" }}>
         <DocumentHeader
           icon={<StoryboardIcon size={20} />}
+          badge={
+            <DurationBadge
+              summary={durationSummary}
+              mode={durationDisplayMode}
+              onModeChange={setDurationDisplayMode}
+            />
+          }
           toolbar={
             <div className="relative">
               <DocumentToolbar
@@ -631,7 +648,7 @@ export function StoryboardView() {
           <LockedDocumentBanner message="Storyboard is locked. Unlock it to edit sections, reorder sketches, or use AI suggestions." />
         )}
         {/* Description — markdown preview, click to edit */}
-        <div className="relative group/desc mb-2">
+        <div className="relative group/desc my-2">
           {editingDesc ? (
             <textarea
               ref={descRef}
@@ -682,7 +699,13 @@ export function StoryboardView() {
           )}
         </div>
 
-        <div className="mb-8" />
+        <div className="mb-8">
+          <MetadataEditor
+            metadata={activeStoryboard.metadata}
+            disabled={storyboardLocked}
+            onChange={(metadata) => updateStoryboard({ metadata })}
+          />
+        </div>
 
         {hasStoryboardItems && (
           <div className="mb-4 flex items-center justify-between border-y border-[rgb(var(--color-border-subtle))] py-2">
@@ -741,6 +764,7 @@ export function StoryboardView() {
                           locked={storyboardLocked}
                           outlineLevel="top"
                           collapsed={collapsedItems.has(itemKey)}
+                          durationDisplayMode={durationDisplayMode}
                           onToggleCollapse={() => setCollapsedItems((prev) => {
                             const next = new Set(prev);
                             if (next.has(itemKey)) next.delete(itemKey); else next.add(itemKey);
@@ -776,6 +800,7 @@ export function StoryboardView() {
                           )}
                           onAddNewSketch={() => handleAddNewSketch({ type: "section", sectionIndex: idx })}
                           onPickExisting={() => setPickerTarget({ type: "section", sectionIndex: idx })}
+                          durationDisplayMode={durationDisplayMode}
                         />
                       )}
                     </SortableStoryboardItem>
@@ -877,6 +902,14 @@ function SortableStoryboardItem({ id, disabled, children }: { id: number; disabl
 
 /* ── Expandable sketch card with inline read-only preview ─ */
 
+function StoryboardDurationPill({ label }: { label: string }) {
+  return (
+    <span className="shrink-0 rounded-full border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] px-2 py-0.5 text-[10px] font-medium text-[rgb(var(--color-text-secondary))]">
+      {label}
+    </span>
+  );
+}
+
 function ExpandableSketchCard({
   sketch,
   fullSketch,
@@ -887,6 +920,7 @@ function ExpandableSketchCard({
   locked,
   outlineLevel = "top",
   collapsed,
+  durationDisplayMode,
   onToggleCollapse,
 }: {
   sketch: SketchSummary;
@@ -898,9 +932,11 @@ function ExpandableSketchCard({
   locked?: boolean;
   outlineLevel?: "top" | "nested";
   collapsed: boolean;
+  durationDisplayMode: DurationDisplayMode;
   onToggleCollapse: () => void;
 }) {
   const isTopLevel = outlineLevel === "top";
+  const sketchDurationLabel = fullSketch ? formatDurationSummary(summarizeSketchDuration(fullSketch.rows), durationDisplayMode) : null;
 
   return (
     <div className={`group/sketch ${isTopLevel ? "rounded-xl border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))]/25 px-3 py-2.5" : "rounded-lg bg-[rgb(var(--color-surface))]/25 px-3 py-1.5"}`}>
@@ -949,6 +985,10 @@ function ExpandableSketchCard({
             <span className={`shrink-0 text-[10px] text-[rgb(var(--color-text-secondary))]/85 ${isTopLevel ? "hidden" : ""}`}>
               {sketch.row_count} {sketch.row_count === 1 ? "row" : "rows"}
             </span>
+
+            {sketchDurationLabel && (
+              <StoryboardDurationPill label={sketchDurationLabel} />
+            )}
 
             <button
               onClick={onOpen}
@@ -1017,6 +1057,7 @@ function StoryboardSectionBlock({
   onImproveDescription,
   onAddNewSketch,
   onPickExisting,
+  durationDisplayMode,
 }: {
   item: Extract<StoryboardItem, { type: "section" }>;
   index: number;
@@ -1036,6 +1077,7 @@ function StoryboardSectionBlock({
   onImproveDescription: (title: string, description: string) => void;
   onAddNewSketch: () => void;
   onPickExisting: () => void;
+  durationDisplayMode: DurationDisplayMode;
 }) {
   const [draftTitle, setDraftTitle] = useState(item.title);
   const [draftDescription, setDraftDescription] = useState(item.description ?? "");
@@ -1069,6 +1111,9 @@ function StoryboardSectionBlock({
     }
   }, [draftDescription, draftTitle, index, item.description, item.title, locked, onUpdateSection]);
   const sketchCount = item.sketches.length;
+  const sectionDuration = summarizeSketchPathsDuration(item.sketches, sketchCache);
+  const sectionDurationLabel = sketchCount > 0 ? formatDurationSummary(sectionDuration, durationDisplayMode) : null;
+  const titleWidthCh = Math.min(34, Math.max(14, (draftTitle || "Section title").length + 1));
 
   return (
     <section className="group/section rounded-xl border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))]/25 px-3 py-2.5">
@@ -1115,9 +1160,11 @@ function StoryboardSectionBlock({
               readOnly={locked}
               onChange={(event) => setDraftTitle(event.target.value)}
               onBlur={flushSectionDraft}
-              className={`w-full bg-transparent text-base font-semibold leading-tight text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/35 outline-none ${locked ? "cursor-default" : ""}`}
+              className={`min-w-0 max-w-[60%] bg-transparent text-base font-semibold leading-tight text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/35 outline-none ${locked ? "cursor-default" : ""}`}
+              style={{ width: `${titleWidthCh}ch` }}
               placeholder="Section title..."
             />
+            {sectionDurationLabel && <StoryboardDurationPill label={sectionDurationLabel} />}
             {!locked && (
               <button
                 onClick={(event) => {
@@ -1180,6 +1227,7 @@ function StoryboardSectionBlock({
                 locked={locked}
                 outlineLevel="nested"
                 collapsed={collapsedItems.has(collapseKey)}
+                durationDisplayMode={durationDisplayMode}
                 onToggleCollapse={() => setCollapsedItems((prev) => {
                   const next = new Set(prev);
                   if (next.has(collapseKey)) next.delete(collapseKey); else next.add(collapseKey);

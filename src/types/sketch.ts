@@ -14,6 +14,8 @@ export interface PlanningRow {
   /** Per-cell lock state for targeted AI-safe editing. */
   locks?: Partial<Record<PlanningCellField, boolean>>;
   time: string;
+  /** Concrete duration in seconds. Legacy rows may only have `time`; totals derive from either field. */
+  duration_seconds?: number | null;
   narrative: string;
   demo_actions: string;
   screenshot: string | null;
@@ -25,6 +27,11 @@ export interface PlanningRow {
 
 export type PlanningCellField = "time" | "narrative" | "demo_actions" | "screenshot" | "visual" | "design_plan";
 
+/** User-defined key/value metadata stored with portable project documents. */
+export interface DocumentMetadata {
+  fields?: Record<string, string>;
+}
+
 /** A sketch — a focused scene in a demo storyboard. */
 export interface Sketch {
   title: string;
@@ -34,6 +41,7 @@ export interface Sketch {
   description: unknown;
   /** Planning table rows. */
   rows: PlanningRow[];
+  metadata?: DocumentMetadata;
   state: SketchState;
   created_at: string;
   updated_at: string;
@@ -55,6 +63,7 @@ export interface Storyboard {
   description: string;
   /** Whether the whole storyboard is protected from edits. */
   locked?: boolean;
+  metadata?: DocumentMetadata;
   items: StoryboardItem[];
   created_at: string;
   updated_at: string;
