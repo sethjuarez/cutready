@@ -922,6 +922,10 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
       if (activeNotePath) overridePrompt += `\n\nThe user is currently editing the note at: ${activeNotePath}`;
       effectiveSystemPrompt = overridePrompt;
     }
+    const allowMutationTools = settings.aiApplyMode === "auto";
+    if (!allowMutationTools) {
+      effectiveSystemPrompt += "\n\nAI apply behavior is set to Ask before applying. You cannot use write or mutation tools in this chat turn. Read project context as needed, then describe the edits you would apply so the user can choose to enable Auto-apply or use a gated AI shortcut.";
+    }
     const fullMessages: ChatMessage[] = [
       { role: "system", content: effectiveSystemPrompt },
       ...llmMessages,
@@ -999,6 +1003,7 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
             messages: fullMessages,
             agentPrompts,
             agentId: effectiveAgent.id,
+            allowMutationTools,
           });
 
       // Activity logging now handled by real-time agent-event listener

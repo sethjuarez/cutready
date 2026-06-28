@@ -16,7 +16,7 @@ fn project_root(state: &AppState) -> Result<std::path::PathBuf, String> {
     Ok(view.root.clone())
 }
 
-#[tauri::command]
+#[auditaur_command(skip_all, err)]
 pub async fn create_sketch(
     relative_path: String,
     title: String,
@@ -35,7 +35,7 @@ pub async fn create_sketch(
     Ok(sketch)
 }
 
-#[tauri::command]
+#[auditaur_command(skip_all, err)]
 pub async fn update_sketch(
     relative_path: String,
     description: Option<serde_json::Value>,
@@ -109,7 +109,7 @@ pub async fn list_sketches(state: State<'_, AppState>) -> Result<Vec<SketchSumma
     project::scan_sketches(&root).map_err(|e| e.to_string())
 }
 
-#[tauri::command]
+#[auditaur_command(skip_all, err)]
 pub async fn get_sketch(
     relative_path: String,
     state: State<'_, AppState>,

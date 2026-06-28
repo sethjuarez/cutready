@@ -26,6 +26,7 @@ export interface AgentPreset {
 
 export type AiProviderKind = "microsoft_foundry" | "azure_openai" | "openai" | "anthropic";
 export type AiAuthMode = "api_key" | "azure_oauth";
+export type AiApplyMode = "ask" | "auto";
 
 export interface AiProviderConfig {
   id: string;
@@ -109,6 +110,8 @@ export interface GlobalSettings {
   aiModelSupportsVision: string;
   /** Web search access for chat agents: "disabled" or "enabled". */
   aiWebAccess: "disabled" | "enabled";
+  /** Whether write-capable AI shortcuts prompt before mutating project files. */
+  aiApplyMode: AiApplyMode;
   /** Named AI provider configurations. Secrets are stored separately in Stronghold. */
   aiProviders: AiProviderConfig[];
   /** Provider used by chat/model fetching unless an override is selected. */
@@ -202,6 +205,7 @@ const defaultGlobalSettings: GlobalSettings = {
   aiVisionMode: "notes_and_sketches",
   aiModelSupportsVision: "",
   aiWebAccess: "disabled",
+  aiApplyMode: "ask",
   aiProviders: [],
   aiActiveProviderId: "",
   aiDefaultProviderId: "",

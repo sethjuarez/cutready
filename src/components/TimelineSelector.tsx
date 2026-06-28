@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { createPortal } from "react-dom";
 import { useAppStore } from "../stores/appStore";
 import { ArrowLeftRight, ChevronDown, Check, Plus } from "lucide-react";
+import { UnsavedWorkspaceDialog } from "./UnsavedWorkspaceDialog";
 
 /**
  * TimelineSelector — dropdown for switching timelines (branches).
@@ -13,8 +14,11 @@ export function TimelineSelector() {
   const switchTimeline = useAppStore((s) => s.switchTimeline);
   const createTimeline = useAppStore((s) => s.createTimeline);
   const graphNodes = useAppStore((s) => s.graphNodes);
+  const isDirty = useAppStore((s) => s.isDirty);
+  const discardChanges = useAppStore((s) => s.discardChanges);
 
   const [open, setOpen] = useState(false);
+  const [pendingSwitch, setPendingSwitch] = useState<string | null>(null);
   const [filter, setFilter] = useState("");
   const [newName, setNewName] = useState("");
   const [showNew, setShowNew] = useState(false);
@@ -78,10 +82,17 @@ export function TimelineSelector() {
   }, [open]);
 
   const handleSwitch = useCallback(async (name: string) => {
+    if (isDirty) {
+      setPendingSwitch(name);
+      setOpen(false);
+      return;
+    }
     await switchTimeline(name);
     setOpen(false);
     setFilter("");
-  }, [switchTimeline]);
+  }, [isDirty, switchTimeline]);
+
+  const pendingTimeline = pendingSwitch ? timelines.find((timeline) => timeline.name === pendingSwitch) : null;
 
   const handleCreate = useCallback(async () => {
     if (!newName.trim()) return;
@@ -187,11 +198,11 @@ export function TimelineSelector() {
   ) : null;
 
   return (
-    <div className="relative" ref={triggerRef}>
+    <div className="relative min-w-0" ref={triggerRef}>
       {/* Trigger button */}
       <button
         onClick={() => setOpen(!open)}
-        className="flex h-5 max-w-[5.75rem] items-center gap-1.5 rounded-md px-1.5 text-[10px] text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
+        className="flex h-6 min-w-0 max-w-full items-center gap-1.5 rounded-md px-1.5 text-[10px] text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
         title={`Branch: ${active?.label ?? "main"}`}
       >
         <ArrowLeftRight className="shrink-0 w-3 h-3" />
@@ -200,6 +211,23 @@ export function TimelineSelector() {
       </button>
 
       {dropdown}
+      <UnsavedWorkspaceDialog
+        open={!!pendingSwitch}
+        targetLabel={pendingTimeline?.label ?? pendingSwitch ?? "that branch"}
+        onCancel={() => setPendingSwitch(null)}
+        onSaveFirst={() => {
+          if (!pendingSwitch) return;
+          useAppStore.setState({ pendingTimelineAfterSave: pendingSwitch, snapshotPromptOpen: true });
+          setPendingSwitch(null);
+        }}
+        onDiscardAndContinue={async () => {
+          if (!pendingSwitch) return;
+          const target = pendingSwitch;
+          setPendingSwitch(null);
+          await discardChanges();
+          await switchTimeline(target);
+        }}
+      />
     </div>
   );
 }

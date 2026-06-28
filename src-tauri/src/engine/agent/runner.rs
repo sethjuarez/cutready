@@ -97,6 +97,7 @@ pub async fn run(
     steering: &agentive::Steering,
     vision: &VisionConfig,
     web_access: &WebAccessConfig,
+    mutation_tools_enabled: bool,
     run_id: Option<String>,
     agent_state: Option<AgentStateStore>,
     emit: impl Fn(AgentEvent) + Send + Sync + 'static,
@@ -114,6 +115,7 @@ pub async fn run(
         0,
         vision,
         web_access,
+        mutation_tools_enabled,
         run_id,
         agent_state,
         emit,
@@ -135,6 +137,7 @@ fn run_inner<'a>(
     depth: usize,
     vision: &'a VisionConfig,
     web_access: &'a WebAccessConfig,
+    mutation_tools_enabled: bool,
     run_id: Option<String>,
     agent_state: Option<AgentStateStore>,
     emit: Arc<dyn Fn(AgentEvent) + Send + Sync + 'static>,
@@ -143,13 +146,16 @@ fn run_inner<'a>(
 > {
     Box::pin(async move {
         let project_workspace_tools_enabled = agent_id.eq_ignore_ascii_case("writer");
-        let tool_defs =
-            tools::all_tools(web_access.search_enabled, project_workspace_tools_enabled);
+        let tool_defs = tools::all_tools(
+            web_access.search_enabled,
+            project_workspace_tools_enabled && mutation_tools_enabled,
+            mutation_tools_enabled,
+        );
         let tool_count = tool_defs.len();
         let starting_chars = agentive::context::estimate_chars(&messages);
 
         log::info!(
-            "[agent] starting run (depth={}, agent={}, {} messages, chars={}, budget={}chars, tools={}, vision={}, web_search={}, project_workspace_tools={})",
+            "[agent] starting run (depth={}, agent={}, {} messages, chars={}, budget={}chars, tools={}, vision={}, web_search={}, project_workspace_tools={}, mutation_tools={})",
             depth,
             agent_id,
             messages.len(),
@@ -158,7 +164,8 @@ fn run_inner<'a>(
             tool_count,
             vision.enabled,
             web_access.search_enabled,
-            project_workspace_tools_enabled
+            project_workspace_tools_enabled && mutation_tools_enabled,
+            mutation_tools_enabled
         );
         crate::util::trace::emit(
             "agent_start",
@@ -171,7 +178,8 @@ fn run_inner<'a>(
                 "tools": tool_count,
                 "vision_enabled": vision.enabled,
                 "web_search_enabled": web_access.search_enabled,
-                "project_workspace_tools_enabled": project_workspace_tools_enabled,
+                "project_workspace_tools_enabled": project_workspace_tools_enabled && mutation_tools_enabled,
+                "mutation_tools_enabled": mutation_tools_enabled,
             }),
         );
 
@@ -325,6 +333,7 @@ fn run_inner<'a>(
         let emit_for_tools = emit.clone();
         let vision_enabled = vision.enabled;
         let web_search_enabled = web_access.search_enabled;
+        let mutation_tools_enabled_for_tools = mutation_tools_enabled;
         let tool_depth = depth;
         let steering_for_tools = steering.clone();
 
@@ -352,6 +361,7 @@ fn run_inner<'a>(
                     tool_depth,
                     vision_enabled,
                     web_search_enabled,
+                    mutation_tools_enabled_for_tools,
                     steering,
                     emit,
                 )
@@ -382,6 +392,7 @@ fn run_inner<'a>(
                     Path::new(&project_root),
                     vision_enabled,
                     project_workspace_tools_enabled,
+                    mutation_tools_enabled_for_tools,
                 );
                 Box::pin(std::future::ready(Ok(output)))
             }
@@ -464,8 +475,11 @@ fn run_inner<'a>(
                 let provider_name_for_tools = provider_name.clone();
                 let model_name_for_tools = model_name.clone();
                 let web_search_enabled = web_access.search_enabled;
-                let tools_for_exec =
-                    tools::all_tools(web_search_enabled, project_workspace_tools_enabled);
+                let tools_for_exec = tools::all_tools(
+                    web_search_enabled,
+                    project_workspace_tools_enabled && mutation_tools_enabled,
+                    mutation_tools_enabled,
+                );
                 let emit_for_tools = emit.clone();
                 let vision_enabled = vision.enabled;
                 let tool_depth = depth;
@@ -498,6 +512,7 @@ fn run_inner<'a>(
                             tool_depth,
                             vision_enabled,
                             web_search_enabled,
+                            mutation_tools_enabled,
                             steering,
                             emit,
                         )
@@ -531,7 +546,8 @@ fn run_inner<'a>(
                             &tool_call,
                             Path::new(&project_root),
                             vision_enabled,
-                            project_workspace_tools_enabled,
+                            project_workspace_tools_enabled && mutation_tools_enabled,
+                            mutation_tools_enabled,
                         );
                         Box::pin(std::future::ready(Ok(output)))
                     }
@@ -540,7 +556,11 @@ fn run_inner<'a>(
                 agentive::run(
                     provider,
                     retry_messages,
-                    tools::all_tools(web_search_enabled, project_workspace_tools_enabled),
+                    tools::all_tools(
+                        web_search_enabled,
+                        project_workspace_tools_enabled && mutation_tools_enabled,
+                        mutation_tools_enabled,
+                    ),
                     retry_tool_executor,
                     retry_config,
                     agentive::CancellationToken::new(),
@@ -794,6 +814,7 @@ fn exec_delegation(
     depth: usize,
     vision_enabled: bool,
     web_search_enabled: bool,
+    mutation_tools_enabled: bool,
     steering: agentive::Steering,
     emit: Arc<dyn Fn(AgentEvent) + Send + Sync + 'static>,
 ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<agentive::ToolOutput, String>> + Send>>
@@ -837,7 +858,11 @@ fn exec_delegation(
     // Own everything needed by the async block
     let project_root = project_root.to_string();
     let agent_prompts = agent_prompts.clone();
-    let tools = tools::all_tools_for_agent(web_search_enabled, Some(&agent_id));
+    let tools = tools::all_tools(
+        web_search_enabled,
+        agent_id.eq_ignore_ascii_case("writer") && mutation_tools_enabled,
+        mutation_tools_enabled,
+    );
     let sub_depth = depth + 1;
 
     Box::pin(async move {
@@ -866,7 +891,8 @@ fn exec_delegation(
         let tools_for_tools = tools.clone();
         let emit_for_tools = emit.clone();
         let steering_for_tools = steering.clone();
-        let sub_project_workspace_tools_enabled = agent_id.eq_ignore_ascii_case("writer");
+        let sub_project_workspace_tools_enabled =
+            agent_id.eq_ignore_ascii_case("writer") && mutation_tools_enabled;
 
         let sub_tool_executor = move |tool_call: agentive::ToolCall| -> std::pin::Pin<
             Box<dyn std::future::Future<Output = Result<agentive::ToolOutput, String>> + Send>,
@@ -892,6 +918,7 @@ fn exec_delegation(
                     sub_depth,
                     vision_enabled,
                     web_search_enabled,
+                    mutation_tools_enabled,
                     steering,
                     emit,
                 )
@@ -911,6 +938,7 @@ fn exec_delegation(
                     Path::new(&project_root),
                     vision_enabled,
                     sub_project_workspace_tools_enabled,
+                    mutation_tools_enabled,
                 );
                 Box::pin(std::future::ready(Ok(output)))
             }
@@ -1239,6 +1267,7 @@ mod tests {
             &WebAccessConfig {
                 search_enabled: false,
             },
+            true,
             Some(run_id.clone()),
             Some(store.clone()),
             Arc::new(|_| {}),

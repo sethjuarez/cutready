@@ -967,6 +967,25 @@ function AIProviderTab({ settings, updateSetting, isAzure, isFoundry, isAnthropi
   return (
     <div className="flex flex-col gap-4">
       <div className="rounded-2xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]/40 p-4">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h3 className="text-sm font-semibold text-[rgb(var(--color-text))]">AI apply behavior</h3>
+            <p className="mt-1 text-xs leading-5 text-[rgb(var(--color-text-secondary))]">
+              Control whether write-capable AI shortcuts stop for approval or apply changes automatically.
+            </p>
+          </div>
+          <select
+            value={settings.aiApplyMode}
+            onChange={(event) => void updateSetting("aiApplyMode", event.target.value as typeof settings.aiApplyMode)}
+            className={inputClass + " min-w-56 text-xs"}
+          >
+            <option value="ask">Ask before applying</option>
+            <option value="auto">Auto-apply AI changes</option>
+          </select>
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]/40 p-4">
         <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div className="max-w-xl">
             <h3 className="text-sm font-semibold text-[rgb(var(--color-text))]">Connected AI providers</h3>

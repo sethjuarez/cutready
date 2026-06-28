@@ -1,9 +1,11 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockInvoke = vi.hoisted(() => vi.fn());
+const mockUnlisten = vi.hoisted(() => vi.fn());
 
 vi.mock("../services/tauri", () => ({
   invoke: (...args: unknown[]) => mockInvoke(...args),
+  listen: () => Promise.resolve(mockUnlisten),
 }));
 
 import {
@@ -17,38 +19,72 @@ import {
   listDraftlineVersions,
   hasDraftlineShelf,
   popDraftlineShelf,
+  preflightDraftlineRenameVariation,
   previewDraftlineVersion,
+  renameDraftlineVariation,
   saveDraftlineVersion,
+  setDraftlineWorkspacePath,
   shelveDraftlineChanges,
 } from "../services/draftlineVersioning";
+
+const WORKSPACE = "D:\\project";
+
+function variation(id: string, label = id, isCurrent = true) {
+  return {
+    id,
+    name: id,
+    metadata: { label, slug: id },
+    is_current: isCurrent,
+  };
+}
 
 function version(id: string, label: string, timeSeconds: number, name = "Seth") {
   return {
     id,
     label,
-    timeSeconds,
     author: { name, email: null },
-    savedBy: { name, email: null },
+    saved_by: { name, email: null },
+    time_seconds: timeSeconds,
+  };
+}
+
+function diagnostics({
+  versions = [],
+  dirtyFiles = [],
+}: {
+  versions?: ReturnType<typeof version>[];
+  dirtyFiles?: Array<{ path: string; kind: string; is_binary?: boolean; is_large?: boolean }>;
+} = {}) {
+  const main = variation("main", "main");
+  return {
+    summary: {
+      active_variation: main,
+      variations: [main],
+      versions,
+      dirty_files: dirtyFiles,
+      is_dirty: dirtyFiles.length > 0,
+      recovery: null,
+      state_may_be_inconsistent: false,
+    },
   };
 }
 
 describe("draftlineVersioning", () => {
+  beforeEach(() => {
+    setDraftlineWorkspacePath(WORKSPACE);
+  });
+
   afterEach(() => {
+    setDraftlineWorkspacePath(null);
     mockInvoke.mockReset();
+    mockUnlisten.mockReset();
     localStorage.clear();
   });
 
   it("maps Draftline versions onto existing version entries", async () => {
-    mockInvoke.mockResolvedValueOnce({
-      activeVariation: { id: "main", name: "main", displayLabel: "main", isCurrent: true },
-      variations: [{ id: "main", name: "main", displayLabel: "main", isCurrent: true }],
-      versions: [
-        version("0123456789012345678901234567890123456789", "Initial storyboard", 1_700_000_000),
-      ],
-      dirtyFiles: [],
-      isDirty: false,
-      stateMayBeInconsistent: false,
-    });
+    mockInvoke.mockResolvedValueOnce(diagnostics({
+      versions: [version("0123456789012345678901234567890123456789", "Initial storyboard", 1_700_000_000)],
+    }));
 
     await expect(listDraftlineVersions()).resolves.toEqual([
       {
@@ -58,26 +94,23 @@ describe("draftlineVersioning", () => {
         summary: "Initial storyboard",
       },
     ]);
-    expect(mockInvoke).toHaveBeenCalledWith("draftline_workspace_summary");
+    expect(mockInvoke).toHaveBeenCalledWith("inspect_workspace", {
+      request: { workspace_path: WORKSPACE },
+    });
   });
 
   it("maps Draftline change kinds onto existing diff entries", async () => {
     mockInvoke
-      .mockResolvedValueOnce({
-        activeVariation: { id: "main", name: "main", displayLabel: "main", isCurrent: true },
-        variations: [{ id: "main", name: "main", displayLabel: "main", isCurrent: true }],
+      .mockResolvedValueOnce(diagnostics({
         versions: [version("2222222222222222222222222222222222222222", "Head", 1_700_000_100)],
-        dirtyFiles: [],
-        isDirty: false,
-        stateMayBeInconsistent: false,
-      })
+      }))
       .mockResolvedValueOnce({
-        fromVersion: "2222222222222222222222222222222222222222",
-        toVersion: null,
+        from_version: "2222222222222222222222222222222222222222",
+        to_version: null,
         files: [
-          { path: "intro.sk", kind: "added" },
-          { path: "demo.sb", kind: "typeChanged" },
-          { path: "notes.md", kind: "deleted" },
+          { path: "intro.sk", kind: "Added", is_binary: false, is_large: false },
+          { path: "demo.sb", kind: "TypeChanged", is_binary: false, is_large: false },
+          { path: "notes.md", kind: "Deleted", is_binary: false, is_large: false },
         ],
         patch: null,
       });
@@ -87,23 +120,18 @@ describe("draftlineVersioning", () => {
       { path: "demo.sb", status: "modified", additions: 0, deletions: 0 },
       { path: "notes.md", status: "deleted", additions: 0, deletions: 0 },
     ]);
-    expect(mockInvoke).toHaveBeenNthCalledWith(1, "draftline_workspace_summary");
-    expect(mockInvoke).toHaveBeenNthCalledWith(2, "draftline_diff_version_to_workspace", {
-      version: "2222222222222222222222222222222222222222",
+    expect(mockInvoke).toHaveBeenNthCalledWith(1, "inspect_workspace", {
+      request: { workspace_path: WORKSPACE },
+    });
+    expect(mockInvoke).toHaveBeenNthCalledWith(2, "diff_version_to_workspace", {
+      request: { workspace_path: WORKSPACE, version_id: "2222222222222222222222222222222222222222" },
     });
   });
 
   it("falls back to summary dirty files in an empty workspace", async () => {
-    mockInvoke.mockResolvedValueOnce({
-      activeVariation: { id: "main", name: "main", displayLabel: "main", isCurrent: true },
-      variations: [{ id: "main", name: "main", displayLabel: "main", isCurrent: true }],
-      versions: [],
-      dirtyFiles: [
-        { path: "intro.sk", kind: "added" },
-      ],
-      isDirty: true,
-      stateMayBeInconsistent: false,
-    });
+    mockInvoke.mockResolvedValueOnce(diagnostics({
+      dirtyFiles: [{ path: "intro.sk", kind: "Added", is_binary: false, is_large: false }],
+    }));
 
     await expect(listDraftlineChangedFiles()).resolves.toEqual([
       { path: "intro.sk", status: "added", additions: 0, deletions: 0 },
@@ -113,33 +141,26 @@ describe("draftlineVersioning", () => {
 
   it("maps Draftline full history onto graph nodes", async () => {
     mockInvoke
-      .mockResolvedValueOnce({
-        activeVariation: { id: "main", name: "main", displayLabel: "main", isCurrent: true },
-        variations: [{ id: "main", name: "main", displayLabel: "main", isCurrent: true }],
-        versions: [],
-        dirtyFiles: [],
-        isDirty: false,
-        stateMayBeInconsistent: false,
-      })
+      .mockResolvedValueOnce(diagnostics())
       .mockResolvedValueOnce([
         {
           version: version("2222222222222222222222222222222222222222", "Second", 1_700_000_100, "Seth"),
-          variationTips: ["main"],
-          isHead: true,
-          parentIds: ["1111111111111111111111111111111111111111"],
+          variation_tips: ["main"],
+          is_head: true,
+          parent_ids: ["1111111111111111111111111111111111111111"],
         },
         {
           version: version("1111111111111111111111111111111111111111", "First", 1_700_000_000, "Maria"),
-          variationTips: [],
-          isHead: false,
-          parentIds: [],
+          variation_tips: [],
+          is_head: false,
+          parent_ids: [],
         },
       ])
       .mockResolvedValueOnce([
         {
-          variation: { id: "main", name: "main", displayLabel: "Main", isCurrent: true },
-          headVersion: version("2222222222222222222222222222222222222222", "Second", 1_700_000_100),
-          reachableVersionCount: 2,
+          variation: variation("main", "Main"),
+          head_version: version("2222222222222222222222222222222222222222", "Second", 1_700_000_100),
+          reachable_version_count: 2,
         },
       ]);
 
@@ -167,22 +188,28 @@ describe("draftlineVersioning", () => {
         author: "Maria",
       },
     ]);
-    expect(mockInvoke).toHaveBeenNthCalledWith(1, "draftline_workspace_summary");
-    expect(mockInvoke).toHaveBeenNthCalledWith(2, "draftline_full_history");
-    expect(mockInvoke).toHaveBeenNthCalledWith(3, "draftline_variation_summaries");
+    expect(mockInvoke).toHaveBeenNthCalledWith(1, "inspect_workspace", {
+      request: { workspace_path: WORKSPACE },
+    });
+    expect(mockInvoke).toHaveBeenNthCalledWith(2, "get_full_history", {
+      request: { workspace_path: WORKSPACE },
+    });
+    expect(mockInvoke).toHaveBeenNthCalledWith(3, "list_variations", {
+      request: { workspace_path: WORKSPACE },
+    });
   });
 
   it("maps Draftline variations onto timeline entries", async () => {
     mockInvoke.mockResolvedValueOnce([
       {
-        variation: { id: "main", name: "main", displayLabel: "Main", isCurrent: true },
-        headVersion: version("1111111111111111111111111111111111111111", "First", 1_700_000_000),
-        reachableVersionCount: 1,
+        variation: variation("main", "Main"),
+        head_version: version("1111111111111111111111111111111111111111", "First", 1_700_000_000),
+        reachable_version_count: 1,
       },
       {
-        variation: { id: "alt", name: "alt", displayLabel: "Alternative", isCurrent: false },
-        headVersion: null,
-        reachableVersionCount: 3,
+        variation: variation("alt", "Alternative", false),
+        head_version: null,
+        reachable_version_count: 3,
       },
     ]);
 
@@ -199,33 +226,73 @@ describe("draftlineVersioning", () => {
     expect(mockInvoke).toHaveBeenCalledWith("draftline_delete_variation", { variation: "alt" });
   });
 
+  it("preflights and renames a Draftline variation through the guarded API", async () => {
+    const token = {
+      operation_id: "rename-master-main",
+      source_variation: "master",
+      target_variation: "main",
+      expected_oid: "abc123",
+      support_ref: "refs/draftline/variations/master",
+    };
+    const preflight = {
+      source_variation: "master",
+      target_variation: "main",
+      expected_oid: "abc123",
+      support_ref: "refs/draftline/variations/master",
+      token,
+      can_rename: true,
+    };
+
+    mockInvoke
+      .mockResolvedValueOnce(preflight)
+      .mockResolvedValueOnce({
+        preflight,
+        variation: variation("main", "main"),
+        postconditions: { workspace_changed: true, active_variation: "main", dirty_files: [] },
+      });
+
+    await expect(preflightDraftlineRenameVariation("master", "main")).resolves.toEqual(preflight);
+    await expect(renameDraftlineVariation("master", "main", token)).resolves.toMatchObject({
+      preflight,
+      variation: { id: "main" },
+    });
+    expect(mockInvoke).toHaveBeenNthCalledWith(1, "preflight_rename_variation", {
+      request: {
+        workspace_path: WORKSPACE,
+        source_variation_id: "master",
+        target_variation_id: "main",
+      },
+    });
+    expect(mockInvoke).toHaveBeenNthCalledWith(2, "rename_variation", {
+      request: {
+        workspace_path: WORKSPACE,
+        source_variation_id: "master",
+        target_variation_id: "main",
+        token,
+      },
+    });
+  });
+
   it("reports large changed files from the Draftline content policy", async () => {
     mockInvoke.mockResolvedValueOnce({
-      activeVariation: { id: "main", name: "main", displayLabel: "main", isCurrent: true },
-      variations: [{ id: "main", name: "main", displayLabel: "main", isCurrent: true }],
-      versions: [],
-      dirtyFiles: [
-        { path: "intro.sk", kind: "modified", isBinary: false, isLarge: false },
-        { path: "screenshots/demo.png", kind: "added", isBinary: true, isLarge: true },
+      files: [
+        { path: "intro.sk", kind: "Modified", is_binary: false, is_large: false },
+        { path: "screenshots/demo.png", kind: "Added", is_binary: true, is_large: true },
       ],
-      isDirty: true,
-      stateMayBeInconsistent: false,
+      diff: null,
     });
 
     await expect(listDraftlineLargeChangedFiles()).resolves.toEqual(["screenshots/demo.png"]);
-    expect(mockInvoke).toHaveBeenCalledWith("draftline_workspace_summary");
+    expect(mockInvoke).toHaveBeenCalledWith("get_changes", {
+      request: { workspace_path: WORKSPACE },
+    });
   });
 
   it("maps Draftline version diffs to diff entries", async () => {
     mockInvoke.mockResolvedValueOnce({
-      fromVersion: "1111111111111111111111111111111111111111",
-      toVersion: "2222222222222222222222222222222222222222",
-      files: [
-        {
-          path: "intro.sk",
-          kind: "modified",
-        },
-      ],
+      from_version: "1111111111111111111111111111111111111111",
+      to_version: "2222222222222222222222222222222222222222",
+      files: [{ path: "intro.sk", kind: "Modified", is_binary: false, is_large: false }],
       patch: "@@",
     });
 
@@ -235,19 +302,22 @@ describe("draftlineVersioning", () => {
     )).resolves.toEqual([
       { path: "intro.sk", status: "modified", additions: 0, deletions: 0 },
     ]);
-    expect(mockInvoke).toHaveBeenCalledWith("draftline_diff_versions", {
-      from: "1111111111111111111111111111111111111111",
-      to: "2222222222222222222222222222222222222222",
+    expect(mockInvoke).toHaveBeenCalledWith("diff_versions", {
+      request: {
+        workspace_path: WORKSPACE,
+        from_version_id: "1111111111111111111111111111111111111111",
+        to_version_id: "2222222222222222222222222222222222222222",
+      },
     });
   });
 
   it("maps Draftline version-to-workspace diffs for previews", async () => {
     mockInvoke.mockResolvedValueOnce({
-      fromVersion: "1111111111111111111111111111111111111111",
-      toVersion: null,
+      from_version: "1111111111111111111111111111111111111111",
+      to_version: null,
       files: [
-        { path: "intro.sk", kind: "modified", isBinary: false },
-        { path: "screenshots/a.png", kind: "added", isBinary: true },
+        { path: "intro.sk", kind: "Modified", is_binary: false, is_large: false },
+        { path: "screenshots/a.png", kind: "Added", is_binary: true, is_large: false },
       ],
       patch: null,
     });
@@ -256,34 +326,44 @@ describe("draftlineVersioning", () => {
       { path: "intro.sk", status: "modified", additions: 0, deletions: 0 },
       { path: "screenshots/a.png", status: "added", additions: 0, deletions: 0 },
     ]);
-    expect(mockInvoke).toHaveBeenCalledWith("draftline_diff_version_to_workspace", {
-      version: "1111111111111111111111111111111111111111",
+    expect(mockInvoke).toHaveBeenCalledWith("diff_version_to_workspace", {
+      request: { workspace_path: WORKSPACE, version_id: "1111111111111111111111111111111111111111" },
     });
   });
 
   it("uses Draftline summary and save commands for the adapter lane", async () => {
     mockInvoke
       .mockResolvedValueOnce({
-        activeVariation: { id: "main", name: "main", displayLabel: "main", isCurrent: true },
-        variations: [{ id: "main", name: "main", displayLabel: "main", isCurrent: true }],
-        versions: [],
-        dirtyFiles: [{ path: "intro.sk", kind: "modified" }],
-        isDirty: true,
-        stateMayBeInconsistent: false,
+        files: [{ path: "intro.sk", kind: "Modified", is_binary: false, is_large: false }],
+        diff: null,
       })
-      .mockResolvedValueOnce({ id: "fedcba98765432100123456789abcdef01234567", label: "Save" });
+      .mockResolvedValueOnce({
+        version: version("fedcba98765432100123456789abcdef01234567", "Save", 1_700_000_300),
+        postconditions: { errors: [] },
+      });
 
     await expect(hasDraftlineChanges()).resolves.toBe(true);
     await expect(saveDraftlineVersion("Save")).resolves.toBe("fedcba98765432100123456789abcdef01234567");
-    expect(mockInvoke).toHaveBeenNthCalledWith(1, "draftline_workspace_summary");
-    expect(mockInvoke).toHaveBeenNthCalledWith(2, "draftline_save_version", { label: "Save" });
+    expect(mockInvoke).toHaveBeenNthCalledWith(1, "get_changes", {
+      request: { workspace_path: WORKSPACE },
+    });
+    expect(mockInvoke).toHaveBeenNthCalledWith(2, "save", {
+      request: { workspace_path: WORKSPACE, label: "Save" },
+    });
   });
 
   it("uses Draftline shelves for stash-compatible operations", async () => {
     mockInvoke
       .mockResolvedValueOnce({
-        id: "cutready-stash",
-        version: version("3333333333333333333333333333333333333333", "Shelved changes", 1_700_000_200),
+        files: [{ path: "intro.sk", kind: "Modified", is_binary: false, is_large: false }],
+        diff: null,
+      })
+      .mockResolvedValueOnce({
+        shelf: {
+          id: "cutready-stash",
+          version: version("3333333333333333333333333333333333333333", "Shelved changes", 1_700_000_200),
+        },
+        postconditions: { errors: [] },
       })
       .mockResolvedValueOnce([
         {
@@ -298,18 +378,34 @@ describe("draftlineVersioning", () => {
         },
       ])
       .mockResolvedValueOnce({
-        id: "cutready-stash",
-        version: version("3333333333333333333333333333333333333333", "Shelved changes", 1_700_000_200),
+        shelf: {
+          id: "cutready-stash",
+          version: version("3333333333333333333333333333333333333333", "Shelved changes", 1_700_000_200),
+        },
+        postconditions: { errors: [] },
       })
       .mockResolvedValueOnce(undefined);
 
     await expect(shelveDraftlineChanges()).resolves.toBeUndefined();
     await expect(hasDraftlineShelf()).resolves.toBe(true);
     await expect(popDraftlineShelf()).resolves.toBe(true);
-    expect(mockInvoke).toHaveBeenNthCalledWith(1, "draftline_shelve_changes", { name: "cutready-stash" });
-    expect(mockInvoke).toHaveBeenNthCalledWith(2, "draftline_list_shelves");
-    expect(mockInvoke).toHaveBeenNthCalledWith(3, "draftline_list_shelves");
-    expect(mockInvoke).toHaveBeenNthCalledWith(4, "draftline_apply_shelf", { id: "cutready-stash" });
-    expect(mockInvoke).toHaveBeenNthCalledWith(5, "draftline_delete_shelf", { id: "cutready-stash" });
+    expect(mockInvoke).toHaveBeenNthCalledWith(1, "get_changes", {
+      request: { workspace_path: WORKSPACE },
+    });
+    expect(mockInvoke).toHaveBeenNthCalledWith(2, "selected_shelve", {
+      request: { workspace_path: WORKSPACE, paths: ["intro.sk"], name: "cutready-stash" },
+    });
+    expect(mockInvoke).toHaveBeenNthCalledWith(3, "list_shelves", {
+      request: { workspace_path: WORKSPACE },
+    });
+    expect(mockInvoke).toHaveBeenNthCalledWith(4, "list_shelves", {
+      request: { workspace_path: WORKSPACE },
+    });
+    expect(mockInvoke).toHaveBeenNthCalledWith(5, "apply_shelf", {
+      request: { workspace_path: WORKSPACE, shelf_id: "cutready-stash" },
+    });
+    expect(mockInvoke).toHaveBeenNthCalledWith(6, "delete_shelf", {
+      request: { workspace_path: WORKSPACE, shelf_id: "cutready-stash" },
+    });
   });
 });

@@ -5,6 +5,7 @@ import { SnapshotDiffPanel } from "./SnapshotDiffPanel";
 import { SyncBar } from "./SyncBar";
 import { TimelineSelector } from "./TimelineSelector";
 import { RefreshCw, Search, Clock, Download, GitPullRequestArrow, X } from "lucide-react";
+import { useConfirmDialog } from "./ConfirmDialog";
 
 export function VersionHistory() {
   const graphNodes = useAppStore((s) => s.graphNodes);
@@ -26,9 +27,6 @@ export function VersionHistory() {
   const isMultiProject = useAppStore((s) => s.isMultiProject);
   const hasRemote = !!currentRemote;
 
-  const [pendingNavTarget, setPendingNavTarget] = useState<string | null>(null);
-  const [confirmDiscard, setConfirmDiscard] = useState(false);
-  const [discarding, setDiscarding] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [showSearch, setShowSearch] = useState(false);
   const [squashMode, setSquashMode] = useState(false);
@@ -80,6 +78,8 @@ export function VersionHistory() {
   const selectedHead = selectedNodes.find((node) => node.is_head);
   const selectedOldest = selectedNodes[selectedNodes.length - 1];
   const canSquash = selectedNodes.length >= 2 && !!selectedHead && !hasRemote && !isRewound;
+  const activeProjectName = currentProject?.name ?? "this project";
+  const { confirm, confirmationDialog } = useConfirmDialog();
 
   useEffect(() => {
     loadGraphData();
@@ -90,41 +90,24 @@ export function VersionHistory() {
 
   const handleNodeClick = useCallback(async (commitId: string, isHead: boolean) => {
     if (isHead) return;
-    const dirty = useAppStore.getState().isDirty;
-    if (dirty) {
-      setPendingNavTarget(commitId);
-      return;
-    }
     await navigateToSnapshot(commitId);
     // Force full refresh after navigation
     await loadGraphData();
     await loadTimelines();
   }, [navigateToSnapshot, loadGraphData, loadTimelines]);
 
-  const handleNavSave = useCallback(async () => {
-    const target = pendingNavTarget;
-    if (!target) return;
-    setPendingNavTarget(null);
-    useAppStore.setState({ pendingNavAfterSave: target, snapshotPromptOpen: true });
-  }, [pendingNavTarget]);
-
-  const handleNavDiscard = useCallback(async () => {
-    const target = pendingNavTarget;
-    if (!target) return;
-    setPendingNavTarget(null);
-    await navigateToSnapshot(target);
-    await loadGraphData();
-    await loadTimelines();
-  }, [pendingNavTarget, navigateToSnapshot, loadGraphData, loadTimelines]);
-
   const handleDiscard = useCallback(async () => {
-    setDiscarding(true);
+    const confirmed = await confirm({
+      title: "Discard active project changes?",
+      message: `This restores ${isMultiProject ? activeProjectName : "this project"} to the last saved snapshot. Unsaved edits will be lost.`,
+      confirmLabel: "Discard changes",
+      variant: "error",
+    });
+    if (!confirmed) return;
     await discardChanges();
-    setConfirmDiscard(false);
-    setDiscarding(false);
     await loadGraphData();
     await loadTimelines();
-  }, [discardChanges, loadGraphData, loadTimelines]);
+  }, [activeProjectName, confirm, discardChanges, isMultiProject, loadGraphData, loadTimelines]);
 
   const toggleSquashSelection = useCallback((commitId: string) => {
     setSelectedForSquash((prev) => {
@@ -159,7 +142,6 @@ export function VersionHistory() {
 
   const borderClass = sidebarPosition === "left" ? "border-l" : "border-r";
   const workspaceName = currentProject ? getPathBasename(currentProject.repo_root) : "workspace";
-  const activeProjectName = currentProject?.name ?? "this project";
 
   return (
     <div className={`flex flex-col h-full ${borderClass} border-[rgb(var(--color-border))]`}>
@@ -180,9 +162,9 @@ export function VersionHistory() {
           {timelines.length > 1 && <TimelineSelector />}
         </div>
         <div className="flex items-center gap-0.5">
-          {isDirty && !pendingNavTarget && (
+          {isDirty && (
             <button
-              onClick={() => setConfirmDiscard(true)}
+              onClick={() => void handleDiscard()}
               className="group/btn flex items-center gap-1 p-1 rounded text-[rgb(var(--color-text-secondary))] hover:text-error transition-colors"
               title="Discard active project changes"
             >
@@ -316,59 +298,6 @@ export function VersionHistory() {
         </div>
       )}
 
-      {/* Discard confirmation */}
-      {confirmDiscard && (
-        <div className="px-3 py-2 border-b border-error/20 bg-error/5">
-          <div className="text-[10px] font-medium text-error mb-1.5">
-            Discard changes in {isMultiProject ? activeProjectName : "this project"} since the last snapshot?
-          </div>
-          <div className="flex gap-1.5">
-            <button
-              onClick={handleDiscard}
-              disabled={discarding}
-              className="flex-1 px-2 py-1 rounded-md text-[10px] font-medium text-accent-fg bg-error hover:bg-error/80 disabled:opacity-40 transition-colors"
-            >
-              {discarding ? "Discarding..." : "Discard"}
-            </button>
-            <button
-              onClick={() => setConfirmDiscard(false)}
-              className="px-2 py-1 rounded-md text-[10px] text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] transition-colors"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Navigation prompt: dirty + clicking a different snapshot */}
-      {pendingNavTarget && (
-        <div className="px-3 py-2 border-b border-warning/20 bg-warning/5">
-          <div className="text-[10px] font-medium text-warning mb-1.5">
-            You have unsaved changes
-          </div>
-          <div className="flex gap-1.5">
-            <button
-              onClick={handleNavSave}
-              className="flex-1 px-2 py-1 rounded-md text-[10px] font-medium bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))] hover:bg-[rgb(var(--color-accent-hover))] transition-colors"
-            >
-              Save snapshot
-            </button>
-            <button
-              onClick={handleNavDiscard}
-              className="flex-1 px-2 py-1 rounded-md text-[10px] font-medium text-[rgb(var(--color-text-secondary))] hover:text-error border border-[rgb(var(--color-border))] hover:border-error/30 transition-colors"
-            >
-              Discard changes
-            </button>
-            <button
-              onClick={() => setPendingNavTarget(null)}
-              className="px-2 py-1 rounded-md text-[10px] text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] transition-colors"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* Active branch — linear snapshot list */}
       <div className="flex-1 overflow-y-auto">
         {activeNodes.length === 0 ? (
@@ -408,6 +337,7 @@ export function VersionHistory() {
 
       {/* Diff panel — shows file changes between two selected snapshots */}
       <SnapshotDiffPanel />
+      {confirmationDialog}
     </div>
   );
 }

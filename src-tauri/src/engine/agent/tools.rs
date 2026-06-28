@@ -228,8 +228,46 @@ pub fn encode_image_at_path(root: &Path, rel_path: &str) -> Option<ContentPart> 
 // Tool registry
 // ---------------------------------------------------------------------------
 
+#[cfg(test)]
+fn mutation_tool_names() -> &'static [&'static str] {
+    &[
+        "write_note",
+        "write_sketch",
+        "update_planning_row",
+        "set_row_visual",
+        "apply_row_visual_nudge",
+        "apply_row_visual_command",
+        "design_plan",
+        "write_storyboard",
+        "create_project",
+        "add_items_to_project",
+    ]
+}
+
+fn read_only_tool_names() -> &'static [&'static str] {
+    &[
+        "list_project_files",
+        "read_note",
+        "read_sketch",
+        "review_row_visual",
+        "read_storyboard",
+        "delegate_to_agent",
+        "fetch_url",
+        "search_web",
+        "recall_memory",
+    ]
+}
+
+fn is_read_only_tool(name: &str) -> bool {
+    read_only_tool_names().contains(&name)
+}
+
 /// All tools available to the AI assistant.
-pub fn all_tools(web_search_enabled: bool, project_workspace_tools_enabled: bool) -> Vec<Tool> {
+pub fn all_tools(
+    web_search_enabled: bool,
+    project_workspace_tools_enabled: bool,
+    mutation_tools_enabled: bool,
+) -> Vec<Tool> {
     let mut tools = vec![
         Tool::function(
             "list_project_files",
@@ -596,13 +634,20 @@ pub fn all_tools(web_search_enabled: bool, project_workspace_tools_enabled: bool
         );
     }
 
+    if !mutation_tools_enabled {
+        // Fail closed: review-mode chat only receives tools known to be read-only.
+        tools.retain(|tool| is_read_only_tool(&tool.function.name));
+    }
+
     tools
 }
 
-pub fn all_tools_for_agent(web_search_enabled: bool, agent_id: Option<&str>) -> Vec<Tool> {
+#[cfg(test)]
+fn all_tools_for_agent(web_search_enabled: bool, agent_id: Option<&str>) -> Vec<Tool> {
     all_tools(
         web_search_enabled,
         agent_id.is_some_and(|id| id.eq_ignore_ascii_case("writer")),
+        true,
     )
 }
 
@@ -753,6 +798,7 @@ pub fn execute_tool(
     project_root: &Path,
     vision_enabled: bool,
     project_workspace_tools_enabled: bool,
+    mutation_tools_enabled: bool,
 ) -> agentive::ToolOutput {
     let args: Value = agentive::parse_tool_args(&call.function.arguments).unwrap_or(json!({}));
     let start = std::time::Instant::now();
@@ -763,6 +809,13 @@ pub fn execute_tool(
         call.function.name,
         call.function.arguments.len()
     );
+
+    if !mutation_tools_enabled && !is_read_only_tool(&call.function.name) {
+        return agentive::ToolOutput::from(format!(
+            "Error: {} is disabled while AI apply behavior is set to review changes first.",
+            call.function.name
+        ));
+    }
 
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         match call.function.name.as_str() {
@@ -5060,7 +5113,7 @@ mod tests {
     fn elucim_agent_operation_schema_advertises_catalog_operations() {
         let previous = std::env::var_os("CUTREADY_ELUCIM_BRIDGE");
         std::env::set_var("CUTREADY_ELUCIM_BRIDGE", "1");
-        let tools = all_tools(false, false);
+        let tools = all_tools(false, false, true);
         if let Some(value) = previous {
             std::env::set_var("CUTREADY_ELUCIM_BRIDGE", value);
         } else {
@@ -5120,6 +5173,30 @@ mod tests {
     }
 
     #[test]
+    fn mutation_tools_can_be_removed_from_chat_tool_schema() {
+        let tools = all_tools(false, true, false);
+        let tool_names = tools
+            .iter()
+            .map(|tool| serde_json::to_value(tool).unwrap())
+            .filter_map(|tool| {
+                tool.pointer("/function/name")
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+            })
+            .collect::<Vec<_>>();
+
+        assert!(tool_names.contains(&"read_sketch".to_string()));
+        assert!(tool_names.contains(&"recall_memory".to_string()));
+        assert!(!tool_names.contains(&"save_memory".to_string()));
+        for name in mutation_tool_names() {
+            assert!(
+                !tool_names.iter().any(|tool_name| tool_name == name),
+                "{name} should not be offered when mutation tools are disabled"
+            );
+        }
+    }
+
+    #[test]
     fn non_writer_execution_rejects_project_workspace_tools() {
         let tmp = TempDir::new().unwrap();
         let call = ToolCall {
@@ -5131,9 +5208,27 @@ mod tests {
             },
         };
 
-        let output = execute_tool(&call, tmp.path(), false, false);
+        let output = execute_tool(&call, tmp.path(), false, false, true);
 
         assert!(output.text().contains("only available to the Writer agent"));
+    }
+
+    #[test]
+    fn disabled_mutation_tool_execution_is_rejected() {
+        let tmp = TempDir::new().unwrap();
+        let call = ToolCall {
+            id: "call-1".into(),
+            call_type: "function".into(),
+            function: agentive::FunctionCall {
+                name: "write_note".into(),
+                arguments: json!({ "path": "draft.md", "content": "nope" }).to_string(),
+            },
+        };
+
+        let output = execute_tool(&call, tmp.path(), false, true, false);
+
+        assert!(output.text().contains("disabled while AI apply behavior"));
+        assert!(!tmp.path().join("draft.md").exists());
     }
 
     #[test]

@@ -3,8 +3,8 @@ import type { GraphNode } from "../types/sketch";
 import { useAppStore } from "../stores/appStore";
 
 /* ── Layout constants ─────────────────────────────────────────────── */
-const ROW_H = 40;         // px per commit row
-const DIRTY_ROW_H = 28;   // px for dirty/ghost/alias indicator rows
+const ROW_H = 48;         // px per commit row
+const DIRTY_ROW_H = 32;   // px for dirty/ghost/alias indicator rows
 const LANE_W = 16;        // px between lane centers
 const GRAPH_PAD = 14;     // left padding to first lane center
 const NODE_R = 5;         // regular dot radius
@@ -445,23 +445,28 @@ export function SnapshotGraph({
                   : isHov ? "text-[rgb(var(--color-text))]"
                   : "text-[rgb(var(--color-text-secondary))]"
               }`}>{node.message}</div>
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="text-[10px] text-[rgb(var(--color-text-secondary))]/50">{fmtDate(node.timestamp)}</span>
+              <div className="flex min-w-0 items-center gap-1.5 overflow-hidden whitespace-nowrap">
+                <span className="shrink-0 text-[10px] text-[rgb(var(--color-text-secondary))]/50">{fmtDate(node.timestamp)}</span>
                 {/* Author — only show when remote is configured (collaborator context) */}
                 {currentRemote && node.author && (
-                  <span className="text-[9px] text-[rgb(var(--color-text-secondary))]/40" title={`by ${node.author}`}>
+                  <span className="min-w-0 max-w-[4.5rem] truncate text-[9px] text-[rgb(var(--color-text-secondary))]/40" title={`by ${node.author}`}>
                     {node.author}
                   </span>
                 )}
                 {hasMultipleTimelines && (
-                  <span className="text-[9px] px-1 py-px rounded-sm leading-tight"
+                  <span
+                    className="min-w-0 max-w-[6.75rem] truncate rounded-sm px-1 py-px text-[9px] leading-tight"
+                    title={tlLabel}
                     style={{ color, backgroundColor: `${color}15` }}>{tlLabel}</span>
                 )}
                 {nodeAliases && nodeAliases.map(a => {
                   const aInfo = timelineMap.get(a.timeline);
                   const aLabel = aInfo?.label ?? a.timeline;
                   return (
-                    <span key={a.timeline} className="text-[9px] px-1 py-px rounded-sm leading-tight text-[rgb(var(--color-text-secondary))]/50"
+                    <span
+                      key={a.timeline}
+                      className="min-w-0 max-w-[6rem] truncate rounded-sm px-1 py-px text-[9px] leading-tight text-[rgb(var(--color-text-secondary))]/50"
+                      title={aLabel}
                       style={{ backgroundColor: "rgb(var(--color-surface-alt))" }}>+{aLabel}</span>
                   );
                 })}

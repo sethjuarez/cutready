@@ -18,17 +18,23 @@ import {
   listDraftlineRemotes,
   listDraftlineTimelines,
   listDraftlineVersions,
-  previewDraftlineVersion,
   preflightDraftlineIncoming,
   preflightDraftlineMergeIncoming,
   mergeDraftlineIncoming,
+  mergeDraftlineIncomingWithResolutions,
   publishDraftlineChanges,
   popDraftlineShelf,
+  preflightDraftlineRenameVariation,
   restoreDraftlineVersionAsNewSave,
+  restoreDraftlineVersionAsNewSaveToVariation,
+  renameDraftlineVariation,
   saveDraftlineVersion,
+  setDraftlineWorkspacePath,
   shelveDraftlineChanges,
   squashDraftlineVersions,
   switchDraftlineVariation,
+  type DraftlineRestoreVersionTarget,
+  type DraftlineMergeIncomingToken,
 } from "../services/draftlineVersioning";
 import { recordActivityEntries } from "../services/telemetry";
 import { useToastStore } from "./toastStore";
@@ -186,7 +192,7 @@ export interface SidebarOrder {
 /** An open tab in the editor area. */
 export interface EditorTab {
   id: string;
-  type: "sketch" | "storyboard" | "note" | "history" | "asset" | "diff" | "agent-run" | "database";
+  type: "sketch" | "storyboard" | "note" | "history" | "snapshot-preview" | "asset" | "diff" | "agent-run" | "database";
   path: string;
   title: string;
 }
@@ -340,6 +346,8 @@ interface AppStoreState {
   snapshotPromptOpen: boolean;
   /** After saving a snapshot, navigate to this commit ID (used by nav-save flow). */
   pendingNavAfterSave: string | null;
+  /** After saving a snapshot, switch to this branch. */
+  pendingTimelineAfterSave: string | null;
   /** Whether there are unsaved changes since the last snapshot. */
   isDirty: boolean;
   /** List of changed files since last snapshot (for Changes panel). */
@@ -374,6 +382,10 @@ interface AppStoreState {
   mergeTarget: string | null;
   /** Conflict files from the merge engine (empty = clean merge). */
   mergeConflicts: ConflictFile[];
+  /** Draftline token for the currently displayed incoming conflict set. */
+  draftlineMergeToken: DraftlineMergeIncomingToken | null;
+  /** Remote that produced the currently displayed incoming conflict set. */
+  draftlineMergeRemote: string | null;
 
   // ── Diff ──────────────────────────────────────────────────
   /** Currently selected diff result (file changes between two snapshots). */
@@ -419,7 +431,7 @@ interface AppStoreState {
   /** Switch to a different view. */
   setView: (view: AppView) => void;
   /** Set sidebar width. */
-  setSidebarWidth: (width: number) => void;
+  setSidebarWidth: (width: number | ((current: number) => number)) => void;
   /** Toggle sidebar visibility. */
   toggleSidebar: () => void;
   /** Toggle output panel visibility. */
@@ -626,14 +638,24 @@ interface AppStoreState {
   checkRewound: () => Promise<void>;
   /** Navigate to any snapshot. Defers fork until commit. */
   navigateToSnapshot: (commitId: string) => Promise<void>;
+  /** Open a read-only snapshot preview tab. */
+  openSnapshotPreview: (commitId: string) => Promise<void>;
   /** Restore a snapshot as a new Draftline save. */
   restoreSnapshotAsNewSave: (commitId: string, label: string) => Promise<void>;
+  /** Restore a snapshot as a new Draftline save on a chosen variation. */
+  restoreSnapshotAsNewSaveToVariation: (
+    commitId: string,
+    label: string,
+    target: DraftlineRestoreVersionTarget,
+  ) => Promise<void>;
   /** Create a new timeline from a snapshot. */
   createTimeline: (fromCommitId: string, name: string) => Promise<void>;
   /** Load all timelines. */
   loadTimelines: () => Promise<void>;
   /** Switch to a different timeline. */
   switchTimeline: (name: string) => Promise<void>;
+  /** Rename the legacy Draftline master variation to main. */
+  renameLegacyMasterTimeline: () => Promise<void>;
   /** Delete a non-active timeline. */
   deleteTimeline: (name: string) => Promise<void>;
   /** Promote a fork timeline to become the new main. */
@@ -793,6 +815,60 @@ function clampOutputHeight(height: number) {
   return clamp(height, 72, maxHeightWithRemainder(72, Math.max(500, viewportHeight() - 220), 160));
 }
 
+function resetPersistenceState(): Pick<AppStoreState,
+  | "versions"
+  | "timelines"
+  | "graphNodes"
+  | "snapshotPromptOpen"
+  | "pendingNavAfterSave"
+  | "pendingTimelineAfterSave"
+  | "isDirty"
+  | "changedFiles"
+  | "hasStash"
+  | "isRewound"
+  | "currentRemote"
+  | "syncStatus"
+  | "isSyncing"
+  | "syncError"
+  | "incomingCommits"
+  | "shareUrl"
+  | "isMerging"
+  | "mergeSource"
+  | "mergeTarget"
+  | "mergeConflicts"
+  | "draftlineMergeToken"
+  | "draftlineMergeRemote"
+  | "diffResult"
+  | "diffSelection"
+> {
+  return {
+    versions: [],
+    timelines: [],
+    graphNodes: [],
+    snapshotPromptOpen: false,
+    pendingNavAfterSave: null,
+    pendingTimelineAfterSave: null,
+    isDirty: false,
+    changedFiles: [],
+    hasStash: false,
+    isRewound: false,
+    currentRemote: null,
+    syncStatus: null,
+    isSyncing: false,
+    syncError: null,
+    incomingCommits: [],
+    shareUrl: null,
+    isMerging: false,
+    mergeSource: null,
+    mergeTarget: null,
+    mergeConflicts: [],
+    draftlineMergeToken: null,
+    draftlineMergeRemote: null,
+    diffResult: null,
+    diffSelection: null,
+  };
+}
+
 export const useAppStore = create<AppStoreState>((set, get) => ({
   view: "home",
   currentProject: null,
@@ -848,6 +924,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   showSecondaryPanel: savedLayout.showSecondaryPanel ?? false,
   snapshotPromptOpen: false,
   pendingNavAfterSave: null,
+  pendingTimelineAfterSave: null,
   isDirty: false,
   changedFiles: [],
   saving: false,
@@ -863,6 +940,8 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   mergeSource: null,
   mergeTarget: null,
   mergeConflicts: [],
+  draftlineMergeToken: null,
+  draftlineMergeRemote: null,
   diffResult: null,
   diffSelection: null,
   sidebarOrder: null,
@@ -884,7 +963,8 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   clearError: () => set({ error: null }),
   setView: (view) => set({ view }),
   setSidebarWidth: (width) => {
-    const w = clampSidebarWidth(width);
+    const next = typeof width === "function" ? width(get().sidebarWidth) : width;
+    const w = clampSidebarWidth(next);
     set({ sidebarWidth: w });
     saveLayout({ sidebarWidth: w });
   },
@@ -972,7 +1052,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         get().openStoryboard(nextTab.path);
       } else if (nextTab?.type === "note") {
         get().openNote(nextTab.path);
-      } else if (nextTab?.type === "database" || nextTab?.type === "diff" || nextTab?.type === "history" || nextTab?.type === "asset" || nextTab?.type === "agent-run") {
+      } else if (nextTab?.type === "database" || nextTab?.type === "diff" || nextTab?.type === "history" || nextTab?.type === "snapshot-preview" || nextTab?.type === "asset" || nextTab?.type === "agent-run") {
         set({ activeSketchPath: null, activeSketch: null, activeStoryboardPath: null, activeStoryboard: null, activeNotePath: null, activeNoteContent: null, activeNoteLocked: false });
       }
     } else {
@@ -1033,7 +1113,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     } else if (tab.type === "note") {
       set({ activeSketchPath: null, activeSketch: null, activeStoryboardPath: null, activeStoryboard: null });
       get().openNote(tab.path);
-    } else if (tab.type === "history" || tab.type === "agent-run" || tab.type === "diff" || tab.type === "asset" || tab.type === "database") {
+    } else if (tab.type === "history" || tab.type === "snapshot-preview" || tab.type === "agent-run" || tab.type === "diff" || tab.type === "asset" || tab.type === "database") {
       set({ activeSketchPath: null, activeSketch: null, activeStoryboardPath: null, activeStoryboard: null, activeNotePath: null, activeNoteContent: null, activeNoteLocked: false });
     }
     get()._persistTabs();
@@ -1092,7 +1172,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     if (!tab) return;
     if (openTabs.length < 2) return;
     // Guard: only splittable types
-    if (tab.type === "history" || tab.type === "asset" || tab.type === "agent-run" || tab.type === "diff" || tab.type === "database") return;
+    if (tab.type === "history" || tab.type === "snapshot-preview" || tab.type === "asset" || tab.type === "agent-run" || tab.type === "diff" || tab.type === "database") return;
 
     // Remove from main
     const newOpenTabs = openTabs.filter((t) => t.id !== tabId);
@@ -1194,7 +1274,9 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     set({ loading: true });
     try {
       const project = await invoke<ProjectView>("create_project_folder", { path });
+      setDraftlineWorkspacePath(project.repo_root);
       set({
+        ...resetPersistenceState(),
         currentProject: project,
         view: "project",
         openTabs: [],
@@ -1219,6 +1301,12 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await get().loadStoryboards();
       await get().loadNotes();
       await get().loadSidebarOrder();
+      await get().loadVersions();
+      await get().loadTimelines();
+      await get().loadGraphData();
+      await get().checkDirty();
+      await get().checkRewound();
+      await get().checkStash();
     } catch (err) {
       console.error("Failed to create project:", err);
       set({ error: String(err) });
@@ -1231,7 +1319,9 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     set({ loading: true });
     try {
       const project = await invoke<ProjectView>("open_project_folder", { path });
+      setDraftlineWorkspacePath(project.repo_root);
       set({
+        ...resetPersistenceState(),
         currentProject: project,
         view: "project",
         openTabs: [],
@@ -1283,6 +1373,12 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
           get().loadChatSession(ws.chat_session_path).catch(() => {});
         }
       } catch { /* first launch or corrupted — ignore */ }
+      await get().loadVersions();
+      await get().loadTimelines();
+      await get().loadGraphData();
+      await get().checkDirty();
+      await get().checkRewound();
+      await get().checkStash();
       // Auto-detect remote and fetch in background (non-blocking)
       get().detectRemote().then(() => {
         if (get().currentRemote) {
@@ -1299,12 +1395,14 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
 
   closeProject: () => {
     invoke("close_project").catch(console.error);
+    setDraftlineWorkspacePath(null);
     localStorage.removeItem("cutready:lastProject");
     // Clear workspace settings
     import("../hooks/useSettings").then(({ useSettingsStore }) => {
       useSettingsStore.getState()._clearWorkspaceSettings();
     });
     set({
+      ...resetPersistenceState(),
       currentProject: null,
       projects: [],
       isMultiProject: false,
@@ -1327,23 +1425,6 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       pendingChatPrompt: null,
       activityLog: [],
       debugLog: [],
-      versions: [],
-      timelines: [],
-      graphNodes: [],
-      snapshotPromptOpen: false,
-      isDirty: false,
-      changedFiles: [],
-      hasStash: false,
-      isRewound: false,
-      currentRemote: null,
-      isSyncing: false,
-      syncError: null,
-      isMerging: false,
-      mergeSource: null,
-      mergeTarget: null,
-      mergeConflicts: [],
-      diffResult: null,
-      diffSelection: null,
       sidebarOrder: null,
       openTabs: [],
       activeTabId: null,
@@ -1386,7 +1467,9 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       }).catch(() => {});
 
       const project = await invoke<ProjectView>("switch_project", { projectPath });
+      setDraftlineWorkspacePath(project.repo_root);
       set({
+        ...resetPersistenceState(),
         currentProject: project,
         openTabs: [],
         activeTabId: null,
@@ -1407,6 +1490,12 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await get().loadStoryboards();
       await get().loadNotes();
       await get().loadSidebarOrder();
+      await get().loadVersions();
+      await get().loadTimelines();
+      await get().loadGraphData();
+      await get().checkDirty();
+      await get().checkRewound();
+      await get().checkStash();
     } catch (err) {
       console.error("Failed to switch project:", err);
       set({ error: String(err) });
@@ -2103,6 +2192,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       });
       globalThis.setTimeout(() => clearSuppressedEditorFlushes(suppressedPaths), 100);
       await get().checkDirty();
+      set({ syncError: null });
     } catch (err) {
       clearSuppressedEditorFlushes(suppressedPaths);
       console.error("Failed to discard changes:", err);
@@ -2250,11 +2340,20 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   },
 
   navigateToSnapshot: async (commitId) => {
+    await get().openSnapshotPreview(commitId);
+  },
+
+  openSnapshotPreview: async (commitId) => {
     try {
-      const entries = await previewDraftlineVersion(commitId);
-      set({ diffResult: entries, diffSelection: { from: commitId, to: "preview" } });
+      const node = get().graphNodes.find((entry) => entry.id === commitId);
+      const label = node?.message?.trim() || commitId.slice(0, 7);
+      get().openTab({
+        type: "snapshot-preview",
+        path: `snapshot:${commitId}`,
+        title: `Snapshot: ${label}`,
+      });
       useToastStore.getState().show(
-        "Previewed snapshot contents without changing your workspace.",
+        "Opened snapshot preview without changing your workspace.",
         5000,
         "info",
       );
@@ -2279,6 +2378,26 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     } catch (err) {
       console.error("Failed to restore snapshot:", err);
       useToastStore.getState().show(`Restore failed: ${err}`, 5000, "error");
+    }
+  },
+
+  restoreSnapshotAsNewSaveToVariation: async (commitId, label, target) => {
+    try {
+      const result = await restoreDraftlineVersionAsNewSaveToVariation(commitId, label, target);
+      set({ diffResult: null, diffSelection: null, isDirty: false, changedFiles: [] });
+      await get().loadSketches();
+      await get().loadStoryboards();
+      await get().loadNotes();
+      await get().loadVersions();
+      await get().loadTimelines();
+      await get().loadGraphData();
+      await get().checkDirty();
+      const targetLabel = result.target_variation.metadata.label ?? result.target_variation.name;
+      useToastStore.getState().show(`Restored snapshot on ${targetLabel}.`, 4000, "success");
+    } catch (err) {
+      console.error("Failed to restore snapshot:", err);
+      useToastStore.getState().show(`Restore failed: ${err}`, 5000, "error");
+      throw err;
     }
   },
 
@@ -2324,6 +2443,29 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     } catch (err) {
       console.error("Failed to switch timeline:", err);
       useToastStore.getState().show(`Switch failed: ${err}`, 5000, "error");
+    }
+  },
+
+  renameLegacyMasterTimeline: async () => {
+    const timelines = get().timelines;
+    const hasMaster = timelines.some((timeline) => timeline.name === "master");
+    const hasMain = timelines.some((timeline) => timeline.name === "main");
+    if (!hasMaster || hasMain) {
+      useToastStore.getState().show("No legacy master branch is available to rename.", 4000, "info");
+      return;
+    }
+
+    try {
+      const preflight = await preflightDraftlineRenameVariation("master", "main");
+      await renameDraftlineVariation("master", "main", preflight.token);
+      await get().loadTimelines();
+      await get().loadVersions();
+      await get().loadGraphData();
+      await get().checkDirty();
+      useToastStore.getState().show("Renamed Draftline branch master to main.", 5000, "success");
+    } catch (err) {
+      console.error("Failed to rename Draftline branch:", err);
+      useToastStore.getState().show(`Rename failed: ${err}`, 5000, "error");
     }
   },
 
@@ -2397,12 +2539,18 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     try {
       const remotes = await listDraftlineRemotes();
       const info = remotes[0] ?? null;
-      set({ currentRemote: info ?? null });
+      set({
+        currentRemote: info ?? null,
+        syncStatus: null,
+        incomingCommits: [],
+        syncError: null,
+        shareUrl: null,
+      });
       if (info) {
         await get().refreshSyncStatus();
       }
     } catch {
-      set({ currentRemote: null });
+      set({ currentRemote: null, syncStatus: null, incomingCommits: [], syncError: null, shareUrl: null });
     }
   },
 
@@ -2512,10 +2660,24 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
             useToastStore.getState().show("Incoming saves merged.", 4000, "success");
             return;
           }
-          const reason = mergeReport.conflicts.length > 0
-            ? "Incoming saves have conflicts. Manual Draftline conflict resolution is available in the backend but the CutReady conflict UI is not wired to it yet."
-            : "Incoming saves cannot be merged safely right now.";
-          set({ syncError: reason, syncStatus: { ahead: mergeReport.syncStatus.ahead, behind: mergeReport.syncStatus.behind } });
+          if (mergeReport.conflicts.length > 0 && mergeReport.token) {
+            set({
+              isMerging: true,
+              mergeSource: currentRemote.name,
+              mergeTarget: "incoming",
+              mergeConflicts: mergeReport.conflicts,
+              draftlineMergeToken: mergeReport.token,
+              draftlineMergeRemote: currentRemote.name,
+              syncError: null,
+              syncStatus: { ahead: mergeReport.syncStatus.ahead, behind: mergeReport.syncStatus.behind },
+            });
+            useToastStore.getState().show("Incoming saves need conflict resolution.", 5000, "info");
+            return;
+          }
+          set({
+            syncError: "Incoming saves cannot be merged safely right now.",
+            syncStatus: { ahead: mergeReport.syncStatus.ahead, behind: mergeReport.syncStatus.behind },
+          });
           return;
         }
         const reason = preflight.dirtyFiles.length > 0
@@ -2651,11 +2813,38 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   },
 
   applyMergeResolution: async (resolutions) => {
-    const { mergeSource, mergeTarget } = get();
-    if (!mergeSource || !mergeTarget) throw new Error("No merge in progress");
+    const { draftlineMergeToken, draftlineMergeRemote } = get();
+    if (!draftlineMergeToken || !draftlineMergeRemote) throw new Error("No Draftline merge in progress");
 
-    void resolutions;
-    throw new Error("Draftline conflict resolution UI is not wired yet.");
+    const commitId = await mergeDraftlineIncomingWithResolutions(
+      draftlineMergeToken,
+      "Resolve incoming saves",
+      resolutions.map((resolution) => ({
+        path: resolution.path,
+        field_path: null,
+        choice: { kind: "use_content", content: resolution.content },
+      })),
+      draftlineMergeRemote,
+    );
+    set({
+      isMerging: false,
+      mergeSource: null,
+      mergeTarget: null,
+      mergeConflicts: [],
+      draftlineMergeToken: null,
+      draftlineMergeRemote: null,
+    });
+    await get().loadSketches();
+    await get().loadStoryboards();
+    await get().loadNotes();
+    await get().refreshSyncStatus();
+    await get().refreshIncomingCommits();
+    await get().loadVersions();
+    await get().loadGraphData();
+    await get().loadTimelines();
+    await get().checkDirty();
+    useToastStore.getState().show("Incoming saves merged.", 4000, "success");
+    return commitId;
   },
 
   cancelMerge: () => {
@@ -2664,6 +2853,8 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       mergeSource: null,
       mergeTarget: null,
       mergeConflicts: [],
+      draftlineMergeToken: null,
+      draftlineMergeRemote: null,
     });
   },
 

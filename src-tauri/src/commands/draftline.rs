@@ -9,8 +9,8 @@ use draftline::{
     ContributorProfile, HistoryEntry, MergeConflictResolution, MergeIncomingReport,
     MergeIncomingResult, MergeIncomingToken, MergeResolutionChoice, PreflightReport, PreviewFile,
     RemoteCredential, RemoteCredentialRequest, RemoteEndpoint, Shelf, SyncState, SyncStatus,
-    Variation, VariationId, VariationMetadata, VariationSummary, Version, VersionDiff, VersionId,
-    VersionPreview, WorkspaceSummary,
+    Variation, VariationId, VariationMetadata, VariationRenamePreflight, VariationSummary, Version,
+    VersionDiff, VersionId, VersionPreview, WorkspaceSummary,
 };
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, State};
@@ -305,7 +305,7 @@ pub enum DraftlineSwitchPolicyInput {
 fn draftline_project_root(state: &AppState) -> Result<PathBuf, String> {
     let current = state.current_project.lock().map_err(|e| e.to_string())?;
     let view = current.as_ref().ok_or("No project is currently open")?;
-    Ok(view.root.clone())
+    Ok(view.repo_root.clone())
 }
 
 fn open_adapter(state: &AppState) -> Result<CutReadyDraftlineAdapter, String> {
@@ -776,6 +776,455 @@ pub async fn clone_from_url(url: String, dest: String) -> Result<(), String> {
     CutReadyDraftlineAdapter::clone_project_with_options(&url, &dest_path, &mut options)
         .map(|_| ())
         .map_err(|error| error.to_string())
+}
+
+fn context_for_workspace(
+    workspace_path: &Path,
+    app: AppHandle,
+) -> contract::TauriCommandResult<contract::DraftlineCommandContext<'static>> {
+    build_draftline_context(workspace_path, Some(app)).map_err(|message| {
+        contract::TauriCommandError {
+            code: "cutready_context_error".into(),
+            message,
+            details: None,
+        }
+    })
+}
+
+#[auditaur_command(skip_all)]
+pub async fn open_workspace(
+    request: contract::WorkspaceRequest,
+    app: AppHandle,
+) -> contract::TauriCommandResult<contract::WorkspaceOpenResult> {
+    let context = context_for_workspace(&request.workspace_path, app)?;
+    contract::into_tauri_result(contract::open_workspace_with_context(&context, request))
+}
+
+#[auditaur_command(skip_all)]
+pub async fn clone_workspace(
+    request: contract::CloneWorkspaceRequest,
+    app: AppHandle,
+    lock: State<'_, ProjectLock>,
+) -> contract::TauriCommandResult<contract::WorkspaceOpenResult> {
+    let _guard = lock.0.lock().await;
+    let mut context = context_for_workspace(&request.workspace_path, app)?;
+    contract::into_tauri_result(contract::clone_workspace_with_context(
+        &mut context,
+        request,
+    ))
+}
+
+#[auditaur_command(skip_all)]
+pub async fn adopt_workspace(
+    request: contract::WorkspaceRequest,
+    app: AppHandle,
+    lock: State<'_, ProjectLock>,
+) -> contract::TauriCommandResult<contract::AdoptWorkspaceResult> {
+    let _guard = lock.0.lock().await;
+    let mut context = context_for_workspace(&request.workspace_path, app)?;
+    contract::into_tauri_result(contract::adopt_workspace_with_context(
+        &mut context,
+        request,
+    ))
+}
+
+#[auditaur_command(skip_all)]
+pub async fn inspect_workspace(
+    request: contract::WorkspaceRequest,
+    app: AppHandle,
+) -> contract::TauriCommandResult<contract::WorkspaceDiagnostics> {
+    let context = context_for_workspace(&request.workspace_path, app)?;
+    contract::into_tauri_result(contract::inspect_workspace_with_context(&context, request))
+}
+
+#[auditaur_command(skip_all)]
+pub async fn verify_workspace(
+    request: contract::WorkspaceRequest,
+    app: AppHandle,
+) -> contract::TauriCommandResult<draftline::WorkspaceVerification> {
+    let context = context_for_workspace(&request.workspace_path, app)?;
+    contract::into_tauri_result(contract::verify_workspace_with_context(&context, request))
+}
+
+#[auditaur_command(skip_all)]
+pub async fn list_variations(
+    request: contract::WorkspaceRequest,
+    app: AppHandle,
+) -> contract::TauriCommandResult<Vec<VariationSummary>> {
+    let context = context_for_workspace(&request.workspace_path, app)?;
+    contract::into_tauri_result(contract::list_variations_with_context(&context, request))
+}
+
+#[auditaur_command(skip_all)]
+pub async fn preflight_rename_variation(
+    request: contract::RenameVariationRequest,
+    app: AppHandle,
+) -> contract::TauriCommandResult<VariationRenamePreflight> {
+    let context = context_for_workspace(&request.workspace_path, app)?;
+    contract::into_tauri_result(contract::preflight_rename_variation_with_context(
+        &context, request,
+    ))
+}
+
+#[auditaur_command(skip_all)]
+pub async fn rename_variation(
+    request: contract::RenameVariationRequest,
+    app: AppHandle,
+    lock: State<'_, ProjectLock>,
+) -> contract::TauriCommandResult<contract::RenameVariationResult> {
+    let _guard = lock.0.lock().await;
+    let mut context = context_for_workspace(&request.workspace_path, app)?;
+    contract::into_tauri_result(contract::rename_variation_with_context(
+        &mut context,
+        request,
+    ))
+}
+
+#[auditaur_command(skip_all)]
+pub async fn list_support_refs(
+    request: contract::ListSupportRefsRequest,
+    app: AppHandle,
+) -> contract::TauriCommandResult<Vec<draftline::SupportRef>> {
+    let context = context_for_workspace(&request.workspace_path, app)?;
+    contract::into_tauri_result(contract::list_support_refs_with_context(&context, request))
+}
+
+#[auditaur_command(skip_all)]
+pub async fn get_changes(
+    request: contract::WorkspaceRequest,
+    app: AppHandle,
+) -> contract::TauriCommandResult<ChangeSet> {
+    let context = context_for_workspace(&request.workspace_path, app)?;
+    contract::into_tauri_result(contract::get_changes_with_context(&context, request))
+}
+
+#[auditaur_command(skip_all)]
+pub async fn get_history(
+    request: contract::WorkspaceRequest,
+    app: AppHandle,
+) -> contract::TauriCommandResult<Vec<HistoryEntry>> {
+    let context = context_for_workspace(&request.workspace_path, app)?;
+    contract::into_tauri_result(contract::get_history_with_context(&context, request))
+}
+
+#[auditaur_command(skip_all)]
+pub async fn get_full_history(
+    request: contract::WorkspaceRequest,
+    app: AppHandle,
+) -> contract::TauriCommandResult<Vec<HistoryEntry>> {
+    let context = context_for_workspace(&request.workspace_path, app)?;
+    contract::into_tauri_result(contract::get_full_history_with_context(&context, request))
+}
+
+#[auditaur_command(skip_all)]
+pub async fn diff_versions(
+    request: contract::DiffVersionsRequest,
+    app: AppHandle,
+) -> contract::TauriCommandResult<VersionDiff> {
+    let context = context_for_workspace(&request.workspace_path, app)?;
+    contract::into_tauri_result(contract::diff_versions_with_context(&context, request))
+}
+
+#[auditaur_command(skip_all)]
+pub async fn diff_version_to_workspace(
+    request: contract::VersionRequest,
+    app: AppHandle,
+) -> contract::TauriCommandResult<VersionDiff> {
+    let context = context_for_workspace(&request.workspace_path, app)?;
+    contract::into_tauri_result(contract::diff_version_to_workspace_with_context(
+        &context, request,
+    ))
+}
+
+#[auditaur_command(skip_all)]
+pub async fn diff_workspace_file(
+    request: contract::CurrentFileRequest,
+    app: AppHandle,
+) -> contract::TauriCommandResult<Option<draftline::CurrentFileDiff>> {
+    let context = context_for_workspace(&request.workspace_path, app)?;
+    contract::into_tauri_result(contract::diff_workspace_file_with_context(
+        &context, request,
+    ))
+}
+
+#[auditaur_command(skip_all)]
+pub async fn preview_version(
+    request: contract::VersionRequest,
+    app: AppHandle,
+) -> contract::TauriCommandResult<VersionPreview> {
+    let context = context_for_workspace(&request.workspace_path, app)?;
+    contract::into_tauri_result(contract::preview_version_with_context(&context, request))
+}
+
+#[auditaur_command(skip_all)]
+pub async fn preview_version_file(
+    request: contract::PreviewVersionFileRequest,
+    app: AppHandle,
+) -> contract::TauriCommandResult<Option<PreviewFile>> {
+    let context = context_for_workspace(&request.workspace_path, app)?;
+    contract::into_tauri_result(contract::preview_version_file_with_context(
+        &context, request,
+    ))
+}
+
+#[auditaur_command(skip_all)]
+pub async fn preview_workspace_file(
+    request: contract::CurrentFileRequest,
+    app: AppHandle,
+) -> contract::TauriCommandResult<Option<draftline::CurrentFilePreview>> {
+    let context = context_for_workspace(&request.workspace_path, app)?;
+    contract::into_tauri_result(contract::preview_workspace_file_with_context(
+        &context, request,
+    ))
+}
+
+#[auditaur_command(skip_all)]
+pub async fn restore_version_as_new_save(
+    request: contract::RestoreVersionRequest,
+    app: AppHandle,
+    lock: State<'_, ProjectLock>,
+) -> contract::TauriCommandResult<contract::RestoreVersionResult> {
+    let _guard = lock.0.lock().await;
+    let mut context = context_for_workspace(&request.workspace_path, app)?;
+    contract::into_tauri_result(contract::restore_version_as_new_save_with_context(
+        &mut context,
+        request,
+    ))
+}
+
+#[auditaur_command(skip_all)]
+pub async fn restore_version_as_new_save_to_variation(
+    request: contract::TargetedRestoreVersionRequest,
+    app: AppHandle,
+    lock: State<'_, ProjectLock>,
+) -> contract::TauriCommandResult<contract::TargetedRestoreVersionCommandResult> {
+    let _guard = lock.0.lock().await;
+    let mut context = context_for_workspace(&request.workspace_path, app)?;
+    contract::into_tauri_result(contract::restore_version_as_new_save_to_variation_with_context(
+        &mut context,
+        request,
+    ))
+}
+
+#[auditaur_command(skip_all)]
+pub async fn save(
+    request: contract::SaveRequest,
+    app: AppHandle,
+    lock: State<'_, ProjectLock>,
+) -> contract::TauriCommandResult<contract::SaveResult> {
+    let _guard = lock.0.lock().await;
+    let mut context = context_for_workspace(&request.workspace_path, app)?;
+    contract::into_tauri_result(contract::save_with_context(&mut context, request))
+}
+
+#[auditaur_command(skip_all)]
+pub async fn list_shelves(
+    request: contract::WorkspaceRequest,
+    app: AppHandle,
+) -> contract::TauriCommandResult<Vec<Shelf>> {
+    let context = context_for_workspace(&request.workspace_path, app)?;
+    contract::into_tauri_result(contract::list_shelves_with_context(&context, request))
+}
+
+#[auditaur_command(skip_all)]
+pub async fn apply_shelf(
+    request: contract::ShelfRequest,
+    app: AppHandle,
+    lock: State<'_, ProjectLock>,
+) -> contract::TauriCommandResult<contract::ApplyShelfCommandResult> {
+    let _guard = lock.0.lock().await;
+    let mut context = context_for_workspace(&request.workspace_path, app)?;
+    contract::into_tauri_result(contract::apply_shelf_with_context(&mut context, request))
+}
+
+#[auditaur_command(skip_all)]
+pub async fn delete_shelf(
+    request: contract::ShelfRequest,
+    app: AppHandle,
+    lock: State<'_, ProjectLock>,
+) -> contract::TauriCommandResult<contract::DeleteShelfResult> {
+    let _guard = lock.0.lock().await;
+    let mut context = context_for_workspace(&request.workspace_path, app)?;
+    contract::into_tauri_result(contract::delete_shelf_with_context(&mut context, request))
+}
+
+#[auditaur_command(skip_all)]
+pub async fn selected_save(
+    request: contract::SelectedSaveRequest,
+    app: AppHandle,
+    lock: State<'_, ProjectLock>,
+) -> contract::TauriCommandResult<contract::SelectedSaveResult> {
+    let _guard = lock.0.lock().await;
+    let mut context = context_for_workspace(&request.workspace_path, app)?;
+    contract::into_tauri_result(contract::selected_save_with_context(&mut context, request))
+}
+
+#[auditaur_command(skip_all)]
+pub async fn selected_shelve(
+    request: contract::SelectedShelveRequest,
+    app: AppHandle,
+    lock: State<'_, ProjectLock>,
+) -> contract::TauriCommandResult<contract::SelectedShelveResult> {
+    let _guard = lock.0.lock().await;
+    let mut context = context_for_workspace(&request.workspace_path, app)?;
+    contract::into_tauri_result(contract::selected_shelve_with_context(
+        &mut context,
+        request,
+    ))
+}
+
+#[auditaur_command(skip_all)]
+pub async fn selected_discard(
+    request: contract::SelectedDiscardRequest,
+    app: AppHandle,
+    lock: State<'_, ProjectLock>,
+) -> contract::TauriCommandResult<contract::SelectedDiscardResult> {
+    let _guard = lock.0.lock().await;
+    let mut context = context_for_workspace(&request.workspace_path, app)?;
+    contract::into_tauri_result(contract::selected_discard_with_context(
+        &mut context,
+        request,
+    ))
+}
+
+#[auditaur_command(skip_all)]
+pub async fn list_remotes(
+    request: contract::WorkspaceRequest,
+    app: AppHandle,
+) -> contract::TauriCommandResult<Vec<RemoteEndpoint>> {
+    let context = context_for_workspace(&request.workspace_path, app)?;
+    contract::into_tauri_result(contract::list_remotes_with_context(&context, request))
+}
+
+#[auditaur_command(skip_all)]
+pub async fn list_remote_variations(
+    request: contract::RemoteRequest,
+    app: AppHandle,
+    lock: State<'_, ProjectLock>,
+) -> contract::TauriCommandResult<Vec<draftline::RemoteVariation>> {
+    let _guard = lock.0.lock().await;
+    let mut context = context_for_workspace(&request.workspace_path, app)?;
+    contract::into_tauri_result(contract::list_remote_variations_with_context(
+        &mut context,
+        request,
+    ))
+}
+
+#[auditaur_command(skip_all)]
+pub async fn remote_variation_diagnostics(
+    request: contract::RemoteRequest,
+    app: AppHandle,
+    lock: State<'_, ProjectLock>,
+) -> contract::TauriCommandResult<draftline::RemoteVariationDiagnostics> {
+    let _guard = lock.0.lock().await;
+    let mut context = context_for_workspace(&request.workspace_path, app)?;
+    contract::into_tauri_result(contract::remote_variation_diagnostics_with_context(
+        &mut context,
+        request,
+    ))
+}
+
+#[auditaur_command(skip_all)]
+pub async fn adopt_remote_variation(
+    request: contract::RemoteVariationRequest,
+    app: AppHandle,
+    lock: State<'_, ProjectLock>,
+) -> contract::TauriCommandResult<contract::AdoptRemoteVariationResult> {
+    let _guard = lock.0.lock().await;
+    let mut context = context_for_workspace(&request.workspace_path, app)?;
+    contract::into_tauri_result(contract::adopt_remote_variation_with_context(
+        &mut context,
+        request,
+    ))
+}
+
+#[auditaur_command(skip_all)]
+pub async fn fetch_remote(
+    request: contract::RemoteRequest,
+    app: AppHandle,
+    lock: State<'_, ProjectLock>,
+) -> contract::TauriCommandResult<contract::FetchRemoteResult> {
+    let _guard = lock.0.lock().await;
+    let mut context = context_for_workspace(&request.workspace_path, app)?;
+    contract::into_tauri_result(contract::fetch_remote_with_context(&mut context, request))
+}
+
+#[auditaur_command(skip_all)]
+pub async fn publish_current_variation(
+    request: contract::PublishCurrentVariationRequest,
+    app: AppHandle,
+    lock: State<'_, ProjectLock>,
+) -> contract::TauriCommandResult<contract::PublishCurrentVariationResult> {
+    let _guard = lock.0.lock().await;
+    let mut context = context_for_workspace(&request.workspace_path, app)?;
+    contract::into_tauri_result(contract::publish_current_variation_with_context(
+        &mut context,
+        request,
+    ))
+}
+
+#[auditaur_command(skip_all)]
+pub async fn preflight_apply_incoming(
+    request: contract::RemoteRequest,
+    app: AppHandle,
+    lock: State<'_, ProjectLock>,
+) -> contract::TauriCommandResult<ApplyIncomingReport> {
+    let _guard = lock.0.lock().await;
+    let mut context = context_for_workspace(&request.workspace_path, app)?;
+    contract::into_tauri_result(contract::preflight_apply_incoming_with_context(
+        &mut context,
+        request,
+    ))
+}
+
+#[auditaur_command(skip_all)]
+pub async fn apply_incoming(
+    request: contract::RemoteRequest,
+    app: AppHandle,
+    lock: State<'_, ProjectLock>,
+) -> contract::TauriCommandResult<contract::ApplyIncomingCommandResult> {
+    let _guard = lock.0.lock().await;
+    let mut context = context_for_workspace(&request.workspace_path, app)?;
+    contract::into_tauri_result(contract::apply_incoming_with_context(&mut context, request))
+}
+
+#[auditaur_command(skip_all)]
+pub async fn preflight_merge_incoming(
+    request: contract::RemoteRequest,
+    app: AppHandle,
+    lock: State<'_, ProjectLock>,
+) -> contract::TauriCommandResult<MergeIncomingReport> {
+    let _guard = lock.0.lock().await;
+    let mut context = context_for_workspace(&request.workspace_path, app)?;
+    contract::into_tauri_result(contract::preflight_merge_incoming_with_context(
+        &mut context,
+        request,
+    ))
+}
+
+#[auditaur_command(skip_all)]
+pub async fn merge_incoming(
+    request: contract::MergeIncomingRequest,
+    app: AppHandle,
+    lock: State<'_, ProjectLock>,
+) -> contract::TauriCommandResult<contract::MergeIncomingCommandResult> {
+    let _guard = lock.0.lock().await;
+    let mut context = context_for_workspace(&request.workspace_path, app)?;
+    contract::into_tauri_result(contract::merge_incoming_with_context(&mut context, request))
+}
+
+#[auditaur_command(skip_all)]
+pub async fn merge_incoming_with_resolutions(
+    request: contract::MergeIncomingWithResolutionsRequest,
+    app: AppHandle,
+    lock: State<'_, ProjectLock>,
+) -> contract::TauriCommandResult<contract::MergeIncomingCommandResult> {
+    let _guard = lock.0.lock().await;
+    let mut context = context_for_workspace(&request.workspace_path, app)?;
+    contract::into_tauri_result(contract::merge_incoming_with_resolutions_with_context(
+        &mut context,
+        request,
+    ))
 }
 
 fn redact_remote_url_credentials(url: &str) -> String {

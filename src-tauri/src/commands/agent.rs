@@ -405,6 +405,7 @@ pub async fn agent_chat_with_tools(
     agent_prompts: Option<std::collections::HashMap<String, String>>,
     agent_id: Option<String>,
     emit_events: Option<bool>,
+    allow_mutation_tools: Option<bool>,
 ) -> Result<AgentChatResult, String> {
     use tauri::Emitter;
 
@@ -443,6 +444,7 @@ pub async fn agent_chat_with_tools(
     let vision_mode = config.vision_mode.clone().unwrap_or_else(|| "off".into());
     let discovered_vision_support = config.model_supports_vision;
     let search_enabled = config.web_access.as_deref() == Some("enabled");
+    let mutation_tools_enabled = allow_mutation_tools.unwrap_or(false);
     let provider_name = config.provider.clone();
     let configured_provider_name = config.provider_name.clone();
     let configured_provider_id = config.provider_id.clone();
@@ -481,6 +483,7 @@ pub async fn agent_chat_with_tools(
                     "reported_context": reported_context,
                     "vision_enabled": vision.enabled,
                     "web_search_enabled": web_access.search_enabled,
+                    "mutation_tools_enabled": mutation_tools_enabled,
                     "agent_prompts": prompts.len(),
                     "agent_id": &agent_id,
                 }),
@@ -509,7 +512,7 @@ pub async fn agent_chat_with_tools(
         }
     };
     log::info!(
-        "[agent_chat_with_tools] start run_id={} agent={} provider={} model={} messages={} chars={} budget={}chars reported_context={:?} vision={} web_search={} prompts={}",
+        "[agent_chat_with_tools] start run_id={} agent={} provider={} model={} messages={} chars={} budget={}chars reported_context={:?} vision={} web_search={} mutation_tools={} prompts={}",
         run_id,
         agent_id,
         provider_name,
@@ -520,6 +523,7 @@ pub async fn agent_chat_with_tools(
         reported_context,
         vision.enabled,
         web_access.search_enabled,
+        mutation_tools_enabled,
         prompts.len()
     );
     crate::util::trace::emit(
@@ -537,6 +541,7 @@ pub async fn agent_chat_with_tools(
             "reported_context": reported_context,
             "vision_enabled": vision.enabled,
             "web_search_enabled": web_access.search_enabled,
+            "mutation_tools_enabled": mutation_tools_enabled,
             "agent_prompts": prompts.len(),
             "agent_id": &agent_id,
         }),
@@ -555,6 +560,7 @@ pub async fn agent_chat_with_tools(
         &steering,
         &vision,
         &web_access,
+        mutation_tools_enabled,
         Some(run_id.clone()),
         agent_state.clone(),
         move |event: AgentEvent| {

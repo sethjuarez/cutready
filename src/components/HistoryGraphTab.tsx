@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeftRight, ArrowDown, ArrowRight, Maximize2, Minus, Plus } from "lucide-react";
 import { useAppStore } from "../stores/appStore";
 import type { GraphNode, TimelineInfo } from "../types/sketch";
+import { UnsavedWorkspaceDialog } from "./UnsavedWorkspaceDialog";
 
 /**
  * HistoryGraphTab — Full DAG visualization using topological sort + git-style
@@ -243,6 +244,8 @@ export function HistoryGraphTab() {
   const loadTimelines = useAppStore((s) => s.loadTimelines);
   const navigateToSnapshot = useAppStore((s) => s.navigateToSnapshot);
   const switchTimeline = useAppStore((s) => s.switchTimeline);
+  const isDirty = useAppStore((s) => s.isDirty);
+  const discardChanges = useAppStore((s) => s.discardChanges);
 
   const svgRef = useRef<SVGSVGElement>(null);
   const gRef = useRef<SVGGElement>(null);
@@ -252,6 +255,7 @@ export function HistoryGraphTab() {
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
   const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number } | null>(null);
   const [dir, setDir] = useState<LayoutDir>("vertical");
+  const [pendingSwitch, setPendingSwitch] = useState<string | null>(null);
 
   useEffect(() => { loadGraphData(); loadTimelines(); }, [loadGraphData, loadTimelines]);
 
@@ -263,6 +267,14 @@ export function HistoryGraphTab() {
       console.error("Navigation failed:", err);
     }
   }, [navigateToSnapshot, loadGraphData]);
+
+  const requestTimelineSwitch = useCallback((name: string) => {
+    if (isDirty) {
+      setPendingSwitch(name);
+      return;
+    }
+    void switchTimeline(name);
+  }, [isDirty, switchTimeline]);
 
   const timelineMap = useMemo(() => {
     const m = new Map<string, TimelineInfo>();
@@ -406,7 +418,7 @@ export function HistoryGraphTab() {
           {timelines.map((t) => (
             <button
               key={t.name}
-              onClick={() => switchTimeline(t.name)}
+              onClick={() => requestTimelineSwitch(t.name)}
               className="flex items-center gap-1.5 text-[10px] text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] transition-colors"
               title={`Switch to ${t.label}`}
             >
@@ -576,6 +588,23 @@ export function HistoryGraphTab() {
           );
         })()}
       </div>
+      <UnsavedWorkspaceDialog
+        open={!!pendingSwitch}
+        targetLabel={timelines.find((timeline) => timeline.name === pendingSwitch)?.label ?? pendingSwitch ?? "that branch"}
+        onCancel={() => setPendingSwitch(null)}
+        onSaveFirst={() => {
+          if (!pendingSwitch) return;
+          useAppStore.setState({ pendingTimelineAfterSave: pendingSwitch, snapshotPromptOpen: true });
+          setPendingSwitch(null);
+        }}
+        onDiscardAndContinue={async () => {
+          if (!pendingSwitch) return;
+          const target = pendingSwitch;
+          setPendingSwitch(null);
+          await discardChanges();
+          await switchTimeline(target);
+        }}
+      />
     </div>
   );
 }

@@ -255,6 +255,52 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
       }];
     case "draftline_current_variation":
       return "main";
+    case "preflight_rename_variation": {
+      const source = (args as { request?: { source_variation_id?: string } })?.request?.source_variation_id ?? "master";
+      const target = (args as { request?: { target_variation_id?: string } })?.request?.target_variation_id ?? "main";
+      return {
+        source_variation: source,
+        target_variation: target,
+        expected_oid: "abc123abc123abc123abc123abc123abc123abc1",
+        support_ref: `refs/draftline/variations/${source}`,
+        token: {
+          operation_id: "mock-rename-master-main",
+          source_variation: source,
+          target_variation: target,
+          expected_oid: "abc123abc123abc123abc123abc123abc123abc1",
+          support_ref: `refs/draftline/variations/${source}`,
+        },
+        can_rename: true,
+      };
+    }
+    case "rename_variation": {
+      const source = (args as { request?: { source_variation_id?: string } })?.request?.source_variation_id ?? "master";
+      const target = (args as { request?: { target_variation_id?: string } })?.request?.target_variation_id ?? "main";
+      const token = {
+        operation_id: "mock-rename-master-main",
+        source_variation: source,
+        target_variation: target,
+        expected_oid: "abc123abc123abc123abc123abc123abc123abc1",
+        support_ref: `refs/draftline/variations/${source}`,
+      };
+      return {
+        preflight: {
+          source_variation: source,
+          target_variation: target,
+          expected_oid: token.expected_oid,
+          support_ref: token.support_ref,
+          token,
+          can_rename: true,
+        },
+        variation: {
+          id: target,
+          name: target,
+          metadata: { label: target, slug: target },
+          is_current: true,
+        },
+        postconditions: { workspace_changed: true, active_variation: target, dirty_files: [] },
+      };
+    }
     case "draftline_delete_variation":
       return null;
     case "draftline_inspect_changes":
@@ -352,6 +398,29 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
         author: { name: "You", email: "dev@example.com" },
         savedBy: { name: "You", email: "dev@example.com" },
         timeSeconds: Math.floor(Date.now() / 1000),
+      };
+    case "restore_version_as_new_save_to_variation":
+      const restoreTarget = (args as { request?: { target?: { kind?: string; variation?: string; name?: string } } })?.request?.target;
+      const restoreTargetName = restoreTarget?.kind === "new"
+        ? restoreTarget.name
+        : restoreTarget?.kind === "existing"
+          ? restoreTarget.variation
+          : "main";
+      return {
+        version: {
+          id: "restore456restore456restore456restore456rest",
+          label: (args as { request?: { label?: string } })?.request?.label ?? "Restored draft",
+          author: { name: "You", email: "dev@example.com" },
+          saved_by: { name: "You", email: "dev@example.com" },
+          time_seconds: Math.floor(Date.now() / 1000),
+        },
+        target_variation: {
+          id: restoreTargetName ?? "main",
+          name: restoreTargetName ?? "main",
+          metadata: { label: restoreTargetName ?? "Main", slug: restoreTargetName ?? "main" },
+          is_current: true,
+        },
+        postconditions: { errors: [] },
       };
     case "draftline_squash_versions":
       return {

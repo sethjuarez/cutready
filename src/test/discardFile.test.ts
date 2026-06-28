@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockInvoke = vi.hoisted(() => vi.fn());
 
@@ -8,7 +8,10 @@ vi.mock("@tauri-apps/api/core", () => ({
 }));
 
 import { shouldSuppressEditorFlush, useAppStore } from "../stores/appStore";
+import { setDraftlineWorkspacePath } from "../services/draftlineVersioning";
 import type { Sketch } from "../types/sketch";
+
+const WORKSPACE = "D:\\repo";
 
 const restoredSketch: Sketch = {
   title: "Restored sketch",
@@ -36,9 +39,21 @@ const cleanDraftlineSummary = {
 };
 
 describe("discardFile", () => {
+  beforeEach(() => {
+    setDraftlineWorkspacePath(WORKSPACE);
+    useAppStore.setState({
+      currentProject: {
+        root: WORKSPACE,
+        repo_root: WORKSPACE,
+        name: "Project",
+      },
+    });
+  });
+
   afterEach(() => {
     vi.useRealTimers();
     mockInvoke.mockReset();
+    setDraftlineWorkspacePath(null);
     useAppStore.setState({
       activeSketchPath: null,
       activeSketch: null,
@@ -66,8 +81,10 @@ describe("discardFile", () => {
     vi.useFakeTimers();
     mockInvoke.mockImplementation((command: string) => {
       switch (command) {
-        case "draftline_discard_file":
-          return Promise.resolve();
+        case "selected_discard":
+          return Promise.resolve({ discarded: { files: [] }, postconditions: { errors: [] } });
+        case "get_changes":
+          return Promise.resolve({ files: [], diff: null });
         case "list_sketches":
           return Promise.resolve([
             { path: "demo.sk", title: "Restored sketch", state: "draft", row_count: 1, created_at: "", updated_at: "" },
@@ -99,7 +116,9 @@ describe("discardFile", () => {
 
     await useAppStore.getState().discardFile("demo.sk");
 
-    expect(mockInvoke).toHaveBeenCalledWith("draftline_discard_file", { path: "demo.sk" });
+    expect(mockInvoke).toHaveBeenCalledWith("selected_discard", {
+      request: { workspace_path: WORKSPACE, paths: ["demo.sk"] },
+    });
     expect(mockInvoke).toHaveBeenCalledWith("get_sketch", { relativePath: "demo.sk" });
     expect(useAppStore.getState().activeSketch).toEqual(restoredSketch);
     expect(useAppStore.getState().editorReloadKey).toBe(1);
@@ -114,8 +133,10 @@ describe("discardFile", () => {
     vi.useFakeTimers();
     mockInvoke.mockImplementation((command: string) => {
       switch (command) {
-        case "draftline_discard_file":
-          return Promise.resolve();
+        case "selected_discard":
+          return Promise.resolve({ discarded: { files: [] }, postconditions: { errors: [] } });
+        case "get_changes":
+          return Promise.resolve({ files: [], diff: null });
         case "list_sketches":
           return Promise.resolve([
             { path: "demo.sk", title: "Restored sketch", state: "draft", row_count: 1, created_at: "", updated_at: "" },
@@ -149,10 +170,13 @@ describe("discardFile", () => {
       openTabs: [{ id: "sketch-demo.sk", type: "sketch", path: "demo.sk", title: "Demo" }],
       activeTabId: "sketch-demo.sk",
     });
+    setDraftlineWorkspacePath("D:\\repo\\project-a");
 
     await useAppStore.getState().discardFile("project-a/demo.sk");
 
-    expect(mockInvoke).toHaveBeenCalledWith("draftline_discard_file", { path: "project-a/demo.sk" });
+    expect(mockInvoke).toHaveBeenCalledWith("selected_discard", {
+      request: { workspace_path: "D:\\repo\\project-a", paths: ["project-a/demo.sk"] },
+    });
     expect(mockInvoke).toHaveBeenCalledWith("get_sketch", { relativePath: "demo.sk" });
     expect(useAppStore.getState().activeSketch).toEqual(restoredSketch);
     expect(useAppStore.getState().editorReloadPath).toBe("demo.sk");
@@ -167,8 +191,10 @@ describe("discardFile", () => {
     vi.useFakeTimers();
     mockInvoke.mockImplementation((command: string) => {
       switch (command) {
-        case "draftline_discard_file":
-          return Promise.resolve();
+        case "selected_discard":
+          return Promise.resolve({ discarded: { files: [] }, postconditions: { errors: [] } });
+        case "get_changes":
+          return Promise.resolve({ files: [], diff: null });
         case "list_sketches":
           return Promise.resolve([
             { path: "demo.sk", title: "Restored sketch", state: "draft", row_count: 1, created_at: "", updated_at: "" },
@@ -212,8 +238,10 @@ describe("discardFile", () => {
     vi.useFakeTimers();
     mockInvoke.mockImplementation((command: string) => {
       switch (command) {
-        case "draftline_discard_file":
-          return Promise.resolve();
+        case "selected_discard":
+          return Promise.resolve({ discarded: { files: [] }, postconditions: { errors: [] } });
+        case "get_changes":
+          return Promise.resolve({ files: [], diff: null });
         case "list_sketches":
         case "list_storyboards":
         case "list_notes":
@@ -255,8 +283,17 @@ describe("discardFile", () => {
     vi.useFakeTimers();
     mockInvoke.mockImplementation((command: string) => {
       switch (command) {
-        case "draftline_discard_changes":
-          return Promise.resolve();
+        case "get_changes":
+          return Promise.resolve({
+            files: [
+              { path: "active.sk", kind: "Modified", is_binary: false, is_large: false },
+              { path: "notes.md", kind: "Modified", is_binary: false, is_large: false },
+              { path: "demo.sb", kind: "Modified", is_binary: false, is_large: false },
+            ],
+            diff: null,
+          });
+        case "selected_discard":
+          return Promise.resolve({ discarded: { files: [] }, postconditions: { errors: [] } });
         case "list_sketches":
         case "list_storyboards":
         case "list_notes":

@@ -341,7 +341,7 @@ pub async fn get_workspace_state(
 }
 
 /// Save workspace state for the current project.
-#[tauri::command]
+#[auditaur_command(skip_all, err)]
 pub async fn set_workspace_state(
     workspace: project::WorkspaceState,
     state: State<'_, AppState>,
@@ -633,7 +633,7 @@ pub async fn is_multi_project(state: State<'_, AppState>) -> Result<bool, String
 }
 
 /// Switch to a different project within the current repo.
-#[tauri::command]
+#[auditaur_command(skip_all, err)]
 pub async fn switch_project(
     project_path: String,
     app: tauri::AppHandle,

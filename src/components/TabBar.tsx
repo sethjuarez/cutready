@@ -22,9 +22,10 @@ export function getClampedPopoverPosition(position: { x: number; y: number }, wi
  */
 export function getTabCopyPath(tab: Pick<EditorTab, "type" | "path"> | undefined | null): string | null {
   if (!tab) return null;
-  if (tab.type === "history") return null;
+  if (tab.type === "history" || tab.type === "snapshot-preview") return null;
   if (!tab.path) return null;
   if (tab.path.startsWith("__")) return null;
+  if (tab.path.startsWith("cutready://")) return null;
   return tab.path;
 }
 
@@ -87,7 +88,7 @@ export function TabBar() {
   if (openTabs.length === 0) return null;
 
   const contextTab = openTabs.find((t) => t.id === contextTabIdRef.current);
-  const canSplit = contextTab && openTabs.length > 1 && contextTab.type !== "history" && contextTab.type !== "asset" && contextTab.type !== "agent-run" && contextTab.type !== "diff" && contextTab.type !== "database";
+  const canSplit = contextTab && openTabs.length > 1 && contextTab.type !== "history" && contextTab.type !== "snapshot-preview" && contextTab.type !== "asset" && contextTab.type !== "agent-run" && contextTab.type !== "diff" && contextTab.type !== "database";
   const copyablePath = getTabCopyPath(contextTab);
   const isAlreadyInSplit = contextTab
     ? splitTabs.some((st) => st.path === contextTab.path && st.type === contextTab.type)
@@ -361,6 +362,7 @@ function Tab({
     tab.type === "sketch" ? "Sketch"
     : tab.type === "storyboard" ? "Storyboard"
     : tab.type === "history" ? "History"
+    : tab.type === "snapshot-preview" ? "Snapshot Preview"
     : tab.type === "diff" ? "Diff"
     : tab.type === "agent-run" ? "Agent Run"
     : tab.type === "database" ? "Database"
@@ -376,7 +378,9 @@ function Tab({
         ? { bar: "bg-success", icon: "text-success", tint: "bg-success" }
         : tab.type === "history"
             ? { bar: "bg-[rgb(var(--color-accent))]", icon: "text-[rgb(var(--color-accent))]", tint: "bg-[rgb(var(--color-accent))]" }
-          : tab.type === "diff"
+           : tab.type === "snapshot-preview"
+             ? { bar: "bg-[rgb(var(--color-accent))]", icon: "text-[rgb(var(--color-accent))]", tint: "bg-[rgb(var(--color-accent))]" }
+           : tab.type === "diff"
               ? { bar: "bg-warning", icon: "text-warning", tint: "bg-warning" }
               : tab.type === "agent-run"
                 ? { bar: "bg-[rgb(var(--color-accent))]", icon: "text-[rgb(var(--color-accent))]", tint: "bg-[rgb(var(--color-accent))]" }
@@ -392,6 +396,7 @@ function Tab({
     tab.type === "sketch" ? SketchIcon
     : tab.type === "storyboard" ? StoryboardIcon
     : tab.type === "history" ? HistoryIcon
+    : tab.type === "snapshot-preview" ? DiffIcon
     : tab.type === "diff" ? DiffIcon
     : tab.type === "agent-run" ? AgentRunIcon
     : tab.type === "database" ? DatabaseIcon

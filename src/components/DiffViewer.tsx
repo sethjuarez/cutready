@@ -1,11 +1,26 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "../services/tauri";
+import { previewDraftlineVersionFile, previewDraftlineWorkspaceFile } from "../services/draftlineVersioning";
 import { Columns2, Rows2, LayoutList } from "lucide-react";
 
 interface FileDiffContent {
   path: string;
-  head_content: string | null;
-  working_content: string | null;
+  headContent: string | null;
+  workingContent: string | null;
+  isBinary?: boolean;
+}
+
+interface RawFileDiffContent {
+  path: string;
+  headContent?: string | null;
+  workingContent?: string | null;
+  head_content?: string | null;
+  working_content?: string | null;
+}
+
+interface SnapshotDiffTarget {
+  snapshotId: string;
+  filePath: string;
 }
 
 interface DiffLine {
@@ -98,8 +113,34 @@ function groupIntoHunks(lines: DiffLine[], contextSize = 3): DiffLine[][] {
   return hunks;
 }
 
+export function snapshotDiffTabPath(snapshotId: string, filePath: string): string {
+  return `cutready://snapshot-diff?version=${encodeURIComponent(snapshotId)}&path=${encodeURIComponent(filePath)}`;
+}
+
+function parseSnapshotDiffTarget(path: string): SnapshotDiffTarget | null {
+  if (!path.startsWith("cutready://snapshot-diff?")) return null;
+  try {
+    const url = new URL(path);
+    const snapshotId = url.searchParams.get("version");
+    const filePath = url.searchParams.get("path");
+    return snapshotId && filePath ? { snapshotId, filePath } : null;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeFileDiffContent(content: RawFileDiffContent): FileDiffContent {
+  return {
+    path: content.path,
+    headContent: content.headContent ?? content.head_content ?? null,
+    workingContent: content.workingContent ?? content.working_content ?? null,
+  };
+}
+
 export function DiffViewer({ filePath }: { filePath: string }) {
-  const isStructured = filePath.endsWith(".sk") || filePath.endsWith(".sb");
+  const snapshotTarget = parseSnapshotDiffTarget(filePath);
+  const displayPath = snapshotTarget?.filePath ?? filePath;
+  const isStructured = displayPath.endsWith(".sk") || displayPath.endsWith(".sb");
   const [diff, setDiff] = useState<FileDiffContent | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -108,11 +149,26 @@ export function DiffViewer({ filePath }: { filePath: string }) {
   useEffect(() => {
     setLoading(true);
     setError(null);
-    invoke<FileDiffContent>("draftline_file_diff_content", { filePath })
+    const loadDiff = async () => {
+      if (snapshotTarget) {
+        const [snapshotFile, workspaceFile] = await Promise.all([
+          previewDraftlineVersionFile(snapshotTarget.snapshotId, snapshotTarget.filePath),
+          previewDraftlineWorkspaceFile(snapshotTarget.filePath),
+        ]);
+        return {
+          path: snapshotTarget.filePath,
+          headContent: snapshotFile?.content ?? null,
+          workingContent: workspaceFile?.content ?? null,
+          isBinary: snapshotFile?.isBinary ?? false,
+        };
+      }
+      return normalizeFileDiffContent(await invoke<RawFileDiffContent>("draftline_file_diff_content", { filePath }));
+    };
+    loadDiff()
       .then(setDiff)
       .catch((e) => setError(String(e)))
       .finally(() => setLoading(false));
-  }, [filePath]);
+  }, [filePath, snapshotTarget?.filePath, snapshotTarget?.snapshotId]);
 
   if (loading) {
     return (
@@ -132,13 +188,19 @@ export function DiffViewer({ filePath }: { filePath: string }) {
 
   if (!diff) return null;
 
-  const filename = filePath.split("/").pop() ?? filePath;
-  const isNew = diff.head_content === null;
-  const isDeleted = diff.working_content === null;
-  const oldText = diff.head_content ?? "";
-  const newText = diff.working_content ?? "";
+  const filename = displayPath.split("/").pop() ?? displayPath;
+  const isSnapshotDiff = snapshotTarget !== null;
+  const leftContent = isSnapshotDiff ? diff.workingContent : diff.headContent;
+  const rightContent = isSnapshotDiff ? diff.headContent : diff.workingContent;
+  const isNew = leftContent === null && rightContent !== null;
+  const isDeleted = leftContent !== null && rightContent === null;
+  const oldText = leftContent ?? "";
+  const newText = rightContent ?? "";
   const status = isNew ? "added" : isDeleted ? "deleted" : "modified";
   const showToggle = !isDeleted || isStructured;
+  const leftLabel = isSnapshotDiff ? "Current workspace" : "Last snapshot";
+  const rightLabel = isSnapshotDiff ? "Snapshot restore" : "Working copy";
+  const lineDelta = !isNew && !isDeleted ? newText.split("\n").length - oldText.split("\n").length : undefined;
 
   return (
     <div className="flex h-full flex-col bg-[rgb(var(--color-surface))]">
@@ -149,19 +211,20 @@ export function DiffViewer({ filePath }: { filePath: string }) {
         onViewModeChange={setViewMode}
         showToggle={showToggle}
         isStructured={isStructured}
-        additions={!isNew && !isDeleted ? newText.split("\n").length - oldText.split("\n").length : undefined}
+        additions={lineDelta}
+        contextLabel={isSnapshotDiff ? "Restore preview" : "Workspace diff"}
       />
       <div className="flex-1 overflow-auto">
         {viewMode === "semantic" && isStructured ? (
           <div className="p-4">
-            <StructuredDiff oldJson={oldText} newJson={newText} isNew={isNew} />
+            <StructuredDiff oldJson={oldText} newJson={newText} isNew={isNew} oldLabel={leftLabel} newLabel={rightLabel} />
           </div>
         ) : isNew && viewMode !== "split" ? (
           <NewFileView text={newText} />
         ) : isDeleted ? (
           <DeletedFileView text={oldText} />
         ) : viewMode === "split" ? (
-          <SplitDiffView oldText={oldText} newText={newText} isNew={isNew} />
+          <SplitDiffView oldText={oldText} newText={newText} isNew={isNew} oldLabel={leftLabel} newLabel={rightLabel} />
         ) : (
           <UnifiedDiffView oldText={oldText} newText={newText} />
         )}
@@ -172,7 +235,7 @@ export function DiffViewer({ filePath }: { filePath: string }) {
 
 // --- Toolbar ---
 
-function DiffToolbar({ filename, status, viewMode, onViewModeChange, showToggle, isStructured, additions }: {
+function DiffToolbar({ filename, status, viewMode, onViewModeChange, showToggle, isStructured, additions, contextLabel }: {
   filename: string;
   status: "added" | "deleted" | "modified";
   viewMode: ViewMode;
@@ -180,13 +243,17 @@ function DiffToolbar({ filename, status, viewMode, onViewModeChange, showToggle,
   showToggle: boolean;
   isStructured?: boolean;
   additions?: number;
+  contextLabel: string;
 }) {
   const badge = status === "added" ? { label: "New file", cls: "bg-success/15 text-success" } :
                 status === "deleted" ? { label: "Deleted", cls: "bg-error/15 text-error" } :
                 { label: "Modified", cls: "bg-warning/15 text-warning" };
   return (
     <div className="flex items-center gap-3 border-b border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-4 py-2">
-      <span className="font-mono text-[12px] font-medium text-[rgb(var(--color-text))]">{filename}</span>
+      <div className="min-w-0">
+        <div className="font-mono text-[12px] font-medium text-[rgb(var(--color-text))]">{filename}</div>
+        <div className="text-[10px] font-medium uppercase tracking-wider text-[rgb(var(--color-text-secondary))]">{contextLabel}</div>
+      </div>
       <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${badge.cls}`}>{badge.label}</span>
       {additions !== undefined && additions !== 0 && (
         <span className={`text-[10px] ${additions > 0 ? "text-success" : "text-error"}`}>
@@ -247,7 +314,19 @@ function ToggleButton({ active, onClick, icon, label, border }: {
 
 // --- Split (side-by-side) view ---
 
-function SplitDiffView({ oldText, newText, isNew }: { oldText: string; newText: string; isNew?: boolean }) {
+function SplitDiffView({
+  oldText,
+  newText,
+  isNew,
+  oldLabel,
+  newLabel,
+}: {
+  oldText: string;
+  newText: string;
+  isNew?: boolean;
+  oldLabel: string;
+  newLabel: string;
+}) {
   const diffLines = useMemo(() => computeDiffLines(oldText, newText), [oldText, newText]);
   const hunks = useMemo(() => groupIntoHunks(diffLines), [diffLines]);
   const leftRef = useRef<HTMLDivElement>(null);
@@ -312,7 +391,7 @@ function SplitDiffView({ oldText, newText, isNew }: { oldText: string; newText: 
       {/* Left pane */}
       <div className="flex-1 flex flex-col min-w-0 border-r border-[rgb(var(--color-border))]">
         <div className="shrink-0 px-3 py-1 text-[10px] font-medium text-[rgb(var(--color-text-secondary))] uppercase tracking-wider border-b border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-inset))]">
-          {isNew ? "(New file)" : "Last Snapshot"}
+          {isNew ? "(Missing)" : oldLabel}
         </div>
         <div
           ref={leftRef}
@@ -327,7 +406,7 @@ function SplitDiffView({ oldText, newText, isNew }: { oldText: string; newText: 
       {/* Right pane */}
       <div className="flex-1 flex flex-col min-w-0">
         <div className="shrink-0 px-3 py-1 text-[10px] font-medium text-[rgb(var(--color-text-secondary))] uppercase tracking-wider border-b border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-inset))]">
-          Working Copy
+          {newLabel}
         </div>
         <div
           ref={rightRef}
@@ -537,7 +616,7 @@ function humanizePath(path: string): string {
   return path
     .replace(/^rows\[(\d+)\]/, (_, i) => `Row ${+i + 1}`)
     .replace(/\.narrative$/, " → Narrative")
-    .replace(/\.actions$/, " → Actions")
+    .replace(/\.demo_actions$/, " → Actions")
     .replace(/\.time$/, " → Time")
     .replace(/\.screenshot$/, " → Screenshot")
     .replace(/\.visual$/, " → Visual")
@@ -547,7 +626,19 @@ function humanizePath(path: string): string {
     .replace(/^state$/, "State");
 }
 
-function StructuredDiff({ oldJson, newJson, isNew }: { oldJson: string; newJson: string; isNew?: boolean }) {
+function StructuredDiff({
+  oldJson,
+  newJson,
+  isNew,
+  oldLabel,
+  newLabel,
+}: {
+  oldJson: string;
+  newJson: string;
+  isNew?: boolean;
+  oldLabel: string;
+  newLabel: string;
+}) {
   let oldObj: unknown = null;
   let newObj: unknown;
   if (!isNew) {
@@ -566,17 +657,17 @@ function StructuredDiff({ oldJson, newJson, isNew }: { oldJson: string; newJson:
   }
 
   return (
-    <div className="space-y-1.5">
+    <div className="space-y-2">
       <div className="mb-3 text-[11px] text-[rgb(var(--color-text-secondary))]">
         {changes.length} field{changes.length !== 1 ? "s" : ""} {isNew ? "in new file" : "changed"}
       </div>
       {changes.map((change, i) => (
-        <div key={i} className={`rounded-md border px-3 py-2 text-[12px] ${
+        <div key={i} className={`overflow-hidden rounded-md border text-[12px] ${
           change.type === "added" ? "border-success/30 bg-success/5" :
           change.type === "removed" ? "border-error/30 bg-error/5" :
           "border-warning/30 bg-warning/5"
         }`}>
-          <div className="flex items-center gap-2 mb-1">
+          <div className="flex items-center gap-2 border-b border-[rgb(var(--color-border))]/30 bg-[rgb(var(--color-bg))] px-3 py-1.5">
             <span className={`inline-block w-1.5 h-1.5 rounded-full ${
               change.type === "added" ? "bg-success" :
               change.type === "removed" ? "bg-error" :
@@ -591,26 +682,39 @@ function StructuredDiff({ oldJson, newJson, isNew }: { oldJson: string; newJson:
               {change.type}
             </span>
           </div>
-          {change.type === "changed" && (
-            <div className="ml-3.5 space-y-0.5">
-              <div className="flex items-start gap-2">
-                <span className="shrink-0 text-[10px] text-error font-medium">−</span>
-                <span className="text-[rgb(var(--color-text-secondary))] break-all">{change.oldValue}</span>
-              </div>
-              <div className="flex items-start gap-2">
-                <span className="shrink-0 text-[10px] text-success font-medium">+</span>
-                <span className="text-[rgb(var(--color-text))] break-all">{change.newValue}</span>
-              </div>
-            </div>
-          )}
-          {change.type === "added" && change.newValue && (
-            <div className="ml-3.5 text-[rgb(var(--color-text))] break-all">{change.newValue}</div>
-          )}
-          {change.type === "removed" && change.oldValue && (
-            <div className="ml-3.5 text-[rgb(var(--color-text-secondary))] break-all line-through">{change.oldValue}</div>
-          )}
+          <div className="grid grid-cols-1 gap-px bg-[rgb(var(--color-border))]/30 sm:grid-cols-2">
+            <ReadOnlyVersionPane label={oldLabel} value={change.type === "added" ? "(missing)" : change.oldValue ?? "(unchanged)"} tone={change.type === "removed" ? "removed" : "neutral"} />
+            <ReadOnlyVersionPane label={newLabel} value={change.type === "removed" ? "(missing)" : change.newValue ?? "(unchanged)"} tone={change.type === "added" ? "added" : "accent"} />
+          </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+function ReadOnlyVersionPane({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone: "neutral" | "accent" | "added" | "removed";
+}) {
+  const labelClass = tone === "added"
+    ? "text-success"
+    : tone === "removed"
+      ? "text-error"
+      : tone === "accent"
+        ? "text-[rgb(var(--color-accent))]"
+        : "text-[rgb(var(--color-text-secondary))]";
+
+  return (
+    <div className="bg-[rgb(var(--color-surface))] px-3 py-2">
+      <div className={`mb-1 text-[9px] font-medium uppercase tracking-wider ${labelClass}`}>{label}</div>
+      <div className="whitespace-pre-wrap break-all font-mono text-[11px] text-[rgb(var(--color-text))]">
+        {value}
+      </div>
     </div>
   );
 }
