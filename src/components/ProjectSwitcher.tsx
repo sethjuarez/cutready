@@ -3,6 +3,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useAppStore } from "../stores/appStore";
 import type { ProjectEntry } from "../types/project";
 import { Folder, ChevronDown, Pencil, Check, Plus, RefreshCw, Trash2, X } from "lucide-react";
+import { DecisionDialog } from "./DecisionDialog";
+import { UnsavedWorkspaceDialog } from "./UnsavedWorkspaceDialog";
 
 /** Compact project switcher dropdown for the title breadcrumb or sidebar. */
 interface ProjectSwitcherProps {
@@ -17,6 +19,10 @@ export function ProjectSwitcher({ variant = "sidebar" }: ProjectSwitcherProps) {
   const createProjectInRepo = useAppStore((s) => s.createProjectInRepo);
   const deleteProjectFromRepo = useAppStore((s) => s.deleteProjectFromRepo);
   const loadProjects = useAppStore((s) => s.loadProjects);
+  const isDirty = useAppStore((s) => s.isDirty);
+  const isMerging = useAppStore((s) => s.isMerging);
+  const discardChanges = useAppStore((s) => s.discardChanges);
+  const cancelMerge = useAppStore((s) => s.cancelMerge);
 
   const [isOpen, setIsOpen] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
@@ -26,6 +32,8 @@ export function ProjectSwitcher({ variant = "sidebar" }: ProjectSwitcherProps) {
   const [renamingPath, setRenamingPath] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [deletingPath, setDeletingPath] = useState<string | null>(null);
+  const [pendingSwitchPath, setPendingSwitchPath] = useState<string | null>(null);
+  const [mergeSwitchPath, setMergeSwitchPath] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -79,10 +87,20 @@ export function ProjectSwitcher({ variant = "sidebar" }: ProjectSwitcherProps) {
 
   const handleSwitch = useCallback(
     (path: string) => {
-      switchProject(path);
+      if (isMerging) {
+        setMergeSwitchPath(path);
+        setIsOpen(false);
+        return;
+      }
+      if (isDirty) {
+        setPendingSwitchPath(path);
+        setIsOpen(false);
+        return;
+      }
+      void switchProject(path);
       setIsOpen(false);
     },
-    [switchProject],
+    [isDirty, isMerging, switchProject],
   );
 
   const handleCreate = useCallback(async () => {
@@ -168,6 +186,12 @@ export function ProjectSwitcher({ variant = "sidebar" }: ProjectSwitcherProps) {
     ? currentProject.repo_root.replace(/[/\\]+$/, "").split(/[/\\]/).pop()
     : null;
   const isTitle = variant === "title";
+  const pendingProject = pendingSwitchPath
+    ? projects.find((project) => project.path === pendingSwitchPath)
+    : null;
+  const mergeProject = mergeSwitchPath
+    ? projects.find((project) => project.path === mergeSwitchPath)
+    : null;
 
   return (
     <div
@@ -440,6 +464,56 @@ export function ProjectSwitcher({ variant = "sidebar" }: ProjectSwitcherProps) {
           </div>
         </div>
       )}
+      <UnsavedWorkspaceDialog
+        open={!!pendingSwitchPath}
+        targetLabel={pendingProject?.name ?? pendingSwitchPath ?? "that project"}
+        onCancel={() => setPendingSwitchPath(null)}
+        onSaveFirst={() => {
+          if (!pendingSwitchPath) return;
+          useAppStore.setState({ pendingProjectAfterSave: pendingSwitchPath, snapshotPromptOpen: true });
+          setPendingSwitchPath(null);
+        }}
+        onDiscardAndContinue={async () => {
+          if (!pendingSwitchPath) return;
+          const target = pendingSwitchPath;
+          setPendingSwitchPath(null);
+          await discardChanges();
+          await switchProject(target);
+        }}
+      />
+      <DecisionDialog
+        open={!!mergeSwitchPath}
+        title="Finish merge before switching projects?"
+        message={(
+          <>
+            Incoming saves are waiting for conflict resolution. Switching to{" "}
+            <span className="font-medium text-[rgb(var(--color-text))]">
+              {mergeProject?.name ?? mergeSwitchPath ?? "that project"}
+            </span>{" "}
+            cancels the in-progress resolution flow.
+          </>
+        )}
+        actions={[
+          { id: "stay", label: "Stay and resolve", onSelect: () => setMergeSwitchPath(null) },
+          {
+            id: "switch",
+            label: "Cancel merge and switch",
+            variant: "danger",
+            onSelect: async () => {
+              if (!mergeSwitchPath) return;
+              const target = mergeSwitchPath;
+              setMergeSwitchPath(null);
+              cancelMerge();
+              if (useAppStore.getState().isDirty) {
+                setPendingSwitchPath(target);
+                return;
+              }
+              await switchProject(target);
+            },
+          },
+        ]}
+        onClose={() => setMergeSwitchPath(null)}
+      />
     </div>
   );
 }

@@ -8,7 +8,7 @@ use tauri::State;
 use tauri_plugin_auditaur::auditaur_command;
 
 use crate::engine::project;
-use crate::models::sketch::{Storyboard, StoryboardItem, StoryboardSummary};
+use crate::models::sketch::{DocumentMetadata, Storyboard, StoryboardItem, StoryboardSummary};
 use crate::AppState;
 
 /// Helper: get the project root from current state.
@@ -79,6 +79,7 @@ pub async fn update_storyboard(
     relative_path: String,
     title: Option<String>,
     description: Option<String>,
+    metadata: Option<DocumentMetadata>,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let root = project_root(&state)?;
@@ -92,6 +93,9 @@ pub async fn update_storyboard(
     }
     if let Some(d) = description {
         sb.description = d;
+    }
+    if let Some(m) = metadata {
+        sb.metadata = m;
     }
     sb.updated_at = Utc::now();
 
@@ -273,6 +277,7 @@ mod tests {
             title: "Demo".into(),
             description: String::new(),
             locked: false,
+            metadata: DocumentMetadata::default(),
             items: vec![StoryboardItem::Section {
                 title: "Section".into(),
                 description: String::new(),

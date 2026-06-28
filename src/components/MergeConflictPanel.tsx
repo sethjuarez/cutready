@@ -1,7 +1,8 @@
 import { useCallback, useState } from "react";
 import { ArrowLeftRight } from "lucide-react";
 import { useAppStore } from "../stores/appStore";
-import type { ConflictFile, FieldConflict, TextConflictRegion, FileResolution } from "../types/sketch";
+import type { ConflictFile, FileResolution } from "../types/sketch";
+import { SemanticConflictResolver } from "./SemanticConflictResolver";
 
 /**
  * MergeConflictPanel — shown when a merge has conflicts.
@@ -22,7 +23,7 @@ export function MergeConflictPanel() {
   const [resolutions, setResolutions] = useState<Record<string, string>>({});
   const [applying, setApplying] = useState(false);
   const sourceLabel = formatMergeLabel(mergeSource ?? "source");
-  const targetLabel = formatMergeLabel(mergeTarget ?? "target");
+  const targetLabel = mergeTarget === "incoming" ? "current workspace" : formatMergeLabel(mergeTarget ?? "target");
 
   const updateResolution = useCallback((path: string, content: string) => {
     setResolutions((prev) => ({ ...prev, [path]: content }));
@@ -159,15 +160,8 @@ function ConflictCard({
 
       {/* Resolver UI based on file type */}
       <div className="p-3">
-        {(conflict.file_type === "sketch" || conflict.file_type === "storyboard") && conflict.field_conflicts.length > 0 ? (
-          <JsonFieldResolver
-            conflict={conflict}
-            onResolve={onResolve}
-            sourceLabel={sourceLabel}
-            targetLabel={targetLabel}
-          />
-        ) : conflict.file_type === "note" && conflict.text_conflicts.length > 0 ? (
-          <TextRegionResolver
+        {conflict.file_type === "sketch" || conflict.file_type === "storyboard" || conflict.file_type === "note" ? (
+          <SemanticConflictResolver
             conflict={conflict}
             onResolve={onResolve}
             sourceLabel={sourceLabel}
@@ -184,161 +178,6 @@ function ConflictCard({
       </div>
     </div>
   );
-}
-
-// ── JSON field-level resolver (sketches/storyboards) ────────────
-
-function JsonFieldResolver({
-  conflict,
-  onResolve,
-  sourceLabel,
-  targetLabel,
-}: {
-  conflict: ConflictFile;
-  onResolve: (content: string) => void;
-  sourceLabel: string;
-  targetLabel: string;
-}) {
-  const [choices, setChoices] = useState<Record<string, "ours" | "theirs">>({});
-
-  const allChosen = conflict.field_conflicts.every((fc) => choices[fc.field_path] !== undefined);
-
-  const handleChoice = (fieldPath: string, choice: "ours" | "theirs") => {
-    const next = { ...choices, [fieldPath]: choice };
-    setChoices(next);
-
-    if (conflict.field_conflicts.every((fc) => next[fc.field_path] !== undefined)) {
-      try {
-        onResolve(buildMergedJson(conflict, next));
-      } catch { /* wait for all choices */ }
-    }
-  };
-
-  return (
-    <div className="space-y-2">
-      {/* Quick actions */}
-      {conflict.field_conflicts.length > 1 && (
-        <div className="flex items-center gap-2 mb-1">
-          <span className="text-[10px] text-[rgb(var(--color-text-secondary))]">Quick:</span>
-          <button
-            onClick={() => {
-              const all: Record<string, "ours" | "theirs"> = {};
-              conflict.field_conflicts.forEach((fc) => { all[fc.field_path] = "ours"; });
-              setChoices(all);
-              try { onResolve(buildMergedJson(conflict, all)); } catch {}
-            }}
-            className="text-[10px] px-2 py-0.5 rounded bg-[rgb(var(--color-border))]/30 text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-border))]/50 transition-colors"
-          >
-            Accept all current
-          </button>
-          <button
-            onClick={() => {
-              const all: Record<string, "ours" | "theirs"> = {};
-              conflict.field_conflicts.forEach((fc) => { all[fc.field_path] = "theirs"; });
-              setChoices(all);
-              try { onResolve(buildMergedJson(conflict, all)); } catch {}
-            }}
-            className="text-[10px] px-2 py-0.5 rounded bg-[rgb(var(--color-border))]/30 text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-border))]/50 transition-colors"
-          >
-            Accept all incoming
-          </button>
-        </div>
-      )}
-      {conflict.field_conflicts.map((fc) => (
-        <FieldConflictRow
-          key={fc.field_path}
-          field={fc}
-          choice={choices[fc.field_path]}
-          onChoice={(c) => handleChoice(fc.field_path, c)}
-          sourceLabel={sourceLabel}
-          targetLabel={targetLabel}
-        />
-      ))}
-      {!allChosen && (
-        <p className="text-[10px] text-[rgb(var(--color-text-secondary))] italic">
-          Choose a version for each conflicting field
-        </p>
-      )}
-    </div>
-  );
-}
-
-function FieldConflictRow({
-  field,
-  choice,
-  onChoice,
-  sourceLabel,
-  targetLabel,
-}: {
-  field: FieldConflict;
-  choice: "ours" | "theirs" | undefined;
-  onChoice: (c: "ours" | "theirs") => void;
-  sourceLabel: string;
-  targetLabel: string;
-}) {
-  const formatValue = (v: unknown) => {
-    if (typeof v === "string") return v;
-    return JSON.stringify(v, null, 2);
-  };
-
-  return (
-    <div className="rounded-md border border-[rgb(var(--color-border))]/50 bg-[rgb(var(--color-surface))] overflow-hidden">
-      <div className="px-3 py-1.5 bg-[rgb(var(--color-bg))] border-b border-[rgb(var(--color-border))]/30">
-        <span className="text-[10px] font-medium text-[rgb(var(--color-text-secondary))]">{friendlyFieldName(field.field_path)}</span>
-      </div>
-      <div className="grid grid-cols-2 gap-px bg-[rgb(var(--color-border))]/30">
-        <button
-          onClick={() => onChoice("ours")}
-          className={`px-3 py-2 text-left transition-colors ${
-            choice === "ours"
-              ? "bg-accent/10 ring-1 ring-inset ring-accent/40"
-              : "bg-[rgb(var(--color-surface))] hover:bg-[rgb(var(--color-border))]/20"
-          }`}
-        >
-          <div className="text-[9px] font-medium text-accent mb-1">{targetLabel} (current)</div>
-          <div className="text-[11px] text-[rgb(var(--color-text))] font-mono whitespace-pre-wrap break-all">
-            {formatValue(field.ours)}
-          </div>
-        </button>
-        <button
-          onClick={() => onChoice("theirs")}
-          className={`px-3 py-2 text-left transition-colors ${
-            choice === "theirs"
-              ? "bg-purple-500/10 ring-1 ring-inset ring-purple-500/40"
-              : "bg-[rgb(var(--color-surface))] hover:bg-[rgb(var(--color-border))]/20"
-          }`}
-        >
-          <div className="text-[9px] font-medium text-purple-500 mb-1">{sourceLabel} (incoming)</div>
-          <div className="text-[11px] text-[rgb(var(--color-text))] font-mono whitespace-pre-wrap break-all">
-            {formatValue(field.theirs)}
-          </div>
-        </button>
-      </div>
-    </div>
-  );
-}
-
-/** Convert a JSON field path to a user-friendly label. */
-function friendlyFieldName(path: string): string {
-  const labels: Record<string, string> = {
-    title: "Title",
-    description: "Description",
-    rows: "Planning Table",
-    sections: "Sections",
-    sketches: "Sketches",
-    narrative: "Narrative",
-    actions: "Actions",
-    time: "Time",
-    screenshot: "Screenshot",
-    visual: "Visual",
-  };
-  // "rows[2].narrative" → "Row 3 · Narrative"
-  const parts = path.replace(/\[(\d+)\]/g, ".$1").split(".");
-  const friendly = parts.map((p) => {
-    if (/^\d+$/.test(p)) return `#${Number(p) + 1}`;
-    return labels[p] || p.charAt(0).toUpperCase() + p.slice(1);
-  });
-  return friendly.join(" · ");
 }
 
 export function buildMergedJson(
@@ -377,136 +216,6 @@ export function setNestedValue(obj: any, path: string, value: unknown) {
   current[lastKey] = value;
 }
 
-// ── Text region resolver (notes/markdown) ───────────────────────
-
-function TextRegionResolver({
-  conflict,
-  onResolve,
-  sourceLabel,
-  targetLabel,
-}: {
-  conflict: ConflictFile;
-  onResolve: (content: string) => void;
-  sourceLabel: string;
-  targetLabel: string;
-}) {
-  const [choices, setChoices] = useState<Record<number, "ours" | "theirs">>({});
-
-  const allChosen = conflict.text_conflicts.every((_, i) => choices[i] !== undefined);
-
-  const handleChoice = (index: number, choice: "ours" | "theirs") => {
-    const next = { ...choices, [index]: choice };
-    setChoices(next);
-
-    if (conflict.text_conflicts.every((_, i) => next[i] !== undefined)) {
-      onResolve(buildMergedText(conflict, next));
-    }
-  };
-
-  return (
-    <div className="space-y-2">
-      {/* Quick actions */}
-      {conflict.text_conflicts.length > 1 && (
-        <div className="flex items-center gap-2 mb-1">
-          <span className="text-[10px] text-[rgb(var(--color-text-secondary))]">Quick:</span>
-          <button
-            onClick={() => {
-              const all: Record<number, "ours" | "theirs"> = {};
-              conflict.text_conflicts.forEach((_, i) => { all[i] = "ours"; });
-              setChoices(all);
-              onResolve(buildMergedText(conflict, all));
-            }}
-            className="text-[10px] px-2 py-0.5 rounded bg-[rgb(var(--color-border))]/30 text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-border))]/50 transition-colors"
-          >
-            Accept all current
-          </button>
-          <button
-            onClick={() => {
-              const all: Record<number, "ours" | "theirs"> = {};
-              conflict.text_conflicts.forEach((_, i) => { all[i] = "theirs"; });
-              setChoices(all);
-              onResolve(buildMergedText(conflict, all));
-            }}
-            className="text-[10px] px-2 py-0.5 rounded bg-[rgb(var(--color-border))]/30 text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-border))]/50 transition-colors"
-          >
-            Accept all incoming
-          </button>
-        </div>
-      )}
-      {conflict.text_conflicts.map((region, i) => (
-        <TextConflictRow
-          key={i}
-          region={region}
-          index={i}
-          choice={choices[i]}
-          onChoice={(c) => handleChoice(i, c)}
-          sourceLabel={sourceLabel}
-          targetLabel={targetLabel}
-        />
-      ))}
-      {!allChosen && (
-        <p className="text-[10px] text-[rgb(var(--color-text-secondary))] italic">
-          Choose a version for each conflicting region
-        </p>
-      )}
-    </div>
-  );
-}
-
-function TextConflictRow({
-  region,
-  index,
-  choice,
-  onChoice,
-  sourceLabel,
-  targetLabel,
-}: {
-  region: TextConflictRegion;
-  index: number;
-  choice: "ours" | "theirs" | undefined;
-  onChoice: (c: "ours" | "theirs") => void;
-  sourceLabel: string;
-  targetLabel: string;
-}) {
-  return (
-    <div className="rounded-md border border-[rgb(var(--color-border))]/50 bg-[rgb(var(--color-surface))] overflow-hidden">
-      <div className="px-3 py-1.5 bg-[rgb(var(--color-bg))] border-b border-[rgb(var(--color-border))]/30">
-        <span className="text-[10px] text-[rgb(var(--color-text-secondary))]">
-          Conflict region {index + 1} (line {region.start_line + 1})
-        </span>
-      </div>
-      <div className="grid grid-cols-2 gap-px bg-[rgb(var(--color-border))]/30">
-        <button
-          onClick={() => onChoice("ours")}
-          className={`px-3 py-2 text-left transition-colors ${
-            choice === "ours"
-              ? "bg-accent/10 ring-1 ring-inset ring-accent/40"
-              : "bg-[rgb(var(--color-surface))] hover:bg-[rgb(var(--color-border))]/20"
-          }`}
-        >
-          <div className="text-[9px] font-medium text-accent mb-1">{targetLabel} (current)</div>
-          <pre className="text-[11px] text-[rgb(var(--color-text))] font-mono whitespace-pre-wrap">
-            {region.ours_lines.join("\n") || "(empty)"}
-          </pre>
-        </button>
-        <button
-          onClick={() => onChoice("theirs")}
-          className={`px-3 py-2 text-left transition-colors ${
-            choice === "theirs"
-              ? "bg-purple-500/10 ring-1 ring-inset ring-purple-500/40"
-              : "bg-[rgb(var(--color-surface))] hover:bg-[rgb(var(--color-border))]/20"
-          }`}
-        >
-          <div className="text-[9px] font-medium text-purple-500 mb-1">{sourceLabel} (incoming)</div>
-          <pre className="text-[11px] text-[rgb(var(--color-text))] font-mono whitespace-pre-wrap">
-            {region.theirs_lines.join("\n") || "(empty)"}
-          </pre>
-        </button>
-      </div>
-    </div>
-  );
-}
-
 export function buildMergedText(
   conflict: ConflictFile,
   choices: Record<number, "ours" | "theirs">,
@@ -522,15 +231,14 @@ export function buildMergedText(
   // Mixed: reconstruct from ancestor, replacing each conflict region
   // with the chosen side's lines
   const ancestorLines = conflict.ancestor.split("\n");
-  const regions = [...conflict.text_conflicts].sort(
-    (a, b) => a.start_line - b.start_line,
-  );
+  const regions = conflict.text_conflicts
+    .map((region, index) => ({ region, index }))
+    .sort((a, b) => a.region.start_line - b.region.start_line);
 
   const result: string[] = [];
   let cursor = 0;
 
-  for (let i = 0; i < regions.length; i++) {
-    const region = regions[i];
+  for (const { region, index } of regions) {
     // Add non-conflicting lines before this region
     while (cursor < region.start_line) {
       result.push(ancestorLines[cursor]);
@@ -538,7 +246,7 @@ export function buildMergedText(
     }
     // Add chosen side's lines for this region
     const chosen =
-      choices[conflict.text_conflicts.indexOf(region)] === "theirs"
+      choices[index] === "theirs"
         ? region.theirs_lines
         : region.ours_lines;
     result.push(...chosen);

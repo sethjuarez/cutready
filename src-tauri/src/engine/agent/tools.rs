@@ -2068,6 +2068,10 @@ fn exec_write_sketch(root: &Path, args: &Value) -> String {
                 locked: false,
                 locks: crate::models::sketch::PlanningCellLocks::default(),
                 time: r.get("time").and_then(|v| v.as_str()).unwrap_or("").into(),
+                duration_seconds: r
+                    .get("duration_seconds")
+                    .and_then(|v| v.as_u64())
+                    .and_then(|v| u32::try_from(v).ok()),
                 narrative: r
                     .get("narrative")
                     .and_then(|v| v.as_str())
@@ -2111,6 +2115,7 @@ fn exec_write_sketch(root: &Path, args: &Value) -> String {
                 locked: false,
                 description: serde_json::Value::Null,
                 rows: vec![],
+                metadata: crate::models::sketch::DocumentMetadata::default(),
                 state: crate::models::sketch::SketchState::Draft,
                 created_at: chrono::Utc::now(),
                 updated_at: chrono::Utc::now(),

@@ -36,6 +36,7 @@ import { normalizeDocument } from "@elucim/dsl";
 import type { CutReadyElucimDocument } from "../types/elucim";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { useProjectImage } from "../hooks/useProjectImage";
+import { parseDurationSeconds } from "../utils/documentMetadata";
 
 
 const VisualCell = lazy(() => import("./VisualCell"));
@@ -64,7 +65,7 @@ function getRowColor(idx: number): string {
 }
 
 function emptyRow(): PlanningRow {
-  return { time: "", narrative: "", demo_actions: "", screenshot: null };
+  return { time: "", duration_seconds: null, narrative: "", demo_actions: "", screenshot: null };
 }
 
 function isCellLocked(row: PlanningRow, field: PlanningCellField): boolean {
@@ -251,9 +252,13 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
     (index: number, field: keyof PlanningRow, value: string) => {
       if (rowsRef.current[index]?.locked || rowsRef.current[index]?.locks?.[field as PlanningCellField]) return;
       pushUndo();
-      const updated = rowsRef.current.map((r, i) =>
-        i === index ? { ...r, [field]: value } : r,
-      );
+      const updated = rowsRef.current.map((r, i) => {
+        if (i !== index) return r;
+        if (field === "time") {
+          return { ...r, time: value, duration_seconds: parseDurationSeconds(value) };
+        }
+        return { ...r, [field]: value };
+      });
       onChange(updated);
     },
     [onChange, pushUndo],

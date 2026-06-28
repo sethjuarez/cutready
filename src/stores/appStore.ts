@@ -84,6 +84,23 @@ export function createLocalChatSessionPath(now = new Date()): string {
   return `${LOCAL_CHAT_SESSION_PREFIX}chat-${timestamp}-${randomSessionSuffix()}.chat`;
 }
 
+export function errorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  if (error && typeof error === "object") {
+    const maybeMessage = (error as { message?: unknown }).message;
+    if (typeof maybeMessage === "string" && maybeMessage.trim()) return maybeMessage;
+    const maybeError = (error as { error?: unknown }).error;
+    if (typeof maybeError === "string" && maybeError.trim()) return maybeError;
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return String(error);
+    }
+  }
+  return String(error);
+}
+
 function chatMessagePreviewContent(message: ChatMessage): string {
   if (typeof message.content === "string") return message.content;
   if (Array.isArray(message.content)) {
@@ -348,6 +365,8 @@ interface AppStoreState {
   pendingNavAfterSave: string | null;
   /** After saving a snapshot, switch to this branch. */
   pendingTimelineAfterSave: string | null;
+  /** After saving a snapshot, switch to this project path. */
+  pendingProjectAfterSave: string | null;
   /** Whether there are unsaved changes since the last snapshot. */
   isDirty: boolean;
   /** List of changed files since last snapshot (for Changes panel). */
@@ -512,7 +531,7 @@ interface AppStoreState {
   /** Open a sketch for editing by path. */
   openSketch: (sketchPath: string) => Promise<void>;
   /** Update the active sketch (description and/or rows). */
-  updateSketch: (update: { description?: unknown; rows?: import("../types/sketch").PlanningRow[] }) => Promise<void>;
+  updateSketch: (update: { description?: unknown; rows?: import("../types/sketch").PlanningRow[]; metadata?: import("../types/sketch").DocumentMetadata }) => Promise<void>;
   /** Update a sketch's title. */
   updateSketchTitle: (sketchPath: string, title: string) => Promise<void>;
   /** Delete a sketch. */
@@ -529,7 +548,7 @@ interface AppStoreState {
   /** Open a storyboard for viewing by path. */
   openStoryboard: (storyboardPath: string) => Promise<void>;
   /** Update storyboard title/description. */
-  updateStoryboard: (update: { title?: string; description?: string }) => Promise<void>;
+  updateStoryboard: (update: { title?: string; description?: string; metadata?: import("../types/sketch").DocumentMetadata }) => Promise<void>;
   /** Lock or unlock the active storyboard. */
   setStoryboardLocked: (locked: boolean) => Promise<void>;
   /** Delete a storyboard. */
@@ -822,6 +841,7 @@ function resetPersistenceState(): Pick<AppStoreState,
   | "snapshotPromptOpen"
   | "pendingNavAfterSave"
   | "pendingTimelineAfterSave"
+  | "pendingProjectAfterSave"
   | "isDirty"
   | "changedFiles"
   | "hasStash"
@@ -848,6 +868,7 @@ function resetPersistenceState(): Pick<AppStoreState,
     snapshotPromptOpen: false,
     pendingNavAfterSave: null,
     pendingTimelineAfterSave: null,
+    pendingProjectAfterSave: null,
     isDirty: false,
     changedFiles: [],
     hasStash: false,
@@ -925,6 +946,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   snapshotPromptOpen: false,
   pendingNavAfterSave: null,
   pendingTimelineAfterSave: null,
+  pendingProjectAfterSave: null,
   isDirty: false,
   changedFiles: [],
   saving: false,
@@ -1574,6 +1596,10 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     if (shouldSuppressEditorFlush(activeSketchPath)) return;
     try {
       await invoke("update_sketch", { relativePath: activeSketchPath, ...update });
+      const { activeSketch } = get();
+      if (activeSketch) {
+        set({ activeSketch: { ...activeSketch, ...update } });
+      }
       set({ isDirty: true });
       await get().refreshChangedFiles();
     } catch (err) {
@@ -2566,7 +2592,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await get().loadTimelines();
       await get().loadVersions();
     } catch (err) {
-      set({ syncError: String(err) });
+      set({ syncError: errorMessage(err) });
     } finally {
       set({ isSyncing: false });
     }
@@ -2596,7 +2622,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await get().loadTimelines();
       await get().loadVersions();
     } catch (err) {
-      set({ syncError: String(err) });
+      set({ syncError: errorMessage(err) });
     } finally {
       set({ isSyncing: false });
     }
@@ -2699,7 +2725,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await get().checkDirty();
       useToastStore.getState().show("Incoming saves applied.", 4000, "success");
     } catch (err) {
-      set({ syncError: String(err) });
+      set({ syncError: errorMessage(err) });
     } finally {
       set({ isSyncing: false });
     }
@@ -2724,7 +2750,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await publishDraftlineChanges(currentRemote.name);
       await get().refreshSyncStatus();
     } catch (err) {
-      set({ syncError: String(err) });
+      set({ syncError: errorMessage(err) });
     } finally {
       set({ isSyncing: false });
     }

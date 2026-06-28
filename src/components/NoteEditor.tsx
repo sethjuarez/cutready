@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Sparkles } from "lucide-react";
 import { SafeMarkdown } from "./SafeMarkdown";
 import { makeMainTabId, makeSplitTabId, shouldSuppressEditorFlush, useAppStore } from "../stores/appStore";
@@ -14,6 +14,8 @@ import { DocumentHeader } from "./DocumentHeader";
 import { DocumentToolbar, documentToolbarIcons, type DocumentToolbarAction } from "./DocumentToolbar";
 import { NoteIcon } from "./Icons";
 import { LockedDocumentBanner } from "./LockedDocumentBanner";
+import { MetadataEditor } from "./MetadataEditor";
+import { parseNoteDocument, serializeNoteDocument } from "../utils/documentMetadata";
 
 const AI_NOTE_CLEANUP_PROMPT = `You are a document editor. Clean up and improve the following Markdown note.
 
@@ -71,6 +73,7 @@ export function NoteEditor() {
   }, [activeNotePath, setNotePreview]);
   const { settings } = useSettings();
   const runBackgroundAgentAction = useBackgroundAgentAction();
+  const noteDocument = useMemo(() => parseNoteDocument(activeNoteContent ?? ""), [activeNoteContent]);
   const [aiCleaning, setAiCleaning] = useState(false);
   const [aiUpdatedFlash, setAiUpdatedFlash] = useState(false);
   const [richPasteBusy, setRichPasteBusy] = useState(false);
@@ -117,15 +120,31 @@ export function NoteEditor() {
   const handleChange = useCallback(
     (value: string) => {
       if (activeNoteLocked) return;
-      pendingContentRef.current = value;
+      const nextContent = serializeNoteDocument(noteDocument.metadata, value);
+      pendingContentRef.current = nextContent;
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
       saveTimeoutRef.current = setTimeout(() => {
         pendingContentRef.current = null;
         if (shouldSuppressEditorFlush(activeNotePath)) return;
-        updateNoteRef.current(value);
+        updateNoteRef.current(nextContent);
       }, 800);
     },
-    [activeNoteLocked, activeNotePath],
+    [activeNoteLocked, activeNotePath, noteDocument.metadata],
+  );
+
+  const handleMetadataChange = useCallback(
+    (metadata: Parameters<typeof serializeNoteDocument>[0]) => {
+      if (activeNoteLocked) return;
+      const currentDocument = parseNoteDocument(pendingContentRef.current ?? activeNoteContent ?? "");
+      const nextContent = serializeNoteDocument(metadata, currentDocument.body);
+      pendingContentRef.current = null;
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+        saveTimeoutRef.current = null;
+      }
+      updateNoteRef.current(nextContent);
+    },
+    [activeNoteLocked, activeNoteContent],
   );
 
   // Flush on unmount
@@ -238,7 +257,7 @@ Use write_note to save the cleaned Markdown back to "${activeNotePath}". Do not 
     if (!activeNoteContent || exporting) return;
     setExporting(true);
     try {
-      await exportNoteToWord(draftTitle || noteTitleFromPath(activeNotePath), activeNoteContent, projectRoot ?? "", orientation);
+      await exportNoteToWord(draftTitle || noteTitleFromPath(activeNotePath), noteDocument.body, projectRoot ?? "", orientation);
     } catch (e) {
       console.error("[NoteEditor] Export to Word failed:", e);
     } finally {
@@ -355,18 +374,24 @@ Use write_note to save the cleaned Markdown back to "${activeNotePath}". Do not 
           <LockedDocumentBanner message="Note is locked. Unlock it to edit, rename, or use AI cleanup." />
         )}
 
+        <MetadataEditor
+          metadata={noteDocument.metadata}
+          disabled={activeNoteLocked}
+          onChange={handleMetadataChange}
+        />
+
         {/* Content */}
         {mode === "edit" && !activeNoteLocked ? (
           <MarkdownEditor
             editorKey={activeNotePath}
-            value={activeNoteContent ?? ""}
+            value={noteDocument.body}
             onChange={handleChange}
             placeholder="Write your notes here..."
           />
         ) : (
           <div className="py-6">
             <div className="prose-desc text-sm text-[rgb(var(--color-text))] leading-relaxed">
-              {activeNoteContent ? (
+              {noteDocument.body ? (
                 <SafeMarkdown
                   components={{
                     img: ({ src, alt, ...props }) => {
@@ -379,7 +404,7 @@ Use write_note to save the cleaned Markdown back to "${activeNotePath}". Do not 
                     },
                   }}
                 >
-                  {activeNoteContent}
+                  {noteDocument.body}
                 </SafeMarkdown>
               ) : (
                 <p className="text-[rgb(var(--color-text-secondary))] italic">Nothing to preview</p>
