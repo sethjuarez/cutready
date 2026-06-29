@@ -9,6 +9,21 @@
 Covector manages this changelog. Do not edit manually.
 Each release section is generated from `.changes/*.md` files.
 
+## [1.17.0](https://github.com/sethjuarez/cutready/compare/v1.16.0...v1.17.0) (2026-06-29)
+
+
+### Features
+
+* **versioning:** guard remote branch creation ([96062d4](https://github.com/sethjuarez/cutready/commit/96062d4c2ece73b126500c1cca5d52033b02ae08))
+* **versioning:** guard remote branch creation ([28217e7](https://github.com/sethjuarez/cutready/commit/28217e7344b698aacdad2a29184126447222ea24))
+
+
+### Bug Fixes
+
+* harden draftline versioning flow ([00cc39e](https://github.com/sethjuarez/cutready/commit/00cc39e8942202c2b35a8515221bffe2f773d155))
+* **window:** allow custom close button to exit ([c95acab](https://github.com/sethjuarez/cutready/commit/c95acab8cbb9e8ca09ee13da8ee5159208487a65))
+* **window:** allow custom close button to exit ([2edcb6d](https://github.com/sethjuarez/cutready/commit/2edcb6d0a0d6d55f18e0b20d867a7f9dcb4e0552))
+
 ## [1.16.0](https://github.com/sethjuarez/cutready/compare/v1.15.0...v1.16.0) (2026-06-28)
 
 
