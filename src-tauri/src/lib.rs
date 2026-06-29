@@ -158,13 +158,13 @@ pub fn run() {
     let auditaur_policy = configure_auditaur_startup();
     let auditaur_enabled = auditaur_policy.enabled;
     if let Err(error) = tracing_log::LogTracer::init() {
-        eprintln!("Auditaur log bridge was not installed: {error}");
+        eprintln!("Diagnostics log bridge was not installed: {error}");
     }
     let subscriber = tracing_subscriber::registry().with(
         tauri_plugin_auditaur::tracing_layer().with_filter(filter_fn(should_capture_telemetry)),
     );
     if let Err(error) = tracing::subscriber::set_global_default(subscriber) {
-        eprintln!("Auditaur tracing subscriber was not installed: {error}");
+        eprintln!("Diagnostics tracing subscriber was not installed: {error}");
     }
 
     fn should_capture_telemetry(metadata: &Metadata<'_>) -> bool {
@@ -561,6 +561,7 @@ pub fn run() {
             commands::feedback::delete_feedback,
             commands::feedback::export_logs,
             commands::feedback::create_github_issue,
+            commands::feedback::get_feedback_system_info,
             commands::terminal::terminal_open,
             commands::terminal::terminal_write,
             commands::terminal::terminal_resize,

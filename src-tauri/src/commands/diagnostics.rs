@@ -150,9 +150,9 @@ pub async fn get_auditaur_diagnostics() -> Result<AuditaurDiagnosticsSummary, St
         &discovery.database_path,
         rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
     )
-    .map_err(|e| format!("Could not open Auditaur database: {e}"))?;
+    .map_err(|e| format!("Could not open diagnostics database: {e}"))?;
     conn.busy_timeout(Duration::from_millis(750))
-        .map_err(|e| format!("Could not configure Auditaur database timeout: {e}"))?;
+        .map_err(|e| format!("Could not configure diagnostics database timeout: {e}"))?;
 
     let counts = AuditaurDiagnosticsCounts {
         frontend_errors: count_rows_or_note(
@@ -288,7 +288,7 @@ pub async fn clear_auditaur_logs() -> Result<ClearAuditaurLogsResult, String> {
             removed_sessions: 0,
             removed_bytes: 0,
             skipped_active_session: false,
-            notes: vec!["No Auditaur logs were found for CutReady.".to_string()],
+            notes: vec!["No diagnostics logs were found for CutReady.".to_string()],
         });
     }
 
@@ -299,9 +299,10 @@ pub async fn clear_auditaur_logs() -> Result<ClearAuditaurLogsResult, String> {
     let mut removable = Vec::new();
 
     let entries = std::fs::read_dir(&apps_dir)
-        .map_err(|e| format!("Could not read Auditaur discovery directory: {e}"))?;
+        .map_err(|e| format!("Could not read diagnostics discovery directory: {e}"))?;
     for entry in entries {
-        let entry = entry.map_err(|e| format!("Could not read Auditaur discovery entry: {e}"))?;
+        let entry =
+            entry.map_err(|e| format!("Could not read diagnostics discovery entry: {e}"))?;
         if entry.path().extension().and_then(|ext| ext.to_str()) != Some("json") {
             continue;
         }
@@ -346,14 +347,14 @@ pub async fn clear_auditaur_logs() -> Result<ClearAuditaurLogsResult, String> {
             .unwrap_or_else(|| sessions_dir.join(&discovery.session_id));
         if !is_path_inside(&session_dir, &sessions_dir) {
             notes.push(format!(
-                "Skipped Auditaur session outside sessions directory: {}",
+                "Skipped diagnostics session outside sessions directory: {}",
                 session_dir.display()
             ));
             continue;
         }
         let session_bytes = directory_size(&session_dir).unwrap_or_else(|error| {
             notes.push(format!(
-                "Could not size Auditaur session {}: {error}",
+                "Could not size diagnostics session {}: {error}",
                 session_dir.display()
             ));
             0
@@ -366,7 +367,7 @@ pub async fn clear_auditaur_logs() -> Result<ClearAuditaurLogsResult, String> {
                 }
                 Err(error) => {
                     notes.push(format!(
-                        "Could not remove Auditaur session {}: {error}",
+                        "Could not remove diagnostics session {}: {error}",
                         session_dir.display()
                     ));
                     continue;
@@ -377,7 +378,7 @@ pub async fn clear_auditaur_logs() -> Result<ClearAuditaurLogsResult, String> {
             if is_path_inside(&discovery_path, &apps_dir) {
                 if let Err(error) = std::fs::remove_file(&discovery_path) {
                     notes.push(format!(
-                        "Could not remove Auditaur discovery file {}: {error}",
+                        "Could not remove diagnostics discovery file {}: {error}",
                         discovery_path.display()
                     ));
                 }
@@ -386,7 +387,7 @@ pub async fn clear_auditaur_logs() -> Result<ClearAuditaurLogsResult, String> {
     }
 
     if skipped_active_session {
-        notes.push("The current Auditaur session is still open and will be cleared after restarting CutReady with diagnostics disabled, or by clearing logs after restart.".to_string());
+        notes.push("The current diagnostics session is still open and will be cleared after restarting CutReady with diagnostics disabled, or by clearing logs after restart.".to_string());
     }
 
     Ok(ClearAuditaurLogsResult {
@@ -506,7 +507,7 @@ fn find_current_auditaur_discovery(
     let apps_dir = auditaur_root().join("apps");
     if !apps_dir.exists() {
         notes.push(format!(
-            "Auditaur discovery directory does not exist: {}",
+            "Diagnostics discovery directory does not exist: {}",
             apps_dir.display()
         ));
         return Ok(None);
@@ -515,9 +516,10 @@ fn find_current_auditaur_discovery(
     let current_pid = std::process::id();
     let mut candidates = Vec::new();
     let entries = std::fs::read_dir(&apps_dir)
-        .map_err(|e| format!("Could not read Auditaur discovery directory: {e}"))?;
+        .map_err(|e| format!("Could not read diagnostics discovery directory: {e}"))?;
     for entry in entries {
-        let entry = entry.map_err(|e| format!("Could not read Auditaur discovery entry: {e}"))?;
+        let entry =
+            entry.map_err(|e| format!("Could not read diagnostics discovery entry: {e}"))?;
         if entry.path().extension().and_then(|ext| ext.to_str()) != Some("json") {
             continue;
         }
@@ -526,7 +528,7 @@ fn find_current_auditaur_discovery(
             Ok(content) => content,
             Err(error) => {
                 notes.push(format!(
-                    "Skipping unreadable Auditaur discovery file {}: {error}",
+                    "Skipping unreadable diagnostics discovery file {}: {error}",
                     entry.path().display()
                 ));
                 continue;
@@ -536,7 +538,7 @@ fn find_current_auditaur_discovery(
             Ok(discovery) => discovery,
             Err(error) => {
                 notes.push(format!(
-                    "Skipping invalid Auditaur discovery file {}: {error}",
+                    "Skipping invalid diagnostics discovery file {}: {error}",
                     entry.path().display()
                 ));
                 continue;
@@ -559,7 +561,7 @@ fn find_current_auditaur_discovery(
     let fallback = candidates.pop();
     if let Some(discovery) = &fallback {
         notes.push(format!(
-            "Using newest readable CutReady Auditaur session {} because this process did not have a fresh matching discovery PID.",
+            "Using newest readable CutReady diagnostics session {} because this process did not have a fresh matching discovery PID.",
             discovery.session_id
         ));
     }
@@ -580,14 +582,14 @@ fn heartbeat_is_fresh(last_heartbeat_at: Option<&str>) -> bool {
 
 fn count_rows(conn: &Connection, sql: &str) -> Result<i64, String> {
     conn.query_row(sql, [], |row| row.get(0))
-        .map_err(|e| format!("Auditaur count query failed: {e}"))
+        .map_err(|e| format!("Diagnostics count query failed: {e}"))
 }
 
 fn count_rows_or_note(conn: &Connection, sql: &str, label: &str, notes: &mut Vec<String>) -> i64 {
     match count_rows(conn, sql) {
         Ok(count) => count,
         Err(error) => {
-            notes.push(format!("Could not read Auditaur {label}: {error}"));
+            notes.push(format!("Could not read diagnostics {label}: {error}"));
             0
         }
     }
@@ -602,7 +604,7 @@ fn query_items_or_note(
     match query_items(conn, sql) {
         Ok(items) => items,
         Err(error) => {
-            notes.push(format!("Could not read Auditaur {label}: {error}"));
+            notes.push(format!("Could not read diagnostics {label}: {error}"));
             Vec::new()
         }
     }
@@ -611,7 +613,7 @@ fn query_items_or_note(
 fn query_items(conn: &Connection, sql: &str) -> Result<Vec<AuditaurDiagnosticItem>, String> {
     let mut statement = conn
         .prepare(sql)
-        .map_err(|e| format!("Auditaur query prepare failed: {e}"))?;
+        .map_err(|e| format!("Diagnostics query prepare failed: {e}"))?;
     let rows = statement
         .query_map([], |row| {
             Ok(AuditaurDiagnosticItem {
@@ -626,10 +628,10 @@ fn query_items(conn: &Connection, sql: &str) -> Result<Vec<AuditaurDiagnosticIte
                 window_label: row.get(8)?,
             })
         })
-        .map_err(|e| format!("Auditaur query failed: {e}"))?;
+        .map_err(|e| format!("Diagnostics query failed: {e}"))?;
 
     rows.collect::<Result<Vec<_>, _>>()
-        .map_err(|e| format!("Auditaur row mapping failed: {e}"))
+        .map_err(|e| format!("Diagnostics row mapping failed: {e}"))
 }
 
 fn diagnostic_checks(
