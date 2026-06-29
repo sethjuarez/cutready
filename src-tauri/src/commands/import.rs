@@ -265,11 +265,11 @@ pub async fn import_storyboard(
     Ok(final_path)
 }
 
-/// Infer the project root from a file path by walking up to find `.git` or `.cutready`.
+/// Infer the project root from a file path by walking up to find CutReady metadata.
 fn infer_source_root(file_path: &Path) -> Option<PathBuf> {
     let mut dir = file_path.parent()?;
     loop {
-        if dir.join(".git").exists() || dir.join(".cutready").exists() {
+        if dir.join(".cutready").exists() {
             return Some(dir.to_path_buf());
         }
         dir = dir.parent()?;

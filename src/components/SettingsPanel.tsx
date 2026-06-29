@@ -14,6 +14,7 @@ import { ReleaseNotesMarkdown } from "./UpdateAvailableButton";
 import { Dialog } from "./Dialog";
 import { useConfirmDialog } from "./ConfirmDialog";
 import { agentChat } from "../services/agentChat";
+import { addDraftlineRemote, listDraftlineRemotes } from "../services/draftlineVersioning";
 import {
   X,
   RefreshCw,
@@ -2315,10 +2316,10 @@ function RepositoryTab({ settings, updateSetting }: {
   const [detectedRemote, setDetectedRemote] = useState<{ name: string; url: string } | null>(null);
 
   useEffect(() => {
-    invoke("draftline_list_remotes")
+    listDraftlineRemotes()
       .then((remotes) => {
         if (Array.isArray(remotes) && remotes.length > 0) {
-          const remote = remotes[0] as { name: string; url: string };
+          const remote = remotes[0];
           setDetectedRemote(remote);
           if (!settings.repoRemoteUrl) {
             updateSetting("repoRemoteUrl", remote.url);
@@ -2332,13 +2333,13 @@ function RepositoryTab({ settings, updateSetting }: {
     setTestStatus("testing");
     setTestMessage("");
     try {
-      const remotes = await invoke("draftline_list_remotes") as { name: string; url: string }[];
+      const remotes = await listDraftlineRemotes();
       const hasOrigin = remotes.some((r) => r.name === "origin");
       if (hasOrigin) {
         setTestStatus("success");
         setTestMessage("Remote is configured and accessible.");
       } else if (settings.repoRemoteUrl) {
-        await invoke("draftline_add_remote", { name: "origin", url: settings.repoRemoteUrl });
+        await addDraftlineRemote("origin", settings.repoRemoteUrl);
         setTestStatus("success");
         setTestMessage("Remote 'origin' added successfully.");
       } else {

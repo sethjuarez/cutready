@@ -1,7 +1,7 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useCallback, useEffect, useState } from "react";
 import type { MouseEvent } from "react";
-import { Search, X, LayoutGrid } from "lucide-react";
+import { Copy, LayoutGrid, Minus, Search, Square, X } from "lucide-react";
 import { useAppStore } from "../stores/appStore";
 import { isMac, formatKeybinding } from "../utils/platform";
 import { ProjectSwitcher } from "./ProjectSwitcher";
@@ -84,7 +84,6 @@ export function TitleBar({
           height: "var(--titlebar-height)",
           paddingLeft: "var(--macos-traffic-light-space)",
         }}
-        data-tauri-drag-region
         onMouseDown={handleTitleBarMouseDown}
       >
         <MacTrafficLightControls
@@ -233,7 +232,6 @@ export function TitleBar({
     <div
       className="no-select fixed left-0 right-0 top-0 z-chrome flex items-center justify-between border-b border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))]"
       style={{ height: "var(--titlebar-height)" }}
-      data-tauri-drag-region
       onMouseDown={handleTitleBarMouseDown}
     >
       {/* Left side */}
@@ -332,42 +330,80 @@ export function TitleBar({
 
         {/* Window controls — Windows style on the right, hidden on macOS */}
         {!isMac && (
-          <div className="flex items-center h-full">
-            <button
-              onClick={handleMinimize}
-              className="inline-flex items-center justify-center w-11 h-full hover:bg-[rgb(var(--color-surface-alt))] transition-colors"
-              aria-label="Minimize"
-            >
-              <svg width="10" height="1" viewBox="0 0 10 1" fill="currentColor">
-                <rect width="10" height="1" />
-              </svg>
-            </button>
-            <button
-              onClick={handleMaximize}
-              className="inline-flex items-center justify-center w-11 h-full hover:bg-[rgb(var(--color-surface-alt))] transition-colors"
-              aria-label="Maximize"
-            >
-              {maximized ? (
-                <svg width="10" height="10" viewBox="0 0 11 11" fill="none" stroke="currentColor" strokeWidth="1">
-                  <rect x="3.5" y="0.5" width="7" height="7" rx="0.5" />
-                  <rect x="0.5" y="3.5" width="7" height="7" rx="0.5" fill="rgb(var(--color-surface-toolbar))" />
-                </svg>
-              ) : (
-                <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1">
-                  <rect x="0.5" y="0.5" width="9" height="9" rx="0.5" />
-                </svg>
-              )}
-            </button>
-            <button
-              onClick={handleClose}
-              className="inline-flex items-center justify-center w-11 h-full hover:bg-error hover:text-[rgb(var(--color-accent-fg))] transition-colors"
-              aria-label="Close"
-            >
-              <X className="w-2.5 h-2.5" />
-            </button>
-          </div>
+          <WindowsWindowControls
+            maximized={maximized}
+            onMinimize={handleMinimize}
+            onMaximize={handleMaximize}
+            onClose={handleClose}
+          />
         )}
       </div>
     </div>
+  );
+}
+
+function WindowsWindowControls({
+  maximized,
+  onMinimize,
+  onMaximize,
+  onClose,
+}: {
+  maximized: boolean;
+  onMinimize: () => void;
+  onMaximize: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <div
+      className="flex h-full items-stretch border-l border-[rgb(var(--color-border-subtle))]"
+      onMouseDown={(event) => event.stopPropagation()}
+    >
+      <WindowsControlButton label="Minimize" onClick={onMinimize}>
+        <Minus className="h-4 w-4" aria-hidden="true" />
+      </WindowsControlButton>
+      <WindowsControlButton label={maximized ? "Restore" : "Maximize"} onClick={onMaximize}>
+        {maximized ? (
+          <Copy className="h-4 w-4" aria-hidden="true" />
+        ) : (
+          <Square className="h-4 w-4" aria-hidden="true" />
+        )}
+      </WindowsControlButton>
+      <WindowsControlButton label="Close" onClick={onClose} danger>
+        <X className="h-4 w-4" aria-hidden="true" />
+      </WindowsControlButton>
+    </div>
+  );
+}
+
+function WindowsControlButton({
+  label,
+  onClick,
+  danger = false,
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  danger?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      title={label}
+      className={[
+        "group/window-control inline-flex h-full w-[46px] items-center justify-center",
+        "text-[rgb(var(--color-text-secondary))] transition-[background-color,color,box-shadow] duration-150",
+        "hover:text-[rgb(var(--color-text))] active:shadow-[inset_0_0_0_999px_rgb(var(--color-overlay-scrim)/0.04)]",
+        danger
+          ? "hover:bg-[rgb(var(--color-error))] hover:text-[rgb(var(--color-accent-fg))]"
+          : "hover:bg-[rgb(var(--color-surface-alt))]",
+      ].join(" ")}
+    >
+      <span className="grid h-7 w-7 place-items-center opacity-90 transition-opacity group-hover/window-control:opacity-100">
+        {children}
+      </span>
+    </button>
   );
 }

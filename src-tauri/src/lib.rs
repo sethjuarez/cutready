@@ -441,6 +441,10 @@ pub fn run() {
             commands::draftline::list_variations,
             commands::draftline::preflight_rename_variation,
             commands::draftline::rename_variation,
+            commands::draftline::delete_variation,
+            commands::draftline::switch_variation,
+            commands::draftline::add_remote,
+            commands::draftline::squash_versions,
             commands::draftline::list_support_refs,
             commands::draftline::get_changes,
             commands::draftline::get_history,
@@ -485,41 +489,6 @@ pub fn run() {
             commands::draftline::merge_incoming,
             commands::draftline::merge_incoming_with_resolutions,
             commands::draftline::clone_from_url,
-            commands::draftline::draftline_inspect_changes,
-            commands::draftline::draftline_discard_changes,
-            commands::draftline::draftline_discard_file,
-            commands::draftline::draftline_workspace_summary,
-            commands::draftline::draftline_save_version,
-            commands::draftline::draftline_shelve_changes,
-            commands::draftline::draftline_list_shelves,
-            commands::draftline::draftline_apply_shelf,
-            commands::draftline::draftline_delete_shelf,
-            commands::draftline::draftline_list_versions,
-            commands::draftline::draftline_full_history,
-            commands::draftline::draftline_preview_version,
-            commands::draftline::draftline_preview_version_file,
-            commands::draftline::draftline_current_variation,
-            commands::draftline::draftline_list_variations,
-            commands::draftline::draftline_variation_summaries,
-            commands::draftline::draftline_create_variation_from,
-            commands::draftline::draftline_delete_variation,
-            commands::draftline::draftline_preflight_switch_variation,
-            commands::draftline::draftline_switch_variation,
-            commands::draftline::draftline_restore_version_as_new_save,
-            commands::draftline::draftline_squash_versions,
-            commands::draftline::draftline_diff_versions,
-            commands::draftline::draftline_diff_version_to_workspace,
-            commands::draftline::draftline_file_diff_content,
-            commands::draftline::draftline_add_remote,
-            commands::draftline::draftline_list_remotes,
-            commands::draftline::draftline_fetch_remote,
-            commands::draftline::draftline_preflight_apply_incoming,
-            commands::draftline::draftline_apply_incoming,
-            commands::draftline::draftline_preflight_merge_incoming,
-            commands::draftline::draftline_merge_incoming,
-            commands::draftline::draftline_merge_incoming_with_resolutions,
-            commands::draftline::draftline_publish_changes,
-            commands::draftline::draftline_sync_status,
             commands::interaction::detect_browser_profiles,
             commands::interaction::check_browsers_running,
             commands::interaction::prepare_browser,
@@ -629,15 +598,21 @@ pub fn run() {
                     let app = window.app_handle();
                     if let Some(state) = app.try_state::<AppState>() {
                         let summary = state.last_chat_summary.lock().unwrap().take();
-                        let root = state
+                        let roots = state
                             .current_project
                             .lock()
                             .unwrap()
                             .as_ref()
-                            .map(|p| p.root.clone());
-                        if let (Some((session_id, text)), Some(root)) = (summary, root) {
-                            let _ =
-                                crate::engine::memory::archive_session(&root, &text, &session_id);
+                            .map(|p| (p.repo_root.clone(), p.root.clone()));
+                        if let (Some((session_id, text)), Some((repo_root, root))) =
+                            (summary, roots)
+                        {
+                            let _ = crate::engine::memory::archive_session(
+                                &repo_root,
+                                &root,
+                                &text,
+                                &session_id,
+                            );
                         }
                     }
                 }

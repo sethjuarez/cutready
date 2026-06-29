@@ -27,9 +27,11 @@ struct SqliteBackend {
 }
 
 impl SqliteBackend {
-    fn new(project_root: &Path) -> Result<Self, String> {
-        let db_path =
-            crate::engine::agent_state::AgentStateStore::ensure_database_for_project(project_root)?;
+    fn new(repo_root: &Path, project_root: &Path) -> Result<Self, String> {
+        let db_path = crate::engine::agent_state::AgentStateStore::ensure_database_for_project(
+            repo_root,
+            project_root,
+        )?;
         Ok(Self {
             local_json_path: db_path.with_file_name("memory.json"),
             db_path,
@@ -194,16 +196,16 @@ fn memory_category_name(category: &MemoryCategory) -> Result<String, String> {
 }
 
 // ---------------------------------------------------------------------------
-// Convenience functions (same signatures as before for call-site compatibility)
+// Convenience functions
 // ---------------------------------------------------------------------------
 
 /// Load the memory store from disk.
-pub fn load(project_root: &Path) -> MemoryStore {
+pub fn load(repo_root: &Path, project_root: &Path) -> MemoryStore {
     let Ok(_guard) = MEMORY_BACKEND_LOCK.lock() else {
         log::warn!("[memory] memory backend lock is poisoned");
         return MemoryStore::default();
     };
-    match SqliteBackend::new(project_root) {
+    match SqliteBackend::new(repo_root, project_root) {
         Ok(backend) => backend.load(),
         Err(err) => {
             log::warn!("[memory] could not initialize memory backend: {err}");
@@ -214,6 +216,7 @@ pub fn load(project_root: &Path) -> MemoryStore {
 
 /// Save a memory entry with dedup + capacity management, then persist.
 pub fn save_memory(
+    repo_root: &Path,
     project_root: &Path,
     category: MemoryCategory,
     content: &str,
@@ -222,15 +225,15 @@ pub fn save_memory(
     let _guard = MEMORY_BACKEND_LOCK
         .lock()
         .map_err(|e| format!("Could not lock memory backend: {e}"))?;
-    let backend = SqliteBackend::new(project_root)?;
+    let backend = SqliteBackend::new(repo_root, project_root)?;
     let mut store = backend.load();
     store.save(category, content, tags);
     backend.save(&store)
 }
 
 /// Search memories by keyword.
-pub fn recall(project_root: &Path, query: &str) -> Vec<MemoryEntry> {
-    let store = load(project_root);
+pub fn recall(repo_root: &Path, project_root: &Path, query: &str) -> Vec<MemoryEntry> {
+    let store = load(repo_root, project_root);
     log::debug!(
         "[memory] recall query='{}' across {} memories",
         query,
@@ -242,8 +245,8 @@ pub fn recall(project_root: &Path, query: &str) -> Vec<MemoryEntry> {
 }
 
 /// Format core memories for injection into the system prompt.
-pub fn format_for_system_prompt(project_root: &Path) -> String {
-    load(project_root).format_for_system_prompt()
+pub fn format_for_system_prompt(repo_root: &Path, project_root: &Path) -> String {
+    load(repo_root, project_root).format_for_system_prompt()
 }
 
 /// Format recall results for the agent.
@@ -253,22 +256,27 @@ pub fn format_recall_results(results: &[MemoryEntry]) -> String {
 }
 
 /// Save an archival session summary.
-pub fn archive_session(project_root: &Path, summary: &str, session_id: &str) -> Result<(), String> {
+pub fn archive_session(
+    repo_root: &Path,
+    project_root: &Path,
+    summary: &str,
+    session_id: &str,
+) -> Result<(), String> {
     let _guard = MEMORY_BACKEND_LOCK
         .lock()
         .map_err(|e| format!("Could not lock memory backend: {e}"))?;
-    let backend = SqliteBackend::new(project_root)?;
+    let backend = SqliteBackend::new(repo_root, project_root)?;
     let mut store = backend.load();
     store.archive_session(summary, session_id);
     backend.save(&store)
 }
 
 /// Delete a memory by index.
-pub fn delete_memory(project_root: &Path, index: usize) -> Result<(), String> {
+pub fn delete_memory(repo_root: &Path, project_root: &Path, index: usize) -> Result<(), String> {
     let _guard = MEMORY_BACKEND_LOCK
         .lock()
         .map_err(|e| format!("Could not lock memory backend: {e}"))?;
-    let backend = SqliteBackend::new(project_root)?;
+    let backend = SqliteBackend::new(repo_root, project_root)?;
     let mut store = backend.load();
     store.delete(index).ok_or_else(|| {
         format!(
@@ -281,11 +289,16 @@ pub fn delete_memory(project_root: &Path, index: usize) -> Result<(), String> {
 }
 
 /// Update a memory's content by index.
-pub fn update_memory(project_root: &Path, index: usize, content: &str) -> Result<(), String> {
+pub fn update_memory(
+    repo_root: &Path,
+    project_root: &Path,
+    index: usize,
+    content: &str,
+) -> Result<(), String> {
     let _guard = MEMORY_BACKEND_LOCK
         .lock()
         .map_err(|e| format!("Could not lock memory backend: {e}"))?;
-    let backend = SqliteBackend::new(project_root)?;
+    let backend = SqliteBackend::new(repo_root, project_root)?;
     let mut store = backend.load();
     if !store.update(index, content) {
         return Err(format!(
@@ -299,13 +312,14 @@ pub fn update_memory(project_root: &Path, index: usize, content: &str) -> Result
 
 /// Delete all memories of a given category, or all if None.
 pub fn clear_memories(
+    repo_root: &Path,
     project_root: &Path,
     category: Option<MemoryCategory>,
 ) -> Result<usize, String> {
     let _guard = MEMORY_BACKEND_LOCK
         .lock()
         .map_err(|e| format!("Could not lock memory backend: {e}"))?;
-    let backend = SqliteBackend::new(project_root)?;
+    let backend = SqliteBackend::new(repo_root, project_root)?;
     let mut store = backend.load();
     let removed = store.clear(category);
     backend.save(&store)?;
@@ -322,7 +336,8 @@ mod tests {
     use tempfile::TempDir;
 
     fn memory_row_count(root: &Path) -> usize {
-        let db_path = crate::engine::agent_state::AgentStateStore::database_path_for_project(root);
+        let db_path =
+            crate::engine::agent_state::AgentStateStore::database_path_for_project(root, root);
         let conn = Connection::open(db_path).unwrap();
         conn.query_row("SELECT COUNT(*) FROM agent_memories", [], |row| {
             row.get::<_, usize>(0)
@@ -337,6 +352,7 @@ mod tests {
 
         save_memory(
             root,
+            root,
             MemoryCategory::Core,
             "User prefers short narration",
             vec!["preference".into()],
@@ -344,13 +360,14 @@ mod tests {
         .unwrap();
         save_memory(
             root,
+            root,
             MemoryCategory::Insight,
             "Dashboard demo needs more detail",
             vec!["demo".into()],
         )
         .unwrap();
 
-        let store = load(root);
+        let store = load(root, root);
         assert_eq!(store.memories.len(), 2);
         assert_eq!(store.memories[0].content, "User prefers short narration");
         assert!(root.join(".git/cutready/agent-state.db").exists());
@@ -366,12 +383,14 @@ mod tests {
 
         save_memory(
             root,
+            root,
             MemoryCategory::Core,
             "User prefers TypeScript",
             vec!["language".into()],
         )
         .unwrap();
         save_memory(
+            root,
             root,
             MemoryCategory::Insight,
             "Dashboard needs chart builder",
@@ -380,17 +399,18 @@ mod tests {
         .unwrap();
         save_memory(
             root,
+            root,
             MemoryCategory::Archival,
             "Session discussed login flow",
             vec!["session:1".into()],
         )
         .unwrap();
 
-        let results = recall(root, "dashboard chart");
+        let results = recall(root, root, "dashboard chart");
         assert_eq!(results.len(), 1);
         assert!(results[0].content.contains("Dashboard"));
 
-        let results = recall(root, "TypeScript language");
+        let results = recall(root, root, "TypeScript language");
         assert_eq!(results.len(), 1);
         assert!(results[0].content.contains("TypeScript"));
     }
@@ -402,6 +422,7 @@ mod tests {
 
         save_memory(
             root,
+            root,
             MemoryCategory::Core,
             "User likes blue",
             vec!["color-pref".into()],
@@ -409,13 +430,14 @@ mod tests {
         .unwrap();
         save_memory(
             root,
+            root,
             MemoryCategory::Core,
             "User likes purple",
             vec!["color-pref".into()],
         )
         .unwrap();
 
-        let store = load(root);
+        let store = load(root, root);
         let cores: Vec<_> = store
             .memories
             .iter()
@@ -431,7 +453,7 @@ mod tests {
     #[test]
     fn format_system_prompt_empty_when_no_memories() {
         let tmp = TempDir::new().unwrap();
-        let result = format_for_system_prompt(tmp.path());
+        let result = format_for_system_prompt(tmp.path(), tmp.path());
         assert!(result.is_empty());
     }
 
@@ -442,12 +464,13 @@ mod tests {
 
         archive_session(
             root,
+            root,
             "Discussed login flow demo with 5 steps",
             "chat-2026-01-01",
         )
         .unwrap();
 
-        let store = load(root);
+        let store = load(root, root);
         assert_eq!(store.memories.len(), 1);
         assert_eq!(store.memories[0].category, MemoryCategory::Archival);
         assert!(store.memories[0]
@@ -462,6 +485,7 @@ mod tests {
 
         save_memory(
             root,
+            root,
             MemoryCategory::Core,
             "Use precise narration",
             vec!["style".into()],
@@ -469,24 +493,25 @@ mod tests {
         .unwrap();
         save_memory(
             root,
+            root,
             MemoryCategory::Insight,
             "Dashboard demo needs charts",
             vec!["dashboard".into()],
         )
         .unwrap();
 
-        update_memory(root, 0, "Use concise narration").unwrap();
-        let store = load(root);
+        update_memory(root, root, 0, "Use concise narration").unwrap();
+        let store = load(root, root);
         assert_eq!(store.memories[0].content, "Use concise narration");
 
-        delete_memory(root, 1).unwrap();
-        let store = load(root);
+        delete_memory(root, root, 1).unwrap();
+        let store = load(root, root);
         assert_eq!(store.memories.len(), 1);
         assert_eq!(store.memories[0].content, "Use concise narration");
 
-        let removed = clear_memories(root, Some(MemoryCategory::Core)).unwrap();
+        let removed = clear_memories(root, root, Some(MemoryCategory::Core)).unwrap();
         assert_eq!(removed, 1);
-        assert!(load(root).memories.is_empty());
+        assert!(load(root, root).memories.is_empty());
         assert_eq!(memory_row_count(root), 0);
     }
 
@@ -502,7 +527,7 @@ mod tests {
         )
         .unwrap();
 
-        let store = load(root);
+        let store = load(root, root);
 
         assert_eq!(store.memories.len(), 1);
         assert_eq!(store.memories[0].content, "Use concise narration");
@@ -524,7 +549,7 @@ mod tests {
         )
         .unwrap();
 
-        let store = load(root);
+        let store = load(root, root);
 
         assert_eq!(store.memories.len(), 1);
         assert_eq!(store.memories[0].content, "Charts should animate in");

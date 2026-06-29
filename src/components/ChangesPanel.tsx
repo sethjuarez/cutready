@@ -261,6 +261,11 @@ export function ChangesPanel() {
     }
   }, [confirmRenameMaster, renameLegacyMasterTimeline]);
 
+  const openFullHistoryGraph = useCallback(() => {
+    openTab({ type: "history", path: "__history__", title: "History Graph" });
+    setShowAdvanced(false);
+  }, [openTab]);
+
   const selectedProjectFilter = projectFilter === "all"
     ? null
     : projects.find((project) => project.path === projectFilter) ?? null;
@@ -515,6 +520,13 @@ export function ChangesPanel() {
             <TimelineSelector />
           </div>
           <button
+            onClick={openFullHistoryGraph}
+            className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-accent))]"
+            title="Open full history graph"
+          >
+            <GitBranch className="h-3 w-3" />
+          </button>
+          <button
             onClick={() => {
               setShowSearch(!showSearch);
               if (showSearch) setSearchQuery("");
@@ -537,14 +549,11 @@ export function ChangesPanel() {
       {showAdvanced && !squashMode && (
         <div className="space-y-0.5 border-b border-[rgb(var(--color-border))] px-3 py-1">
           <button
-            onClick={() => {
-              openTab({ type: "history", path: "__history__", title: "History" });
-              setShowAdvanced(false);
-            }}
+            onClick={openFullHistoryGraph}
             className="flex w-full items-center gap-1.5 rounded px-2 py-1 text-[10px] text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
           >
-            <Clock className="h-3 w-3" />
-            Open full history
+            <GitBranch className="h-3 w-3" />
+            Open full history graph
           </button>
           {historyAuthors.length > 1 && (
             <label className="flex items-center gap-1.5 rounded px-2 py-1 text-[10px] text-[rgb(var(--color-text-secondary))]">

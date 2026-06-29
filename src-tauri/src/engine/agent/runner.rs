@@ -91,6 +91,7 @@ pub async fn run(
     provider_name: Option<String>,
     model_name: Option<String>,
     messages: Vec<ChatMessage>,
+    repo_root: &Path,
     project_root: &Path,
     agent_id: &str,
     agent_prompts: &HashMap<String, String>,
@@ -108,6 +109,7 @@ pub async fn run(
         provider_name,
         model_name,
         messages,
+        repo_root,
         project_root,
         agent_id,
         agent_prompts,
@@ -130,6 +132,7 @@ fn run_inner<'a>(
     provider_name: Option<String>,
     model_name: Option<String>,
     messages: Vec<ChatMessage>,
+    repo_root: &'a Path,
     project_root: &'a Path,
     agent_id: &'a str,
     agent_prompts: &'a HashMap<String, String>,
@@ -324,6 +327,7 @@ fn run_inner<'a>(
         };
 
         // Build async tool executor
+        let repo_root_str = repo_root.to_string_lossy().to_string();
         let project_root_str = project_root.to_string_lossy().to_string();
         let agent_prompts_owned = agent_prompts.clone();
         let provider_for_tools = provider.clone();
@@ -340,6 +344,7 @@ fn run_inner<'a>(
         let tool_executor = move |tool_call: agentive::ToolCall| -> std::pin::Pin<
             Box<dyn std::future::Future<Output = Result<agentive::ToolOutput, String>> + Send>,
         > {
+            let repo_root = repo_root_str.clone();
             let project_root = project_root_str.clone();
             let agent_prompts = agent_prompts_owned.clone();
             let provider = provider_for_tools.clone();
@@ -355,6 +360,7 @@ fn run_inner<'a>(
                     provider_name,
                     model_name,
                     &tool_call,
+                    &repo_root,
                     &project_root,
                     &agent_prompts,
                     &tools,
@@ -389,6 +395,7 @@ fn run_inner<'a>(
             } else {
                 let output = tools::execute_tool(
                     &tool_call,
+                    Path::new(&repo_root),
                     Path::new(&project_root),
                     vision_enabled,
                     project_workspace_tools_enabled,
@@ -469,6 +476,7 @@ fn run_inner<'a>(
                     ..Default::default()
                 };
 
+                let repo_root_str = repo_root.to_string_lossy().to_string();
                 let project_root_str = project_root.to_string_lossy().to_string();
                 let agent_prompts_owned = agent_prompts.clone();
                 let provider_for_tools = provider.clone();
@@ -491,6 +499,7 @@ fn run_inner<'a>(
                             + Send,
                     >,
                 > {
+                    let repo_root = repo_root_str.clone();
                     let project_root = project_root_str.clone();
                     let agent_prompts = agent_prompts_owned.clone();
                     let provider = provider_for_tools.clone();
@@ -506,6 +515,7 @@ fn run_inner<'a>(
                             provider_name,
                             model_name,
                             &tool_call,
+                            &repo_root,
                             &project_root,
                             &agent_prompts,
                             &tools,
@@ -544,6 +554,7 @@ fn run_inner<'a>(
                     } else {
                         let output = tools::execute_tool(
                             &tool_call,
+                            Path::new(&repo_root),
                             Path::new(&project_root),
                             vision_enabled,
                             project_workspace_tools_enabled && mutation_tools_enabled,
@@ -808,6 +819,7 @@ fn exec_delegation(
     provider_name: Option<String>,
     model_name: Option<String>,
     call: &agentive::ToolCall,
+    repo_root: &str,
     project_root: &str,
     agent_prompts: &HashMap<String, String>,
     _tools: &[agentive::Tool],
@@ -856,6 +868,7 @@ fn exec_delegation(
     };
 
     // Own everything needed by the async block
+    let repo_root = repo_root.to_string();
     let project_root = project_root.to_string();
     let agent_prompts = agent_prompts.clone();
     let tools = tools::all_tools(
@@ -884,6 +897,7 @@ fn exec_delegation(
         };
 
         let project_root_for_tools = project_root.clone();
+        let repo_root_for_tools = repo_root.clone();
         let agent_prompts_for_tools = agent_prompts.clone();
         let provider_for_tools = provider.clone();
         let provider_name_for_tools = provider_name.clone();
@@ -897,6 +911,7 @@ fn exec_delegation(
         let sub_tool_executor = move |tool_call: agentive::ToolCall| -> std::pin::Pin<
             Box<dyn std::future::Future<Output = Result<agentive::ToolOutput, String>> + Send>,
         > {
+            let repo_root = repo_root_for_tools.clone();
             let project_root = project_root_for_tools.clone();
             let agent_prompts = agent_prompts_for_tools.clone();
             let provider = provider_for_tools.clone();
@@ -912,6 +927,7 @@ fn exec_delegation(
                     provider_name,
                     model_name,
                     &tool_call,
+                    &repo_root,
                     &project_root,
                     &agent_prompts,
                     &tools,
@@ -935,6 +951,7 @@ fn exec_delegation(
             } else {
                 let output = tools::execute_tool(
                     &tool_call,
+                    Path::new(&repo_root),
                     Path::new(&project_root),
                     vision_enabled,
                     sub_project_workspace_tools_enabled,
@@ -1238,7 +1255,8 @@ mod tests {
     async fn cutready_runner_persists_trajectory_to_agent_state_store() {
         let project = tempfile::tempdir().unwrap();
         let run_id = "cutready-runner-checkpoint-test".to_string();
-        let store = AgentStateStore::for_project(project.path(), run_id.clone()).unwrap();
+        let store =
+            AgentStateStore::for_project(project.path(), project.path(), run_id.clone()).unwrap();
         store
             .insert_run(
                 None,
@@ -1258,6 +1276,7 @@ mod tests {
             Some("harness-test".into()),
             Some("tiny-harness".into()),
             messages,
+            project.path(),
             project.path(),
             "writer",
             &HashMap::new(),

@@ -29,13 +29,16 @@ const restoredSketch: Sketch = {
   updated_at: "2026-01-01T00:00:00Z",
 };
 
-const cleanDraftlineSummary = {
-  activeVariation: { id: "main", name: "main", displayLabel: "main", isCurrent: true },
-  variations: [{ id: "main", name: "main", displayLabel: "main", isCurrent: true }],
-  versions: [],
-  dirtyFiles: [],
-  isDirty: false,
-  stateMayBeInconsistent: false,
+const cleanDraftlineDiagnostics = {
+  summary: {
+    active_variation: { id: "main", name: "main", metadata: {}, is_current: true },
+    variations: [{ id: "main", name: "main", metadata: {}, is_current: true }],
+    versions: [],
+    dirty_files: [],
+    is_dirty: false,
+    recovery: null,
+    state_may_be_inconsistent: false,
+  },
 };
 
 describe("discardFile", () => {
@@ -94,8 +97,8 @@ describe("discardFile", () => {
           return Promise.resolve([]);
         case "get_sketch":
           return Promise.resolve(restoredSketch);
-        case "draftline_workspace_summary":
-          return Promise.resolve(cleanDraftlineSummary);
+        case "inspect_workspace":
+          return Promise.resolve(cleanDraftlineDiagnostics);
         case "set_workspace_state":
           return Promise.resolve();
         default:
@@ -146,8 +149,8 @@ describe("discardFile", () => {
           return Promise.resolve([]);
         case "get_sketch":
           return Promise.resolve(restoredSketch);
-        case "draftline_workspace_summary":
-          return Promise.resolve(cleanDraftlineSummary);
+        case "inspect_workspace":
+          return Promise.resolve(cleanDraftlineDiagnostics);
         case "set_workspace_state":
           return Promise.resolve();
         default:
@@ -202,8 +205,8 @@ describe("discardFile", () => {
         case "list_storyboards":
         case "list_notes":
           return Promise.resolve([]);
-        case "draftline_workspace_summary":
-          return Promise.resolve(cleanDraftlineSummary);
+        case "inspect_workspace":
+          return Promise.resolve(cleanDraftlineDiagnostics);
         case "set_workspace_state":
           return Promise.resolve();
         default:
@@ -246,8 +249,8 @@ describe("discardFile", () => {
         case "list_storyboards":
         case "list_notes":
           return Promise.resolve([]);
-        case "draftline_workspace_summary":
-          return Promise.resolve(cleanDraftlineSummary);
+        case "inspect_workspace":
+          return Promise.resolve(cleanDraftlineDiagnostics);
         case "set_workspace_state":
           return Promise.resolve();
         default:
@@ -298,8 +301,8 @@ describe("discardFile", () => {
         case "list_storyboards":
         case "list_notes":
           return Promise.resolve([]);
-        case "draftline_workspace_summary":
-          return Promise.resolve(cleanDraftlineSummary);
+        case "inspect_workspace":
+          return Promise.resolve(cleanDraftlineDiagnostics);
         default:
           return Promise.resolve(null);
       }

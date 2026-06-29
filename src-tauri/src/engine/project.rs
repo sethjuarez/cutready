@@ -106,11 +106,8 @@ pub fn safe_resolve(root: &Path, relative_path: &str) -> Result<PathBuf, Project
 pub fn init_project_folder(root: &Path) -> Result<ProjectView, ProjectError> {
     std::fs::create_dir_all(root).map_err(|e| ProjectError::Io(e.to_string()))?;
 
-    // Init Draftline if not already a workspace.
-    if !root.join(".git").exists() {
-        CutReadyDraftlineAdapter::open_project(root)
-            .map_err(|e| ProjectError::Io(e.to_string()))?;
-    }
+    // Draftline owns workspace initialization and existing-workspace detection.
+    CutReadyDraftlineAdapter::open_project(root).map_err(|e| ProjectError::Io(e.to_string()))?;
 
     Ok(ProjectView::new(root.to_path_buf()))
 }
@@ -169,11 +166,8 @@ pub fn open_repo(root: &Path) -> Result<(RepoView, Vec<ProjectEntry>), ProjectEr
         return Err(ProjectError::NotFound(root.to_string_lossy().into_owned()));
     }
 
-    // Init Draftline if not already a workspace so persistence works.
-    if !root.join(".git").exists() {
-        CutReadyDraftlineAdapter::open_project(root)
-            .map_err(|e| ProjectError::Io(e.to_string()))?;
-    }
+    // Draftline owns workspace initialization and existing-workspace detection.
+    CutReadyDraftlineAdapter::open_project(root).map_err(|e| ProjectError::Io(e.to_string()))?;
 
     // Repair: move orphaned repo-level assets into the first project.
     // This fixes workspaces migrated before the asset-move fix.
@@ -901,17 +895,8 @@ fn scan_all_recursive(
         let file_name = entry.file_name();
         let name = file_name.to_string_lossy();
 
-        // Skip .git internals (huge pack files, not useful to browse)
+        // Skip VCS internals entirely; Draftline owns versioning metadata.
         if name == ".git" {
-            // Still show the .git folder itself, just don't recurse into it
-            if let Ok(rel) = path.strip_prefix(project_root) {
-                entries.push(FileEntry {
-                    path: rel.to_string_lossy().replace('\\', "/"),
-                    ext: String::new(),
-                    size: 0,
-                    is_dir: true,
-                });
-            }
             continue;
         }
 
@@ -1477,7 +1462,7 @@ fn migrate_legacy_chat_file(
     destination: &Path,
 ) -> Result<(), ProjectError> {
     let data = std::fs::read_to_string(source).map_err(|e| ProjectError::Io(e.to_string()))?;
-    if let Ok(mut session) = serde_json::from_str::<ChatSession>(&data) {
+    if let Ok(session) = serde_json::from_str::<ChatSession>(&data) {
         write_chat_session(destination, &session)?;
     } else {
         std::fs::write(destination, data).map_err(|e| ProjectError::Io(e.to_string()))?;

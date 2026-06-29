@@ -2378,11 +2378,6 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         path: `snapshot:${commitId}`,
         title: `Snapshot: ${label}`,
       });
-      useToastStore.getState().show(
-        "Opened snapshot preview without changing your workspace.",
-        5000,
-        "info",
-      );
     } catch (err) {
       console.error("Failed to preview snapshot:", err);
       useToastStore.getState().show(`Snapshot preview failed: ${err}`, 5000, "error");
@@ -2790,6 +2785,8 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       return entries;
     } catch (err) {
       console.error("Failed to diff snapshots:", err);
+      set({ diffResult: null, diffSelection: null });
+      useToastStore.getState().show(`Could not compare snapshots: ${err}`, 5000, "error");
       return [];
     }
   },

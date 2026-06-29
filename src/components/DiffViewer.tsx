@@ -1,21 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { invoke } from "../services/tauri";
-import { previewDraftlineVersionFile, previewDraftlineWorkspaceFile } from "../services/draftlineVersioning";
+import {
+  previewDraftlineVersionFile,
+  previewDraftlineWorkspaceDiffFile,
+  previewDraftlineWorkspaceFile,
+} from "../services/draftlineVersioning";
 import { Columns2, Rows2, LayoutList } from "lucide-react";
 
 interface FileDiffContent {
   path: string;
   headContent: string | null;
   workingContent: string | null;
+  headPresent: boolean;
+  workingPresent: boolean;
   isBinary?: boolean;
-}
-
-interface RawFileDiffContent {
-  path: string;
-  headContent?: string | null;
-  workingContent?: string | null;
-  head_content?: string | null;
-  working_content?: string | null;
 }
 
 interface SnapshotDiffTarget {
@@ -129,14 +126,6 @@ function parseSnapshotDiffTarget(path: string): SnapshotDiffTarget | null {
   }
 }
 
-function normalizeFileDiffContent(content: RawFileDiffContent): FileDiffContent {
-  return {
-    path: content.path,
-    headContent: content.headContent ?? content.head_content ?? null,
-    workingContent: content.workingContent ?? content.working_content ?? null,
-  };
-}
-
 export function DiffViewer({ filePath }: { filePath: string }) {
   const snapshotTarget = parseSnapshotDiffTarget(filePath);
   const displayPath = snapshotTarget?.filePath ?? filePath;
@@ -159,10 +148,12 @@ export function DiffViewer({ filePath }: { filePath: string }) {
           path: snapshotTarget.filePath,
           headContent: snapshotFile?.content ?? null,
           workingContent: workspaceFile?.content ?? null,
-          isBinary: snapshotFile?.isBinary ?? false,
+          headPresent: snapshotFile !== null,
+          workingPresent: workspaceFile !== null,
+          isBinary: snapshotFile?.isBinary ?? workspaceFile?.isBinary ?? false,
         };
       }
-      return normalizeFileDiffContent(await invoke<RawFileDiffContent>("draftline_file_diff_content", { filePath }));
+      return previewDraftlineWorkspaceDiffFile(filePath);
     };
     loadDiff()
       .then(setDiff)
@@ -192,12 +183,14 @@ export function DiffViewer({ filePath }: { filePath: string }) {
   const isSnapshotDiff = snapshotTarget !== null;
   const leftContent = isSnapshotDiff ? diff.workingContent : diff.headContent;
   const rightContent = isSnapshotDiff ? diff.headContent : diff.workingContent;
-  const isNew = leftContent === null && rightContent !== null;
-  const isDeleted = leftContent !== null && rightContent === null;
+  const leftPresent = isSnapshotDiff ? diff.workingPresent : diff.headPresent;
+  const rightPresent = isSnapshotDiff ? diff.headPresent : diff.workingPresent;
+  const isNew = !leftPresent && rightPresent;
+  const isDeleted = leftPresent && !rightPresent;
   const oldText = leftContent ?? "";
   const newText = rightContent ?? "";
   const status = isNew ? "added" : isDeleted ? "deleted" : "modified";
-  const showToggle = !isDeleted || isStructured;
+  const showToggle = !diff.isBinary && (!isDeleted || isStructured);
   const leftLabel = isSnapshotDiff ? "Current workspace" : "Last snapshot";
   const rightLabel = isSnapshotDiff ? "Snapshot restore" : "Working copy";
   const lineDelta = !isNew && !isDeleted ? newText.split("\n").length - oldText.split("\n").length : undefined;
@@ -215,9 +208,23 @@ export function DiffViewer({ filePath }: { filePath: string }) {
         contextLabel={isSnapshotDiff ? "Restore preview" : "Workspace diff"}
       />
       <div className="flex-1 overflow-auto">
-        {viewMode === "semantic" && isStructured ? (
+        {diff.isBinary ? (
+          <BinaryFileView
+            oldLabel={leftLabel}
+            newLabel={rightLabel}
+            oldPresent={leftPresent}
+            newPresent={rightPresent}
+          />
+        ) : viewMode === "semantic" && isStructured ? (
           <div className="p-4">
-            <StructuredDiff oldJson={oldText} newJson={newText} isNew={isNew} oldLabel={leftLabel} newLabel={rightLabel} />
+            <StructuredDiff
+              oldJson={oldText}
+              newJson={newText}
+              isNew={isNew}
+              isDeleted={isDeleted}
+              oldLabel={leftLabel}
+              newLabel={rightLabel}
+            />
           </div>
         ) : isNew && viewMode !== "split" ? (
           <NewFileView text={newText} />
@@ -228,6 +235,44 @@ export function DiffViewer({ filePath }: { filePath: string }) {
         ) : (
           <UnifiedDiffView oldText={oldText} newText={newText} />
         )}
+      </div>
+    </div>
+  );
+}
+
+function BinaryFileView({
+  oldLabel,
+  newLabel,
+  oldPresent,
+  newPresent,
+}: {
+  oldLabel: string;
+  newLabel: string;
+  oldPresent: boolean;
+  newPresent: boolean;
+}) {
+  return (
+    <div className="flex h-full items-center justify-center p-6">
+      <div className="max-w-lg rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] p-4 text-sm">
+        <div className="font-medium text-[rgb(var(--color-text))]">Binary file preview</div>
+        <p className="mt-1 text-[rgb(var(--color-text-secondary))]">
+          This file cannot be rendered as an inline text diff, but Draftline reported its presence on each side.
+        </p>
+        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <BinaryPresence label={oldLabel} present={oldPresent} />
+          <BinaryPresence label={newLabel} present={newPresent} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BinaryPresence({ label, present }: { label: string; present: boolean }) {
+  return (
+    <div className="rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] p-3">
+      <div className="text-[10px] font-medium uppercase tracking-wider text-[rgb(var(--color-text-secondary))]">{label}</div>
+      <div className={present ? "mt-1 text-success" : "mt-1 text-error"}>
+        {present ? "Binary file present" : "File missing"}
       </div>
     </div>
   );
@@ -630,21 +675,25 @@ function StructuredDiff({
   oldJson,
   newJson,
   isNew,
+  isDeleted,
   oldLabel,
   newLabel,
 }: {
   oldJson: string;
   newJson: string;
   isNew?: boolean;
+  isDeleted?: boolean;
   oldLabel: string;
   newLabel: string;
 }) {
   let oldObj: unknown = null;
-  let newObj: unknown;
+  let newObj: unknown = null;
   if (!isNew) {
     try { oldObj = JSON.parse(oldJson); } catch { return <FallbackMessage msg="Could not parse previous version" />; }
   }
-  try { newObj = JSON.parse(newJson); } catch { return <FallbackMessage msg="Could not parse current version" />; }
+  if (!isDeleted) {
+    try { newObj = JSON.parse(newJson); } catch { return <FallbackMessage msg="Could not parse current version" />; }
+  }
 
   const changes = collectChanges(oldObj, newObj);
 

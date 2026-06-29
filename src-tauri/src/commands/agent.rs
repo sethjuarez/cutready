@@ -318,11 +318,12 @@ pub async fn list_agent_runs(
     state: tauri::State<'_, AppState>,
     limit: Option<usize>,
 ) -> Result<Vec<AgentRunSummary>, String> {
-    let root = {
+    let (repo_root, root) = {
         let guard = state.current_project.lock().unwrap();
-        guard.as_ref().ok_or("No project open")?.root.clone()
+        let view = guard.as_ref().ok_or("No project open")?;
+        (view.repo_root.clone(), view.root.clone())
     };
-    AgentStateStore::list_recent_runs(&root, limit.unwrap_or(25).clamp(1, 100))
+    AgentStateStore::list_recent_runs(&repo_root, &root, limit.unwrap_or(25).clamp(1, 100))
 }
 
 #[auditaur_command(skip_all, err)]
@@ -330,11 +331,12 @@ pub async fn get_agent_run(
     state: tauri::State<'_, AppState>,
     run_id: String,
 ) -> Result<Option<AgentRunDetail>, String> {
-    let root = {
+    let (repo_root, root) = {
         let guard = state.current_project.lock().unwrap();
-        guard.as_ref().ok_or("No project open")?.root.clone()
+        let view = guard.as_ref().ok_or("No project open")?;
+        (view.repo_root.clone(), view.root.clone())
     };
-    AgentStateStore::get_run_detail(&root, &run_id)
+    AgentStateStore::get_run_detail(&repo_root, &root, &run_id)
 }
 
 #[auditaur_command(skip_all, err)]
@@ -352,11 +354,12 @@ pub async fn delete_agent_run(
     state: tauri::State<'_, AppState>,
     run_id: String,
 ) -> Result<AgentStateMaintenanceResult, String> {
-    let root = {
+    let (repo_root, root) = {
         let guard = state.current_project.lock().unwrap();
-        guard.as_ref().ok_or("No project open")?.root.clone()
+        let view = guard.as_ref().ok_or("No project open")?;
+        (view.repo_root.clone(), view.root.clone())
     };
-    AgentStateStore::delete_run(&root, &run_id)
+    AgentStateStore::delete_run(&repo_root, &root, &run_id)
 }
 
 #[auditaur_command(skip_all, err)]
@@ -364,11 +367,13 @@ pub async fn prune_agent_runs(
     state: tauri::State<'_, AppState>,
     keep_recent_completed: Option<usize>,
 ) -> Result<AgentStateMaintenanceResult, String> {
-    let root = {
+    let (repo_root, root) = {
         let guard = state.current_project.lock().unwrap();
-        guard.as_ref().ok_or("No project open")?.root.clone()
+        let view = guard.as_ref().ok_or("No project open")?;
+        (view.repo_root.clone(), view.root.clone())
     };
     AgentStateStore::prune_completed_runs_for_project(
+        &repo_root,
         &root,
         keep_recent_completed.unwrap_or(25).clamp(1, 100),
     )
@@ -386,11 +391,12 @@ pub async fn compact_agent_state_database(
     if active_count > 0 {
         return Err("Cannot compact the agent-state database while an agent run is active".into());
     }
-    let root = {
+    let (repo_root, root) = {
         let guard = state.current_project.lock().unwrap();
-        guard.as_ref().ok_or("No project open")?.root.clone()
+        let view = guard.as_ref().ok_or("No project open")?;
+        (view.repo_root.clone(), view.root.clone())
     };
-    AgentStateStore::compact_project_database(&root)
+    AgentStateStore::compact_project_database(&repo_root, &root)
 }
 
 /// Agentic chat with function calling — the LLM can read/write project files.
@@ -431,9 +437,10 @@ pub async fn agent_chat_with_tools(
             message_chars,
         );
     }
-    let project_root = {
+    let (repo_root, project_root) = {
         let guard = state.current_project.lock().unwrap();
-        guard.as_ref().ok_or("No project open")?.root.clone()
+        let view = guard.as_ref().ok_or("No project open")?;
+        (view.repo_root.clone(), view.root.clone())
     };
 
     let steering = state.steering.clone();
@@ -466,6 +473,7 @@ pub async fn agent_chat_with_tools(
     let _active_run_guard =
         ActiveAgentRunGuard::register(state.active_agent_runs.clone(), run_id.clone());
     let agent_state = match crate::engine::agent_state::AgentStateStore::for_project(
+        &repo_root,
         &project_root,
         run_id.clone(),
     ) {
@@ -554,6 +562,7 @@ pub async fn agent_chat_with_tools(
         Some(provider_name.clone()),
         Some(model.clone()),
         messages,
+        &repo_root,
         &project_root,
         &agent_id,
         &prompts,
@@ -742,11 +751,14 @@ pub async fn delete_chat_session(
 /// Get core memories formatted for injection into the system prompt.
 #[auditaur_command(skip_all, err)]
 pub async fn get_memory_context(state: tauri::State<'_, AppState>) -> Result<String, String> {
-    let root = {
+    let (repo_root, root) = {
         let guard = state.current_project.lock().unwrap();
-        guard.as_ref().ok_or("No project open")?.root.clone()
+        let view = guard.as_ref().ok_or("No project open")?;
+        (view.repo_root.clone(), view.root.clone())
     };
-    Ok(crate::engine::memory::format_for_system_prompt(&root))
+    Ok(crate::engine::memory::format_for_system_prompt(
+        &repo_root, &root,
+    ))
 }
 
 /// Save a session summary to archival memory (called when chat session ends).
@@ -756,13 +768,14 @@ pub async fn archive_chat_session(
     summary: String,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
-    let root = {
+    let (repo_root, root) = {
         let guard = state.current_project.lock().unwrap();
-        guard.as_ref().ok_or("No project open")?.root.clone()
+        let view = guard.as_ref().ok_or("No project open")?;
+        (view.repo_root.clone(), view.root.clone())
     };
     // Clear the pending summary since we're archiving now
     *state.last_chat_summary.lock().unwrap() = None;
-    crate::engine::memory::archive_session(&root, &summary, &session_id)
+    crate::engine::memory::archive_session(&repo_root, &root, &summary, &session_id)
 }
 
 /// Update the current chat summary (called periodically by frontend).
@@ -782,21 +795,23 @@ pub async fn update_chat_summary(
 pub async fn list_memories(
     state: tauri::State<'_, AppState>,
 ) -> Result<Vec<crate::engine::memory::MemoryEntry>, String> {
-    let root = {
+    let (repo_root, root) = {
         let guard = state.current_project.lock().unwrap();
-        guard.as_ref().ok_or("No project open")?.root.clone()
+        let view = guard.as_ref().ok_or("No project open")?;
+        (view.repo_root.clone(), view.root.clone())
     };
-    Ok(crate::engine::memory::load(&root).memories)
+    Ok(crate::engine::memory::load(&repo_root, &root).memories)
 }
 
 /// Delete a memory by index.
 #[tauri::command]
 pub async fn delete_memory(index: usize, state: tauri::State<'_, AppState>) -> Result<(), String> {
-    let root = {
+    let (repo_root, root) = {
         let guard = state.current_project.lock().unwrap();
-        guard.as_ref().ok_or("No project open")?.root.clone()
+        let view = guard.as_ref().ok_or("No project open")?;
+        (view.repo_root.clone(), view.root.clone())
     };
-    crate::engine::memory::delete_memory(&root, index)
+    crate::engine::memory::delete_memory(&repo_root, &root, index)
 }
 
 /// Update a memory's content by index.
@@ -806,11 +821,12 @@ pub async fn update_memory(
     content: String,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
-    let root = {
+    let (repo_root, root) = {
         let guard = state.current_project.lock().unwrap();
-        guard.as_ref().ok_or("No project open")?.root.clone()
+        let view = guard.as_ref().ok_or("No project open")?;
+        (view.repo_root.clone(), view.root.clone())
     };
-    crate::engine::memory::update_memory(&root, index, &content)
+    crate::engine::memory::update_memory(&repo_root, &root, index, &content)
 }
 
 /// Clear memories by category (or all if no category provided).
@@ -819,9 +835,10 @@ pub async fn clear_memories(
     category: Option<String>,
     state: tauri::State<'_, AppState>,
 ) -> Result<usize, String> {
-    let root = {
+    let (repo_root, root) = {
         let guard = state.current_project.lock().unwrap();
-        guard.as_ref().ok_or("No project open")?.root.clone()
+        let view = guard.as_ref().ok_or("No project open")?;
+        (view.repo_root.clone(), view.root.clone())
     };
     let cat = category.map(|c| match c.as_str() {
         "core" => crate::engine::memory::MemoryCategory::Core,
@@ -829,7 +846,7 @@ pub async fn clear_memories(
         "insight" => crate::engine::memory::MemoryCategory::Insight,
         _ => crate::engine::memory::MemoryCategory::Archival,
     });
-    crate::engine::memory::clear_memories(&root, cat)
+    crate::engine::memory::clear_memories(&repo_root, &root, cat)
 }
 
 // ---------------------------------------------------------------------------

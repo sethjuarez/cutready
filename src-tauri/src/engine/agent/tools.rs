@@ -795,6 +795,7 @@ fn format_elucim_bridge_evaluation(response: &Value) -> Option<String> {
 /// Execute a single tool call and return the result as a ToolOutput.
 pub fn execute_tool(
     call: &ToolCall,
+    repo_root: &Path,
     project_root: &Path,
     vision_enabled: bool,
     project_workspace_tools_enabled: bool,
@@ -866,8 +867,12 @@ pub fn execute_tool(
             "write_storyboard" => {
                 agentive::ToolOutput::from(exec_write_storyboard(project_root, &args))
             }
-            "recall_memory" => agentive::ToolOutput::from(exec_recall_memory(project_root, &args)),
-            "save_memory" => agentive::ToolOutput::from(exec_save_memory(project_root, &args)),
+            "recall_memory" => {
+                agentive::ToolOutput::from(exec_recall_memory(repo_root, project_root, &args))
+            }
+            "save_memory" => {
+                agentive::ToolOutput::from(exec_save_memory(repo_root, project_root, &args))
+            }
             "fetch_url" => {
                 let url = args
                     .get("url")
@@ -4452,17 +4457,17 @@ fn exec_write_storyboard(root: &Path, args: &Value) -> String {
     }
 }
 
-fn exec_recall_memory(root: &Path, args: &Value) -> String {
+fn exec_recall_memory(repo_root: &Path, root: &Path, args: &Value) -> String {
     let query = match args.get("query").and_then(|v| v.as_str()) {
         Some(q) => q,
         None => return "Error: missing 'query' argument".into(),
     };
 
-    let results = crate::engine::memory::recall(root, query);
+    let results = crate::engine::memory::recall(repo_root, root, query);
     crate::engine::memory::format_recall_results(&results)
 }
 
-fn exec_save_memory(root: &Path, args: &Value) -> String {
+fn exec_save_memory(repo_root: &Path, root: &Path, args: &Value) -> String {
     let category = match args.get("category").and_then(|v| v.as_str()) {
         Some("core") => crate::engine::memory::MemoryCategory::Core,
         Some("insight") => crate::engine::memory::MemoryCategory::Insight,
@@ -4487,7 +4492,7 @@ fn exec_save_memory(root: &Path, args: &Value) -> String {
         })
         .unwrap_or_default();
 
-    match crate::engine::memory::save_memory(root, category, content, tags) {
+    match crate::engine::memory::save_memory(repo_root, root, category, content, tags) {
         Ok(()) => format!("Memory saved: {content}"),
         Err(e) => format!("Error saving memory: {e}"),
     }
@@ -5213,7 +5218,7 @@ mod tests {
             },
         };
 
-        let output = execute_tool(&call, tmp.path(), false, false, true);
+        let output = execute_tool(&call, tmp.path(), tmp.path(), false, false, true);
 
         assert!(output.text().contains("only available to the Writer agent"));
     }
@@ -5230,7 +5235,7 @@ mod tests {
             },
         };
 
-        let output = execute_tool(&call, tmp.path(), false, true, false);
+        let output = execute_tool(&call, tmp.path(), tmp.path(), false, true, false);
 
         assert!(output.text().contains("disabled while AI apply behavior"));
         assert!(!tmp.path().join("draft.md").exists());

@@ -49,15 +49,15 @@ function mockDraftlineVersions() {
       id: "def456def456def456def456def456def456def4",
       label: "Added feature section",
       author: { name: "You", email: "dev@example.com" },
-      savedBy: { name: "You", email: "dev@example.com" },
-      timeSeconds: Math.floor(new Date("2025-01-15T11:00:00Z").getTime() / 1000),
+      saved_by: { name: "You", email: "dev@example.com" },
+      time_seconds: Math.floor(new Date("2025-01-15T11:00:00Z").getTime() / 1000),
     },
     {
       id: "abc123abc123abc123abc123abc123abc123abc1",
       label: "Initial draft",
       author: { name: "You", email: "dev@example.com" },
-      savedBy: { name: "You", email: "dev@example.com" },
-      timeSeconds: Math.floor(new Date("2025-01-15T10:00:00Z").getTime() / 1000),
+      saved_by: { name: "You", email: "dev@example.com" },
+      time_seconds: Math.floor(new Date("2025-01-15T10:00:00Z").getTime() / 1000),
     },
   ];
 }
@@ -150,7 +150,6 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
         { path: ".cutready", ext: "", size: 0, is_dir: true },
         { path: ".cutready/visuals", ext: "", size: 0, is_dir: true },
         { path: ".cutready/visuals/abc123def456.json", ext: "json", size: 2100, is_dir: false },
-        { path: ".git", ext: "", size: 0, is_dir: true },
         { path: "sketches", ext: "", size: 0, is_dir: true },
         { path: "sketches/demo-introduction.sk", ext: "sk", size: 4200, is_dir: false },
         { path: "sketches/feature-deep-dive.sk", ext: "sk", size: 3800, is_dir: false },
@@ -218,43 +217,73 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
     case "delete_storyboard":
     case "rename_storyboard":
       return null;
-    case "draftline_list_versions":
+    case "get_history":
       return mockDraftlineVersions();
-    case "draftline_workspace_summary":
+    case "inspect_workspace":
       return {
-        activeVariation: { id: "main", name: "main", displayLabel: "main", isCurrent: true },
-        variations: [{ id: "main", name: "main", displayLabel: "main", isCurrent: true }],
-        versions: mockDraftlineVersions(),
-        dirtyFiles: [],
-        isDirty: false,
-        recovery: null,
-        stateMayBeInconsistent: false,
+        summary: {
+          active_variation: { id: "main", name: "main", metadata: { label: "main", slug: "main" }, is_current: true },
+          variations: [{ id: "main", name: "main", metadata: { label: "main", slug: "main" }, is_current: true }],
+          versions: mockDraftlineVersions(),
+          dirty_files: [],
+          is_dirty: false,
+          recovery: null,
+          state_may_be_inconsistent: false,
+        },
+        diagnostics: [],
       };
-    case "draftline_full_history":
+    case "get_full_history":
       return [
         {
           version: mockDraftlineVersions()[0],
-          variationTips: ["main"],
-          isHead: true,
-          parentIds: ["abc123abc123abc123abc123abc123abc123abc1"],
+          variation_tips: ["main"],
+          is_head: true,
+          parent_ids: ["abc123abc123abc123abc123abc123abc123abc1"],
         },
         {
           version: mockDraftlineVersions()[1],
-          variationTips: [],
-          isHead: false,
-          parentIds: [],
+          variation_tips: [],
+          is_head: false,
+          parent_ids: [],
         },
       ];
-    case "draftline_list_variations":
-      return [{ id: "main", name: "main", displayLabel: "main", isCurrent: true }];
-    case "draftline_variation_summaries":
+    case "list_variations":
       return [{
-        variation: { id: "main", name: "main", displayLabel: "main", isCurrent: true },
-        headVersion: mockDraftlineVersions()[0],
-        reachableVersionCount: 2,
+        variation: { id: "main", name: "main", metadata: { label: "main", slug: "main" }, is_current: true },
+        head_version: mockDraftlineVersions()[0],
+        reachable_version_count: 2,
       }];
-    case "draftline_current_variation":
-      return "main";
+    case "get_workspace_graph_overview":
+      return {
+        current_variation: "main",
+        nodes: [
+          {
+            version: mockDraftlineVersions()[0],
+            parent_version_ids: ["abc123abc123abc123abc123abc123abc123abc1"],
+            layout: { lane: 0, row: 0 },
+            is_current: true,
+            is_head: true,
+            is_tip: true,
+          },
+          {
+            version: mockDraftlineVersions()[1],
+            parent_version_ids: [],
+            layout: { lane: 0, row: 1 },
+            is_current: false,
+            is_head: false,
+            is_tip: false,
+          },
+        ],
+        refs: [
+          {
+            id: "refs/draftline/variations/main",
+            name: "main",
+            kind: "local_variation",
+            target_version_id: "def456def456def456def456def456def456def4",
+            is_user_facing: true,
+          },
+        ],
+      };
     case "preflight_rename_variation": {
       const source = (args as { request?: { source_variation_id?: string } })?.request?.source_variation_id ?? "master";
       const target = (args as { request?: { target_variation_id?: string } })?.request?.target_variation_id ?? "main";
@@ -301,103 +330,90 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
         postconditions: { workspace_changed: true, active_variation: target, dirty_files: [] },
       };
     }
-    case "draftline_delete_variation":
+    case "delete_variation":
       return null;
-    case "draftline_inspect_changes":
+    case "get_changes":
       return { files: [], diff: null };
-    case "draftline_diff_versions":
-    case "draftline_diff_version_to_workspace":
+    case "diff_versions":
+    case "diff_version_to_workspace":
       return {
-        fromVersion: (args as { from?: string; version?: string })?.from ?? (args as { version?: string })?.version ?? null,
-        toVersion: (args as { to?: string })?.to ?? null,
-        files: [{ path: "sketches/demo-introduction.sk", kind: "modified", isBinary: false, isLarge: false }],
+        from_version: (args as { request?: { from_version_id?: string; version_id?: string } })?.request?.from_version_id ?? null,
+        to_version: (args as { request?: { to_version_id?: string; version_id?: string } })?.request?.to_version_id ?? (args as { request?: { version_id?: string } })?.request?.version_id ?? null,
+        files: [{ path: "sketches/demo-introduction.sk", kind: "Modified", is_binary: false, is_large: false }],
         patch: null,
       };
-    case "draftline_preview_version":
+    case "preview_version":
       return {
-        id: (args as { version?: string })?.version ?? "def456def456def456def456def456def456def4",
+        id: (args as { request?: { version_id?: string } })?.request?.version_id ?? "def456def456def456def456def456def456def4",
         files: [
-          { path: "sketches/demo-introduction.sk", content: JSON.stringify(MOCK_SKETCH), isBinary: false },
+          { path: "sketches/demo-introduction.sk", content: JSON.stringify(MOCK_SKETCH), is_binary: false },
         ],
       };
-    case "draftline_preview_version_file":
-      return { path: (args as { path?: string })?.path ?? "sketches/demo-introduction.sk", content: JSON.stringify(MOCK_SKETCH), isBinary: false };
-    case "draftline_file_diff_content":
-      return {
-        path: (args as { filePath?: string })?.filePath ?? "sketches/demo-introduction.sk",
-        headContent: JSON.stringify(MOCK_SKETCH, null, 2),
-        workingContent: JSON.stringify({ ...MOCK_SKETCH, title: "Updated demo introduction" }, null, 2),
-      };
+    case "preview_version_file":
+    case "preview_workspace_file":
+      return { path: (args as { request?: { path?: string } })?.request?.path ?? "sketches/demo-introduction.sk", content: JSON.stringify(MOCK_SKETCH), is_binary: false };
     case "resolve_deep_link":
       return null;
-    case "draftline_save_version":
+    case "save":
       return {
         id: "fff456fff456fff456fff456fff456fff456fff4",
-        label: (args as { label?: string })?.label ?? "Saved draft",
+        label: (args as { request?: { label?: string } })?.request?.label ?? "Saved draft",
         author: { name: "You", email: "dev@example.com" },
-        savedBy: { name: "You", email: "dev@example.com" },
-        timeSeconds: Math.floor(Date.now() / 1000),
+        saved_by: { name: "You", email: "dev@example.com" },
+        time_seconds: Math.floor(Date.now() / 1000),
       };
-    case "draftline_discard_changes":
+    case "selected_discard":
       return { files: [], diff: null };
-    case "draftline_discard_file":
+    case "selected_shelve":
       return {
-        path: (args as { path?: string })?.path ?? "intro.sk",
-        kind: "modified",
-        isBinary: false,
-        isLarge: false,
-      };
-    case "draftline_shelve_changes":
-      return {
-        id: (args as { name?: string })?.name ?? "cutready-stash",
+        id: (args as { request?: { name?: string } })?.request?.name ?? "cutready-stash",
         version: {
           id: "shelf456shelf456shelf456shelf456shelf456",
           label: "Shelved changes",
           author: { name: "You", email: "dev@example.com" },
-          savedBy: { name: "You", email: "dev@example.com" },
-          timeSeconds: Math.floor(Date.now() / 1000),
+          saved_by: { name: "You", email: "dev@example.com" },
+          time_seconds: Math.floor(Date.now() / 1000),
         },
       };
-    case "draftline_list_shelves":
+    case "list_shelves":
       return [];
-    case "draftline_apply_shelf":
+    case "apply_shelf":
       return {
-        id: (args as { id?: string })?.id ?? "cutready-stash",
+        id: (args as { request?: { shelf_id?: string } })?.request?.shelf_id ?? "cutready-stash",
         version: {
           id: "shelf456shelf456shelf456shelf456shelf456",
           label: "Shelved changes",
           author: { name: "You", email: "dev@example.com" },
-          savedBy: { name: "You", email: "dev@example.com" },
-          timeSeconds: Math.floor(Date.now() / 1000),
+          saved_by: { name: "You", email: "dev@example.com" },
+          time_seconds: Math.floor(Date.now() / 1000),
         },
       };
-    case "draftline_delete_shelf":
+    case "delete_shelf":
       return null;
-    case "draftline_create_variation_from":
+    case "create_variation_from_version":
       return {
-        id: (args as { name?: string })?.name ?? "variation",
-        name: (args as { name?: string })?.name ?? "variation",
-        label: (args as { metadata?: { label?: string } })?.metadata?.label ?? null,
-        slug: (args as { metadata?: { slug?: string } })?.metadata?.slug ?? null,
-        displayLabel: (args as { name?: string })?.name ?? "variation",
-        isCurrent: false,
+        id: (args as { request?: { name?: string } })?.request?.name ?? "variation",
+        name: (args as { request?: { name?: string } })?.request?.name ?? "variation",
+        metadata: {
+          label: (args as { request?: { metadata?: { label?: string } } })?.request?.metadata?.label ?? null,
+          slug: (args as { request?: { metadata?: { slug?: string } } })?.request?.metadata?.slug ?? null,
+        },
+        is_current: false,
       };
-    case "draftline_switch_variation":
+    case "switch_variation":
       return {
-        id: (args as { variation?: string })?.variation ?? "main",
-        name: (args as { variation?: string })?.variation ?? "main",
-        label: null,
-        slug: null,
-        displayLabel: (args as { variation?: string })?.variation ?? "main",
-        isCurrent: true,
+        id: (args as { request?: { variation?: string } })?.request?.variation ?? "main",
+        name: (args as { request?: { variation?: string } })?.request?.variation ?? "main",
+        metadata: { label: null, slug: null },
+        is_current: true,
       };
-    case "draftline_restore_version_as_new_save":
+    case "restore_version_as_new_save":
       return {
         id: "restore456restore456restore456restore456rest",
-        label: (args as { label?: string })?.label ?? "Restored draft",
+        label: (args as { request?: { label?: string } })?.request?.label ?? "Restored draft",
         author: { name: "You", email: "dev@example.com" },
-        savedBy: { name: "You", email: "dev@example.com" },
-        timeSeconds: Math.floor(Date.now() / 1000),
+        saved_by: { name: "You", email: "dev@example.com" },
+        time_seconds: Math.floor(Date.now() / 1000),
       };
     case "restore_version_as_new_save_to_variation":
       const restoreTarget = (args as { request?: { target?: { kind?: string; variation?: string; name?: string } } })?.request?.target;
@@ -422,16 +438,14 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
         },
         postconditions: { errors: [] },
       };
-    case "draftline_squash_versions":
+    case "squash_versions":
       return {
         id: "squash456squash456squash456squash456squa",
-        label: (args as { label?: string })?.label ?? "Squashed draft",
+        label: (args as { request?: { label?: string } })?.request?.label ?? "Squashed draft",
         author: { name: "You", email: "dev@example.com" },
-        savedBy: { name: "You", email: "dev@example.com" },
-        timeSeconds: Math.floor(Date.now() / 1000),
+        saved_by: { name: "You", email: "dev@example.com" },
+        time_seconds: Math.floor(Date.now() / 1000),
       };
-    case "squash_snapshots":
-      return "mock-squashed-commit-id";
     case "get_sidebar_order":
       return { storyboards: [], sketches: [], notes: [] };
     case "get_workspace_state":
@@ -962,68 +976,60 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
           ],
         },
       };
-    // Remote/Draftline commands
-    case "draftline_add_remote":
+    // Remote and Draftline commands
+    case "add_remote":
       return {
-        name: (args as { name?: string })?.name ?? "origin",
-        url: (args as { url?: string })?.url ?? "https://github.com/example/cutready-demo.git",
+        name: (args as { request?: { name?: string } })?.request?.name ?? "origin",
+        url: (args as { request?: { url?: string } })?.request?.url ?? "https://github.com/example/cutready-demo.git",
       };
-    case "draftline_list_remotes":
+    case "list_remotes":
       return [];
-    case "draftline_fetch_remote":
-    case "draftline_apply_incoming":
-    case "draftline_publish_changes":
-      return cmd === "draftline_apply_incoming" ? { appliedCount: 0 } : null;
-    case "draftline_merge_incoming":
-    case "draftline_merge_incoming_with_resolutions":
+    case "fetch_remote":
+    case "publish_current_variation":
+      return null;
+    case "apply_incoming":
+      return { applied_count: 0 };
+    case "merge_incoming":
+    case "merge_incoming_with_resolutions":
       return {
         version: {
           id: "mock-merged-version",
-          label: (args as { label?: string })?.label ?? "Merge incoming saves",
-          timeSeconds: Math.floor(Date.now() / 1000),
+          label: (args as { request?: { label?: string } })?.request?.label ?? "Merge incoming saves",
+          time_seconds: Math.floor(Date.now() / 1000),
           author: { name: "Demo User", email: null },
         },
-        mergedFiles: [],
+        merged_files: [],
       };
-    case "draftline_sync_status":
+    case "preflight_apply_incoming":
       return {
-        remote: (args as { remote?: string })?.remote ?? "origin",
-        variation: "main",
-        ahead: 0,
-        behind: 0,
-        state: "upToDate",
-        incoming: [],
-      };
-    case "draftline_preflight_apply_incoming":
-      return {
-        syncStatus: {
-          remote: (args as { remote?: string })?.remote ?? "origin",
+        sync_status: {
+          remote: (args as { request?: { remote?: string } })?.request?.remote ?? "origin",
           variation: "main",
           ahead: 0,
           behind: 0,
-          state: "upToDate",
+          state: "UpToDate",
           incoming: [],
         },
-        dirtyFiles: [],
-        isFastForward: false,
-        canProceed: false,
+        dirty_files: [],
+        is_fast_forward: false,
+        can_proceed: false,
       };
-    case "draftline_preflight_merge_incoming":
+    case "preflight_merge_incoming":
       return {
-        syncStatus: {
-          remote: (args as { remote?: string })?.remote ?? "origin",
+        sync_status: {
+          remote: (args as { request?: { remote?: string } })?.request?.remote ?? "origin",
           variation: "main",
           ahead: 0,
           behind: 0,
-          state: "upToDate",
+          state: "UpToDate",
           incoming: [],
         },
-        dirtyFiles: [],
-        fileHazards: [],
+        dirty_files: [],
+        file_hazards: [],
         conflicts: [],
         token: null,
-        canMergeCleanly: false,
-        changedWorkspace: false,
+        can_merge_cleanly: false,
+        changed_workspace: false,
       };
     case "check_large_files":
       return [];

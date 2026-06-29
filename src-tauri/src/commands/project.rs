@@ -409,8 +409,8 @@ pub async fn get_database_preview(
 pub async fn get_agent_state_database_preview(
     state: State<'_, AppState>,
 ) -> Result<DatabasePreview, String> {
-    let project_root = project_root(&state)?;
-    let abs_path = AgentStateStore::ensure_database_for_project(&project_root)?;
+    let (project_root, repo_root) = project_and_repo_root(&state)?;
+    let abs_path = AgentStateStore::ensure_database_for_project(&repo_root, &project_root)?;
     read_database_preview(abs_path, "agent-state.db".to_string())
 }
 
@@ -682,7 +682,11 @@ fn reconcile_abandoned_agent_runs(state: &AppState, view: &ProjectView) {
         };
         active_runs.iter().cloned().collect::<Vec<_>>()
     };
-    match AgentStateStore::reconcile_abandoned_runs_for_project(&view.root, &active_run_ids) {
+    match AgentStateStore::reconcile_abandoned_runs_for_project(
+        &view.repo_root,
+        &view.root,
+        &active_run_ids,
+    ) {
         Ok(count) if count > 0 => {
             log::info!(
                 "[project] marked {count} abandoned agent run(s) interrupted for {}",
@@ -1075,9 +1079,8 @@ pub async fn set_workspace_settings(
 
 /// Check if any recent project was cloned from a given GitHub repo.
 ///
-/// Scans recent projects' `.git/config` for a remote URL matching
-/// `github.com/{owner}/{repo}`. Returns the path if found and the folder
-/// still exists on disk.
+/// Uses Draftline remotes to match `github.com/{owner}/{repo}`. Returns the path
+/// if found and the folder still exists on disk.
 #[tauri::command]
 pub async fn resolve_deep_link(
     owner: String,
@@ -1097,55 +1100,28 @@ pub async fn resolve_deep_link(
         if !path.exists() {
             continue;
         }
-        if let Some(url) = read_origin_url_from_git_config(&path) {
-            let url_clean = url.to_lowercase().trim_end_matches(".git").to_string();
-            if url_clean.contains(&target) {
-                return Ok(Some(project.path));
+        match CutReadyDraftlineAdapter::open_project(&path) {
+            Ok(adapter) => {
+                let remotes = adapter.remotes().map_err(|error| error.to_string())?;
+                if remotes.iter().any(|remote| {
+                    remote
+                        .url
+                        .to_lowercase()
+                        .trim_end_matches(".git")
+                        .contains(&target)
+                }) {
+                    return Ok(Some(project.path));
+                }
+            }
+            Err(error) => {
+                tracing::warn!(
+                    path = %path.display(),
+                    error = %error,
+                    "Skipping recent project during deep-link resolution because Draftline could not open it"
+                );
             }
         }
     }
 
     Ok(None)
-}
-
-fn read_origin_url_from_git_config(project_path: &Path) -> Option<String> {
-    let git_entry = project_path.join(".git");
-    let config_path = if git_entry.is_dir() {
-        git_entry.join("config")
-    } else if git_entry.is_file() {
-        let gitdir = std::fs::read_to_string(&git_entry).ok()?;
-        let gitdir = gitdir.trim().strip_prefix("gitdir:")?.trim();
-        let gitdir_path = Path::new(gitdir);
-        let resolved = if gitdir_path.is_absolute() {
-            gitdir_path.to_path_buf()
-        } else {
-            project_path.join(gitdir_path)
-        };
-        resolved.join("config")
-    } else {
-        return None;
-    };
-
-    let config = std::fs::read_to_string(config_path).ok()?;
-    let mut in_origin_remote = false;
-
-    for line in config.lines() {
-        let trimmed = line.trim();
-        if trimmed.starts_with('[') && trimmed.ends_with(']') {
-            in_origin_remote =
-                trimmed == r#"[remote "origin"]"# || trimmed == r#"[remote 'origin']"#;
-            continue;
-        }
-        if !in_origin_remote {
-            continue;
-        }
-        let Some((key, value)) = trimmed.split_once('=') else {
-            continue;
-        };
-        if key.trim() == "url" {
-            return Some(value.trim().to_string());
-        }
-    }
-
-    None
 }

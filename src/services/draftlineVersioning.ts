@@ -54,6 +54,15 @@ export interface DraftlinePreviewFile {
   isBinary: boolean;
 }
 
+export interface DraftlineFileDiffContent {
+  path: string;
+  headContent: string | null;
+  workingContent: string | null;
+  headPresent: boolean;
+  workingPresent: boolean;
+  isBinary: boolean;
+}
+
 interface DraftlineApplyIncomingReportDto {
   syncStatus: {
     ahead: number;
@@ -137,7 +146,14 @@ export async function previewDraftlineVersion(version: string): Promise<DiffEntr
 }
 
 export async function previewDraftlineVersionFile(version: string, path: string): Promise<DraftlinePreviewFile | null> {
-  return invoke<DraftlinePreviewFile | null>("draftline_preview_version_file", { version, path });
+  const file = await facade().previewVersionFile(version, path);
+  return file
+    ? {
+      path: file.path,
+      content: file.content ?? null,
+      isBinary: file.is_binary,
+    }
+    : null;
 }
 
 export async function previewDraftlineWorkspaceFile(path: string): Promise<DraftlinePreviewFile | null> {
@@ -151,20 +167,38 @@ export async function previewDraftlineWorkspaceFile(path: string): Promise<Draft
     : null;
 }
 
+export async function previewDraftlineWorkspaceDiffFile(path: string): Promise<DraftlineFileDiffContent> {
+  const summary = await facade().inspect();
+  const head = summary.summary.versions[0]?.id;
+  const [headFile, workingFile] = await Promise.all([
+    head ? facade().previewVersionFile(head, path) : Promise.resolve(null),
+    facade().previewWorkspaceFile(path),
+  ]);
+  return {
+    path,
+    headContent: headFile?.content ?? null,
+    workingContent: workingFile?.content ?? null,
+    headPresent: headFile !== null,
+    workingPresent: workingFile !== null,
+    isBinary: headFile?.is_binary ?? workingFile?.is_binary ?? false,
+  };
+}
+
 export async function diffDraftlineVersions(from: string, to: string): Promise<DiffEntry[]> {
   return versionDiffToDiffEntries(await facade().diffVersions(from, to));
 }
 
 export async function createDraftlineVariation(fromVersion: string, name: string): Promise<void> {
-  await invoke("draftline_create_variation_from", {
-    version: fromVersion,
-    name,
-    metadata: { label: name, slug: name },
-  });
+  await facade().createVariationFromVersion(fromVersion, name, { label: name, slug: name });
 }
 
 export async function deleteDraftlineVariation(variation: string): Promise<void> {
-  await invoke("draftline_delete_variation", { variation });
+  if (!draftlineWorkspacePath) {
+    throw new Error("No Draftline workspace is currently open");
+  }
+  await invoke("delete_variation", {
+    request: { workspace_path: draftlineWorkspacePath, variation },
+  });
 }
 
 export async function preflightDraftlineRenameVariation(
@@ -202,11 +236,17 @@ export async function renameDraftlineVariation(
 }
 
 export async function switchDraftlineVariation(variation: string, saveFirstLabel?: string): Promise<void> {
-  await invoke("draftline_switch_variation", {
-    variation,
-    policy: saveFirstLabel
-      ? { type: "saveFirst", label: saveFirstLabel }
-      : { type: "abortIfDirty" },
+  if (!draftlineWorkspacePath) {
+    throw new Error("No Draftline workspace is currently open");
+  }
+  await invoke("switch_variation", {
+    request: {
+      workspace_path: draftlineWorkspacePath,
+      variation,
+      policy: saveFirstLabel
+        ? { type: "saveFirst", label: saveFirstLabel }
+        : { type: "abortIfDirty" },
+    },
   });
 }
 
@@ -229,7 +269,12 @@ export async function listDraftlineRemotes(): Promise<RemoteInfo[]> {
 }
 
 export async function addDraftlineRemote(name: string, url: string): Promise<RemoteInfo> {
-  const remote = await invoke<{ name: string; url: string }>("draftline_add_remote", { name, url });
+  if (!draftlineWorkspacePath) {
+    throw new Error("No Draftline workspace is currently open");
+  }
+  const remote = await invoke<{ name: string; url: string }>("add_remote", {
+    request: { workspace_path: draftlineWorkspacePath, name, url },
+  });
   return { name: remote.name, url: remote.url };
 }
 
@@ -361,7 +406,12 @@ export async function popDraftlineShelf(): Promise<boolean> {
 }
 
 export async function squashDraftlineVersions(count: number, label: string): Promise<string> {
-  const version = await invoke<Version>("draftline_squash_versions", { count, label });
+  if (!draftlineWorkspacePath) {
+    throw new Error("No Draftline workspace is currently open");
+  }
+  const version = await invoke<Version>("squash_versions", {
+    request: { workspace_path: draftlineWorkspacePath, count, label },
+  });
   return version.id;
 }
 

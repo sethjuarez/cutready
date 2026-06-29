@@ -132,8 +132,12 @@ pub struct AgentRunDetail {
 }
 
 impl AgentStateStore {
-    pub fn for_project(project_root: &Path, run_id: impl Into<String>) -> Result<Self, String> {
-        let db_path = Self::prepare_database_path_for_project(project_root)?;
+    pub fn for_project(
+        repo_root: &Path,
+        project_root: &Path,
+        run_id: impl Into<String>,
+    ) -> Result<Self, String> {
+        let db_path = Self::prepare_database_path_for_project(repo_root, project_root)?;
 
         let store = Self {
             db_path: Arc::new(db_path),
@@ -143,13 +147,15 @@ impl AgentStateStore {
         Ok(store)
     }
 
-    pub fn database_path_for_project(project_root: &Path) -> PathBuf {
-        let repo_root = Self::local_state_repo_root(project_root);
+    pub fn database_path_for_project(repo_root: &Path, project_root: &Path) -> PathBuf {
         crate::engine::project::git_state_dir(&repo_root, project_root).join(AGENT_STATE_FILENAME)
     }
 
-    pub fn prepare_database_path_for_project(project_root: &Path) -> Result<PathBuf, String> {
-        let db_path = Self::database_path_for_project(project_root);
+    pub fn prepare_database_path_for_project(
+        repo_root: &Path,
+        project_root: &Path,
+    ) -> Result<PathBuf, String> {
+        let db_path = Self::database_path_for_project(repo_root, project_root);
         if let Some(parent) = db_path.parent() {
             std::fs::create_dir_all(parent)
                 .map_err(|e| format!("Could not create CutReady agent state directory: {e}"))?;
@@ -158,22 +164,17 @@ impl AgentStateStore {
         Ok(db_path)
     }
 
-    pub fn ensure_database_for_project(project_root: &Path) -> Result<PathBuf, String> {
-        let db_path = Self::prepare_database_path_for_project(project_root)?;
+    pub fn ensure_database_for_project(
+        repo_root: &Path,
+        project_root: &Path,
+    ) -> Result<PathBuf, String> {
+        let db_path = Self::prepare_database_path_for_project(repo_root, project_root)?;
         let conn = Connection::open(&db_path)
             .map_err(|e| format!("Could not open CutReady agent state database: {e}"))?;
         conn.busy_timeout(BUSY_TIMEOUT)
             .map_err(|e| format!("Could not configure agent state database timeout: {e}"))?;
         initialize_schema(&conn)?;
         Ok(db_path)
-    }
-
-    fn local_state_repo_root(project_root: &Path) -> PathBuf {
-        project_root
-            .ancestors()
-            .find(|ancestor| ancestor.join(".git").exists())
-            .unwrap_or(project_root)
-            .to_path_buf()
     }
 
     #[cfg(test)]
@@ -206,10 +207,11 @@ impl AgentStateStore {
     }
 
     pub fn list_recent_runs(
+        repo_root: &Path,
         project_root: &Path,
         limit: usize,
     ) -> Result<Vec<AgentRunSummary>, String> {
-        let Some(conn) = Self::connect_existing_project_database(project_root)? else {
+        let Some(conn) = Self::connect_existing_project_database(repo_root, project_root)? else {
             return Ok(Vec::new());
         };
         let mut stmt = conn
@@ -252,10 +254,11 @@ impl AgentStateStore {
     }
 
     pub fn get_run_detail(
+        repo_root: &Path,
         project_root: &Path,
         run_id: &str,
     ) -> Result<Option<AgentRunDetail>, String> {
-        let Some(conn) = Self::connect_existing_project_database(project_root)? else {
+        let Some(conn) = Self::connect_existing_project_database(repo_root, project_root)? else {
             return Ok(None);
         };
         let row = conn
@@ -307,12 +310,13 @@ impl AgentStateStore {
     }
 
     pub fn delete_run(
+        repo_root: &Path,
         project_root: &Path,
         run_id: &str,
     ) -> Result<AgentStateMaintenanceResult, String> {
-        let db_path = Self::ensure_database_for_project(project_root)?;
+        let db_path = Self::ensure_database_for_project(repo_root, project_root)?;
         let size_before = database_size(&db_path);
-        let conn = Self::connect_project_database_for_write(project_root)?;
+        let conn = Self::connect_project_database_for_write(repo_root, project_root)?;
         let status = conn
             .query_row(
                 "SELECT status FROM agent_runs WHERE run_id = ?1",
@@ -341,12 +345,13 @@ impl AgentStateStore {
     }
 
     pub fn prune_completed_runs_for_project(
+        repo_root: &Path,
         project_root: &Path,
         keep_recent: usize,
     ) -> Result<AgentStateMaintenanceResult, String> {
-        let db_path = Self::ensure_database_for_project(project_root)?;
+        let db_path = Self::ensure_database_for_project(repo_root, project_root)?;
         let size_before = database_size(&db_path);
-        let conn = Self::connect_project_database_for_write(project_root)?;
+        let conn = Self::connect_project_database_for_write(repo_root, project_root)?;
         let keep_recent = keep_recent.clamp(1, MAX_COMPLETED_RUNS);
         let cleanup = prune_completed_runs_keep(&conn, keep_recent)?;
         Ok(AgentStateMaintenanceResult {
@@ -358,11 +363,12 @@ impl AgentStateStore {
     }
 
     pub fn compact_project_database(
+        repo_root: &Path,
         project_root: &Path,
     ) -> Result<AgentStateMaintenanceResult, String> {
-        let db_path = Self::ensure_database_for_project(project_root)?;
+        let db_path = Self::ensure_database_for_project(repo_root, project_root)?;
         let size_before = database_size(&db_path);
-        let conn = Self::connect_project_database_for_write(project_root)?;
+        let conn = Self::connect_project_database_for_write(repo_root, project_root)?;
         conn.execute_batch("VACUUM;")
             .map_err(|e| format!("Could not compact agent state database: {e}"))?;
         Ok(AgentStateMaintenanceResult {
@@ -374,10 +380,11 @@ impl AgentStateStore {
     }
 
     pub fn reconcile_abandoned_runs_for_project(
+        repo_root: &Path,
         project_root: &Path,
         active_run_ids: &[String],
     ) -> Result<usize, String> {
-        let conn = Self::connect_project_database_for_write(project_root)?;
+        let conn = Self::connect_project_database_for_write(repo_root, project_root)?;
         let now = Utc::now().to_rfc3339();
         let mut sql =
             "UPDATE agent_runs SET status = 'interrupted', completed_at = ?1 WHERE status = 'running'"
@@ -426,9 +433,10 @@ impl AgentStateStore {
     }
 
     fn connect_existing_project_database(
+        repo_root: &Path,
         project_root: &Path,
     ) -> Result<Option<Connection>, String> {
-        let db_path = Self::prepare_database_path_for_project(project_root)?;
+        let db_path = Self::prepare_database_path_for_project(repo_root, project_root)?;
         if !db_path.exists() {
             return Ok(None);
         }
@@ -447,8 +455,11 @@ impl AgentStateStore {
         Ok(Some(conn))
     }
 
-    fn connect_project_database_for_write(project_root: &Path) -> Result<Connection, String> {
-        let db_path = Self::ensure_database_for_project(project_root)?;
+    fn connect_project_database_for_write(
+        repo_root: &Path,
+        project_root: &Path,
+    ) -> Result<Connection, String> {
+        let db_path = Self::ensure_database_for_project(repo_root, project_root)?;
         let conn = Connection::open(db_path)
             .map_err(|e| format!("Could not open CutReady agent state database: {e}"))?;
         conn.busy_timeout(BUSY_TIMEOUT)
@@ -1386,19 +1397,19 @@ mod tests {
     }
 
     #[test]
-    fn for_project_uses_local_git_state_and_migrates_legacy_database() {
+    fn for_project_uses_explicit_repo_local_state_and_migrates_legacy_database() {
         let project_root = tempfile::tempdir().unwrap().keep();
-        std::fs::create_dir_all(project_root.join(".git")).unwrap();
 
         let legacy_path = project_root.join(".cutready").join("agent-state.db");
         std::fs::create_dir_all(legacy_path.parent().unwrap()).unwrap();
         drop(Connection::open(&legacy_path).unwrap());
 
-        let store = AgentStateStore::for_project(&project_root, "run-local-state").unwrap();
+        let store =
+            AgentStateStore::for_project(&project_root, &project_root, "run-local-state").unwrap();
 
         assert_eq!(
             store.db_path(),
-            AgentStateStore::database_path_for_project(&project_root)
+            AgentStateStore::database_path_for_project(&project_root, &project_root)
         );
         assert!(store.db_path().exists());
         assert!(!legacy_path.exists());
@@ -1522,11 +1533,8 @@ mod tests {
     #[test]
     fn query_projection_returns_recent_runs_and_detail() {
         let project_root = tempfile::tempdir().unwrap().keep();
-        let store = AgentStateStore::for_database_path(
-            project_root.join(".cutready").join("agent-state.db"),
-            "run-query",
-        )
-        .unwrap();
+        let store =
+            AgentStateStore::for_project(&project_root, &project_root, "run-query").unwrap();
         store
             .insert_run(
                 None,
@@ -1552,7 +1560,7 @@ mod tests {
             })
             .unwrap();
 
-        let runs = AgentStateStore::list_recent_runs(&project_root, 10).unwrap();
+        let runs = AgentStateStore::list_recent_runs(&project_root, &project_root, 10).unwrap();
         assert_eq!(runs.len(), 1);
         assert_eq!(runs[0].run_id, "run-query");
         assert_eq!(
@@ -1562,7 +1570,7 @@ mod tests {
         assert_eq!(runs[0].trajectory_event_count, 2);
         assert_eq!(runs[0].verification_result_count, 1);
 
-        let detail = AgentStateStore::get_run_detail(&project_root, "run-query")
+        let detail = AgentStateStore::get_run_detail(&project_root, &project_root, "run-query")
             .unwrap()
             .unwrap();
         assert_eq!(detail.run.model, "gpt-5-codex");
@@ -1574,18 +1582,23 @@ mod tests {
     #[test]
     fn query_projection_returns_empty_for_missing_database() {
         let project_root = tempfile::tempdir().unwrap().keep();
-        assert!(AgentStateStore::list_recent_runs(&project_root, 10)
-            .unwrap()
-            .is_empty());
-        assert!(AgentStateStore::get_run_detail(&project_root, "missing")
-            .unwrap()
-            .is_none());
+        assert!(
+            AgentStateStore::list_recent_runs(&project_root, &project_root, 10)
+                .unwrap()
+                .is_empty()
+        );
+        assert!(
+            AgentStateStore::get_run_detail(&project_root, &project_root, "missing")
+                .unwrap()
+                .is_none()
+        );
     }
 
     #[test]
     fn delete_run_removes_associated_runtime_rows() {
         let project_root = tempfile::tempdir().unwrap().keep();
-        let store = AgentStateStore::for_project(&project_root, "run-delete").unwrap();
+        let store =
+            AgentStateStore::for_project(&project_root, &project_root, "run-delete").unwrap();
         store
             .insert_run(None, "openai", "gpt-4o", serde_json::json!({}))
             .unwrap();
@@ -1604,29 +1617,36 @@ mod tests {
             .unwrap();
         store.finish_run("completed").unwrap();
 
-        let result = AgentStateStore::delete_run(&project_root, "run-delete").unwrap();
+        let result =
+            AgentStateStore::delete_run(&project_root, &project_root, "run-delete").unwrap();
 
         assert_eq!(result.deleted_runs, 1);
         assert!(result.deleted_rows >= 3);
-        assert!(AgentStateStore::get_run_detail(&project_root, "run-delete")
-            .unwrap()
-            .is_none());
+        assert!(
+            AgentStateStore::get_run_detail(&project_root, &project_root, "run-delete")
+                .unwrap()
+                .is_none()
+        );
     }
 
     #[test]
     fn delete_run_rejects_running_run() {
         let project_root = tempfile::tempdir().unwrap().keep();
-        let store = AgentStateStore::for_project(&project_root, "run-active").unwrap();
+        let store =
+            AgentStateStore::for_project(&project_root, &project_root, "run-active").unwrap();
         store
             .insert_run(None, "openai", "gpt-4o", serde_json::json!({}))
             .unwrap();
 
-        let err = AgentStateStore::delete_run(&project_root, "run-active").unwrap_err();
+        let err =
+            AgentStateStore::delete_run(&project_root, &project_root, "run-active").unwrap_err();
 
         assert!(err.contains("still running"));
-        assert!(AgentStateStore::get_run_detail(&project_root, "run-active")
-            .unwrap()
-            .is_some());
+        assert!(
+            AgentStateStore::get_run_detail(&project_root, &project_root, "run-active")
+                .unwrap()
+                .is_some()
+        );
     }
 
     #[test]
@@ -1638,7 +1658,7 @@ mod tests {
             ("run-keep", true),
             ("run-running", false),
         ] {
-            let store = AgentStateStore::for_project(&project_root, run_id).unwrap();
+            let store = AgentStateStore::for_project(&project_root, &project_root, run_id).unwrap();
             store
                 .insert_run(None, "openai", "gpt-4o", serde_json::json!({}))
                 .unwrap();
@@ -1654,8 +1674,11 @@ mod tests {
             std::thread::sleep(std::time::Duration::from_millis(2));
         }
 
-        let result = AgentStateStore::prune_completed_runs_for_project(&project_root, 1).unwrap();
-        let remaining = AgentStateStore::list_recent_runs(&project_root, 10).unwrap();
+        let result =
+            AgentStateStore::prune_completed_runs_for_project(&project_root, &project_root, 1)
+                .unwrap();
+        let remaining =
+            AgentStateStore::list_recent_runs(&project_root, &project_root, 10).unwrap();
         let remaining_ids: Vec<_> = remaining.iter().map(|run| run.run_id.as_str()).collect();
 
         assert_eq!(result.deleted_runs, 2);
@@ -1669,7 +1692,7 @@ mod tests {
     fn reconcile_abandoned_runs_interrupts_only_inactive_running_runs() {
         let project_root = tempfile::tempdir().unwrap().keep();
         for run_id in ["run-stale", "run-active"] {
-            let store = AgentStateStore::for_project(&project_root, run_id).unwrap();
+            let store = AgentStateStore::for_project(&project_root, &project_root, run_id).unwrap();
             store
                 .insert_run(None, "openai", "gpt-4o", serde_json::json!({}))
                 .unwrap();
@@ -1677,11 +1700,13 @@ mod tests {
 
         let reconciled = AgentStateStore::reconcile_abandoned_runs_for_project(
             &project_root,
+            &project_root,
             &[String::from("run-active")],
         )
         .unwrap();
 
-        let stale_store = AgentStateStore::for_project(&project_root, "reader").unwrap();
+        let stale_store =
+            AgentStateStore::for_project(&project_root, &project_root, "reader").unwrap();
         let stale = stale_store.get_run("run-stale").unwrap().unwrap();
         let active = stale_store.get_run("run-active").unwrap().unwrap();
         assert_eq!(reconciled, 1);

@@ -264,7 +264,9 @@ describe("draftlineVersioning", () => {
     mockInvoke.mockResolvedValueOnce(undefined);
 
     await expect(deleteDraftlineVariation("alt")).resolves.toBeUndefined();
-    expect(mockInvoke).toHaveBeenCalledWith("draftline_delete_variation", { variation: "alt" });
+    expect(mockInvoke).toHaveBeenCalledWith("delete_variation", {
+      request: { workspace_path: WORKSPACE, variation: "alt" },
+    });
   });
 
   it("preflights and renames a Draftline variation through the guarded API", async () => {
