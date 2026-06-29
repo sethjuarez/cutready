@@ -835,8 +835,16 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
     case "clear_feedback":
     case "export_logs":
       return null;
+    case "get_feedback_system_info":
+      return {
+        app_version: "1.18.0",
+        os: "windows",
+        os_family: "windows",
+        arch: "x86_64",
+        machine_name: "DEV-MACHINE",
+      };
     case "create_github_issue":
-      return "https://github.com/sethjuarez/cutready/issues/999";
+      return { url: "https://github.com/sethjuarez/cutready/issues/999", diagnostics_comments_posted: 0, diagnostics_comment_error: null };
     case "list_monitors":
       return [{
         id: 0,

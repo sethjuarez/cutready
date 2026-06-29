@@ -1725,10 +1725,25 @@ interface FeedbackEntry {
   feedback: string;
   date: string;
   debug_log?: string;
+  system_info?: FeedbackSystemInfo;
 }
 
 interface IssueReviewDraft {
   entry: FeedbackEntry;
+}
+
+interface FeedbackSystemInfo {
+  app_version: string;
+  os: string;
+  os_family: string;
+  arch: string;
+  machine_name?: string | null;
+}
+
+interface CreateGithubIssueResult {
+  url: string;
+  diagnostics_comments_posted: number;
+  diagnostics_comment_error?: string | null;
 }
 
 interface DiagnosticsPolicy {
@@ -1772,13 +1787,22 @@ function formatBytes(bytes: number | null | undefined): string {
   return `${value.toFixed(value >= 10 ? 1 : 2)} ${unit}`;
 }
 
+function formatSystemInfoLines(systemInfo?: FeedbackSystemInfo): string[] {
+  if (!systemInfo) return [];
+  return [
+    `- App Version: ${systemInfo.app_version}`,
+    `- OS: ${systemInfo.os} (${systemInfo.os_family})`,
+    `- Architecture: ${systemInfo.arch}`,
+    ...(systemInfo.machine_name ? [`- Machine: ${systemInfo.machine_name}`] : []),
+  ];
+}
+
 const ISSUE_FORMAT_PROMPT = `You are formatting user feedback into a GitHub issue for the CutReady desktop app. Given the feedback below, produce a JSON object with two fields:
 - "title": A concise, descriptive issue title (max 80 chars)
 - "body": A well-formatted GitHub issue body in markdown. Include:
   - A clear description of the feedback
   - The category as a label suggestion
   - The app version in an "Environment" section
-  - If debug log is provided, include it in a collapsible <details> section
   - Keep it professional and actionable
 
 Respond ONLY with valid JSON, no markdown fences.`;
@@ -1787,6 +1811,121 @@ Respond ONLY with valid JSON, no markdown fences.`;
 const MAX_URL_LENGTH = 8000;
 const FEEDBACK_ISSUE_FORMAT_TIMEOUT_MS = 20_000;
 export const CUTREADY_FEEDBACK_REPO = "sethjuarez/cutready";
+
+const DIAGNOSTIC_PATH_KEYS = new Set(["database_path", "settings_path", "root"]);
+const DIAGNOSTIC_SECRET_KEY_PATTERN = /(token|secret|password|authorization|api[_-]?key|bearer)/i;
+
+function sanitizeDiagnosticsValue(value: unknown, key = ""): unknown {
+  if (DIAGNOSTIC_SECRET_KEY_PATTERN.test(key)) {
+    return "<redacted secret>";
+  }
+  if (DIAGNOSTIC_PATH_KEYS.has(key)) {
+    return "<redacted local path>";
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => sanitizeDiagnosticsValue(item));
+  }
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([entryKey, entryValue]) => [
+        entryKey,
+        sanitizeDiagnosticsValue(entryValue, entryKey),
+      ]),
+    );
+  }
+  if (typeof value === "string") {
+    return value
+      .replace(/[A-Za-z]:\\Users\\[^"\\\s]+\\[^\n"]*/g, "<redacted local path>")
+      .replace(/\/Users\/[^/"\s]+\/[^\n"]*/g, "<redacted local path>");
+  }
+  return value;
+}
+
+function sanitizeDiagnosticsLog(debugLog?: string): string | undefined {
+  if (!debugLog?.trim()) return undefined;
+  try {
+    const parsed = JSON.parse(debugLog) as unknown;
+    return JSON.stringify(sanitizeDiagnosticsValue(parsed), null, 2);
+  } catch {
+    return String(sanitizeDiagnosticsValue(debugLog));
+  }
+}
+
+function summarizeDiagnostics(debugLog?: string): string[] {
+  if (!debugLog?.trim()) return [];
+  try {
+    type DiagnosticSummaryItem = { kind?: string; title?: string; detail?: string; trace_id?: string };
+    const parsed = JSON.parse(debugLog) as {
+      session?: { session_id?: string; service_name?: string; database_size_bytes?: number; session_size_bytes?: number };
+      counts?: Record<string, number>;
+      failed_ipc?: DiagnosticSummaryItem[];
+      failed_traces?: DiagnosticSummaryItem[];
+      frontend_errors?: DiagnosticSummaryItem[];
+      warning_logs?: DiagnosticSummaryItem[];
+      notes?: string[];
+    };
+    const lines: string[] = [];
+    if (parsed.session) {
+      const sessionParts = [
+        parsed.session.service_name ? `service ${parsed.session.service_name}` : null,
+        parsed.session.session_id ? `session ${parsed.session.session_id}` : null,
+        parsed.session.session_size_bytes ? `session size ${formatBytes(parsed.session.session_size_bytes)}` : null,
+        parsed.session.database_size_bytes ? `database ${formatBytes(parsed.session.database_size_bytes)}` : null,
+      ].filter(Boolean);
+      if (sessionParts.length > 0) {
+        lines.push(`- Diagnostics: ${sessionParts.join(", ")}`);
+      }
+    }
+    if (parsed.counts) {
+      lines.push(
+        `- Counts: frontend errors ${parsed.counts.frontend_errors ?? 0}, failed IPC ${parsed.counts.failed_ipc ?? 0}, failed traces ${parsed.counts.failed_traces ?? 0}, warning/error logs ${parsed.counts.warning_logs ?? 0}`,
+      );
+    }
+    const recentItems = [
+      ...(parsed.failed_ipc ?? []),
+      ...(parsed.failed_traces ?? []),
+      ...(parsed.frontend_errors ?? []),
+      ...(parsed.warning_logs ?? []),
+    ].slice(0, 5);
+    for (const item of recentItems) {
+      const title = item.kind || item.title || "diagnostic item";
+      const detail = item.detail ? ` — ${item.detail.slice(0, 240)}` : "";
+      const trace = item.trace_id ? ` (trace ${item.trace_id})` : "";
+      lines.push(`- Recent: ${title}${detail}${trace}`);
+    }
+    for (const note of (parsed.notes ?? []).slice(0, 3)) {
+      lines.push(`- Note: ${note}`);
+    }
+    return lines;
+  } catch {
+    return ["- Full diagnostics were captured, but the JSON could not be parsed for a summary."];
+  }
+}
+
+function appendDiagnosticsSection(body: string, debugLog?: string): string {
+  const sanitized = sanitizeDiagnosticsLog(debugLog);
+  if (!sanitized) return body;
+  const summary = summarizeDiagnostics(sanitized);
+  const lines = [
+    body.trim(),
+    "",
+    "## Diagnostics",
+    ...(summary.length > 0 ? summary : ["- Debug diagnostics were included."]),
+    `- Full sanitized diagnostics JSON will be posted as follow-up comment${sanitized.length > 55_000 ? "s" : ""}.`,
+  ];
+  return lines.join("\n");
+}
+
+function appendSystemInfoSection(body: string, systemInfo?: FeedbackSystemInfo): string {
+  const lines = formatSystemInfoLines(systemInfo);
+  if (lines.length === 0) return body;
+  return [
+    body.trim(),
+    "",
+    "## OS and machine details",
+    ...lines,
+  ].join("\n");
+}
 
 function FeedbackListTab() {
   const { settings, updateSetting } = useSettings();
@@ -1841,6 +1980,7 @@ function FeedbackListTab() {
     const text = entries
       .map((e) => {
         let t = `## ${e.category}\n**Date:** ${e.date.split("T")[0]}\n\n${e.feedback}`;
+        if (e.system_info) t += `\n\n---\n### OS and machine details\n${formatSystemInfoLines(e.system_info).join("\n")}`;
         if (e.debug_log) t += `\n\n---\n### Debug Log\n\`\`\`\n${e.debug_log}\n\`\`\``;
         return t;
       })
@@ -1854,6 +1994,7 @@ function FeedbackListTab() {
 
   const copySingle = async (entry: FeedbackEntry) => {
     let text = `## ${entry.category}\n**Date:** ${entry.date.split("T")[0]}\n\n${entry.feedback}`;
+    if (entry.system_info) text += `\n\n---\n### OS and machine details\n${formatSystemInfoLines(entry.system_info).join("\n")}`;
     if (entry.debug_log) text += `\n\n---\n### Debug Log\n\`\`\`\n${entry.debug_log}\n\`\`\``;
     try {
       await navigator.clipboard.writeText(text);
@@ -1900,10 +2041,8 @@ function FeedbackListTab() {
     const title = `[${entry.category}] Feedback — ${entry.date.split("T")[0]}`;
     let body = `## ${entry.category} Feedback\n\n${entry.feedback}`;
     body += `\n\n---\n**App Version:** ${version || "unknown"}`;
-    if (entry.debug_log) {
-      body += `\n\n<details><summary>Debug Log (${entry.debug_log.split("\n").length} lines)</summary>\n\n\`\`\`\n${entry.debug_log}\n\`\`\`\n</details>`;
-    }
-    return { title, body };
+    body = appendSystemInfoSection(body, entry.system_info);
+    return { title, body: appendDiagnosticsSection(body, entry.debug_log) };
   };
 
   const openIssueReview = (entry: FeedbackEntry, title: string, body: string) => {
@@ -1928,15 +2067,23 @@ function FeedbackListTab() {
 
     try {
       const labels = [entry.category === "bug" ? "bug" : entry.category === "feature" ? "enhancement" : "feedback"];
-      const url = await invoke<string>("create_github_issue", {
+      const result = await invoke<CreateGithubIssueResult>("create_github_issue", {
         repo: CUTREADY_FEEDBACK_REPO,
         title,
         body,
         labels,
+        diagnosticsAttachment: sanitizeDiagnosticsLog(entry.debug_log) ?? null,
       });
+      const url = result.url;
       if (url) {
         try { await shellOpen(url); } catch { /* opened via gh, URL still returned */ }
-        useToastStore.getState().show(`Issue created: ${url}`, 3000, "info");
+        const diagnosticsNote = result.diagnostics_comments_posted > 0
+          ? ` with ${result.diagnostics_comments_posted} diagnostics comment${result.diagnostics_comments_posted === 1 ? "" : "s"}`
+          : "";
+        useToastStore.getState().show(`Issue created${diagnosticsNote}: ${url}`, 3000, "info");
+        if (result.diagnostics_comment_error) {
+          useToastStore.getState().show(`Diagnostics comment failed: ${result.diagnostics_comment_error}`, 6000, "warning");
+        }
         setIssueReview(null);
         setIssueReviewTitle("");
         setIssueReviewBody("");
@@ -2010,7 +2157,8 @@ function FeedbackListTab() {
           `Date: ${entry.date}`,
           `App Version: ${appVersion}`,
           `Feedback: ${entry.feedback}`,
-          ...(entry.debug_log ? [`Debug Log:\n${entry.debug_log}`] : []),
+          ...(entry.system_info ? [`OS and machine details:\n${formatSystemInfoLines(entry.system_info).join("\n")}`] : []),
+          ...(entry.debug_log ? [`Diagnostics Summary:\n${summarizeDiagnostics(sanitizeDiagnosticsLog(entry.debug_log)).join("\n")}`] : []),
         ].join("\n\n");
 
         const result = await agentChat(
@@ -2024,8 +2172,11 @@ function FeedbackListTab() {
 
         if (result.content) {
           const parsed = JSON.parse(result.content.trim());
-          title = parsed.title || buildFallbackIssue(entry, appVersion).title;
-          body = parsed.body || buildFallbackIssue(entry, appVersion).body;
+          const fallback = buildFallbackIssue(entry, appVersion);
+          title = parsed.title || fallback.title;
+          body = parsed.body
+            ? appendDiagnosticsSection(appendSystemInfoSection(parsed.body, entry.system_info), entry.debug_log)
+            : fallback.body;
         } else {
           ({ title, body } = buildFallbackIssue(entry, appVersion));
         }
@@ -2057,7 +2208,7 @@ function FeedbackListTab() {
           <div>
             <div className="text-sm font-medium text-[rgb(var(--color-text))]">Diagnostics capture</div>
             <p className="mt-1 text-xs text-[rgb(var(--color-text-secondary))]">
-              Auditaur stores local diagnostics in a SQLite database. Full capture is off by default in packaged builds unless enabled here for the next launch, or started with <code className="font-mono">CUTREADY_DIAGNOSTICS=1</code>.
+              CutReady can collect local troubleshooting details in a diagnostics database. Full capture is off by default in packaged builds unless enabled here for the next launch, or started with <code className="font-mono">CUTREADY_DIAGNOSTICS=1</code>.
             </p>
           </div>
           <label className="flex shrink-0 items-center gap-2 text-xs text-[rgb(var(--color-text))]">
@@ -2094,7 +2245,7 @@ function FeedbackListTab() {
           <p className="text-[11px] text-[rgb(var(--color-text-secondary))]">
             {auditaurSummary?.session
               ? `Session ${auditaurSummary.session.session_id.slice(0, 8)} is active.`
-              : "No active Auditaur diagnostics session was found."}
+              : "No active diagnostics session was found."}
           </p>
           <button
             type="button"
@@ -2170,6 +2321,12 @@ function FeedbackListTab() {
                 <div className="mt-1.5 flex items-center gap-1 text-[10px] text-[rgb(var(--color-text-secondary))]">
                   <LayoutGrid className="w-2.5 h-2.5" />
                   Debug log attached ({entry.debug_log.split("\n").length} lines)
+                </div>
+              )}
+              {entry.system_info && (
+                <div className="mt-1.5 flex items-center gap-1 text-[10px] text-[rgb(var(--color-text-secondary))]">
+                  <Info className="w-2.5 h-2.5" />
+                  OS and machine details attached
                 </div>
               )}
               {/* Confirm delete inline */}

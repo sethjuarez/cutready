@@ -5,6 +5,8 @@ use std::{fs, io::Write};
 use tauri::Manager;
 use tauri_plugin_auditaur::auditaur_command;
 
+const GITHUB_COMMENT_CHUNK_BYTES: usize = 52_000;
+
 #[derive(Serialize, Deserialize, Clone)]
 pub struct FeedbackEntry {
     pub category: String,
@@ -12,6 +14,18 @@ pub struct FeedbackEntry {
     pub date: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub debug_log: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub system_info: Option<FeedbackSystemInfo>,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct FeedbackSystemInfo {
+    pub app_version: String,
+    pub os: String,
+    pub os_family: String,
+    pub arch: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub machine_name: Option<String>,
 }
 
 /// Append a feedback entry to `<app_data>/feedback.json`.
@@ -97,15 +111,34 @@ pub fn delete_feedback(app: tauri::AppHandle, index: usize) -> Result<(), String
     Ok(())
 }
 
+#[auditaur_command(skip_all, err)]
+pub fn get_feedback_system_info(app: tauri::AppHandle) -> Result<FeedbackSystemInfo, String> {
+    Ok(FeedbackSystemInfo {
+        app_version: app.package_info().version.to_string(),
+        os: std::env::consts::OS.to_string(),
+        os_family: std::env::consts::FAMILY.to_string(),
+        arch: std::env::consts::ARCH.to_string(),
+        machine_name: machine_name(),
+    })
+}
+
 /// Create a GitHub issue via the `gh` CLI. Returns the issue URL on success.
 /// Uses `--body-file -` to pipe the body via stdin (avoids shell escaping and length limits).
+#[derive(Debug, Serialize)]
+pub struct CreateGithubIssueResult {
+    pub url: String,
+    pub diagnostics_comments_posted: usize,
+    pub diagnostics_comment_error: Option<String>,
+}
+
 #[auditaur_command(skip_all, err)]
 pub async fn create_github_issue(
     repo: String,
     title: String,
     body: String,
     labels: Option<Vec<String>>,
-) -> Result<String, String> {
+    diagnostics_attachment: Option<String>,
+) -> Result<CreateGithubIssueResult, String> {
     use std::process::Stdio;
     use tokio::io::AsyncWriteExt;
 
@@ -161,7 +194,16 @@ pub async fn create_github_issue(
 
     if output.status.success() {
         let url = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        Ok(url)
+        let (diagnostics_comments_posted, diagnostics_comment_error) =
+            match post_diagnostics_comments(&repo, &url, diagnostics_attachment).await {
+                Ok(count) => (count, None),
+                Err(error) => (0, Some(error)),
+            };
+        Ok(CreateGithubIssueResult {
+            url,
+            diagnostics_comments_posted,
+            diagnostics_comment_error,
+        })
     } else {
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
         if stderr.contains("401") || stderr.contains("authentication") {
@@ -170,6 +212,119 @@ pub async fn create_github_issue(
             Err(format!("gh issue create failed: {stderr}"))
         }
     }
+}
+
+async fn post_diagnostics_comments(
+    repo: &str,
+    issue_url: &str,
+    diagnostics_attachment: Option<String>,
+) -> Result<usize, String> {
+    let Some(diagnostics_attachment) = diagnostics_attachment else {
+        return Ok(0);
+    };
+    let redacted = redact_auditaur_summary(&diagnostics_attachment);
+    let redacted = redacted.trim();
+    if redacted.is_empty() {
+        return Ok(0);
+    }
+    let issue_number = issue_number_from_url(issue_url).ok_or_else(|| {
+        format!("Issue created, but could not parse issue number from {issue_url}")
+    })?;
+    let chunks = chunk_text_by_bytes(redacted, GITHUB_COMMENT_CHUNK_BYTES);
+    let chunk_count = chunks.len();
+    for (index, chunk) in chunks.iter().enumerate() {
+        let body = if chunk_count == 1 {
+            format!("## Sanitized debug diagnostics\n\n```json\n{}\n```", chunk)
+        } else {
+            format!(
+                "## Sanitized debug diagnostics ({}/{})\n\n```text\n{}\n```",
+                index + 1,
+                chunk_count,
+                chunk
+            )
+        };
+        post_issue_comment(repo, &issue_number, &body).await?;
+    }
+    Ok(chunk_count)
+}
+
+async fn post_issue_comment(repo: &str, issue_number: &str, body: &str) -> Result<(), String> {
+    use std::process::Stdio;
+    use tokio::io::AsyncWriteExt;
+
+    let mut cmd = tokio::process::Command::new("gh");
+    cmd.args([
+        "issue",
+        "comment",
+        issue_number,
+        "--repo",
+        repo,
+        "--body-file",
+        "-",
+    ]);
+    cmd.stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    #[cfg(windows)]
+    cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+
+    let mut child = cmd
+        .spawn()
+        .map_err(|e| format!("Failed to start gh CLI for diagnostics comment: {e}"))?;
+    if let Some(mut stdin) = child.stdin.take() {
+        stdin
+            .write_all(body.as_bytes())
+            .await
+            .map_err(|e| format!("Failed to write diagnostics comment: {e}"))?;
+    }
+
+    let output = child
+        .wait_with_output()
+        .await
+        .map_err(|e| format!("gh issue comment process error: {e}"))?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        Err(format!(
+            "Issue was created, but posting diagnostics failed: {stderr}"
+        ))
+    }
+}
+
+fn issue_number_from_url(url: &str) -> Option<String> {
+    url.trim_end_matches('/')
+        .rsplit('/')
+        .next()
+        .filter(|value| value.chars().all(|ch| ch.is_ascii_digit()))
+        .map(ToString::to_string)
+}
+
+fn chunk_text_by_bytes(text: &str, max_bytes: usize) -> Vec<String> {
+    if text.len() <= max_bytes {
+        return vec![text.to_string()];
+    }
+    let mut chunks = Vec::new();
+    let mut current = String::new();
+    for ch in text.chars() {
+        if !current.is_empty() && current.len() + ch.len_utf8() > max_bytes {
+            chunks.push(current);
+            current = String::new();
+        }
+        current.push(ch);
+    }
+    if !current.is_empty() {
+        chunks.push(current);
+    }
+    chunks
+}
+
+fn machine_name() -> Option<String> {
+    ["COMPUTERNAME", "HOSTNAME"]
+        .iter()
+        .find_map(|key| std::env::var(key).ok())
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
 }
 
 fn is_safe_github_repo(repo: &str) -> bool {
@@ -209,7 +364,7 @@ pub fn export_logs(
         add_dir_to_zip(&mut zip, &log_dir, "legacy-logs", options)?;
     }
 
-    // Include a compact, redacted Auditaur summary rather than the raw SQLite
+    // Include a compact, redacted diagnostics summary rather than the raw SQLite
     // session directory so exported reports stay shareable by default.
     if let Some(log_text) = debug_log {
         zip.start_file("auditaur-redacted-summary.json", options)
@@ -312,7 +467,9 @@ fn redact_paths_in_value(value: &mut serde_json::Value) {
 
 #[cfg(test)]
 mod tests {
-    use super::{is_safe_github_repo, redact_auditaur_summary};
+    use super::{
+        chunk_text_by_bytes, is_safe_github_repo, issue_number_from_url, redact_auditaur_summary,
+    };
 
     #[test]
     fn github_repo_validation_accepts_owner_repo() {
@@ -342,5 +499,25 @@ mod tests {
 
         assert!(!redacted.contains("Users\\\\person"));
         assert!(redacted.contains("<redacted local path>"));
+    }
+
+    #[test]
+    fn issue_number_from_url_accepts_issue_urls() {
+        assert_eq!(
+            issue_number_from_url("https://github.com/sethjuarez/cutready/issues/125"),
+            Some("125".to_string())
+        );
+        assert_eq!(
+            issue_number_from_url("https://github.com/sethjuarez/cutready/issues/125/"),
+            Some("125".to_string())
+        );
+        assert_eq!(issue_number_from_url("not-a-url"), None);
+    }
+
+    #[test]
+    fn chunk_text_by_bytes_preserves_utf8_boundaries() {
+        let chunks = chunk_text_by_bytes("aé😊b", 3);
+        assert_eq!(chunks.concat(), "aé😊b");
+        assert!(chunks.iter().all(|chunk| chunk.len() <= 4));
     }
 }

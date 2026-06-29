@@ -62,7 +62,7 @@ async function exportAuditaurDiagnostics(summary: AuditaurDiagnosticsSummary | n
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `cutready-auditaur-diagnostics-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
+  a.download = `cutready-debug-diagnostics-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -83,7 +83,7 @@ function AuditaurDebugView({
   if (loading && !summary) {
     return (
       <div className="text-center text-[rgb(var(--color-text-secondary))] py-8">
-        Loading Auditaur diagnostics…
+        Loading debug diagnostics...
       </div>
     );
   }
@@ -99,7 +99,7 @@ function AuditaurDebugView({
   if (!summary?.session) {
     return (
       <div className="text-center text-[rgb(var(--color-text-secondary))] py-8">
-        No active Auditaur session found for this CutReady process.
+        No active diagnostics session found for this CutReady process.
       </div>
     );
   }
@@ -364,14 +364,14 @@ export function OutputPanel({ onCollapse }: OutputPanelProps) {
                 <button
                   onClick={() => activeTab === "activity" ? exportActivity(outputs) : exportAuditaurDiagnostics(auditaurSummary)}
                   className="p-1 rounded text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors"
-                  title={activeTab === "activity" ? "Export activity log" : "Export Auditaur diagnostics"}
+                  title={activeTab === "activity" ? "Export activity log" : "Export debug diagnostics"}
                 >
                   <Download className="w-3 h-3" />
                 </button>
                 <button
                   onClick={() => activeTab === "activity" ? clearActivityLog() : loadAuditaurDiagnostics()}
                   className="p-1 rounded text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors"
-                  title={activeTab === "activity" ? "Clear" : "Refresh Auditaur diagnostics"}
+                  title={activeTab === "activity" ? "Clear" : "Refresh debug diagnostics"}
                 >
                   {activeTab === "activity" ? <Trash2 className="w-3 h-3" /> : <RefreshCw className="w-3 h-3" />}
                 </button>

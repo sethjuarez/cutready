@@ -146,7 +146,7 @@ export interface GlobalSettings {
   recorderSystemAudioVolume: number;
   /** Feature flag: show recording UI (experimental, default false). */
   featureRecording: boolean;
-  /** Enable full Auditaur diagnostics capture on the next app launch. */
+  /** Enable full diagnostics capture on the next app launch. */
   auditaurDiagnosticsEnabled: boolean;
   // Legacy fields (migrated on load)
   llmApiKey?: string;

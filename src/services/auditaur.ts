@@ -38,7 +38,7 @@ export function initializeAuditaur() {
       driveBridge: policy.release_build ? false : { windowLabel: "main" },
       batchIntervalMs: 1000,
       onExportError(failure) {
-        originalWarn("Auditaur export failed", failure.error);
+        originalWarn("Diagnostics export failed", failure.error);
       },
     });
   })
@@ -47,7 +47,7 @@ export function initializeAuditaur() {
       return auditaur;
     })
     .catch((error) => {
-      originalWarn("Auditaur initialization failed", error);
+      originalWarn("Diagnostics initialization failed", error);
       initPromise = null;
       return null;
     });
