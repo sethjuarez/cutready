@@ -6,6 +6,7 @@ import { SyncBar } from "./SyncBar";
 import { TimelineSelector } from "./TimelineSelector";
 import { RefreshCw, Search, Clock, Download, GitPullRequestArrow, X } from "lucide-react";
 import { useConfirmDialog } from "./ConfirmDialog";
+import { headAnchoredCleanupSelection, isExactHeadCleanupSelection } from "../utils/historyCleanupSelection";
 
 export function VersionHistory() {
   const graphNodes = useAppStore((s) => s.graphNodes);
@@ -22,7 +23,8 @@ export function VersionHistory() {
   const sidebarPosition = useAppStore((s) => s.sidebarPosition);
   const timelines = useAppStore((s) => s.timelines);
   const loadTimelines = useAppStore((s) => s.loadTimelines);
-  const squashSnapshots = useAppStore((s) => s.squashSnapshots);
+  const previewSnapshotCleanup = useAppStore((s) => s.previewSnapshotCleanup);
+  const applySnapshotCleanup = useAppStore((s) => s.applySnapshotCleanup);
   const currentRemote = useAppStore((s) => s.currentRemote);
   const saving = useAppStore((s) => s.saving);
   const currentProject = useAppStore((s) => s.currentProject);
@@ -86,7 +88,8 @@ export function VersionHistory() {
     .sort((a, b) => +new Date(b.timestamp) - +new Date(a.timestamp));
   const selectedHead = selectedNodes.find((node) => node.is_head);
   const selectedOldest = selectedNodes[selectedNodes.length - 1];
-  const canSquash = selectedNodes.length >= 2 && !!selectedHead && !hasRemote && !isRewound;
+  const hasContiguousCleanupSelection = isExactHeadCleanupSelection(activeNodes, selectedForSquash);
+  const canSquash = hasContiguousCleanupSelection && !hasRemote && !isRewound && !isDirty;
   const activeProjectName = currentProject?.name ?? "this project";
   const { confirm, confirmationDialog } = useConfirmDialog();
 
@@ -134,14 +137,9 @@ export function VersionHistory() {
   }, [activeProjectName, confirm, deleteTimeline, discardChanges, emptyStartedBranch, isMultiProject, loadGraphData, loadTimelines, switchTimeline, timelines]);
 
   const toggleSquashSelection = useCallback((commitId: string) => {
-    setSelectedForSquash((prev) => {
-      const next = new Set(prev);
-      if (next.has(commitId)) next.delete(commitId);
-      else next.add(commitId);
-      return next;
-    });
+    setSelectedForSquash(headAnchoredCleanupSelection(activeNodes, commitId));
     setSquashError(null);
-  }, []);
+  }, [activeNodes]);
 
   const cancelSquash = useCallback(() => {
     setSquashMode(false);
@@ -155,14 +153,31 @@ export function VersionHistory() {
     setSquashing(true);
     setSquashError(null);
     try {
-      await squashSnapshots(selectedOldest.id, selectedHead.id, squashLabel.trim());
+      const preview = await previewSnapshotCleanup(
+        selectedOldest.id,
+        selectedHead.id,
+        squashLabel.trim(),
+        selectedNodes.map((node) => node.id),
+      );
+      const warningText = preview.warnings.length > 0
+        ? `\n\nWarnings:\n${preview.warnings.map((warning) => `- ${warning.message}`).join("\n")}`
+        : "";
+      const confirmed = await confirm({
+        title: "Compact timeline history?",
+        message: `Draftline will replace ${preview.graph_diff.old_commit_count} selected snapshots with ${preview.graph_diff.new_commit_count} milestone snapshot and create a backup ref before moving the timeline.${warningText}`,
+        confirmLabel: "Compact timeline",
+        cancelLabel: "Cancel",
+        variant: "warning",
+      });
+      if (!confirmed) return;
+      await applySnapshotCleanup(preview.plan_id);
       cancelSquash();
     } catch (err) {
       setSquashError(String(err));
     } finally {
       setSquashing(false);
     }
-  }, [cancelSquash, selectedHead, selectedOldest, squashLabel, squashSnapshots]);
+  }, [applySnapshotCleanup, cancelSquash, confirm, previewSnapshotCleanup, selectedHead, selectedNodes, selectedOldest, squashLabel]);
 
   const borderClass = sidebarPosition === "left" ? "border-l" : "border-r";
   const workspaceName = currentProject ? getPathBasename(currentProject.repo_root) : "workspace";
@@ -215,11 +230,11 @@ export function VersionHistory() {
                 ? "text-[rgb(var(--color-accent))] bg-[rgb(var(--color-accent))]/10"
                 : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))]"
             }`}
-            title="Squash recent snapshots"
+            title="Compact recent snapshots"
           >
             <GitPullRequestArrow className="shrink-0 w-3.5 h-3.5" />
             <span className="max-w-0 overflow-hidden group-hover/btn:max-w-[10rem] transition-all duration-200 whitespace-nowrap text-[10px]">
-              Squash
+              Cleanup
             </span>
           </button>
           <button
@@ -285,13 +300,13 @@ export function VersionHistory() {
                 Select recent snapshots ending at HEAD
               </div>
               <div className="text-[10px] text-[rgb(var(--color-text-secondary))] leading-relaxed">
-                Squashing rewrites selected local snapshots and leaves your current workspace changes untouched.
+                Draftline previews a cleanup plan, creates a backup ref, then compacts selected clean snapshots into one milestone.
               </div>
             </div>
             <button
               onClick={cancelSquash}
               className="p-0.5 rounded text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] transition-colors"
-              title="Cancel squash"
+              title="Cancel cleanup"
             >
               <X className="w-3.5 h-3.5" />
             </button>
@@ -299,17 +314,17 @@ export function VersionHistory() {
           <input
             value={squashLabel}
             onChange={(e) => setSquashLabel(e.target.value)}
-            placeholder="Squashed snapshot name..."
+            placeholder="Milestone snapshot name..."
             className="w-full px-2 py-1 rounded text-[10px] bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/50 outline-none focus:border-[rgb(var(--color-accent))]"
           />
           {isDirty && (
-            <div className="text-[10px] text-[rgb(var(--color-text-secondary))]">
-              Unsaved workspace changes will stay as-is after the squash.
+            <div className="text-[10px] text-warning">
+              Save or discard unsaved workspace changes before compacting history.
             </div>
           )}
           {(hasRemote || isRewound) && (
             <div className="text-[10px] text-warning">
-              Squashing is available only on local timeline tips that are not rewound.
+              Cleanup is available only on local timeline tips that are not rewound.
             </div>
           )}
           {squashError && <div className="text-[10px] text-error">{squashError}</div>}
@@ -319,7 +334,7 @@ export function VersionHistory() {
               disabled={!canSquash || !squashLabel.trim() || squashing}
               className="flex-1 px-2 py-1 rounded-md text-[10px] font-medium bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))] hover:bg-[rgb(var(--color-accent-hover))] disabled:opacity-40 disabled:pointer-events-none transition-colors"
             >
-              {squashing ? "Squashing..." : `Squash ${selectedNodes.length || ""} snapshots`}
+              {squashing ? "Previewing..." : `Compact ${selectedNodes.length || ""} snapshots`}
             </button>
           </div>
         </div>

@@ -352,6 +352,67 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
     case "preview_version_file":
     case "preview_workspace_file":
       return { path: (args as { request?: { path?: string } })?.request?.path ?? "sketches/demo-introduction.sk", content: JSON.stringify(MOCK_SKETCH), is_binary: false };
+    case "preview_history_cleanup": {
+      const request = (args as { request?: { cleanup?: { mode?: { milestones?: Array<{ title?: string; include_range?: { start?: string; end?: string } }> } } } })?.request;
+      const milestone = request?.cleanup?.mode?.milestones?.[0];
+      const oldHead = milestone?.include_range?.end ?? "def456def456def456def456def456def456def4";
+      const newHead = "clean456clean456clean456clean456clean456clean456";
+      return {
+        plan_id: "mock-cleanup-plan",
+        target_variation: "main",
+        old_head: oldHead,
+        new_head: newHead,
+        preview_ref: "refs/draftline/previews/history-cleanup/main/mock-cleanup-plan",
+        planned_backup_ref: "refs/draftline/backups/history-cleanup/main/mock-cleanup-plan",
+        operations: [{
+          title: milestone?.title ?? "Compacted history",
+          description: null,
+          old_versions: [milestone?.include_range?.start ?? "abc123abc123abc123abc123abc123abc123abc1", oldHead],
+          new_version: newHead,
+        }],
+        graph_diff: {
+          old_head: oldHead,
+          new_head: newHead,
+          old_commit_count: 2,
+          new_commit_count: 1,
+          squashed_commit_count: 2,
+        },
+        commit_map: [{
+          old: oldHead,
+          new: newHead,
+          disposition: { kind: "squashed_into", new_id: newHead },
+        }],
+        snapshot_map: [{
+          old: oldHead,
+          new: newHead,
+          disposition: { kind: "squashed_into", new_id: newHead },
+        }],
+        warnings: [],
+      };
+    }
+    case "apply_history_cleanup":
+      return {
+        plan_id: (args as { request?: { plan_id?: string } })?.request?.plan_id ?? "mock-cleanup-plan",
+        old_head: "def456def456def456def456def456def456def4",
+        new_head: "clean456clean456clean456clean456clean456clean456",
+        backup_refs: ["refs/draftline/backups/history-cleanup/main/mock-cleanup-plan"],
+        ref_updates: [{
+          name: "main",
+          old: "def456def456def456def456def456def456def4",
+          new: "clean456clean456clean456clean456clean456clean456",
+        }],
+        commit_map: [{
+          old: "def456def456def456def456def456def456def4",
+          new: "clean456clean456clean456clean456clean456clean456",
+          disposition: { kind: "squashed_into", new_id: "clean456clean456clean456clean456clean456clean456" },
+        }],
+        snapshot_map: [{
+          old: "def456def456def456def456def456def456def4",
+          new: "clean456clean456clean456clean456clean456clean456",
+          disposition: { kind: "squashed_into", new_id: "clean456clean456clean456clean456clean456clean456" },
+        }],
+        warnings: [],
+      };
     case "resolve_deep_link":
       return null;
     case "save":

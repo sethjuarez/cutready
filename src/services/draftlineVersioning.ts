@@ -22,6 +22,8 @@ import {
   type VariationRenameToken,
   type VariationCreatePreflight,
   type VariationCreateToken,
+  type HistoryCleanupPreview,
+  type TimelineCleanupResult,
   type VariationSummary,
   type Version,
   type VersionDiff,
@@ -41,6 +43,8 @@ export type DraftlineSwitchVariationPreflight = PreflightReport;
 export type DraftlineSwitchVariationResult = SwitchVariationResult;
 export type DraftlineVariationCreatePreflight = VariationCreatePreflight;
 export type DraftlineVariationCreateToken = VariationCreateToken;
+export type DraftlineHistoryCleanupPreview = HistoryCleanupPreview;
+export type DraftlineTimelineCleanupResult = TimelineCleanupResult;
 
 export class DraftlineVariationCreateConflictError extends Error {
   readonly preflight: VariationCreatePreflight;
@@ -480,6 +484,51 @@ export async function squashDraftlineVersions(count: number, label: string): Pro
     request: { workspace_path: draftlineWorkspacePath, count, label },
   });
   return version.id;
+}
+
+export async function previewDraftlineSnapshotCleanup(
+  oldestVersion: string,
+  newestVersion: string,
+  label: string,
+  targetVariation?: string | null,
+): Promise<HistoryCleanupPreview> {
+  if (!draftlineWorkspacePath) {
+    throw new Error("No Draftline workspace is currently open");
+  }
+  return draftlineClient.previewHistoryCleanup({
+    workspace_path: draftlineWorkspacePath,
+    cleanup: {
+      target_variation: targetVariation ?? null,
+      base: { kind: "auto" },
+      mode: {
+        kind: "compact_milestones",
+        milestones: [{
+          title: label,
+          description: null,
+          include_range: { start: oldestVersion, end: newestVersion },
+        }],
+        preserve_named_branches: true,
+        preserve_merge_boundaries: true,
+      },
+      safety: {
+        create_backup_ref: true,
+        backup_ref_name: null,
+        require_clean_worktree: true,
+      },
+      remote_policy: { kind: "local_only" },
+    },
+  });
+}
+
+export async function applyDraftlineSnapshotCleanup(planId: string): Promise<TimelineCleanupResult> {
+  if (!draftlineWorkspacePath) {
+    throw new Error("No Draftline workspace is currently open");
+  }
+  return draftlineClient.applyHistoryCleanup({
+    workspace_path: draftlineWorkspacePath,
+    plan_id: planId,
+    confirmation: "user_confirmed",
+  });
 }
 
 function refsByTargetVersion(refs: WorkspaceGraphRef[]): Map<string, WorkspaceGraphRef[]> {
