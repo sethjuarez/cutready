@@ -390,6 +390,58 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
       };
     case "delete_shelf":
       return null;
+    case "preflight_create_variation_from_version": {
+      const request = (args as { request?: { version_id?: string; name?: string; remote?: string | null } })?.request;
+      const name = request?.name ?? "variation";
+      const sourceVersion = request?.version_id ?? mockDraftlineVersions()[0].id;
+      return {
+        from_version: sourceVersion,
+        variation: name,
+        remote: request?.remote ?? null,
+        can_create: true,
+        local_collision: false,
+        remote_collision: false,
+        remote_only_collision: false,
+        existing_remote_head: null,
+        suggested_alternative: null,
+        token: {
+          operation_id: `create-${name}`,
+          from_version: sourceVersion,
+          variation: name,
+          remote: request?.remote ?? null,
+          expected_source_oid: sourceVersion,
+          expected_remote_oid: null,
+        },
+      };
+    }
+    case "create_variation_from_version_guarded": {
+      const request = (args as { request?: { token?: { from_version?: string; variation?: string }; metadata?: { label?: string; slug?: string } } })?.request;
+      const name = request?.token?.variation ?? "variation";
+      return {
+        preflight: {
+          from_version: request?.token?.from_version ?? mockDraftlineVersions()[0].id,
+          variation: name,
+          remote: null,
+          can_create: true,
+          local_collision: false,
+          remote_collision: false,
+          remote_only_collision: false,
+          existing_remote_head: null,
+          suggested_alternative: null,
+          token: request?.token,
+        },
+        variation: {
+          id: name,
+          name,
+          metadata: {
+            label: request?.metadata?.label ?? null,
+            slug: request?.metadata?.slug ?? null,
+          },
+          is_current: false,
+        },
+        postconditions: { workspace_changed: true, active_variation: "main", dirty_files: [] },
+      };
+    }
     case "create_variation_from_version":
       return {
         id: (args as { request?: { name?: string } })?.request?.name ?? "variation",
@@ -984,6 +1036,30 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
       };
     case "list_remotes":
       return [];
+    case "list_remote_variations":
+      return [
+        {
+          id: "teammate-option",
+          name: "teammate-option",
+          remote: (args as { request?: { remote?: string } })?.request?.remote ?? "origin",
+          head_version: {
+            id: "remote-teammate-option",
+            label: "Teammate option",
+            time_seconds: Math.floor(Date.now() / 1000) - 3600,
+            author: { name: "Demo Collaborator", email: null },
+          },
+        },
+      ];
+    case "adopt_remote_variation":
+      return {
+        variation: {
+          id: (args as { request?: { variation_id?: string } })?.request?.variation_id ?? "teammate-option",
+          name: (args as { request?: { variation_id?: string } })?.request?.variation_id ?? "teammate-option",
+          metadata: { label: (args as { request?: { variation_id?: string } })?.request?.variation_id ?? "teammate-option" },
+          is_current: false,
+        },
+        postconditions: { errors: [] },
+      };
     case "fetch_remote":
     case "publish_current_variation":
       return null;

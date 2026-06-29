@@ -11,12 +11,17 @@ import {
   type MergeConflictViewModel,
   type MergeIncomingReport,
   type MergeIncomingToken,
+  type PreflightReport,
+  type RemoteVariation,
   type RenameVariationResult,
   type RestoreVersionTarget,
+  type SwitchVariationResult,
   type SyncState,
   type TargetedRestoreVersionResult,
   type VariationRenamePreflight,
   type VariationRenameToken,
+  type VariationCreatePreflight,
+  type VariationCreateToken,
   type VariationSummary,
   type Version,
   type VersionDiff,
@@ -24,7 +29,7 @@ import {
   type WorkspaceGraphRef,
 } from "@draftline/client";
 import { invoke, listen } from "./tauri";
-import type { ConflictFile, DiffEntry, GraphNode, IncomingCommit, RemoteInfo, SyncStatus, TimelineInfo, VersionEntry } from "../types/sketch";
+import type { ConflictFile, DiffEntry, GraphNode, IncomingCommit, RemoteBranchInfo, RemoteInfo, SyncStatus, TimelineInfo, VersionEntry } from "../types/sketch";
 
 export type DraftlineMergeIncomingToken = MergeIncomingToken;
 export type DraftlineMergeConflictResolution = MergeConflictResolution;
@@ -32,6 +37,26 @@ export type DraftlineRestoreVersionTarget = RestoreVersionTarget;
 export type DraftlineVariationRenamePreflight = VariationRenamePreflight;
 export type DraftlineVariationRenameToken = VariationRenameToken;
 export type DraftlineRenameVariationResult = RenameVariationResult;
+export type DraftlineSwitchVariationPreflight = PreflightReport;
+export type DraftlineSwitchVariationResult = SwitchVariationResult;
+export type DraftlineVariationCreatePreflight = VariationCreatePreflight;
+export type DraftlineVariationCreateToken = VariationCreateToken;
+
+export class DraftlineVariationCreateConflictError extends Error {
+  readonly preflight: VariationCreatePreflight;
+
+  constructor(preflight: VariationCreatePreflight) {
+    super(variationCreateConflictMessage(preflight));
+    this.name = "DraftlineVariationCreateConflictError";
+    this.preflight = preflight;
+  }
+}
+
+export function isDraftlineVariationCreateConflictError(
+  error: unknown,
+): error is DraftlineVariationCreateConflictError {
+  return error instanceof DraftlineVariationCreateConflictError;
+}
 
 export interface DraftlineMergeIncomingReport {
   syncStatus: {
@@ -188,8 +213,49 @@ export async function diffDraftlineVersions(from: string, to: string): Promise<D
   return versionDiffToDiffEntries(await facade().diffVersions(from, to));
 }
 
-export async function createDraftlineVariation(fromVersion: string, name: string): Promise<void> {
-  await facade().createVariationFromVersion(fromVersion, name, { label: name, slug: name });
+export async function createDraftlineVariation(
+  fromVersion: string,
+  name: string,
+  remote?: string | null,
+): Promise<void> {
+  if (!draftlineWorkspacePath) {
+    throw new Error("No Draftline workspace is currently open");
+  }
+
+  const metadata = { label: name, slug: name };
+  const preflight = await draftlineClient.preflightCreateVariationFromVersion({
+    workspace_path: draftlineWorkspacePath,
+    version_id: fromVersion,
+    name,
+    remote: remote ?? null,
+  });
+  if (!preflight.can_create || !preflight.token) {
+    throw new DraftlineVariationCreateConflictError(preflight);
+  }
+
+  try {
+    await draftlineClient.createVariationFromVersionGuarded({
+      workspace_path: draftlineWorkspacePath,
+      token: preflight.token,
+      metadata,
+    });
+  } catch (error) {
+    const failedPreflight = variationCreatePreflightFromError(error);
+    if (failedPreflight) {
+      throw new DraftlineVariationCreateConflictError(failedPreflight);
+    }
+
+    const refreshed = await draftlineClient.preflightCreateVariationFromVersion({
+      workspace_path: draftlineWorkspacePath,
+      version_id: fromVersion,
+      name,
+      remote: remote ?? null,
+    });
+    if (!refreshed.can_create || !refreshed.token) {
+      throw new DraftlineVariationCreateConflictError(refreshed);
+    }
+    throw error;
+  }
 }
 
 export async function deleteDraftlineVariation(variation: string): Promise<void> {
@@ -235,19 +301,12 @@ export async function renameDraftlineVariation(
   });
 }
 
-export async function switchDraftlineVariation(variation: string, saveFirstLabel?: string): Promise<void> {
-  if (!draftlineWorkspacePath) {
-    throw new Error("No Draftline workspace is currently open");
-  }
-  await invoke("switch_variation", {
-    request: {
-      workspace_path: draftlineWorkspacePath,
-      variation,
-      policy: saveFirstLabel
-        ? { type: "saveFirst", label: saveFirstLabel }
-        : { type: "abortIfDirty" },
-    },
-  });
+export async function preflightDraftlineSwitchVariation(variation: string): Promise<PreflightReport> {
+  return facade().preflightSwitchVariation(variation);
+}
+
+export async function switchDraftlineVariation(variation: string): Promise<SwitchVariationResult> {
+  return facade().switchVariation(variation);
 }
 
 export async function restoreDraftlineVersionAsNewSave(version: string, label: string): Promise<string> {
@@ -284,6 +343,14 @@ export async function fetchDraftlineRemote(remote: string): Promise<void> {
 
 export async function publishDraftlineChanges(remote: string): Promise<void> {
   await facade().publishCurrentVariation(remote);
+}
+
+export async function listDraftlineRemoteBranches(remote: string): Promise<RemoteBranchInfo[]> {
+  return (await facade().remoteVariations(remote)).map(remoteVariationToBranchInfo);
+}
+
+export async function adoptDraftlineRemoteBranch(remote: string, variationId: string): Promise<void> {
+  await facade().adoptRemoteVariation(variationId, remote);
 }
 
 export async function preflightDraftlineIncoming(remote: string): Promise<DraftlineApplyIncomingReportDto> {
@@ -450,6 +517,70 @@ function variationToTimeline(summary: VariationSummary, index: number): Timeline
     snapshot_count: summary.reachable_version_count,
     color_index: index,
   };
+}
+
+function remoteVariationToBranchInfo(variation: RemoteVariation): RemoteBranchInfo {
+  return {
+    id: variation.id,
+    name: variation.name,
+    remote: variation.remote,
+    head_message: variation.head_version?.label,
+    head_author: variation.head_version?.author.name,
+    head_timestamp: variation.head_version
+      ? new Date(variation.head_version.time_seconds * 1000).toISOString()
+      : undefined,
+  };
+}
+
+function variationCreateConflictMessage(preflight: VariationCreatePreflight): string {
+  if (preflight.remote_collision || preflight.remote_only_collision) {
+    const remote = preflight.remote ?? "remote";
+    const head = preflight.existing_remote_head?.label
+      ? ` Remote head: ${preflight.existing_remote_head.label}.`
+      : "";
+    const suggestion = preflight.suggested_alternative
+      ? ` Suggested name: ${preflight.suggested_alternative}.`
+      : "";
+    return `Branch "${preflight.variation}" already exists on ${remote}.${head}${suggestion}`;
+  }
+  if (preflight.local_collision) {
+    return `Branch "${preflight.variation}" already exists locally.`;
+  }
+  return `Branch "${preflight.variation}" cannot be created.`;
+}
+
+function variationCreatePreflightFromError(error: unknown): VariationCreatePreflight | null {
+  const value = typeof error === "string" ? parseJsonObject(error) : error;
+  if (!value || typeof value !== "object") return null;
+  const record = value as Record<string, unknown>;
+  const preflight = record.preflight ?? record.report;
+  if (isVariationCreatePreflight(preflight)) return preflight;
+  if (
+    (record.kind === "variation_create_preflight_failed" || record.code === "variation_create_preflight_failed")
+    && isVariationCreatePreflight(record.preflight)
+  ) {
+    return record.preflight;
+  }
+  return null;
+}
+
+function parseJsonObject(value: string): unknown {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}
+
+function isVariationCreatePreflight(value: unknown): value is VariationCreatePreflight {
+  if (!value || typeof value !== "object") return false;
+  const record = value as Record<string, unknown>;
+  return typeof record.from_version === "string"
+    && typeof record.variation === "string"
+    && typeof record.can_create === "boolean"
+    && typeof record.local_collision === "boolean"
+    && typeof record.remote_collision === "boolean"
+    && typeof record.remote_only_collision === "boolean";
 }
 
 function versionDiffToDiffEntries(diff: VersionDiff): DiffEntry[] {

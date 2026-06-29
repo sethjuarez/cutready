@@ -28,7 +28,7 @@ tokio = { version = "1", features = ["process", "io-util", "sync", "time"] }
 reqwest = { version = "0.12", features = ["json", "stream"] }
 tokio-stream = "0.1"
 futures-util = "0.3"
-draftline = "0.2.5"
+draftline = "0.2.7"
 xcap = "0.8"
 image = "0.25"
 base64 = "0.22"

@@ -155,6 +155,25 @@ body.recording-prompter-root #root {
   background: rgb(var(--color-text-secondary));
 }
 
+.terminal-xterm-host {
+  display: flex;
+  align-items: center;
+}
+
+.terminal-xterm-host,
+.terminal-xterm-host .xterm,
+.terminal-xterm-host .xterm-rows {
+  letter-spacing: 0 !important;
+}
+
+.terminal-xterm-host .xterm {
+  width: 100%;
+}
+
+.terminal-xterm-host .xterm-screen {
+  margin-inline: auto;
+}
+
 /* ── Animations ──────────────────────────────────────────── */
 
 @keyframes fadeSlideIn {

@@ -61,6 +61,8 @@ export function AppLayout() {
   const showSecondaryPanel = useAppStore((s) => s.showSecondaryPanel);
   const chatFocusMode = useAppStore((s) => s.chatFocusMode);
   const setChatFocusMode = useAppStore((s) => s.setChatFocusMode);
+  const terminalFocusMode = useAppStore((s) => s.terminalFocusMode);
+  const setTerminalFocusMode = useAppStore((s) => s.setTerminalFocusMode);
   const isMerging = useAppStore((s) => s.isMerging);
 
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
@@ -272,6 +274,12 @@ export function AppLayout() {
         return;
       }
 
+      if (e.key === "Escape" && terminalFocusMode) {
+        e.preventDefault();
+        setTerminalFocusMode(false);
+        return;
+      }
+
       // Always allow Mod+Shift+P to toggle the command palette
       if (mod && e.shiftKey && (e.key === "P" || e.key === "p")) {
         e.preventDefault();
@@ -325,7 +333,17 @@ export function AppLayout() {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [chatFocusMode, setChatFocusMode, toggleSidebar, toggleOutput, toggleSecondaryPanel, toggleTheme, commandPaletteOpen]);
+  }, [
+    chatFocusMode,
+    commandPaletteOpen,
+    setChatFocusMode,
+    setTerminalFocusMode,
+    terminalFocusMode,
+    toggleOutput,
+    toggleSecondaryPanel,
+    toggleSidebar,
+    toggleTheme,
+  ]);
 
   // Apply display settings as CSS variables
   const { settings: displaySettings, loaded: displaySettingsLoaded } = useSettings();

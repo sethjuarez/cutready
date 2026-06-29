@@ -9,22 +9,28 @@ vi.mock("../services/tauri", () => ({
 }));
 
 import {
+  adoptDraftlineRemoteBranch,
+  createDraftlineVariation,
   diffDraftlineVersions,
   hasDraftlineChanges,
   deleteDraftlineVariation,
+  isDraftlineVariationCreateConflictError,
   listDraftlineChangedFiles,
   listDraftlineGraphNodes,
   listDraftlineLargeChangedFiles,
+  listDraftlineRemoteBranches,
   listDraftlineTimelines,
   listDraftlineVersions,
   hasDraftlineShelf,
   popDraftlineShelf,
   preflightDraftlineRenameVariation,
+  preflightDraftlineSwitchVariation,
   previewDraftlineVersion,
   renameDraftlineVariation,
   saveDraftlineVersion,
   setDraftlineWorkspacePath,
   shelveDraftlineChanges,
+  switchDraftlineVariation,
 } from "../services/draftlineVersioning";
 
 const WORKSPACE = "D:\\project";
@@ -269,6 +275,90 @@ describe("draftlineVersioning", () => {
     });
   });
 
+  it("creates a Draftline variation through remote-aware preflight and guarded create", async () => {
+    const token = {
+      operation_id: "create-feature",
+      from_version: "1111111111111111111111111111111111111111",
+      variation: "feature",
+      remote: "origin",
+      expected_source_oid: "abc123",
+      expected_remote_oid: null,
+    };
+    const preflight = {
+      from_version: token.from_version,
+      variation: "feature",
+      remote: "origin",
+      can_create: true,
+      local_collision: false,
+      remote_collision: false,
+      remote_only_collision: false,
+      existing_remote_head: null,
+      suggested_alternative: null,
+      token,
+    };
+
+    mockInvoke
+      .mockResolvedValueOnce(preflight)
+      .mockResolvedValueOnce({
+        preflight,
+        variation: variation("feature", "Feature", false),
+        postconditions: { workspace_changed: true, active_variation: "main", dirty_files: [] },
+      });
+
+    await expect(createDraftlineVariation(token.from_version, "feature", "origin")).resolves.toBeUndefined();
+    expect(mockInvoke).toHaveBeenNthCalledWith(1, "preflight_create_variation_from_version", {
+      request: {
+        workspace_path: WORKSPACE,
+        version_id: token.from_version,
+        name: "feature",
+        remote: "origin",
+      },
+    });
+    expect(mockInvoke).toHaveBeenNthCalledWith(2, "create_variation_from_version_guarded", {
+      request: {
+        workspace_path: WORKSPACE,
+        token,
+        metadata: { label: "feature", slug: "feature" },
+      },
+    });
+  });
+
+  it("surfaces remote variation collisions without creating a local branch", async () => {
+    const preflight = {
+      from_version: "1111111111111111111111111111111111111111",
+      variation: "feature",
+      remote: "origin",
+      can_create: false,
+      local_collision: false,
+      remote_collision: true,
+      remote_only_collision: true,
+      existing_remote_head: version("3333333333333333333333333333333333333333", "Remote feature", 1_700_000_200),
+      suggested_alternative: "feature-2",
+      token: null,
+    };
+    mockInvoke.mockResolvedValueOnce(preflight);
+
+    try {
+      await createDraftlineVariation(preflight.from_version, "feature", "origin");
+      throw new Error("expected createDraftlineVariation to reject");
+    } catch (error) {
+      expect(isDraftlineVariationCreateConflictError(error)).toBe(true);
+      if (isDraftlineVariationCreateConflictError(error)) {
+        expect(error.preflight.remote_only_collision).toBe(true);
+        expect(error.preflight.suggested_alternative).toBe("feature-2");
+      }
+    }
+    expect(mockInvoke).toHaveBeenCalledTimes(1);
+    expect(mockInvoke).toHaveBeenCalledWith("preflight_create_variation_from_version", {
+      request: {
+        workspace_path: WORKSPACE,
+        version_id: preflight.from_version,
+        name: "feature",
+        remote: "origin",
+      },
+    });
+  });
+
   it("preflights and renames a Draftline variation through the guarded API", async () => {
     const token = {
       operation_id: "rename-master-main",
@@ -313,6 +403,73 @@ describe("draftlineVersioning", () => {
         target_variation_id: "main",
         token,
       },
+    });
+  });
+
+  it("switches Draftline variations through the no-save guarded API", async () => {
+    const preflight = {
+      operation: "switch_variation",
+      will_write_files: true,
+      dirty_files: [],
+      file_hazards: [],
+      untracked_assets: [],
+      unresolved_conflicts: [],
+      large_files: [],
+      binary_files: [],
+      variation_divergence: null,
+      can_proceed: true,
+    };
+
+    mockInvoke
+      .mockResolvedValueOnce(preflight)
+      .mockResolvedValueOnce({
+        variation: variation("feature", "Feature"),
+        postconditions: { workspace_changed: true, active_variation: "feature", dirty_files: [] },
+      });
+
+    await expect(preflightDraftlineSwitchVariation("feature")).resolves.toEqual(preflight);
+    await expect(switchDraftlineVariation("feature")).resolves.toMatchObject({
+      variation: { id: "feature" },
+    });
+    expect(mockInvoke).toHaveBeenNthCalledWith(1, "preflight_switch_variation", {
+      request: { workspace_path: WORKSPACE, variation_id: "feature" },
+    });
+    expect(mockInvoke).toHaveBeenNthCalledWith(2, "switch_variation", {
+      request: { workspace_path: WORKSPACE, variation_id: "feature" },
+    });
+  });
+
+  it("lists and adopts remote Draftline branches", async () => {
+    mockInvoke
+      .mockResolvedValueOnce([
+        {
+          id: "teammate-option",
+          name: "teammate-option",
+          remote: "origin",
+          head_version: version("3333333333333333333333333333333333333333", "Remote idea", 1_700_000_200, "Maria"),
+        },
+      ])
+      .mockResolvedValueOnce({
+        variation: variation("teammate-option", "teammate-option", false),
+        postconditions: { workspace_changed: true, active_variation: "main", dirty_files: [] },
+      });
+
+    await expect(listDraftlineRemoteBranches("origin")).resolves.toEqual([
+      {
+        id: "teammate-option",
+        name: "teammate-option",
+        remote: "origin",
+        head_message: "Remote idea",
+        head_author: "Maria",
+        head_timestamp: "2023-11-14T22:16:40.000Z",
+      },
+    ]);
+    await expect(adoptDraftlineRemoteBranch("origin", "teammate-option")).resolves.toBeUndefined();
+    expect(mockInvoke).toHaveBeenNthCalledWith(1, "list_remote_variations", {
+      request: { workspace_path: WORKSPACE, remote: "origin" },
+    });
+    expect(mockInvoke).toHaveBeenNthCalledWith(2, "adopt_remote_variation", {
+      request: { workspace_path: WORKSPACE, remote: "origin", variation_id: "teammate-option" },
     });
   });
 

@@ -16,6 +16,8 @@ export function VersionHistory() {
   const checkRewound = useAppStore((s) => s.checkRewound);
   const navigateToSnapshot = useAppStore((s) => s.navigateToSnapshot);
   const discardChanges = useAppStore((s) => s.discardChanges);
+  const deleteTimeline = useAppStore((s) => s.deleteTimeline);
+  const switchTimeline = useAppStore((s) => s.switchTimeline);
   const loadGraphData = useAppStore((s) => s.loadGraphData);
   const sidebarPosition = useAppStore((s) => s.sidebarPosition);
   const timelines = useAppStore((s) => s.timelines);
@@ -25,6 +27,7 @@ export function VersionHistory() {
   const saving = useAppStore((s) => s.saving);
   const currentProject = useAppStore((s) => s.currentProject);
   const isMultiProject = useAppStore((s) => s.isMultiProject);
+  const startedBranchFromSnapshot = useAppStore((s) => s.startedBranchFromSnapshot);
   const hasRemote = !!currentRemote;
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -37,6 +40,12 @@ export function VersionHistory() {
 
   // Show active branch + its ancestor history from the originating branch
   const activeTimeline = timelines.find((t) => t.is_active);
+  const head = graphNodes.find((node) => node.is_head);
+  const emptyStartedBranch = startedBranchFromSnapshot
+    && activeTimeline?.name === startedBranchFromSnapshot.branchName
+    && head?.id === startedBranchFromSnapshot.snapshotId
+    ? startedBranchFromSnapshot
+    : null;
   const activeNodes = (() => {
     if (!activeTimeline) return graphNodes;
     const branchNodes = graphNodes.filter((n) => n.timeline === activeTimeline.name);
@@ -104,10 +113,25 @@ export function VersionHistory() {
       variant: "error",
     });
     if (!confirmed) return;
+    const branchToDelete = emptyStartedBranch;
     await discardChanges();
     await loadGraphData();
     await loadTimelines();
-  }, [activeProjectName, confirm, discardChanges, isMultiProject, loadGraphData, loadTimelines]);
+    if (branchToDelete) {
+      const shouldDelete = await confirm({
+        title: "Delete the empty branch too?",
+        message: `You discarded the unsaved work on ${branchToDelete.branchName}. This branch has no new saved snapshots beyond where it started. Delete it as well?`,
+        confirmLabel: "Delete branch",
+        cancelLabel: "Keep branch",
+        variant: "warning",
+      });
+      if (shouldDelete) {
+        const fallback = timelines.find((timeline) => timeline.name !== branchToDelete.branchName);
+        if (fallback) await switchTimeline(fallback.name);
+        await deleteTimeline(branchToDelete.branchName);
+      }
+    }
+  }, [activeProjectName, confirm, deleteTimeline, discardChanges, emptyStartedBranch, isMultiProject, loadGraphData, loadTimelines, switchTimeline, timelines]);
 
   const toggleSquashSelection = useCallback((commitId: string) => {
     setSelectedForSquash((prev) => {
@@ -150,6 +174,9 @@ export function VersionHistory() {
         <div className="flex items-center gap-1">
           <span className="text-xs font-medium text-[rgb(var(--color-text-secondary))] uppercase tracking-wider">
             Snapshots
+          </span>
+          <span className="hidden rounded-full border border-[rgb(var(--color-accent))]/20 bg-[rgb(var(--color-accent))]/10 px-1.5 py-0 text-[9px] font-medium text-[rgb(var(--color-accent))] sm:inline">
+            Click previews
           </span>
           {isMultiProject && (
             <span
@@ -326,6 +353,11 @@ export function VersionHistory() {
             onToggleSelect={toggleSquashSelection}
             onNodeClick={handleNodeClick}
           />
+          {!squashMode && (
+            <div className="mx-3 mb-2 mt-1 rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]/70 px-2 py-1.5 text-[10px] leading-relaxed text-[rgb(var(--color-text-secondary))]">
+              Click a dot to preview. Switch branches from the branch menu. To write from history, use the preview tab to create a new branch and snapshot.
+            </div>
+          )}
           {searchQuery && activeNodes.length > 0 && activeNodes.filter((n) => n.message.toLowerCase().includes(searchQuery.toLowerCase())).length === 0 && (
             <div className="px-4 py-6 text-center text-[10px] text-[rgb(var(--color-text-secondary))]">
               No snapshots match "{searchQuery}"

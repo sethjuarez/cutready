@@ -278,6 +278,8 @@ interface OutputPanelProps {
 export function OutputPanel({ onCollapse }: OutputPanelProps) {
   const activeTab = useAppStore((s) => s.outputActiveTab);
   const setActiveTab = useAppStore((s) => s.showOutputTab);
+  const terminalFocusMode = useAppStore((s) => s.terminalFocusMode);
+  const setTerminalFocusMode = useAppStore((s) => s.setTerminalFocusMode);
   const outputs = useAppStore((s) => s.activityLog);
   const debugEntries = useAppStore((s) => s.debugLog);
   const clearActivityLog = useAppStore((s) => s.clearActivityLog);
@@ -306,61 +308,85 @@ export function OutputPanel({ onCollapse }: OutputPanelProps) {
     if (activeTab === "terminal") setTerminalActivated(true);
   }, [activeTab]);
 
+  useEffect(() => {
+    if (activeTab !== "terminal" && terminalFocusMode) setTerminalFocusMode(false);
+  }, [activeTab, setTerminalFocusMode, terminalFocusMode]);
+
+  const handleCollapse = useCallback(() => {
+    if (terminalFocusMode) {
+      setTerminalFocusMode(false);
+      return;
+    }
+
+    onCollapse();
+  }, [onCollapse, setTerminalFocusMode, terminalFocusMode]);
+
   return (
-    <div className="flex flex-col h-full bg-[rgb(var(--color-surface-inset))] border-t border-[rgb(var(--color-border))]">
-      {/* Header */}
-      <div className="no-select flex items-center justify-between px-3 shrink-0 border-b border-[rgb(var(--color-border))]">
-        <div className="flex items-stretch gap-0">
-          <TabButton
-            active={activeTab === "activity"}
-            onClick={() => setActiveTab("activity")}
-          >
-            <BarChart2 className="w-3 h-3" />
-            Activity
-          </TabButton>
-          <TabButton
-            active={activeTab === "debug"}
-            onClick={() => setActiveTab("debug")}
-          >
-            <Bug className="w-3 h-3" />
-            Debug
-          </TabButton>
-          <TabButton
-            active={activeTab === "terminal"}
-            onClick={() => setActiveTab("terminal")}
-          >
-            <SquareTerminal className="w-3 h-3" />
-            Terminal
-          </TabButton>
+    <div
+      className={`flex flex-col bg-[rgb(var(--color-surface-inset))] border-t border-[rgb(var(--color-border))] ${
+        terminalFocusMode
+          ? "fixed left-0 right-0 z-20 overflow-hidden border-y shadow-2xl"
+          : "h-full"
+      }`}
+      style={terminalFocusMode ? { top: "var(--titlebar-height)", bottom: "var(--statusbar-height)" } : undefined}
+      role={terminalFocusMode ? "dialog" : undefined}
+      aria-label={terminalFocusMode ? "Terminal focus mode" : undefined}
+      aria-modal={terminalFocusMode ? true : undefined}
+    >
+      {!terminalFocusMode && (
+        <div className="no-select flex items-center justify-between px-3 shrink-0 border-b border-[rgb(var(--color-border))]">
+          <div className="flex items-stretch gap-0">
+            <TabButton
+              active={activeTab === "activity"}
+              onClick={() => setActiveTab("activity")}
+            >
+              <BarChart2 className="w-3 h-3" />
+              Activity
+            </TabButton>
+            <TabButton
+              active={activeTab === "debug"}
+              onClick={() => setActiveTab("debug")}
+            >
+              <Bug className="w-3 h-3" />
+              Debug
+            </TabButton>
+            <TabButton
+              active={activeTab === "terminal"}
+              onClick={() => setActiveTab("terminal")}
+            >
+              <SquareTerminal className="w-3 h-3" />
+              Terminal
+            </TabButton>
+          </div>
+          <div className="flex items-center gap-1">
+            {activeTab !== "terminal" && (
+              <>
+                <button
+                  onClick={() => activeTab === "activity" ? exportActivity(outputs) : exportAuditaurDiagnostics(auditaurSummary)}
+                  className="p-1 rounded text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors"
+                  title={activeTab === "activity" ? "Export activity log" : "Export Auditaur diagnostics"}
+                >
+                  <Download className="w-3 h-3" />
+                </button>
+                <button
+                  onClick={() => activeTab === "activity" ? clearActivityLog() : loadAuditaurDiagnostics()}
+                  className="p-1 rounded text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors"
+                  title={activeTab === "activity" ? "Clear" : "Refresh Auditaur diagnostics"}
+                >
+                  {activeTab === "activity" ? <Trash2 className="w-3 h-3" /> : <RefreshCw className="w-3 h-3" />}
+                </button>
+              </>
+            )}
+            <button
+              onClick={handleCollapse}
+              className="p-1 rounded text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors"
+              title="Collapse panel"
+            >
+              <ChevronDown className="w-3 h-3" />
+            </button>
+          </div>
         </div>
-        <div className="flex items-center gap-1">
-          {activeTab !== "terminal" && (
-            <>
-              <button
-                onClick={() => activeTab === "activity" ? exportActivity(outputs) : exportAuditaurDiagnostics(auditaurSummary)}
-                className="p-1 rounded text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors"
-                title={activeTab === "activity" ? "Export activity log" : "Export Auditaur diagnostics"}
-              >
-                <Download className="w-3 h-3" />
-              </button>
-              <button
-                onClick={() => activeTab === "activity" ? clearActivityLog() : loadAuditaurDiagnostics()}
-                className="p-1 rounded text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors"
-                title={activeTab === "activity" ? "Clear" : "Refresh Auditaur diagnostics"}
-              >
-                {activeTab === "activity" ? <Trash2 className="w-3 h-3" /> : <RefreshCw className="w-3 h-3" />}
-              </button>
-            </>
-          )}
-          <button
-            onClick={onCollapse}
-            className="p-1 rounded text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors"
-            title="Collapse panel"
-          >
-            <ChevronDown className="w-3 h-3" />
-          </button>
-        </div>
-      </div>
+      )}
 
       {/* Content — auto-scrolls to latest */}
       <div className="flex-1 min-h-0 text-xs font-mono">
