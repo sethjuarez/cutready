@@ -1265,7 +1265,7 @@ dependencies = [
 
 [[package]]
 name = "cutready"
-version = "1.16.0"
+version = "1.17.0"
 dependencies = [
  "agentive",
  "anyhow",
@@ -1277,8 +1277,6 @@ dependencies = [
  "futures-util",
  "image",
  "log",
- "objc2-app-kit",
- "objc2-quartz-core",
  "openssl-sys",
  "pdf-extract",
  "portable-pty",

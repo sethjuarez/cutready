@@ -1,0 +1,28 @@
+{
+  "app": {
+    "windows": [
+      {
+        "title": "CutReady",
+        "label": "main",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 800,
+        "minHeight": 600,
+        "center": true,
+        "decorations": true,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "trafficLightPosition": {
+          "x": 20,
+          "y": 17
+        },
+        "transparent": false,
+        "backgroundColor": "#fbfaf8",
+        "shadow": true,
+        "resizable": true,
+        "fullscreen": false,
+        "acceptFirstMouse": true
+      }
+    ]
+  }
+}
