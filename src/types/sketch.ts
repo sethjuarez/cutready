@@ -122,6 +122,16 @@ export interface RemoteInfo {
   url: string;
 }
 
+/** A branch that exists on a remote but has not necessarily been adopted locally. */
+export interface RemoteBranchInfo {
+  id: string;
+  name: string;
+  remote: string;
+  head_message?: string;
+  head_author?: string;
+  head_timestamp?: string;
+}
+
 /** Sync status: how many commits ahead/behind the remote. */
 export interface SyncStatus {
   ahead: number;

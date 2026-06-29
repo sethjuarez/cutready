@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
-import { AlertTriangle, SquareTerminal } from "lucide-react";
+import { AlertTriangle, Maximize2, Minimize2, SquareTerminal } from "lucide-react";
 import { Channel, invoke } from "../services/tauri";
 import { useAppStore } from "../stores/appStore";
 import { useSettings } from "../hooks/useSettings";
@@ -69,6 +69,8 @@ function terminalTheme(mode: TerminalColorMode) {
 
 export function TerminalPanel({ active }: { active: boolean }) {
   const currentProject = useAppStore((state) => state.currentProject);
+  const terminalFocusMode = useAppStore((state) => state.terminalFocusMode);
+  const setTerminalFocusMode = useAppStore((state) => state.setTerminalFocusMode);
   const { settings } = useSettings();
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
@@ -99,10 +101,13 @@ export function TerminalPanel({ active }: { active: boolean }) {
 
     fit.fit();
 
-    // xterm's DOM renderer can paint the final column slightly past the WebView edge on Windows.
-    // Keep a small right-side gutter so box-drawing prompts never escape the panel.
+    // xterm can paint a full-width final column slightly past the WebView edge.
+    // Keep a small right-side gutter so TUIs do not clip their right status text.
     const safeCols = Math.max(2, terminal.cols - 3);
-    if (safeCols !== terminal.cols) terminal.resize(safeCols, terminal.rows);
+    const safeRows = Math.max(2, terminal.rows - 1);
+    if (safeCols !== terminal.cols || safeRows !== terminal.rows) {
+      terminal.resize(safeCols, safeRows);
+    }
 
     return { cols: terminal.cols, rows: terminal.rows };
   }, []);
@@ -112,6 +117,7 @@ export function TerminalPanel({ active }: { active: boolean }) {
     if (!term) return;
     term.options.fontFamily = terminalFontFamily;
     term.options.fontSize = terminalFontSize;
+    term.options.letterSpacing = 0;
     term.options.theme = theme;
     fitTerminal();
   }, [fitTerminal, terminalFontFamily, terminalFontSize, theme]);
@@ -135,6 +141,7 @@ export function TerminalPanel({ active }: { active: boolean }) {
       cursorBlink: true,
       fontFamily: terminalFontFamily,
       fontSize: terminalFontSize,
+      letterSpacing: 0,
       scrollback: 10_000,
       theme,
     });
@@ -236,7 +243,31 @@ export function TerminalPanel({ active }: { active: boolean }) {
           {status === "opening" ? "Starting terminal..." : sessionInfo?.cwd ?? currentProject?.root}
         </div>
         {status === "open" && sessionInfo && (
-          <span className="shrink-0 truncate" title={sessionInfo.shell}>{sessionInfo.shell}</span>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <span className="truncate" title={sessionInfo.shell}>{sessionInfo.shell}</span>
+            <button
+              className={`flex h-5 items-center justify-center gap-1 rounded px-1.5 transition-colors ${
+                terminalFocusMode
+                  ? "font-medium text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10"
+                  : "text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-toolbar))] hover:text-[rgb(var(--color-text))]"
+              }`}
+              onClick={() => setTerminalFocusMode(!terminalFocusMode)}
+              title={terminalFocusMode ? "Exit terminal focus mode" : "Expand terminal to focus mode"}
+              aria-label={terminalFocusMode ? "Exit terminal focus mode" : "Expand terminal to focus mode"}
+            >
+              {terminalFocusMode ? (
+                <>
+                  <Minimize2 className="h-3 w-3" />
+                  <span>Exit focus</span>
+                </>
+              ) : (
+                <>
+                  <Maximize2 className="h-3 w-3" />
+                  <span>Focus</span>
+                </>
+              )}
+            </button>
+          </div>
         )}
         {status === "error" && (
           <span className="flex shrink-0 items-center gap-1 text-error" title={error ?? undefined}>
@@ -247,7 +278,7 @@ export function TerminalPanel({ active }: { active: boolean }) {
       </div>
       <div
         ref={containerRef}
-        className="m-1 min-h-0 flex-1 overflow-hidden rounded-md border border-[rgb(var(--color-border))] p-1 shadow-inner"
+        className="terminal-xterm-host m-1 min-h-0 flex-1 overflow-hidden rounded-md border border-[rgb(var(--color-border))] p-1 shadow-inner"
         style={{ backgroundColor: theme.background }}
         onMouseDown={focusTerminal}
         onPointerDown={focusTerminal}

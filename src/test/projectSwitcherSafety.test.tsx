@@ -51,13 +51,12 @@ describe("ProjectSwitcher safety gates", () => {
         isDirty: false,
         isMerging: false,
         snapshotPromptOpen: false,
-        pendingProjectAfterSave: null,
         loading: false,
       });
     });
   });
 
-  it("opens the unsaved workspace modal before switching a dirty project", async () => {
+  it("switches projects without prompting when workspace content is dirty", async () => {
     act(() => {
       useAppStore.setState({
         switchProject: mockSwitchProject,
@@ -80,15 +79,9 @@ describe("ProjectSwitcher safety gates", () => {
       fireEvent.click(betaButton);
     });
 
-    expect(await screen.findByText("Save changes before continuing?")).toBeInTheDocument();
-    expect(mockSwitchProject).not.toHaveBeenCalled();
-
-    act(() => {
-      fireEvent.click(screen.getByRole("button", { name: "Save snapshot first" }));
-    });
-
-    expect(useAppStore.getState().snapshotPromptOpen).toBe(true);
-    expect(useAppStore.getState().pendingProjectAfterSave).toBe("beta");
+    expect(mockSwitchProject).toHaveBeenCalledWith("beta");
+    expect(screen.queryByText("Save changes before continuing?")).not.toBeInTheDocument();
+    expect(useAppStore.getState().snapshotPromptOpen).toBe(false);
   });
 
   it("requires a merge decision before switching projects", async () => {
@@ -123,7 +116,7 @@ describe("ProjectSwitcher safety gates", () => {
     expect(mockSwitchProject).toHaveBeenCalledWith("beta");
   });
 
-  it("falls through to the dirty gate after canceling a merge when switching projects", async () => {
+  it("switches after canceling a merge even when workspace content is dirty", async () => {
     act(() => {
       useAppStore.setState({
         switchProject: mockSwitchProject,
@@ -153,7 +146,7 @@ describe("ProjectSwitcher safety gates", () => {
     });
 
     expect(useAppStore.getState().isMerging).toBe(false);
-    expect(mockSwitchProject).not.toHaveBeenCalled();
-    expect(await screen.findByText("Save changes before continuing?")).toBeInTheDocument();
+    expect(mockSwitchProject).toHaveBeenCalledWith("beta");
+    expect(screen.queryByText("Save changes before continuing?")).not.toBeInTheDocument();
   });
 });

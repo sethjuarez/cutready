@@ -4,6 +4,7 @@ import { ArrowLeftRight, ArrowDown, ArrowRight, Maximize2, Minus, Plus } from "l
 import { useAppStore } from "../stores/appStore";
 import type { GraphNode, TimelineInfo } from "../types/sketch";
 import { UnsavedWorkspaceDialog } from "./UnsavedWorkspaceDialog";
+import { useConfirmDialog } from "./ConfirmDialog";
 
 /**
  * HistoryGraphTab — Full DAG visualization using topological sort + git-style
@@ -246,6 +247,8 @@ export function HistoryGraphTab() {
   const switchTimeline = useAppStore((s) => s.switchTimeline);
   const isDirty = useAppStore((s) => s.isDirty);
   const discardChanges = useAppStore((s) => s.discardChanges);
+  const deleteTimeline = useAppStore((s) => s.deleteTimeline);
+  const startedBranchFromSnapshot = useAppStore((s) => s.startedBranchFromSnapshot);
 
   const svgRef = useRef<SVGSVGElement>(null);
   const gRef = useRef<SVGGElement>(null);
@@ -256,6 +259,7 @@ export function HistoryGraphTab() {
   const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number } | null>(null);
   const [dir, setDir] = useState<LayoutDir>("vertical");
   const [pendingSwitch, setPendingSwitch] = useState<string | null>(null);
+  const { confirm, confirmationDialog } = useConfirmDialog();
 
   useEffect(() => { loadGraphData(); loadTimelines(); }, [loadGraphData, loadTimelines]);
 
@@ -281,6 +285,13 @@ export function HistoryGraphTab() {
     for (const t of timelines) m.set(t.name, t);
     return m;
   }, [timelines]);
+  const activeTimeline = timelines.find((timeline) => timeline.is_active);
+  const head = graphNodes.find((node) => node.is_head);
+  const emptyStartedBranch = startedBranchFromSnapshot
+    && activeTimeline?.name === startedBranchFromSnapshot.branchName
+    && head?.id === startedBranchFromSnapshot.snapshotId
+    ? startedBranchFromSnapshot
+    : null;
 
   const layout = useMemo(
     () => computeLayout(graphNodes, timelineMap, dir),
@@ -367,6 +378,12 @@ export function HistoryGraphTab() {
       <div className="flex items-center gap-3 px-4 py-1.5 border-b border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] shrink-0">
         <span className="text-[10px] text-[rgb(var(--color-text-secondary))]">
           {layout.nodes.length} snapshot{layout.nodes.length !== 1 ? "s" : ""} · {timelines.length} timeline{timelines.length !== 1 ? "s" : ""}
+        </span>
+        <span className="rounded-full border border-[rgb(var(--color-accent))]/20 bg-[rgb(var(--color-accent))]/10 px-2 py-0.5 text-[10px] font-medium text-[rgb(var(--color-accent))]">
+          Graph clicks preview snapshots
+        </span>
+        <span className="hidden text-[10px] text-[rgb(var(--color-text-secondary))] md:inline">
+          Switch branches from the legend. Write from history in the preview tab.
         </span>
 
         <div className="flex-1" />
@@ -583,6 +600,9 @@ export function HistoryGraphTab() {
                 {node.author && (
                   <p className="text-[9px] text-[rgb(var(--color-text-secondary))] mt-0.5">{node.author}</p>
                 )}
+                <div className="mt-2 rounded-md bg-[rgb(var(--color-surface-alt))] px-2 py-1 text-[9px] font-medium text-[rgb(var(--color-accent))]">
+                  Click opens a read-only preview.
+                </div>
               </div>
             </div>
           );
@@ -600,11 +620,23 @@ export function HistoryGraphTab() {
         onDiscardAndContinue={async () => {
           if (!pendingSwitch) return;
           const target = pendingSwitch;
+          const branchToDelete = emptyStartedBranch;
           setPendingSwitch(null);
           await discardChanges();
           await switchTimeline(target);
+          if (branchToDelete) {
+            const shouldDelete = await confirm({
+              title: "Delete the empty branch too?",
+              message: `You discarded the unsaved work on ${branchToDelete.branchName}. This branch has no new saved snapshots beyond where it started. Delete it as well?`,
+              confirmLabel: "Delete branch",
+              cancelLabel: "Keep branch",
+              variant: "warning",
+            });
+            if (shouldDelete) await deleteTimeline(branchToDelete.branchName);
+          }
         }}
       />
+      {confirmationDialog}
     </div>
   );
 }

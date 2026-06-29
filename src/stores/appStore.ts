@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { invoke, Channel } from "../services/tauri";
 import {
   applyDraftlineIncoming,
+  adoptDraftlineRemoteBranch,
   createDraftlineVariation,
   deleteDraftlineVariation,
   discardDraftlineChanges,
@@ -11,15 +12,18 @@ import {
   getDraftlineSyncStatus,
   hasDraftlineShelf,
   hasDraftlineChanges,
+  isDraftlineVariationCreateConflictError,
   listDraftlineIncomingCommits,
   listDraftlineChangedFiles,
   listDraftlineGraphNodes,
   listDraftlineLargeChangedFiles,
+  listDraftlineRemoteBranches,
   listDraftlineRemotes,
   listDraftlineTimelines,
   listDraftlineVersions,
   preflightDraftlineIncoming,
   preflightDraftlineMergeIncoming,
+  preflightDraftlineSwitchVariation,
   mergeDraftlineIncoming,
   mergeDraftlineIncomingWithResolutions,
   publishDraftlineChanges,
@@ -58,6 +62,7 @@ import type {
   NoteSummary,
   ChatMessage,
   ChatSessionSummary,
+  RemoteBranchInfo,
   RemoteInfo,
   SyncStatus,
   IncomingCommit,
@@ -346,6 +351,8 @@ interface AppStoreState {
   pendingChatPrompt: { text: string; silent?: boolean; agent?: string } | null;
   /** Whether chat is occupying the main work area as an intentional focus mode. */
   chatFocusMode: boolean;
+  /** Whether the terminal output tab is occupying the main work area as an intentional focus mode. */
+  terminalFocusMode: boolean;
   /** Activity log entries for the output panel. */
   activityLog: ActivityEntry[];
   /** Debug log entries for the debug panel. */
@@ -365,8 +372,8 @@ interface AppStoreState {
   pendingNavAfterSave: string | null;
   /** After saving a snapshot, switch to this branch. */
   pendingTimelineAfterSave: string | null;
-  /** After saving a snapshot, switch to this project path. */
-  pendingProjectAfterSave: string | null;
+  /** Branch created from a historical snapshot that has not recorded its first new save yet. */
+  startedBranchFromSnapshot: { branchName: string; snapshotId: string } | null;
   /** Whether there are unsaved changes since the last snapshot. */
   isDirty: boolean;
   /** List of changed files since last snapshot (for Changes panel). */
@@ -381,6 +388,10 @@ interface AppStoreState {
   // ── Remote sync ─────────────────────────────────────────
   /** Detected/configured remote, null if none. */
   currentRemote: RemoteInfo | null;
+  /** Branches that exist on the selected remote but have not been adopted locally. */
+  remoteBranches: RemoteBranchInfo[];
+  /** Whether remote-only branches are currently being refreshed. */
+  remoteBranchesLoading: boolean;
   /** Ahead/behind counts vs remote tracking branch. */
   syncStatus: SyncStatus | null;
   /** Whether a fetch/push/pull is in progress. */
@@ -620,6 +631,8 @@ interface AppStoreState {
   sendChatPrompt: (prompt: string, opts?: { silent?: boolean; agent?: string }) => void;
   /** Enter or exit chat focus mode. */
   setChatFocusMode: (enabled: boolean) => void;
+  /** Enter or exit terminal focus mode. */
+  setTerminalFocusMode: (enabled: boolean) => void;
   /** Add entries to activity log. */
   addActivityEntries: (entries: ActivityEntry[]) => void;
   /** Clear activity log. */
@@ -669,6 +682,8 @@ interface AppStoreState {
   ) => Promise<void>;
   /** Create a new timeline from a snapshot. */
   createTimeline: (fromCommitId: string, name: string) => Promise<void>;
+  /** Create a named branch from a snapshot and switch to it for editing. */
+  startTimelineFromSnapshot: (fromCommitId: string, name: string) => Promise<void>;
   /** Load all timelines. */
   loadTimelines: () => Promise<void>;
   /** Switch to a different timeline. */
@@ -708,7 +723,7 @@ interface AppStoreState {
   /** Refresh the ahead/behind sync status. */
   refreshSyncStatus: () => Promise<void>;
   /** List branches available on the remote. */
-  loadRemoteBranches: () => Promise<string[]>;
+  loadRemoteBranches: () => Promise<RemoteBranchInfo[]>;
   /** Checkout a remote-only branch as a local tracking branch. */
   checkoutRemoteTimeline: (branch: string) => Promise<void>;
   /** Publish (push) the current local-only timeline to the remote. */
@@ -802,6 +817,45 @@ function saveLayout(partial: Record<string, unknown>) {
 
 const savedLayout = loadLayout();
 
+type PersistedWorkspaceState = {
+  open_tabs: { id: string; type: string; path: string; title: string }[];
+  active_tab_id: string | null;
+  chat_session_path: string | null;
+};
+
+async function restoreWorkspaceState(get: () => AppStoreState, set: (partial: Partial<AppStoreState>) => void) {
+  try {
+    const ws = await invoke<PersistedWorkspaceState>("get_workspace_state");
+    const { sketches, storyboards, notes } = get();
+    const validTabs: EditorTab[] = (ws.open_tabs ?? [])
+      .map((t) => ({ id: t.id, type: t.type as EditorTab["type"], path: t.path, title: t.title }))
+      .filter((t) => {
+        if (t.type === "sketch") return sketches.some((s) => s.path === t.path);
+        if (t.type === "storyboard") return storyboards.some((s) => s.path === t.path);
+        if (t.type === "note") return notes.some((n) => n.path === t.path);
+        if (t.type === "database") return isDatabasePath(t.path);
+        return false;
+      });
+
+    if (validTabs.length > 0) {
+      const activeId = validTabs.find((t) => t.id === ws.active_tab_id)
+        ? ws.active_tab_id!
+        : validTabs[0].id;
+      set({ openTabs: validTabs, activeTabId: activeId });
+      const active = validTabs.find((t) => t.id === activeId);
+      if (active?.type === "sketch") await get().openSketch(active.path);
+      else if (active?.type === "storyboard") await get().openStoryboard(active.path);
+      else if (active?.type === "note") await get().openNote(active.path);
+    }
+
+    if (ws.chat_session_path) {
+      get().loadChatSession(ws.chat_session_path).catch(() => {});
+    }
+  } catch {
+    // First launch or corrupted local workspace UI state; project content still loads normally.
+  }
+}
+
 function viewportWidth() {
   return typeof window === "undefined" ? 1440 : window.innerWidth;
 }
@@ -841,12 +895,14 @@ function resetPersistenceState(): Pick<AppStoreState,
   | "snapshotPromptOpen"
   | "pendingNavAfterSave"
   | "pendingTimelineAfterSave"
-  | "pendingProjectAfterSave"
+  | "startedBranchFromSnapshot"
   | "isDirty"
   | "changedFiles"
   | "hasStash"
   | "isRewound"
   | "currentRemote"
+  | "remoteBranches"
+  | "remoteBranchesLoading"
   | "syncStatus"
   | "isSyncing"
   | "syncError"
@@ -868,12 +924,14 @@ function resetPersistenceState(): Pick<AppStoreState,
     snapshotPromptOpen: false,
     pendingNavAfterSave: null,
     pendingTimelineAfterSave: null,
-    pendingProjectAfterSave: null,
+    startedBranchFromSnapshot: null,
     isDirty: false,
     changedFiles: [],
     hasStash: false,
     isRewound: false,
     currentRemote: null,
+    remoteBranches: [],
+    remoteBranchesLoading: false,
     syncStatus: null,
     isSyncing: false,
     syncError: null,
@@ -937,6 +995,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   chatStreamingDrafts: [],
   pendingChatPrompt: null,
   chatFocusMode: false,
+  terminalFocusMode: false,
   activityLog: [],
   debugLog: [],
   versions: [],
@@ -946,13 +1005,15 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   snapshotPromptOpen: false,
   pendingNavAfterSave: null,
   pendingTimelineAfterSave: null,
-  pendingProjectAfterSave: null,
+  startedBranchFromSnapshot: null,
   isDirty: false,
   changedFiles: [],
   saving: false,
   hasStash: false,
   isRewound: false,
   currentRemote: null,
+  remoteBranches: [],
+  remoteBranchesLoading: false,
   syncStatus: null,
   isSyncing: false,
   syncError: null,
@@ -1369,32 +1430,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await get().loadStoryboards();
       await get().loadNotes();
       await get().loadSidebarOrder();
-      // Restore workspace state (open tabs + chat session) from disk
-      try {
-        const ws = await invoke<{ open_tabs: { id: string; type: string; path: string; title: string }[]; active_tab_id: string | null; chat_session_path: string | null }>("get_workspace_state");
-        const { sketches, storyboards, notes } = get();
-        const validTabs: EditorTab[] = (ws.open_tabs ?? [])
-          .map((t) => ({ id: t.id, type: t.type as EditorTab["type"], path: t.path, title: t.title }))
-          .filter((t) => {
-            if (t.type === "sketch") return sketches.some((s) => s.path === t.path);
-            if (t.type === "storyboard") return storyboards.some((s) => s.path === t.path);
-            if (t.type === "note") return notes.some((n) => n.path === t.path);
-            if (t.type === "database") return isDatabasePath(t.path);
-            return false;
-          });
-        if (validTabs.length > 0) {
-          const activeId = validTabs.find((t) => t.id === ws.active_tab_id) ? ws.active_tab_id! : validTabs[0].id;
-          set({ openTabs: validTabs, activeTabId: activeId });
-          const active = validTabs.find((t) => t.id === activeId);
-          if (active?.type === "sketch") await get().openSketch(active.path);
-          else if (active?.type === "storyboard") await get().openStoryboard(active.path);
-          else if (active?.type === "note") await get().openNote(active.path);
-        }
-        // Restore last chat session
-        if (ws.chat_session_path) {
-          get().loadChatSession(ws.chat_session_path).catch(() => {});
-        }
-      } catch { /* first launch or corrupted — ignore */ }
+      await restoreWorkspaceState(get, set);
       await get().loadVersions();
       await get().loadTimelines();
       await get().loadGraphData();
@@ -1474,7 +1510,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     set({ loading: true });
     try {
       // Save current workspace state before switching
-      const { openTabs, activeTabId, chatSessionPath } = get();
+      const { openTabs, activeTabId, chatSessionPath, currentProject, startedBranchFromSnapshot } = get();
       await invoke("set_workspace_state", {
         workspace: {
           open_tabs: openTabs.map((t) => ({
@@ -1489,9 +1525,11 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       }).catch(() => {});
 
       const project = await invoke<ProjectView>("switch_project", { projectPath });
+      const preservesDraftlineWorkspace = currentProject?.repo_root === project.repo_root;
       setDraftlineWorkspacePath(project.repo_root);
       set({
         ...resetPersistenceState(),
+        startedBranchFromSnapshot: preservesDraftlineWorkspace ? startedBranchFromSnapshot : null,
         currentProject: project,
         openTabs: [],
         activeTabId: null,
@@ -1512,6 +1550,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await get().loadStoryboards();
       await get().loadNotes();
       await get().loadSidebarOrder();
+      await restoreWorkspaceState(get, set);
       await get().loadVersions();
       await get().loadTimelines();
       await get().loadGraphData();
@@ -2103,6 +2142,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   }),
   sendChatPrompt: (prompt, opts) => set({ pendingChatPrompt: { text: prompt, silent: opts?.silent, agent: opts?.agent } }),
   setChatFocusMode: (enabled) => set({ chatFocusMode: enabled }),
+  setTerminalFocusMode: (enabled) => set({ terminalFocusMode: enabled, outputVisible: true, outputActiveTab: "terminal" }),
   addActivityEntries: (entries) => {
     recordActivityEntries(entries);
     set((s) => ({ activityLog: [...s.activityLog, ...entries] }));
@@ -2164,7 +2204,14 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   saveVersion: async (label, _forkLabel?) => {
     try {
       await saveDraftlineVersion(label);
-      set({ isDirty: false, isRewound: false, changedFiles: [] });
+      const activeTimeline = get().timelines.find((timeline) => timeline.is_active);
+      const startedBranch = get().startedBranchFromSnapshot;
+      set({
+        isDirty: false,
+        isRewound: false,
+        changedFiles: [],
+        startedBranchFromSnapshot: startedBranch?.branchName === activeTimeline?.name ? null : startedBranch,
+      });
       await get().loadVersions();
       await get().loadTimelines();
       await get().loadGraphData();
@@ -2424,12 +2471,36 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
 
   createTimeline: async (fromCommitId, name) => {
     try {
-      await createDraftlineVariation(fromCommitId, name);
+      await createDraftlineVariation(fromCommitId, name, get().currentRemote?.name ?? null);
       await get().loadTimelines();
       await get().loadVersions();
       await get().loadGraphData();
     } catch (err) {
       console.error("Failed to create timeline:", err);
+      if (!isDraftlineVariationCreateConflictError(err)) {
+        useToastStore.getState().show(`Branch creation failed: ${err}`, 5000, "error");
+      }
+      throw err;
+    }
+  },
+
+  startTimelineFromSnapshot: async (fromCommitId, name) => {
+    try {
+      await createDraftlineVariation(fromCommitId, name, get().currentRemote?.name ?? null);
+      set({ startedBranchFromSnapshot: { branchName: name, snapshotId: fromCommitId } });
+      await get().switchTimeline(name);
+      useToastStore.getState().show(`Started branch ${name} from the previewed snapshot.`, 4000, "success");
+    } catch (err) {
+      set((state) => (
+        state.startedBranchFromSnapshot?.branchName === name
+          ? { startedBranchFromSnapshot: null }
+          : {}
+      ));
+      console.error("Failed to start branch from snapshot:", err);
+      if (!isDraftlineVariationCreateConflictError(err)) {
+        useToastStore.getState().show(`Start branch failed: ${err}`, 5000, "error");
+      }
+      throw err;
     }
   },
 
@@ -2444,6 +2515,14 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
 
   switchTimeline: async (name) => {
     try {
+      const preflight = await preflightDraftlineSwitchVariation(name);
+      if (!preflight.can_proceed) {
+        const reason = preflight.dirty_files.length > 0
+          ? "Save or discard local changes before switching branches."
+          : "Branch switch cannot be applied safely right now.";
+        useToastStore.getState().show(reason, 5000, "error");
+        throw new Error(reason);
+      }
       await switchDraftlineVariation(name);
       await get().loadSketches();
       await get().loadStoryboards();
@@ -2464,6 +2543,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     } catch (err) {
       console.error("Failed to switch timeline:", err);
       useToastStore.getState().show(`Switch failed: ${err}`, 5000, "error");
+      throw err;
     }
   },
 
@@ -2493,6 +2573,11 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   deleteTimeline: async (name) => {
     try {
       await deleteDraftlineVariation(name);
+      set((state) => (
+        state.startedBranchFromSnapshot?.branchName === name
+          ? { startedBranchFromSnapshot: null }
+          : {}
+      ));
       await get().loadTimelines();
       await get().loadGraphData();
       await get().loadVersions();
@@ -2562,6 +2647,8 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       const info = remotes[0] ?? null;
       set({
         currentRemote: info ?? null,
+        remoteBranches: [],
+        remoteBranchesLoading: false,
         syncStatus: null,
         incomingCommits: [],
         syncError: null,
@@ -2571,7 +2658,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         await get().refreshSyncStatus();
       }
     } catch {
-      set({ currentRemote: null, syncStatus: null, incomingCommits: [], syncError: null, shareUrl: null });
+      set({ currentRemote: null, remoteBranches: [], remoteBranchesLoading: false, syncStatus: null, incomingCommits: [], syncError: null, shareUrl: null });
     }
   },
 
@@ -2727,12 +2814,50 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   },
 
   loadRemoteBranches: async () => {
-    return [];
+    const { currentRemote, timelines } = get();
+    if (!currentRemote) {
+      set({ remoteBranches: [], remoteBranchesLoading: false });
+      return [];
+    }
+    set({ remoteBranchesLoading: true, syncError: null });
+    try {
+      const localNames = new Set(timelines.map((timeline) => timeline.name));
+      const branches = (await listDraftlineRemoteBranches(currentRemote.name))
+        .filter((branch) => !localNames.has(branch.id) && !localNames.has(branch.name));
+      set({ remoteBranches: branches });
+      return branches;
+    } catch (err) {
+      const message = errorMessage(err);
+      set({ remoteBranches: [], syncError: message });
+      return [];
+    } finally {
+      set({ remoteBranchesLoading: false });
+    }
   },
 
   checkoutRemoteTimeline: async (branch: string) => {
-    console.warn("Draftline remote branch checkout is not available yet:", branch);
-    useToastStore.getState().show("Draftline does not expose remote branch checkout yet.", 5000, "info");
+    const { currentRemote, isDirty } = get();
+    if (!currentRemote) return;
+    if (isDirty) {
+      const reason = "Save or discard local changes before adopting a remote branch.";
+      useToastStore.getState().show(reason, 5000, "error");
+      throw new Error(reason);
+    }
+    set({ isSyncing: true, syncError: null });
+    try {
+      await adoptDraftlineRemoteBranch(currentRemote.name, branch);
+      await get().loadTimelines();
+      await get().switchTimeline(branch);
+      await get().loadRemoteBranches();
+      await get().refreshSyncStatus();
+      await get().loadGraphData();
+      useToastStore.getState().show(`Adopted ${currentRemote.name}/${branch}.`, 4000, "success");
+    } catch (err) {
+      set({ syncError: errorMessage(err) });
+      throw err;
+    } finally {
+      set({ isSyncing: false });
+    }
   },
 
   publishTimeline: async () => {

@@ -409,7 +409,7 @@ export function SnapshotGraph({
                   zIndex: 3, padding: 0,
                 }}
                 onClick={() => selectionMode ? onToggleSelect?.(node.id) : onNodeClick(node.id, node.is_head)}
-                title={selectionMode ? `Select ${node.message}` : node.is_head ? "Current snapshot (HEAD)" : `Navigate to: ${node.message}`}
+                title={selectionMode ? `Select ${node.message}` : node.is_head ? "Current snapshot (HEAD)" : `Preview snapshot: ${node.message}`}
               />
               {/* Remote badge — left of the dot with connector line, mirroring branch labels */}
               {showRemoteBadges && node.is_remote_tip && (() => {

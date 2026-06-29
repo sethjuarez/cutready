@@ -50,7 +50,6 @@ describe("AppCloseGuard", () => {
         isDirty: false,
         isMerging: false,
         snapshotPromptOpen: false,
-        pendingProjectAfterSave: null,
         mergeConflicts: [],
         draftlineMergeToken: null,
         draftlineMergeRemote: null,

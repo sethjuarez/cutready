@@ -17,8 +17,9 @@ import {
   previewDraftlineVersion,
   previewDraftlineVersionFile,
   previewDraftlineWorkspaceFile,
+  isDraftlineVariationCreateConflictError,
   type DraftlinePreviewFile,
-  type DraftlineRestoreVersionTarget,
+  type DraftlineVariationCreatePreflight,
 } from "../services/draftlineVersioning";
 import { useAppStore } from "../stores/appStore";
 import type { DiffEntry } from "../types/sketch";
@@ -29,7 +30,6 @@ interface SnapshotPreviewTabProps {
 }
 
 type ChangeKind = "sketch" | "storyboard" | "note" | "visual" | "asset" | "other";
-type RestoreTarget = "current" | "existing" | "new";
 type FileDetailState =
   | { status: "loading" }
   | { status: "ready"; bullets: string[]; context: string }
@@ -69,25 +69,22 @@ export function SnapshotPreviewTab({ snapshotId }: SnapshotPreviewTabProps) {
   const timelines = useAppStore((s) => s.timelines);
   const isDirty = useAppStore((s) => s.isDirty);
   const changedFiles = useAppStore((s) => s.changedFiles);
-  const restoreSnapshotAsNewSaveToVariation = useAppStore((s) => s.restoreSnapshotAsNewSaveToVariation);
+  const startTimelineFromSnapshot = useAppStore((s) => s.startTimelineFromSnapshot);
+  const checkoutRemoteTimeline = useAppStore((s) => s.checkoutRemoteTimeline);
   const openTab = useAppStore((s) => s.openTab);
 
   const [entries, setEntries] = useState<DiffEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [projectFilter, setProjectFilter] = useState("all");
-  const [restoreTarget, setRestoreTarget] = useState<RestoreTarget>("current");
-  const [selectedTimeline, setSelectedTimeline] = useState("");
   const [newTimelineName, setNewTimelineName] = useState("");
-  const [restoreLabel, setRestoreLabel] = useState("");
   const [restoreError, setRestoreError] = useState<string | null>(null);
+  const [restoreConflict, setRestoreConflict] = useState<DraftlineVariationCreatePreflight | null>(null);
   const [restoring, setRestoring] = useState(false);
   const [restoreMenuOpen, setRestoreMenuOpen] = useState(false);
   const [expandedPath, setExpandedPath] = useState<string | null>(null);
   const [fileDetails, setFileDetails] = useState<Record<string, FileDetailState>>({});
-
   const snapshot = graphNodes.find((node) => node.id === snapshotId);
   const activeTimeline = timelines.find((timeline) => timeline.is_active);
-  const inactiveTimelines = timelines.filter((timeline) => !timeline.is_active);
   const selectedProject = projectFilter === "all"
     ? null
     : projects.find((project) => project.path === projectFilter) ?? null;
@@ -127,14 +124,8 @@ export function SnapshotPreviewTab({ snapshotId }: SnapshotPreviewTabProps) {
 
   useEffect(() => {
     const base = snapshot?.message?.trim() || snapshotId.slice(0, 7);
-    setRestoreLabel(`Restore ${base}`);
+    setNewTimelineName(branchNameFromSnapshot(base, snapshotId));
   }, [snapshot?.message, snapshotId]);
-
-  useEffect(() => {
-    if (!selectedTimeline && inactiveTimelines.length > 0) {
-      setSelectedTimeline(inactiveTimelines[0].name);
-    }
-  }, [inactiveTimelines, selectedTimeline]);
 
   const filteredEntries = useMemo(() => {
     if (!entries) return [];
@@ -153,35 +144,31 @@ export function SnapshotPreviewTab({ snapshotId }: SnapshotPreviewTabProps) {
 
   const totalAdded = filteredEntries.reduce((sum, entry) => sum + entry.additions, 0);
   const totalRemoved = filteredEntries.reduce((sum, entry) => sum + entry.deletions, 0);
-  const restoreDisabled = restoring || isDirty || !restoreLabel.trim()
-    || (restoreTarget === "existing" && !selectedTimeline)
-    || (restoreTarget === "new" && !newTimelineName.trim());
+  const restoreDisabled = restoring || isDirty || !newTimelineName.trim();
 
   const handleRestore = useCallback(async () => {
     if (restoreDisabled) return;
     setRestoring(true);
     setRestoreError(null);
     try {
-      let target: DraftlineRestoreVersionTarget;
-      if (restoreTarget === "existing") {
-        target = { kind: "existing", variation: selectedTimeline };
-      } else if (restoreTarget === "new") {
-        const name = newTimelineName.trim();
-        const collides = timelines.some((timeline) => timeline.name === name || timeline.label === name);
-        if (collides) {
-          setRestoreError(`Branch "${name}" already exists. Choose a different new branch name or restore to the existing branch.`);
-          return;
-        }
-        target = { kind: "new", name, metadata: { label: name, slug: name } };
-      } else {
-        target = { kind: "current" };
+      const name = newTimelineName.trim();
+      const collides = timelines.some((timeline) => timeline.name === name || timeline.label === name);
+      if (collides) {
+        setRestoreError(`Branch "${name}" already exists. Choose a different branch name.`);
+        return;
       }
-      await restoreSnapshotAsNewSaveToVariation(snapshotId, restoreLabel.trim(), target);
+      await startTimelineFromSnapshot(snapshotId, name);
+      setRestoreConflict(null);
       setEntries(await previewDraftlineVersion(snapshotId));
       setExpandedPath(null);
       setFileDetails({});
       setRestoreMenuOpen(false);
     } catch (err) {
+      if (isDraftlineVariationCreateConflictError(err)) {
+        setRestoreConflict(err.preflight);
+        setRestoreMenuOpen(true);
+        return;
+      }
       setRestoreError(`Restore failed: ${err}`);
     } finally {
       setRestoring(false);
@@ -189,13 +176,25 @@ export function SnapshotPreviewTab({ snapshotId }: SnapshotPreviewTabProps) {
   }, [
     newTimelineName,
     restoreDisabled,
-    restoreLabel,
-    restoreSnapshotAsNewSaveToVariation,
-    restoreTarget,
-    selectedTimeline,
+    startTimelineFromSnapshot,
     snapshotId,
     timelines,
   ]);
+
+  const handleAdoptRestoreConflict = useCallback(async () => {
+    if (!restoreConflict) return;
+    setRestoring(true);
+    setRestoreError(null);
+    try {
+      await checkoutRemoteTimeline(restoreConflict.variation);
+      setRestoreConflict(null);
+      setRestoreMenuOpen(false);
+    } catch (err) {
+      setRestoreError(`Adopt failed: ${err}`);
+    } finally {
+      setRestoring(false);
+    }
+  }, [checkoutRemoteTimeline, restoreConflict]);
 
   const handleOpenFileDiff = useCallback((entry: DiffEntry) => {
     openTab({
@@ -281,21 +280,27 @@ export function SnapshotPreviewTab({ snapshotId }: SnapshotPreviewTabProps) {
             </div>
             <RestoreControls
               activeTimelineLabel={activeTimeline?.label ?? "current branch"}
-              inactiveTimelines={inactiveTimelines}
               isDirty={isDirty}
               menuOpen={restoreMenuOpen}
               newTimelineName={newTimelineName}
               onMenuOpenChange={setRestoreMenuOpen}
-              onNewTimelineNameChange={setNewTimelineName}
+              onNewTimelineNameChange={(value) => {
+                setRestoreConflict(null);
+                setNewTimelineName(value);
+              }}
               onRestore={handleRestore}
+              onAdoptConflict={handleAdoptRestoreConflict}
+              onCancelConflict={() => {
+                setRestoreConflict(null);
+                setRestoreMenuOpen(false);
+              }}
+              onUseConflictSuggestion={(name) => {
+                setRestoreConflict(null);
+                setNewTimelineName(name);
+              }}
+              restoreConflict={restoreConflict}
               restoreDisabled={restoreDisabled}
-              restoreLabel={restoreLabel}
               restoring={restoring}
-              restoreTarget={restoreTarget}
-              selectedTimeline={selectedTimeline}
-              setRestoreLabel={setRestoreLabel}
-              setRestoreTarget={setRestoreTarget}
-              setSelectedTimeline={setSelectedTimeline}
               snapshotLabel={snapshot?.message ?? snapshotId.slice(0, 7)}
             />
           </div>
@@ -354,48 +359,38 @@ export function SnapshotPreviewTab({ snapshotId }: SnapshotPreviewTabProps) {
 
 function RestoreControls({
   activeTimelineLabel,
-  inactiveTimelines,
   isDirty,
   menuOpen,
   newTimelineName,
   onMenuOpenChange,
   onNewTimelineNameChange,
+  onAdoptConflict,
+  onCancelConflict,
   onRestore,
+  onUseConflictSuggestion,
+  restoreConflict,
   restoreDisabled,
-  restoreLabel,
   restoring,
-  restoreTarget,
-  selectedTimeline,
-  setRestoreLabel,
-  setRestoreTarget,
-  setSelectedTimeline,
   snapshotLabel,
 }: {
   activeTimelineLabel: string;
-  inactiveTimelines: { name: string; label: string }[];
   isDirty: boolean;
   menuOpen: boolean;
   newTimelineName: string;
   onMenuOpenChange: (open: boolean) => void;
   onNewTimelineNameChange: (value: string) => void;
+  onAdoptConflict: () => void;
+  onCancelConflict: () => void;
   onRestore: () => void;
+  onUseConflictSuggestion: (name: string) => void;
+  restoreConflict: DraftlineVariationCreatePreflight | null;
   restoreDisabled: boolean;
-  restoreLabel: string;
   restoring: boolean;
-  restoreTarget: RestoreTarget;
-  selectedTimeline: string;
-  setRestoreLabel: (value: string) => void;
-  setRestoreTarget: (value: RestoreTarget) => void;
-  setSelectedTimeline: (value: string) => void;
   snapshotLabel: string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [confirming, setConfirming] = useState(false);
-  const targetLabel = restoreTarget === "current"
-    ? activeTimelineLabel
-    : restoreTarget === "existing"
-      ? inactiveTimelines.find((timeline) => timeline.name === selectedTimeline)?.label ?? "selected branch"
-      : newTimelineName.trim() || "new branch";
+  const targetLabel = newTimelineName.trim() || "new branch";
 
   useEffect(() => {
     if (!menuOpen) {
@@ -425,12 +420,12 @@ function RestoreControls({
         onClick={() => onMenuOpenChange(!menuOpen)}
         disabled={isDirty || restoring}
         className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-[rgb(var(--color-accent))] px-3 text-[11px] font-semibold text-[rgb(var(--color-accent-fg))] transition-colors hover:bg-[rgb(var(--color-accent-hover))] disabled:cursor-not-allowed disabled:opacity-45"
-        title={isDirty ? "Save or discard workspace changes before restoring" : "Restore this snapshot without rewriting history"}
+        title={isDirty ? "Save or discard workspace changes before starting a branch from this snapshot" : "Create a branch from this preview and switch to it"}
         aria-haspopup="dialog"
         aria-expanded={menuOpen}
       >
         <RotateCcw className="h-3.5 w-3.5" />
-        {restoring ? "Restoring..." : "Restore as New"}
+        {restoring ? "Starting..." : "Start Branch from Here"}
         <ChevronDown className={`h-3 w-3 transition-transform ${menuOpen ? "rotate-180" : ""}`} />
       </button>
 
@@ -442,67 +437,37 @@ function RestoreControls({
         >
           <div className="mb-2 rounded-lg bg-[rgb(var(--color-surface-alt))] px-3 py-2 text-[11px] text-[rgb(var(--color-text-secondary))]">
             <GitBranch className="mr-1.5 inline h-3.5 w-3.5 align-[-2px]" />
-            Restore <span className="font-medium text-[rgb(var(--color-text))]">{snapshotLabel}</span> as a new save on{" "}
-            <span className="font-medium text-[rgb(var(--color-text))]">{targetLabel}</span>.
+            You are previewing <span className="font-medium text-[rgb(var(--color-text))]">{snapshotLabel}</span>. To write from it,
+            CutReady creates branch <span className="font-medium text-[rgb(var(--color-text))]">{targetLabel}</span> and switches there. Your first edit will be dirty until you save a named snapshot.
           </div>
           <label>
             <span className="mb-1 block text-[10px] font-medium uppercase tracking-wider text-[rgb(var(--color-text-secondary))]">
-              Save label
+              New branch name
             </span>
-            <input
-              value={restoreLabel}
-              onChange={(event) => {
-                setConfirming(false);
-                setRestoreLabel(event.target.value);
-              }}
-              className="h-8 w-full rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] px-2 text-[12px] text-[rgb(var(--color-text))] outline-none focus:border-[rgb(var(--color-accent))]"
-            />
-          </label>
-          <label className="mt-2 block">
-            <span className="mb-1 block text-[10px] font-medium uppercase tracking-wider text-[rgb(var(--color-text-secondary))]">
-              Restore to
-            </span>
-            <select
-              value={restoreTarget}
-              onChange={(event) => {
-                setConfirming(false);
-                setRestoreTarget(event.target.value as RestoreTarget);
-              }}
-              className="h-8 w-full rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] px-2 text-[12px] text-[rgb(var(--color-text))] outline-none focus:border-[rgb(var(--color-accent))]"
-            >
-              <option value="current">{activeTimelineLabel}</option>
-              <option value="existing" disabled={inactiveTimelines.length === 0}>Existing branch...</option>
-              <option value="new">New branch...</option>
-            </select>
-          </label>
-          {restoreTarget === "existing" && (
-            <select
-              value={selectedTimeline}
-              onChange={(event) => {
-                setConfirming(false);
-                setSelectedTimeline(event.target.value);
-              }}
-              className="mt-2 h-8 w-full rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] px-2 text-[12px] text-[rgb(var(--color-text))] outline-none focus:border-[rgb(var(--color-accent))]"
-            >
-              {inactiveTimelines.map((timeline) => (
-                <option key={timeline.name} value={timeline.name}>{timeline.label}</option>
-              ))}
-            </select>
-          )}
-          {restoreTarget === "new" && (
             <input
               value={newTimelineName}
               onChange={(event) => {
                 setConfirming(false);
                 onNewTimelineNameChange(event.target.value);
               }}
-              placeholder="New branch name..."
-              className="mt-2 h-8 w-full rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] px-2 text-[12px] text-[rgb(var(--color-text))] outline-none placeholder:text-[rgb(var(--color-text-secondary))]/50 focus:border-[rgb(var(--color-accent))]"
+              placeholder="branch-name"
+              className="h-8 w-full rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] px-2 text-[12px] text-[rgb(var(--color-text))] outline-none placeholder:text-[rgb(var(--color-text-secondary))]/50 focus:border-[rgb(var(--color-accent))]"
+            />
+          </label>
+          <div className="mt-2 rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]/60 px-3 py-2 text-[10px] leading-relaxed text-[rgb(var(--color-text-secondary))]">
+            Current branch <span className="font-medium text-[rgb(var(--color-text))]">{activeTimelineLabel}</span> stays untouched. Save later asks for the snapshot name.
+          </div>
+          {restoreConflict && (
+            <SnapshotBranchConflictPanel
+              preflight={restoreConflict}
+              onUseSuggestion={onUseConflictSuggestion}
+              onAdopt={onAdoptConflict}
+              onCancel={onCancelConflict}
             />
           )}
           {isDirty && (
             <div className="mt-2 text-[10px] text-warning">
-              Save or discard current workspace changes before restoring.
+              Save or discard current workspace changes before starting from this preview.
             </div>
           )}
           <button
@@ -516,12 +481,64 @@ function RestoreControls({
             }}
             disabled={restoreDisabled}
             className="mt-3 inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-lg bg-[rgb(var(--color-accent))] px-3 text-[11px] font-semibold text-[rgb(var(--color-accent-fg))] transition-colors hover:bg-[rgb(var(--color-accent-hover))] disabled:pointer-events-none disabled:opacity-45"
-            title={isDirty ? "Save or discard workspace changes before restoring" : "Restore as a new save without rewriting history"}
+            title={isDirty ? "Save or discard workspace changes before starting from this preview" : "Create a branch and switch to it"}
           >
-            {restoring ? "Restoring..." : confirming ? "Confirm Restore" : "Restore as New"}
+            {restoring ? "Starting..." : confirming ? "Confirm Start Branch" : "Create Branch"}
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+function SnapshotBranchConflictPanel({
+  preflight,
+  onUseSuggestion,
+  onAdopt,
+  onCancel,
+}: {
+  preflight: DraftlineVariationCreatePreflight;
+  onUseSuggestion: (name: string) => void;
+  onAdopt: () => void;
+  onCancel: () => void;
+}) {
+  const remote = preflight.remote ?? "remote";
+  const canAdopt = preflight.remote_collision || preflight.remote_only_collision;
+  const message = canAdopt
+    ? `${remote}/${preflight.variation} already exists${preflight.existing_remote_head?.label ? ` at "${preflight.existing_remote_head.label}"` : ""}.`
+    : `Branch "${preflight.variation}" already exists locally.`;
+
+  return (
+    <div className="mt-2 rounded-lg border border-warning/25 bg-warning/5 px-3 py-2 text-[10px] leading-relaxed text-[rgb(var(--color-text-secondary))]">
+      <div className="font-medium text-warning">{message}</div>
+      <div className="mt-1">Rename this branch, adopt the remote branch, or cancel starting from this snapshot.</div>
+      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+        {preflight.suggested_alternative && (
+          <button
+            type="button"
+            onClick={() => onUseSuggestion(preflight.suggested_alternative!)}
+            className="rounded-md border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-2 py-1 font-medium text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))]"
+          >
+            Use {preflight.suggested_alternative}
+          </button>
+        )}
+        {canAdopt && (
+          <button
+            type="button"
+            onClick={onAdopt}
+            className="rounded-md bg-[rgb(var(--color-accent))] px-2 py-1 font-medium text-[rgb(var(--color-accent-fg))] hover:bg-[rgb(var(--color-accent-hover))]"
+          >
+            Adopt and switch
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={onCancel}
+          className="rounded-md px-2 py-1 font-medium text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))]"
+        >
+          Cancel
+        </button>
+      </div>
     </div>
   );
 }
@@ -968,6 +985,15 @@ function displayName(path: string): string {
     .replace(/\.(sk|sb|md)$/i, "")
     .replace(/[-_]+/g, " ")
     .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function branchNameFromSnapshot(label: string, snapshotId: string) {
+  const slug = label
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 36);
+  return `from-${slug || snapshotId.slice(0, 7)}`;
 }
 
 function businessSummary(path: string, kind: ChangeKind): string {

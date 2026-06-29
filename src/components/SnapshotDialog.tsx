@@ -17,9 +17,7 @@ export function SnapshotDialog() {
   const navigateToSnapshot = useAppStore((s) => s.navigateToSnapshot);
   const pendingNavAfterSave = useAppStore((s) => s.pendingNavAfterSave);
   const pendingTimelineAfterSave = useAppStore((s) => s.pendingTimelineAfterSave);
-  const pendingProjectAfterSave = useAppStore((s) => s.pendingProjectAfterSave);
   const switchTimeline = useAppStore((s) => s.switchTimeline);
-  const switchProject = useAppStore((s) => s.switchProject);
   const isMultiProject = useAppStore((s) => s.isMultiProject);
 
   const [label, setLabel] = useState("");
@@ -44,7 +42,6 @@ export function SnapshotDialog() {
       snapshotPromptOpen: false,
       pendingNavAfterSave: null,
       pendingTimelineAfterSave: null,
-      pendingProjectAfterSave: null,
     });
     setLabel("");
     setForkLabel("");
@@ -69,9 +66,6 @@ export function SnapshotDialog() {
       if (pendingTimelineAfterSave) {
         await switchTimeline(pendingTimelineAfterSave);
       }
-      if (pendingProjectAfterSave) {
-        await switchProject(pendingProjectAfterSave);
-      }
       close();
     } catch (err) {
       console.error("Snapshot save failed:", err);
@@ -79,7 +73,7 @@ export function SnapshotDialog() {
       useToastStore.getState().show(`Snapshot failed: ${err}`, 5000, "error");
       setSaving(false);
     }
-  }, [label, forkLabel, isRewound, saveVersion, loadGraphData, loadTimelines, pendingNavAfterSave, pendingTimelineAfterSave, pendingProjectAfterSave, navigateToSnapshot, switchTimeline, switchProject, close]);
+  }, [label, forkLabel, isRewound, saveVersion, loadGraphData, loadTimelines, pendingNavAfterSave, pendingTimelineAfterSave, navigateToSnapshot, switchTimeline, close]);
 
   // Auto-focus and select input when opened
   useEffect(() => {

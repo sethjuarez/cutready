@@ -38,6 +38,8 @@ export function ChangesPanel() {
   const checkRewound = useAppStore((s) => s.checkRewound);
   const navigateToSnapshot = useAppStore((s) => s.navigateToSnapshot);
   const discardChanges = useAppStore((s) => s.discardChanges);
+  const deleteTimeline = useAppStore((s) => s.deleteTimeline);
+  const switchTimeline = useAppStore((s) => s.switchTimeline);
   const loadGraphData = useAppStore((s) => s.loadGraphData);
   const timelines = useAppStore((s) => s.timelines);
   const loadTimelines = useAppStore((s) => s.loadTimelines);
@@ -51,6 +53,7 @@ export function ChangesPanel() {
   const currentProject = useAppStore((s) => s.currentProject);
   const isMultiProject = useAppStore((s) => s.isMultiProject);
   const projects = useAppStore((s) => s.projects);
+  const startedBranchFromSnapshot = useAppStore((s) => s.startedBranchFromSnapshot);
   const hasRemote = !!currentRemote;
 
   const [changesExpanded, setChangesExpanded] = useState(true);
@@ -123,6 +126,12 @@ export function ChangesPanel() {
   }, [showIncoming, showOutgoing]);
 
   const activeTimeline = timelines.find((t) => t.is_active);
+  const head = graphNodes.find((node) => node.is_head);
+  const emptyStartedBranch = startedBranchFromSnapshot
+    && activeTimeline?.name === startedBranchFromSnapshot.branchName
+    && head?.id === startedBranchFromSnapshot.snapshotId
+    ? startedBranchFromSnapshot
+    : null;
   const hasLegacyMasterTimeline = timelines.some((timeline) => timeline.name === "master")
     && !timelines.some((timeline) => timeline.name === "main");
   const activeNodes = (() => {
@@ -210,10 +219,25 @@ export function ChangesPanel() {
       variant: "error",
     });
     if (!confirmed) return;
+    const branchToDelete = emptyStartedBranch;
     await discardChanges();
     await loadGraphData();
     await loadTimelines();
-  }, [confirm, discardChanges, loadGraphData, loadTimelines]);
+    if (branchToDelete) {
+      const shouldDelete = await confirm({
+        title: "Delete the empty branch too?",
+        message: `You discarded the unsaved work on ${branchToDelete.branchName}. This branch has no new saved snapshots beyond where it started. Delete it as well?`,
+        confirmLabel: "Delete branch",
+        cancelLabel: "Keep branch",
+        variant: "warning",
+      });
+      if (shouldDelete) {
+        const fallback = timelines.find((timeline) => timeline.name !== branchToDelete.branchName);
+        if (fallback) await switchTimeline(fallback.name);
+        await deleteTimeline(branchToDelete.branchName);
+      }
+    }
+  }, [confirm, deleteTimeline, discardChanges, emptyStartedBranch, loadGraphData, loadTimelines, switchTimeline, timelines]);
 
   const toggleSquashSelection = useCallback((commitId: string) => {
     setSelectedForSquash((prev) => {

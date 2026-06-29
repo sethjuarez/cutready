@@ -2,7 +2,7 @@ use std::{
     collections::HashMap,
     io::{Read, Write},
     path::{Path, PathBuf},
-    sync::Mutex,
+    sync::{Arc, Mutex},
     thread::{self, JoinHandle},
 };
 
@@ -19,7 +19,7 @@ use crate::AppState;
 
 #[derive(Default)]
 pub struct TerminalState {
-    sessions: Mutex<HashMap<String, TerminalSession>>,
+    sessions: Arc<Mutex<HashMap<String, TerminalSession>>>,
 }
 
 struct TerminalSession {
@@ -70,6 +70,8 @@ pub async fn terminal_open(
     drop(slave);
 
     let session_id = Uuid::new_v4().to_string();
+    let reader_session_id = session_id.clone();
+    let sessions = Arc::clone(&terminal_state.sessions);
     let mut reader = master
         .try_clone_reader()
         .map_err(|error| format!("Failed to attach terminal output: {error}"))?;
@@ -86,6 +88,10 @@ pub async fn terminal_open(
                             .send(InvokeResponseBody::Raw(buffer[..count].to_vec()))
                             .is_err()
                         {
+                            tracing::debug!(
+                                session_id = %reader_session_id,
+                                "terminal output channel closed; cleaning up session"
+                            );
                             let _ = killer.kill();
                             break;
                         }
@@ -96,6 +102,8 @@ pub async fn terminal_open(
                     }
                 }
             }
+
+            remove_reader_session(&sessions, &reader_session_id);
         })
         .map_err(|error| format!("Failed to start terminal reader: {error}"))?;
 
@@ -214,6 +222,31 @@ fn close_session(mut session: TerminalSession) {
     drop(session.master);
     if let Some(reader) = session.reader.take() {
         let _ = reader.join();
+    }
+}
+
+fn remove_reader_session(
+    sessions: &Arc<Mutex<HashMap<String, TerminalSession>>>,
+    session_id: &str,
+) {
+    let session = match sessions.lock() {
+        Ok(mut sessions) => sessions.remove(session_id),
+        Err(error) => {
+            tracing::warn!(
+                session_id,
+                "Failed to lock terminal sessions for reader cleanup: {error}"
+            );
+            None
+        }
+    };
+
+    if let Some(mut session) = session {
+        tracing::debug!(session_id, "terminal reader ended; removing session");
+        let _ = session.writer.flush();
+        drop(session.writer);
+        let _ = session.child.kill();
+        drop(session.master);
+        let _ = session.reader.take();
     }
 }
 
