@@ -2914,7 +2914,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     if (!currentRemote) return;
     try {
       const status = await getDraftlineSyncStatus(currentRemote.name);
-      set({ syncStatus: status });
+      set({ syncStatus: status, syncError: null });
     } catch {
       set({ syncStatus: null });
     }
