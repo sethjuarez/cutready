@@ -29,19 +29,23 @@ import {
   publishDraftlineChanges,
   popDraftlineShelf,
   preflightDraftlineRenameVariation,
+  applyDraftlineSnapshotCleanup,
+  previewDraftlineSnapshotCleanup,
   restoreDraftlineVersionAsNewSave,
   restoreDraftlineVersionAsNewSaveToVariation,
   renameDraftlineVariation,
   saveDraftlineVersion,
   setDraftlineWorkspacePath,
   shelveDraftlineChanges,
-  squashDraftlineVersions,
   switchDraftlineVariation,
   type DraftlineRestoreVersionTarget,
   type DraftlineMergeIncomingToken,
+  type DraftlineHistoryCleanupPreview,
+  type DraftlineTimelineCleanupResult,
 } from "../services/draftlineVersioning";
 import { recordActivityEntries } from "../services/telemetry";
 import { useToastStore } from "./toastStore";
+import { cleanupRange } from "../utils/historyCleanupSelection";
 import { getStoryboardSketchPaths } from "../utils/storyboard";
 import type { ProjectView, ProjectEntry, RecentProject } from "../types/project";
 import type {
@@ -702,8 +706,12 @@ interface AppStoreState {
   quickSave: () => Promise<void>;
   /** Open snapshot name prompt (and ensure panel is visible). */
   promptSnapshot: () => Promise<void>;
-  /** Squash a HEAD-anchored range of snapshots into one named snapshot. */
+  /** Compact a HEAD-anchored range of snapshots into one named milestone. */
   squashSnapshots: (oldestCommitId: string, newestCommitId: string, label: string) => Promise<void>;
+  /** Preview compacting a HEAD-anchored range of snapshots through Draftline cleanup. */
+  previewSnapshotCleanup: (oldestCommitId: string, newestCommitId: string, label: string, selectedRangeCommitIds?: string[]) => Promise<DraftlineHistoryCleanupPreview>;
+  /** Apply a previously previewed Draftline cleanup plan. */
+  applySnapshotCleanup: (planId: string) => Promise<DraftlineTimelineCleanupResult>;
 
   // ── Remote sync actions ────────────────────────────────────
   /** Detect configured remote for the project. */
@@ -2618,25 +2626,50 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   },
 
   squashSnapshots: async (oldestCommitId, newestCommitId, label) => {
-    const { graphNodes } = get();
-    const headIndex = graphNodes.findIndex((node) => node.id === newestCommitId);
-    const oldestIndex = graphNodes.findIndex((node) => node.id === oldestCommitId);
-    if (headIndex < 0 || oldestIndex < 0 || oldestIndex < headIndex) {
-      useToastStore.getState().show("Select a contiguous range ending at the current snapshot to squash.", 5000, "error");
-      return;
-    }
-
     try {
-      await squashDraftlineVersions(oldestIndex - headIndex + 1, label);
-      await get().loadVersions();
-      await get().loadGraphData();
-      await get().loadTimelines();
-      await get().checkDirty();
-      useToastStore.getState().show("Snapshots squashed safely.", 4000, "success");
+      const preview = await get().previewSnapshotCleanup(oldestCommitId, newestCommitId, label);
+      await get().applySnapshotCleanup(preview.plan_id);
     } catch (err) {
-      console.error("Failed to squash snapshots:", err);
-      useToastStore.getState().show(`Squash failed: ${err}`, 5000, "error");
+      console.error("Failed to compact snapshots:", err);
+      useToastStore.getState().show(`Cleanup failed: ${err}`, 5000, "error");
     }
+  },
+
+  previewSnapshotCleanup: async (oldestCommitId, newestCommitId, label, selectedRangeCommitIds) => {
+    const { graphNodes, timelines } = get();
+    if (selectedRangeCommitIds) {
+      const selected = new Set(selectedRangeCommitIds);
+      const allKnown = selectedRangeCommitIds.every((id) => graphNodes.some((node) => node.id === id));
+      if (
+        selectedRangeCommitIds.length < 2
+        || selected.size !== selectedRangeCommitIds.length
+        || selectedRangeCommitIds[0] !== newestCommitId
+        || selectedRangeCommitIds[selectedRangeCommitIds.length - 1] !== oldestCommitId
+        || !allKnown
+      ) {
+        throw new Error("Select a contiguous range ending at the current snapshot to compact.");
+      }
+    } else if (!cleanupRange(graphNodes, newestCommitId, oldestCommitId)) {
+      throw new Error("Select a contiguous range ending at the current snapshot to compact.");
+    }
+    const targetVariation = timelines.find((timeline) => timeline.is_active)?.name ?? null;
+    return previewDraftlineSnapshotCleanup(oldestCommitId, newestCommitId, label, targetVariation);
+  },
+
+  applySnapshotCleanup: async (planId) => {
+    const result = await applyDraftlineSnapshotCleanup(planId);
+    set({ diffResult: null, diffSelection: null, isDirty: false, changedFiles: [] });
+    await get().loadVersions();
+    await get().loadGraphData();
+    await get().loadTimelines();
+    await get().checkDirty();
+    const squashed = result.commit_map.filter((entry) => entry.disposition.kind === "squashed_into").length;
+    useToastStore.getState().show(
+      squashed > 0 ? `Timeline compacted. ${squashed} old snapshots are mapped to the new milestone.` : "Timeline compacted.",
+      5000,
+      "success",
+    );
+    return result;
   },
 
   // ── Remote sync actions ────────────────────────────────────

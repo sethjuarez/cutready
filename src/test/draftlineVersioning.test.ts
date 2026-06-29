@@ -24,6 +24,8 @@ import {
   hasDraftlineShelf,
   popDraftlineShelf,
   preflightDraftlineRenameVariation,
+  applyDraftlineSnapshotCleanup,
+  previewDraftlineSnapshotCleanup,
   preflightDraftlineSwitchVariation,
   previewDraftlineVersion,
   renameDraftlineVariation,
@@ -402,6 +404,85 @@ describe("draftlineVersioning", () => {
         source_variation_id: "master",
         target_variation_id: "main",
         token,
+      },
+    });
+  });
+
+  it("previews and applies Draftline history cleanup for a selected snapshot range", async () => {
+    const preview = {
+      plan_id: "cleanup-plan-1",
+      target_variation: "main",
+      old_head: "2222222222222222222222222222222222222222",
+      new_head: "3333333333333333333333333333333333333333",
+      preview_ref: "refs/draftline/previews/history-cleanup/main/cleanup-plan-1",
+      planned_backup_ref: "refs/draftline/backups/history-cleanup/main/cleanup-plan-1",
+      operations: [],
+      graph_diff: {
+        old_head: "2222222222222222222222222222222222222222",
+        new_head: "3333333333333333333333333333333333333333",
+        old_commit_count: 2,
+        new_commit_count: 1,
+        squashed_commit_count: 2,
+      },
+      commit_map: [],
+      snapshot_map: [],
+      warnings: [],
+    };
+    const result = {
+      plan_id: preview.plan_id,
+      old_head: preview.old_head,
+      new_head: preview.new_head,
+      backup_refs: ["refs/draftline/backups/history-cleanup/main/cleanup-plan-1"],
+      ref_updates: [],
+      commit_map: [],
+      snapshot_map: [],
+      warnings: [],
+    };
+    mockInvoke
+      .mockResolvedValueOnce(preview)
+      .mockResolvedValueOnce(result);
+
+    await expect(previewDraftlineSnapshotCleanup(
+      "1111111111111111111111111111111111111111",
+      "2222222222222222222222222222222222222222",
+      "Demo milestone",
+      "main",
+    )).resolves.toEqual(preview);
+    await expect(applyDraftlineSnapshotCleanup("cleanup-plan-1")).resolves.toEqual(result);
+
+    expect(mockInvoke).toHaveBeenNthCalledWith(1, "preview_history_cleanup", {
+      request: {
+        workspace_path: WORKSPACE,
+        cleanup: {
+          target_variation: "main",
+          base: { kind: "auto" },
+          mode: {
+            kind: "compact_milestones",
+            milestones: [{
+              title: "Demo milestone",
+              description: null,
+              include_range: {
+                start: "1111111111111111111111111111111111111111",
+                end: "2222222222222222222222222222222222222222",
+              },
+            }],
+            preserve_named_branches: true,
+            preserve_merge_boundaries: true,
+          },
+          safety: {
+            create_backup_ref: true,
+            backup_ref_name: null,
+            require_clean_worktree: true,
+          },
+          remote_policy: { kind: "local_only" },
+        },
+      },
+    });
+    expect(mockInvoke).toHaveBeenNthCalledWith(2, "apply_history_cleanup", {
+      request: {
+        workspace_path: WORKSPACE,
+        plan_id: "cleanup-plan-1",
+        confirmation: "user_confirmed",
       },
     });
   });

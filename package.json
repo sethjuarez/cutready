@@ -26,7 +26,7 @@
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
-    "@draftline/client": "^0.1.8",
+    "@draftline/client": "^0.1.9",
     "@elucim/core": "^0.23.0",
     "@elucim/dsl": "^0.23.0",
     "@elucim/editor": "^0.23.0",

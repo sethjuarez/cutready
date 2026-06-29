@@ -17,7 +17,7 @@ use chrono::{DateTime, Utc};
 use rusqlite::{params, Connection, OpenFlags, OptionalExtension, Row};
 
 const AGENT_STATE_FILENAME: &str = "agent-state.db";
-const SCHEMA_VERSION: i32 = 2;
+const SCHEMA_VERSION: i32 = 3;
 const BUSY_TIMEOUT: Duration = Duration::from_millis(750);
 const MAX_COMPLETED_RUNS: usize = 100;
 const MAX_EVENTS_PER_RUN: usize = 1_000;
@@ -131,6 +131,21 @@ pub struct AgentRunDetail {
     pub verification_results: Vec<AgentVerificationResultRecord>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HistoryCleanupLedgerOperation {
+    Apply,
+    Undo,
+}
+
+impl HistoryCleanupLedgerOperation {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Apply => "apply",
+            Self::Undo => "undo",
+        }
+    }
+}
+
 impl AgentStateStore {
     pub fn for_project(
         repo_root: &Path,
@@ -175,6 +190,35 @@ impl AgentStateStore {
             .map_err(|e| format!("Could not configure agent state database timeout: {e}"))?;
         initialize_schema(&conn)?;
         Ok(db_path)
+    }
+
+    pub fn record_history_cleanup_result(
+        repo_root: &Path,
+        project_root: &Path,
+        operation: HistoryCleanupLedgerOperation,
+        result: &draftline::TimelineCleanupResult,
+    ) -> Result<(), String> {
+        let db_path = Self::ensure_database_for_project(repo_root, project_root)?;
+        let conn = Connection::open(&db_path)
+            .map_err(|e| format!("Could not open CutReady agent state database: {e}"))?;
+        conn.busy_timeout(BUSY_TIMEOUT)
+            .map_err(|e| format!("Could not configure agent state database timeout: {e}"))?;
+        let ledger_json = serde_json::to_string(result).map_err(|e| e.to_string())?;
+        conn.execute(
+            "INSERT INTO history_cleanup_ledgers
+                (plan_id, operation, created_at, old_head, new_head, ledger_json)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![
+                result.plan_id.to_string(),
+                operation.as_str(),
+                Utc::now().to_rfc3339(),
+                result.old_head.to_string(),
+                result.new_head.to_string(),
+                ledger_json,
+            ],
+        )
+        .map_err(|e| format!("Could not record history cleanup ledger: {e}"))?;
+        Ok(())
     }
 
     #[cfg(test)]
@@ -1035,6 +1079,19 @@ fn initialize_schema(conn: &Connection) -> Result<(), String> {
         );
         CREATE INDEX IF NOT EXISTS idx_agent_memories_category
             ON agent_memories (category, position);
+        CREATE TABLE IF NOT EXISTS history_cleanup_ledgers (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            plan_id TEXT NOT NULL,
+            operation TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            old_head TEXT NOT NULL,
+            new_head TEXT NOT NULL,
+            ledger_json TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_history_cleanup_ledgers_plan_id
+            ON history_cleanup_ledgers (plan_id);
+        CREATE INDEX IF NOT EXISTS idx_history_cleanup_ledgers_old_head
+            ON history_cleanup_ledgers (old_head);
         ",
     )
     .map_err(|e| format!("Could not initialize agent state schema: {e}"))?;
@@ -1380,6 +1437,60 @@ mod tests {
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .unwrap();
         assert_eq!(version, SCHEMA_VERSION);
+    }
+
+    #[test]
+    fn history_cleanup_ledger_is_recorded_for_stale_resolution() {
+        let project_root = tempfile::tempdir().unwrap().keep();
+        let old_head =
+            draftline::VersionId::from_canonical_string("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+                .unwrap();
+        let new_head =
+            draftline::VersionId::from_canonical_string("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
+                .unwrap();
+        let result = draftline::TimelineCleanupResult {
+            plan_id: draftline::CleanupPlanId::from_string("cleanup-test-plan").unwrap(),
+            old_head: old_head.clone(),
+            new_head: new_head.clone(),
+            backup_refs: vec![draftline::RefName::from(
+                "refs/draftline/backups/history-cleanup/main/cleanup-test-plan",
+            )],
+            ref_updates: Vec::new(),
+            commit_map: Vec::new(),
+            snapshot_map: Vec::new(),
+            warnings: Vec::new(),
+        };
+
+        AgentStateStore::record_history_cleanup_result(
+            &project_root,
+            &project_root,
+            HistoryCleanupLedgerOperation::Apply,
+            &result,
+        )
+        .unwrap();
+
+        let db_path = AgentStateStore::database_path_for_project(&project_root, &project_root);
+        let conn = Connection::open(db_path).unwrap();
+        let (operation, old_head_recorded, new_head_recorded, ledger_json): (
+            String,
+            String,
+            String,
+            String,
+        ) = conn
+            .query_row(
+                "SELECT operation, old_head, new_head, ledger_json
+                 FROM history_cleanup_ledgers
+                 WHERE plan_id = ?1",
+                params!["cleanup-test-plan"],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )
+            .unwrap();
+
+        assert_eq!(operation, "apply");
+        assert_eq!(old_head_recorded, old_head.to_string());
+        assert_eq!(new_head_recorded, new_head.to_string());
+        let stored: draftline::TimelineCleanupResult = serde_json::from_str(&ledger_json).unwrap();
+        assert_eq!(stored, result);
     }
 
     #[test]
