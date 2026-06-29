@@ -9,6 +9,14 @@
 Covector manages this changelog. Do not edit manually.
 Each release section is generated from `.changes/*.md` files.
 
+## [1.18.0](https://github.com/sethjuarez/cutready/compare/v1.17.0...v1.18.0) (2026-06-29)
+
+
+### Features
+
+* **mac:** use native traffic lights ([0611d4a](https://github.com/sethjuarez/cutready/commit/0611d4ab640b41b78f2201f55cfbdd227b3e8590))
+* **mac:** use native traffic lights ([7cf0b01](https://github.com/sethjuarez/cutready/commit/7cf0b0115ee5fb6c7ab658b80d9148abb26059b0))
+
 ## [1.17.0](https://github.com/sethjuarez/cutready/compare/v1.16.0...v1.17.0) (2026-06-29)
 
 
