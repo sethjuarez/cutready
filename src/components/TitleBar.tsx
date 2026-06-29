@@ -75,7 +75,7 @@ export function TitleBar({
     [appWindow],
   );
 
-  // macOS uses custom traffic lights so alignment is controlled by the titlebar layout.
+  // macOS lets the native titlebar own traffic lights; the layout keeps a safe area for them.
   if (isMac) {
     return (
       <div
@@ -86,11 +86,6 @@ export function TitleBar({
         }}
         onMouseDown={handleTitleBarMouseDown}
       >
-        <MacTrafficLightControls
-          onClose={handleClose}
-          onMinimize={handleMinimize}
-          onMaximize={handleMaximize}
-        />
         {/* Left: workspace/project breadcrumb */}
         <div className="flex items-center gap-2 shrink-0">
           <span className="flex h-[22px] items-center text-sm font-semibold leading-none tracking-tight text-[rgb(var(--color-text))]">CutReady</span>
@@ -153,77 +148,6 @@ export function TitleBar({
             </svg>
           </button>
         </div>
-      </div>
-    );
-  }
-
-  function MacTrafficLightControls({
-    onClose,
-    onMinimize,
-    onMaximize,
-  }: {
-    onClose: () => void;
-    onMinimize: () => void;
-    onMaximize: () => void;
-  }) {
-    const controls = [
-      {
-        label: "Close",
-        color: "var(--macos-traffic-light-close)",
-        borderColor: "var(--macos-traffic-light-close-border)",
-        glyph: "M4 4l4 4m0-4L4 8",
-        action: onClose,
-      },
-      {
-        label: "Minimize",
-        color: "var(--macos-traffic-light-minimize)",
-        borderColor: "var(--macos-traffic-light-minimize-border)",
-        glyph: "M3.5 6h5",
-        action: onMinimize,
-      },
-      {
-        label: "Maximize",
-        color: "var(--macos-traffic-light-maximize)",
-        borderColor: "var(--macos-traffic-light-maximize-border)",
-        glyph: "M4 8l4-4M8 4v3H5",
-        action: onMaximize,
-      },
-    ];
-
-    return (
-      <div
-        className="absolute left-5 top-1/2 flex -translate-y-1/2 items-center gap-2"
-        onMouseDown={(event) => event.stopPropagation()}
-      >
-        {controls.map((control) => (
-          <button
-            key={control.label}
-            type="button"
-            aria-label={control.label}
-            title={control.label}
-            onClick={control.action}
-            className="group inline-flex h-3 w-3 items-center justify-center rounded-full border transition-colors"
-            style={{
-              backgroundColor: control.color,
-              borderColor: control.borderColor,
-            }}
-          >
-            <svg
-              width="8"
-              height="8"
-              viewBox="0 0 12 12"
-              fill="none"
-              stroke="rgba(0,0,0,0.55)"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="opacity-0 transition-opacity group-hover:opacity-100"
-              aria-hidden="true"
-            >
-              <path d={control.glyph} />
-            </svg>
-          </button>
-        ))}
       </div>
     );
   }

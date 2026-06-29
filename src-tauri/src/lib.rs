@@ -22,7 +22,6 @@ const CUTREADY_DIAGNOSTICS_ENV: &str = "CUTREADY_DIAGNOSTICS";
 const AUDITAUR_ENV: &str = "AUDITAUR";
 const SETTINGS_FILE: &str = "settings.json";
 const AUDITAUR_DIAGNOSTICS_SETTING: &str = "auditaurDiagnosticsEnabled";
-const MACOS_WINDOW_CORNER_RADIUS: f64 = 12.0;
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub(crate) struct AuditaurDiagnosticsPolicy {
@@ -68,37 +67,6 @@ fn configure_auditaur_startup() -> AuditaurDiagnosticsPolicy {
         auditaur_flag_enabled,
         persisted_setting_enabled,
         settings_path: settings_path.map(|path| path.display().to_string()),
-    }
-}
-
-#[cfg(target_os = "macos")]
-fn apply_macos_window_rounding(window: &tauri::WebviewWindow) {
-    use objc2_app_kit::{NSColor, NSView, NSWindow};
-
-    let Ok(ns_window_ptr) = window.ns_window() else {
-        tracing::warn!("Could not get NSWindow handle for rounded macOS chrome");
-        return;
-    };
-    let Ok(ns_view_ptr) = window.ns_view() else {
-        tracing::warn!("Could not get NSView handle for rounded macOS chrome");
-        return;
-    };
-
-    unsafe {
-        let ns_window = &*ns_window_ptr.cast::<NSWindow>();
-        ns_window.setOpaque(false);
-        ns_window.setBackgroundColor(Some(&NSColor::clearColor()));
-
-        let ns_view = &*ns_view_ptr.cast::<NSView>();
-        ns_view.setWantsLayer(true);
-        let Some(layer) = ns_view.layer() else {
-            tracing::warn!("Could not get NSView layer for rounded macOS chrome");
-            return;
-        };
-
-        layer.setCornerRadius(MACOS_WINDOW_CORNER_RADIUS);
-        layer.setMasksToBounds(true);
-        ns_window.invalidateShadow();
     }
 }
 
@@ -243,6 +211,10 @@ pub fn run() {
         .plugin(
             tauri_plugin_window_state::Builder::new()
                 .with_denylist(&["capture", "preview"])
+                .with_state_flags(
+                    tauri_plugin_window_state::StateFlags::all()
+                        - tauri_plugin_window_state::StateFlags::DECORATIONS,
+                )
                 .build(),
         )
         .plugin(
@@ -364,13 +336,11 @@ pub fn run() {
                 )?;
             }
 
-            // Desktop builds use the React titlebar for deterministic cross-platform chrome.
-            #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
+            // Windows/Linux still use the React titlebar for deterministic custom chrome.
+            #[cfg(any(target_os = "windows", target_os = "linux"))]
             {
                 if let Some(window) = app.get_webview_window("main") {
                     let _ = window.set_decorations(false);
-                    #[cfg(target_os = "macos")]
-                    apply_macos_window_rounding(&window);
                 }
             }
 

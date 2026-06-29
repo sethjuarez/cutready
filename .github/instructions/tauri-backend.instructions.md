@@ -15,7 +15,9 @@ applyTo: "src-tauri/**"
 ## Tauri Configuration
 
 - App identifier: `com.cutready.app`
-- Main window: `decorations: false`, `shadow: true`, 1280×800 default, 800×600 minimum. Desktop builds use the React titlebar for deterministic cross-platform chrome; macOS renders custom traffic lights instead of mixing native controls with `titleBarStyle: "Overlay"` because Tauri documents OS-version-dependent titlebar heights for overlay mode.
+- Main window: 1280×800 default, 800×600 minimum, `shadow: true`. Windows/Linux use `decorations: false` and the React titlebar for deterministic custom chrome. macOS uses `tauri.macos.conf.json` with `decorations: true`, `titleBarStyle: "Overlay"`, `hiddenTitle: true`, and `trafficLightPosition` so AppKit owns the native traffic-light controls.
+- Do not let `tauri-plugin-window-state` restore or persist `StateFlags::DECORATIONS`; stale saved state can force macOS back to `decorated: false` and hide native traffic lights.
+- If native macOS traffic lights disappear, check the effective runtime decoration state before trying AppKit reparenting. The known failure mode is an old `.window-state.json` value with `"decorated": false`, which overrides the macOS overlay config at launch. The fix is to keep `StateFlags::DECORATIONS` excluded from window-state while leaving size, position, maximized, visible, and fullscreen restore enabled.
 - Dev server: Vite on `http://localhost:1420`.
 - Frontend dist directory: `../dist` (relative to src-tauri).
 - Capabilities defined in `capabilities/default.json`.
