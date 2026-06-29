@@ -166,24 +166,56 @@ fn reject_remote_url_credentials(url: &str) -> Result<(), String> {
 }
 
 fn try_gh_token() -> Option<String> {
-    let mut cmd = std::process::Command::new("gh");
-    cmd.args(["auth", "token"]);
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        cmd.creation_flags(0x08000000);
-    }
+    for candidate in gh_command_candidates() {
+        let mut cmd = std::process::Command::new(&candidate);
+        cmd.args(["auth", "token"]);
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            cmd.creation_flags(0x08000000);
+        }
 
-    match cmd.output() {
-        Ok(output) if output.status.success() => {
-            let token = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            if token.is_empty() {
-                None
-            } else {
-                Some(token)
+        match cmd.output() {
+            Ok(output) if output.status.success() => {
+                let token = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                if !token.is_empty() {
+                    return Some(token);
+                }
+            }
+            Ok(output) => {
+                tracing::debug!(
+                    gh = %candidate.display(),
+                    status = ?output.status.code(),
+                    "GitHub CLI token lookup failed"
+                );
+            }
+            Err(error) => {
+                tracing::debug!(
+                    gh = %candidate.display(),
+                    error = %error,
+                    "GitHub CLI token lookup could not start"
+                );
             }
         }
-        _ => None,
+    }
+
+    None
+}
+
+fn gh_command_candidates() -> Vec<PathBuf> {
+    #[cfg(not(target_os = "macos"))]
+    {
+        vec![PathBuf::from("gh")]
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        vec![
+            PathBuf::from("gh"),
+            PathBuf::from("/opt/homebrew/bin/gh"),
+            PathBuf::from("/usr/local/bin/gh"),
+            PathBuf::from("/usr/bin/gh"),
+        ]
     }
 }
 
