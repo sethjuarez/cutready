@@ -11,6 +11,7 @@ import {
   type ProviderSecretName,
   type SecretKey,
 } from "./useSecretStore";
+import { DEFAULT_TERMINAL_CUSTOM_THEME, type TerminalColorMode, type TerminalCustomTheme } from "../theme/terminalThemes";
 
 export interface AgentPreset {
   id: string;
@@ -100,8 +101,10 @@ export interface GlobalSettings {
   displayTerminalFontFamily: string;
   /** Terminal text size in px. */
   displayTerminalFontSize: number;
-  /** Terminal color mode: "console" | "app". */
-  displayTerminalColorMode: "console" | "app";
+  /** Terminal color mode: built-in schemes plus "custom". */
+  displayTerminalColorMode: TerminalColorMode;
+  /** Custom terminal key colors used when displayTerminalColorMode is "custom". */
+  displayTerminalCustomTheme: TerminalCustomTheme;
   /** API-reported context window (tokens) for the selected model. */
   aiContextLength: number;
   /** Vision mode: "off", "notes", or "notes_and_sketches". */
@@ -201,6 +204,7 @@ const defaultGlobalSettings: GlobalSettings = {
   displayTerminalFontFamily: '"CaskaydiaCove Nerd Font", "CaskaydiaMono Nerd Font", "Cascadia Code PL", "Cascadia Code", Consolas, monospace',
   displayTerminalFontSize: 12,
   displayTerminalColorMode: "console",
+  displayTerminalCustomTheme: DEFAULT_TERMINAL_CUSTOM_THEME,
   aiContextLength: 0,
   aiVisionMode: "notes_and_sketches",
   aiModelSupportsVision: "",

@@ -115,6 +115,12 @@ const mockSettingsStore: Record<string, unknown> = {
   displayTerminalFontFamily: '"CaskaydiaCove Nerd Font", "CaskaydiaMono Nerd Font", "Cascadia Code PL", "Cascadia Code", Consolas, monospace',
   displayTerminalFontSize: 12,
   displayTerminalColorMode: "console",
+  displayTerminalCustomTheme: {
+    background: "#0c0c0c",
+    foreground: "#cccccc",
+    cursor: "#ffffff",
+    selectionBackground: "#3a3d41",
+  },
 };
 
 /**
