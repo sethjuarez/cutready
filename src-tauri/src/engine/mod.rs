@@ -2,6 +2,7 @@ pub mod agent;
 pub mod agent_state;
 pub mod animation;
 pub mod automation;
+pub mod diagnostics_sanitizer;
 pub mod draftline_adapter;
 pub mod export;
 pub mod import;

@@ -9,7 +9,11 @@ use std::time::Duration;
 use tauri::State;
 use tauri_plugin_auditaur::auditaur_command;
 
-use crate::engine::{agent::tools::normalize_visual_document_for_save, project};
+use crate::engine::{
+    agent::tools::normalize_visual_document_for_save,
+    diagnostics_sanitizer::{sanitize_diagnostic_optional_text, sanitize_diagnostic_text},
+    project,
+};
 use crate::{AppState, AuditaurDiagnosticsPolicy};
 
 #[derive(Debug, Serialize)]
@@ -135,6 +139,9 @@ pub async fn get_diagnostics_policy(
 pub async fn get_auditaur_diagnostics() -> Result<AuditaurDiagnosticsSummary, String> {
     let mut notes = Vec::new();
     let Some(discovery) = find_current_auditaur_discovery(&mut notes)? else {
+        for note in &mut notes {
+            *note = sanitize_diagnostic_text(note);
+        }
         return Ok(AuditaurDiagnosticsSummary {
             session: None,
             counts: AuditaurDiagnosticsCounts::default(),
@@ -254,6 +261,17 @@ pub async fn get_auditaur_diagnostics() -> Result<AuditaurDiagnosticsSummary, St
         &mut notes,
     );
 
+    for note in &mut notes {
+        *note = sanitize_diagnostic_text(note);
+    }
+    tracing::info!(
+        frontend_errors = counts.frontend_errors,
+        failed_ipc = counts.failed_ipc,
+        failed_traces = counts.failed_traces,
+        warning_logs = counts.warning_logs,
+        "returning sanitized Auditaur diagnostics summary"
+    );
+
     Ok(AuditaurDiagnosticsSummary {
         session: Some(AuditaurSessionDiagnostics {
             session_id: discovery.session_id,
@@ -265,7 +283,7 @@ pub async fn get_auditaur_diagnostics() -> Result<AuditaurDiagnosticsSummary, St
                 .database_path
                 .parent()
                 .and_then(|path| directory_size(path).ok()),
-            database_path: discovery.database_path.display().to_string(),
+            database_path: sanitize_diagnostic_text(&discovery.database_path.display().to_string()),
             last_heartbeat_at: discovery.last_heartbeat_at,
         }),
         counts,
@@ -618,14 +636,14 @@ fn query_items(conn: &Connection, sql: &str) -> Result<Vec<AuditaurDiagnosticIte
         .query_map([], |row| {
             Ok(AuditaurDiagnosticItem {
                 timestamp_unix_nanos: row.get::<_, i64>(0)?.to_string(),
-                source: row.get(1)?,
-                kind: row.get(2)?,
-                title: row.get(3)?,
-                detail: row.get(4)?,
-                status: row.get(5)?,
-                trace_id: row.get(6)?,
-                span_id: row.get(7)?,
-                window_label: row.get(8)?,
+                source: sanitize_diagnostic_text(&row.get::<_, String>(1)?),
+                kind: sanitize_diagnostic_text(&row.get::<_, String>(2)?),
+                title: sanitize_diagnostic_text(&row.get::<_, String>(3)?),
+                detail: sanitize_diagnostic_optional_text(row.get(4)?),
+                status: sanitize_diagnostic_optional_text(row.get(5)?),
+                trace_id: sanitize_diagnostic_optional_text(row.get(6)?),
+                span_id: sanitize_diagnostic_optional_text(row.get(7)?),
+                window_label: sanitize_diagnostic_optional_text(row.get(8)?),
             })
         })
         .map_err(|e| format!("Diagnostics query failed: {e}"))?;

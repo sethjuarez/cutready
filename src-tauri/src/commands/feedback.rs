@@ -5,6 +5,8 @@ use std::{fs, io::Write};
 use tauri::Manager;
 use tauri_plugin_auditaur::auditaur_command;
 
+use crate::engine::diagnostics_sanitizer::{sanitize_diagnostic_text, sanitize_diagnostic_value};
+
 const GITHUB_COMMENT_CHUNK_BYTES: usize = 52_000;
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -24,13 +26,11 @@ pub struct FeedbackSystemInfo {
     pub os: String,
     pub os_family: String,
     pub arch: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub machine_name: Option<String>,
 }
 
 /// Append a feedback entry to `<app_data>/feedback.json`.
 #[auditaur_command(skip_all, err)]
-pub fn save_feedback(app: tauri::AppHandle, entry: FeedbackEntry) -> Result<(), String> {
+pub fn save_feedback(app: tauri::AppHandle, mut entry: FeedbackEntry) -> Result<(), String> {
     let data_dir = app
         .path()
         .app_data_dir()
@@ -45,6 +45,9 @@ pub fn save_feedback(app: tauri::AppHandle, entry: FeedbackEntry) -> Result<(), 
         vec![]
     };
 
+    if let Some(debug_log) = entry.debug_log.as_mut() {
+        *debug_log = redact_auditaur_summary(debug_log);
+    }
     entries.push(entry);
 
     let json =
@@ -68,8 +71,13 @@ pub fn list_feedback(app: tauri::AppHandle) -> Result<Vec<FeedbackEntry>, String
     }
 
     let content = fs::read_to_string(&path).map_err(|e| format!("Read error: {e}"))?;
-    let entries: Vec<FeedbackEntry> =
+    let mut entries: Vec<FeedbackEntry> =
         serde_json::from_str(&content).map_err(|e| format!("Parse error: {e}"))?;
+    for entry in &mut entries {
+        if let Some(debug_log) = entry.debug_log.as_mut() {
+            *debug_log = redact_auditaur_summary(debug_log);
+        }
+    }
     Ok(entries)
 }
 
@@ -118,7 +126,6 @@ pub fn get_feedback_system_info(app: tauri::AppHandle) -> Result<FeedbackSystemI
         os: std::env::consts::OS.to_string(),
         os_family: std::env::consts::FAMILY.to_string(),
         arch: std::env::consts::ARCH.to_string(),
-        machine_name: machine_name(),
     })
 }
 
@@ -145,6 +152,12 @@ pub async fn create_github_issue(
     if !is_safe_github_repo(&repo) {
         return Err("Invalid GitHub repository. Expected owner/repo.".into());
     }
+    let body = sanitize_diagnostic_text(&body);
+    tracing::info!(
+        body_bytes = body.len(),
+        has_diagnostics_attachment = diagnostics_attachment.is_some(),
+        "creating feedback issue with sanitized body"
+    );
 
     let mut cmd = tokio::process::Command::new("gh");
     cmd.args([
@@ -232,6 +245,11 @@ async fn post_diagnostics_comments(
     })?;
     let chunks = chunk_text_by_bytes(redacted, GITHUB_COMMENT_CHUNK_BYTES);
     let chunk_count = chunks.len();
+    tracing::info!(
+        diagnostics_bytes = redacted.len(),
+        chunk_count,
+        "posting sanitized diagnostics comments"
+    );
     for (index, chunk) in chunks.iter().enumerate() {
         let body = if chunk_count == 1 {
             format!("## Sanitized debug diagnostics\n\n```json\n{}\n```", chunk)
@@ -319,14 +337,6 @@ fn chunk_text_by_bytes(text: &str, max_bytes: usize) -> Vec<String> {
     chunks
 }
 
-fn machine_name() -> Option<String> {
-    ["COMPUTERNAME", "HOSTNAME"]
-        .iter()
-        .find_map(|key| std::env::var(key).ok())
-        .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty())
-}
-
 fn is_safe_github_repo(repo: &str) -> bool {
     let Some((owner, name)) = repo.split_once('/') else {
         return false;
@@ -370,6 +380,10 @@ pub fn export_logs(
         zip.start_file("auditaur-redacted-summary.json", options)
             .map_err(|e| format!("Zip error: {e}"))?;
         let redacted = redact_auditaur_summary(&log_text);
+        tracing::info!(
+            diagnostics_bytes = redacted.len(),
+            "writing sanitized diagnostics summary to exported logs"
+        );
         zip.write_all(redacted.as_bytes())
             .map_err(|e| format!("Write error: {e}"))?;
     }
@@ -439,36 +453,17 @@ fn add_dir_entries_to_zip(
 
 fn redact_auditaur_summary(summary: &str) -> String {
     let Ok(mut value) = serde_json::from_str::<serde_json::Value>(summary) else {
-        return summary.to_string();
+        return sanitize_diagnostic_text(summary);
     };
-    redact_paths_in_value(&mut value);
-    serde_json::to_string_pretty(&value).unwrap_or_else(|_| summary.to_string())
-}
-
-fn redact_paths_in_value(value: &mut serde_json::Value) {
-    match value {
-        serde_json::Value::Object(map) => {
-            for (key, value) in map.iter_mut() {
-                if matches!(key.as_str(), "database_path" | "settings_path") {
-                    *value = serde_json::Value::String("<redacted local path>".to_string());
-                } else {
-                    redact_paths_in_value(value);
-                }
-            }
-        }
-        serde_json::Value::Array(items) => {
-            for value in items {
-                redact_paths_in_value(value);
-            }
-        }
-        _ => {}
-    }
+    sanitize_diagnostic_value(&mut value);
+    serde_json::to_string_pretty(&value).unwrap_or_else(|_| sanitize_diagnostic_text(summary))
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
         chunk_text_by_bytes, is_safe_github_repo, issue_number_from_url, redact_auditaur_summary,
+        FeedbackSystemInfo,
     };
 
     #[test]
@@ -499,6 +494,41 @@ mod tests {
 
         assert!(!redacted.contains("Users\\\\person"));
         assert!(redacted.contains("<redacted local path>"));
+    }
+
+    #[test]
+    fn redacted_auditaur_summary_removes_secret_and_raw_detail_values() {
+        let summary = r#"{
+          "failed_ipc": [{
+            "kind": "create_visual",
+            "detail": "Authorization: Bearer secret-token failed at C:\\Users\\person\\project\\file.ts"
+          }],
+          "warning_logs": [{
+            "api_key": "sk-secret",
+            "title": "request token=secret-token"
+          }]
+        }"#;
+
+        let redacted = redact_auditaur_summary(summary);
+
+        assert!(!redacted.contains("secret-token"));
+        assert!(!redacted.contains("sk-secret"));
+        assert!(!redacted.contains("Users\\\\person"));
+        assert!(redacted.contains("<redacted secret>"));
+        assert!(redacted.contains("<redacted local path>"));
+    }
+
+    #[test]
+    fn feedback_system_info_omits_machine_name() {
+        let info = FeedbackSystemInfo {
+            app_version: "1.0.0".to_string(),
+            os: "windows".to_string(),
+            os_family: "windows".to_string(),
+            arch: "x86_64".to_string(),
+        };
+        let value = serde_json::to_value(info).unwrap();
+
+        assert!(value.get("machine_name").is_none());
     }
 
     #[test]
