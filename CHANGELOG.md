@@ -10,6 +10,24 @@
 
 Release Please manages this changelog. Do not edit manually.
 
+## [1.21.0](https://github.com/sethjuarez/cutready/compare/v1.20.0...v1.21.0) (2026-06-30)
+
+
+### Features
+
+* **editor:** enlarge project image picker ([984884c](https://github.com/sethjuarez/cutready/commit/984884c36a5764fa2a03103b5f6faef6f8844822))
+* **feedback:** support screenshot attachments ([792746d](https://github.com/sethjuarez/cutready/commit/792746da2ca5a00e190d0e901ae0f87cae7ac823))
+* **settings:** add terminal color schemes ([19856ff](https://github.com/sethjuarez/cutready/commit/19856fff957e7bf16166d373e38869288a58b18f))
+
+
+### Bug Fixes
+
+* **agent:** allow ask mode write approval ([9711f2e](https://github.com/sethjuarez/cutready/commit/9711f2e366bad43fed1e7f77de4ec335402cd3c1))
+* **diagnostics:** sanitize feedback diagnostics ([e3b242c](https://github.com/sethjuarez/cutready/commit/e3b242c4d4b453a6afef4412782b39a52cb8189f))
+* keep terminal alive across navigation ([af772c6](https://github.com/sethjuarez/cutready/commit/af772c66347b59a018078901ec6c85f1f9a7056f))
+* **release:** dedupe release-please changelog entries ([f3f4584](https://github.com/sethjuarez/cutready/commit/f3f4584dbb03f4cf1dff94bce203856105f6ffde))
+* **storyboard:** render section descriptions read-only ([5af77f8](https://github.com/sethjuarez/cutready/commit/5af77f80b23bfd18287be6555853dbb0b5bb7c9c))
+
 ## [1.20.0](https://github.com/sethjuarez/cutready/compare/v1.19.0...v1.20.0) (2026-06-30)
 
 
