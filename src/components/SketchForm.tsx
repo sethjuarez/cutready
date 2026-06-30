@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke, listen } from "../services/tauri";
 import { open } from "@tauri-apps/plugin-dialog";
 import { SafeMarkdown } from "./SafeMarkdown";
-import { ChevronLeft, Sparkles, Monitor, Plus, X, Folder } from "lucide-react";
+import { ChevronLeft, Sparkles, Monitor, Plus, X, Folder, Check, Film, Image as ImageIcon } from "lucide-react";
 import { shouldSuppressEditorFlush, useAppStore } from "../stores/appStore";
 import { useToastStore } from "../stores/toastStore";
 import { useSettings } from "../hooks/useSettings";
@@ -36,6 +36,210 @@ interface MonitorInfo {
 }
 
 const PREVIEW_DATA_KEY = "cutready:preview-data";
+
+type ProjectAsset = { path: string; size: number; assetType: string };
+
+interface SketchRowAssetPickerProps {
+  assets: ProjectAsset[];
+  projectRoot: string | null;
+  selectedPath: string | null;
+  onSelectedPathChange: (path: string) => void;
+  onInsert: (asset: ProjectAsset) => void;
+  onBrowse: () => void | Promise<void>;
+  onCancel: () => void;
+}
+
+export function SketchRowAssetPicker({
+  assets,
+  projectRoot,
+  selectedPath,
+  onSelectedPathChange,
+  onInsert,
+  onBrowse,
+  onCancel,
+}: SketchRowAssetPickerProps) {
+  const selectedAsset = assets.find((asset) => asset.path === selectedPath) ?? assets[0] ?? null;
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onCancel();
+      if ((event.metaKey || event.ctrlKey) && event.key === "Enter" && selectedAsset) {
+        event.preventDefault();
+        onInsert(selectedAsset);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onCancel, onInsert, selectedAsset]);
+
+  return (
+    <div
+      className="fixed inset-0 z-modal flex items-center justify-center p-4 bg-[rgb(var(--color-overlay-scrim)/0.55)]"
+      onClick={onCancel}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="sketch-row-asset-picker-title"
+        className="bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-2xl shadow-2xl w-full max-h-[calc(100vh-32px)] flex flex-col overflow-hidden"
+        style={{ width: "min(1180px, calc(100vw - 32px))" }}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-4 px-5 py-4 border-b border-[rgb(var(--color-border))]">
+          <div>
+            <h2 id="sketch-row-asset-picker-title" className="text-sm font-semibold text-[rgb(var(--color-text))]">
+              Pick an image or visual
+            </h2>
+            <p className="mt-1 text-xs text-[rgb(var(--color-text-secondary))]">
+              Preview workspace media at demo scale before inserting it into the row.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onCancel}
+            className="rounded-lg p-1.5 text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))] transition-colors"
+            aria-label="Cancel"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px]">
+          <section className="min-h-0 border-b lg:border-b-0 lg:border-r border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]/45 p-4">
+            {selectedAsset ? (
+              <div className="flex h-full min-h-[360px] flex-col rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] overflow-hidden">
+                <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-[rgb(var(--color-border))]">
+                  <div className="min-w-0">
+                    <div className="text-xs font-medium text-[rgb(var(--color-text-secondary))]">
+                      Previewing selected {selectedAsset.assetType === "visual" ? "visual" : "image"}
+                    </div>
+                    <div className="truncate text-sm font-medium text-[rgb(var(--color-text))]">{selectedAsset.path}</div>
+                  </div>
+                  <span className="shrink-0 rounded-full border border-[rgb(var(--color-border))] px-2 py-1 text-[10px] uppercase tracking-wide text-[rgb(var(--color-text-secondary))]">
+                    {selectedAsset.assetType === "visual" ? "Visual" : "Image"}
+                  </span>
+                </div>
+                <div className="flex min-h-0 flex-1 items-center justify-center p-4">
+                  {selectedAsset.assetType === "visual" ? (
+                    <div className="h-full max-h-[62vh] min-h-[300px] w-full">
+                      <VisualCell visualPath={selectedAsset.path} mode="full" className="rounded-lg" />
+                    </div>
+                  ) : (
+                    <ProjectImage
+                      relativePath={selectedAsset.path}
+                      projectRoot={projectRoot}
+                      alt={selectedAsset.path.split("/").pop() ?? "Selected workspace image"}
+                      className="max-h-[62vh] w-full rounded-lg object-contain"
+                    />
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="flex h-full min-h-[360px] items-center justify-center rounded-xl border border-dashed border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] p-8 text-center">
+                <div>
+                  <ImageIcon className="mx-auto h-8 w-8 text-[rgb(var(--color-text-secondary))]" />
+                  <div className="mt-3 text-sm font-medium text-[rgb(var(--color-text))]">No images or visuals in workspace</div>
+                  <div className="mt-1 text-xs text-[rgb(var(--color-text-secondary))]">
+                    Browse files to import a screenshot from outside the project.
+                  </div>
+                </div>
+              </div>
+            )}
+          </section>
+
+          <aside className="flex min-h-0 flex-col">
+            <div className="px-4 py-3 border-b border-[rgb(var(--color-border))]">
+              <div className="text-xs font-medium text-[rgb(var(--color-text))]">Workspace assets</div>
+              <div className="text-[11px] text-[rgb(var(--color-text-secondary))]">{assets.length} available</div>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto p-3">
+              {assets.length > 0 ? (
+                <div className="grid grid-cols-2 gap-2 lg:grid-cols-1">
+                  {assets.map((asset) => {
+                    const isSelected = asset.path === selectedAsset?.path;
+                    const assetName = asset.path.split("/").pop() ?? asset.path;
+
+                    return (
+                      <button
+                        type="button"
+                        key={asset.path}
+                        onClick={() => onSelectedPathChange(asset.path)}
+                        onDoubleClick={() => onInsert(asset)}
+                        className={`group rounded-xl border text-left overflow-hidden transition-colors ${
+                          isSelected
+                            ? "border-[rgb(var(--color-accent))] bg-[rgb(var(--color-accent))]/10"
+                            : "border-[rgb(var(--color-border))] hover:border-[rgb(var(--color-accent))]/70 hover:bg-[rgb(var(--color-surface-alt))]"
+                        }`}
+                        aria-pressed={isSelected}
+                        aria-label={`Preview ${assetName}`}
+                        title={asset.path}
+                      >
+                        <div className="aspect-video bg-[rgb(var(--color-surface-alt))]">
+                          {asset.assetType === "visual" ? (
+                            <VisualCell visualPath={asset.path} mode="thumbnail" className="!w-full !h-full !rounded-none !border-0" />
+                          ) : (
+                            <ProjectImage
+                              relativePath={asset.path}
+                              projectRoot={projectRoot}
+                              alt=""
+                              className="h-full w-full object-cover"
+                            />
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 px-2.5 py-2">
+                          {asset.assetType === "visual" ? (
+                            <Film className="h-3.5 w-3.5 shrink-0 text-[rgb(var(--color-accent))]" />
+                          ) : (
+                            <ImageIcon className="h-3.5 w-3.5 shrink-0 text-[rgb(var(--color-text-secondary))] group-hover:text-[rgb(var(--color-accent))]" />
+                          )}
+                          <span className="min-w-0 flex-1 truncate text-[11px] text-[rgb(var(--color-text))]">{assetName}</span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="rounded-xl border border-dashed border-[rgb(var(--color-border))] p-4 text-center text-xs text-[rgb(var(--color-text-secondary))]">
+                  No workspace media yet.
+                </div>
+              )}
+            </div>
+          </aside>
+        </div>
+
+        <div className="flex flex-col-reverse gap-2 border-t border-[rgb(var(--color-border))] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <button
+            type="button"
+            onClick={() => void onBrowse()}
+            className="inline-flex items-center justify-center gap-1.5 text-xs text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] px-3 py-2 rounded-lg border border-dashed border-[rgb(var(--color-border))] hover:border-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/5 transition-colors"
+          >
+            <Folder className="w-3.5 h-3.5" />
+            Browse files...
+          </button>
+          <div className="flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={onCancel}
+              className="rounded-lg border border-[rgb(var(--color-border))] px-3 py-2 text-xs font-medium text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))] transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => selectedAsset && onInsert(selectedAsset)}
+              disabled={!selectedAsset}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-[rgb(var(--color-accent))] px-3 py-2 text-xs font-medium text-[rgb(var(--color-accent-fg))] transition-colors hover:bg-[rgb(var(--color-accent-hover))] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Check className="w-3.5 h-3.5" />
+              Insert
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 /**
  * SketchForm — structured editor for a single sketch.
@@ -384,15 +588,19 @@ The Actions describe what happens on screen — use them as visual design hints.
 
   // Image/visual picker state
   const [imagePickerRowIdx, setImagePickerRowIdx] = useState<number | null>(null);
-  const [projectAssets, setProjectAssets] = useState<{ path: string; size: number; assetType: string }[]>([]);
+  const [projectAssets, setProjectAssets] = useState<ProjectAsset[]>([]);
+  const [selectedAssetPath, setSelectedAssetPath] = useState<string | null>(null);
 
   const handlePickImage = useCallback(async (rowIndex: number) => {
     setImagePickerRowIdx(rowIndex);
     try {
       const images = await invoke<{ path: string; size: number; referencedBy: string[]; assetType: string }[]>("list_project_images");
-      setProjectAssets(images.map((i) => ({ path: i.path, size: i.size, assetType: i.assetType })));
+      const assets = images.map((i) => ({ path: i.path, size: i.size, assetType: i.assetType }));
+      setProjectAssets(assets);
+      setSelectedAssetPath(assets[0]?.path ?? null);
     } catch {
       setProjectAssets([]);
+      setSelectedAssetPath(null);
     }
   }, []);
 
@@ -406,6 +614,7 @@ The Actions describe what happens on screen — use them as visual design hints.
     }
     handleRowsChange(updated);
     setImagePickerRowIdx(null);
+    setSelectedAssetPath(null);
   }, [imagePickerRowIdx, localRows, handleRowsChange]);
 
   const handleBrowseImage = useCallback(async (rowIndex: number) => {
@@ -808,61 +1017,24 @@ The row already has a visual and design_plan. You may read the sketch for contex
 
       {/* Asset picker overlay — screenshots + visuals */}
       {imagePickerRowIdx !== null && (
-        <div className="fixed inset-0 z-modal flex items-center justify-center bg-[rgb(var(--color-overlay-scrim)/0.4)]" onClick={() => setImagePickerRowIdx(null)}>
-          <div className="bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-xl shadow-2xl max-w-md w-full max-h-[60vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-4 py-3 border-b border-[rgb(var(--color-border))]">
-              <span className="text-sm font-medium text-[rgb(var(--color-text))]">Pick an image or visual</span>
-              <button onClick={() => setImagePickerRowIdx(null)} className="text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))]">
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </div>
-            <div className="flex-1 overflow-y-auto p-3">
-              {projectAssets.length === 0 ? (
-                <div className="text-center text-sm text-[rgb(var(--color-text-secondary))] py-8">No images or visuals in workspace</div>
-              ) : (
-                <div className="grid grid-cols-3 gap-2">
-                  {projectAssets.map((asset) => (
-                    <button
-                      key={asset.path}
-                      onClick={() => handleAssetPicked(asset)}
-                      className="rounded-lg border border-[rgb(var(--color-border))] hover:border-[rgb(var(--color-accent))] overflow-hidden transition-colors group"
-                      title={asset.path}
-                    >
-                      {asset.assetType === "visual" ? (
-                        <div className="w-full aspect-video">
-                          <VisualCell visualPath={asset.path} mode="thumbnail" className="!w-full !h-full !rounded-none" />
-                        </div>
-                      ) : (
-                        <ProjectImage
-                          relativePath={asset.path}
-                          projectRoot={projectRoot}
-                          alt={asset.path.split("/").pop() ?? ""}
-                          className="w-full aspect-video object-cover"
-                        />
-                      )}
-                      <div className="px-1.5 py-1 text-[10px] text-[rgb(var(--color-text-secondary))] group-hover:text-[rgb(var(--color-accent))] truncate">
-                        {asset.assetType === "visual" ? "🎬 " : ""}{asset.path.split("/").pop()}
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-            <div className="px-3 pb-3 pt-1 border-t border-[rgb(var(--color-border))]">
-              <button
-                onClick={async () => {
-                  if (imagePickerRowIdx === null) return;
-                  setImagePickerRowIdx(null);
-                  await handleBrowseImage(imagePickerRowIdx);
-                }}
-                className="w-full flex items-center justify-center gap-1.5 text-xs text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] px-3 py-2 rounded-lg border border-dashed border-[rgb(var(--color-border))] hover:border-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/5 transition-colors"
-              >
-                <Folder className="w-3 h-3" />
-                Browse files...
-              </button>
-            </div>
-          </div>
-        </div>
+        <SketchRowAssetPicker
+          assets={projectAssets}
+          projectRoot={projectRoot}
+          selectedPath={selectedAssetPath}
+          onSelectedPathChange={setSelectedAssetPath}
+          onInsert={handleAssetPicked}
+          onCancel={() => {
+            setImagePickerRowIdx(null);
+            setSelectedAssetPath(null);
+          }}
+          onBrowse={async () => {
+            if (imagePickerRowIdx === null) return;
+            const rowIndex = imagePickerRowIdx;
+            setImagePickerRowIdx(null);
+            setSelectedAssetPath(null);
+            await handleBrowseImage(rowIndex);
+          }}
+        />
       )}
 
       {/* Visual generation instructions popup */}
