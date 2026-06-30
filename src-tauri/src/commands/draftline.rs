@@ -483,6 +483,42 @@ pub async fn apply_history_cleanup(
 }
 
 #[auditaur_command(skip_all)]
+pub async fn preflight_history_cleanup_remote_impact(
+    request: contract::HistoryCleanupRemoteImpactRequest,
+    app: AppHandle,
+) -> contract::TauriCommandResult<draftline::HistoryCleanupRemoteImpact> {
+    let context = context_for_workspace(&request.workspace_path, app)?;
+    contract::into_tauri_result(contract::preflight_history_cleanup_remote_impact_with_context(
+        &context, request,
+    ))
+}
+
+#[auditaur_command(skip_all)]
+pub async fn preflight_publish_history_cleanup(
+    request: contract::PublishHistoryCleanupPreflightRequest,
+    app: AppHandle,
+) -> contract::TauriCommandResult<draftline::HistoryCleanupPublishPreflight> {
+    let context = context_for_workspace(&request.workspace_path, app)?;
+    contract::into_tauri_result(contract::preflight_publish_history_cleanup_with_context(
+        &context, request,
+    ))
+}
+
+#[auditaur_command(skip_all)]
+pub async fn publish_history_cleanup(
+    request: contract::PublishHistoryCleanupRequest,
+    app: AppHandle,
+    lock: State<'_, ProjectLock>,
+) -> contract::TauriCommandResult<draftline::HistoryCleanupPublishResult> {
+    let _guard = lock.0.lock().await;
+    let mut context = context_for_workspace(&request.workspace_path, app)?;
+    contract::into_tauri_result(contract::publish_history_cleanup_with_context(
+        &mut context,
+        request,
+    ))
+}
+
+#[auditaur_command(skip_all)]
 pub async fn resolve_rewritten_version(
     request: contract::ResolveRewrittenVersionRequest,
     app: AppHandle,

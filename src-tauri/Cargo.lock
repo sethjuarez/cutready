@@ -1265,7 +1265,7 @@ dependencies = [
 
 [[package]]
 name = "cutready"
-version = "1.18.0"
+version = "1.19.0"
 dependencies = [
  "agentive",
  "anyhow",
@@ -1621,9 +1621,9 @@ dependencies = [
 
 [[package]]
 name = "draftline"
-version = "0.2.10"
+version = "0.2.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "30fa3149945299746cae64dbd58fa0bf4a898fbc9ea8cfca8a16525cc2542c30"
+checksum = "a109980dcebf24936a59f496bd8e2996d70bd67b00fc71c1773d4366b24e8ea0"
 dependencies = [
  "git2",
  "serde",

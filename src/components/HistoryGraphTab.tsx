@@ -325,7 +325,7 @@ export function HistoryGraphTab() {
       ? `\n\nWarnings:\n${cleanupPreview.warnings.map((warning) => `- ${warning.message}`).join("\n")}`
       : "";
     const remoteText = currentRemote
-      ? "\n\nThis compacts local history first. Publishing rewritten history to the remote may require a guarded force/lease push workflow; normal sync may reject it if the remote already has the old snapshots."
+      ? "\n\nThis compacts local history first. Use Sync/Push afterward to publish the compacted history through Draftline's guarded remote update."
       : "";
     const confirmed = await confirm({
       title: "Apply compacted history?",
@@ -813,7 +813,7 @@ function CleanupStatus({
   } else if (cleanupPointCount === 1 && loadingCandidates) {
     message = "First point selected. Finding valid Draftline range targets...";
   } else if (cleanupPointCount === 1 && validCandidateCount > 0 && currentRemote && sharedHistoryCandidateCount > 0) {
-    message = `${validCandidateCount} valid target${validCandidateCount === 1 ? "" : "s"} found; ${sharedHistoryCandidateCount} touch published history and will stay local unless you later use guarded publish.`;
+    message = `${validCandidateCount} valid target${validCandidateCount === 1 ? "" : "s"} found; ${sharedHistoryCandidateCount} touch published history and can be shared afterward with guarded publish.`;
   } else if (cleanupPointCount === 1 && validCandidateCount > 0) {
     message = `First point selected. Choose one of ${validCandidateCount} valid Draftline range target${validCandidateCount === 1 ? "" : "s"}.`;
   } else if (cleanupPointCount === 1) {
@@ -823,7 +823,7 @@ function CleanupStatus({
     message = "Choose two points that form a contiguous active-timeline range.";
     className = "text-warning";
   } else if (currentRemote) {
-    message = "Compaction is local-first. Publishing rewritten history may need a guarded remote update.";
+    message = "Compaction is local-first. Sync/Push will publish rewritten history with Draftline's guarded remote update.";
   }
 
   if (cleanupError) {

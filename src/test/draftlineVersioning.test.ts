@@ -25,8 +25,11 @@ import {
   hasDraftlineShelf,
   popDraftlineShelf,
   preflightDraftlineUndoSnapshotCleanup,
+  preflightDraftlinePublishSnapshotCleanup,
+  preflightDraftlineSnapshotCleanupRemoteImpact,
   preflightDraftlineRenameVariation,
   applyDraftlineSnapshotCleanup,
+  publishDraftlineSnapshotCleanup,
   previewDraftlineSnapshotCleanup,
   preflightDraftlineSwitchVariation,
   previewDraftlineVersion,
@@ -529,6 +532,93 @@ describe("draftlineVersioning", () => {
           preserve_named_branches: true,
           preserve_merge_boundaries: true,
         },
+      },
+    });
+  });
+
+  it("preflights and publishes compacted history through Draftline guarded remote cleanup APIs", async () => {
+    const remoteImpact = {
+      remote: "origin",
+      variation: "main",
+      tracking_ref: "refs/remotes/origin/main",
+      upstream_head: "1111111111111111111111111111111111111111",
+      local_head: "3333333333333333333333333333333333333333",
+      replacement_head: "3333333333333333333333333333333333333333",
+      selected: {
+        published_count: 1,
+        private_count: 0,
+        published_versions: ["1111111111111111111111111111111111111111"],
+        private_versions: [],
+      },
+      descendants: {
+        published_count: 0,
+        private_count: 0,
+        published_versions: [],
+        private_versions: [],
+      },
+      publish_status: "shared_history_rewrite_required",
+      warnings: [],
+    };
+    const token = {
+      plan_id: "cleanup-plan-1",
+      remote: "origin",
+      variation: "main",
+      expected_remote_oid: "1111111111111111111111111111111111111111",
+      replacement_oid: "3333333333333333333333333333333333333333",
+      support_ref_token: { remote: "origin", refs: [] },
+    };
+    const publishPreflight = {
+      plan_id: "cleanup-plan-1",
+      remote: "origin",
+      variation: "main",
+      expected_remote_oid: token.expected_remote_oid,
+      replacement_oid: token.replacement_oid,
+      remote_impact: remoteImpact,
+      support_refs: [],
+      token,
+      can_publish: true,
+    };
+    const publishResult = {
+      plan_id: "cleanup-plan-1",
+      remote: "origin",
+      variation: "main",
+      expected_remote_oid: token.expected_remote_oid,
+      replacement_oid: token.replacement_oid,
+      support_refs: [],
+      ref_updates: [{
+        name: "refs/heads/main",
+        old: token.expected_remote_oid,
+        new: token.replacement_oid,
+      }],
+    };
+    mockInvoke
+      .mockResolvedValueOnce(remoteImpact)
+      .mockResolvedValueOnce(publishPreflight)
+      .mockResolvedValueOnce(publishResult);
+
+    await expect(preflightDraftlineSnapshotCleanupRemoteImpact("cleanup-plan-1", "origin")).resolves.toEqual(remoteImpact);
+    await expect(preflightDraftlinePublishSnapshotCleanup("cleanup-plan-1", "origin")).resolves.toEqual(publishPreflight);
+    await expect(publishDraftlineSnapshotCleanup(token)).resolves.toEqual(publishResult);
+
+    expect(mockInvoke).toHaveBeenNthCalledWith(1, "preflight_history_cleanup_remote_impact", {
+      request: {
+        workspace_path: WORKSPACE,
+        plan_id: "cleanup-plan-1",
+        remote: "origin",
+      },
+    });
+    expect(mockInvoke).toHaveBeenNthCalledWith(2, "preflight_publish_history_cleanup", {
+      request: {
+        workspace_path: WORKSPACE,
+        plan_id: "cleanup-plan-1",
+        remote: "origin",
+      },
+    });
+    expect(mockInvoke).toHaveBeenNthCalledWith(3, "publish_history_cleanup", {
+      request: {
+        workspace_path: WORKSPACE,
+        token,
+        confirmation: "user_confirmed",
       },
     });
   });

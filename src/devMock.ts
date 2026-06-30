@@ -413,6 +413,66 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
         }],
         warnings: [],
       };
+    case "preflight_history_cleanup_remote_impact":
+      return {
+        remote: (args as { request?: { remote?: string } })?.request?.remote ?? "origin",
+        variation: "main",
+        tracking_ref: "refs/remotes/origin/main",
+        upstream_head: "def456def456def456def456def456def456def4",
+        local_head: "clean456clean456clean456clean456clean456clean456",
+        replacement_head: "clean456clean456clean456clean456clean456clean456",
+        selected: { published_count: 1, private_count: 0, published_versions: ["def456def456def456def456def456def456def4"], private_versions: [] },
+        descendants: { published_count: 0, private_count: 0, published_versions: [], private_versions: [] },
+        publish_status: "shared_history_rewrite_required",
+        warnings: [],
+      };
+    case "preflight_publish_history_cleanup":
+      return {
+        plan_id: (args as { request?: { plan_id?: string } })?.request?.plan_id ?? "mock-cleanup-plan",
+        remote: (args as { request?: { remote?: string } })?.request?.remote ?? "origin",
+        variation: "main",
+        expected_remote_oid: "def456def456def456def456def456def456def4",
+        replacement_oid: "clean456clean456clean456clean456clean456clean456",
+        remote_impact: {
+          remote: (args as { request?: { remote?: string } })?.request?.remote ?? "origin",
+          variation: "main",
+          tracking_ref: "refs/remotes/origin/main",
+          upstream_head: "def456def456def456def456def456def456def4",
+          local_head: "clean456clean456clean456clean456clean456clean456",
+          replacement_head: "clean456clean456clean456clean456clean456clean456",
+          selected: { published_count: 1, private_count: 0, published_versions: ["def456def456def456def456def456def456def4"], private_versions: [] },
+          descendants: { published_count: 0, private_count: 0, published_versions: [], private_versions: [] },
+          publish_status: "shared_history_rewrite_required",
+          warnings: [],
+        },
+        support_refs: [],
+        can_publish: true,
+        token: {
+          plan_id: (args as { request?: { plan_id?: string } })?.request?.plan_id ?? "mock-cleanup-plan",
+          remote: (args as { request?: { remote?: string } })?.request?.remote ?? "origin",
+          variation: "main",
+          expected_remote_oid: "def456def456def456def456def456def456def4",
+          replacement_oid: "clean456clean456clean456clean456clean456clean456",
+          support_ref_token: {
+            remote: (args as { request?: { remote?: string } })?.request?.remote ?? "origin",
+            refs: [],
+          },
+        },
+      };
+    case "publish_history_cleanup":
+      return {
+        plan_id: (args as { request?: { token?: { plan_id?: string } } })?.request?.token?.plan_id ?? "mock-cleanup-plan",
+        remote: (args as { request?: { token?: { remote?: string } } })?.request?.token?.remote ?? "origin",
+        variation: "main",
+        expected_remote_oid: "def456def456def456def456def456def456def4",
+        replacement_oid: "clean456clean456clean456clean456clean456clean456",
+        support_refs: [],
+        ref_updates: [{
+          name: "refs/heads/main",
+          old: "def456def456def456def456def456def456def4",
+          new: "clean456clean456clean456clean456clean456clean456",
+        }],
+      };
     case "resolve_deep_link":
       return null;
     case "save":
