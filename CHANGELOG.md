@@ -10,6 +10,13 @@
 
 Release Please manages this changelog. Do not edit manually.
 
+## [1.21.1](https://github.com/sethjuarez/cutready/compare/v1.21.0...v1.21.1) (2026-06-30)
+
+
+### Bug Fixes
+
+* **editor:** enlarge sketch row asset picker ([41aa2ba](https://github.com/sethjuarez/cutready/commit/41aa2ba522e135a0d6b9cee228e2c790c799a868))
+
 ## [1.21.0](https://github.com/sethjuarez/cutready/compare/v1.20.0...v1.21.0) (2026-06-30)
 
 
