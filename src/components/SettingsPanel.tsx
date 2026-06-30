@@ -54,6 +54,12 @@ type SettingsTab = "ai" | "agents" | "memory" | "display" | "themes" | "recordin
 import { inputClass, tabBtnClass } from "../styles";
 import { FoundryResourcePicker } from "./FoundryResourcePicker";
 import { THEME_PALETTES, type ThemePalette } from "../theme/appThemePalettes";
+import {
+  TERMINAL_COLOR_SCHEMES,
+  normalizeTerminalColorMode,
+  normalizeTerminalCustomTheme,
+  type TerminalCustomTheme,
+} from "../theme/terminalThemes";
 import { activeProvider, buildProviderConfig, canFetchModelsFor, createAiProviderConfig, isAiProviderConfigured } from "../utils/providerConfig";
 
 export function SettingsPanel() {
@@ -323,6 +329,16 @@ const terminalFontSizes = [
   { value: 12, label: "Medium (12px)" },
   { value: 14, label: "Large (14px)" },
   { value: 16, label: "XL (16px)" },
+];
+
+const terminalCustomColorFields: Array<{
+  key: keyof TerminalCustomTheme;
+  label: string;
+}> = [
+  { key: "background", label: "Background" },
+  { key: "foreground", label: "Foreground" },
+  { key: "cursor", label: "Cursor" },
+  { key: "selectionBackground", label: "Selection" },
 ];
 
 function tokenRgb(value: string): string {
@@ -692,6 +708,12 @@ function DisplayTab({ settings, updateSetting }: {
   settings: ReturnType<typeof useSettings>["settings"];
   updateSetting: ReturnType<typeof useSettings>["updateSetting"];
 }) {
+  const terminalColorMode = normalizeTerminalColorMode(settings.displayTerminalColorMode);
+  const terminalCustomTheme = normalizeTerminalCustomTheme(settings.displayTerminalCustomTheme);
+  const updateTerminalCustomColor = (key: keyof TerminalCustomTheme, value: string) => {
+    void updateSetting("displayTerminalCustomTheme", { ...terminalCustomTheme, [key]: value });
+  };
+
   return (
     <div className="flex flex-col gap-6">
       {/* Font family */}
@@ -764,7 +786,7 @@ function DisplayTab({ settings, updateSetting }: {
         <div>
           <label className="text-sm font-medium">Terminal Appearance</label>
           <p className="mt-1 text-xs text-[rgb(var(--color-text-secondary))]">
-            Use a Nerd Font or Powerline-patched font for prompt icons and branch glyphs.
+            Use a Nerd Font for prompt glyphs, then choose a built-in terminal palette or customize key colors.
           </p>
         </div>
 
@@ -795,16 +817,14 @@ function DisplayTab({ settings, updateSetting }: {
 
           <div className="flex flex-col gap-1.5">
             <span className="text-xs font-medium text-[rgb(var(--color-text-secondary))]">Terminal Colors</span>
-            <div className="flex gap-2">
-              {([
-                { id: "console", label: "Console dark" },
-                { id: "app", label: "App surface" },
-              ] as const).map((mode) => (
+            <div className="grid grid-cols-2 gap-2">
+              {TERMINAL_COLOR_SCHEMES.map((mode) => (
                 <button
                   key={mode.id}
                   onClick={() => updateSetting("displayTerminalColorMode", mode.id)}
-                  className={`flex-1 rounded-lg border px-3 py-2 text-xs font-medium transition-colors ${
-                    settings.displayTerminalColorMode === mode.id
+                  title={mode.description}
+                  className={`rounded-lg border px-3 py-2 text-left text-xs font-medium transition-colors ${
+                    terminalColorMode === mode.id
                       ? "border-[rgb(var(--color-accent))] bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))]"
                       : "border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))]"
                   }`}
@@ -815,6 +835,23 @@ function DisplayTab({ settings, updateSetting }: {
             </div>
           </div>
         </div>
+
+        {terminalColorMode === "custom" && (
+          <div className="grid gap-3 rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] p-3 sm:grid-cols-2">
+            {terminalCustomColorFields.map((field) => (
+              <label key={field.key} className="flex items-center justify-between gap-3 text-xs font-medium text-[rgb(var(--color-text-secondary))]">
+                <span>{field.label}</span>
+                <input
+                  type="color"
+                  value={terminalCustomTheme[field.key]}
+                  onChange={(event) => updateTerminalCustomColor(field.key, event.target.value)}
+                  className="h-8 w-14 cursor-pointer rounded border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]"
+                  aria-label={`Terminal ${field.label.toLowerCase()} color`}
+                />
+              </label>
+            ))}
+          </div>
+        )}
       </fieldset>
 
       {/* Row density */}

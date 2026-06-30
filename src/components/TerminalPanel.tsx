@@ -6,6 +6,7 @@ import { AlertTriangle, Maximize2, Minimize2, SquareTerminal } from "lucide-reac
 import { Channel, invoke } from "../services/tauri";
 import { useAppStore } from "../stores/appStore";
 import { useSettings } from "../hooks/useSettings";
+import { normalizeTerminalColorMode, resolveTerminalTheme } from "../theme/terminalThemes";
 
 type TerminalOpenResult = {
   session_id: string;
@@ -15,7 +16,6 @@ type TerminalOpenResult = {
 
 type TerminalStatus = "idle" | "opening" | "open" | "error";
 type TerminalOutput = number[] | ArrayBuffer | Uint8Array;
-type TerminalColorMode = "console" | "app";
 
 function readThemeColor(name: string, fallback: string) {
   if (typeof window === "undefined") return fallback;
@@ -31,40 +31,6 @@ function encoder() {
 function outputBytes(data: TerminalOutput) {
   if (data instanceof Uint8Array) return data;
   return new Uint8Array(data);
-}
-
-function terminalTheme(mode: TerminalColorMode) {
-  if (mode === "app") {
-    return {
-      background: readThemeColor("--color-surface-inset", "#1f1d1a"),
-      foreground: readThemeColor("--color-text", "#f5f1ea"),
-      cursor: readThemeColor("--color-accent", "#a49afa"),
-      selectionBackground: readThemeColor("--color-accent", "#6b5ce7"),
-    };
-  }
-
-  return {
-    background: "#0c0c0c",
-    foreground: "#cccccc",
-    cursor: "#ffffff",
-    selectionBackground: "#3a3d41",
-    black: "#0c0c0c",
-    red: "#c50f1f",
-    green: "#13a10e",
-    yellow: "#c19c00",
-    blue: "#0037da",
-    magenta: "#881798",
-    cyan: "#3a96dd",
-    white: "#cccccc",
-    brightBlack: "#767676",
-    brightRed: "#e74856",
-    brightGreen: "#16c60c",
-    brightYellow: "#f9f1a5",
-    brightBlue: "#3b78ff",
-    brightMagenta: "#b4009e",
-    brightCyan: "#61d6d6",
-    brightWhite: "#f2f2f2",
-  };
 }
 
 export function TerminalPanel({ active }: { active: boolean }) {
@@ -84,8 +50,11 @@ export function TerminalPanel({ active }: { active: boolean }) {
   const hasProject = Boolean(currentProject);
   const terminalFontFamily = settings.displayTerminalFontFamily || '"Cascadia Code", Consolas, monospace';
   const terminalFontSize = settings.displayTerminalFontSize || 12;
-  const terminalColorMode = settings.displayTerminalColorMode === "app" ? "app" : "console";
-  const theme = useMemo(() => terminalTheme(terminalColorMode), [terminalColorMode]);
+  const terminalColorMode = normalizeTerminalColorMode(settings.displayTerminalColorMode);
+  const theme = useMemo(
+    () => resolveTerminalTheme(terminalColorMode, settings.displayTerminalCustomTheme, readThemeColor),
+    [settings.displayTerminalCustomTheme, terminalColorMode],
+  );
   const projectRoot = currentProject?.root ?? null;
   const focusTerminal = useCallback(() => {
     terminalRef.current?.focus();
@@ -225,7 +194,7 @@ export function TerminalPanel({ active }: { active: boolean }) {
       terminalRef.current = null;
       fitRef.current = null;
     };
-  }, [fitTerminal, focusTerminal, hasProject, projectRoot, terminalColorMode, terminalFontFamily, terminalFontSize, theme]);
+  }, [fitTerminal, focusTerminal, hasProject, projectRoot, terminalFontFamily, terminalFontSize]);
 
   if (!hasProject) {
     return (
