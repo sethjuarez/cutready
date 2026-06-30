@@ -15,7 +15,6 @@ Release Please manages this changelog. Do not edit manually.
 
 ### Features
 
-* **editor:** enlarge project image picker ([a54a977](https://github.com/sethjuarez/cutready/commit/a54a97763c0d4d126f154ad888432543cbf40940))
 * **editor:** enlarge project image picker ([984884c](https://github.com/sethjuarez/cutready/commit/984884c36a5764fa2a03103b5f6faef6f8844822))
 * **feedback:** support screenshot attachments ([792746d](https://github.com/sethjuarez/cutready/commit/792746da2ca5a00e190d0e901ae0f87cae7ac823))
 * **settings:** add terminal color schemes ([19856ff](https://github.com/sethjuarez/cutready/commit/19856fff957e7bf16166d373e38869288a58b18f))
@@ -23,11 +22,9 @@ Release Please manages this changelog. Do not edit manually.
 
 ### Bug Fixes
 
-* **agent:** allow ask mode write approval ([765c3e2](https://github.com/sethjuarez/cutready/commit/765c3e24526ea66dd4a9e9fad2a889a11cdd4574))
 * **agent:** allow ask mode write approval ([9711f2e](https://github.com/sethjuarez/cutready/commit/9711f2e366bad43fed1e7f77de4ec335402cd3c1))
 * **diagnostics:** sanitize feedback diagnostics ([e3b242c](https://github.com/sethjuarez/cutready/commit/e3b242c4d4b453a6afef4412782b39a52cb8189f))
 * keep terminal alive across navigation ([af772c6](https://github.com/sethjuarez/cutready/commit/af772c66347b59a018078901ec6c85f1f9a7056f))
-* **release:** dedupe release-please changelog entries ([e09c363](https://github.com/sethjuarez/cutready/commit/e09c3638f0124f05415b362448d7d79386add331))
 * **release:** dedupe release-please changelog entries ([f3f4584](https://github.com/sethjuarez/cutready/commit/f3f4584dbb03f4cf1dff94bce203856105f6ffde))
 * **storyboard:** render section descriptions read-only ([5af77f8](https://github.com/sethjuarez/cutready/commit/5af77f80b23bfd18287be6555853dbb0b5bb7c9c))
 
