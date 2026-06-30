@@ -907,7 +907,6 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
         os: "windows",
         os_family: "windows",
         arch: "x86_64",
-        machine_name: "DEV-MACHINE",
       };
     case "create_github_issue":
       return { url: "https://github.com/sethjuarez/cutready/issues/999", diagnostics_comments_posted: 0, diagnostics_comment_error: null };

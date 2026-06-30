@@ -10,6 +10,7 @@ import {
   X,
 } from "lucide-react";
 import { Dialog } from "./Dialog";
+import { sanitizeDiagnosticsLog } from "../utils/diagnosticsSanitizer";
 
 interface FeedbackDialogProps {
   isOpen: boolean;
@@ -30,7 +31,6 @@ interface FeedbackSystemInfo {
   os: string;
   os_family: string;
   arch: string;
-  machine_name?: string | null;
 }
 
 export function FeedbackDialog({ isOpen, onClose }: FeedbackDialogProps) {
@@ -59,10 +59,10 @@ export function FeedbackDialog({ isOpen, onClose }: FeedbackDialogProps) {
     let debugLogText: string | undefined;
     if (includeDebug) {
       debugLogText = await invoke<unknown>("get_auditaur_diagnostics")
-        .then((diagnostics) => JSON.stringify(diagnostics, null, 2))
-        .catch((error) => JSON.stringify({
+        .then((diagnostics) => sanitizeDiagnosticsLog(JSON.stringify(diagnostics, null, 2)))
+        .catch((error) => sanitizeDiagnosticsLog(JSON.stringify({
           error: error instanceof Error ? error.message : String(error),
-        }, null, 2));
+        }, null, 2)));
     }
 
     let systemInfo: FeedbackSystemInfo | undefined;
@@ -91,11 +91,10 @@ export function FeedbackDialog({ isOpen, onClose }: FeedbackDialogProps) {
         ? [
           ``,
           `---`,
-          `### OS and machine details`,
+          `### OS details`,
           `- App Version: ${systemInfo.app_version}`,
           `- OS: ${systemInfo.os} (${systemInfo.os_family})`,
           `- Architecture: ${systemInfo.arch}`,
-          ...(systemInfo.machine_name ? [`- Machine: ${systemInfo.machine_name}`] : []),
         ]
         : []),
       ...(debugLogText
@@ -202,7 +201,7 @@ export function FeedbackDialog({ isOpen, onClose }: FeedbackDialogProps) {
               />
             </button>
             <span className="text-[11px] text-[rgb(var(--color-text-secondary))] group-hover:text-[rgb(var(--color-text))] transition-colors select-none">
-              Include OS and machine details
+              Include OS details
             </span>
           </label>
           </div>

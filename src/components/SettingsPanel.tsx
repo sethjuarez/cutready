@@ -60,6 +60,7 @@ import {
   normalizeTerminalCustomTheme,
   type TerminalCustomTheme,
 } from "../theme/terminalThemes";
+import { sanitizeDiagnosticsLog } from "../utils/diagnosticsSanitizer";
 import { activeProvider, buildProviderConfig, canFetchModelsFor, createAiProviderConfig, isAiProviderConfigured } from "../utils/providerConfig";
 
 export function SettingsPanel() {
@@ -1774,7 +1775,6 @@ interface FeedbackSystemInfo {
   os: string;
   os_family: string;
   arch: string;
-  machine_name?: string | null;
 }
 
 interface CreateGithubIssueResult {
@@ -1830,7 +1830,6 @@ function formatSystemInfoLines(systemInfo?: FeedbackSystemInfo): string[] {
     `- App Version: ${systemInfo.app_version}`,
     `- OS: ${systemInfo.os} (${systemInfo.os_family})`,
     `- Architecture: ${systemInfo.arch}`,
-    ...(systemInfo.machine_name ? [`- Machine: ${systemInfo.machine_name}`] : []),
   ];
 }
 
@@ -1848,45 +1847,6 @@ Respond ONLY with valid JSON, no markdown fences.`;
 const MAX_URL_LENGTH = 8000;
 const FEEDBACK_ISSUE_FORMAT_TIMEOUT_MS = 20_000;
 export const CUTREADY_FEEDBACK_REPO = "sethjuarez/cutready";
-
-const DIAGNOSTIC_PATH_KEYS = new Set(["database_path", "settings_path", "root"]);
-const DIAGNOSTIC_SECRET_KEY_PATTERN = /(token|secret|password|authorization|api[_-]?key|bearer)/i;
-
-function sanitizeDiagnosticsValue(value: unknown, key = ""): unknown {
-  if (DIAGNOSTIC_SECRET_KEY_PATTERN.test(key)) {
-    return "<redacted secret>";
-  }
-  if (DIAGNOSTIC_PATH_KEYS.has(key)) {
-    return "<redacted local path>";
-  }
-  if (Array.isArray(value)) {
-    return value.map((item) => sanitizeDiagnosticsValue(item));
-  }
-  if (value && typeof value === "object") {
-    return Object.fromEntries(
-      Object.entries(value).map(([entryKey, entryValue]) => [
-        entryKey,
-        sanitizeDiagnosticsValue(entryValue, entryKey),
-      ]),
-    );
-  }
-  if (typeof value === "string") {
-    return value
-      .replace(/[A-Za-z]:\\Users\\[^"\\\s]+\\[^\n"]*/g, "<redacted local path>")
-      .replace(/\/Users\/[^/"\s]+\/[^\n"]*/g, "<redacted local path>");
-  }
-  return value;
-}
-
-function sanitizeDiagnosticsLog(debugLog?: string): string | undefined {
-  if (!debugLog?.trim()) return undefined;
-  try {
-    const parsed = JSON.parse(debugLog) as unknown;
-    return JSON.stringify(sanitizeDiagnosticsValue(parsed), null, 2);
-  } catch {
-    return String(sanitizeDiagnosticsValue(debugLog));
-  }
-}
 
 function summarizeDiagnostics(debugLog?: string): string[] {
   if (!debugLog?.trim()) return [];
@@ -1959,7 +1919,7 @@ function appendSystemInfoSection(body: string, systemInfo?: FeedbackSystemInfo):
   return [
     body.trim(),
     "",
-    "## OS and machine details",
+    "## OS details",
     ...lines,
   ].join("\n");
 }
@@ -2017,8 +1977,8 @@ function FeedbackListTab() {
     const text = entries
       .map((e) => {
         let t = `## ${e.category}\n**Date:** ${e.date.split("T")[0]}\n\n${e.feedback}`;
-        if (e.system_info) t += `\n\n---\n### OS and machine details\n${formatSystemInfoLines(e.system_info).join("\n")}`;
-        if (e.debug_log) t += `\n\n---\n### Debug Log\n\`\`\`\n${e.debug_log}\n\`\`\``;
+        if (e.system_info) t += `\n\n---\n### OS details\n${formatSystemInfoLines(e.system_info).join("\n")}`;
+        if (e.debug_log) t += `\n\n---\n### Debug Log\n\`\`\`\n${sanitizeDiagnosticsLog(e.debug_log) ?? ""}\n\`\`\``;
         return t;
       })
       .join("\n\n---\n\n");
@@ -2031,8 +1991,8 @@ function FeedbackListTab() {
 
   const copySingle = async (entry: FeedbackEntry) => {
     let text = `## ${entry.category}\n**Date:** ${entry.date.split("T")[0]}\n\n${entry.feedback}`;
-    if (entry.system_info) text += `\n\n---\n### OS and machine details\n${formatSystemInfoLines(entry.system_info).join("\n")}`;
-    if (entry.debug_log) text += `\n\n---\n### Debug Log\n\`\`\`\n${entry.debug_log}\n\`\`\``;
+    if (entry.system_info) text += `\n\n---\n### OS details\n${formatSystemInfoLines(entry.system_info).join("\n")}`;
+    if (entry.debug_log) text += `\n\n---\n### Debug Log\n\`\`\`\n${sanitizeDiagnosticsLog(entry.debug_log) ?? ""}\n\`\`\``;
     try {
       await navigator.clipboard.writeText(text);
     } catch { /* ignore */ }
@@ -2194,7 +2154,7 @@ function FeedbackListTab() {
           `Date: ${entry.date}`,
           `App Version: ${appVersion}`,
           `Feedback: ${entry.feedback}`,
-          ...(entry.system_info ? [`OS and machine details:\n${formatSystemInfoLines(entry.system_info).join("\n")}`] : []),
+          ...(entry.system_info ? [`OS details:\n${formatSystemInfoLines(entry.system_info).join("\n")}`] : []),
           ...(entry.debug_log ? [`Diagnostics Summary:\n${summarizeDiagnostics(sanitizeDiagnosticsLog(entry.debug_log)).join("\n")}`] : []),
         ].join("\n\n");
 
@@ -2363,7 +2323,7 @@ function FeedbackListTab() {
               {entry.system_info && (
                 <div className="mt-1.5 flex items-center gap-1 text-[10px] text-[rgb(var(--color-text-secondary))]">
                   <Info className="w-2.5 h-2.5" />
-                  OS and machine details attached
+                  OS details attached
                 </div>
               )}
               {/* Confirm delete inline */}
