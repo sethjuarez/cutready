@@ -893,11 +893,43 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
       return null;
     case "list_feedback":
       return [
-        { category: "bug", feedback: "The sketch editor sometimes loses focus when switching tabs quickly.", date: "2025-01-15T14:00:00Z" },
+        {
+          category: "bug",
+          feedback: "The sketch editor sometimes loses focus when switching tabs quickly.",
+          date: "2025-01-15T14:00:00Z",
+          attachments: [{
+            id: "mock-screenshot",
+            file_name: "focus-loss.png",
+            content_type: "image/png",
+            size_bytes: 248_120,
+            stored_path: "feedback-attachments/mock-screenshot/focus-loss.png",
+            sha256: "mock",
+          }],
+        },
         { category: "feature", feedback: "Would love to see a timer overlay during recording.", date: "2025-01-15T10:30:00Z" },
         { category: "general", feedback: "Great app! The AI suggestions are really helpful for structuring demos.", date: "2025-01-14T16:00:00Z" },
       ];
-    case "save_feedback":
+    case "save_feedback": {
+      const entry = (args?.entry ?? {}) as {
+        category?: string;
+        feedback?: string;
+        date?: string;
+        debug_log?: string;
+        system_info?: unknown;
+        attachments?: Array<{ file_name: string; content_type: string; size_bytes: number }>;
+      };
+      return {
+        ...entry,
+        attachments: (entry.attachments ?? []).map((attachment, index) => ({
+          id: `mock-attachment-${index}`,
+          file_name: attachment.file_name,
+          content_type: attachment.content_type,
+          size_bytes: attachment.size_bytes,
+          stored_path: `feedback-attachments/mock-attachment-${index}/${attachment.file_name}`,
+          sha256: "mock",
+        })),
+      };
+    }
     case "clear_feedback":
     case "export_logs":
       return null;
