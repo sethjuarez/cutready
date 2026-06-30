@@ -9,6 +9,27 @@
 Covector manages this changelog. Do not edit manually.
 Each release section is generated from `.changes/*.md` files.
 
+## [1.19.0](https://github.com/sethjuarez/cutready/compare/v1.18.0...v1.19.0) (2026-06-30)
+
+
+### Features
+
+* **history:** use row-based full graph ([21e1b9b](https://github.com/sethjuarez/cutready/commit/21e1b9b24307befa3b877bfe600898e2dc6296ab))
+* **history:** use row-based full graph ([3d527e2](https://github.com/sethjuarez/cutready/commit/3d527e2765306208e4b2e44f5bd08b93ba3e262c))
+* **versioning:** add Draftline timeline cleanup ([7181b38](https://github.com/sethjuarez/cutready/commit/7181b383cbe2b5df08d08cccb86e815cfb246edc))
+* **versioning:** add Draftline timeline cleanup ([707727c](https://github.com/sethjuarez/cutready/commit/707727ccf25cf890815f5ff4f50d44b65fdf671c))
+* **versioning:** use Draftline cleanup candidates ([fd32500](https://github.com/sethjuarez/cutready/commit/fd32500cc47e108e1083d1c94568f1b551632e81))
+* **versioning:** use Draftline cleanup candidates ([1e936d7](https://github.com/sethjuarez/cutready/commit/1e936d7a9404766a2321daa32da2246eef13ad9d))
+
+
+### Bug Fixes
+
+* **feedback:** improve issue diagnostics reporting ([b94438d](https://github.com/sethjuarez/cutready/commit/b94438da1ebbb0f61a9e5e9728089c0c670f4a4b))
+* **feedback:** improve issue diagnostics reporting ([664a7ed](https://github.com/sethjuarez/cutready/commit/664a7eda73e1609cd141a8e30c830ecdfc038152))
+* **history:** refine compact selection and provider readiness ([d7e21a0](https://github.com/sethjuarez/cutready/commit/d7e21a09ff849bd819217afa9d79339f62df9514))
+* **versioning:** clear stale remote warnings on macOS ([9eba55c](https://github.com/sethjuarez/cutready/commit/9eba55c97a3e81af172c3129ba2cd44950f9fb8f))
+* **versioning:** clear stale remote warnings on macOS ([f672250](https://github.com/sethjuarez/cutready/commit/f67225018e24e84d242c86c5602ad7d39255f9ac))
+
 ## [1.18.0](https://github.com/sethjuarez/cutready/compare/v1.17.0...v1.18.0) (2026-06-29)
 
 
