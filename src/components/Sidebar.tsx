@@ -1,5 +1,5 @@
 import { type ReactNode, useCallback } from "react";
-import { House, SlidersHorizontal, Images, LayoutList, MessageSquare, GitCompareArrows } from "lucide-react";
+import { House, Settings, Images, LayoutList, MessageSquare, GitCompareArrows } from "lucide-react";
 import type { AppView } from "../stores/appStore";
 import { useAppStore } from "../stores/appStore";
 import { usePopover } from "../hooks/usePopover";
@@ -130,7 +130,7 @@ export function Sidebar({ onFeedback }: { onFeedback?: () => void }) {
               title="Settings"
               data-testid="activity-settings"
             >
-              <SlidersHorizontal className="w-4 h-4" />
+              <Settings className="w-4 h-4" />
               {isActive && (
                 <span className={`absolute top-1/2 h-4 w-[2px] -translate-y-1/2 bg-[rgb(var(--color-accent))] ${
                   isRight ? "right-[-8px]" : "left-[-8px]"

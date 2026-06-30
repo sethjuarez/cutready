@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useAppStore } from "../stores/appStore";
+import { useAppStore, type AppView } from "../stores/appStore";
 import { useToastStore } from "../stores/toastStore";
 import { useSettings } from "../hooks/useSettings";
 import { HomePanel } from "./HomePanel";
@@ -69,10 +69,17 @@ export function AppLayout() {
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [recentCommands, setRecentCommands] = useState<string[]>([]);
+  const [settingsBackgroundView, setSettingsBackgroundView] = useState<AppView>("home");
 
   const { theme: resolvedTheme, toggle: toggleTheme } = useTheme();
   const commands = useCommands();
   const mainRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (view !== "settings") {
+      setSettingsBackgroundView(view);
+    }
+  }, [view]);
 
   // Register built-in commands
   useEffect(() => {
@@ -396,7 +403,8 @@ export function AppLayout() {
     (delta: number) => setOutputHeight(outputHeight - delta),
     [outputHeight, setOutputHeight],
   );
-  const outputPanelAvailable = view !== "home" && view !== "settings" && view !== "chat";
+  const contentView = view === "settings" ? settingsBackgroundView : view;
+  const outputPanelAvailable = contentView !== "home" && contentView !== "chat";
   const outputPanelVisible = terminalFocusMode || (outputPanelAvailable && outputVisible);
 
   return (
@@ -428,19 +436,18 @@ export function AppLayout() {
           {/* Activity bar on left (hidden on home) */}
           {view !== "home" && sidebarPosition === "left" && <Sidebar onFeedback={() => setFeedbackOpen(true)} />}
 
-          {/* Primary sidebar (hidden on home, settings, and chat) */}
-          {view !== "home" && view !== "settings" && view !== "chat" && sidebarVisible && sidebarPosition === "left" && <PrimarySidebar />}
+          {/* Primary sidebar (hidden on home and chat) */}
+          {contentView !== "home" && contentView !== "chat" && sidebarVisible && sidebarPosition === "left" && <PrimarySidebar viewOverride={contentView} />}
 
           {/* Center column: content + output panel */}
           <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
             {/* Upper: main content */}
-            <div className="flex-1 min-h-0">
-              {view === "home" && <div className="h-full overflow-y-auto"><HomePanel /></div>}
-              {(view === "project" || view === "sketch" || view === "assets" || view === "changes") && (isMerging ? <MergeConflictPanel /> : <StoryboardPanel />)}
-              {view === "editor" && <div className="h-full overflow-y-auto"><ScriptEditorPanel /></div>}
-              {view === "recording" && displaySettings.featureRecording && <div className="h-full overflow-y-auto"><RecordingPanel /></div>}
-              {view === "settings" && <div className="h-full overflow-y-auto"><SettingsPanel /></div>}
-              {view === "chat" && <div className="h-full overflow-hidden"><ChatPanel /></div>}
+            <div className="relative flex-1 min-h-0">
+              {contentView === "home" && <div className="h-full overflow-y-auto"><HomePanel /></div>}
+              {(contentView === "project" || contentView === "sketch" || contentView === "assets" || contentView === "changes") && (isMerging ? <MergeConflictPanel /> : <StoryboardPanel />)}
+              {contentView === "editor" && <div className="h-full overflow-y-auto"><ScriptEditorPanel /></div>}
+              {contentView === "recording" && displaySettings.featureRecording && <div className="h-full overflow-y-auto"><RecordingPanel /></div>}
+              {contentView === "chat" && <div className="h-full overflow-hidden"><ChatPanel /></div>}
             </div>
 
             {/* Lower: output panel. Keep it mounted so terminal sessions survive navigation. */}
@@ -458,13 +465,19 @@ export function AppLayout() {
             </div>
           </div>
 
-          {/* Primary sidebar on right (hidden on home, settings, and chat views) */}
-          {view !== "home" && view !== "settings" && view !== "chat" && sidebarVisible && sidebarPosition === "right" && <PrimarySidebar />}
+          {/* Primary sidebar on right (hidden on home and chat views) */}
+          {contentView !== "home" && contentView !== "chat" && sidebarVisible && sidebarPosition === "right" && <PrimarySidebar viewOverride={contentView} />}
 
           {/* Activity bar on right (hidden on home) */}
           {view !== "home" && sidebarPosition === "right" && <Sidebar onFeedback={() => setFeedbackOpen(true)} />}
         </div>
       </div>
+
+      {view === "settings" && (
+        <div className="fixed inset-0 z-modal">
+          <SettingsPanel onClose={() => setView(settingsBackgroundView)} />
+        </div>
+      )}
 
       {chatFocusMode && (
         <div
@@ -498,8 +511,9 @@ export function AppLayout() {
 }
 
 /** Primary sidebar with resize handle. Content switches based on active view. */
-function PrimarySidebar() {
-  const view = useAppStore((s) => s.view);
+function PrimarySidebar({ viewOverride }: { viewOverride?: AppView }) {
+  const storeView = useAppStore((s) => s.view);
+  const view = viewOverride ?? storeView;
   const sidebarWidth = useAppStore((s) => s.sidebarWidth);
   const setSidebarWidth = useAppStore((s) => s.setSidebarWidth);
   const sidebarPosition = useAppStore((s) => s.sidebarPosition);

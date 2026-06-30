@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, type ReactNode } from "react";
 import { useAppStore } from "../stores/appStore";
 import { useSettings, useSettingsStore, type AgentPreset } from "../hooks/useSettings";
 import { useRecordingDevices } from "../hooks/useRecordingDevices";
@@ -28,6 +28,18 @@ import {
   CheckCircle,
   ExternalLink,
   Image,
+  Search,
+  MonitorCog,
+  Palette,
+  Bot,
+  Brain,
+  Mic2,
+  MessageCircleWarning,
+  GitBranch,
+  DownloadCloud,
+  FlaskConical,
+  SlidersHorizontal,
+  FolderGit2,
 } from "lucide-react";
 
 interface ModelInfo {
@@ -52,7 +64,7 @@ interface AuthCodeFlowInit {
 
 type SettingsTab = "ai" | "agents" | "memory" | "display" | "themes" | "recording" | "feedback" | "repository" | "updates" | "experimental";
 
-import { inputClass, tabBtnClass } from "../styles";
+import { inputClass } from "../styles";
 import { FoundryResourcePicker } from "./FoundryResourcePicker";
 import { THEME_PALETTES, type ThemePalette } from "../theme/appThemePalettes";
 import {
@@ -70,11 +82,13 @@ import {
   type FeedbackAttachmentMetadata,
 } from "../utils/feedbackAttachments";
 
-export function SettingsPanel() {
+export function SettingsPanel({ onClose }: { onClose?: () => void }) {
   const { settings, updateSetting, loaded } = useSettings();
   const currentProject = useAppStore((s) => s.currentProject);
+  const setView = useAppStore((s) => s.setView);
   const [scope, setScope] = useState<"app" | "workspace">("app");
   const [activeTab, setActiveTab] = useState<SettingsTab>("display");
+  const [settingsFilter, setSettingsFilter] = useState("");
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [loadingModels, setLoadingModels] = useState(false);
   const [modelError, setModelError] = useState("");
@@ -191,134 +205,319 @@ export function SettingsPanel() {
   const hasToken = !!settings.aiAccessToken;
   const canFetchModels = canFetchModelsFor(settings);
 
-  const tabLabels: Record<string, string> = {
-    display: "Display",
-    themes: "Themes",
-    recording: "Recording",
-    ai: "AI Providers",
-    agents: "Agents",
-    memory: "Memory",
-    feedback: "Feedback",
-    repository: "Git Remote",
-    updates: "Updates",
-    experimental: "Experimental",
+  const tabMeta: Record<SettingsTab, {
+    label: string;
+    eyebrow: string;
+    description: string;
+    icon: ReactNode;
+    keywords: string;
+  }> = {
+    display: {
+      label: "Display",
+      eyebrow: "Studio ergonomics",
+      description: "Tune density, typography, terminal colors, and how CutReady presents your work.",
+      icon: <MonitorCog className="h-4 w-4" />,
+      keywords: "display font size density editor terminal rows",
+    },
+    themes: {
+      label: "Themes",
+      eyebrow: "Visual language",
+      description: "Choose the warm CutReady palette and row color system for your demo workspace.",
+      icon: <Palette className="h-4 w-4" />,
+      keywords: "theme palette colors appearance light dark",
+    },
+    recording: {
+      label: "Recording",
+      eyebrow: "Capture defaults",
+      description: "Set default devices, tracks, countdowns, and output quality for new recording takes.",
+      icon: <Mic2 className="h-4 w-4" />,
+      keywords: "recording microphone camera audio capture ffmpeg",
+    },
+    ai: {
+      label: "AI providers",
+      eyebrow: "Model connection",
+      description: "Connect Foundry, Azure OpenAI, OpenAI-compatible, or Anthropic providers.",
+      icon: <Bot className="h-4 w-4" />,
+      keywords: "ai provider model foundry azure openai anthropic oauth token",
+    },
+    agents: {
+      label: "Agents",
+      eyebrow: "Assistant behavior",
+      description: "Customize planner, writer, editor, designer, and tool-application defaults.",
+      icon: <SlidersHorizontal className="h-4 w-4" />,
+      keywords: "agents planner writer editor designer apply behavior",
+    },
+    memory: {
+      label: "Memory",
+      eyebrow: "Project recall",
+      description: "Inspect local agent recall and workspace memory stored with this project.",
+      icon: <Brain className="h-4 w-4" />,
+      keywords: "memory recall agent state database",
+    },
+    feedback: {
+      label: "Feedback",
+      eyebrow: "Diagnostics",
+      description: "Review feedback drafts, attachments, and diagnostic capture preferences.",
+      icon: <MessageCircleWarning className="h-4 w-4" />,
+      keywords: "feedback diagnostics logs attachments auditaur",
+    },
+    repository: {
+      label: "Git remote",
+      eyebrow: "Collaboration",
+      description: "Manage the Draftline-backed remote used for syncing this CutReady project.",
+      icon: <GitBranch className="h-4 w-4" />,
+      keywords: "git remote repository draftline sync collaboration",
+    },
+    updates: {
+      label: "Updates",
+      eyebrow: "App freshness",
+      description: "Check the installed version and control automatic update behavior.",
+      icon: <DownloadCloud className="h-4 w-4" />,
+      keywords: "updates version release auto update",
+    },
+    experimental: {
+      label: "Experimental",
+      eyebrow: "Preview switches",
+      description: "Enable feature previews that are still being shaped and tested.",
+      icon: <FlaskConical className="h-4 w-4" />,
+      keywords: "experimental feature flags preview recording",
+    },
   };
+  const activeMeta = tabMeta[activeTab];
+  const normalizedFilter = settingsFilter.trim().toLowerCase();
+  const visibleTabs = normalizedFilter
+    ? tabs.filter((tab) => {
+        const meta = tabMeta[tab];
+        return `${meta.label} ${meta.eyebrow} ${meta.description} ${meta.keywords}`
+          .toLowerCase()
+          .includes(normalizedFilter);
+      })
+    : tabs;
+  const projectLocation = currentProject?.root ?? "Open a project to configure workspace settings.";
 
   return (
-    <div className="max-w-4xl mx-auto px-6 py-10">
-      <h1 className="text-2xl font-semibold tracking-tight mb-2">
-        {scope === "workspace" ? "Workspace Settings" : "Settings"}
-      </h1>
-      <p className="text-sm text-[rgb(var(--color-text-secondary))] mb-4">
-        {scope === "workspace"
-          ? "Settings for this workspace. Overrides apply only here."
-          : "Global preferences that apply to all workspaces."}
-      </p>
+    <div className="h-full overflow-hidden bg-[rgb(var(--color-overlay-scrim))]/12 px-5 py-6 backdrop-blur-[2px]">
+      <div className="mx-auto flex h-full max-w-7xl overflow-hidden rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] shadow-2xl shadow-[rgb(var(--color-overlay-scrim)/0.18)]">
+        <aside className="flex w-[19rem] shrink-0 flex-col border-r border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-alt))]">
+          <div className="border-b border-[rgb(var(--color-border-subtle))] p-5">
+            <div className="flex items-start gap-3">
+              <img
+                src="/cutready-mark.svg"
+                alt=""
+                aria-hidden="true"
+                draggable={false}
+                className="h-11 w-11 shrink-0 drop-shadow-lg"
+              />
+              <div className="min-w-0">
+                <div className="truncate text-sm font-semibold text-[rgb(var(--color-text))]">
+                  CutReady
+                </div>
+                <div className="mt-0.5 truncate text-xs text-[rgb(var(--color-text-secondary))]">
+                  Demo production settings
+                </div>
+              </div>
+            </div>
 
-      {currentProject && (
-        <div className="flex items-center gap-1 mb-6 p-1 rounded-lg bg-[rgb(var(--color-surface-alt))] w-fit">
-          <button
-            onClick={() => {
-              setScope("app");
-              setActiveTab("display");
-            }}
-            className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-              scope === "app"
-                ? "bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text))] shadow-sm"
-                : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))]"
-            }`}
-          >
-            App
-          </button>
-          <button
-            onClick={() => {
-              setScope("workspace");
-              setActiveTab("repository");
-            }}
-            className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-              scope === "workspace"
-                ? "bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text))] shadow-sm"
-                : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))]"
-            }`}
-          >
-            Workspace
-          </button>
-        </div>
-      )}
+            <div className="relative mt-5">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[rgb(var(--color-text-secondary))]" />
+              <input
+                value={settingsFilter}
+                onChange={(event) => setSettingsFilter(event.target.value)}
+                placeholder="Search settings..."
+                data-testid="settings-search"
+                className="w-full rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] py-2 pl-9 pr-3 text-sm text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--color-accent))]/35"
+              />
+            </div>
 
-      {/* Tab bar */}
-      <div className="flex items-stretch border-b border-[rgb(var(--color-border))] mb-6">
-        {tabs.map((tab) => (
-          <button
-            key={tab}
-            className={tabBtnClass(activeTab === tab)}
-            onClick={() => setActiveTab(tab)}
-            data-testid={`settings-tab-${tab}`}
-          >
-            {tabLabels[tab]}
-          </button>
-        ))}
+            {currentProject && (
+              <div className="mt-4 grid grid-cols-2 gap-1 rounded-lg bg-[rgb(var(--color-surface-inset))] p-1">
+                <button
+                  type="button"
+                  data-testid="settings-scope-app"
+                  onClick={() => {
+                    setScope("app");
+                    setActiveTab("display");
+                  }}
+                  className={`rounded-md px-3 py-2 text-xs font-medium transition-colors ${
+                    scope === "app"
+                      ? "bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text))] shadow-sm"
+                      : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))]"
+                  }`}
+                >
+                  App
+                </button>
+                <button
+                  type="button"
+                  data-testid="settings-scope-workspace"
+                  onClick={() => {
+                    setScope("workspace");
+                    setActiveTab("repository");
+                  }}
+                  className={`rounded-md px-3 py-2 text-xs font-medium transition-colors ${
+                    scope === "workspace"
+                      ? "bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text))] shadow-sm"
+                      : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))]"
+                  }`}
+                >
+                  Workspace
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div className="min-h-0 flex-1 overflow-y-auto p-3">
+            <div className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))]">
+              {scope === "workspace" ? "Workspace" : "General"}
+            </div>
+            <div className="space-y-1">
+              {visibleTabs.map((tab) => {
+                const meta = tabMeta[tab];
+                const active = activeTab === tab;
+                return (
+                  <button
+                    key={tab}
+                    type="button"
+                    onClick={() => setActiveTab(tab)}
+                    data-testid={`settings-tab-${tab}`}
+                    className={`group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors ${
+                      active
+                        ? "bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text))] shadow-sm"
+                        : "text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface))] hover:text-[rgb(var(--color-text))]"
+                    }`}
+                  >
+                    <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg border transition-colors ${
+                      active
+                        ? "border-[rgb(var(--color-accent))]/30 bg-[rgb(var(--color-accent))]/12 text-[rgb(var(--color-accent))]"
+                        : "border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text-secondary))] group-hover:text-[rgb(var(--color-text))]"
+                    }`}>
+                      {meta.icon}
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-medium">{meta.label}</span>
+                      <span className="block truncate text-[11px] text-[rgb(var(--color-text-secondary))]">
+                        {meta.eyebrow}
+                      </span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            {visibleTabs.length === 0 && (
+              <div className="rounded-lg border border-dashed border-[rgb(var(--color-border))] px-3 py-5 text-center text-xs text-[rgb(var(--color-text-secondary))]">
+                No settings match "{settingsFilter}".
+              </div>
+            )}
+          </div>
+
+          <div className="border-t border-[rgb(var(--color-border-subtle))] p-4">
+            <div className="flex items-center gap-2 rounded-lg bg-[rgb(var(--color-surface))] p-3 text-xs text-[rgb(var(--color-text-secondary))]">
+              <FolderGit2 className="h-4 w-4 shrink-0 text-[rgb(var(--color-accent))]" />
+              <div className="min-w-0">
+                <div className="font-medium text-[rgb(var(--color-text))]">
+                  {currentProject?.name ?? "No project open"}
+                </div>
+                <div className="truncate">{projectLocation}</div>
+              </div>
+            </div>
+          </div>
+        </aside>
+
+        <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
+          <div className="shrink-0 border-b border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))] px-6 py-4">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[rgb(var(--color-accent))]">
+                  {activeMeta.eyebrow}
+                </div>
+                <h1 className="mt-0.5 text-xl font-semibold tracking-tight text-[rgb(var(--color-text))]">
+                  {activeMeta.label}
+                </h1>
+                <p className="mt-1 max-w-3xl text-sm leading-5 text-[rgb(var(--color-text-secondary))]">
+                  {activeMeta.description}
+                </p>
+              </div>
+              <button
+                type="button"
+                data-testid="settings-close"
+                onClick={() => {
+                  if (onClose) {
+                    onClose();
+                    return;
+                  }
+                  setView(currentProject ? "project" : "home");
+                }}
+                className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
+                aria-label="Close settings"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+
+          <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+            <div className="mx-auto max-w-5xl">
+              {activeTab === "display" && (
+                <DisplayTab settings={settings} updateSetting={updateSetting} />
+              )}
+              {activeTab === "themes" && (
+                <ThemesTab settings={settings} updateSetting={updateSetting} />
+              )}
+              {activeTab === "recording" && (
+                <RecordingTab settings={settings} updateSetting={updateSetting} />
+              )}
+              {activeTab === "ai" && (
+                <AIProviderTab
+                  settings={settings}
+                  updateSetting={updateSetting}
+                  isAzure={isAzure}
+                  isFoundry={isFoundry}
+                  isAnthropic={isAnthropic}
+                  isOAuth={isOAuth}
+                  hasToken={hasToken}
+                  canFetchModels={canFetchModels}
+                  models={models}
+                  setModels={setModels}
+                  loadingModels={loadingModels}
+                  modelFilter={modelFilter}
+                  setModelFilter={setModelFilter}
+                  modelError={modelError}
+                  fetchModels={fetchModels}
+                  oauthStatus={oauthStatus}
+                  oauthError={oauthError}
+                  startOAuthFlow={startOAuthFlow}
+                  signOut={signOut}
+                />
+              )}
+              {activeTab === "agents" && (
+                <AgentsTab
+                  settings={settings}
+                  updateSetting={updateSetting}
+                  models={models}
+                  loadingModels={loadingModels}
+                  canFetchModels={canFetchModels}
+                  fetchModels={fetchModels}
+                  modelError={modelError}
+                />
+              )}
+              {activeTab === "memory" && (
+                <MemoryTab />
+              )}
+              {activeTab === "feedback" && (
+                <FeedbackListTab />
+              )}
+              {activeTab === "repository" && (
+                <RepositoryTab settings={settings} updateSetting={updateSetting} />
+              )}
+              {activeTab === "updates" && (
+                <UpdatesTab />
+              )}
+              {activeTab === "experimental" && (
+                <ExperimentalTab settings={settings} updateSetting={updateSetting} />
+              )}
+            </div>
+          </div>
+        </main>
       </div>
-
-      {/* Tab content */}
-      {activeTab === "display" && (
-        <DisplayTab settings={settings} updateSetting={updateSetting} />
-      )}
-      {activeTab === "themes" && (
-        <ThemesTab settings={settings} updateSetting={updateSetting} />
-      )}
-      {activeTab === "recording" && (
-        <RecordingTab settings={settings} updateSetting={updateSetting} />
-      )}
-      {activeTab === "ai" && (
-        <AIProviderTab
-          settings={settings}
-          updateSetting={updateSetting}
-          isAzure={isAzure}
-          isFoundry={isFoundry}
-          isAnthropic={isAnthropic}
-          isOAuth={isOAuth}
-          hasToken={hasToken}
-          canFetchModels={canFetchModels}
-          models={models}
-          setModels={setModels}
-          loadingModels={loadingModels}
-          modelFilter={modelFilter}
-          setModelFilter={setModelFilter}
-          modelError={modelError}
-          fetchModels={fetchModels}
-          oauthStatus={oauthStatus}
-          oauthError={oauthError}
-          startOAuthFlow={startOAuthFlow}
-          signOut={signOut}
-        />
-      )}
-      {activeTab === "agents" && (
-        <AgentsTab
-          settings={settings}
-          updateSetting={updateSetting}
-          models={models}
-          loadingModels={loadingModels}
-          canFetchModels={canFetchModels}
-          fetchModels={fetchModels}
-          modelError={modelError}
-        />
-      )}
-      {activeTab === "memory" && (
-        <MemoryTab />
-      )}
-      {activeTab === "feedback" && (
-        <FeedbackListTab />
-      )}
-      {activeTab === "repository" && (
-        <RepositoryTab settings={settings} updateSetting={updateSetting} />
-      )}
-      {activeTab === "updates" && (
-        <UpdatesTab />
-      )}
-      {activeTab === "experimental" && (
-        <ExperimentalTab settings={settings} updateSetting={updateSetting} />
-      )}
     </div>
   );
 }
@@ -637,7 +836,7 @@ function ThemePaletteCard({
           <div className="space-y-2">
             <div className="h-2 w-full rounded-full" style={{ backgroundColor: tokenRgb(preview.borderSubtle) }} />
             <div className="h-2 w-5/6 rounded-full" style={{ backgroundColor: tokenRgb(preview.borderSubtle) }} />
-            <div className="flex gap-1">
+            <div className="flex flex-wrap gap-1">
               {swatches.map((swatch) => (
                 <span key={swatch} className="h-1.5 flex-1 rounded-full" style={{ backgroundColor: swatch }} />
               ))}
@@ -2737,12 +2936,9 @@ function MemoryTab() {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-sm font-medium">AI Memory</h3>
-          <p className="text-xs text-[rgb(var(--color-text-secondary))] mt-0.5">
-            {memories.length} {memories.length === 1 ? "memory" : "memories"} stored
-          </p>
-        </div>
+        <p className="text-xs text-[rgb(var(--color-text-secondary))]">
+          {memories.length} {memories.length === 1 ? "memory" : "memories"} stored
+        </p>
         <div className="flex items-center gap-2">
           <button
             onClick={loadMemories}
@@ -2791,7 +2987,7 @@ function MemoryTab() {
           <p className="text-xs mt-1">The AI assistant will save memories as you chat.</p>
         </div>
       ) : (
-        <div className="flex flex-col gap-1.5 max-h-[400px] overflow-y-auto">
+        <div className="flex flex-col gap-1.5">
           {filtered.map((m) => {
             const idx = globalIndex(m);
             const isEditing = editingIndex === idx;
@@ -2851,7 +3047,7 @@ function MemoryTab() {
                     </button>
                   </div>
                 ) : (
-                  <p className="text-xs text-[rgb(var(--color-text))] leading-relaxed">{m.content}</p>
+                  <p className="whitespace-pre-wrap break-words text-xs leading-relaxed text-[rgb(var(--color-text))]">{m.content}</p>
                 )}
                 <span className="text-[10px] text-[rgb(var(--color-text-secondary))]/50">
                   {new Date(m.created_at).toLocaleDateString()}
