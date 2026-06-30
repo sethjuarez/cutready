@@ -32,7 +32,7 @@ vi.mock("../components/AssetList", () => ({
   AssetList: () => <div />,
 }));
 vi.mock("../components/OutputPanel", () => ({
-  OutputPanel: () => <div />,
+  OutputPanel: () => <div data-testid="output-panel" />,
 }));
 vi.mock("../components/CommandPalette", () => ({
   CommandPalette: () => null,
@@ -95,6 +95,7 @@ describe("AppLayout titlebar spacing", () => {
       useAppStore.setState({
         chatFocusMode: false,
         view: "home",
+        outputVisible: true,
       }),
     );
     platform.isMac = false;
@@ -165,5 +166,27 @@ describe("AppLayout titlebar spacing", () => {
       top: "var(--titlebar-height)",
       bottom: "var(--statusbar-height)",
     });
+  });
+
+  it("keeps the output panel mounted when navigating to views that hide it", () => {
+    act(() =>
+      useAppStore.setState({
+        chatFocusMode: false,
+        outputVisible: true,
+        view: "project",
+      }),
+    );
+
+    render(<AppLayout />);
+
+    expect(screen.getByTestId("output-panel")).toBeInTheDocument();
+
+    act(() =>
+      useAppStore.setState({
+        view: "chat",
+      }),
+    );
+
+    expect(screen.getByTestId("output-panel")).toBeInTheDocument();
   });
 });

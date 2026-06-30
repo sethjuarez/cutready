@@ -396,6 +396,8 @@ export function AppLayout() {
     (delta: number) => setOutputHeight(outputHeight - delta),
     [outputHeight, setOutputHeight],
   );
+  const outputPanelAvailable = view !== "home" && view !== "settings" && view !== "chat";
+  const outputPanelVisible = terminalFocusMode || (outputPanelAvailable && outputVisible);
 
   return (
     <div className="flex flex-col h-full">
@@ -441,21 +443,19 @@ export function AppLayout() {
               {view === "chat" && <div className="h-full overflow-hidden"><ChatPanel /></div>}
             </div>
 
-            {/* Lower: output panel (hidden on home, settings, and chat views) */}
-            {view !== "home" && view !== "settings" && view !== "chat" && (
-              <>
-                {outputVisible && <ResizeHandle direction="vertical" onResize={handleOutputResize} />}
-                <div
-                  className={outputVisible ? "shrink-0 overflow-hidden" : "h-0 shrink-0 overflow-hidden"}
-                  style={{ height: outputVisible ? outputHeight : 0 }}
-                  aria-hidden={!outputVisible}
-                >
-                  <OutputPanel
-                    onCollapse={toggleOutput}
-                  />
-                </div>
-              </>
+            {/* Lower: output panel. Keep it mounted so terminal sessions survive navigation. */}
+            {outputPanelAvailable && outputVisible && !terminalFocusMode && (
+              <ResizeHandle direction="vertical" onResize={handleOutputResize} />
             )}
+            <div
+              className={outputPanelVisible ? "shrink-0 overflow-hidden" : "h-0 shrink-0 overflow-hidden"}
+              style={{ height: outputPanelVisible ? outputHeight : 0 }}
+              aria-hidden={!outputPanelVisible}
+            >
+              <OutputPanel
+                onCollapse={toggleOutput}
+              />
+            </div>
           </div>
 
           {/* Primary sidebar on right (hidden on home, settings, and chat views) */}
