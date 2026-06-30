@@ -203,10 +203,6 @@ describe("StoryboardView", () => {
 
     render(<StoryboardView />);
 
-    const description = screen.getByDisplayValue("Original section framing");
-    fireEvent.change(description, {
-      target: { value: "Updated section framing" },
-    });
     fireEvent.click(screen.getByLabelText("Edit section title: Build"));
     const title = screen.getByDisplayValue("Build");
     fireEvent.change(title, {
@@ -223,6 +219,42 @@ describe("StoryboardView", () => {
         type: "section",
         title: "Build chapter",
         description: "Original section framing",
+      })],
+    });
+  });
+
+  it("renders section descriptions as read-only markdown until edited", async () => {
+    const section: StoryboardItem = {
+      type: "section",
+      title: "Build",
+      description: "Original **section** framing",
+      sketches: [],
+    };
+    useAppStore.setState({
+      activeStoryboard: activeStoryboard("Original description", false, [section]),
+    });
+
+    render(<StoryboardView />);
+
+    expect(screen.queryByDisplayValue("Original **section** framing")).not.toBeInTheDocument();
+    expect(screen.getByText("section")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("section"));
+    const description = screen.getByDisplayValue("Original **section** framing");
+    fireEvent.change(description, {
+      target: { value: "Updated section framing" },
+    });
+    await act(async () => {
+      fireEvent.blur(description);
+      await Promise.resolve();
+    });
+
+    expect(mockInvoke).toHaveBeenCalledWith("reorder_storyboard_items", {
+      storyboardPath: "demo.sb",
+      items: [expect.objectContaining({
+        type: "section",
+        title: "Build",
+        description: "Updated section framing",
       })],
     });
   });
