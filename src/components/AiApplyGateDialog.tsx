@@ -14,8 +14,9 @@ export function AiApplyGateDialog() {
       title="Allow AI to apply changes?"
       message={(
         <>
+          <span className="font-medium text-[rgb(var(--color-text))]">Ask Mode is active.</span>{" "}
           <span className="font-medium text-[rgb(var(--color-text))]">{request?.label ?? "This AI action"}</span>{" "}
-          can write to sketches, notes, storyboards, or visuals. CutReady will keep the changes visible in the Changes panel so you can snapshot or discard them.
+          can write to sketches, notes, storyboards, or visuals after you approve. CutReady will keep the changes visible in the Changes panel so you can snapshot or discard them. To stop seeing this prompt, choose Auto-apply from now on or change Settings &gt; AI apply behavior.
         </>
       )}
       actions={[
@@ -34,4 +35,3 @@ export function AiApplyGateDialog() {
     />
   );
 }
-

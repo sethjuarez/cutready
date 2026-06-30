@@ -1,5 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
-import { applyStreamingDeltaReset, buildChatWorkingNotes, extractInlineToolActivity, isChatScrolledNearBottom, reconcileMessagesForDisplay } from "../components/ChatPanel";
+import {
+  applyStreamingDeltaReset,
+  askModeApprovedSystemInstruction,
+  askModeCancelledMessage,
+  buildChatWorkingNotes,
+  canUseChatMutationTools,
+  extractInlineToolActivity,
+  isChatScrolledNearBottom,
+  reconcileMessagesForDisplay,
+  shouldRequestChatMutationApproval,
+} from "../components/ChatPanel";
 import type { ChatMessage } from "../types/sketch";
 
 describe("reconcileMessagesForDisplay", () => {
@@ -162,6 +172,34 @@ describe("buildChatWorkingNotes", () => {
     });
   });
 
+});
+
+describe("Ask Mode chat mutation gating", () => {
+  it("allows mutation tools in ask mode only after approval", () => {
+    expect(shouldRequestChatMutationApproval("ask")).toBe(true);
+    expect(shouldRequestChatMutationApproval("auto")).toBe(false);
+    expect(canUseChatMutationTools("ask", false)).toBe(false);
+    expect(canUseChatMutationTools("ask", true)).toBe(true);
+    expect(canUseChatMutationTools("auto", false)).toBe(true);
+    expect(canUseChatMutationTools("readonly", true)).toBe(false);
+  });
+
+  it("tells the model ask mode approval permits write tools for the current turn", () => {
+    const instruction = askModeApprovedSystemInstruction();
+
+    expect(instruction).toContain("Ask before applying");
+    expect(instruction).toContain("approved mutation tools");
+    expect(instruction).toContain("you may use write or mutation tools");
+    expect(instruction).not.toContain("cannot use write");
+  });
+
+  it("explains where to change settings when ask mode approval is canceled", () => {
+    const message = askModeCancelledMessage();
+
+    expect(message).toContain("Ask Mode is active");
+    expect(message).toContain("Settings > AI apply behavior");
+    expect(message).toContain("Auto-apply AI changes");
+  });
 });
 
 describe("extractInlineToolActivity", () => {

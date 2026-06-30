@@ -813,7 +813,7 @@ pub fn execute_tool(
 
     if !mutation_tools_enabled && !is_read_only_tool(&call.function.name) {
         return agentive::ToolOutput::from(format!(
-            "Error: {} is disabled while AI apply behavior is set to review changes first.",
+            "Error: {} is disabled by the current AI mutation guard. In Ask Mode, approve the permission prompt before applying changes or switch Settings > AI apply behavior to Auto-apply AI changes.",
             call.function.name
         ));
     }
@@ -5237,7 +5237,7 @@ mod tests {
 
         let output = execute_tool(&call, tmp.path(), tmp.path(), false, true, false);
 
-        assert!(output.text().contains("disabled while AI apply behavior"));
+        assert!(output.text().contains("disabled by the current AI mutation guard"));
         assert!(!tmp.path().join("draft.md").exists());
     }
 
