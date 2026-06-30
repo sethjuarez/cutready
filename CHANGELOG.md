@@ -10,6 +10,13 @@
 
 Release Please manages this changelog. Do not edit manually.
 
+## [1.22.0](https://github.com/sethjuarez/cutready/compare/v1.21.1...v1.22.0) (2026-06-30)
+
+
+### Features
+
+* **settings:** redesign settings overlay ([a423842](https://github.com/sethjuarez/cutready/commit/a42384285795b60247878e2a93166b0823e88721))
+
 ## [1.21.1](https://github.com/sethjuarez/cutready/compare/v1.21.0...v1.21.1) (2026-06-30)
 
 
