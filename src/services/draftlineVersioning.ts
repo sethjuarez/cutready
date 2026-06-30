@@ -25,6 +25,10 @@ import {
   type VariationCreatePreflight,
   type VariationCreateToken,
   type HistoryCleanupPreview,
+  type HistoryCleanupPublishPreflight,
+  type HistoryCleanupPublishResult,
+  type HistoryCleanupPublishToken,
+  type HistoryCleanupRemoteImpact,
   type HistoryCleanupUndoPreflight,
   type HistoryCleanupUndoToken,
   type StaleVersionResolution,
@@ -49,6 +53,10 @@ export type DraftlineSwitchVariationResult = SwitchVariationResult;
 export type DraftlineVariationCreatePreflight = VariationCreatePreflight;
 export type DraftlineVariationCreateToken = VariationCreateToken;
 export type DraftlineHistoryCleanupPreview = HistoryCleanupPreview;
+export type DraftlineHistoryCleanupPublishPreflight = HistoryCleanupPublishPreflight;
+export type DraftlineHistoryCleanupPublishResult = HistoryCleanupPublishResult;
+export type DraftlineHistoryCleanupPublishToken = HistoryCleanupPublishToken;
+export type DraftlineHistoryCleanupRemoteImpact = HistoryCleanupRemoteImpact;
 export type DraftlineHistoryCleanupUndoPreflight = HistoryCleanupUndoPreflight;
 export type DraftlineHistoryCleanupUndoToken = HistoryCleanupUndoToken;
 export type DraftlineStaleVersionResolution = StaleVersionResolution;
@@ -557,6 +565,26 @@ export async function previewDraftlineSnapshotCleanup(
 
 export async function applyDraftlineSnapshotCleanup(planId: string): Promise<TimelineCleanupResult> {
   return facade().applyHistoryCleanup(planId);
+}
+
+export async function preflightDraftlineSnapshotCleanupRemoteImpact(
+  planId: string,
+  remote: string,
+): Promise<HistoryCleanupRemoteImpact> {
+  return facade().preflightHistoryCleanupRemoteImpact(planId, remote);
+}
+
+export async function preflightDraftlinePublishSnapshotCleanup(
+  planId: string,
+  remote: string,
+): Promise<HistoryCleanupPublishPreflight> {
+  return facade().preflightPublishHistoryCleanup(planId, remote);
+}
+
+export async function publishDraftlineSnapshotCleanup(
+  token: HistoryCleanupPublishToken,
+): Promise<HistoryCleanupPublishResult> {
+  return facade().publishHistoryCleanup(token);
 }
 
 export async function resolveDraftlineRewrittenVersion(versionId: string): Promise<StaleVersionResolution> {

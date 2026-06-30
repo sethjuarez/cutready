@@ -24,10 +24,12 @@ import {
   listDraftlineVersions,
   preflightDraftlineIncoming,
   preflightDraftlineMergeIncoming,
+  preflightDraftlinePublishSnapshotCleanup,
   preflightDraftlineSwitchVariation,
   mergeDraftlineIncoming,
   mergeDraftlineIncomingWithResolutions,
   publishDraftlineChanges,
+  publishDraftlineSnapshotCleanup,
   popDraftlineShelf,
   preflightDraftlineRenameVariation,
   applyDraftlineSnapshotCleanup,
@@ -44,6 +46,7 @@ import {
   type DraftlineRestoreVersionTarget,
   type DraftlineMergeIncomingToken,
   type DraftlineHistoryCleanupPreview,
+  type DraftlineHistoryCleanupPublishResult,
   type DraftlineHistoryCompactionCandidates,
   type DraftlineTimelineCleanupResult,
 } from "../services/draftlineVersioning";
@@ -788,6 +791,8 @@ interface AppStoreState {
   previewSnapshotCleanup: (oldestCommitId: string, newestCommitId: string, label: string, selectedRangeCommitIds?: string[]) => Promise<DraftlineHistoryCleanupPreview>;
   /** Apply a previously previewed Draftline cleanup plan. */
   applySnapshotCleanup: (planId: string) => Promise<DraftlineTimelineCleanupResult>;
+  /** Publish an applied Draftline cleanup plan to the remote with Draftline's lease-protected token. */
+  publishSnapshotCleanup: (planId: string, remote: string) => Promise<DraftlineHistoryCleanupPublishResult | null>;
   /** Undo a previously applied Draftline cleanup plan using Draftline's guarded backup token. */
   undoSnapshotCleanup: (planId?: string) => Promise<DraftlineTimelineCleanupResult>;
 
@@ -2771,6 +2776,25 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     return result;
   },
 
+  publishSnapshotCleanup: async (planId, remote) => {
+    const preflight = await preflightDraftlinePublishSnapshotCleanup(planId, remote);
+    if (preflight.remote_impact.publish_status === "remote_has_incoming") {
+      throw new Error("Remote has new incoming snapshots. Sync before publishing compacted history.");
+    }
+    if (!preflight.can_publish || !preflight.token) {
+      return null;
+    }
+    const result = await publishDraftlineSnapshotCleanup(preflight.token);
+    set({ lastHistoryCleanup: null });
+    await get().refreshSyncStatus();
+    await get().refreshIncomingCommits();
+    await get().loadGraphData();
+    await get().loadTimelines();
+    await get().loadVersions();
+    useToastStore.getState().show("Compacted remote history published safely.", 5000, "success");
+    return result;
+  },
+
   undoSnapshotCleanup: async (planId) => {
     const targetPlanId = planId ?? get().lastHistoryCleanup?.plan_id;
     if (!targetPlanId) {
@@ -2858,6 +2882,13 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
           .join(", ");
         set({ syncError: `Large files detected: ${names}. Remove or add to .gitignore before pushing.`, isSyncing: false });
         return;
+      }
+      const pendingCleanup = get().lastHistoryCleanup;
+      if (pendingCleanup) {
+        const published = await get().publishSnapshotCleanup(pendingCleanup.plan_id, currentRemote.name);
+        if (published) {
+          return;
+        }
       }
       await publishDraftlineChanges(currentRemote.name);
       await get().refreshSyncStatus();
