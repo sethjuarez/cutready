@@ -22,10 +22,30 @@ export function isExactHeadCleanupSelection(nodes: GraphNode[], selectedIds: Set
   return !!range && range.length === selectedIds.size && range.every((node) => selectedIds.has(node.id));
 }
 
+export function isExactCleanupSelection(nodes: GraphNode[], selectedIds: Set<string>): boolean {
+  const ordered = newestFirst(nodes);
+  if (selectedIds.size < 2) return false;
+  const selectedNewest = ordered.find((node) => selectedIds.has(node.id));
+  const selectedOldest = [...ordered].reverse().find((node) => selectedIds.has(node.id));
+  if (!selectedNewest || !selectedOldest) return false;
+  const range = cleanupRange(ordered, selectedNewest.id, selectedOldest.id);
+  return !!range && range.length === selectedIds.size && range.every((node) => selectedIds.has(node.id));
+}
+
 export function headAnchoredCleanupSelection(nodes: GraphNode[], clickedId: string): Set<string> {
   const ordered = newestFirst(nodes);
   const headIndex = ordered.findIndex((node) => node.is_head);
   const clickedIndex = ordered.findIndex((node) => node.id === clickedId);
   if (headIndex < 0 || clickedIndex < headIndex) return new Set();
   return new Set(ordered.slice(headIndex, clickedIndex + 1).map((node) => node.id));
+}
+
+export function twoPointCleanupSelection(nodes: GraphNode[], firstId: string, secondId: string): Set<string> {
+  const ordered = newestFirst(nodes);
+  const firstIndex = ordered.findIndex((node) => node.id === firstId);
+  const secondIndex = ordered.findIndex((node) => node.id === secondId);
+  if (firstIndex < 0 || secondIndex < 0 || firstIndex === secondIndex) return new Set();
+  const start = Math.min(firstIndex, secondIndex);
+  const end = Math.max(firstIndex, secondIndex);
+  return new Set(ordered.slice(start, end + 1).map((node) => node.id));
 }

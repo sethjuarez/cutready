@@ -21,6 +21,7 @@ import { SketchIcon, StoryboardIcon, NoteIcon } from "./Icons";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { ContextMenu, type ContextMenuItem } from "./ContextMenu";
 import { useToastStore } from "../stores/toastStore";
+import { contentTypeTones, type ContentTypeTone } from "../utils/contentTypeTheme";
 
 /** Sort items by manifest order. Items not in the manifest go at the end. */
 function applySidebarOrder<T extends { path: string }>(items: T[], order: string[]): T[] {
@@ -49,29 +50,29 @@ function sectionBodyStyle(
   };
 }
 
-function documentItemClass(active: boolean) {
+function documentItemClass(active: boolean, tone: ContentTypeTone) {
   return `group/item relative flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-left text-[12px] outline-none transition-colors focus-visible:bg-[rgb(var(--color-surface-alt))] ${
     active
-      ? "bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))]"
-      : "text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))]"
+      ? `${tone.activeBg} ${tone.text}`
+      : `text-[rgb(var(--color-text))] ${tone.hoverBg}`
   }`;
 }
 
-function documentItemMetaClass(active: boolean) {
-  return active ? "text-[rgb(var(--color-accent))]/70" : "text-[rgb(var(--color-text-secondary))]/80";
+function documentItemMetaClass(active: boolean, tone: ContentTypeTone) {
+  return active ? tone.metaText : "text-[rgb(var(--color-text-secondary))]/80";
 }
 
-function ActiveDocumentMarker({ active }: { active: boolean }) {
+function ActiveDocumentMarker({ active, tone }: { active: boolean; tone: ContentTypeTone }) {
   if (!active) return null;
-  return <span className="absolute left-0 top-1 bottom-1 w-0.5 rounded-r bg-[rgb(var(--color-accent))]" />;
+  return <span className={`absolute left-0 top-1 bottom-1 w-0.5 rounded-r ${tone.bg}`} />;
 }
 
-function DocumentItemText({ title, meta, active }: { title: string; meta?: string; active: boolean }) {
+function DocumentItemText({ title, meta, active, tone }: { title: string; meta?: string; active: boolean; tone: ContentTypeTone }) {
   return (
     <div className="min-w-0 flex-1 py-0.5 leading-tight">
       <div className="truncate text-[12px] font-medium leading-4" title={title}>{title}</div>
       {meta && (
-        <div className={`mt-0.5 truncate text-[10px] leading-3 ${documentItemMetaClass(active)}`} title={meta}>
+        <div className={`mt-0.5 truncate text-[10px] leading-3 ${documentItemMetaClass(active, tone)}`} title={meta}>
           {meta}
         </div>
       )}
@@ -117,23 +118,25 @@ function SidebarSectionHeader({
   expanded,
   onToggle,
   actions,
+  tone,
 }: {
   title: string;
   count: number;
   expanded: boolean;
   onToggle: () => void;
   actions?: React.ReactNode;
+  tone: ContentTypeTone;
 }) {
   return (
     <div className="flex h-8 min-w-0 shrink-0 items-center justify-between gap-2 border-b border-[rgb(var(--color-border))] px-3">
       <button
         onClick={onToggle}
-        className="flex min-w-0 flex-1 items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-[rgb(var(--color-text-secondary))] transition-colors hover:text-[rgb(var(--color-text))]"
+        className={`flex min-w-0 flex-1 items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-[rgb(var(--color-text-secondary))] transition-colors ${tone.hoverText}`}
       >
         {expanded ? <ChevronDown className="h-3 w-3 shrink-0" /> : <ChevronRight className="h-3 w-3 shrink-0" />}
         <span className="truncate">{title}</span>
         {count > 0 && (
-          <span className="ml-1 rounded-full bg-[rgb(var(--color-accent))]/15 px-1 py-0 text-[9px] font-medium text-[rgb(var(--color-accent))]">
+          <span className={`ml-1 rounded-full border px-1 py-0 text-[9px] font-medium ${tone.activeBg} ${tone.text} ${tone.border}`}>
             {count}
           </span>
         )}
@@ -437,6 +440,9 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
   const storyboardsBodyStyle = sectionBodyStyle(resolvedMode, 0.75, orderedStoryboards.length, expandedSectionCount, 42);
   const sketchesBodyStyle = sectionBodyStyle(resolvedMode, 1.25, orderedSketches.length, expandedSectionCount, 42);
   const notesBodyStyle = sectionBodyStyle(resolvedMode, 2, orderedNotes.length, expandedSectionCount, 30);
+  const storyboardTone = contentTypeTones.storyboard;
+  const sketchTone = contentTypeTones.sketch;
+  const noteTone = contentTypeTones.note;
 
   // DnD sensors — require 5px movement to start drag (avoids accidental drags on click)
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
@@ -644,6 +650,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
             count={orderedStoryboards.length}
             expanded={storyboardsExpanded}
             onToggle={() => setStoryboardsExpanded(!storyboardsExpanded)}
+            tone={storyboardTone}
             actions={
               <>
               {resolvedMode === "storyboards" && (
@@ -717,10 +724,10 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                           if (e.key === "F2") { e.preventDefault(); startRename("storyboard", sb.path); }
                           else if (e.key === "Enter" || e.key === " ") { if (!renamingItem) openStoryboard(sb.path); }
                         }}
-                        className={documentItemClass(sb.path === activeStoryboardPath)}
+                        className={documentItemClass(sb.path === activeStoryboardPath, storyboardTone)}
                       >
-                        <ActiveDocumentMarker active={sb.path === activeStoryboardPath} />
-                        <StoryboardIcon className="shrink-0 opacity-80" />
+                        <ActiveDocumentMarker active={sb.path === activeStoryboardPath} tone={storyboardTone} />
+                        <StoryboardIcon className={`shrink-0 opacity-90 ${storyboardTone.text}`} />
                         <div className="min-w-0 flex-1">
                           {renamingItem?.path === sb.path ? (
                             <input
@@ -741,6 +748,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                               title={sb.title}
                               meta={`${sb.sketch_count} ${sb.sketch_count === 1 ? "sketch" : "sketches"}`}
                               active={sb.path === activeStoryboardPath}
+                              tone={storyboardTone}
                             />
                           )}
                         </div>
@@ -774,6 +782,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
             count={orderedSketches.length}
             expanded={sketchesExpanded}
             onToggle={() => setSketchesExpanded(!sketchesExpanded)}
+            tone={sketchTone}
             actions={
               <>
               {resolvedMode === "sketches" && (
@@ -847,10 +856,10 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                           if (e.key === "F2") { e.preventDefault(); startRename("sketch", sk.path); }
                           else if (e.key === "Enter" || e.key === " ") { if (!renamingItem) handleOpenSketchStandalone(sk.path); }
                         }}
-                        className={documentItemClass(sk.path === activeSketchPath)}
+                        className={documentItemClass(sk.path === activeSketchPath, sketchTone)}
                       >
-                        <ActiveDocumentMarker active={sk.path === activeSketchPath} />
-                        <SketchIcon className="shrink-0 opacity-80" />
+                        <ActiveDocumentMarker active={sk.path === activeSketchPath} tone={sketchTone} />
+                        <SketchIcon className={`shrink-0 opacity-90 ${sketchTone.text}`} />
                         <div className="min-w-0 flex-1">
                           {renamingItem?.path === sk.path ? (
                             <input
@@ -871,6 +880,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                               title={sk.title}
                               meta={`${sk.row_count} ${sk.row_count === 1 ? "row" : "rows"}`}
                               active={sk.path === activeSketchPath}
+                              tone={sketchTone}
                             />
                           )}
                         </div>
@@ -904,6 +914,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
             count={orderedNotes.length}
             expanded={notesExpanded}
             onToggle={() => setNotesExpanded(!notesExpanded)}
+            tone={noteTone}
             actions={
               <>
               {resolvedMode === "notes" && (
@@ -990,10 +1001,10 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                           if (e.key === "F2") { e.preventDefault(); startRename("note", note.path); }
                           else if (e.key === "Enter" || e.key === " ") { if (!renamingItem) openNote(note.path); }
                         }}
-                        className={documentItemClass(note.path === activeNotePath)}
+                        className={documentItemClass(note.path === activeNotePath, noteTone)}
                       >
-                        <ActiveDocumentMarker active={note.path === activeNotePath} />
-                        <NoteIcon className="shrink-0 opacity-80" />
+                        <ActiveDocumentMarker active={note.path === activeNotePath} tone={noteTone} />
+                        <NoteIcon className={`shrink-0 opacity-90 ${noteTone.text}`} />
                         <div className="min-w-0 flex-1">
                           {renamingItem?.path === note.path ? (
                             <input
@@ -1010,7 +1021,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                               className="w-full px-1 py-0.5 text-xs font-medium bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-accent))]/40 rounded focus:outline-none focus:ring-1 focus:ring-[rgb(var(--color-accent))]/40 text-[rgb(var(--color-text))]"
                             />
                           ) : (
-                            <DocumentItemText title={note.title} meta={note.path} active={note.path === activeNotePath} />
+                            <DocumentItemText title={note.title} meta={note.path} active={note.path === activeNotePath} tone={noteTone} />
                           )}
                         </div>
                         {renamingItem?.path !== note.path && (

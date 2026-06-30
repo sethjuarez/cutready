@@ -412,6 +412,7 @@ pub fn run() {
             commands::draftline::preflight_rename_variation,
             commands::draftline::rename_variation,
             commands::draftline::delete_variation,
+            commands::draftline::preflight_switch_variation,
             commands::draftline::switch_variation,
             commands::draftline::add_remote,
             commands::draftline::squash_versions,

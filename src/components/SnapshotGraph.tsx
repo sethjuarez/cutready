@@ -135,6 +135,8 @@ interface Props {
   isRewound: boolean;
   timelineMap: Map<string, TimelineInfo>;
   hasMultipleTimelines: boolean;
+  variant?: "compact" | "expanded";
+  zoom?: number;
   showRemoteBadges?: boolean;
   selectionMode?: boolean;
   selectedIds?: Set<string>;
@@ -144,11 +146,22 @@ interface Props {
 
 /* ── Component ────────────────────────────────────────────────────── */
 export function SnapshotGraph({
-  nodes: rawNodes, isDirty, isRewound, timelineMap, hasMultipleTimelines, showRemoteBadges = false, selectionMode = false, selectedIds = new Set(), onToggleSelect, onNodeClick,
+  nodes: rawNodes, isDirty, isRewound, timelineMap, hasMultipleTimelines, variant = "compact", zoom = 1, showRemoteBadges = false, selectionMode = false, selectedIds = new Set(), onToggleSelect, onNodeClick,
 }: Props) {
   const [hovered, setHovered] = useState<string | null>(null);
   const currentRemote = useAppStore((s) => s.currentRemote);
   const diffWorkingTree = useAppStore((s) => s.diffWorkingTree);
+  const expanded = variant === "expanded";
+  const z = expanded ? Math.min(1.6, Math.max(0.7, zoom)) : 1;
+  const rowH = expanded ? Math.round(54 * z) : ROW_H;
+  const dirtyRowH = expanded ? Math.round(36 * z) : DIRTY_ROW_H;
+  const laneW = expanded ? Math.round(34 * z) : LANE_W;
+  const graphPad = expanded ? Math.round((showRemoteBadges ? 92 : 48) * z) : showRemoteBadges ? 52 : GRAPH_PAD;
+  const nodeR = expanded ? 5.5 * z : NODE_R;
+  const headR = expanded ? 7 * z : HEAD_R;
+  const strokeW = expanded ? 2.5 : STROKE_W;
+  const messageFontSize = expanded ? `${Math.max(11, 13 * z)}px` : undefined;
+  const metaFontSize = expanded ? `${Math.max(9, 10 * z)}px` : undefined;
 
   /* ── Separate primary nodes from alias nodes ──── */
   const { primaryNodes, aliases } = useMemo(() => {
@@ -184,20 +197,19 @@ export function SnapshotGraph({
 
       // Ghost row above HEAD (rewound + dirty)
       if (n.is_head && isDirty && isRewound) {
-        result.push({ kind: "ghost", laneIdx: dl + 1, h: DIRTY_ROW_H });
+        result.push({ kind: "ghost", laneIdx: dl + 1, h: dirtyRowH });
       }
       // Dirty row above HEAD (not rewound)
       if (n.is_head && isDirty && !isRewound) {
-        result.push({ kind: "dirty", laneIdx: dl, h: DIRTY_ROW_H });
+        result.push({ kind: "dirty", laneIdx: dl, h: dirtyRowH });
       }
 
-      result.push({ kind: "node", node: n, laneIdx: dl, h: ROW_H });
+      result.push({ kind: "node", node: n, laneIdx: dl, h: rowH });
     }
     return result;
-  }, [sorted, displayLane, numLanes, isDirty, isRewound, aliases]);
+  }, [dirtyRowH, sorted, displayLane, numLanes, isDirty, isRewound, aliases, rowH]);
 
-  const graphPad = showRemoteBadges ? 52 : GRAPH_PAD;
-  const graphW = graphPad + (numLanes || 1) * LANE_W + 4;
+  const graphW = graphPad + (numLanes || 1) * laneW + (expanded ? 18 : 4);
 
   /* ── empty state ─────────────────────────────── */
   if (sorted.length === 0 && !isDirty) {
@@ -219,7 +231,7 @@ export function SnapshotGraph({
     totalH += r.h;
   }
   function rowCy(i: number) { return rowTops[i] + rows[i].h / 2; }
-  function laneX(l: number) { return graphPad + l * LANE_W; }
+  function laneX(l: number) { return graphPad + l * laneW; }
 
   /* ── Build SVG paths: rails + connectors ──────── */
   // For each node row, we need:
@@ -257,13 +269,13 @@ export function SnapshotGraph({
       if (childLane === parentLane) {
         // Same lane: straight vertical line
         paths.push({
-          d: `M ${cx} ${cy + NODE_R} L ${px} ${py - NODE_R}`,
+         d: `M ${cx} ${cy + nodeR} L ${px} ${py - nodeR}`,
           color, opacity: 0.7,
         });
       } else {
         // Different lanes: smooth S-curve bezier (like git log --graph)
         paths.push({
-          d: `M ${cx} ${cy + NODE_R} C ${cx} ${(cy + py) / 2}, ${px} ${(cy + py) / 2}, ${px} ${py - NODE_R}`,
+         d: `M ${cx} ${cy + nodeR} C ${cx} ${(cy + py) / 2}, ${px} ${(cy + py) / 2}, ${px} ${py - nodeR}`,
           color, opacity: 0.6,
         });
       }
@@ -276,7 +288,7 @@ export function SnapshotGraph({
   if (dirtyRowIdx >= 0 && headRowIdx >= 0) {
     const dx = laneX(rows[dirtyRowIdx].laneIdx);
     paths.push({
-      d: `M ${dx} ${rowCy(dirtyRowIdx) + 4} L ${dx} ${rowCy(headRowIdx) - HEAD_R}`,
+      d: `M ${dx} ${rowCy(dirtyRowIdx) + 4} L ${dx} ${rowCy(headRowIdx) - headR}`,
       color: "rgb(var(--color-text-secondary))", opacity: 0.4, dashed: true,
     });
   }
@@ -289,14 +301,15 @@ export function SnapshotGraph({
     const gy = rowCy(ghostRowIdx);
     const hy = rowCy(headRowIdx);
     paths.push({
-      d: `M ${hx + HEAD_R} ${hy} Q ${gx} ${hy}, ${gx} ${gy + 4}`,
+      d: `M ${hx + headR} ${hy} Q ${gx} ${hy}, ${gx} ${gy + 4}`,
       color: lc(rows[headRowIdx].laneIdx), opacity: 0.5, dashed: true,
     });
   }
 
   /* ── Render ──────────────────────────────────── */
   return (
-    <div className="relative" style={{ minHeight: totalH }}>
+    <div>
+      <div className="relative" style={{ minHeight: totalH }}>
       {/* SVG graph layer */}
       <svg
         className="absolute top-0 left-0"
@@ -305,7 +318,7 @@ export function SnapshotGraph({
         style={{ pointerEvents: "none", zIndex: 1 }}
       >
         {paths.map((p, i) => (
-          <path key={i} d={p.d} stroke={p.color} strokeWidth={STROKE_W}
+          <path key={i} d={p.d} stroke={p.color} strokeWidth={strokeW}
             strokeOpacity={p.opacity} fill="none"
             strokeDasharray={p.dashed ? "3 2" : undefined}
             strokeLinecap="round" />
@@ -370,7 +383,7 @@ export function SnapshotGraph({
         const x = laneX(dl);
         const tlInfo = timelineMap.get(node.timeline);
         const color = lc(tlInfo?.colorIndex ?? dl);
-        const r = node.is_head ? HEAD_R : NODE_R;
+        const r = node.is_head ? headR : nodeR;
         const isHov = hovered === node.id;
         const selected = selectedIds.has(node.id);
         const tlLabel = tlInfo?.label ?? node.timeline;
@@ -378,7 +391,7 @@ export function SnapshotGraph({
 
         return (
           <div key={node.id}
-            className="flex items-center group overflow-hidden"
+          className={`flex items-center group ${expanded ? "overflow-visible" : "overflow-hidden"}`}
             style={{ height: row.h }}
             onMouseEnter={() => !node.is_head && setHovered(node.id)}
             onMouseLeave={() => setHovered(null)}
@@ -437,44 +450,115 @@ export function SnapshotGraph({
             {/* Label column — indented to match lane */}
             <div
               className={`flex-1 min-w-0 pr-2 flex flex-col justify-center ${!node.is_head ? "cursor-pointer" : ""}`}
-              style={{ paddingLeft: dl * LANE_W }}
+              style={{ paddingLeft: expanded ? 0 : dl * laneW }}
               onClick={() => selectionMode ? onToggleSelect?.(node.id) : !node.is_head && onNodeClick(node.id, node.is_head)}
             >
-              <div className={`text-xs truncate leading-tight transition-colors ${
-                node.is_head ? "font-medium text-[rgb(var(--color-text))]"
-                  : isHov ? "text-[rgb(var(--color-text))]"
-                  : "text-[rgb(var(--color-text-secondary))]"
-              }`}>{node.message}</div>
-              <div className="flex min-w-0 items-center gap-1.5 overflow-hidden whitespace-nowrap">
-                <span className="shrink-0 text-[10px] text-[rgb(var(--color-text-secondary))]/50">{fmtDate(node.timestamp)}</span>
-                {/* Author — only show when remote is configured (collaborator context) */}
-                {currentRemote && node.author && (
-                  <span className="min-w-0 max-w-[4.5rem] truncate text-[9px] text-[rgb(var(--color-text-secondary))]/40" title={`by ${node.author}`}>
-                    {node.author}
-                  </span>
-                )}
-                {hasMultipleTimelines && (
-                  <span
-                    className="min-w-0 max-w-[6.75rem] truncate rounded-sm px-1 py-px text-[9px] leading-tight"
-                    title={tlLabel}
-                    style={{ color, backgroundColor: `${color}15` }}>{tlLabel}</span>
-                )}
-                {nodeAliases && nodeAliases.map(a => {
-                  const aInfo = timelineMap.get(a.timeline);
-                  const aLabel = aInfo?.label ?? a.timeline;
-                  return (
+              {expanded ? (
+               <div className={`border-l-2 px-3 py-1.5 transition-colors ${
+                 selected
+                   ? "border-[rgb(var(--color-accent))] bg-[rgb(var(--color-accent))]/10"
+                   : isHov
+                    ? "border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]"
+                    : "border-transparent bg-transparent"
+               }`} style={{ borderLeftColor: selected || isHov ? color : "transparent" }}>
+                 <div className="flex min-w-0 items-start justify-between gap-3">
+                   <div className="min-w-0">
+                    <div className={`truncate text-sm leading-tight transition-colors ${
+                       node.is_head ? "font-semibold text-[rgb(var(--color-text))]"
+                         : isHov ? "text-[rgb(var(--color-text))]"
+                         : "text-[rgb(var(--color-text))]"
+                    }`} style={{ fontSize: messageFontSize }}>{node.message}</div>
+                    <div className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5 text-[10px] text-[rgb(var(--color-text-secondary))]" style={{ fontSize: metaFontSize }}>
+                       <span title={fmtExactDate(node.timestamp)}>{fmtDate(node.timestamp)}</span>
+                       <span className="text-[rgb(var(--color-text-secondary))]/35">-</span>
+                       <span className="font-mono">{node.id.slice(0, 7)}</span>
+                       {node.author && (
+                         <>
+                           <span className="text-[rgb(var(--color-text-secondary))]/35">-</span>
+                           <span className="truncate" title={`by ${node.author}`}>{node.author}</span>
+                         </>
+                       )}
+                       {node.parents.length > 1 && (
+                         <>
+                           <span className="text-[rgb(var(--color-text-secondary))]/35">-</span>
+                           <span>{node.parents.length} parents</span>
+                         </>
+                       )}
+                    </div>
+                   </div>
+                   <div className="flex shrink-0 flex-wrap justify-end gap-1">
+                    {node.is_head && <SnapshotBadge label="HEAD" tone="accent" />}
+                    {node.is_branch_tip && <SnapshotBadge label="tip" tone="neutral" />}
+                    {node.is_remote_tip && <SnapshotBadge label="remote" tone="success" />}
+                    {hasMultipleTimelines && (
+                       <span
+                         className="max-w-[10rem] truncate rounded-full px-2 py-0.5 text-[10px] font-medium"
+                         title={tlLabel}
+                         style={{ color, backgroundColor: `${color}18` }}
+                       >
+                         {tlLabel}
+                       </span>
+                    )}
+                   </div>
+                 </div>
+                 {nodeAliases && (
+                   <div className="mt-2 flex flex-wrap gap-1">
+                    {nodeAliases.map(a => {
+                       const aInfo = timelineMap.get(a.timeline);
+                       const aLabel = aInfo?.label ?? a.timeline;
+                       return (
+                         <span
+                           key={a.timeline}
+                           className="max-w-[10rem] truncate rounded-full bg-[rgb(var(--color-surface))] px-2 py-0.5 text-[10px] text-[rgb(var(--color-text-secondary))]"
+                           title={aLabel}
+                         >
+                           also on {aLabel}
+                         </span>
+                       );
+                    })}
+                   </div>
+                 )}
+               </div>
+              ) : (
+               <>
+                 <div className={`text-xs truncate leading-tight transition-colors ${
+                   node.is_head ? "font-medium text-[rgb(var(--color-text))]"
+                    : isHov ? "text-[rgb(var(--color-text))]"
+                    : "text-[rgb(var(--color-text-secondary))]"
+                 }`}>{node.message}</div>
+                 <div className="flex min-w-0 items-center gap-1.5 overflow-hidden whitespace-nowrap">
+                   <span className="shrink-0 text-[10px] text-[rgb(var(--color-text-secondary))]/50">{fmtDate(node.timestamp)}</span>
+                   {/* Author — only show when remote is configured (collaborator context) */}
+                   {currentRemote && node.author && (
+                    <span className="min-w-0 max-w-[4.5rem] truncate text-[9px] text-[rgb(var(--color-text-secondary))]/40" title={`by ${node.author}`}>
+                       {node.author}
+                    </span>
+                   )}
+                   {hasMultipleTimelines && (
                     <span
-                      key={a.timeline}
-                      className="min-w-0 max-w-[6rem] truncate rounded-sm px-1 py-px text-[9px] leading-tight text-[rgb(var(--color-text-secondary))]/50"
-                      title={aLabel}
-                      style={{ backgroundColor: "rgb(var(--color-surface-alt))" }}>+{aLabel}</span>
-                  );
-                })}
-              </div>
+                       className="min-w-0 max-w-[6.75rem] truncate rounded-sm px-1 py-px text-[9px] leading-tight"
+                       title={tlLabel}
+                       style={{ color, backgroundColor: `${color}15` }}>{tlLabel}</span>
+                   )}
+                   {nodeAliases && nodeAliases.map(a => {
+                    const aInfo = timelineMap.get(a.timeline);
+                    const aLabel = aInfo?.label ?? a.timeline;
+                    return (
+                       <span
+                         key={a.timeline}
+                         className="min-w-0 max-w-[6rem] truncate rounded-sm px-1 py-px text-[9px] leading-tight text-[rgb(var(--color-text-secondary))]/50"
+                         title={aLabel}
+                         style={{ backgroundColor: "rgb(var(--color-surface-alt))" }}>+{aLabel}</span>
+                    );
+                   })}
+                 </div>
+               </>
+              )}
             </div>
           </div>
         );
       })}
+      </div>
     </div>
   );
 }
@@ -491,4 +575,22 @@ function fmtDate(iso: string): string {
   const dd = Math.floor(h / 24);
   if (dd < 7) return `${dd}d ago`;
   return d.toLocaleDateString();
+}
+
+function fmtExactDate(iso: string): string {
+  return new Date(iso).toLocaleString();
+}
+
+function SnapshotBadge({ label, tone }: { label: string; tone: "accent" | "neutral" | "success" }) {
+  const className = tone === "accent"
+    ? "bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))]"
+    : tone === "success"
+      ? "bg-success/10 text-success"
+      : "bg-[rgb(var(--color-surface-alt))] text-[rgb(var(--color-text-secondary))]";
+
+  return (
+    <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${className}`}>
+      {label}
+    </span>
+  );
 }
