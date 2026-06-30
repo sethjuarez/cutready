@@ -469,7 +469,7 @@ export function ChatPanel({ focusMode = false }: { focusMode?: boolean }) {
 // ── Chat Tab ─────────────────────────────────────────────────────
 
 function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
-  const { settings, updateSetting } = useSettings();
+  const { settings, updateSetting, loaded: settingsLoaded } = useSettings();
   const chatFocusMode = useAppStore((s) => s.chatFocusMode);
   const setChatFocusMode = useAppStore((s) => s.setChatFocusMode);
   const currentProject = useAppStore((s) => s.currentProject);
@@ -798,6 +798,32 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
       accessToken: secrets.accessToken,
     });
   }, [settings]);
+  const [providerConfigured, setProviderConfigured] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (!settingsLoaded) {
+      setProviderConfigured(null);
+      return;
+    }
+
+    let cancelled = false;
+    setProviderConfigured(null);
+    void buildEffectiveProviderInput(selectedAgent)
+      .then((input) => {
+        if (!cancelled) setProviderConfigured(isProviderInputConfigured(input));
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setProviderConfigured(
+            isAiProviderConfigured(settings) || isProviderInputConfigured(activeProviderInput(settings)),
+          );
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [buildEffectiveProviderInput, selectedAgent, settings, settingsLoaded]);
 
   // Build system prompt from selected agent
   const [memoryContext, setMemoryContext] = useState("");
@@ -1260,13 +1286,23 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
     setReferences([]);
   }, [newChatSession]);
 
-  const isConfigured = isAiProviderConfigured(settings) || isProviderInputConfigured(activeProviderInput(settings));
+  const isConfigured = providerConfigured === true;
 
   if (!currentProject) {
     return (
       <div className="flex-1 flex items-center justify-center p-4">
         <p className="text-xs text-[rgb(var(--color-text-secondary))] text-center">
           Open a workspace to start chatting
+        </p>
+      </div>
+    );
+  }
+
+  if (providerConfigured === null) {
+    return (
+      <div className="flex-1 flex items-center justify-center p-4">
+        <p className="text-xs text-[rgb(var(--color-text-secondary))] text-center">
+          Loading AI provider settings…
         </p>
       </div>
     );

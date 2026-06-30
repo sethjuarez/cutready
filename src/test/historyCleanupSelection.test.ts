@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { cleanupRange, headAnchoredCleanupSelection, isExactHeadCleanupSelection } from "../utils/historyCleanupSelection";
+import {
+  cleanupRange,
+  headAnchoredCleanupSelection,
+  isExactCleanupSelection,
+  isExactHeadCleanupSelection,
+  twoPointCleanupSelection,
+} from "../utils/historyCleanupSelection";
 import type { GraphNode } from "../types/sketch";
 
 function node(id: string, index: number, isHead = false): GraphNode {
@@ -35,5 +41,17 @@ describe("history cleanup selection", () => {
       "second",
       "third",
     ]);
+  });
+
+  it("builds a contiguous range between two explicit points", () => {
+    expect([...twoPointCleanupSelection(nodes, "second", "fourth")]).toEqual(["second", "third", "fourth"]);
+  });
+
+  it("accepts exact contiguous non-HEAD selections", () => {
+    expect(isExactCleanupSelection(nodes, new Set(["second", "third", "fourth"]))).toBe(true);
+  });
+
+  it("rejects non-HEAD selections with holes", () => {
+    expect(isExactCleanupSelection(nodes, new Set(["second", "fourth"]))).toBe(false);
   });
 });

@@ -19,6 +19,7 @@ import {
   listDraftlineLargeChangedFiles,
   listDraftlineRemoteBranches,
   listDraftlineRemotes,
+  listDraftlineSnapshotCleanupCandidates,
   listDraftlineTimelines,
   listDraftlineVersions,
   preflightDraftlineIncoming,
@@ -30,6 +31,7 @@ import {
   popDraftlineShelf,
   preflightDraftlineRenameVariation,
   applyDraftlineSnapshotCleanup,
+  preflightDraftlineUndoSnapshotCleanup,
   previewDraftlineSnapshotCleanup,
   restoreDraftlineVersionAsNewSave,
   restoreDraftlineVersionAsNewSaveToVariation,
@@ -38,9 +40,11 @@ import {
   setDraftlineWorkspacePath,
   shelveDraftlineChanges,
   switchDraftlineVariation,
+  undoDraftlineSnapshotCleanup,
   type DraftlineRestoreVersionTarget,
   type DraftlineMergeIncomingToken,
   type DraftlineHistoryCleanupPreview,
+  type DraftlineHistoryCompactionCandidates,
   type DraftlineTimelineCleanupResult,
 } from "../services/draftlineVersioning";
 import { recordActivityEntries } from "../services/telemetry";
@@ -241,6 +245,74 @@ function buildShareUrl(remoteUrl: string, branch: string): string | null {
   return `https://github.com/${repo}/compare/${branch}?expand=1`;
 }
 
+function snapshotIdFromPreviewPath(path: string): string | null {
+  return path.startsWith("snapshot:") ? path.slice("snapshot:".length) : null;
+}
+
+function cleanupRewriteTarget(result: DraftlineTimelineCleanupResult, versionId: string): string | null | undefined {
+  const entry = result.snapshot_map.find((candidate) => candidate.old === versionId)
+    ?? result.commit_map.find((candidate) => candidate.old === versionId);
+  if (!entry) return undefined;
+
+  switch (entry.disposition.kind) {
+    case "preserved":
+    case "squashed_into":
+      return entry.disposition.new_id || entry.new || null;
+    case "dropped_as_noise":
+    case "orphaned_but_backed_up":
+    case "conflict_requires_user_choice":
+      return null;
+  }
+}
+
+function rewriteSnapshotPreviewTabs(
+  tabs: EditorTab[],
+  result: DraftlineTimelineCleanupResult,
+  idForPath: (type: EditorTab["type"], path: string) => string,
+): { tabs: EditorTab[]; remappedIds: Map<string, string | null>; changed: boolean } {
+  const remappedIds = new Map<string, string | null>();
+  const seen = new Set<string>();
+  const next: EditorTab[] = [];
+  let changed = false;
+
+  for (const tab of tabs) {
+    const snapshotId = tab.type === "snapshot-preview" ? snapshotIdFromPreviewPath(tab.path) : null;
+    const target = snapshotId ? cleanupRewriteTarget(result, snapshotId) : undefined;
+    if (target === null) {
+      remappedIds.set(tab.id, null);
+      changed = true;
+      continue;
+    }
+
+    const path = target && target !== snapshotId ? `snapshot:${target}` : tab.path;
+    const id = path === tab.path ? tab.id : idForPath(tab.type, path);
+    const title = path === tab.path || !target ? tab.title : `Snapshot: ${target.slice(0, 7)}`;
+    const key = `${tab.type}\u0000${path}`;
+    if (seen.has(key)) {
+      remappedIds.set(tab.id, id);
+      changed = true;
+      continue;
+    }
+    seen.add(key);
+    next.push(path === tab.path ? tab : { ...tab, id, path, title });
+    if (id !== tab.id) {
+      remappedIds.set(tab.id, id);
+      changed = true;
+    }
+  }
+
+  return { tabs: next, remappedIds, changed };
+}
+
+function remapActiveTabId(activeId: string | null, tabs: EditorTab[], remappedIds: Map<string, string | null>): string | null {
+  if (!activeId) return null;
+  if (!remappedIds.has(activeId)) {
+    return tabs.some((tab) => tab.id === activeId) ? activeId : tabs[0]?.id ?? null;
+  }
+  const mapped = remappedIds.get(activeId) ?? null;
+  return mapped && tabs.some((tab) => tab.id === mapped) ? mapped : tabs[0]?.id ?? null;
+}
+
 /** A project asset (screenshot or visual) with reference info. */
 export interface AssetInfo {
   path: string;
@@ -378,6 +450,8 @@ interface AppStoreState {
   pendingTimelineAfterSave: string | null;
   /** Branch created from a historical snapshot that has not recorded its first new save yet. */
   startedBranchFromSnapshot: { branchName: string; snapshotId: string } | null;
+  /** Most recent Draftline history cleanup result, used for guarded undo. */
+  lastHistoryCleanup: DraftlineTimelineCleanupResult | null;
   /** Whether there are unsaved changes since the last snapshot. */
   isDirty: boolean;
   /** List of changed files since last snapshot (for Changes panel). */
@@ -708,10 +782,14 @@ interface AppStoreState {
   promptSnapshot: () => Promise<void>;
   /** Compact a HEAD-anchored range of snapshots into one named milestone. */
   squashSnapshots: (oldestCommitId: string, newestCommitId: string, label: string) => Promise<void>;
-  /** Preview compacting a HEAD-anchored range of snapshots through Draftline cleanup. */
+  /** Load Draftline's valid compact-range endpoint candidates for one selected snapshot. */
+  findSnapshotCleanupCandidates: (selectedCommitId: string) => Promise<DraftlineHistoryCompactionCandidates>;
+  /** Preview compacting a contiguous range of snapshots through Draftline cleanup. */
   previewSnapshotCleanup: (oldestCommitId: string, newestCommitId: string, label: string, selectedRangeCommitIds?: string[]) => Promise<DraftlineHistoryCleanupPreview>;
   /** Apply a previously previewed Draftline cleanup plan. */
   applySnapshotCleanup: (planId: string) => Promise<DraftlineTimelineCleanupResult>;
+  /** Undo a previously applied Draftline cleanup plan using Draftline's guarded backup token. */
+  undoSnapshotCleanup: (planId?: string) => Promise<DraftlineTimelineCleanupResult>;
 
   // ── Remote sync actions ────────────────────────────────────
   /** Detect configured remote for the project. */
@@ -904,6 +982,7 @@ function resetPersistenceState(): Pick<AppStoreState,
   | "pendingNavAfterSave"
   | "pendingTimelineAfterSave"
   | "startedBranchFromSnapshot"
+  | "lastHistoryCleanup"
   | "isDirty"
   | "changedFiles"
   | "hasStash"
@@ -933,6 +1012,7 @@ function resetPersistenceState(): Pick<AppStoreState,
     pendingNavAfterSave: null,
     pendingTimelineAfterSave: null,
     startedBranchFromSnapshot: null,
+    lastHistoryCleanup: null,
     isDirty: false,
     changedFiles: [],
     hasStash: false,
@@ -1014,6 +1094,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   pendingNavAfterSave: null,
   pendingTimelineAfterSave: null,
   startedBranchFromSnapshot: null,
+  lastHistoryCleanup: null,
   isDirty: false,
   changedFiles: [],
   saving: false,
@@ -2635,6 +2716,12 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     }
   },
 
+  findSnapshotCleanupCandidates: async (selectedCommitId) => {
+    const { currentRemote, timelines } = get();
+    const targetVariation = timelines.find((timeline) => timeline.is_active)?.name ?? null;
+    return listDraftlineSnapshotCleanupCandidates(selectedCommitId, targetVariation, currentRemote?.name ?? null);
+  },
+
   previewSnapshotCleanup: async (oldestCommitId, newestCommitId, label, selectedRangeCommitIds) => {
     const { graphNodes, timelines } = get();
     if (selectedRangeCommitIds) {
@@ -2647,10 +2734,10 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         || selectedRangeCommitIds[selectedRangeCommitIds.length - 1] !== oldestCommitId
         || !allKnown
       ) {
-        throw new Error("Select a contiguous range ending at the current snapshot to compact.");
+        throw new Error("Select a contiguous range of snapshots to compact.");
       }
     } else if (!cleanupRange(graphNodes, newestCommitId, oldestCommitId)) {
-      throw new Error("Select a contiguous range ending at the current snapshot to compact.");
+      throw new Error("Select a contiguous range of snapshots to compact.");
     }
     const targetVariation = timelines.find((timeline) => timeline.is_active)?.name ?? null;
     return previewDraftlineSnapshotCleanup(oldestCommitId, newestCommitId, label, targetVariation);
@@ -2658,17 +2745,60 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
 
   applySnapshotCleanup: async (planId) => {
     const result = await applyDraftlineSnapshotCleanup(planId);
-    set({ diffResult: null, diffSelection: null, isDirty: false, changedFiles: [] });
+    set({ diffResult: null, diffSelection: null, isDirty: false, changedFiles: [], lastHistoryCleanup: result });
     await get().loadVersions();
     await get().loadGraphData();
     await get().loadTimelines();
     await get().checkDirty();
+    const mainTabs = rewriteSnapshotPreviewTabs(get().openTabs, result, makeMainTabId);
+    const splitTabs = rewriteSnapshotPreviewTabs(get().splitTabs, result, makeSplitTabId);
+    if (mainTabs.changed || splitTabs.changed) {
+      set((state) => ({
+        openTabs: mainTabs.tabs,
+        activeTabId: remapActiveTabId(state.activeTabId, mainTabs.tabs, mainTabs.remappedIds),
+        splitTabs: splitTabs.tabs,
+        splitActiveTabId: remapActiveTabId(state.splitActiveTabId, splitTabs.tabs, splitTabs.remappedIds),
+        activeEditorGroup: splitTabs.tabs.length === 0 && state.activeEditorGroup === "split" ? "main" : state.activeEditorGroup,
+      }));
+      get()._persistTabs();
+    }
     const squashed = result.commit_map.filter((entry) => entry.disposition.kind === "squashed_into").length;
     useToastStore.getState().show(
       squashed > 0 ? `Timeline compacted. ${squashed} old snapshots are mapped to the new milestone.` : "Timeline compacted.",
       5000,
       "success",
     );
+    return result;
+  },
+
+  undoSnapshotCleanup: async (planId) => {
+    const targetPlanId = planId ?? get().lastHistoryCleanup?.plan_id;
+    if (!targetPlanId) {
+      throw new Error("No compacted history cleanup is available to undo.");
+    }
+    const preflight = await preflightDraftlineUndoSnapshotCleanup(targetPlanId);
+    if (!preflight.can_undo) {
+      throw new Error("Draftline cannot undo this cleanup because the current timeline no longer matches the cleanup backup.");
+    }
+    const result = await undoDraftlineSnapshotCleanup(preflight.token);
+    set({ diffResult: null, diffSelection: null, isDirty: false, changedFiles: [], lastHistoryCleanup: null });
+    await get().loadVersions();
+    await get().loadGraphData();
+    await get().loadTimelines();
+    await get().checkDirty();
+    const mainTabs = rewriteSnapshotPreviewTabs(get().openTabs, result, makeMainTabId);
+    const splitTabs = rewriteSnapshotPreviewTabs(get().splitTabs, result, makeSplitTabId);
+    if (mainTabs.changed || splitTabs.changed) {
+      set((state) => ({
+        openTabs: mainTabs.tabs,
+        activeTabId: remapActiveTabId(state.activeTabId, mainTabs.tabs, mainTabs.remappedIds),
+        splitTabs: splitTabs.tabs,
+        splitActiveTabId: remapActiveTabId(state.splitActiveTabId, splitTabs.tabs, splitTabs.remappedIds),
+        activeEditorGroup: splitTabs.tabs.length === 0 && state.activeEditorGroup === "split" ? "main" : state.activeEditorGroup,
+      }));
+      get()._persistTabs();
+    }
+    useToastStore.getState().show("Compacted history restored from Draftline backup.", 5000, "success");
     return result;
   },
 

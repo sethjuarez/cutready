@@ -969,18 +969,23 @@ function ExpandableSketchCard({
             </div>
           )}
 
-          <div className="flex items-center gap-2">
+          <div className="group/section-title flex items-center gap-2">
             <button
               onClick={onToggleCollapse}
-              className="shrink-0 text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] transition-colors"
+              className="shrink-0 text-[rgb(var(--color-text-secondary))] transition-colors hover:text-[rgb(var(--color-text))]"
               title={collapsed ? "Show table" : "Hide table"}
             >
               <ChevronRight className={`w-3.5 h-3.5 transition-transform ${collapsed ? "" : "rotate-90"}`} />
             </button>
 
-            <h3 className={`truncate font-semibold text-[rgb(var(--color-text))] ${isTopLevel ? "text-[15px]" : "text-[13px]"}`}>
+            <button
+              type="button"
+              onClick={onToggleCollapse}
+              className={`min-w-0 truncate text-left font-semibold text-[rgb(var(--color-text))] transition-colors hover:text-[rgb(var(--color-text-secondary))] ${isTopLevel ? "text-[15px]" : "text-[13px]"}`}
+              title={collapsed ? `Expand ${sketch.title}` : `Collapse ${sketch.title}`}
+            >
               {sketch.title}
-            </h3>
+            </button>
 
             <span className={`shrink-0 text-[10px] text-[rgb(var(--color-text-secondary))]/85 ${isTopLevel ? "hidden" : ""}`}>
               {sketch.row_count} {sketch.row_count === 1 ? "row" : "rows"}
@@ -992,7 +997,7 @@ function ExpandableSketchCard({
 
             <button
               onClick={onOpen}
-              className="shrink-0 p-1 rounded text-[rgb(var(--color-text-secondary))] opacity-0 group-hover/sketch:opacity-100 hover:text-[rgb(var(--color-accent))] transition-all"
+              className="shrink-0 p-1 rounded text-[rgb(var(--color-text-secondary))] opacity-0 transition-all group-hover/sketch:opacity-100 hover:text-[rgb(var(--color-text))]"
               title="Open in editor"
             >
               <Pencil className="w-3.5 h-3.5" />
@@ -1081,6 +1086,7 @@ function StoryboardSectionBlock({
 }) {
   const [draftTitle, setDraftTitle] = useState(item.title);
   const [draftDescription, setDraftDescription] = useState(item.description ?? "");
+  const [editingTitle, setEditingTitle] = useState(false);
   const titleInputRef = useRef<HTMLInputElement>(null);
   const descriptionInputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -1100,16 +1106,30 @@ function StoryboardSectionBlock({
     textarea.style.height = `${textarea.scrollHeight}px`;
   }, [draftDescription]);
 
-  const flushSectionDraft = useCallback(() => {
+  useEffect(() => {
+    if (!editingTitle) return;
+    requestAnimationFrame(() => titleInputRef.current?.select());
+  }, [editingTitle]);
+
+  const flushSectionTitleDraft = useCallback(() => {
     if (locked) return;
     const currentTitle = titleInputRef.current?.value ?? draftTitle;
     const title = currentTitle.trim() || item.title;
-    const description = descriptionInputRef.current?.value ?? draftDescription;
     if (title !== currentTitle) setDraftTitle(title);
-    if (title !== item.title || description !== (item.description ?? "")) {
-      onUpdateSection(index, { title, description });
+    setEditingTitle(false);
+    if (title !== item.title) {
+      onUpdateSection(index, { title });
     }
-  }, [draftDescription, draftTitle, index, item.description, item.title, locked, onUpdateSection]);
+  }, [draftTitle, index, item.title, locked, onUpdateSection]);
+
+  const flushSectionDescriptionDraft = useCallback(() => {
+    if (locked) return;
+    const description = descriptionInputRef.current?.value ?? draftDescription;
+    if (description !== (item.description ?? "")) {
+      onUpdateSection(index, { description });
+    }
+  }, [draftDescription, index, item.description, locked, onUpdateSection]);
+
   const sketchCount = item.sketches.length;
   const sectionDuration = summarizeSketchPathsDuration(item.sketches, sketchCache);
   const sectionDurationLabel = sketchCount > 0 ? formatDurationSummary(sectionDuration, durationDisplayMode) : null;
@@ -1117,14 +1137,14 @@ function StoryboardSectionBlock({
 
   return (
     <section className="group/section rounded-xl border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))]/25 px-3 py-2.5">
-      <div
-        {...(!locked ? dragListeners : {})}
-        className={`${locked ? "" : "cursor-grab active:cursor-grabbing"}`}
-        title={locked ? undefined : "Drag to reorder section"}
-      >
+      <div>
         <div className="flex items-start gap-3">
         {!locked && (
-          <div className="mt-1 shrink-0 text-[rgb(var(--color-text-secondary))]/25 opacity-0 transition-opacity group-hover/section:opacity-100">
+          <div
+            {...dragListeners}
+            className="mt-1 shrink-0 cursor-grab text-[rgb(var(--color-text-secondary))]/25 opacity-0 transition-opacity hover:text-[rgb(var(--color-text-secondary))]/60 hover:opacity-100 active:cursor-grabbing group-hover/section:opacity-100"
+            title="Drag to reorder section"
+          >
             <svg width="8" height="14" viewBox="0 0 8 14" fill="currentColor" aria-hidden="true">
               <circle cx="2" cy="2" r="1.2" />
               <circle cx="6" cy="2" r="1.2" />
@@ -1143,35 +1163,72 @@ function StoryboardSectionBlock({
               {sketchCount} {sketchCount === 1 ? "sketch" : "sketches"}
             </span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="group/section-title flex items-center gap-2">
             <button
               onClick={(event) => {
                 event.stopPropagation();
                 onToggleCollapse();
               }}
-              className="shrink-0 text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] transition-colors"
+              className="shrink-0 text-[rgb(var(--color-text-secondary))] transition-colors hover:text-[rgb(var(--color-text))]"
               title={collapsed ? "Show sketches" : "Hide sketches"}
             >
               <ChevronRight className={`w-3.5 h-3.5 transition-transform ${collapsed ? "" : "rotate-90"}`} />
             </button>
-            <input
-              ref={titleInputRef}
-              value={draftTitle}
-              readOnly={locked}
-              onChange={(event) => setDraftTitle(event.target.value)}
-              onBlur={flushSectionDraft}
-              className={`min-w-0 max-w-[60%] bg-transparent text-base font-semibold leading-tight text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/35 outline-none ${locked ? "cursor-default" : ""}`}
-              style={{ width: `${titleWidthCh}ch` }}
-              placeholder="Section title..."
-            />
+            {editingTitle ? (
+              <input
+                ref={titleInputRef}
+                value={draftTitle}
+                readOnly={locked}
+                onChange={(event) => setDraftTitle(event.target.value)}
+                onBlur={flushSectionTitleDraft}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    flushSectionTitleDraft();
+                  } else if (event.key === "Escape") {
+                    setDraftTitle(item.title);
+                    setEditingTitle(false);
+                  }
+                }}
+                className={`min-w-0 max-w-[60%] rounded border border-[rgb(var(--color-accent))]/30 bg-[rgb(var(--color-surface))]/60 px-1 text-base font-semibold leading-tight text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/35 outline-none focus:ring-1 focus:ring-[rgb(var(--color-accent))]/35 ${locked ? "cursor-default" : ""}`}
+                style={{ width: `${titleWidthCh}ch` }}
+                placeholder="Section title..."
+              />
+            ) : (
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onToggleCollapse();
+                }}
+                className="min-w-0 max-w-[60%] truncate text-left text-base font-semibold leading-tight text-[rgb(var(--color-text))] transition-colors hover:text-[rgb(var(--color-text-secondary))]"
+                title={collapsed ? `Expand ${draftTitle || item.title}` : `Collapse ${draftTitle || item.title}`}
+              >
+                {draftTitle || "Section title"}
+              </button>
+            )}
             {sectionDurationLabel && <StoryboardDurationPill label={sectionDurationLabel} />}
+            {!locked && (
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setEditingTitle(true);
+                }}
+                className="shrink-0 p-1 rounded text-[rgb(var(--color-text-secondary))] opacity-0 group-hover/section-title:opacity-100 hover:text-[rgb(var(--color-text))] focus-visible:opacity-100 transition-all"
+                title="Edit section title"
+                aria-label={`Edit section title: ${item.title}`}
+              >
+                <Pencil className="w-3.5 h-3.5" />
+              </button>
+            )}
             {!locked && (
               <button
                 onClick={(event) => {
                   event.stopPropagation();
                   onRemoveSection();
                 }}
-                className="shrink-0 p-1 rounded text-[rgb(var(--color-text-secondary))] opacity-0 group-hover/section:opacity-100 hover:text-error transition-all"
+                className="shrink-0 p-1 rounded text-[rgb(var(--color-text-secondary))] opacity-0 group-hover/section-title:opacity-100 hover:text-error focus-visible:opacity-100 transition-all"
                 title="Remove section"
               >
                 <X className="w-3 h-3" />
@@ -1184,7 +1241,7 @@ function StoryboardSectionBlock({
               value={draftDescription}
               readOnly={locked}
               onChange={(event) => setDraftDescription(event.target.value)}
-              onBlur={flushSectionDraft}
+              onBlur={flushSectionDescriptionDraft}
               rows={1}
               className={`w-full resize-none overflow-hidden bg-transparent text-sm leading-relaxed text-[rgb(var(--color-text-secondary))] placeholder:text-[rgb(var(--color-text-secondary))]/40 outline-none ${locked ? "" : "pr-10"}`}
               placeholder="Add section framing..."

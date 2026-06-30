@@ -10,6 +10,9 @@
   --color-surface-toolbar: 228 222 214;
   --color-accent: 111 99 232;
   --color-accent-hover: 91 79 209;
+  --color-content-storyboard: 15 118 110;
+  --color-content-sketch: 111 99 232;
+  --color-content-note: 194 105 17;
   --color-border: 222 216 207;
   --color-border-subtle: 235 229 222;
   --color-text: 44 41 37;
@@ -51,6 +54,9 @@
   --color-surface-toolbar: 27 25 23;
   --color-accent: 170 160 255;
   --color-accent-hover: 145 133 246;
+  --color-content-storyboard: 94 234 212;
+  --color-content-sketch: 170 160 255;
+  --color-content-note: 251 191 36;
   --color-border: 73 67 61;
   --color-border-subtle: 58 53 47;
   --color-text: 238 233 226;

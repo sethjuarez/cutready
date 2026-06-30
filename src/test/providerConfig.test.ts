@@ -4,7 +4,9 @@ import {
   activeProviderInput,
   buildProviderConfig,
   canFetchModelsFor,
+  defaultProvider,
   isAiProviderConfigured,
+  isProviderInputConfigured,
   providerById,
   providerToConfigInput,
 } from "../utils/providerConfig";
@@ -137,6 +139,29 @@ describe("feedback issue target", () => {
       expect(input.providerName).toBe("OpenAI Main");
       expect(input.apiKey).toBe("sk-openai");
       expect(input.model).toBe("gpt-4o");
+    });
+
+    test("defaultProvider can resolve a configured non-active runtime provider", () => {
+      const settings = {
+        aiProvider: "azure_openai",
+        aiEndpoint: "",
+        aiApiKey: "",
+        aiModel: "",
+        aiAuthMode: "api_key",
+        aiAccessToken: "",
+        aiProviders: [openaiProvider, anthropicProvider],
+        aiActiveProviderId: "openai-main",
+        aiDefaultProviderId: "anthropic-main",
+      };
+      const runtimeProvider = defaultProvider(settings);
+
+      expect(runtimeProvider?.id).toBe("anthropic-main");
+      expect(isProviderInputConfigured(providerToConfigInput(runtimeProvider!, {
+        aiVisionMode: "notes",
+        aiWebAccess: "disabled",
+      }, {
+        apiKey: "sk-ant-test",
+      }))).toBe(true);
     });
 
     test("providerToConfigInput builds a non-active provider request from scoped secrets", () => {

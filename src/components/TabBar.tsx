@@ -6,6 +6,7 @@ import { usePopover } from "../hooks/usePopover";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Copy, LayoutGrid, MoreHorizontal, Search, X } from "lucide-react";
+import { contentTypeTone } from "../utils/contentTypeTheme";
 
 export function getClampedPopoverPosition(position: { x: number; y: number }, width: number) {
   const margin = 8;
@@ -305,18 +306,50 @@ function TabMenuItem({
   onSelect: () => void;
   onClose: () => void;
 }) {
+  const tone = contentTypeTone(tab.type);
+  const isImage = tab.type === "asset" && tab.path.includes("/screenshots/");
+  const isVisual = tab.type === "asset" && !isImage;
+  const typeLabel =
+    tab.type === "sketch" ? "Sketch"
+    : tab.type === "storyboard" ? "Storyboard"
+    : tab.type === "history" ? "History"
+    : tab.type === "snapshot-preview" ? "Snapshot Preview"
+    : tab.type === "diff" ? "Diff"
+    : tab.type === "agent-run" ? "Agent Run"
+    : tab.type === "database" ? "Database"
+    : isImage ? "Image"
+    : isVisual ? "Visual"
+    : "Note";
+  const TabIcon =
+    tab.type === "sketch" ? SketchIcon
+    : tab.type === "storyboard" ? StoryboardIcon
+    : tab.type === "history" ? HistoryIcon
+    : tab.type === "snapshot-preview" ? DiffIcon
+    : tab.type === "diff" ? DiffIcon
+    : tab.type === "agent-run" ? AgentRunIcon
+    : tab.type === "database" ? DatabaseIcon
+    : isImage ? ImageIcon
+    : isVisual ? VisualIcon
+    : NoteIcon;
+
   return (
     <div
       className={`group flex items-center gap-2 rounded-lg px-2 py-1.5 transition-colors ${
-        active ? "bg-[rgb(var(--color-accent))]/10" : "hover:bg-[rgb(var(--color-surface-alt))]"
+        active && tone ? tone.activeBg : active ? "bg-[rgb(var(--color-accent))]/10" : "hover:bg-[rgb(var(--color-surface-alt))]"
       }`}
     >
       <button className="min-w-0 flex-1 text-left" onClick={onSelect}>
         <div className="truncate text-[12px] font-medium text-[rgb(var(--color-text))]">{tab.title}</div>
         <div className="mt-0.5 truncate font-mono text-[10px] text-[rgb(var(--color-text-secondary))]">{tab.path}</div>
       </button>
-      <span className="rounded-full bg-[rgb(var(--color-surface-alt))] px-1.5 py-0.5 text-[9px] uppercase tracking-[0.08em] text-[rgb(var(--color-text-secondary))]">
-        {tab.type}
+      <span
+        className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border ${
+        tone ? `${tone.activeBg} ${tone.text} ${tone.border}` : "border-transparent bg-[rgb(var(--color-surface-alt))] text-[rgb(var(--color-text-secondary))]"
+      }`}
+        title={typeLabel}
+        aria-label={typeLabel}
+      >
+        <TabIcon size={12} />
       </span>
       <button
         className="flex h-6 w-6 items-center justify-center rounded-md text-[rgb(var(--color-text-secondary))] opacity-60 transition-colors hover:bg-[rgb(var(--color-surface))] hover:text-[rgb(var(--color-text))] group-hover:opacity-100"
@@ -370,27 +403,19 @@ function Tab({
     : isVisual ? "Visual"
     : "Note";
 
-  /* Explicit RGB so inline styles always resolve (CSS vars don't work in all inline contexts) */
+  const documentTone = contentTypeTone(tab.type);
+  const accentTypeClasses = {
+    bar: "bg-[rgb(var(--color-accent))]",
+    icon: "text-[rgb(var(--color-accent))]",
+    tint: "bg-[rgb(var(--color-accent))]",
+  };
+
   const typeClasses =
-    tab.type === "sketch"
-      ? { bar: "bg-[rgb(var(--color-accent))]", icon: "text-[rgb(var(--color-accent))]", tint: "bg-[rgb(var(--color-accent))]" }
-      : tab.type === "storyboard"
-        ? { bar: "bg-success", icon: "text-success", tint: "bg-success" }
-        : tab.type === "history"
-            ? { bar: "bg-[rgb(var(--color-accent))]", icon: "text-[rgb(var(--color-accent))]", tint: "bg-[rgb(var(--color-accent))]" }
-           : tab.type === "snapshot-preview"
-             ? { bar: "bg-[rgb(var(--color-accent))]", icon: "text-[rgb(var(--color-accent))]", tint: "bg-[rgb(var(--color-accent))]" }
-           : tab.type === "diff"
-              ? { bar: "bg-warning", icon: "text-warning", tint: "bg-warning" }
-              : tab.type === "agent-run"
-                ? { bar: "bg-[rgb(var(--color-accent))]", icon: "text-[rgb(var(--color-accent))]", tint: "bg-[rgb(var(--color-accent))]" }
-              : tab.type === "database"
-                ? { bar: "bg-[rgb(var(--color-accent))]", icon: "text-[rgb(var(--color-accent))]", tint: "bg-[rgb(var(--color-accent))]" }
-              : isImage
-                ? { bar: "bg-[rgb(var(--color-accent))]", icon: "text-[rgb(var(--color-accent))]", tint: "bg-[rgb(var(--color-accent))]" }
-              : isVisual
-                ? { bar: "bg-warning", icon: "text-warning", tint: "bg-warning" }
-                : { bar: "bg-[rgb(var(--color-accent))]", icon: "text-[rgb(var(--color-accent))]", tint: "bg-[rgb(var(--color-accent))]" };
+    documentTone
+      ? { bar: documentTone.bg, icon: documentTone.text, tint: documentTone.bg }
+      : tab.type === "diff" || isVisual
+        ? { bar: "bg-warning", icon: "text-warning", tint: "bg-warning" }
+        : accentTypeClasses;
 
   const TabIcon =
     tab.type === "sketch" ? SketchIcon

@@ -6,7 +6,7 @@ use draftline::tauri_contract as contract;
 #[cfg(test)]
 use draftline::VersionId;
 use draftline::{
-    ApplyIncomingReport, ChangeSet, Contributor, ContributorProfile, HistoryEntry,
+    ApplyIncomingReport, ChangeSet, Contributor, ContributorProfile, HistoryEntry, PreflightReport,
     MergeIncomingReport, PreviewFile, RemoteCredential, RemoteCredentialRequest, RemoteEndpoint,
     Shelf, Variation, VariationId, VariationRenamePreflight, VariationSummary, Version,
     VersionDiff, VersionPreview,
@@ -37,7 +37,9 @@ pub struct DraftlineVariationRequest {
 #[derive(Debug, Deserialize)]
 pub struct DraftlineSwitchVariationRequest {
     pub workspace_path: PathBuf,
-    pub variation: VariationId,
+    #[serde(alias = "variation")]
+    pub variation_id: VariationId,
+    #[serde(default)]
     pub policy: DraftlineSwitchPolicyInput,
 }
 
@@ -60,6 +62,12 @@ pub struct DraftlineSquashVersionsRequest {
 pub enum DraftlineSwitchPolicyInput {
     AbortIfDirty,
     SaveFirst { label: String },
+}
+
+impl Default for DraftlineSwitchPolicyInput {
+    fn default() -> Self {
+        Self::AbortIfDirty
+    }
 }
 
 #[cfg(test)]
@@ -346,6 +354,17 @@ pub async fn delete_variation(
 }
 
 #[auditaur_command(skip_all, err)]
+pub async fn preflight_switch_variation(
+    request: DraftlineSwitchVariationRequest,
+) -> Result<PreflightReport, String> {
+    let adapter = CutReadyDraftlineAdapter::open_project(&request.workspace_path)
+        .map_err(|error| error.to_string())?;
+    adapter
+        .preflight_switch_variation(&request.variation_id)
+        .map_err(|error| error.to_string())
+}
+
+#[auditaur_command(skip_all, err)]
 pub async fn switch_variation(
     request: DraftlineSwitchVariationRequest,
     lock: State<'_, ProjectLock>,
@@ -354,7 +373,7 @@ pub async fn switch_variation(
     let adapter = CutReadyDraftlineAdapter::open_project(&request.workspace_path)
         .map_err(|error| error.to_string())?;
     adapter
-        .switch_variation_with_policy(&request.variation, switch_policy_from_input(request.policy))
+        .switch_variation_with_policy(&request.variation_id, switch_policy_from_input(request.policy))
         .map_err(|error| error.to_string())
 }
 

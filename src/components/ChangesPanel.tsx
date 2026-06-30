@@ -11,7 +11,6 @@ import {
   Clock,
   Save,
   X,
-  MoreHorizontal,
   Trash2,
   ArrowUp,
   ArrowDown,
@@ -25,7 +24,6 @@ import { IncomingPreview, SyncBar } from "./SyncBar";
 import { TimelineSelector } from "./TimelineSelector";
 import { useConfirmDialog } from "./ConfirmDialog";
 import type { DiffEntry } from "../types/sketch";
-import { headAnchoredCleanupSelection, isExactHeadCleanupSelection } from "../utils/historyCleanupSelection";
 
 export function ChangesPanel() {
   const changedFiles = useAppStore((s) => s.changedFiles);
@@ -44,8 +42,6 @@ export function ChangesPanel() {
   const loadGraphData = useAppStore((s) => s.loadGraphData);
   const timelines = useAppStore((s) => s.timelines);
   const loadTimelines = useAppStore((s) => s.loadTimelines);
-  const previewSnapshotCleanup = useAppStore((s) => s.previewSnapshotCleanup);
-  const applySnapshotCleanup = useAppStore((s) => s.applySnapshotCleanup);
   const renameLegacyMasterTimeline = useAppStore((s) => s.renameLegacyMasterTimeline);
   const currentRemote = useAppStore((s) => s.currentRemote);
   const syncStatus = useAppStore((s) => s.syncStatus);
@@ -61,14 +57,7 @@ export function ChangesPanel() {
   const [changesExpanded, setChangesExpanded] = useState(true);
   const [historyExpanded, setHistoryExpanded] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
-  const [authorFilter, setAuthorFilter] = useState("all");
   const [showSearch, setShowSearch] = useState(false);
-  const [squashMode, setSquashMode] = useState(false);
-  const [selectedForSquash, setSelectedForSquash] = useState<Set<string>>(new Set());
-  const [squashLabel, setSquashLabel] = useState("");
-  const [squashError, setSquashError] = useState<string | null>(null);
-  const [squashing, setSquashing] = useState(false);
-  const [showAdvanced, setShowAdvanced] = useState(false);
   const [showIncoming, setShowIncoming] = useState(false);
   const [showOutgoing, setShowOutgoing] = useState(false);
   const [confirmRenameMaster, setConfirmRenameMaster] = useState(false);
@@ -169,24 +158,12 @@ export function ChangesPanel() {
     timelines.map((t) => [t.name, { label: t.label, colorIndex: t.color_index }]),
   );
 
-  const historyAuthors = Array.from(
-    new Set(activeNodes.map((node) => node.author).filter((author): author is string => !!author)),
-  ).sort((a, b) => a.localeCompare(b));
   const filteredNodes = activeNodes.filter((node) => {
     const matchesSearch = searchQuery
       ? node.message.toLowerCase().includes(searchQuery.toLowerCase())
       : true;
-    const matchesAuthor = authorFilter === "all" || node.author === authorFilter;
-    return matchesSearch && matchesAuthor;
+    return matchesSearch;
   });
-
-  const selectedNodes = activeNodes
-    .filter((node) => selectedForSquash.has(node.id))
-    .sort((a, b) => +new Date(b.timestamp) - +new Date(a.timestamp));
-  const selectedHead = selectedNodes.find((node) => node.is_head);
-  const selectedOldest = selectedNodes[selectedNodes.length - 1];
-  const hasContiguousCleanupSelection = isExactHeadCleanupSelection(activeNodes, selectedForSquash);
-  const canSquash = hasContiguousCleanupSelection && !hasRemote && !isRewound && !isDirty;
 
   useEffect(() => {
     loadGraphData();
@@ -242,50 +219,6 @@ export function ChangesPanel() {
     }
   }, [confirm, deleteTimeline, discardChanges, emptyStartedBranch, loadGraphData, loadTimelines, switchTimeline, timelines]);
 
-  const toggleSquashSelection = useCallback((commitId: string) => {
-    setSelectedForSquash(headAnchoredCleanupSelection(activeNodes, commitId));
-    setSquashError(null);
-  }, [activeNodes]);
-
-  const cancelSquash = useCallback(() => {
-    setSquashMode(false);
-    setSelectedForSquash(new Set());
-    setSquashLabel("");
-    setSquashError(null);
-    setShowAdvanced(false);
-  }, []);
-
-  const handleSquash = useCallback(async () => {
-    if (!selectedHead || !selectedOldest || !squashLabel.trim()) return;
-    setSquashing(true);
-    setSquashError(null);
-    try {
-      const preview = await previewSnapshotCleanup(
-        selectedOldest.id,
-        selectedHead.id,
-        squashLabel.trim(),
-        selectedNodes.map((node) => node.id),
-      );
-      const warningText = preview.warnings.length > 0
-        ? `\n\nWarnings:\n${preview.warnings.map((warning) => `- ${warning.message}`).join("\n")}`
-        : "";
-      const confirmed = await confirm({
-        title: "Compact timeline history?",
-        message: `Draftline will replace ${preview.graph_diff.old_commit_count} selected snapshots with ${preview.graph_diff.new_commit_count} milestone snapshot and create a backup ref before moving the timeline.${warningText}`,
-        confirmLabel: "Compact timeline",
-        cancelLabel: "Cancel",
-        variant: "warning",
-      });
-      if (!confirmed) return;
-      await applySnapshotCleanup(preview.plan_id);
-      cancelSquash();
-    } catch (err) {
-      setSquashError(String(err));
-    } finally {
-      setSquashing(false);
-    }
-  }, [applySnapshotCleanup, cancelSquash, confirm, previewSnapshotCleanup, selectedHead, selectedNodes, selectedOldest, squashLabel]);
-
   const handleRenameMaster = useCallback(async () => {
     if (!confirmRenameMaster) {
       setConfirmRenameMaster(true);
@@ -302,7 +235,6 @@ export function ChangesPanel() {
 
   const openFullHistoryGraph = useCallback(() => {
     openTab({ type: "history", path: "__history__", title: "History Graph" });
-    setShowAdvanced(false);
   }, [openTab]);
 
   const selectedProjectFilter = projectFilter === "all"
@@ -575,96 +507,6 @@ export function ChangesPanel() {
           >
             <Search className="h-3 w-3" />
           </button>
-          <button
-            onClick={() => setShowAdvanced(!showAdvanced)}
-            className={`grid h-6 w-6 shrink-0 place-items-center rounded-md transition-colors ${showAdvanced ? "text-[rgb(var(--color-accent))] bg-[rgb(var(--color-accent))]/10" : "text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"}`}
-            title="More actions"
-          >
-            <MoreHorizontal className="h-3 w-3" />
-          </button>
-        </div>
-      )}
-
-      {showAdvanced && !squashMode && (
-        <div className="space-y-0.5 border-b border-[rgb(var(--color-border))] px-3 py-1">
-          <button
-            onClick={openFullHistoryGraph}
-            className="flex w-full items-center gap-1.5 rounded px-2 py-1 text-[10px] text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
-          >
-            <GitBranch className="h-3 w-3" />
-            Open full history graph
-          </button>
-          <button
-            onClick={() => {
-              setSquashMode(true);
-              setShowAdvanced(false);
-            }}
-            className="flex w-full items-center gap-1.5 rounded px-2 py-1 text-[10px] text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
-          >
-            <GitBranch className="h-3 w-3" />
-            Compact timeline history
-          </button>
-          {historyAuthors.length > 1 && (
-            <label className="flex items-center gap-1.5 rounded px-2 py-1 text-[10px] text-[rgb(var(--color-text-secondary))]">
-              Author
-              <select
-                value={authorFilter}
-                onChange={(event) => setAuthorFilter(event.target.value)}
-                className="min-w-0 flex-1 rounded border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] px-1 py-0.5 text-[10px] text-[rgb(var(--color-text))] outline-none"
-              >
-                <option value="all">Everyone</option>
-                {historyAuthors.map((author) => (
-                  <option key={author} value={author}>{author}</option>
-                ))}
-              </select>
-            </label>
-          )}
-        </div>
-      )}
-
-      {squashMode && (
-        <div className="space-y-2 border-b border-[rgb(var(--color-accent))]/20 bg-[rgb(var(--color-accent))]/5 px-3 py-2">
-          <div className="flex items-start gap-2">
-            <div className="flex-1">
-              <div className="text-[10px] font-medium text-[rgb(var(--color-accent))]">
-                Select recent snapshots ending at HEAD
-              </div>
-              <div className="text-[10px] leading-relaxed text-[rgb(var(--color-text-secondary))]">
-                Draftline previews a cleanup plan, creates a backup ref, then compacts selected clean snapshots into one milestone.
-              </div>
-            </div>
-            <button
-              onClick={cancelSquash}
-              className="rounded p-0.5 text-[rgb(var(--color-text-secondary))] transition-colors hover:text-[rgb(var(--color-text))]"
-              title="Cancel"
-            >
-              <X className="h-3 w-3" />
-            </button>
-          </div>
-          <input
-            value={squashLabel}
-            onChange={(e) => setSquashLabel(e.target.value)}
-            placeholder="Combined snapshot name..."
-            className="w-full rounded border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-2 py-1 text-[10px] text-[rgb(var(--color-text))] outline-none placeholder:text-[rgb(var(--color-text-secondary))]/50 focus:border-[rgb(var(--color-accent))]"
-          />
-          {isDirty && (
-            <div className="text-[10px] text-warning">
-              Save or discard unsaved workspace changes before compacting history.
-            </div>
-          )}
-          {(hasRemote || isRewound) && (
-            <div className="text-[10px] text-warning">
-              Cleanup is only available on local timeline tips.
-            </div>
-          )}
-          {squashError && <div className="text-[10px] text-error">{squashError}</div>}
-          <button
-            onClick={handleSquash}
-            disabled={!canSquash || !squashLabel.trim() || squashing}
-            className="w-full rounded-md bg-[rgb(var(--color-accent))] px-2 py-1 text-[10px] font-medium text-[rgb(var(--color-accent-fg))] transition-colors hover:bg-[rgb(var(--color-accent-hover))] disabled:pointer-events-none disabled:opacity-40"
-          >
-            {squashing ? "Previewing..." : `Compact ${selectedNodes.length || ""} snapshots`}
-          </button>
         </div>
       )}
 
@@ -702,9 +544,6 @@ export function ChangesPanel() {
                 timelineMap={timelineMap}
                 hasMultipleTimelines={timelines.length > 1}
                 showRemoteBadges={hasRemote}
-                selectionMode={squashMode}
-                selectedIds={selectedForSquash}
-                onToggleSelect={toggleSquashSelection}
                 onNodeClick={handleNodeClick}
               />
               {searchQuery && filteredNodes.length === 0 && (

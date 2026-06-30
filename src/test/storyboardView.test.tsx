@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { StoryboardView } from "../components/StoryboardView";
 import { useAppStore } from "../stores/appStore";
-import type { Storyboard, StoryboardItem } from "../types/sketch";
+import type { SketchSummary, Storyboard, StoryboardItem } from "../types/sketch";
 
 const mockInvoke = vi.fn();
 const mockRunBackgroundAgentAction = vi.fn();
@@ -29,6 +29,17 @@ function activeStoryboard(description = "Original description", locked = false, 
     description,
     locked,
     items,
+    created_at: "2026-01-01T00:00:00Z",
+    updated_at: "2026-01-01T00:00:00Z",
+  };
+}
+
+function sketchSummary(title: string, path: string, row_count = 0): SketchSummary {
+  return {
+    title,
+    path,
+    row_count,
+    state: "draft",
     created_at: "2026-01-01T00:00:00Z",
     updated_at: "2026-01-01T00:00:00Z",
   };
@@ -142,7 +153,44 @@ describe("StoryboardView", () => {
     });
   });
 
-  it("saves section title and description together", async () => {
+  it("toggles a section by clicking its title", () => {
+    const section: StoryboardItem = {
+      type: "section",
+      title: "Build",
+      description: "Original section framing",
+      sketches: ["prototype.sk"],
+    };
+    useAppStore.setState({
+      activeStoryboard: activeStoryboard("Original description", false, [section]),
+      sketches: [sketchSummary("Prototype", "prototype.sk")],
+    });
+
+    render(<StoryboardView />);
+
+    expect(screen.getByText("Loading sketch…")).toBeInTheDocument();
+    act(() => {
+      fireEvent.click(screen.getByRole("button", { name: "Build" }));
+    });
+    expect(screen.queryByText("Loading sketch…")).not.toBeInTheDocument();
+  });
+
+  it("toggles a sketch by clicking its title", async () => {
+    const items: StoryboardItem[] = [{ type: "sketch_ref", path: "intro.sk" }];
+    useAppStore.setState({
+      activeStoryboard: activeStoryboard("Original description", false, items),
+      sketches: [sketchSummary("Intro", "intro.sk")],
+    });
+
+    render(<StoryboardView />);
+
+    expect(screen.getByText("Loading sketch…")).toBeInTheDocument();
+    act(() => {
+      fireEvent.click(screen.getByRole("button", { name: "Intro" }));
+    });
+    expect(screen.queryByText("Loading sketch…")).not.toBeInTheDocument();
+  });
+
+  it("edits section titles from the pencil without saving the description", async () => {
     const section: StoryboardItem = {
       type: "section",
       title: "Build",
@@ -156,12 +204,11 @@ describe("StoryboardView", () => {
     render(<StoryboardView />);
 
     const description = screen.getByDisplayValue("Original section framing");
-    const title = screen.getByDisplayValue("Build");
-    fireEvent.focus(description);
     fireEvent.change(description, {
       target: { value: "Updated section framing" },
     });
-    fireEvent.focus(title);
+    fireEvent.click(screen.getByLabelText("Edit section title: Build"));
+    const title = screen.getByDisplayValue("Build");
     fireEvent.change(title, {
       target: { value: "Build chapter" },
     });
@@ -175,7 +222,7 @@ describe("StoryboardView", () => {
       items: [expect.objectContaining({
         type: "section",
         title: "Build chapter",
-        description: "Updated section framing",
+        description: "Original section framing",
       })],
     });
   });
