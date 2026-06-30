@@ -27,6 +27,7 @@ import {
   Download,
   CheckCircle,
   ExternalLink,
+  Image,
 } from "lucide-react";
 
 interface ModelInfo {
@@ -62,6 +63,12 @@ import {
 } from "../theme/terminalThemes";
 import { sanitizeDiagnosticsLog } from "../utils/diagnosticsSanitizer";
 import { activeProvider, buildProviderConfig, canFetchModelsFor, createAiProviderConfig, isAiProviderConfigured } from "../utils/providerConfig";
+import {
+  appendFeedbackAttachmentsSection,
+  formatFeedbackAttachmentSize,
+  formatFeedbackAttachmentsMarkdown,
+  type FeedbackAttachmentMetadata,
+} from "../utils/feedbackAttachments";
 
 export function SettingsPanel() {
   const { settings, updateSetting, loaded } = useSettings();
@@ -1764,6 +1771,7 @@ interface FeedbackEntry {
   date: string;
   debug_log?: string;
   system_info?: FeedbackSystemInfo;
+  attachments?: FeedbackAttachmentMetadata[];
 }
 
 interface IssueReviewDraft {
@@ -1924,6 +1932,15 @@ function appendSystemInfoSection(body: string, systemInfo?: FeedbackSystemInfo):
   ].join("\n");
 }
 
+function formatFeedbackEntryMarkdown(entry: FeedbackEntry): string {
+  let text = `## ${entry.category}\n**Date:** ${entry.date.split("T")[0]}\n\n${entry.feedback}`;
+  if (entry.system_info) text += `\n\n---\n### OS and machine details\n${formatSystemInfoLines(entry.system_info).join("\n")}`;
+  if (entry.debug_log) text += `\n\n---\n### Debug Log\n\`\`\`\n${entry.debug_log}\n\`\`\``;
+  const attachmentLines = formatFeedbackAttachmentsMarkdown(entry.attachments);
+  if (attachmentLines.length > 0) text += `\n\n---\n${attachmentLines.join("\n").trimStart()}`;
+  return text;
+}
+
 function FeedbackListTab() {
   const { settings, updateSetting } = useSettings();
   const [entries, setEntries] = useState<FeedbackEntry[]>([]);
@@ -1975,12 +1992,7 @@ function FeedbackListTab() {
   const copyAll = async () => {
     if (entries.length === 0) return;
     const text = entries
-      .map((e) => {
-        let t = `## ${e.category}\n**Date:** ${e.date.split("T")[0]}\n\n${e.feedback}`;
-        if (e.system_info) t += `\n\n---\n### OS details\n${formatSystemInfoLines(e.system_info).join("\n")}`;
-        if (e.debug_log) t += `\n\n---\n### Debug Log\n\`\`\`\n${sanitizeDiagnosticsLog(e.debug_log) ?? ""}\n\`\`\``;
-        return t;
-      })
+      .map((e) => formatFeedbackEntryMarkdown(e))
       .join("\n\n---\n\n");
     try {
       await navigator.clipboard.writeText(text);
@@ -1990,11 +2002,8 @@ function FeedbackListTab() {
   };
 
   const copySingle = async (entry: FeedbackEntry) => {
-    let text = `## ${entry.category}\n**Date:** ${entry.date.split("T")[0]}\n\n${entry.feedback}`;
-    if (entry.system_info) text += `\n\n---\n### OS details\n${formatSystemInfoLines(entry.system_info).join("\n")}`;
-    if (entry.debug_log) text += `\n\n---\n### Debug Log\n\`\`\`\n${sanitizeDiagnosticsLog(entry.debug_log) ?? ""}\n\`\`\``;
     try {
-      await navigator.clipboard.writeText(text);
+      await navigator.clipboard.writeText(formatFeedbackEntryMarkdown(entry));
     } catch { /* ignore */ }
   };
 
@@ -2039,7 +2048,8 @@ function FeedbackListTab() {
     let body = `## ${entry.category} Feedback\n\n${entry.feedback}`;
     body += `\n\n---\n**App Version:** ${version || "unknown"}`;
     body = appendSystemInfoSection(body, entry.system_info);
-    return { title, body: appendDiagnosticsSection(body, entry.debug_log) };
+    body = appendDiagnosticsSection(body, entry.debug_log);
+    return { title, body: appendFeedbackAttachmentsSection(body, entry.attachments) };
   };
 
   const openIssueReview = (entry: FeedbackEntry, title: string, body: string) => {
@@ -2172,8 +2182,11 @@ function FeedbackListTab() {
           const fallback = buildFallbackIssue(entry, appVersion);
           title = parsed.title || fallback.title;
           body = parsed.body
-            ? appendDiagnosticsSection(appendSystemInfoSection(parsed.body, entry.system_info), entry.debug_log)
-            : fallback.body;
+              ? appendFeedbackAttachmentsSection(
+                appendDiagnosticsSection(appendSystemInfoSection(parsed.body, entry.system_info), entry.debug_log),
+                entry.attachments,
+              )
+              : fallback.body;
         } else {
           ({ title, body } = buildFallbackIssue(entry, appVersion));
         }
@@ -2326,6 +2339,22 @@ function FeedbackListTab() {
                   OS details attached
                 </div>
               )}
+              {entry.attachments && entry.attachments.length > 0 && (
+                <div className="mt-2 rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))]/60 px-2.5 py-2">
+                  <div className="mb-1.5 flex items-center gap-1 text-[10px] font-medium text-[rgb(var(--color-text-secondary))]">
+                    <Image className="h-2.5 w-2.5 text-[rgb(var(--color-accent))]" />
+                    {entry.attachments.length} screenshot{entry.attachments.length === 1 ? "" : "s"} preserved for manual upload
+                  </div>
+                  <div className="space-y-1">
+                    {entry.attachments.map((attachment) => (
+                      <div key={attachment.id} className="flex items-center justify-between gap-2 text-[10px] text-[rgb(var(--color-text-secondary))]">
+                        <span className="truncate text-[rgb(var(--color-text))]">{attachment.file_name}</span>
+                        <span className="shrink-0">{formatFeedbackAttachmentSize(attachment.size_bytes)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               {/* Confirm delete inline */}
               {isConfirming && (
                 <div className="mt-2 flex items-center gap-2 p-2 rounded bg-error/10 border border-error/20">
@@ -2402,6 +2431,7 @@ function FeedbackListTab() {
               </h3>
               <p className="mt-1 text-xs text-[rgb(var(--color-text-secondary))]">
                 This will be submitted to <span className="font-mono text-[rgb(var(--color-text))]">{CUTREADY_FEEDBACK_REPO}</span>.
+                {issueReview?.entry.attachments?.length ? " Screenshots are preserved locally and listed for manual upload." : ""}
               </p>
             </div>
             <button
