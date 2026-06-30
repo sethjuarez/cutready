@@ -19,20 +19,24 @@ import {
   listDraftlineGraphNodes,
   listDraftlineLargeChangedFiles,
   listDraftlineRemoteBranches,
+  listDraftlineSnapshotCleanupCandidates,
   listDraftlineTimelines,
   listDraftlineVersions,
   hasDraftlineShelf,
   popDraftlineShelf,
+  preflightDraftlineUndoSnapshotCleanup,
   preflightDraftlineRenameVariation,
   applyDraftlineSnapshotCleanup,
   previewDraftlineSnapshotCleanup,
   preflightDraftlineSwitchVariation,
   previewDraftlineVersion,
   renameDraftlineVariation,
+  resolveDraftlineRewrittenVersion,
   saveDraftlineVersion,
   setDraftlineWorkspacePath,
   shelveDraftlineChanges,
   switchDraftlineVariation,
+  undoDraftlineSnapshotCleanup,
 } from "../services/draftlineVersioning";
 
 const WORKSPACE = "D:\\project";
@@ -483,6 +487,110 @@ describe("draftlineVersioning", () => {
         workspace_path: WORKSPACE,
         plan_id: "cleanup-plan-1",
         confirmation: "user_confirmed",
+      },
+    });
+  });
+
+  it("loads Draftline history cleanup candidates for a selected snapshot", async () => {
+    const candidates = {
+      target_variation: "main",
+      selected_version: "1111111111111111111111111111111111111111",
+      target_head: "3333333333333333333333333333333333333333",
+      candidates: [{
+        version: version("2222222222222222222222222222222222222222", "Range end", 2),
+        include_range: {
+          start: "1111111111111111111111111111111111111111",
+          end: "2222222222222222222222222222222222222222",
+        },
+        selected_role: "range_start",
+        can_compact: true,
+        requires_descendant_replay: true,
+        selected_commit_count: 2,
+        descendant_rewrite_count: 1,
+        blockers: [],
+        warnings: [],
+      }],
+    };
+    mockInvoke.mockResolvedValueOnce(candidates);
+
+    await expect(listDraftlineSnapshotCleanupCandidates(
+      "1111111111111111111111111111111111111111",
+      "main",
+      "origin",
+    )).resolves.toEqual(candidates);
+
+    expect(mockInvoke).toHaveBeenCalledWith("get_history_compaction_candidates", {
+      request: {
+        workspace_path: WORKSPACE,
+        request: {
+          target_variation: "main",
+          selected_version: "1111111111111111111111111111111111111111",
+          remote: "origin",
+          preserve_named_branches: true,
+          preserve_merge_boundaries: true,
+        },
+      },
+    });
+  });
+
+  it("resolves stale versions and undoes Draftline history cleanup through guarded tokens", async () => {
+    const resolution = {
+      requested: "1111111111111111111111111111111111111111",
+      disposition: {
+        kind: "squashed_into",
+        version: "3333333333333333333333333333333333333333",
+      },
+    };
+    const preflight = {
+      plan_id: "cleanup-plan-1",
+      target_variation: "main",
+      backup_ref: "refs/draftline/backups/history-cleanup/main/cleanup-plan-1",
+      expected_current_head: "3333333333333333333333333333333333333333",
+      restore_head: "2222222222222222222222222222222222222222",
+      token: {
+        plan_id: "cleanup-plan-1",
+        target_variation: "main",
+        backup_ref: "refs/draftline/backups/history-cleanup/main/cleanup-plan-1",
+        expected_current_head: "3333333333333333333333333333333333333333",
+        restore_head: "2222222222222222222222222222222222222222",
+      },
+      can_undo: true,
+    };
+    const undoResult = {
+      plan_id: "cleanup-plan-1",
+      old_head: "3333333333333333333333333333333333333333",
+      new_head: "2222222222222222222222222222222222222222",
+      backup_refs: [],
+      ref_updates: [],
+      commit_map: [],
+      snapshot_map: [],
+      warnings: [],
+    };
+    mockInvoke
+      .mockResolvedValueOnce(resolution)
+      .mockResolvedValueOnce(preflight)
+      .mockResolvedValueOnce(undoResult);
+
+    await expect(resolveDraftlineRewrittenVersion(resolution.requested)).resolves.toEqual(resolution);
+    await expect(preflightDraftlineUndoSnapshotCleanup("cleanup-plan-1")).resolves.toEqual(preflight);
+    await expect(undoDraftlineSnapshotCleanup(preflight.token)).resolves.toEqual(undoResult);
+
+    expect(mockInvoke).toHaveBeenNthCalledWith(1, "resolve_rewritten_version", {
+      request: {
+        workspace_path: WORKSPACE,
+        version_id: resolution.requested,
+      },
+    });
+    expect(mockInvoke).toHaveBeenNthCalledWith(2, "preflight_undo_history_cleanup", {
+      request: {
+        workspace_path: WORKSPACE,
+        plan_id: "cleanup-plan-1",
+      },
+    });
+    expect(mockInvoke).toHaveBeenNthCalledWith(3, "undo_history_cleanup", {
+      request: {
+        workspace_path: WORKSPACE,
+        token: preflight.token,
       },
     });
   });

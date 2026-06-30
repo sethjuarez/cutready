@@ -208,9 +208,9 @@ export function FullHistoryGraph({
                     r={15}
                     fill="none"
                     stroke={item.color}
-                    strokeOpacity={0.42}
+                    strokeOpacity={selectable ? 0.42 : 0.14}
                     strokeWidth={1.5}
-                    strokeDasharray="3 3"
+                    strokeDasharray={selectable ? "3 3" : "1 6"}
                   />
                 )}
                 <circle
@@ -238,6 +238,7 @@ export function FullHistoryGraph({
                   r={radius}
                   fill={selected ? "rgb(var(--color-warning))" : node.is_head || highlighted || selectionMode ? item.color : "rgb(var(--color-surface))"}
                   stroke={selected ? "rgb(var(--color-warning))" : item.color}
+                  opacity={selectionMode && !selected && !selectable ? 0.38 : 1}
                   strokeWidth={selected ? 3.2 : 2.2}
                   filter={node.is_head ? "url(#history-node-shadow)" : undefined}
                 />

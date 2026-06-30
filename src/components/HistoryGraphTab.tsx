@@ -19,7 +19,11 @@ import { useConfirmDialog } from "./ConfirmDialog";
 import { FullHistoryGraph } from "./FullHistoryGraph";
 import { TimelineSelector } from "./TimelineSelector";
 import { UnsavedWorkspaceDialog } from "./UnsavedWorkspaceDialog";
-import type { DraftlineHistoryCleanupPreview } from "../services/draftlineVersioning";
+import type {
+  DraftlineHistoryCleanupPreview,
+  DraftlineHistoryCompactionCandidate,
+  DraftlineHistoryCompactionCandidates,
+} from "../services/draftlineVersioning";
 import { errorMessage } from "../stores/appStore";
 import { isExactCleanupSelection, twoPointCleanupSelection } from "../utils/historyCleanupSelection";
 
@@ -37,7 +41,10 @@ export function HistoryGraphTab() {
   const discardChanges = useAppStore((s) => s.discardChanges);
   const deleteTimeline = useAppStore((s) => s.deleteTimeline);
   const previewSnapshotCleanup = useAppStore((s) => s.previewSnapshotCleanup);
+  const findSnapshotCleanupCandidates = useAppStore((s) => s.findSnapshotCleanupCandidates);
   const applySnapshotCleanup = useAppStore((s) => s.applySnapshotCleanup);
+  const undoSnapshotCleanup = useAppStore((s) => s.undoSnapshotCleanup);
+  const lastHistoryCleanup = useAppStore((s) => s.lastHistoryCleanup);
   const currentRemote = useAppStore((s) => s.currentRemote);
   const syncStatus = useAppStore((s) => s.syncStatus);
   const currentProject = useAppStore((s) => s.currentProject);
@@ -53,9 +60,13 @@ export function HistoryGraphTab() {
   const [cleanupLabel, setCleanupLabel] = useState("");
   const [cleanupError, setCleanupError] = useState<string | null>(null);
   const [cleanupPreview, setCleanupPreview] = useState<DraftlineHistoryCleanupPreview | null>(null);
+  const [cleanupCandidates, setCleanupCandidates] = useState<DraftlineHistoryCompactionCandidates | null>(null);
+  const [loadingCleanupCandidates, setLoadingCleanupCandidates] = useState(false);
   const [previewingCleanup, setPreviewingCleanup] = useState(false);
   const [applyingCleanup, setApplyingCleanup] = useState(false);
+  const [undoingCleanup, setUndoingCleanup] = useState(false);
   const [graphZoom, setGraphZoom] = useState(1);
+  const cleanupCandidateRequestRef = useRef(0);
   const { confirm, confirmationDialog } = useConfirmDialog();
 
   useEffect(() => {
@@ -140,20 +151,27 @@ export function HistoryGraphTab() {
   const selectedNewest = selectedNodes[0];
   const selectedOldest = selectedNodes[selectedNodes.length - 1];
   const hasContiguousCleanupSelection = isExactCleanupSelection(activeCleanupNodes, selectedForCleanup);
-  const selectedRangeEndsAtHead = selectedNewest?.is_head === true;
+  const cleanupCandidateByEndpoint = useMemo(() => {
+    if (!cleanupCandidates || cleanupPointIds.length !== 1) return new Map<string, DraftlineHistoryCompactionCandidate>();
+    return new Map(cleanupCandidates.candidates.map((candidate) => [cleanupCandidateEndpointId(candidate), candidate]));
+  }, [cleanupCandidates, cleanupPointIds.length]);
+  const validCleanupCandidateCount = useMemo(
+    () => Array.from(cleanupCandidateByEndpoint.values()).filter((candidate) => candidate.can_compact).length,
+    [cleanupCandidateByEndpoint],
+  );
+  const sharedHistoryCandidateCount = useMemo(
+    () => Array.from(cleanupCandidateByEndpoint.values())
+      .filter((candidate) => candidate.can_compact && candidate.remote_impact?.publish_status === "shared_history_rewrite_required")
+      .length,
+    [cleanupCandidateByEndpoint],
+  );
   const cleanupSelectableIds = useMemo(() => {
     if (!cleanupMode) return new Set<string>();
     if (cleanupPointIds.length !== 1) return new Set(activeCleanupNodes.map((node) => node.id));
-    const [firstId] = cleanupPointIds;
-    const first = activeCleanupNodes.find((node) => node.id === firstId);
-    if (!first) return new Set<string>();
-    if (!first.is_head) {
-      return new Set(activeCleanupNodes.filter((node) => node.is_head).map((node) => node.id));
-    }
-    return new Set(activeCleanupNodes
-      .filter((node) => !node.is_head && twoPointCleanupSelection(activeCleanupNodes, firstId, node.id).size >= 2)
-      .map((node) => node.id));
-  }, [activeCleanupNodes, cleanupMode, cleanupPointIds]);
+    return new Set(Array.from(cleanupCandidateByEndpoint.entries())
+      .filter(([, candidate]) => candidate.can_compact)
+      .map(([endpointId]) => endpointId));
+  }, [activeCleanupNodes, cleanupCandidateByEndpoint, cleanupMode, cleanupPointIds.length]);
   const effectiveCleanupLabel = useMemo(() => {
     const explicit = cleanupLabel.trim();
     if (explicit) return explicit;
@@ -164,7 +182,6 @@ export function HistoryGraphTab() {
   }, [cleanupLabel, selectedNewest, selectedOldest]);
   const canPreviewCleanup = cleanupMode
     && hasContiguousCleanupSelection
-    && selectedRangeEndsAtHead
     && !isDirty
     && !isRewound
     && cleanupPointIds.length === 2
@@ -198,12 +215,34 @@ export function HistoryGraphTab() {
     await loadTimelines();
   }, [loadGraphData, loadTimelines, navigateToSnapshot]);
 
+  const loadCleanupCandidates = useCallback(async (commitId: string) => {
+    const requestId = cleanupCandidateRequestRef.current + 1;
+    cleanupCandidateRequestRef.current = requestId;
+    setLoadingCleanupCandidates(true);
+    setCleanupCandidates(null);
+    try {
+      const candidates = await findSnapshotCleanupCandidates(commitId);
+      if (cleanupCandidateRequestRef.current !== requestId) return;
+      setCleanupCandidates(candidates);
+      const validCount = candidates.candidates.filter((candidate) => candidate.can_compact).length;
+      if (validCount === 0) {
+        setCleanupError("Draftline could not find a valid compact range endpoint for that snapshot.");
+      }
+    } catch (err) {
+      if (cleanupCandidateRequestRef.current !== requestId) return;
+      setCleanupError(`Could not load compact range targets: ${errorMessage(err)}`);
+    } finally {
+      if (cleanupCandidateRequestRef.current === requestId) setLoadingCleanupCandidates(false);
+    }
+  }, [findSnapshotCleanupCandidates]);
+
   const toggleCleanupSelection = useCallback((commitId: string) => {
-    if (cleanupPointIds.length === 0) {
+    if (cleanupPointIds.length === 0 || cleanupPointIds.length === 2) {
       setCleanupPointIds([commitId]);
       setSelectedForCleanup(new Set([commitId]));
       setCleanupPreview(null);
       setCleanupError(null);
+      void loadCleanupCandidates(commitId);
       return;
     }
 
@@ -212,6 +251,30 @@ export function HistoryGraphTab() {
       setSelectedForCleanup(new Set());
       setCleanupPreview(null);
       setCleanupError(null);
+      setCleanupCandidates(null);
+      cleanupCandidateRequestRef.current += 1;
+      setLoadingCleanupCandidates(false);
+      return;
+    }
+
+    if (loadingCleanupCandidates) {
+      setCleanupError("Still finding valid compact range targets. Try again in a moment.");
+      return;
+    }
+
+    if (!cleanupCandidates) {
+      setCleanupError("Draftline compact range targets are not ready. Pick the first point again to retry.");
+      return;
+    }
+
+    const candidate = cleanupCandidateByEndpoint.get(commitId);
+    if (!candidate) {
+      setCleanupError("Choose one of the Draftline-approved compact range targets.");
+      return;
+    }
+
+    if (candidate && !candidate.can_compact) {
+      setCleanupError(cleanupCandidateBlockerMessage(candidate));
       return;
     }
 
@@ -221,7 +284,7 @@ export function HistoryGraphTab() {
     setSelectedForCleanup(selection);
     setCleanupPreview(null);
     setCleanupError(selection.size > 1 ? null : "Choose two snapshots on the active timeline to compact.");
-  }, [activeCleanupNodes, cleanupPointIds]);
+  }, [activeCleanupNodes, cleanupCandidateByEndpoint, cleanupCandidates, cleanupPointIds, loadCleanupCandidates, loadingCleanupCandidates]);
 
   const cancelCleanup = useCallback(() => {
     setCleanupMode(false);
@@ -230,6 +293,9 @@ export function HistoryGraphTab() {
     setCleanupLabel("");
     setCleanupError(null);
     setCleanupPreview(null);
+    setCleanupCandidates(null);
+    cleanupCandidateRequestRef.current += 1;
+    setLoadingCleanupCandidates(false);
   }, []);
 
   const handlePreviewCleanup = useCallback(async () => {
@@ -246,6 +312,7 @@ export function HistoryGraphTab() {
       );
       setCleanupPreview(preview);
     } catch (err) {
+      setCleanupMode(true);
       setCleanupError(errorMessage(err));
     } finally {
       setPreviewingCleanup(false);
@@ -279,6 +346,32 @@ export function HistoryGraphTab() {
       setApplyingCleanup(false);
     }
   }, [applySnapshotCleanup, cancelCleanup, cleanupPreview, confirm, currentRemote]);
+
+  const handleUndoCleanup = useCallback(async () => {
+    if (!lastHistoryCleanup || undoingCleanup) return;
+    const confirmed = await confirm({
+      title: "Undo compacted history?",
+      message: "Draftline will restore the branch head from the backup ref created before the last history cleanup.",
+      confirmLabel: "Undo compact",
+      cancelLabel: "Cancel",
+      variant: "warning",
+    });
+    if (!confirmed) return;
+
+    setUndoingCleanup(true);
+    try {
+      await undoSnapshotCleanup(lastHistoryCleanup.plan_id);
+      await loadGraphData();
+      await loadTimelines();
+      await checkDirty();
+      await checkRewound();
+    } catch (err) {
+      setCleanupMode(true);
+      setCleanupError(errorMessage(err));
+    } finally {
+      setUndoingCleanup(false);
+    }
+  }, [checkDirty, checkRewound, confirm, lastHistoryCleanup, loadGraphData, loadTimelines, undoingCleanup, undoSnapshotCleanup]);
 
   if (graphNodes.length === 0) {
     return (
@@ -378,6 +471,18 @@ export function HistoryGraphTab() {
               <GitPullRequestArrow className="h-3.5 w-3.5" />
               Compact
             </button>
+            {lastHistoryCleanup && (
+              <button
+                type="button"
+                onClick={handleUndoCleanup}
+                disabled={undoingCleanup}
+                className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))] disabled:pointer-events-none disabled:opacity-40"
+                title="Undo the last compacted history cleanup"
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+                {undoingCleanup ? "Undoing" : "Undo compact"}
+              </button>
+            )}
             <button
               type="button"
               onClick={focusCurrentSnapshot}
@@ -425,10 +530,12 @@ export function HistoryGraphTab() {
             label={cleanupLabel}
             cleanupError={cleanupError}
             cleanupPointCount={cleanupPointIds.length}
+            loadingCandidates={loadingCleanupCandidates}
+            validCandidateCount={validCleanupCandidateCount}
+            sharedHistoryCandidateCount={sharedHistoryCandidateCount}
             canPreview={canPreviewCleanup}
             currentRemote={!!currentRemote}
             hasContiguousSelection={hasContiguousCleanupSelection}
-            rangeEndsAtHead={selectedRangeEndsAtHead}
             isDirty={isDirty}
             isRewound={isRewound}
             previewing={previewingCleanup}
@@ -514,10 +621,12 @@ function FloatingCleanupPanel({
   label,
   cleanupError,
   cleanupPointCount,
+  loadingCandidates,
+  validCandidateCount,
+  sharedHistoryCandidateCount,
   canPreview,
   currentRemote,
   hasContiguousSelection,
-  rangeEndsAtHead,
   isDirty,
   isRewound,
   previewing,
@@ -534,10 +643,12 @@ function FloatingCleanupPanel({
   label: string;
   cleanupError: string | null;
   cleanupPointCount: number;
+  loadingCandidates: boolean;
+  validCandidateCount: number;
+  sharedHistoryCandidateCount: number;
   canPreview: boolean;
   currentRemote: boolean;
   hasContiguousSelection: boolean;
-  rangeEndsAtHead: boolean;
   isDirty: boolean;
   isRewound: boolean;
   previewing: boolean;
@@ -609,7 +720,7 @@ function FloatingCleanupPanel({
         <div>
           <div className="text-xs font-semibold text-[rgb(var(--color-accent))]">Compact history</div>
           <p className="mt-0.5 text-[11px] leading-relaxed text-[rgb(var(--color-text-secondary))]">
-            Pick two snapshots. One endpoint must be the current snapshot because Draftline can only compact ranges ending at the branch head.
+            Pick two snapshots to compact the contiguous range between them. Draftline will preview the rewrite before anything is applied.
           </p>
         </div>
         <button
@@ -640,9 +751,11 @@ function FloatingCleanupPanel({
       <CleanupStatus
         cleanupError={cleanupError}
         cleanupPointCount={cleanupPointCount}
+        loadingCandidates={loadingCandidates}
+        validCandidateCount={validCandidateCount}
+        sharedHistoryCandidateCount={sharedHistoryCandidateCount}
         currentRemote={currentRemote}
         hasContiguousSelection={hasContiguousSelection}
-        rangeEndsAtHead={rangeEndsAtHead}
         isDirty={isDirty}
         isRewound={isRewound}
       />
@@ -670,21 +783,25 @@ function getInitialCleanupPanelPosition() {
 function CleanupStatus({
   cleanupError,
   cleanupPointCount,
+  loadingCandidates,
+  validCandidateCount,
+  sharedHistoryCandidateCount,
   currentRemote,
   hasContiguousSelection,
-  rangeEndsAtHead,
   isDirty,
   isRewound,
 }: {
   cleanupError: string | null;
   cleanupPointCount: number;
+  loadingCandidates: boolean;
+  validCandidateCount: number;
+  sharedHistoryCandidateCount: number;
   currentRemote: boolean;
   hasContiguousSelection: boolean;
-  rangeEndsAtHead: boolean;
   isDirty: boolean;
   isRewound: boolean;
 }) {
-  let message = "Highlighted graph nodes can start a compact range.";
+  let message = "Pick two graph nodes to compact the contiguous range between them.";
   let className = "text-[rgb(var(--color-text-secondary))]";
 
   if (isDirty) {
@@ -693,13 +810,17 @@ function CleanupStatus({
   } else if (isRewound) {
     message = "Return to the current timeline tip before compacting.";
     className = "text-warning";
+  } else if (cleanupPointCount === 1 && loadingCandidates) {
+    message = "First point selected. Finding valid Draftline range targets...";
+  } else if (cleanupPointCount === 1 && validCandidateCount > 0 && currentRemote && sharedHistoryCandidateCount > 0) {
+    message = `${validCandidateCount} valid target${validCandidateCount === 1 ? "" : "s"} found; ${sharedHistoryCandidateCount} touch published history and will stay local unless you later use guarded publish.`;
+  } else if (cleanupPointCount === 1 && validCandidateCount > 0) {
+    message = `First point selected. Choose one of ${validCandidateCount} valid Draftline range target${validCandidateCount === 1 ? "" : "s"}.`;
   } else if (cleanupPointCount === 1) {
-    message = "First point selected. Choose a second point; one picked point must be the current snapshot to preview.";
+    message = "First point selected, but Draftline did not find a valid compact range target.";
+    className = "text-warning";
   } else if (cleanupPointCount === 2 && !hasContiguousSelection) {
     message = "Choose two points that form a contiguous active-timeline range.";
-    className = "text-warning";
-  } else if (cleanupPointCount === 2 && !rangeEndsAtHead) {
-    message = "One selected point must be the current snapshot; Draftline cannot compact a middle-only range yet.";
     className = "text-warning";
   } else if (currentRemote) {
     message = "Compaction is local-first. Publishing rewritten history may need a guarded remote update.";
@@ -809,4 +930,15 @@ function uniqueGraphNodes(nodes: GraphNode[]): GraphNode[] {
     unique.push(node);
   }
   return unique;
+}
+
+function cleanupCandidateEndpointId(candidate: DraftlineHistoryCompactionCandidate): string {
+  return candidate.selected_role === "range_start"
+    ? candidate.include_range.end
+    : candidate.include_range.start;
+}
+
+function cleanupCandidateBlockerMessage(candidate: DraftlineHistoryCompactionCandidate): string {
+  const blocker = candidate.blockers[0] ?? candidate.warnings[0];
+  return blocker?.message ?? "Draftline marked that compact range target as unavailable.";
 }
