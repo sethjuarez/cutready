@@ -1087,29 +1087,35 @@ function StoryboardSectionBlock({
   const [draftTitle, setDraftTitle] = useState(item.title);
   const [draftDescription, setDraftDescription] = useState(item.description ?? "");
   const [editingTitle, setEditingTitle] = useState(false);
+  const [editingDescription, setEditingDescription] = useState(false);
   const titleInputRef = useRef<HTMLInputElement>(null);
   const descriptionInputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     const activeElement = document.activeElement;
-    if (activeElement === titleInputRef.current || activeElement === descriptionInputRef.current) {
+    if (editingDescription || activeElement === titleInputRef.current || activeElement === descriptionInputRef.current) {
       return;
     }
     setDraftTitle(item.title);
     setDraftDescription(item.description ?? "");
-  }, [item.title, item.description]);
+  }, [editingDescription, item.title, item.description]);
 
   useEffect(() => {
     const textarea = descriptionInputRef.current;
     if (!textarea) return;
     textarea.style.height = "auto";
     textarea.style.height = `${textarea.scrollHeight}px`;
-  }, [draftDescription]);
+  }, [draftDescription, editingDescription]);
 
   useEffect(() => {
     if (!editingTitle) return;
     requestAnimationFrame(() => titleInputRef.current?.select());
   }, [editingTitle]);
+
+  useEffect(() => {
+    if (!editingDescription) return;
+    requestAnimationFrame(() => descriptionInputRef.current?.focus());
+  }, [editingDescription]);
 
   const flushSectionTitleDraft = useCallback(() => {
     if (locked) return;
@@ -1236,17 +1242,39 @@ function StoryboardSectionBlock({
             )}
           </div>
           <div className="group/section-desc relative mt-2">
-            <textarea
-              ref={descriptionInputRef}
-              value={draftDescription}
-              readOnly={locked}
-              onChange={(event) => setDraftDescription(event.target.value)}
-              onBlur={flushSectionDescriptionDraft}
-              rows={1}
-              className={`w-full resize-none overflow-hidden bg-transparent text-sm leading-relaxed text-[rgb(var(--color-text-secondary))] placeholder:text-[rgb(var(--color-text-secondary))]/40 outline-none ${locked ? "" : "pr-10"}`}
-              placeholder="Add section framing..."
-            />
-            {!locked && (
+            {editingDescription ? (
+              <textarea
+                ref={descriptionInputRef}
+                value={draftDescription}
+                readOnly={locked}
+                onChange={(event) => setDraftDescription(event.target.value)}
+                onBlur={() => {
+                  flushSectionDescriptionDraft();
+                  setEditingDescription(false);
+                }}
+                rows={1}
+                className="w-full resize-none overflow-hidden rounded-lg border border-[rgb(var(--color-accent))]/30 bg-[rgb(var(--color-surface))]/60 px-2 py-1 text-sm leading-relaxed text-[rgb(var(--color-text-secondary))] placeholder:text-[rgb(var(--color-text-secondary))]/40 outline-none focus:ring-1 focus:ring-[rgb(var(--color-accent))]/35"
+                placeholder="Add section framing..."
+              />
+            ) : (
+              <div
+                tabIndex={0}
+                onClick={() => { if (!locked) setEditingDescription(true); }}
+                onFocus={() => { if (!locked) setEditingDescription(true); }}
+                className={`min-h-[1.75rem] rounded-lg border border-transparent px-2 py-1 text-sm leading-relaxed transition-colors hover:border-[rgb(var(--color-border))] ${locked ? "cursor-default" : "cursor-text pr-10"}`}
+              >
+                {draftDescription.trim() ? (
+                  <div className="prose-desc text-[rgb(var(--color-text-secondary))]">
+                    <SafeMarkdown>{draftDescription}</SafeMarkdown>
+                  </div>
+                ) : (
+                  <span className="text-[rgb(var(--color-text-secondary))]/40">
+                    Add section framing...
+                  </span>
+                )}
+              </div>
+            )}
+            {!editingDescription && !locked && (
               <FieldAiButton
                 onClick={(event) => {
                   event.stopPropagation();
