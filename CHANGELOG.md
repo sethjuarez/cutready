@@ -9,6 +9,13 @@
 Covector manages this changelog. Do not edit manually.
 Each release section is generated from `.changes/*.md` files.
 
+## [1.20.0](https://github.com/sethjuarez/cutready/compare/v1.19.0...v1.20.0) (2026-06-30)
+
+
+### Features
+
+* **versioning:** support remote compaction publish ([ad7d80b](https://github.com/sethjuarez/cutready/commit/ad7d80b238714fcdb534a0b8659aa17ad63f2235))
+
 ## [1.19.0](https://github.com/sethjuarez/cutready/compare/v1.18.0...v1.19.0) (2026-06-30)
 
 
