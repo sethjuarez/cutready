@@ -26,6 +26,96 @@ jobs:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
 
+      - name: Resolve release PR branch
+        id: release-pr
+        if: steps.release.outputs.prs_created == 'true'
+        env:
+          RELEASE_PLEASE_PRS: ${{ steps.release.outputs.prs }}
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+
+          const prs = JSON.parse(process.env.RELEASE_PLEASE_PRS || '[]');
+          if (prs.length !== 1) {
+            console.warn(`Expected exactly one release-please PR, found ${prs.length}; skipping changelog normalization.`);
+            process.exit(0);
+          }
+
+          fs.appendFileSync(process.env.GITHUB_ENV, `RELEASE_PLEASE_HEAD=${prs[0].headBranchName}\n`);
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `head_branch=${prs[0].headBranchName}\n`);
+          NODE
+
+      - name: Checkout release PR branch
+        if: steps.release.outputs.prs_created == 'true' && steps.release-pr.outputs.head_branch != ''
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.release-pr.outputs.head_branch }}
+          fetch-depth: 0
+
+      - name: Normalize release changelog
+        if: steps.release.outputs.prs_created == 'true' && steps.release-pr.outputs.head_branch != ''
+        run: node scripts/dedupe-release-notes.mjs CHANGELOG.md
+
+      - name: Push normalized changelog
+        if: steps.release.outputs.prs_created == 'true' && steps.release-pr.outputs.head_branch != ''
+        run: |
+          if git diff --quiet -- CHANGELOG.md; then
+            echo "Release changelog already normalized."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add CHANGELOG.md
+          git commit -m "chore: normalize release changelog"
+          git push origin "HEAD:${RELEASE_PLEASE_HEAD}"
+
+      - name: Normalize release PR body
+        if: steps.release.outputs.prs_created == 'true' && steps.release-pr.outputs.head_branch != ''
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_PLEASE_PRS: ${{ steps.release.outputs.prs }}
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const {spawnSync} = require('node:child_process');
+
+          const [pr] = JSON.parse(process.env.RELEASE_PLEASE_PRS || '[]');
+          const bodyPath = 'release-pr-body.md';
+          const originalBody = pr.body || '';
+
+          fs.writeFileSync(bodyPath, originalBody);
+
+          const normalize = spawnSync(process.execPath, ['scripts/dedupe-release-notes.mjs', bodyPath], {
+            stdio: 'inherit',
+          });
+          if (normalize.error) {
+            throw normalize.error;
+          }
+          if (normalize.status !== 0) {
+            process.exit(normalize.status || 1);
+          }
+
+          const normalizedBody = fs.readFileSync(bodyPath, 'utf8');
+
+          if (normalizedBody === originalBody) {
+            fs.rmSync(bodyPath, {force: true});
+            console.log('Release PR body already normalized.');
+            process.exit(0);
+          }
+
+          const edit = spawnSync('gh', ['pr', 'edit', String(pr.number), '--body-file', bodyPath], {
+            stdio: 'inherit',
+            encoding: 'utf8',
+          });
+          fs.rmSync(bodyPath, {force: true});
+          if (edit.error) {
+            throw edit.error;
+          }
+          process.exit(edit.status ?? 1);
+          NODE
+
   trigger-builds:
     needs: release-please
     if: needs.release-please.outputs.release_created == 'true'

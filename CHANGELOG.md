@@ -1,13 +1,14 @@
 # Changelog
 
+<!-- markdownlint-disable MD004 MD012 MD024 -->
+
 ## \[0.6.0]
 
 ### What's Changed
 
 - [`e2a317c`](https://github.com/sethjuarez/cutready/commit/e2a317c0f9f01fa1870b0d21eaa44247d272a2a8) Added Covector-based version management with automated changelog generation and CI release workflow.
 
-Covector manages this changelog. Do not edit manually.
-Each release section is generated from `.changes/*.md` files.
+Release Please manages this changelog. Do not edit manually.
 
 ## [1.20.0](https://github.com/sethjuarez/cutready/compare/v1.19.0...v1.20.0) (2026-06-30)
 
@@ -21,20 +22,15 @@ Each release section is generated from `.changes/*.md` files.
 
 ### Features
 
-* **history:** use row-based full graph ([21e1b9b](https://github.com/sethjuarez/cutready/commit/21e1b9b24307befa3b877bfe600898e2dc6296ab))
 * **history:** use row-based full graph ([3d527e2](https://github.com/sethjuarez/cutready/commit/3d527e2765306208e4b2e44f5bd08b93ba3e262c))
-* **versioning:** add Draftline timeline cleanup ([7181b38](https://github.com/sethjuarez/cutready/commit/7181b383cbe2b5df08d08cccb86e815cfb246edc))
 * **versioning:** add Draftline timeline cleanup ([707727c](https://github.com/sethjuarez/cutready/commit/707727ccf25cf890815f5ff4f50d44b65fdf671c))
-* **versioning:** use Draftline cleanup candidates ([fd32500](https://github.com/sethjuarez/cutready/commit/fd32500cc47e108e1083d1c94568f1b551632e81))
 * **versioning:** use Draftline cleanup candidates ([1e936d7](https://github.com/sethjuarez/cutready/commit/1e936d7a9404766a2321daa32da2246eef13ad9d))
 
 
 ### Bug Fixes
 
-* **feedback:** improve issue diagnostics reporting ([b94438d](https://github.com/sethjuarez/cutready/commit/b94438da1ebbb0f61a9e5e9728089c0c670f4a4b))
 * **feedback:** improve issue diagnostics reporting ([664a7ed](https://github.com/sethjuarez/cutready/commit/664a7eda73e1609cd141a8e30c830ecdfc038152))
 * **history:** refine compact selection and provider readiness ([d7e21a0](https://github.com/sethjuarez/cutready/commit/d7e21a09ff849bd819217afa9d79339f62df9514))
-* **versioning:** clear stale remote warnings on macOS ([9eba55c](https://github.com/sethjuarez/cutready/commit/9eba55c97a3e81af172c3129ba2cd44950f9fb8f))
 * **versioning:** clear stale remote warnings on macOS ([f672250](https://github.com/sethjuarez/cutready/commit/f67225018e24e84d242c86c5602ad7d39255f9ac))
 
 ## [1.18.0](https://github.com/sethjuarez/cutready/compare/v1.17.0...v1.18.0) (2026-06-29)
@@ -42,7 +38,6 @@ Each release section is generated from `.changes/*.md` files.
 
 ### Features
 
-* **mac:** use native traffic lights ([0611d4a](https://github.com/sethjuarez/cutready/commit/0611d4ab640b41b78f2201f55cfbdd227b3e8590))
 * **mac:** use native traffic lights ([7cf0b01](https://github.com/sethjuarez/cutready/commit/7cf0b0115ee5fb6c7ab658b80d9148abb26059b0))
 
 ## [1.17.0](https://github.com/sethjuarez/cutready/compare/v1.16.0...v1.17.0) (2026-06-29)
@@ -50,14 +45,12 @@ Each release section is generated from `.changes/*.md` files.
 
 ### Features
 
-* **versioning:** guard remote branch creation ([96062d4](https://github.com/sethjuarez/cutready/commit/96062d4c2ece73b126500c1cca5d52033b02ae08))
 * **versioning:** guard remote branch creation ([28217e7](https://github.com/sethjuarez/cutready/commit/28217e7344b698aacdad2a29184126447222ea24))
 
 
 ### Bug Fixes
 
 * harden draftline versioning flow ([00cc39e](https://github.com/sethjuarez/cutready/commit/00cc39e8942202c2b35a8515221bffe2f773d155))
-* **window:** allow custom close button to exit ([c95acab](https://github.com/sethjuarez/cutready/commit/c95acab8cbb9e8ca09ee13da8ee5159208487a65))
 * **window:** allow custom close button to exit ([2edcb6d](https://github.com/sethjuarez/cutready/commit/2edcb6d0a0d6d55f18e0b20d867a7f9dcb4e0552))
 
 ## [1.16.0](https://github.com/sethjuarez/cutready/compare/v1.15.0...v1.16.0) (2026-06-28)
@@ -66,26 +59,18 @@ Each release section is generated from `.changes/*.md` files.
 ### Features
 
 * add safety gates for versioning and AI edits ([5f836a7](https://github.com/sethjuarez/cutready/commit/5f836a7f1aed86b4d7290cbcee89e4e795b7c70f))
-* harden persistence safety and semantic merges ([dfc4fb3](https://github.com/sethjuarez/cutready/commit/dfc4fb3e726c914d64d1a405bcd2a5bebe8aa13a))
 * harden persistence safety and semantic merges ([60cc4e7](https://github.com/sethjuarez/cutready/commit/60cc4e70d8856b5e81a63f8ea24fdadda58782af))
-* harden release confidence workflow ([7f314bb](https://github.com/sethjuarez/cutready/commit/7f314bb5264f96c3405d2a9e2a9a76ac0c6fa599))
 * harden release confidence workflow ([05532ff](https://github.com/sethjuarez/cutready/commit/05532ffd5d82091035840a90fa5b6f868b087dbf))
-* modernize document editing UI ([0420ffb](https://github.com/sethjuarez/cutready/commit/0420ffbdf20fe8307a3466a8d17185cfddfec7f2))
 * modernize document editing UI ([bdca7de](https://github.com/sethjuarez/cutready/commit/bdca7dea6feb98aafea74da1bf0cbbc0625b24ee))
-* **versioning:** complete Draftline discard integration ([c0e6a54](https://github.com/sethjuarez/cutready/commit/c0e6a541847e24d0456168f019a36719c6ade95a))
 * **versioning:** complete Draftline discard integration ([718a423](https://github.com/sethjuarez/cutready/commit/718a423fc6f7300c0abc8d0f8fa330ec7741d65f))
 * **versioning:** replace CutReady history with Draftline ([2c551b6](https://github.com/sethjuarez/cutready/commit/2c551b61521e492ff2ba095b95aca508fa11aa09))
 
 
 ### Bug Fixes
 
-* **observability:** adopt auditaur native drive bridge ([71730f0](https://github.com/sethjuarez/cutready/commit/71730f081bc9697722d7c3e91f430404bafd65a0))
 * **observability:** adopt auditaur native drive bridge ([2cac22d](https://github.com/sethjuarez/cutready/commit/2cac22d16e3b823170ca6a8ef784f218696ed42c))
-* run sparkle actions in background ([2354519](https://github.com/sethjuarez/cutready/commit/235451936a1c2469b56ec5c0671abad09ec4697f))
 * run sparkle actions in background ([4269016](https://github.com/sethjuarez/cutready/commit/4269016423ea753275f92b5c87e9e61815bed394))
-* **storyboard:** support section controls ([b786dd3](https://github.com/sethjuarez/cutready/commit/b786dd36ecdf1a8f5266bf95045a003d7a70fa6b))
 * **storyboard:** support section controls ([d60cc15](https://github.com/sethjuarez/cutready/commit/d60cc15c0ec3598ad3b11aae191233a1671277a7))
-* **theme:** improve palette contrast ([43ca859](https://github.com/sethjuarez/cutready/commit/43ca859c248f55ca323b070dae49dd3a09ef7596))
 * **theme:** improve palette contrast ([9b5ecfc](https://github.com/sethjuarez/cutready/commit/9b5ecfcbe03bad1130e49cd6f985f117274928dc))
 
 ## [1.15.0](https://github.com/sethjuarez/cutready/compare/v1.14.0...v1.15.0) (2026-06-23)
@@ -93,7 +78,6 @@ Each release section is generated from `.changes/*.md` files.
 
 ### Features
 
-* **settings:** add interchangeable AI providers ([7ba1481](https://github.com/sethjuarez/cutready/commit/7ba1481e8bb8c5b058ca2eeeb56a026c2eb12643))
 * **settings:** add interchangeable AI providers ([5f876ce](https://github.com/sethjuarez/cutready/commit/5f876ce4471b58e098e675daccf73e85f71c4af3))
 
 ## [1.14.0](https://github.com/sethjuarez/cutready/compare/v1.13.0...v1.14.0) (2026-06-23)
@@ -129,7 +113,6 @@ Each release section is generated from `.changes/*.md` files.
 
 ### Bug Fixes
 
-* align macos window chrome ([d5d4db7](https://github.com/sethjuarez/cutready/commit/d5d4db72728b82cc6347263a592e49c9c4e3f712))
 * align macos window chrome ([230a579](https://github.com/sethjuarez/cutready/commit/230a57950c28282f1dac08caeec9aaccb039abe2))
 
 ## [1.12.3](https://github.com/sethjuarez/cutready/compare/v1.12.2...v1.12.3) (2026-06-17)
@@ -137,7 +120,6 @@ Each release section is generated from `.changes/*.md` files.
 
 ### Bug Fixes
 
-* refine mac chrome and chat session UX ([44bad00](https://github.com/sethjuarez/cutready/commit/44bad009ccee7f7371a837c9190e4e6dd69615f3))
 * refine mac chrome and chat session UX ([985042a](https://github.com/sethjuarez/cutready/commit/985042a10fa3ebdefdd0201d4c611a8105612ff3))
 
 ## [1.12.2](https://github.com/sethjuarez/cutready/compare/v1.12.1...v1.12.2) (2026-06-17)
@@ -161,19 +143,14 @@ Each release section is generated from `.changes/*.md` files.
 
 ### Features
 
-* add run maintenance and split tab UX ([c0c3170](https://github.com/sethjuarez/cutready/commit/c0c3170a9a87ee56192d5f999c7e3b7aebdf1b0c))
 * add run maintenance and split tab UX ([339f440](https://github.com/sethjuarez/cutready/commit/339f440b94091ac772e1faf39affcf17cf4f6c43))
-* **agent:** add agent state database inspector ([a9a1f12](https://github.com/sethjuarez/cutready/commit/a9a1f128412d6aa0af28835c697c5ddf95fdab37))
 * **agent:** add agent state database inspector ([af09f26](https://github.com/sethjuarez/cutready/commit/af09f26a80d15520fc09516eefc7ae90fb4aa7dc))
-* **agent:** store memory in agent-state database ([4d2f008](https://github.com/sethjuarez/cutready/commit/4d2f0087ac5a55d28e6228d3695ac7ebb3156cf7))
 * **agent:** store memory in agent-state database ([931f370](https://github.com/sethjuarez/cutready/commit/931f370252f7c97a21b3d0d6cb9c9d331fcfd875))
 
 
 ### Bug Fixes
 
-* **agent:** keep chat runtime state local ([40b6bbf](https://github.com/sethjuarez/cutready/commit/40b6bbf50b1b9d30b16e147a33183c2eec72b045))
 * **agent:** keep chat runtime state local ([7fc65dd](https://github.com/sethjuarez/cutready/commit/7fc65ddd3204d56d5c45e7f1f59029e76be019fd))
-* **agent:** keep memory state local ([ebb76a9](https://github.com/sethjuarez/cutready/commit/ebb76a96b94838f4e16f1af37d22881033c9e81f))
 * **agent:** keep memory state local ([85683e8](https://github.com/sethjuarez/cutready/commit/85683e85aec42d113e1784188d3e1a6c0b9f9297))
 
 ## [1.11.0](https://github.com/sethjuarez/cutready/compare/v1.10.0...v1.11.0) (2026-06-16)
@@ -184,7 +161,6 @@ Each release section is generated from `.changes/*.md` files.
 * **agent:** add agent run state inspector ([7caee29](https://github.com/sethjuarez/cutready/commit/7caee29ca48aae4a52418211acf64444611188d6))
 * **agent:** add run state inspector ([ded3561](https://github.com/sethjuarez/cutready/commit/ded35618158e22a6e80c96c90df85fdbaf6b37cf))
 * **agent:** open run details in editor tabs ([156b523](https://github.com/sethjuarez/cutready/commit/156b5230ca0620f03ff388ea244755cedae1a36b))
-* **agent:** persist agentive run state ([c6a7838](https://github.com/sethjuarez/cutready/commit/c6a7838f3fd6777c919e6d9030d04ac36bdfaaa9))
 * **agent:** persist agentive run state ([01978d3](https://github.com/sethjuarez/cutready/commit/01978d3b9557fc978495ba304a4e49bd54cfeb98))
 * **chat:** add discoverable focus mode ([#85](https://github.com/sethjuarez/cutready/issues/85)) ([4101095](https://github.com/sethjuarez/cutready/commit/410109571e9ea5e7eb292714116ff9439fdde883))
 
@@ -193,7 +169,6 @@ Each release section is generated from `.changes/*.md` files.
 
 * **agent:** adopt agentive telemetry metadata ([1082bfb](https://github.com/sethjuarez/cutready/commit/1082bfb91c1ac896a452f968e9884936fc3f10bf))
 * **agent:** persist agentive checkpoints ([#86](https://github.com/sethjuarez/cutready/issues/86)) ([12b2a50](https://github.com/sethjuarez/cutready/commit/12b2a507af14722a68e3a32934c754959ec23c02))
-* **layout:** allow panels to resize more freely ([a51722f](https://github.com/sethjuarez/cutready/commit/a51722f19569328bf1fe0e9bacffc8c94e4be527))
 * **layout:** allow panels to resize more freely ([0094f55](https://github.com/sethjuarez/cutready/commit/0094f5514b535cd9f395c44e0ae31bdaa149aa90))
 
 ## [1.10.0](https://github.com/sethjuarez/cutready/compare/v1.9.0...v1.10.0) (2026-06-09)
