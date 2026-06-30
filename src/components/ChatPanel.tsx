@@ -7,6 +7,7 @@ import { ProjectImage } from "./ProjectImage";
 import { projectRelativeScreenshotPath } from "../utils/projectImage";
 
 import { clearSuppressedEditorFlush, suppressEditorFlush, useAppStore } from "../stores/appStore";
+import { useAiApplyGateStore } from "../stores/aiApplyGateStore";
 import { useSettings, type AgentPreset } from "../hooks/useSettings";
 import { loadProviderSecrets } from "../hooks/useSecretStore";
 import { BUILT_IN_AGENTS, resolveAgentPrompt } from "../agents/builtInAgents";
@@ -93,6 +94,24 @@ export function extractInlineToolActivity(message: ChatMessage, followingMessage
 
 function hasToolCalls(message: ChatMessage): boolean {
   return (message.tool_calls?.length ?? 0) > 0;
+}
+
+export function shouldRequestChatMutationApproval(applyMode: string): boolean {
+  return applyMode === "ask";
+}
+
+export function canUseChatMutationTools(applyMode: string, askModeApproved: boolean): boolean {
+  if (applyMode === "auto") return true;
+  if (applyMode === "ask") return askModeApproved;
+  return false;
+}
+
+export function askModeApprovedSystemInstruction(): string {
+  return "AI apply behavior is set to Ask before applying. The user approved mutation tools for this chat turn, so you may use write or mutation tools when they are the right way to complete the request. The approval only applies to this turn; Settings > AI apply behavior can switch future turns to Auto-apply.";
+}
+
+export function askModeCancelledMessage(): string {
+  return "Ask Mode is active, so I need approval before applying AI changes. I did not run write or mutation tools. To skip this prompt in future turns, choose Auto-apply from the approval dialog or change Settings > AI apply behavior to Auto-apply AI changes.";
 }
 
 /**
@@ -933,6 +952,24 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
     }
     setReferences([]);
 
+    let askModeApproved = false;
+    if (shouldRequestChatMutationApproval(settings.aiApplyMode)) {
+      const approval = await useAiApplyGateStore.getState().requestApproval("This chat turn");
+      if (approval === "cancel") {
+        const notice: ChatMessage = { role: "assistant", content: askModeCancelledMessage() };
+        setChatMessages(silent ? [...messages, notice] : [...newMessages, notice]);
+        addActivityEntries([{
+          id: crypto.randomUUID(),
+          timestamp: new Date(),
+          source: "chat",
+          content: "Ask Mode blocked AI mutation tools until approval",
+          level: "info",
+        }]);
+        return;
+      }
+      askModeApproved = true;
+    }
+
     // Build full conversation with system prompt — use llmContent for last message so LLM gets web content
     const llmMessages = newMessages.map((m, i) =>
       i === newMessages.length - 1 && llmContent ? { ...m, content: llmContent } : m
@@ -948,9 +985,11 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
       if (activeNotePath) overridePrompt += `\n\nThe user is currently editing the note at: ${activeNotePath}`;
       effectiveSystemPrompt = overridePrompt;
     }
-    const allowMutationTools = settings.aiApplyMode === "auto";
-    if (!allowMutationTools) {
-      effectiveSystemPrompt += "\n\nAI apply behavior is set to Ask before applying. You cannot use write or mutation tools in this chat turn. Read project context as needed, then describe the edits you would apply so the user can choose to enable Auto-apply or use a gated AI shortcut.";
+    const allowMutationTools = canUseChatMutationTools(settings.aiApplyMode, askModeApproved);
+    if (settings.aiApplyMode === "ask" && askModeApproved) {
+      effectiveSystemPrompt += `\n\n${askModeApprovedSystemInstruction()}`;
+    } else if (!allowMutationTools) {
+      effectiveSystemPrompt += "\n\nWrite and mutation tools are disabled for this chat turn. Read project context as needed, then describe the edits you would apply instead of changing project files.";
     }
     const fullMessages: ChatMessage[] = [
       { role: "system", content: effectiveSystemPrompt },
