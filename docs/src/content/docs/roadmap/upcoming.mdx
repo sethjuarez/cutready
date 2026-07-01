@@ -1,6 +1,6 @@
 ---
 title: Roadmap
-description: Upcoming features and development plans for CutReady.
+description: What is available now, what is experimental, and what is planned for CutReady.
 sidebar:
   order: 1
 ---
@@ -8,139 +8,128 @@ sidebar:
 import { Aside, Badge } from '@astrojs/starlight/components';
 
 <Aside type="caution" title="Preview">
-  This roadmap reflects current development plans and may change. Features
-  listed here are not yet available unless marked otherwise.
+  This roadmap is a planning document, not a release promise. It separates
+  shipped capabilities from experimental work and planned production phases.
 </Aside>
 
-## What's Available Today
+CutReady's north star is still the same: help people turn a rough product demo
+idea into an edit-ready video package. The product is already useful for
+planning, AI refinement, collaboration, and document export. The remaining work
+is concentrated around reliable recording, replay, animation, and timeline
+packaging.
 
-The current release includes a full demo planning workflow with AI assistance,
-multi-project workspaces, encrypted secret storage, and collaboration features:
+## Available Today <Badge text="Available" variant="success" />
 
-- ✅ **Multi-project workspaces** — A single git repo (workspace) can hold multiple projects with a ProjectSwitcher in the sidebar
-- ✅ **Project management** — Create, open, rename, and organize projects within workspaces
-- ✅ **Workspace migration** — Automatic migration flow to convert single-project repos to multi-project
-- ✅ **Sketch editor** — 4-column planning tables with inline editing, card-style rows, and screenshots
-- ✅ **Screen capture** — Multi-monitor screenshots with region selection
-- ✅ **Storyboard management** — Drag-and-drop organization of sketch sequences
-- ✅ **Version history** — Draftline-backed snapshots with visual timeline graph and branching
-- ✅ **Timelines & branching** — Fork, promote, and switch between project directions
-- ✅ **Three-way merge engine** — Combine timelines with field-level conflict detection
-- ✅ **Conflict resolution UI** — Inline resolver for sketch, note, and storyboard conflicts
-- ✅ **History graph** — Full DAG visualization of all timelines, forks, and merges
-- ✅ **Remote sync** — Push/pull/sync with GitHub remotes via Draftline
-- ✅ **Markdown notes** — CodeMirror editor with AI cleanup, rich paste, and live preview
-- ✅ **Command palette** — Keyboard-driven command access (Ctrl+Shift+P)
-- ✅ **Cross-platform builds** — Windows, macOS (ARM + Intel), Linux
-- ✅ **AI assistant** — 4 built-in agents (Planner, Writer, Editor, Designer), custom agents, and color-coded file references
-- ✅ **AI change highlighting** — Modified rows highlighted with inline diffs and undo support; "Show AI Changes" button to re-view
-- ✅ **AI vision support** — Send images to the AI (configurable: off, notes only, notes+sketches)
-- ✅ **LLM compaction** — Smart conversation pruning when context gets long
-- ✅ **Responses API** — Auto-routes codex/pro models to OpenAI Responses API
-- ✅ **Sparkle (✨) buttons** — One-click AI improvements for titles, descriptions, and rows
-- ✅ **Document import** — Word, PDF, PowerPoint, sketch (.sk), storyboard (.sb), and markdown (.md) import via unified Explorer button
-- ✅ **Word export** — Export sketches, storyboards, and notes to .docx format with visual rendering
-- ✅ **Activity panel** — Color-coded AI operation logs
-- ✅ **Debug panel** — Captures JS console and Rust backend logs for diagnostics
-- ✅ **Azure AI Foundry integration** — With OAuth support and deployed model discovery
-- ✅ **Anthropic provider** — Claude models supported alongside OpenAI and Azure providers
-- ✅ **Azure OAuth** — Browser-based OAuth flow for keyless Azure OpenAI
-- ✅ **Encrypted secret storage** — API keys, OAuth tokens, and PATs stored in an IOTA Stronghold encrypted vault
-- ✅ **Settings split** — Global settings (Display, AI Provider, Agents, Feedback, **Updates**) and workspace settings (Git Remote, Memory, Images, plus overrides)
-- ✅ **Feedback system** — Title bar popover with debug log attachment, settings history, and AI-formatted GitHub Issue creation
-- ✅ **Smart rich paste** — AI-powered HTML-to-markdown conversion for Word and web content
-- ✅ **Auto-update** — Built-in update mechanism via Tauri updater
-- ✅ **Display settings** — Text size, row density, color palette, and editor width preferences
-- ✅ **Explorer tree view** — File browser in the sidebar showing all project files
-- ✅ **Title bar breadcrumb** — Shows workspace / project path in the title bar
-- ✅ **Move/Copy between projects** — Right-click any sketch, storyboard, or note to move or copy it to another project in the same workspace; referenced screenshots and visuals transfer automatically
-- ✅ **Open in Terminal** — Open a system terminal in the project directory from the Output Panel (Terminal tab) or right-click any file in the sidebar
-- ✅ **Terminal tab** — Third tab in the Output Panel (next to Activity and Debug) for quick terminal access
-- ✅ **Updates settings tab** — Check for and install app updates directly from Settings → Updates
-- ✅ **Sidebar-flip button** — LayoutGrid button in the title bar (leftmost panel toggle) moves the sidebar between left and right
-- ✅ **Agent link extraction** — The AI's web fetch tool appends a structured links section so the agent can follow links when instructed
-- 🧪 **Experimental recording** — Hidden behind Settings → Experimental; captures browser action traces and screen/camera/audio takes with teleprompter support
+### Planning Workspace
 
-## Experimental: Recording <Badge text="Experimental" variant="note" />
+- **Sketch-first demo planning** with `.sk` files, planning rows, screenshots,
+  narrative, actions, and optional visuals.
+- **Storyboards** with ordered sketch sequences and named sections.
+- **Markdown notes** with live preview, rich paste, AI cleanup, and references
+  from chat.
+- **Single-project and multi-project workspaces** with ProjectSwitcher support,
+  workspace migration, and a shared Draftline history.
+- **Smart Copy between projects** for reusing sketches, storyboards, notes, and
+  referenced screenshots or Elucim visuals.
 
-**Goal:** Capture browser interaction sessions and screen/camera/audio takes,
-then turn them into clean, editable scripts.
+### AI Assistance
 
-Available experimentally:
+- **Built-in agents** for planning, writing, editing, and visual design.
+- **Custom agents** for user-defined workflows.
+- **Sparkle buttons** for one-click improvements to titles, descriptions, notes,
+  and sketch rows.
+- **File and website references** in chat with `@` references and URL fetching.
+- **AI change highlighting** with inline diffs and undo support.
+- **Vision support** for images when enabled in settings.
+- **Conversation compaction** for long-running sessions.
 
-- Launch Chrome, Edge, or fresh Chromium for recording
-- Capture clicks, typing, navigation, and scrolling as action cards
-- Review multiple browser-action takes without relaunching the browser
-- Start screen/camera/audio takes from sketches or storyboards
-- Use a teleprompter generated from sketch rows while recording
+### Persistence and Collaboration
 
-Planned follow-up capabilities:
+- **Draftline-backed snapshots** for content history without exposing git as the
+  primary UI.
+- **Timelines, branching, and restore** from the visual history graph.
+- **Three-way merges** with field-level conflict detection and resolution UI.
+- **GitHub remote sync** through Draftline.
+- **Runtime-state isolation** so chat, agent traces, open tabs, and local UI
+  ordering do not dirty content snapshots.
 
-- Align recorded actions back to sketch rows
-- Remove redundant or accidental actions
-- Stabilize selectors for future replay
-- Generate narration and timing suggestions from the trace
+### Import, Export, and App Shell
 
-## Upcoming: AI Refinement <Badge text="Planned" variant="caution" />
+- **Document import** for Word, PDF, PowerPoint, markdown, sketches, and
+  storyboards.
+- **Word export** for sketches, storyboards, notes, and rendered visuals.
+- **Screen capture** for reference screenshots.
+- **Command palette**, title-bar breadcrumbs, Explorer tree, embedded terminal,
+  feedback flow, encrypted secret storage, auto-update, and cross-platform app
+  builds.
 
-**Goal:** Automatically transform rough scripts into clean, reproducible demo plans.
+## Experimental Now <Badge text="Experimental" variant="note" />
 
-Planned capabilities:
+Experimental features are available behind settings or in active development,
+but they are not yet the stable production path.
 
-- Accept/reject AI refinements per step
-- Selector review and repair suggestions
-- Timing optimization and animation suggestions
-- Script/storyboard consistency checks
+### Recording
 
-## Upcoming: Script Editor <Badge text="Planned" variant="caution" />
+- Browser action trace capture for clicks, typing, navigation, and scrolling.
+- Multiple action takes without relaunching the browser.
+- Screen, camera, microphone, and optional system-audio takes.
+- Sketch/storyboard recording scopes with teleprompter support.
+- Local-only take storage under `.cutready/recordings/` so large media assets
+  stay out of Draftline snapshots.
 
-**Goal:** Full editing interface for recorded/refined scripts.
+### Production Gaps in Recording
 
-Planned capabilities:
+The experimental recording work does not yet complete the full "record, refine,
+replay, export" loop. Planned follow-up work includes:
 
-- Row-by-row script editing with accept/reject per step
-- Re-record individual steps without restarting the full recording
-- Selector modification and timing adjustment
-- Action preview before committing changes
-- Side-by-side view with original sketch
+- Aligning recorded actions back to sketch rows.
+- Removing redundant or accidental actions with human review.
+- Stabilizing selectors for future replay.
+- Generating narration and timing suggestions from traces.
+- Promoting takes into organized output packages.
 
-## Upcoming: Video Production <Badge text="Planned" variant="caution" />
+## Planned Next <Badge text="Planned" variant="caution" />
 
-**Goal:** Automated replay and edit-ready video production.
+### 1. Recording-to-Script Refinement
 
-Planned capabilities:
+The next major step is turning rough recording traces into production scripts:
 
-- Controlled browser replay of the finalized action sequence
-- Promotion of local recording takes into organized output packages
-- Track assembly for screen, camera, system audio, and narration assets
-- Frame-accurate timing metadata
-- Retry individual segments on failure
+- Map actions, screenshots, and timings to sketch rows.
+- Suggest selector repairs and cleaner action paths.
+- Draft narration from the recorded flow.
+- Let users accept, reject, or edit each AI refinement.
 
-## Upcoming: Export & Packaging <Badge text="Planned" variant="caution" />
+### 2. Replay and Self-Healing Automation
 
-**Goal:** Professional video editor integration.
+CutReady's production path depends on reliable replay:
 
-Planned capabilities:
+- Execute finalized browser action sequences in a visible browser.
+- Retry or repair broken selectors when UI changes.
+- Pause for human correction when the agent cannot safely heal an action.
+- Re-record individual segments without restarting the whole demo.
 
-- FCPXML 1.9 timeline export (DaVinci Resolve compatible)
-- Organized output folders with media, metadata, and project files
-- Multi-track assembly (video, narration, system audio)
-- Chapter markers aligned with sketch rows
-- Batch export for multiple storyboards
+### 3. Edit-Ready Video Packaging
 
-## Upcoming: Animation Engine <Badge text="Planned" variant="caution" />
+The video pipeline will turn approved takes into editor-friendly output:
 
-**Goal:** Integrate motion graphics and educational animations.
+- Organize screen, camera, microphone, narration, and system-audio assets.
+- Generate frame-accurate timing metadata.
+- Export FCPXML 1.9 timelines for DaVinci Resolve.
+- Add markers aligned to storyboard sections and sketch rows.
 
-Planned capabilities:
+### 4. Animation and Visual Production
 
-- ManimCE integration for mathematical/educational animations
-- Pre-built animation library with customizable parameters
-- Timeline merge for inserting animations into the video sequence
-- Preview rendering before final export
+Elucim already provides semantic visuals for sketch rows. The planned production
+work is to make those visuals participate in final video output:
+
+- Preview visual segments in the app.
+- Export animation/video-ready assets from Elucim documents.
+- Place visuals on separate timeline tracks.
+- Support reusable visual templates for common demo explanations.
 
 ## Future Considerations
 
-- **Code signing** — macOS notarization ✅ (done), Windows EV certificates
-- **Plugin system** — Extensible architecture for custom actions
-- **Real-time collaboration** — Simultaneous multi-user editing (beyond async remote sync)
+- Plugin points for custom capture, replay, export, or agent tools.
+- Real-time collaboration beyond async Draftline remote sync.
+- Broader platform polish, especially around Windows signing and enterprise
+  deployment.

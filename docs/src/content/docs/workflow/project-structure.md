@@ -5,6 +5,23 @@ sidebar:
   order: 2
 ---
 
+## Workspaces vs. Projects
+
+A **workspace** is the top-level portable folder CutReady opens, versions, and
+syncs. A **project** is a demo effort inside that workspace: its sketches,
+storyboards, notes, screenshots, and visuals.
+
+CutReady supports two workspace shapes:
+
+| Shape | Folder model | Best for |
+| --- | --- | --- |
+| **Single-project workspace** | The workspace root is also the project root. `.sk`, `.sb`, `.md`, and `.cutready/` live directly in the opened folder. | One demo, one presentation, or a simple starter workspace. |
+| **Multi-project workspace** | The workspace root contains `.cutready/projects.json` plus one subfolder per project. Each project has its own `.sk`, `.sb`, `.md`, screenshots, and visuals. | Related demos, variants, team work, or a reusable demo library. |
+
+Both shapes share one Draftline history at the workspace root. Switching
+projects changes the active project view; it does not discard unsaved work or
+create a separate git repository.
+
 ## Directory Layout
 
 CutReady uses a **flat, flexible folder structure**. When you create a project,
@@ -32,6 +49,28 @@ my-demo-project/
 
 CutReady scans the entire project tree for `.sk`, `.sb`, and `.md` files
 and displays them in the sidebar grouped by type.
+
+In a multi-project workspace, each project uses the same internal structure
+inside its own subdirectory:
+
+```text
+demo-workspace/
+├── .cutready/
+│   └── projects.json          # Workspace manifest
+├── .git/                      # Shared Draftline history
+├── build-demo/
+│   ├── intro.sk
+│   ├── demo.sb
+│   └── .cutready/
+│       ├── screenshots/
+│       └── visuals/
+└── start-demo/
+    ├── overview.sk
+    ├── notes.md
+    └── .cutready/
+        ├── screenshots/
+        └── visuals/
+```
 
 ## File Formats
 
@@ -85,6 +124,24 @@ CutReady runtime state under `.git/cutready/`. This is completely independent
 of any source code repository you might have. Each snapshot captures the
 versioned project content while chat/run exhaust and local UI state stay out of
 the snapshot.
+
+## Smart Copy Between Projects
+
+Multi-project workspaces unlock **Smart Copy**. Right-click a sketch,
+storyboard, or note in the Explorer and use **Copy to** to add it to another
+project in the same workspace.
+
+Smart Copy copies the document plus the local files it needs:
+
+- Storyboards copy their referenced sketches.
+- Sketches copy their referenced screenshots and Elucim visuals.
+- Notes copy referenced local screenshots.
+- Existing destination files trigger a rename flow instead of being overwritten
+  silently.
+
+Use **Move to** when the item should leave the current project. Use **Copy to**
+when you want to reuse a sketch, note, storyboard, or asset set as a starting
+point in another project.
 
 ## Assets
 

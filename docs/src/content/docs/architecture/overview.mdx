@@ -44,6 +44,19 @@ CutReady is a **Tauri v2** desktop application with a split architecture:
 └─────────────────────────────────────────────────────────┘
 ```
 
+CutReady also depends on three sibling projects that provide core product
+capabilities:
+
+| Project | Role in CutReady |
+| --- | --- |
+| **Draftline** | Workspace persistence, snapshots, timelines, branching, merge flows, and GitHub remote sync. CutReady hides git behind Draftline commands and content policy. |
+| **Elucim** | Semantic visual DSL and renderer for framing graphics in sketch rows. Designer-agent outputs are stored as Elucim JSON under `.cutready/visuals/`. |
+| **Agentive** | Shared LLM provider layer, agent loop, tool execution, streaming, OAuth helpers, and Responses API routing. |
+
+That means the app shell owns demo-specific UX and file formats, while
+Draftline, Elucim, and Agentive own persistence, visuals, and AI orchestration
+respectively.
+
 ## Frontend
 
 The frontend is a **React 19** single-page application bundled with **Vite**:
@@ -57,6 +70,7 @@ The frontend is a **React 19** single-page application bundled with **Vite**:
 | **CodeMirror** | Markdown editing (notes) |
 | **@dnd-kit** | Drag-and-drop (storyboard list, table rows) |
 | **react-markdown** | Markdown preview rendering |
+| **@elucim/dsl** | Visual rendering for generated framing graphics |
 
 ### State Management
 
@@ -65,6 +79,7 @@ All application state flows through a single **Zustand store** (`appStore.ts`):
 - Project state (current project, recent list)
 - Document state (sketches, storyboards, notes)
 - UI state (sidebar, tabs, panels, theme)
+- Workspace state (single-project vs. multi-project, active project, project manifest)
 - Browser interaction recording state (profiles, active session)
 - Version history (snapshots, timeline, dirty flags)
 
@@ -87,7 +102,7 @@ The Rust backend handles:
 | `screenshot.rs` | Monitor detection, screen/region capture |
 | `import.rs` | Document import (docx, pdf, pptx conversion) |
 | `agent.rs` | AI chat and agent commands |
-| `draftline.rs` | Draftline-backed snapshot save/restore, variations, remotes, and merge/apply flows |
+| `draftline.rs` | Draftline-backed snapshot save/restore, timelines, remotes, and merge/apply flows |
 
 ### Engine Layer (`src/engine/`)
 
@@ -95,9 +110,22 @@ Lower-level implementations:
 
 - **interaction.rs** — browser profile detection and sidecar-backed interaction capture
 - **screenshot.rs** — Native screen capture via `xcap` crate
+- **project.rs** — safe project I/O, single-project and multi-project workspace manifests, asset scanning
 - **draftline_adapter.rs** — CutReady content policy and product-facing facade over Draftline persistence
+- **visuals** — Elucim DSL JSON assets stored under `.cutready/visuals/` and referenced by sketch rows
 - **recording.rs**, **automation.rs**, **export.rs** — placeholders for future
   FFmpeg capture, replay automation, and FCPXML output
+
+### Workspace Persistence
+
+Draftline owns the workspace repository. In a single-project workspace, the
+workspace root is also the project root. In a multi-project workspace,
+`.cutready/projects.json` lists project subdirectories and each project keeps
+its own sketches, storyboards, notes, screenshots, and visuals.
+
+CutReady snapshots versioned project content through Draftline and keeps local
+runtime state under `.git/cutready/`, so normal chat, agent, tab, and ordering
+activity does not dirty the content timeline.
 
 ### AI Layer
 

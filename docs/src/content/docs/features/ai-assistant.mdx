@@ -81,7 +81,7 @@ behind the scenes:
 
 ## Reference Autocomplete
 
-Type **#** in the chat input to trigger autocomplete for project file
+Type **@** in the chat input to trigger autocomplete for project file
 references. This lets you mention specific sketches, notes, or storyboards
 inline so the AI knows exactly which document you're referring to.
 
@@ -99,9 +99,10 @@ it easy to see what context the AI is working with.
 
 The assistant can use public web context in two different ways:
 
-- **URL references** — Paste or reference a URL and the assistant can call
-  `fetch_url` to read that page. The result includes a "Links on this page"
-  section, so the agent can follow links when you ask it to.
+- **URL references** — Paste a URL or type `@https://example.com` to reference a
+  website. The assistant can call `fetch_url` to read that page. The result
+  includes a "Links on this page" section, so the agent can follow links when
+  you ask it to.
 - **Internet Search** — Enable **Settings → AI Provider → Internet Search** to
   expose the `search_web` tool for current public information. Search is
   opt-in, and project content is not sent to a public search query unless you

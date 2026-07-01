@@ -82,7 +82,7 @@ them first, then reference them in the conversation:
 1. **Import the document** — Use the Import button to bring in a `.docx`,
    `.pdf`, or `.pptx` file as a project note.
 
-2. **Reference it in chat** — Type `#` to autocomplete the note name, or
+2. **Reference it in chat** — Type `@` to autocomplete the note name, or
    ask the AI directly: _"Read the imported slide deck and use it to build
    planning rows."_
 
@@ -90,6 +90,10 @@ them first, then reference them in the conversation:
    imported content and incorporates it into your sketch.
 
 </Steps>
+
+You can also reference websites in chat with `@https://example.com`. The
+assistant can fetch that page with `fetch_url`, include the page text as context,
+and expose a structured list of links from the page for follow-up browsing.
 
 ## Choosing the Right Agent
 
