@@ -7,6 +7,7 @@ export default defineConfig({
   integrations: [
     starlight({
       title: "CutReady",
+      disable404Route: true,
       customCss: ["./src/styles/custom.css"],
       social: [
         {

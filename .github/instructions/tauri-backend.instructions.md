@@ -71,9 +71,9 @@ The backend is organized as independent engines:
 | Agent | `engine/agent/` | ✅ | Multi-agent AI system (runner, tools, LLM client) |
 | Import | `engine/import.rs` | ✅ | .docx/.pdf/.pptx import to sketches/notes |
 | Memory | `engine/memory.rs` | ✅ | Agent memory system (core, procedural, archival) |
-| Recording | `engine/recording.rs` | 🔲 | FFmpeg process management for screen + audio capture |
+| Recording | `engine/recording.rs` | 🧪 | Experimental screen, camera, microphone, and system-audio capture with local-only take storage |
 | Automation | `engine/automation.rs` | 🔲 | Replay actions via Playwright sidecar + windows-rs UIA |
-| Interaction | `engine/interaction.rs` | 🔲 | Capture user interactions during demo recording |
+| Interaction | `engine/interaction.rs` | ✅ | Prepare browser sessions and capture user interactions as recorded action traces |
 | Animation | `engine/animation.rs` | 🔲 | Elucim animation rendering and video export |
 | Export | `engine/export.rs` | 🔲 | FCPXML 1.9 generation + output folder assembly |
 

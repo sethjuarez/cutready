@@ -624,7 +624,7 @@ These phases can be worked on simultaneously:
 | Phase | Scope | Relative Effort |
 | --- | --- | --- |
 | 0 — Foundation | Scaffold + CRUD + plugins + shell | Small |
-| 1 — Browser Recording | Sidecar + CDP + session mgmt | Medium-Large |
+| 1 — Browser Recording | Sidecar + DOM observer + session mgmt | Medium-Large |
 | 2 — Sketch Editor + Versioning | Sketch/storyboard/note editors + Draftline versioning + document model + version UI | Large |
 | 3 — Script Table | Session-to-script + TanStack Table + action editor | Medium |
 | 4 — Agent/LLM | Provider + 4 pipeline stages + diff UI | Large |

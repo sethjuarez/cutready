@@ -65,6 +65,23 @@ Squashing rewrites only the selected local snapshots and leaves unsaved
 workspace changes untouched. Do this before publishing or syncing those
 snapshots to a remote.
 
+## Persistence Scenarios
+
+CutReady uses Draftline as the only persistence layer for versioned project
+content. The underlying storage is a `.git/` repository, but app features talk
+to Draftline APIs rather than running git operations directly.
+
+| Scenario | What CutReady does |
+| --- | --- |
+| **Edit a sketch, storyboard, or note** | Marks the file as an unsaved content change. Pressing `Ctrl+S` creates a Draftline snapshot. |
+| **Capture or paste a screenshot** | Stores the image under `.cutready/screenshots/` and includes it in snapshots with the sketch or note that references it. |
+| **Generate a Designer visual** | Stores the Elucim DSL JSON under `.cutready/visuals/` and includes it in snapshots. |
+| **Reorder Explorer files or change open tabs** | Stores local UI state under `.git/cutready/` so it persists without dirtying content snapshots. |
+| **Run chat or agent workflows** | Stores runtime state locally; accepted outputs become versioned only when written to sketches, storyboards, notes, screenshots, or visuals. |
+| **Record screen/camera/audio takes** | Stores large take assets under `.cutready/recordings/`, which is local-only and excluded from snapshots. |
+| **Switch projects inside a workspace** | Changes the active project view without saving, discarding, or abandoning dirty Draftline workspace changes. |
+| **Sync with GitHub** | Publishes or pulls Draftline snapshots and timelines through the configured remote; users do not run git commands. |
+
 ## Timelines (Branching)
 
 **Timelines** let you explore different directions without losing your original
@@ -116,8 +133,11 @@ See [History Graph](/collaboration/history-graph/) for details.
 ## Technical Details
 
 - Snapshots are Draftline-managed versions in the workspace's `.git/` repository
-- Each snapshot captures the project tree, including sketches, storyboards,
-  notes, screenshots, and visuals
+- Each snapshot captures versioned content: `.sk`, `.sb`, `.md`, supported image
+  assets, `.cutready/screenshots/`, and `.cutready/visuals/`
+- Runtime paths such as `.chats`, `.cutready/recordings/`,
+  `.cutready/agent-state.db`, `.cutready/memory.json`, and
+  `.cutready/locks.json` are excluded by policy
 - The graph is computed with Draftline workspace graph helpers
 - Users do not need to run git commands — saves, branches, merges, and sync are built into the app
 - Editor state, open tabs, chat session selection, and sidebar order are stored

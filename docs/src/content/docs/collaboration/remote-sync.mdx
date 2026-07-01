@@ -100,6 +100,21 @@ offline:
 - The Sync Bar shows a disconnected state
 - When connectivity returns, a simple Sync catches up
 
+## How This Relates to Git
+
+Remote sync uses a normal GitHub repository as the transport, but CutReady keeps
+the workflow at the Draftline level:
+
+- **Snapshots** are the user-facing unit of saved work, not commits.
+- **Timelines** are the user-facing unit of branching, not raw branch names.
+- **Sync** transfers Draftline-managed snapshots and timeline refs.
+- **Runtime state** stays local and is not pushed, including chat trajectories,
+  locks, local UI state, and recording takes.
+
+If you inspect the remote with Git tooling, you may see implementation details.
+Do not edit them by hand unless you are intentionally debugging Draftline
+storage.
+
 ## Progressive Disclosure
 
 CutReady uses **progressive disclosure** for remote features:

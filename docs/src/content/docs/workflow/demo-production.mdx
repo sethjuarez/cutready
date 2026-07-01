@@ -10,10 +10,10 @@ import WorkflowSteps from '../../../components/WorkflowSteps.astro';
 import WorkflowStep from '../../../components/WorkflowStep.astro';
 import Screenshot from '../../../components/Screenshot.astro';
 
-CutReady provides a structured workflow for planning, versioning, and
-collaborating on demo videos. The current release focuses on the
-**planning and collaboration** phases, with automated recording and production
-coming in future releases.
+CutReady provides a structured workflow for planning, versioning, collaborating
+on, and experimentally recording demo videos. The current release focuses on the
+**planning and collaboration** phases, with recording available behind a feature
+flag and automated replay/export still planned.
 
 <Screenshot src="/images/storyboard-full.png" darkSrc="/images/storyboard-full-dark.png" alt="Storyboard production view" caption="A storyboard organizing multiple sketches into a complete demo flow" />
 
@@ -67,20 +67,21 @@ branch, merge, and sync without leaving the app or running git commands.
 
 **Key features:** [Version History](/collaboration/version-history/), [Merging](/collaboration/merging/), [History Graph](/collaboration/history-graph/), [Remote Sync](/collaboration/remote-sync/)
 
-## Phase 3: Record <Badge text="Coming Soon" variant="note" />
+## Phase 3: Record <Badge text="Experimental" variant="note" />
 
-<Aside type="note" title="Coming Soon">
-  Browser recording is under active development. See the
-  [Browser Recording](/features/browser-recording/) page for details
-  on what's planned.
+<Aside type="note" title="Experimental">
+  Recording features are hidden behind **Settings → Experimental → Recording**.
+  See the [Browser Recording](/features/browser-recording/) page for action-trace
+  capture details.
 </Aside>
 
-This phase will add automated capture of browser interactions:
+This phase currently supports experimental capture paths:
 
 - Launch Chrome or Edge with your existing profile and sessions
 - Record clicks, typing, navigation, and scrolling as ActionCards
-- Choose free-form recording or step-by-step mode guided by sketch rows
-- Review and re-record individual steps
+- Start screen/camera/audio takes from a sketch or storyboard
+- Use the teleprompter window to read sketch-row narration while recording
+- Store large recording assets under `.cutready/recordings/` as local-only files
 
 ## Phase 4: Produce & Export <Badge text="Planned" variant="caution" />
 
@@ -91,5 +92,5 @@ This phase will add automated capture of browser interactions:
 Future releases will complete the pipeline:
 
 - **Replay** — Execute the finalised action sequence in a controlled browser
-- **Capture** — Record lossless video (FFV1/MKV) and separate audio tracks via FFmpeg
+- **Package** — Promote local recording assets into an edit-ready output folder
 - **Export** — Generate FCPXML 1.9 timelines for DaVinci Resolve with chapter markers aligned to sketch rows

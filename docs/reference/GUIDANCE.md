@@ -6,17 +6,17 @@
 
 ## Overview
 
-CutReady supports two entry points into the demo production workflow. The **sketch-first** path — authoring a structured plan before recording — is the promoted primary workflow. The **record-first** path — jumping straight into a demo walkthrough — is planned for quick iterations or when the user already knows exactly what to demonstrate.
+CutReady supports two entry points into the demo production workflow. The **sketch-first** path — authoring a structured plan before recording — is the promoted primary workflow. The **record-first** path — jumping straight into a demo walkthrough — is experimental for quick iterations or when the user already knows exactly what to demonstrate.
 
-> **Status note:** This guide describes the full intended workflow. Sketch authoring, storyboards, notes, AI chat/refinement, visuals, version history, remote sync, import, and Word export are available today. Recording, automation replay, animation video export, and FCPXML packaging are still in development or planned.
+> **Status note:** This guide describes the full intended workflow. Sketch authoring, storyboards, notes, AI chat/refinement, visuals, version history, remote sync, import, Word export, and experimental recording are available today. Automation replay, animation video export, and FCPXML packaging are still planned.
 
 The workflow phases are:
 
 0. [Sketch](#phase-0-sketch) — available
-1. [Record](#phase-1-record) — in development
+1. [Record](#phase-1-record) — experimental
 2. [Refine (Agent)](#phase-2-refine-agent) — available for sketches/notes; recording refinement planned
 3. [Review & Edit](#phase-3-review--edit) — available for sketch planning tables; full script editing planned
-4. [Produce (Replay + Recording)](#phase-4-produce-replay--recording) — planned
+4. [Produce (Replay + Recording)](#phase-4-produce-replay--recording) — experimental recording; replay planned
 5. [Motion Animations](#phase-5-motion-animations) — planned
 6. [Export & Packaging](#phase-6-export--packaging) — planned
 
@@ -40,7 +40,7 @@ A rich block editor that supports:
   | **Demo Action Bullets** | What to click, type, navigate — a human-readable description of the demo steps |
   | **Screenshot** | Reference image — can be captured directly from a Playwright-controlled browser or pasted manually |
 
-- **Screenshot capture** — with the Playwright sidecar running, the user can capture a screenshot of the current browser state directly into a table cell. This provides visual reference for what the demo should look like at each step.
+- **Screenshot capture** — use the built-in screen capture overlay or paste images directly into screenshot cells. This provides visual reference for what the demo should look like at each step.
 
 ### Documents & Projects
 
@@ -76,16 +76,16 @@ This bridge ensures the recording is guided by the plan rather than ad-hoc.
 
 ## Phase 1: Record
 
-> **Status:** In development.
+> **Status:** Experimental behind **Settings → Experimental → Recording**.
 
-The user performs the demo manually while CutReady observes and captures every interaction as a structured, replayable action sequence.
+The user performs the demo manually while CutReady observes browser interactions as a structured action trace, or records screen/camera/audio takes from a sketch or storyboard.
 
 ### Two Recording Modes
 
 #### Record-Then-Replay (Free-Form)
 
-- Click **Record Steps** and perform the demo naturally — browse websites, click through native apps, type, scroll, navigate.
-- CutReady captures all interactions in real time.
+- Click **Record Steps** and perform the browser demo naturally — browse websites, type, scroll, navigate, and click.
+- CutReady captures browser interactions in real time.
 - When finished, the captured interactions appear as an ordered list of actions in the script table.
 - Auto-screenshots are taken at each interaction point.
 - Best for: getting a rough first draft quickly.
@@ -193,31 +193,30 @@ The planning table is the central artifact today. After recording and refinement
 
 ## Phase 4: Produce (Replay + Recording)
 
-> **Status:** Planned.
+> **Status:** Recording is experimental; replay and edit-ready packaging are planned.
 
 The finalized script drives an automated replay of the demo while the user reads the voiceover.
 
 ### Automation Replay
 
 - **Browser actions** execute via Playwright (headful mode — the user sees the real browser).
-- **Native app actions** execute via Windows UI Automation.
+- **Native app actions** are planned to execute via Windows UI Automation.
 - Actions follow the script table's sequence and timing.
 - If an action fails, the **self-healing agent** inspects the current state and attempts to find the target element via alternative selectors or LLM-assisted reasoning. If it can't recover, it pauses and prompts the user.
 
 ### Recording
 
-- **Screen capture**: Lossless video via FFmpeg (`gdigrab` → FFV1 codec in MKV container). Full desktop or a selected window/region.
-- **Microphone audio**: Captured as a separate PCM/WAV track via FFmpeg (`dshow`). Clean narration — no system sounds mixed in.
-- **System audio** (optional): Captured as a third separate track via Stereo Mix or virtual audio device.
-- **Multi-track output**: All tracks in a single MKV, or as separate files — configurable.
-- **Start/stop**: Global hotkey support for hands-free control.
+- **Screen capture**: Full-screen capture is available experimentally, with lossless FFV1/MKV or MP4 quality options.
+- **Microphone audio**: Captured as a separate WAV asset when configured.
+- **Camera capture**: Captured as a separate MP4 asset when configured.
+- **System audio** (optional): Captured as a separate WAV asset when platform support is available.
+- **Local take storage**: Large recording assets are written under `.cutready/recordings/` and kept out of Draftline snapshots.
 
 ### Teleprompter
 
-- A dedicated panel displays the current segment's narrative text in large, readable font.
-- Auto-advances as the automation progresses through script segments.
-- Configurable scroll speed, font size, and position (dockable or floating window).
-- Optional: highlights the current word/sentence for pacing guidance.
+- A dedicated prompter window displays sketch-row narrative text in large, readable font.
+- Prompter content can be generated from a sketch or storyboard recording scope.
+- Read mode and monitor placement are controlled from the experimental recording flow.
 
 ### Recording Controls
 

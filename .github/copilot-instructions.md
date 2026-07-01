@@ -63,7 +63,7 @@ my-demo-project/
 | Word export | **docx** | Export sketches/storyboards/notes to .docx |
 | History graph | **d3.js** | Git branch/commit visualization |
 | Timeline export | **FCPXML 1.9** | Multi-track, markers, DaVinci Resolve 17+ compatible |
-| Docs site | **Astro Starlight** | Published to GitHub Pages |
+| Docs site | **Astro Starlight** | Published at `https://cutready.io` |
 | Versioning | **release-please** | Conventional Commits → automated semver + CHANGELOG |
 
 ## Source Structure
@@ -133,7 +133,7 @@ cutready/
 | engine/agent/tools.rs | ✅ Implemented | Agent tool definitions (read/write sketches, web fetch, visuals) |
 | engine/import.rs | ✅ Implemented | .docx/.pdf/.pptx import to sketches/notes |
 | engine/memory.rs | ✅ Implemented | Agent memory system (core, procedural, archival) |
-| engine/recording.rs | 🔲 Placeholder | FFmpeg screen recording |
+| engine/recording.rs | 🧪 Experimental | Screen, camera, microphone, and system-audio capture with local-only take storage |
 | engine/automation.rs | 🔲 Placeholder | Playwright replay automation |
 | engine/animation.rs | 🔲 Placeholder | Elucim animation export |
 | engine/export.rs | 🔲 Placeholder | FCPXML timeline generation |
@@ -157,10 +157,11 @@ cutready/
 - Word export with orientation picker and visual rasterization
 - Auto-updater with update banner
 - Feedback system
-- Docs site (Astro Starlight) published to GitHub Pages
+- Docs site (Astro Starlight) published at `https://cutready.io`
+- Experimental screen/camera/audio recording behind the Recording feature flag
 - E2E confidence drill via Auditaur against the real Tauri app
 
-**Not yet implemented:** Recording, automation replay, FCPXML export, Elucim animation export.
+**Not yet implemented:** Automation replay, FCPXML export, Elucim animation export.
 
 ## Design Decisions
 
@@ -269,7 +270,7 @@ When updating, also use `store_memory` to capture the convention for cross-sessi
 
 ## Key Documentation
 
-- [docs/NORTH_STAR.md](docs/NORTH_STAR.md) — The press release / vision
-- [docs/GUIDANCE.md](docs/GUIDANCE.md) — Feature catalog
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — Technical design
-- [User-facing docs site](https://sethjuarez.github.io/cutready) — Astro Starlight
+- [docs/reference/NORTH_STAR.md](docs/reference/NORTH_STAR.md) — The press release / vision
+- [docs/reference/GUIDANCE.md](docs/reference/GUIDANCE.md) — Feature catalog
+- [docs/reference/ARCHITECTURE.md](docs/reference/ARCHITECTURE.md) — Technical design
+- [User-facing docs site](https://cutready.io) — Astro Starlight

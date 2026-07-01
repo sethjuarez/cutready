@@ -211,8 +211,12 @@ new location when read.
 
 Each workspace contains an embedded repository managed through **Draftline**:
 
-- Snapshots capture sketches, storyboards, notes, screenshots, and visuals
+- Snapshots capture `.sk`, `.sb`, `.md`, supported image assets,
+  `.cutready/screenshots/`, and `.cutready/visuals/`
 - Runtime state under `.git/cutready/` does not dirty snapshots
+- Local-only runtime paths such as `.chats`, `.cutready/recordings/`,
+  `.cutready/agent-state.db`, `.cutready/memory.json`, and
+  `.cutready/locks.json` are excluded from Draftline content policy
 - Draftline graph helpers power the visual timeline in the Version History panel
 - Users do not need to run git commands to save, branch, merge, or sync
 

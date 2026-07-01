@@ -139,13 +139,13 @@ src-tauri/
 │   │   ├── draftline.rs           # Draftline persistence/versioning commands
 │   │   ├── feedback.rs            # User feedback submission
 │   │   ├── import.rs              # Document import (.docx/.pdf/.pptx)
-│   │   ├── recording.rs           # FFmpeg recording (placeholder)
+│   │   ├── recording.rs           # Experimental screen/camera/audio recording
 │   │   ├── automation.rs          # Playwright automation (placeholder)
-│   │   ├── interaction.rs         # Interaction recording (placeholder)
+│   │   ├── interaction.rs         # Browser interaction recording
 │   │   ├── animation.rs           # Elucim animation export (placeholder)
 │   │   └── export.rs              # FCPXML export (placeholder)
 │   ├── engine/
-│   │   ├── recording.rs           # FFmpeg process management
+│   │   ├── recording.rs           # Screen/camera/audio capture lifecycle
 │   │   ├── automation.rs          # Action execution (browser + native)
 │   │   ├── interaction.rs         # Interaction recording / capture
 │   │   ├── agent/                 # LLM agent system (via agentive crate)
@@ -427,12 +427,8 @@ Captures user interactions during a demo walkthrough.
 **Browser capture** (via Playwright sidecar):
 
 - Launches a Playwright-controlled browser in **observation mode** (headful, user-driven — Playwright watches but doesn't drive).
-- Listens via CDP (Chrome DevTools Protocol) for:
-  - `Input.dispatchMouseEvent` — clicks
-  - `Input.dispatchKeyEvent` — keystrokes
-  - `Page.navigatedWithinDocument`, `Page.frameNavigated` — navigations
-- Simultaneously injects a lightweight JS observer via `page.exposeFunction` for DOM-level detail: the exact element clicked, its attributes, surrounding DOM context.
-- Maps CDP events + DOM context → `Action` variants with multiple `SelectorStrategy` entries.
+- Injects a lightweight JS observer via `page.addInitScript` and `page.exposeFunction` for DOM-level detail: clicked elements, typed input, scrolls, navigation, attributes, and surrounding DOM context.
+- Maps DOM observer events → `Action` variants with multiple `SelectorStrategy` entries.
 
 **Native app capture** (via windows-rs):
 
@@ -446,7 +442,7 @@ Captures user interactions during a demo walkthrough.
 
 **Screenshot capture**:
 
-- On each recorded interaction, captures a screenshot via Windows `BitBlt` API or a single-frame FFmpeg `gdigrab` capture.
+- On each recorded browser interaction, captures a Playwright page screenshot when a session screenshot directory is configured.
 - Stores as PNG alongside the action metadata.
 
 ```rust
@@ -779,7 +775,8 @@ Draftline tracks the user-authored project surface:
 4. **Project settings/metadata** that should travel with the project
 
 Runtime state such as chat/run trajectories, locks, recordings, and local UI
-layout lives outside snapshots or is excluded by policy.
+layout lives under `.git/cutready/` or other local-only folders, or is excluded
+by policy.
 
 **Deep link protocol**:
 

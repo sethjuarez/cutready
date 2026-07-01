@@ -41,4 +41,4 @@ Built with [Tauri v2](https://tauri.app/) (Rust + React/TypeScript).
 
 ## Status
 
-🚧 **Active development** — Sketches, storyboards, notes, AI assistance, Draftline-backed versioning/collaboration, document import, Word export, and Auditaur diagnostics are implemented. Recording, automation replay, FCPXML export, and Elucim animation export remain later-phase work.
+🚧 **Active development** — Sketches, storyboards, notes, AI assistance, Draftline-backed versioning/collaboration, document import, Word export, Auditaur diagnostics, and experimental recording are implemented. Automation replay, FCPXML export, and Elucim animation export remain later-phase work.

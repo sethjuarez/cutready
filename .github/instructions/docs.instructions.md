@@ -10,15 +10,15 @@ applyTo: "**/*.md"
 
 CutReady has two layers of documentation:
 
-### North Star Documents (in `docs/`)
+### North Star Documents (in `docs/reference/`)
 
-- **NORTH_STAR.md** — Press release written from the future. Describes the vision and "why." Edit carefully — tone is aspirational PR copy.
-- **GUIDANCE.md** — Complete feature catalog by workflow phase. Describes everything CutReady can do. Reference this when implementing features.
-- **ARCHITECTURE.md** — Full technical design. Rust module structure, data models, engine designs, IPC patterns, sidecar architecture. Reference this when writing backend code.
+- **`docs/reference/NORTH_STAR.md`** — Press release written from the future. Describes the vision and "why." Edit carefully — tone is aspirational PR copy.
+- **`docs/reference/GUIDANCE.md`** — Complete feature catalog by workflow phase. Describes everything CutReady can do. Reference this when implementing features.
+- **`docs/reference/ARCHITECTURE.md`** — Full technical design. Rust module structure, data models, engine designs, IPC patterns, sidecar architecture. Reference this when writing backend code.
 
 ### User-Facing Docs Site (Astro Starlight)
 
-The `docs/` folder also contains an **Astro Starlight** site published to GitHub Pages at `https://sethjuarez.github.io/cutready`:
+The `docs/` folder also contains an **Astro Starlight** site published at `https://cutready.io`:
 
 - Config: `docs/astro.config.mjs`
 - Content: `docs/src/content/docs/` (MDX files organized by category)
@@ -52,4 +52,3 @@ Do not leave markdownlint warnings unresolved.
 ## README.md
 
 The root README.md gives a brief overview, links to the three docs, and shows the tech stack. Keep it concise — detail lives in the docs/ files.
-

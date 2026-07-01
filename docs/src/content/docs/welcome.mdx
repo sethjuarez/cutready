@@ -11,9 +11,9 @@ import Screenshot from '../../components/Screenshot.astro';
 <Aside type="caution" title="Early Access">
   CutReady is in active development. Sketch planning, storyboards, AI assistance
   with vision and change highlighting, version history, timelines, merging,
-  remote sync via GitHub, encrypted secret storage, and Word export are
-  functional. Browser interaction recording, automated replay, FFmpeg video
-  capture, and video-editor export are coming later.
+  remote sync via GitHub, encrypted secret storage, Word export, and
+  experimental recording are functional. Automated replay and video-editor
+  export are coming later.
 </Aside>
 
 <Screenshot src="/images/app-home.png" darkSrc="/images/app-home-dark.png" alt="CutReady workspace shell" caption="A CutReady workspace with sketches, a storyboard, notes, chat, and local changes visible" />
@@ -47,8 +47,8 @@ CutReady follows a phased approach:
 | 1 | **Organize** — Sequence sketches into storyboards | <Badge text="Available" variant="success" /> |
 | 2 | **Refine** — Use AI chat, sparkle buttons, visuals, and imported notes | <Badge text="Available" variant="success" /> |
 | 3 | **Version** — Save snapshots, branch timelines, merge, and sync | <Badge text="Available" variant="success" /> |
-| 4 | **Record interactions** — Capture browser actions for review | <Badge text="In Development" variant="note" /> |
-| 5 | **Produce video** — Replay, FFmpeg capture, and FCPXML export | <Badge text="Planned" variant="caution" /> |
+| 4 | **Record** — Capture browser actions or experimental screen/camera/audio takes | <Badge text="Experimental" variant="note" /> |
+| 5 | **Produce video** — Replay and FCPXML export | <Badge text="Planned" variant="caution" /> |
 
 ## Technology Stack
 
@@ -58,7 +58,7 @@ CutReady is built on modern, cross-platform technologies:
 - **React 19 + TypeScript** — Frontend UI
 - **Rust + Tokio** — Backend with async I/O
 - **Zustand** — Centralized state management
-- **Playwright sidecar** — Browser observation/replay infrastructure for later-phase product workflows
+- **Playwright sidecar** — Browser observation infrastructure for recorded action traces
 - **CodeMirror** — Markdown editing
 - **Draftline** — Content versioning, branch graph helpers, sync, and merge
 - **agentive** — Shared LLM provider crate (Foundry, Azure OpenAI, OpenAI, Anthropic)

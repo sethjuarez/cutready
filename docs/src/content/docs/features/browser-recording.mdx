@@ -4,27 +4,27 @@ description: Capture browser interactions for later review and replay automation
 sidebar:
   order: 2
   badge:
-    text: Coming Soon
+    text: Experimental
     variant: note
 ---
 
 import { Aside } from '@astrojs/starlight/components';
 
-<Aside type="note" title="Coming Soon">
-  Browser interaction recording is being wired into the product workflow. The
-  underlying recorder can capture browser actions, but the feature is not yet
-  documented as a general production workflow.
+<Aside type="note" title="Experimental">
+  Browser interaction recording is available behind the Recording feature flag.
+  It captures action traces for review and future replay work; the finished
+  video-production pipeline is still planned.
 </Aside>
 
 ## What It Captures
 
-The recorder is designed to capture actions in a browser session while you walk
-through a rough demo. The resulting actions are saved as a session for later
-review and script refinement.
+The recorder captures actions in a browser session while you walk through a
+rough demo. The resulting actions are saved as a session for later review and
+script refinement.
 
 ## Workflow
 
-The planned product flow is:
+The current product flow is:
 
 1. Open a workspace.
 2. Choose a detected Chrome or Edge profile, or use a fresh browser.
@@ -33,7 +33,7 @@ The planned product flow is:
 5. Perform the walkthrough.
 6. Stop recording to save the session and review action cards.
 
-## Expected Capabilities
+## Capabilities
 
 - **Profile detection** — automatic discovery of Chrome and Edge profiles
 - **Fresh browser mode** — use Chromium without personal extensions or sessions
@@ -43,9 +43,9 @@ The planned product flow is:
 - **Saved sessions** — stopped sessions are written into the project
 
 <Aside type="caution" title="Production video is separate">
-  FFmpeg screen/audio capture, deterministic replay automation, self-healing
-  selectors, and FCPXML timeline export are planned production features. Browser
-  recording today captures the interaction trace, not a finished video file.
+  Deterministic replay automation, self-healing selectors, and FCPXML timeline
+  export are planned production features. Browser recording captures the
+  interaction trace, not a finished video file.
 </Aside>
 
 <Aside type="tip" title="Want to help?">
