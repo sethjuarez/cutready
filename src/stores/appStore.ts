@@ -1678,7 +1678,10 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await get().loadGraphData();
     } catch (err) {
       console.error("Failed to delete project:", err);
-      set({ error: String(err) });
+      const message = `Could not delete project: ${err}`;
+      set({ error: message });
+      useToastStore.getState().show(message, 5000, "error");
+      throw err;
     }
   },
 

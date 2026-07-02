@@ -716,7 +716,7 @@ pub async fn create_project_in_repo(
 
 /// Delete a project from the current repo manifest.
 /// If `delete_files` is true, also removes the project directory.
-#[tauri::command]
+#[auditaur_command(skip_all, err)]
 pub async fn delete_project(
     project_path: String,
     delete_files: bool,
