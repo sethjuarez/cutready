@@ -143,11 +143,12 @@ export function ProjectSwitcher({ variant = "sidebar" }: ProjectSwitcherProps) {
   const handleDelete = useCallback(async (project: ProjectEntry, isActive: boolean, deleteFiles: boolean) => {
     setDeleting(true);
     try {
-      await deleteProjectFromRepo(project.path, deleteFiles);
       const remaining = useAppStore.getState().projects.filter((p) => p.path !== project.path);
       if (isActive && remaining.length > 0) {
         await switchProject(remaining[0].path);
-      } else if (isActive) {
+      }
+      await deleteProjectFromRepo(project.path, deleteFiles);
+      if (isActive && remaining.length === 0) {
         useAppStore.getState().closeProject();
       }
       setDeletingPath(null);

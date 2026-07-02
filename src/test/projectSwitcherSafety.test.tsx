@@ -32,8 +32,10 @@ const projects = [
 const originalSwitchProject = useAppStore.getState().switchProject;
 const originalDiscardChanges = useAppStore.getState().discardChanges;
 const originalLoadProjects = useAppStore.getState().loadProjects;
+const originalDeleteProjectFromRepo = useAppStore.getState().deleteProjectFromRepo;
 const mockSwitchProject = vi.fn(() => Promise.resolve());
 const mockDiscardChanges = vi.fn(() => Promise.resolve());
+const mockDeleteProjectFromRepo = vi.fn(() => Promise.resolve());
 
 describe("ProjectSwitcher safety gates", () => {
   afterEach(() => {
@@ -45,6 +47,7 @@ describe("ProjectSwitcher safety gates", () => {
         switchProject: originalSwitchProject,
         discardChanges: originalDiscardChanges,
         loadProjects: originalLoadProjects,
+        deleteProjectFromRepo: originalDeleteProjectFromRepo,
         currentProject: null,
         projects: [],
         isMultiProject: false,
@@ -82,6 +85,37 @@ describe("ProjectSwitcher safety gates", () => {
     expect(mockSwitchProject).toHaveBeenCalledWith("beta");
     expect(screen.queryByText("Save changes before continuing?")).not.toBeInTheDocument();
     expect(useAppStore.getState().snapshotPromptOpen).toBe(false);
+  });
+
+  it("switches away from the active project before deleting it", async () => {
+    act(() => {
+      useAppStore.setState({
+        switchProject: mockSwitchProject,
+        deleteProjectFromRepo: mockDeleteProjectFromRepo,
+        loadProjects: () => Promise.resolve(),
+        currentProject: project,
+        projects,
+        isMultiProject: true,
+      });
+    });
+
+    render(<ProjectSwitcher variant="title" />);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /alpha/i }));
+    });
+    act(() => {
+      fireEvent.click(screen.getByRole("button", { name: "Delete Alpha" }));
+    });
+    await act(async () => {
+      fireEvent.click(await screen.findByRole("button", { name: "Remove from list" }));
+    });
+
+    expect(mockSwitchProject).toHaveBeenCalledWith("beta");
+    expect(mockDeleteProjectFromRepo).toHaveBeenCalledWith("alpha", false);
+    expect(mockSwitchProject.mock.invocationCallOrder[0]).toBeLessThan(
+      mockDeleteProjectFromRepo.mock.invocationCallOrder[0],
+    );
   });
 
   it("requires a merge decision before switching projects", async () => {
