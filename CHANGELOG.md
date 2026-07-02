@@ -10,6 +10,13 @@
 
 Release Please manages this changelog. Do not edit manually.
 
+## [1.22.1](https://github.com/sethjuarez/cutready/compare/v1.22.0...v1.22.1) (2026-07-02)
+
+
+### Bug Fixes
+
+* **projects:** switch before deleting active project ([#150](https://github.com/sethjuarez/cutready/issues/150)) ([f777849](https://github.com/sethjuarez/cutready/commit/f777849560c5c61d11fb0d0dbd4fbe0a4ee2b61b))
+
 ## [1.22.0](https://github.com/sethjuarez/cutready/compare/v1.21.1...v1.22.0) (2026-06-30)
 
 
