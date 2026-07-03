@@ -141,6 +141,16 @@ export interface GlobalSettings {
   recorderIncludeCursor: boolean;
   /** Default recording quality: "lossless", "high", or "compact". */
   recorderOutputQuality: "lossless" | "high" | "compact";
+  /** Sketch video export title card duration in seconds. */
+  videoExportTitleCardDurationSeconds: number;
+  /** Sketch video export first screenshot hold after the title card in seconds. */
+  videoExportTitleToFirstRowHoldSeconds: number;
+  /** Sketch video export transition duration between rows in seconds. */
+  videoExportRowTransitionHoldSeconds: number;
+  /** Sketch video export final screenshot hold duration in seconds. */
+  videoExportFinalHoldSeconds: number;
+  /** Normalize narration loudness during sketch video export. */
+  videoExportNormalizeNarrationAudio: boolean;
   /** Future default: capture camera as a separate asset. */
   recorderCameraEnabled: boolean;
   /** Last selected camera device id for separate camera.mp4 capture. */
@@ -172,6 +182,18 @@ export interface WorkspaceSettings {
   repoAuthorName: string;
   /** Git author email for commits. */
   repoAuthorEmail: string;
+  /** Override app-level sketch video export timing for this workspace. */
+  videoExportOverrideEnabled: boolean;
+  /** Workspace override: sketch video export title card duration in seconds. */
+  workspaceVideoExportTitleCardDurationSeconds: number;
+  /** Workspace override: first screenshot hold after the title card in seconds. */
+  workspaceVideoExportTitleToFirstRowHoldSeconds: number;
+  /** Workspace override: transition duration between rows in seconds. */
+  workspaceVideoExportRowTransitionHoldSeconds: number;
+  /** Workspace override: final screenshot hold duration in seconds. */
+  workspaceVideoExportFinalHoldSeconds: number;
+  /** Workspace override: normalize narration loudness during sketch video export. */
+  workspaceVideoExportNormalizeNarrationAudio: boolean;
 }
 
 /** Combined view for backward compatibility — consumers that need both. */
@@ -225,6 +247,11 @@ const defaultGlobalSettings: GlobalSettings = {
   recorderFrameRate: 30,
   recorderIncludeCursor: true,
   recorderOutputQuality: "high",
+  videoExportTitleCardDurationSeconds: 3,
+  videoExportTitleToFirstRowHoldSeconds: 0.5,
+  videoExportRowTransitionHoldSeconds: 1,
+  videoExportFinalHoldSeconds: 3,
+  videoExportNormalizeNarrationAudio: true,
   recorderCameraEnabled: false,
   recorderCameraDeviceId: "",
   recorderSystemAudioEnabled: false,
@@ -251,6 +278,12 @@ export const defaultWorkspaceSettings: WorkspaceSettings = {
   repoToken: "",
   repoAuthorName: "",
   repoAuthorEmail: "",
+  videoExportOverrideEnabled: false,
+  workspaceVideoExportTitleCardDurationSeconds: 3,
+  workspaceVideoExportTitleToFirstRowHoldSeconds: 0.5,
+  workspaceVideoExportRowTransitionHoldSeconds: 1,
+  workspaceVideoExportFinalHoldSeconds: 3,
+  workspaceVideoExportNormalizeNarrationAudio: true,
 };
 
 const defaultSettings: AppSettings = {
@@ -291,6 +324,12 @@ const WORKSPACE_KEYS: (keyof WorkspaceSettings)[] = [
   "repoToken",
   "repoAuthorName",
   "repoAuthorEmail",
+  "videoExportOverrideEnabled",
+  "workspaceVideoExportTitleCardDurationSeconds",
+  "workspaceVideoExportTitleToFirstRowHoldSeconds",
+  "workspaceVideoExportRowTransitionHoldSeconds",
+  "workspaceVideoExportFinalHoldSeconds",
+  "workspaceVideoExportNormalizeNarrationAudio",
 ];
 
 function providerLabel(provider: AiProviderKind): string {

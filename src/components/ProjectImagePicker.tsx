@@ -52,14 +52,14 @@ export function ProjectImagePicker({ onSelect, onCancel }: ProjectImagePickerPro
 
   return (
     <div
-      className="fixed inset-0 z-modal flex items-center justify-center bg-[rgb(var(--color-overlay-scrim)/0.6)] backdrop-blur-sm"
+      className="cr-modal-backdrop fixed inset-0 z-modal flex items-center justify-center"
       onClick={onCancel}
     >
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="project-image-picker-title"
-        className="flex flex-col rounded-2xl overflow-hidden shadow-2xl bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))]"
+        className="cr-modal-surface flex flex-col rounded-2xl overflow-hidden"
         style={{ width: "min(1180px, calc(100vw - 32px))", maxHeight: "calc(100vh - 32px)" }}
         onClick={(e) => e.stopPropagation()}
       >

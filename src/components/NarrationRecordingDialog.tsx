@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Image as ImageIcon, Loader2, Play, RotateCcw, Save, Square, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Image as ImageIcon, Loader2, Play, RotateCcw, Save, Square, X } from "lucide-react";
 import { useProjectImage } from "../hooks/useProjectImage";
 import { convertFileSrc } from "../services/tauri";
 
@@ -14,6 +14,7 @@ export interface NarrationRecordingTake {
 }
 
 type RecordingStatus = "idle" | "recording" | "recorded" | "error";
+type SaveNarrationOptions = { navigateToRow?: number | null };
 
 const SILENCE_THRESHOLD_DB = -45;
 const SILENCE_WINDOW_MS = 10;
@@ -25,11 +26,15 @@ interface NarrationRecordingDialogProps {
   screenshotPath?: string | null;
   existingNarrationPath?: string | null;
   existingNarrationDurationMs?: number | null;
+  canNavigatePrevious?: boolean;
+  canNavigateNext?: boolean;
   audio: boolean | MediaTrackConstraints;
   mimeType: string;
   onAddScreenshot?: () => void;
   onCancel: () => void;
-  onSave: (take: NarrationRecordingTake) => Promise<void>;
+  onNavigatePrevious?: () => void;
+  onNavigateNext?: () => void;
+  onSave: (take: NarrationRecordingTake, options?: SaveNarrationOptions) => Promise<void>;
 }
 
 function formatElapsed(ms: number): string {
@@ -53,6 +58,13 @@ function alignToDevicePixel(value: number, dpr: number): number {
 
 function amplitudeFromDb(db: number): number {
   return 10 ** (db / 20);
+}
+
+function closeAudioContext(context: AudioContext | null) {
+  if (!context || context.state === "closed") return;
+  void context.close().catch((error: unknown) => {
+    console.warn("[NarrationRecordingDialog] failed to close audio context", { error });
+  });
 }
 
 function prepareWaveformCanvas(canvas: HTMLCanvasElement) {
@@ -236,7 +248,7 @@ async function analyzeSilence(encodedAudio: ArrayBuffer): Promise<{
       thresholdDb: SILENCE_THRESHOLD_DB,
     };
   } finally {
-    void context.close();
+    closeAudioContext(context);
   }
 }
 
@@ -247,10 +259,14 @@ export function NarrationRecordingDialog({
   screenshotPath,
   existingNarrationPath,
   existingNarrationDurationMs,
+  canNavigatePrevious = false,
+  canNavigateNext = false,
   audio,
   mimeType,
   onAddScreenshot,
   onCancel,
+  onNavigatePrevious,
+  onNavigateNext,
   onSave,
 }: NarrationRecordingDialogProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -298,7 +314,7 @@ export function NarrationRecordingDialog({
     stopVisualizer();
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
-    void audioContextRef.current?.close();
+    closeAudioContext(audioContextRef.current);
     audioContextRef.current = null;
   }, [stopVisualizer]);
 
@@ -392,7 +408,7 @@ export function NarrationRecordingDialog({
     setError("");
   };
 
-  const saveTake = async () => {
+  const saveTake = async (options?: SaveNarrationOptions) => {
     const blob = recordedBlobRef.current;
     if (!blob || saving) return;
     setSaving(true);
@@ -400,21 +416,46 @@ export function NarrationRecordingDialog({
       const encodedAudio = await blob.arrayBuffer();
       const silence = await analyzeSilence(encodedAudio.slice(0));
       const audioData = new Uint8Array(encodedAudio);
-      await onSave({
-        audioData: Array.from(audioData),
-        mimeType: blob.type || mimeType || "audio/webm",
-        durationMs: elapsedMs,
-        sourceText,
-        leadingSilenceMs: silence.leadingSilenceMs,
-        trailingSilenceMs: silence.trailingSilenceMs,
-        silenceThresholdDb: silence.thresholdDb,
-      });
+      await onSave(
+        {
+          audioData: Array.from(audioData),
+          mimeType: blob.type || mimeType || "audio/webm",
+          durationMs: elapsedMs,
+          sourceText,
+          leadingSilenceMs: silence.leadingSilenceMs,
+          trailingSilenceMs: silence.trailingSilenceMs,
+          silenceThresholdDb: silence.thresholdDb,
+        },
+        options,
+      );
+      recordedBlobRef.current = null;
+      setHasUnsavedTake(false);
+      setStatus("recorded");
+      setError("");
     } catch (err) {
       console.error("[NarrationRecordingDialog] failed to save narration take", err);
       setError(`Could not analyze and save narration: ${err}`);
     } finally {
       setSaving(false);
     }
+  };
+
+  const navigatePrevious = async () => {
+    if (!canNavigatePrevious || status === "recording" || saving) return;
+    if (hasUnsavedTake) {
+      await saveTake({ navigateToRow: rowNumber - 2 });
+      return;
+    }
+    onNavigatePrevious?.();
+  };
+
+  const navigateNext = async () => {
+    if (!canNavigateNext || status === "recording" || saving) return;
+    if (hasUnsavedTake) {
+      await saveTake({ navigateToRow: rowNumber });
+      return;
+    }
+    onNavigateNext?.();
   };
 
   const close = () => {
@@ -426,14 +467,30 @@ export function NarrationRecordingDialog({
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.code !== "Space") return;
-      event.preventDefault();
-      if (status === "recording") stopRecording();
-      else if (status === "idle" || status === "recorded") void startRecording();
+      if (event.code === "Escape") {
+        event.preventDefault();
+        close();
+        return;
+      }
+      if (event.code === "ArrowLeft") {
+        event.preventDefault();
+        void navigatePrevious();
+        return;
+      }
+      if (event.code === "ArrowRight") {
+        event.preventDefault();
+        void navigateNext();
+        return;
+      }
+      if (event.code === "Space") {
+        event.preventDefault();
+        if (status === "recording") stopRecording();
+        else if (status === "idle" || status === "recorded") void startRecording();
+      }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [startRecording, status, stopRecording]);
+  }, [close, navigateNext, navigatePrevious, startRecording, status, stopRecording]);
 
   useEffect(() => {
     return () => {
@@ -453,7 +510,7 @@ export function NarrationRecordingDialog({
     setElapsedMs(existingNarrationDurationMs ?? 0);
     setStatus(existingNarrationSrc ? "recorded" : "idle");
     setError("");
-  }, [existingNarrationDurationMs, existingNarrationSrc]);
+  }, [existingNarrationDurationMs, existingNarrationSrc, hasUnsavedTake, recordedUrl, status]);
 
   useEffect(() => {
     if (status === "recording") return;
@@ -477,12 +534,12 @@ export function NarrationRecordingDialog({
         if (!cancelled) drawEmptyWaveform(canvas);
       })
       .finally(() => {
-        void context.close();
+        closeAudioContext(context);
       });
 
     return () => {
       cancelled = true;
-      void context.close();
+      closeAudioContext(context);
     };
   }, [recordedUrl, status, waveformLayoutVersion]);
 
@@ -504,14 +561,14 @@ export function NarrationRecordingDialog({
 
   return (
     <div
-      className="fixed inset-0 z-modal flex items-center justify-center bg-[rgb(var(--color-overlay-scrim)/0.58)] p-5"
+      className="cr-modal-backdrop fixed inset-0 z-modal flex items-center justify-center p-5"
       onClick={close}
     >
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="narration-recording-title"
-        className="h-[min(760px,calc(100vh-40px))] w-[min(1120px,calc(100vw-40px))] overflow-hidden rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] shadow-2xl"
+        className="cr-modal-surface h-[min(760px,calc(100vh-40px))] w-[min(1120px,calc(100vw-40px))] overflow-hidden rounded-xl"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-[rgb(var(--color-border))] px-5 py-4">
@@ -520,7 +577,7 @@ export function NarrationRecordingDialog({
               Narration take — Row {rowNumber}
             </h2>
             <p className="mt-1 text-xs text-[rgb(var(--color-text-secondary))]">
-              Press Space to start or stop. Review the take before saving it to the sketch.
+              Space starts or stops recording. Left and Right move rows. Escape closes.
             </p>
           </div>
           <button
@@ -615,6 +672,28 @@ export function NarrationRecordingDialog({
             )}
 
             <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => void navigatePrevious()}
+                  disabled={!canNavigatePrevious || status === "recording" || saving}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-[rgb(var(--color-border))] px-3 py-2 text-xs font-medium text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))] disabled:cursor-not-allowed disabled:opacity-40"
+                  title={hasUnsavedTake ? "Save take and move to previous row" : "Previous row"}
+                >
+                  <ChevronLeft className="h-3.5 w-3.5" />
+                  Previous
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void navigateNext()}
+                  disabled={!canNavigateNext || status === "recording" || saving}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-[rgb(var(--color-border))] px-3 py-2 text-xs font-medium text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))] disabled:cursor-not-allowed disabled:opacity-40"
+                  title={hasUnsavedTake ? "Save take and move to next row" : "Next row"}
+                >
+                  Next
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </button>
+              </div>
               <div className="text-xs text-[rgb(var(--color-text-secondary))]">
                 {status === "recording"
                   ? "Recording..."

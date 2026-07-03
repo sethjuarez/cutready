@@ -32,8 +32,8 @@ export function DecisionDialog({
   const Icon = icon === "ai" ? Sparkles : AlertTriangle;
 
   return (
-    <Dialog isOpen={open} onClose={onClose} align="top" topOffset="18vh" width="w-full max-w-lg mx-4" backdropClass="bg-[rgb(var(--color-overlay-scrim)/0.52)]">
-      <div className="overflow-hidden rounded-2xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] shadow-2xl">
+    <Dialog isOpen={open} onClose={onClose} align="top" topOffset="18vh" width="w-full max-w-lg mx-4">
+      <div className="cr-modal-surface overflow-hidden rounded-2xl">
         <div className="flex items-start gap-3 border-b border-[rgb(var(--color-border))] px-5 py-4">
           <div className={`mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-xl ${
             icon === "ai"
@@ -70,4 +70,3 @@ export function DecisionDialog({
     </Dialog>
   );
 }
-

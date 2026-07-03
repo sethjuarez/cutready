@@ -48,8 +48,8 @@ export function KeyboardShortcutsDialog({ open, onClose }: KeyboardShortcutsDial
   }
 
   return (
-    <Dialog isOpen={open} onClose={onClose} align="top" topOffset="18vh" width="w-full max-w-lg mx-4" backdropClass="bg-[rgb(var(--color-overlay-scrim)/0.4)]">
-      <div className="bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-xl shadow-2xl overflow-hidden">
+    <Dialog isOpen={open} onClose={onClose} align="top" topOffset="18vh" width="w-full max-w-lg mx-4">
+      <div className="cr-modal-surface rounded-xl overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-[rgb(var(--color-border))]">
           <div className="flex items-center gap-2">

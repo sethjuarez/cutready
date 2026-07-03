@@ -73,7 +73,7 @@ export function UpdateAvailableButton() {
 
       {open && (
         <div
-          className="fixed inset-0 z-modal flex items-center justify-center bg-[rgb(var(--color-overlay-scrim)/0.5)] p-5 backdrop-blur-sm"
+          className="cr-modal-backdrop fixed inset-0 z-modal flex items-center justify-center p-5"
           role="dialog"
           aria-modal="true"
           aria-labelledby="update-title"
@@ -83,7 +83,7 @@ export function UpdateAvailableButton() {
             }
           }}
         >
-          <div className="relative flex max-h-[min(720px,calc(100vh-48px))] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] shadow-2xl">
+          <div className="cr-modal-surface relative flex max-h-[min(720px,calc(100vh-48px))] w-full max-w-2xl flex-col overflow-hidden rounded-2xl">
             <div className="relative overflow-hidden border-b border-[rgb(var(--color-border))] px-6 py-5">
               <div className="absolute -right-16 -top-24 h-48 w-48 rounded-full bg-[rgb(var(--color-accent))]/18 blur-3xl" />
               <div className="relative flex items-start justify-between gap-4">

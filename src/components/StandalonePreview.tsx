@@ -16,6 +16,7 @@ interface PreviewData {
   rows: PlanningRow[];
   projectRoot: string;
   title: string;
+  description?: unknown;
   slides?: PreviewSlide[];
   initialMode?: PresentationMode;
 }
@@ -82,6 +83,7 @@ export function StandalonePreview() {
       rows={data.rows}
       projectRoot={data.projectRoot}
       title={data.title}
+      description={data.description}
       onClose={handleClose}
       slides={data.slides}
       initialMode={data.initialMode}

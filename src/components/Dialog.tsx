@@ -28,7 +28,7 @@ export function Dialog({
   topOffset = "20vh",
   width,
   labelledBy,
-  backdropClass = "bg-[rgb(var(--color-overlay-scrim)/0.25)]",
+  backdropClass = "cr-modal-backdrop",
 }: DialogProps) {
   const contentRef = useRef<HTMLDivElement>(null);
 

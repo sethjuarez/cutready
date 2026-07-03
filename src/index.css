@@ -85,6 +85,17 @@ select option {
   user-select: none;
 }
 
+.cr-modal-backdrop {
+  background: rgb(var(--color-overlay-scrim) / 0.42);
+  backdrop-filter: blur(4px);
+}
+
+.cr-modal-surface {
+  border: 1px solid rgb(var(--color-border));
+  background: rgb(var(--color-surface));
+  box-shadow: 0 24px 64px rgb(var(--color-overlay-scrim) / 0.22);
+}
+
 /* Keyboard-only focus indicators (WCAG 2.4.7) */
 @layer base {
   button:focus-visible,

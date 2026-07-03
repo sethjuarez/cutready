@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, type ReactNode } from "react";
+import { useCallback, useState, useEffect, useRef, type ReactNode } from "react";
 import { useAppStore } from "../stores/appStore";
 import { useSettings, useSettingsStore, type AgentPreset } from "../hooks/useSettings";
 import { useRecordingDevices } from "../hooks/useRecordingDevices";
@@ -40,7 +40,6 @@ import {
   DownloadCloud,
   FlaskConical,
   SlidersHorizontal,
-  FolderGit2,
 } from "lucide-react";
 
 interface ModelInfo {
@@ -49,6 +48,13 @@ interface ModelInfo {
   owned_by?: string;
   capabilities?: Record<string, string>;
   context_length?: number;
+}
+
+interface FfmpegStatus {
+  available: boolean;
+  version: string | null;
+  path: string | null;
+  error: string | null;
 }
 
 interface TokenResponse {
@@ -63,9 +69,9 @@ interface AuthCodeFlowInit {
   port: number;
 }
 
-type SettingsTab = "ai" | "agents" | "memory" | "display" | "themes" | "narration" | "recording" | "feedback" | "repository" | "updates" | "experimental";
+type SettingsTab = "ai" | "agents" | "memory" | "display" | "themes" | "narration" | "recording" | "export" | "feedback" | "repository" | "updates" | "experimental";
 const REQUESTED_SETTINGS_TAB_KEY = "cutready:requested-settings-tab";
-const SETTINGS_TABS: SettingsTab[] = ["ai", "agents", "memory", "display", "themes", "narration", "recording", "feedback", "repository", "updates", "experimental"];
+const SETTINGS_TABS: SettingsTab[] = ["ai", "agents", "memory", "display", "themes", "narration", "recording", "export", "feedback", "repository", "updates", "experimental"];
 
 function consumeRequestedSettingsTab(): SettingsTab | null {
   const requested = localStorage.getItem(REQUESTED_SETTINGS_TAB_KEY);
@@ -117,10 +123,18 @@ export function SettingsPanel({ onClose }: { onClose?: () => void }) {
   const [modelError, setModelError] = useState("");
   const [modelFilter, setModelFilter] = useState("");
 
+  const closeSettings = useCallback(() => {
+    if (onClose) {
+      onClose();
+      return;
+    }
+    setView(currentProject ? "project" : "home");
+  }, [currentProject, onClose, setView]);
+
   const globalTabs: SettingsTab[] = settings.featureRecording
-    ? ["display", "themes", "narration", "recording", "ai", "agents", "feedback", "updates", "experimental"]
-    : ["display", "themes", "narration", "ai", "agents", "feedback", "updates", "experimental"];
-  const workspaceTabs: SettingsTab[] = ["repository", "memory", "display", "themes", "ai", "agents"];
+    ? ["display", "themes", "narration", "recording", "export", "ai", "agents", "feedback", "updates", "experimental"]
+    : ["display", "themes", "narration", "export", "ai", "agents", "feedback", "updates", "experimental"];
+  const workspaceTabs: SettingsTab[] = ["repository", "memory", "display", "themes", "export", "ai", "agents"];
   const tabs: SettingsTab[] = scope === "workspace" ? workspaceTabs : globalTabs;
 
   // OAuth flow state
@@ -138,6 +152,18 @@ export function SettingsPanel({ onClose }: { onClose?: () => void }) {
       setActiveTab(scope === "workspace" ? "repository" : "display");
     }
   }, [activeTab, currentProject, scope, tabs]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeSettings();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [closeSettings]);
 
   const buildConfig = () => buildProviderConfig(settings);
 
@@ -263,6 +289,13 @@ export function SettingsPanel({ onClose }: { onClose?: () => void }) {
       icon: <MessageSquare className="h-4 w-4" />,
       keywords: "narration microphone mic voice audio row record permission",
     },
+    export: {
+      label: "Export",
+      eyebrow: "Video output",
+      description: "Tune the sketch-to-MP4 timing rhythm and output defaults.",
+      icon: <Download className="h-4 w-4" />,
+      keywords: "export video mp4 timing title card lead row transition final hold",
+    },
     ai: {
       label: "AI providers",
       eyebrow: "Model connection",
@@ -323,11 +356,14 @@ export function SettingsPanel({ onClose }: { onClose?: () => void }) {
           .includes(normalizedFilter);
       })
     : tabs;
-  const projectLocation = currentProject?.root ?? "Open a project to configure workspace settings.";
-
   return (
-    <div className="h-full overflow-hidden bg-[rgb(var(--color-overlay-scrim))]/12 px-5 py-6 backdrop-blur-[2px]">
-      <div className="mx-auto flex h-full max-w-7xl overflow-hidden rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] shadow-2xl shadow-[rgb(var(--color-overlay-scrim)/0.18)]">
+    <div className="cr-modal-backdrop h-full overflow-hidden px-5 py-6">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="settings-panel-title"
+        className="cr-modal-surface mx-auto flex h-full max-w-7xl overflow-hidden rounded-xl"
+      >
         <aside className="flex w-[19rem] shrink-0 flex-col border-r border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-alt))]">
           <div className="border-b border-[rgb(var(--color-border-subtle))] p-5">
             <div className="flex items-start gap-3">
@@ -439,17 +475,6 @@ export function SettingsPanel({ onClose }: { onClose?: () => void }) {
             )}
           </div>
 
-          <div className="border-t border-[rgb(var(--color-border-subtle))] p-4">
-            <div className="flex items-center gap-2 rounded-lg bg-[rgb(var(--color-surface))] p-3 text-xs text-[rgb(var(--color-text-secondary))]">
-              <FolderGit2 className="h-4 w-4 shrink-0 text-[rgb(var(--color-accent))]" />
-              <div className="min-w-0">
-                <div className="font-medium text-[rgb(var(--color-text))]">
-                  {currentProject?.name ?? "No project open"}
-                </div>
-                <div className="truncate">{projectLocation}</div>
-              </div>
-            </div>
-          </div>
         </aside>
 
         <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
@@ -459,7 +484,7 @@ export function SettingsPanel({ onClose }: { onClose?: () => void }) {
                 <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[rgb(var(--color-accent))]">
                   {activeMeta.eyebrow}
                 </div>
-                <h1 className="mt-0.5 text-xl font-semibold tracking-tight text-[rgb(var(--color-text))]">
+                <h1 id="settings-panel-title" className="mt-0.5 text-xl font-semibold tracking-tight text-[rgb(var(--color-text))]">
                   {activeMeta.label}
                 </h1>
                 <p className="mt-1 max-w-3xl text-sm leading-5 text-[rgb(var(--color-text-secondary))]">
@@ -469,13 +494,7 @@ export function SettingsPanel({ onClose }: { onClose?: () => void }) {
               <button
                 type="button"
                 data-testid="settings-close"
-                onClick={() => {
-                  if (onClose) {
-                    onClose();
-                    return;
-                  }
-                  setView(currentProject ? "project" : "home");
-                }}
+                onClick={closeSettings}
                 className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
                 aria-label="Close settings"
               >
@@ -494,6 +513,9 @@ export function SettingsPanel({ onClose }: { onClose?: () => void }) {
               )}
               {activeTab === "recording" && (
                 <RecordingTab settings={settings} updateSetting={updateSetting} />
+              )}
+              {activeTab === "export" && (
+                <ExportTab settings={settings} updateSetting={updateSetting} scope={scope} />
               )}
               {activeTab === "narration" && (
                 <NarrationTab settings={settings} updateSetting={updateSetting} />
@@ -999,6 +1021,239 @@ function recordingDeviceStatusText(
   if (error) return "Could not detect recording devices.";
   if (microphoneCount === 0) return "No active Windows microphones were detected.";
   return `${microphoneCount} Windows microphone${microphoneCount === 1 ? "" : "s"} detected`;
+}
+
+// ── Export Tab ─────────────────────────────────────────────────────
+
+function ExportTab({
+  settings,
+  updateSetting,
+  scope,
+}: {
+  settings: ReturnType<typeof useSettings>["settings"];
+  updateSetting: ReturnType<typeof useSettings>["updateSetting"];
+  scope: "app" | "workspace";
+}) {
+  type AppExportTimingKey =
+    | "videoExportTitleCardDurationSeconds"
+    | "videoExportTitleToFirstRowHoldSeconds"
+    | "videoExportRowTransitionHoldSeconds"
+    | "videoExportFinalHoldSeconds";
+  type WorkspaceExportTimingKey =
+    | "workspaceVideoExportTitleCardDurationSeconds"
+    | "workspaceVideoExportTitleToFirstRowHoldSeconds"
+    | "workspaceVideoExportRowTransitionHoldSeconds"
+    | "workspaceVideoExportFinalHoldSeconds";
+  const timingFields: Array<{
+    appKey: AppExportTimingKey;
+    workspaceKey: WorkspaceExportTimingKey;
+    label: string;
+    description: string;
+  }> = [
+    {
+      appKey: "videoExportTitleCardDurationSeconds",
+      workspaceKey: "workspaceVideoExportTitleCardDurationSeconds",
+      label: "Title card",
+      description: "How long the sketch title and description stay on screen before the demo begins.",
+    },
+    {
+      appKey: "videoExportTitleToFirstRowHoldSeconds",
+      workspaceKey: "workspaceVideoExportTitleToFirstRowHoldSeconds",
+      label: "Lead into first row",
+      description: "Silent hold on the first row screenshot after the title card and before narration starts.",
+    },
+    {
+      appKey: "videoExportRowTransitionHoldSeconds",
+      workspaceKey: "workspaceVideoExportRowTransitionHoldSeconds",
+      label: "Between rows",
+      description: "Transition hold split evenly between the previous screenshot and the next screenshot.",
+    },
+    {
+      appKey: "videoExportFinalHoldSeconds",
+      workspaceKey: "workspaceVideoExportFinalHoldSeconds",
+      label: "Final hold",
+      description: "How long the last screenshot remains on screen after the final narration ends.",
+    },
+  ];
+
+  const isWorkspace = scope === "workspace";
+  const disabled = isWorkspace && !settings.videoExportOverrideEnabled;
+  const normalizeAudioKey = isWorkspace
+    ? "workspaceVideoExportNormalizeNarrationAudio"
+    : "videoExportNormalizeNarrationAudio";
+  const normalizeAudioValue = settings[normalizeAudioKey];
+  const [ffmpegStatus, setFfmpegStatus] = useState<FfmpegStatus | null>(null);
+  const [ffmpegChecking, setFfmpegChecking] = useState(false);
+  const ffmpegVersion = ffmpegStatus?.version?.split(/\r?\n/)[0] ?? null;
+  const updateDuration = (key: AppExportTimingKey | WorkspaceExportTimingKey, value: string) => {
+    const parsed = Number.parseFloat(value);
+    void updateSetting(key, Number.isFinite(parsed) ? Math.max(0.1, parsed) : 0.1);
+  };
+  const refreshFfmpegStatus = async () => {
+    setFfmpegChecking(true);
+    try {
+      setFfmpegStatus(await invoke<FfmpegStatus>("check_ffmpeg_status"));
+    } catch (error) {
+      setFfmpegStatus({
+        available: false,
+        version: null,
+        path: null,
+        error: String(error),
+      });
+    } finally {
+      setFfmpegChecking(false);
+    }
+  };
+
+  useEffect(() => {
+    void refreshFfmpegStatus();
+  }, []);
+
+  return (
+    <div className="flex flex-col gap-6">
+      <p className="text-xs text-[rgb(var(--color-text-secondary))]">
+        {isWorkspace
+          ? "Override the app-level sketch video export defaults for this workspace."
+          : "These app defaults apply when exporting a sketch directly to MP4. The current rhythm is tuned for screenshots plus narration."}
+      </p>
+
+      {isWorkspace && (
+        <label className="flex items-center justify-between gap-4 rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]/40 p-4">
+          <span>
+            <span className="block text-sm font-medium text-[rgb(var(--color-text))]">Use workspace export settings</span>
+            <span className="mt-1 block text-xs text-[rgb(var(--color-text-secondary))]">
+              When off, this workspace uses the app-level Export settings.
+            </span>
+          </span>
+          <input
+            type="checkbox"
+            checked={settings.videoExportOverrideEnabled}
+            onChange={(event) => updateSetting("videoExportOverrideEnabled", event.target.checked)}
+            className="h-4 w-4 accent-[rgb(var(--color-accent))]"
+          />
+        </label>
+      )}
+
+      <fieldset className="flex flex-col gap-3 rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]/40 p-4">
+        <div>
+          <label className="text-sm font-medium">Sketch video timing</label>
+          <p className="mt-1 text-xs text-[rgb(var(--color-text-secondary))]">
+            Adjust the pacing around the generated title card, row transitions, and ending hold.
+          </p>
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-2">
+          {timingFields.map((field) => {
+            const key = isWorkspace ? field.workspaceKey : field.appKey;
+            const fallbackValue = settings[field.appKey];
+            const value = settings[key];
+            return (
+              <label
+                key={key}
+                className="rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] p-3"
+              >
+                <span className="block text-xs font-semibold text-[rgb(var(--color-text))]">{field.label}</span>
+                <span className="mt-1 block min-h-10 text-[11px] leading-4 text-[rgb(var(--color-text-secondary))]">
+                  {field.description}
+                </span>
+                <div className="mt-3 flex items-center gap-2">
+                  <input
+                    type="number"
+                    min="0.1"
+                    step="0.1"
+                    value={value}
+                    onChange={(event) => updateDuration(key, event.target.value)}
+                    disabled={disabled}
+                    className={`${inputClass} min-w-0 flex-1`}
+                  />
+                  <span className="text-[11px] font-medium text-[rgb(var(--color-text-secondary))]">sec</span>
+                </div>
+                {isWorkspace && !settings.videoExportOverrideEnabled && (
+                  <span className="mt-2 block text-[10px] text-[rgb(var(--color-text-secondary))]">
+                    App default: {fallbackValue}s
+                  </span>
+                )}
+              </label>
+            );
+          })}
+        </div>
+      </fieldset>
+
+      <label className="flex items-start justify-between gap-4 rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]/40 p-4">
+        <span>
+          <span className="block text-sm font-medium text-[rgb(var(--color-text))]">Normalize narration audio</span>
+          <span className="mt-1 block text-xs leading-5 text-[rgb(var(--color-text-secondary))]">
+            Keep each row at a consistent spoken-word loudness during MP4 export. Original narration files are not changed.
+          </span>
+          {isWorkspace && !settings.videoExportOverrideEnabled && (
+            <span className="mt-2 block text-[10px] text-[rgb(var(--color-text-secondary))]">
+              App default: {settings.videoExportNormalizeNarrationAudio ? "on" : "off"}
+            </span>
+          )}
+        </span>
+        <input
+          type="checkbox"
+          checked={normalizeAudioValue}
+          onChange={(event) => updateSetting(normalizeAudioKey, event.target.checked)}
+          disabled={disabled}
+          className="mt-1 h-4 w-4 shrink-0 accent-[rgb(var(--color-accent))] disabled:cursor-not-allowed disabled:opacity-40"
+        />
+      </label>
+
+      <div className="rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]/50 p-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2 text-sm font-medium text-[rgb(var(--color-text))]">
+              {ffmpegStatus?.available ? (
+                <CheckCircle className="h-4 w-4 text-success" />
+              ) : (
+                <Info className="h-4 w-4 text-warning" />
+              )}
+              FFmpeg for video export
+            </div>
+            <p className="mt-1 text-xs leading-5 text-[rgb(var(--color-text-secondary))]">
+              CutReady uses FFmpeg on your PATH for sketch MP4 export. Bundled FFmpeg is planned later.
+            </p>
+            {ffmpegStatus?.available ? (
+              <p className="mt-2 text-[11px] leading-5 text-[rgb(var(--color-text-secondary))]">
+                Detected {ffmpegVersion ?? "FFmpeg"}{ffmpegStatus.path ? ` at ${ffmpegStatus.path}` : ""}.
+              </p>
+            ) : (
+              <p className="mt-2 text-[11px] leading-5 text-warning">
+                {ffmpegStatus?.error || "FFmpeg was not detected. Install it and make sure ffmpeg is available on PATH."}
+              </p>
+            )}
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <button
+              type="button"
+              onClick={() => void refreshFfmpegStatus()}
+              disabled={ffmpegChecking}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[rgb(var(--color-border))] px-3 py-2 text-xs font-medium text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface))] hover:text-[rgb(var(--color-text))] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${ffmpegChecking ? "animate-spin" : ""}`} />
+              Check
+            </button>
+            <button
+              type="button"
+              onClick={() => void shellOpen("https://ffmpeg.org/download.html")}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-[rgb(var(--color-accent))] px-3 py-2 text-xs font-medium text-[rgb(var(--color-accent-fg))] transition-colors hover:bg-[rgb(var(--color-accent-hover))]"
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+              Install FFmpeg
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]/50 p-4">
+        <div className="text-sm font-medium text-[rgb(var(--color-text))]">Current output format</div>
+        <p className="mt-1 text-xs leading-5 text-[rgb(var(--color-text-secondary))]">
+          Sketch video export currently writes 1920x1080 MP4 files with RGB lossless screenshot encoding, trimmed narration audio, optional loudness normalization, and AAC audio.
+        </p>
+      </div>
+    </div>
+  );
 }
 
 function ThemePaletteCard({
@@ -2830,9 +3085,8 @@ function FeedbackListTab() {
         topOffset="12vh"
         width="w-[720px] max-w-[92vw]"
         labelledBy="feedback-issue-review-title"
-        backdropClass="bg-[rgb(var(--color-overlay-scrim)/0.4)]"
       >
-        <div className="bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-2xl shadow-2xl overflow-hidden">
+        <div className="cr-modal-surface rounded-2xl overflow-hidden">
           <div className="flex items-start justify-between gap-4 px-5 py-4 border-b border-[rgb(var(--color-border))]">
             <div>
               <h3 id="feedback-issue-review-title" className="text-sm font-semibold text-[rgb(var(--color-text))]">

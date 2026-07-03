@@ -31,12 +31,12 @@ export function SnapshotDiffPanel() {
       : `This compares ${diffSelection.from.slice(0, 7)} to ${diffSelection.to.slice(0, 7)}.`;
 
   return (
-    <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/20 px-4 py-6 backdrop-blur-sm">
+    <div className="cr-modal-backdrop fixed inset-0 z-modal flex items-center justify-center px-4 py-6">
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="snapshot-diff-title"
-        className="flex max-h-full w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] shadow-2xl"
+        className="cr-modal-surface flex max-h-full w-full max-w-xl flex-col overflow-hidden rounded-2xl"
       >
         <div className="flex items-start gap-3 border-b border-[rgb(var(--color-border))] px-4 py-3">
           <div className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))]">

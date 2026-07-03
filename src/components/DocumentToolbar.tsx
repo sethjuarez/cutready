@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   ChevronDown,
+  Download,
+  Film,
   Lock,
   Monitor,
   MonitorPlay,
@@ -65,7 +67,7 @@ export function DocumentToolbar({
   const overflowGroups: ToolbarOverflowGroup[] = [
     { id: "present", label: "Present", icon: <Monitor className="h-3.5 w-3.5" />, actions: presentActions },
     { id: "ai", label: "AI assist", icon: <Sparkles className="h-3.5 w-3.5" />, actions: aiActions },
-    { id: "export", label: "Export", icon: <WordDocumentIcon />, actions: exportActions },
+    { id: "export", label: "Export", icon: <Download className="h-3.5 w-3.5" />, actions: exportActions },
   ].filter((group) => group.actions.length > 0);
 
   return (
@@ -99,7 +101,7 @@ export function DocumentToolbar({
       {exportActions.length > 0 && (
         <ToolbarMenu
           label="Export"
-          icon={<WordDocumentIcon />}
+          icon={<Download className="h-3.5 w-3.5" />}
           actions={exportActions}
           className="document-toolbar-wide-action"
         />
@@ -336,4 +338,5 @@ export const documentToolbarIcons = {
   pencil: <Pencil className="h-3.5 w-3.5" />,
   playCircle: <PlayCircle className="h-3.5 w-3.5" />,
   sparkles: <Sparkles className="h-3.5 w-3.5" />,
+  video: <Film className="h-3.5 w-3.5" />,
 };

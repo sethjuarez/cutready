@@ -39,6 +39,7 @@ import { FieldAiButton } from "./FieldAiButton";
 import { LockedDocumentBanner } from "./LockedDocumentBanner";
 import { DurationBadge, MetadataEditor } from "./MetadataEditor";
 import { StoryboardIcon } from "./Icons";
+import { plainTextFromRichValue } from "../utils/richText";
 import type { Sketch, SketchSummary, StoryboardItem } from "../types/sketch";
 import type { RecordingTake } from "../types/recording";
 import type { PreviewSlide, PresentationMode } from "./presentation/types";
@@ -206,7 +207,7 @@ export function StoryboardView() {
       if (!full) return;
       const skTitle = full.title || "Untitled Sketch";
       const context = sectionTitle ? `${sbTitle} › ${sectionTitle} › ${skTitle}` : `${sbTitle} › ${skTitle}`;
-      const desc = typeof full.description === "string" ? full.description : "";
+      const desc = plainTextFromRichValue(full.description);
       // Sketch title slide
       slides.push({
         type: "title",

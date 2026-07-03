@@ -39,6 +39,18 @@ const MOCK_NOTES: NoteSummary[] = [
   { path: "notes/research-notes.md", title: "Research Notes", size: 1024, updated_at: "2025-01-14T15:00:00Z" },
 ];
 
+function sendMockProgress(args: Record<string, unknown> | undefined, progress: Record<string, unknown>) {
+  const channel = args?.onProgress;
+  if (
+    channel &&
+    typeof channel === "object" &&
+    "onmessage" in channel &&
+    typeof channel.onmessage === "function"
+  ) {
+    channel.onmessage(progress);
+  }
+}
+
 const MOCK_STORYBOARDS: StoryboardSummary[] = [
   { path: "storyboards/full-demo.sb", title: "Full Demo Flow", locked: false, sketch_count: 2, created_at: "2025-01-15T09:00:00Z", updated_at: "2025-01-15T12:30:00Z" },
 ];
@@ -170,6 +182,50 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
       return MOCK_SKETCH;
     case "save_sketch":
       return null;
+    case "export_sketch_video":
+      sendMockProgress(args, {
+        phase: "title",
+        current: 1,
+        total: 7,
+        message: "Rendering sketch title card",
+      });
+      sendMockProgress(args, {
+        phase: "lead-in",
+        current: 2,
+        total: 7,
+        message: "Holding the first screen for 0.5 seconds",
+      });
+      sendMockProgress(args, {
+        phase: "row",
+        current: 3,
+        total: 7,
+        message: "Rendering row 1 of 3",
+      });
+      sendMockProgress(args, {
+        phase: "gap",
+        current: 4,
+        total: 7,
+        message: "Holding row 1 for 0.5s, then row 2 for 0.5s",
+      });
+      sendMockProgress(args, {
+        phase: "hold",
+        current: 6,
+        total: 7,
+        message: "Holding the final screen for 3 seconds",
+      });
+      sendMockProgress(args, {
+        phase: "assembling",
+        current: 7,
+        total: 7,
+        message: "Assembling the MP4",
+      });
+      return {
+        path: typeof args?.outputPath === "string"
+          ? args.outputPath
+          : "exports/demo-introduction-20250115-120000.mp4",
+        duration_seconds: 12,
+        row_count: 3,
+      };
     case "create_sketch":
       return "sketches/new-sketch.sk";
     case "delete_sketch":
