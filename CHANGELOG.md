@@ -10,6 +10,20 @@
 
 Release Please manages this changelog. Do not edit manually.
 
+## [1.23.0](https://github.com/sethjuarez/cutready/compare/v1.22.0...v1.23.0) (2026-07-03)
+
+
+### Features
+
+* add built-in GitHub collaboration auth ([e13e372](https://github.com/sethjuarez/cutready/commit/e13e3723d37457d82a9185c9ae08f70d7e00e168))
+* **export:** render sketch videos ([055407d](https://github.com/sethjuarez/cutready/commit/055407df2c84188377e195a74f0a94974a325cd8))
+* **narration:** add narration asset workflow ([c0a12fa](https://github.com/sethjuarez/cutready/commit/c0a12faac5d86adb5cf754cfa080fd72c436855e))
+
+
+### Bug Fixes
+
+* **projects:** switch before deleting active project ([#150](https://github.com/sethjuarez/cutready/issues/150)) ([f777849](https://github.com/sethjuarez/cutready/commit/f777849560c5c61d11fb0d0dbd4fbe0a4ee2b61b))
+
 ## [1.22.0](https://github.com/sethjuarez/cutready/compare/v1.21.1...v1.22.0) (2026-06-30)
 
 
