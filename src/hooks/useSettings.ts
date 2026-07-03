@@ -151,6 +151,10 @@ export interface GlobalSettings {
   videoExportFinalHoldSeconds: number;
   /** Normalize narration loudness during sketch video export. */
   videoExportNormalizeNarrationAudio: boolean;
+  /** Custom FFmpeg executable path. Empty means auto-detect. */
+  ffmpegExecutablePath: string;
+  /** Custom FFprobe executable path. Empty means auto-detect. */
+  ffprobeExecutablePath: string;
   /** Future default: capture camera as a separate asset. */
   recorderCameraEnabled: boolean;
   /** Last selected camera device id for separate camera.mp4 capture. */
@@ -252,6 +256,8 @@ const defaultGlobalSettings: GlobalSettings = {
   videoExportRowTransitionHoldSeconds: 1,
   videoExportFinalHoldSeconds: 3,
   videoExportNormalizeNarrationAudio: true,
+  ffmpegExecutablePath: "",
+  ffprobeExecutablePath: "",
   recorderCameraEnabled: false,
   recorderCameraDeviceId: "",
   recorderSystemAudioEnabled: false,

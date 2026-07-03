@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { invoke } from "../services/tauri";
 import type { RecordingDeviceDiscovery, RecordingDeviceInfo } from "../types/recording";
+import { setCachedFfmpegStatus } from "./useFfmpegStatus";
 
 const initialDiscovery: RecordingDeviceDiscovery = {
   ffmpeg: {
     available: false,
     version: null,
-    path: "ffmpeg",
+    path: null,
     error: null,
   },
   devices: [],
@@ -22,6 +23,7 @@ export function useRecordingDevices(enabled: boolean = true) {
     setError(null);
     try {
       const next = await invoke<RecordingDeviceDiscovery>("discover_recording_devices");
+      setCachedFfmpegStatus(next.ffmpeg);
       setDiscovery(next);
     } catch (err) {
       setError(String(err));

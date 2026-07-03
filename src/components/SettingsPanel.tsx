@@ -1,10 +1,12 @@
 import { useCallback, useState, useEffect, useRef, type ReactNode } from "react";
 import { useAppStore } from "../stores/appStore";
 import { useSettings, useSettingsStore, type AgentPreset } from "../hooks/useSettings";
+import { useFfmpegStatus } from "../hooks/useFfmpegStatus";
 import { useRecordingDevices } from "../hooks/useRecordingDevices";
 import { useTheme, type ThemePreference } from "../hooks/useTheme";
 import { invoke } from "../services/tauri";
 import { getVersion } from "@tauri-apps/api/app";
+import { open as dialogOpen } from "@tauri-apps/plugin-dialog";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { BUILT_IN_AGENTS } from "../agents/builtInAgents";
@@ -50,13 +52,6 @@ interface ModelInfo {
   context_length?: number;
 }
 
-interface FfmpegStatus {
-  available: boolean;
-  version: string | null;
-  path: string | null;
-  error: string | null;
-}
-
 interface TokenResponse {
   access_token: string;
   token_type: string;
@@ -72,6 +67,13 @@ interface AuthCodeFlowInit {
 type SettingsTab = "ai" | "agents" | "memory" | "display" | "themes" | "narration" | "recording" | "export" | "feedback" | "repository" | "updates" | "experimental";
 const REQUESTED_SETTINGS_TAB_KEY = "cutready:requested-settings-tab";
 const SETTINGS_TABS: SettingsTab[] = ["ai", "agents", "memory", "display", "themes", "narration", "recording", "export", "feedback", "repository", "updates", "experimental"];
+
+function inferSiblingFfprobePath(ffmpegPath: string): string | null {
+  if (!ffmpegPath.trim()) return null;
+  if (/ffmpeg\.exe$/i.test(ffmpegPath)) return ffmpegPath.replace(/ffmpeg\.exe$/i, "ffprobe.exe");
+  if (/ffmpeg$/i.test(ffmpegPath)) return ffmpegPath.replace(/ffmpeg$/i, "ffprobe");
+  return null;
+}
 
 function consumeRequestedSettingsTab(): SettingsTab | null {
   const requested = localStorage.getItem(REQUESTED_SETTINGS_TAB_KEY);
@@ -1082,32 +1084,44 @@ function ExportTab({
     ? "workspaceVideoExportNormalizeNarrationAudio"
     : "videoExportNormalizeNarrationAudio";
   const normalizeAudioValue = settings[normalizeAudioKey];
-  const [ffmpegStatus, setFfmpegStatus] = useState<FfmpegStatus | null>(null);
-  const [ffmpegChecking, setFfmpegChecking] = useState(false);
+  const { status: ffmpegStatus, loading: ffmpegChecking, refresh: refreshFfmpegStatus } = useFfmpegStatus();
   const ffmpegVersion = ffmpegStatus?.version?.split(/\r?\n/)[0] ?? null;
+  const ffprobeVersion = ffmpegStatus?.ffprobe_version?.split(/\r?\n/)[0] ?? null;
   const updateDuration = (key: AppExportTimingKey | WorkspaceExportTimingKey, value: string) => {
     const parsed = Number.parseFloat(value);
     void updateSetting(key, Number.isFinite(parsed) ? Math.max(0.1, parsed) : 0.1);
   };
-  const refreshFfmpegStatus = async () => {
-    setFfmpegChecking(true);
-    try {
-      setFfmpegStatus(await invoke<FfmpegStatus>("check_ffmpeg_status"));
-    } catch (error) {
-      setFfmpegStatus({
-        available: false,
-        version: null,
-        path: null,
-        error: String(error),
-      });
-    } finally {
-      setFfmpegChecking(false);
-    }
-  };
 
   useEffect(() => {
     void refreshFfmpegStatus();
-  }, []);
+  }, [refreshFfmpegStatus]);
+
+  const chooseExecutable = async (kind: "ffmpeg" | "ffprobe") => {
+    const selected = await dialogOpen({
+      multiple: false,
+      title: kind === "ffmpeg" ? "Locate FFmpeg executable" : "Locate FFprobe executable",
+    });
+    if (!selected || Array.isArray(selected)) return;
+
+    if (kind === "ffmpeg") {
+      await updateSetting("ffmpegExecutablePath", selected);
+      if (!settings.ffprobeExecutablePath) {
+        const inferred = inferSiblingFfprobePath(selected);
+        if (inferred) {
+          await updateSetting("ffprobeExecutablePath", inferred);
+        }
+      }
+    } else {
+      await updateSetting("ffprobeExecutablePath", selected);
+    }
+    await refreshFfmpegStatus();
+  };
+
+  const clearExecutablePaths = async () => {
+    await updateSetting("ffmpegExecutablePath", "");
+    await updateSetting("ffprobeExecutablePath", "");
+    await refreshFfmpegStatus();
+  };
 
   return (
     <div className="flex flex-col gap-6">
@@ -1212,15 +1226,21 @@ function ExportTab({
               FFmpeg for video export
             </div>
             <p className="mt-1 text-xs leading-5 text-[rgb(var(--color-text-secondary))]">
-              CutReady uses FFmpeg on your PATH for sketch MP4 export. Bundled FFmpeg is planned later.
+              CutReady uses FFmpeg and FFprobe for sketch MP4 export. Auto-detection checks your saved path, PATH, and common install locations.
             </p>
             {ffmpegStatus?.available ? (
               <p className="mt-2 text-[11px] leading-5 text-[rgb(var(--color-text-secondary))]">
                 Detected {ffmpegVersion ?? "FFmpeg"}{ffmpegStatus.path ? ` at ${ffmpegStatus.path}` : ""}.
+                {ffmpegStatus.ffprobe_path ? ` FFprobe: ${ffprobeVersion ?? "detected"} at ${ffmpegStatus.ffprobe_path}.` : ""}
               </p>
             ) : (
               <p className="mt-2 text-[11px] leading-5 text-warning">
-                {ffmpegStatus?.error || "FFmpeg was not detected. Install it and make sure ffmpeg is available on PATH."}
+                {ffmpegStatus?.error || "FFmpeg or FFprobe was not detected. Install FFmpeg or use Locate FFmpeg to choose the executable."}
+              </p>
+            )}
+            {(settings.ffmpegExecutablePath || settings.ffprobeExecutablePath) && (
+              <p className="mt-2 text-[11px] leading-5 text-[rgb(var(--color-text-secondary))]">
+                Custom paths: {settings.ffmpegExecutablePath || "auto FFmpeg"}; {settings.ffprobeExecutablePath || "auto FFprobe"}.
               </p>
             )}
           </div>
@@ -1234,6 +1254,29 @@ function ExportTab({
               <RefreshCw className={`h-3.5 w-3.5 ${ffmpegChecking ? "animate-spin" : ""}`} />
               Check
             </button>
+            <button
+              type="button"
+              onClick={() => void chooseExecutable("ffmpeg")}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[rgb(var(--color-border))] px-3 py-2 text-xs font-medium text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface))] hover:text-[rgb(var(--color-text))]"
+            >
+              Locate FFmpeg
+            </button>
+            <button
+              type="button"
+              onClick={() => void chooseExecutable("ffprobe")}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[rgb(var(--color-border))] px-3 py-2 text-xs font-medium text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface))] hover:text-[rgb(var(--color-text))]"
+            >
+              Locate FFprobe
+            </button>
+            {(settings.ffmpegExecutablePath || settings.ffprobeExecutablePath) && (
+              <button
+                type="button"
+                onClick={() => void clearExecutablePaths()}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-[rgb(var(--color-border))] px-3 py-2 text-xs font-medium text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface))] hover:text-[rgb(var(--color-text))]"
+              >
+                Clear paths
+              </button>
+            )}
             <button
               type="button"
               onClick={() => void shellOpen("https://ffmpeg.org/download.html")}

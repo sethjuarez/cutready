@@ -5,14 +5,15 @@
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use std::ffi::OsStr;
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Stdio};
+use std::process::{Child, Stdio};
 use std::time::{Duration, Instant};
 use uuid::Uuid;
 
-use crate::engine::project;
+use crate::engine::{ffmpeg, project};
 use crate::models::sketch::{PlanningRow, Sketch, StoryboardItem};
 
 const RECORDINGS_DIR: &str = ".cutready/recordings";
@@ -65,9 +66,19 @@ pub fn clear_local_recordings(project_root: &Path) -> anyhow::Result<u64> {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct FfmpegStatus {
     pub available: bool,
+    #[serde(default)]
+    pub ffmpeg_available: bool,
     pub version: Option<String>,
     pub path: Option<String>,
     pub error: Option<String>,
+    #[serde(default)]
+    pub ffprobe_available: bool,
+    #[serde(default)]
+    pub ffprobe_version: Option<String>,
+    #[serde(default)]
+    pub ffprobe_path: Option<String>,
+    #[serde(default)]
+    pub ffprobe_error: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -175,28 +186,113 @@ impl ActiveRecordingProcess {
 }
 
 pub fn check_ffmpeg_status() -> FfmpegStatus {
+    let ffmpeg_status = match ffmpeg::resolve_ffmpeg() {
+        Ok(path) => probe_ffmpeg_executable(path),
+        Err(err) => {
+            tracing::warn!(target: "cutready::recording", error = %err, "ffmpeg executable not found");
+            FfmpegStatus {
+                available: false,
+                ffmpeg_available: false,
+                version: None,
+                path: None,
+                error: Some(err.to_string()),
+                ffprobe_available: false,
+                ffprobe_version: None,
+                ffprobe_path: None,
+                ffprobe_error: None,
+            }
+        }
+    };
+
+    match ffmpeg::resolve_ffprobe() {
+        Ok(path) => with_ffprobe_status(ffmpeg_status, probe_ffprobe_executable(path)),
+        Err(err) => with_ffprobe_status(
+            ffmpeg_status,
+            (false, None, None, Some(err.to_string())),
+        ),
+    }
+}
+
+fn probe_ffmpeg_executable(path: PathBuf) -> FfmpegStatus {
     match run_ffmpeg(["-version"]) {
         Ok(output) if output.success => FfmpegStatus {
             available: true,
+            ffmpeg_available: true,
             version: first_non_empty_line(&output.stdout),
-            path: Some("ffmpeg".to_string()),
+            path: Some(path.display().to_string()),
             error: None,
+            ffprobe_available: false,
+            ffprobe_version: None,
+            ffprobe_path: None,
+            ffprobe_error: None,
         },
         Ok(output) => FfmpegStatus {
             available: false,
+            ffmpeg_available: false,
             version: first_non_empty_line(&output.stdout),
-            path: Some("ffmpeg".to_string()),
+            path: Some(path.display().to_string()),
             error: Some(first_non_empty_line(&output.stderr).unwrap_or_else(|| {
                 "FFmpeg did not return a successful version response".to_string()
             })),
+            ffprobe_available: false,
+            ffprobe_version: None,
+            ffprobe_path: None,
+            ffprobe_error: None,
         },
         Err(err) => FfmpegStatus {
             available: false,
+            ffmpeg_available: false,
             version: None,
-            path: Some("ffmpeg".to_string()),
+            path: Some(path.display().to_string()),
             error: Some(err.to_string()),
+            ffprobe_available: false,
+            ffprobe_version: None,
+            ffprobe_path: None,
+            ffprobe_error: None,
         },
     }
+}
+
+fn probe_ffprobe_executable(path: PathBuf) -> (bool, Option<String>, Option<String>, Option<String>) {
+    match ffmpeg::run_ffprobe(["-version"]) {
+        Ok(output) if output.status.success() => (
+            true,
+            first_non_empty_line(&String::from_utf8_lossy(&output.stdout)),
+            Some(path.display().to_string()),
+            None,
+        ),
+        Ok(output) => (
+            false,
+            first_non_empty_line(&String::from_utf8_lossy(&output.stdout)),
+            Some(path.display().to_string()),
+            Some(
+                first_non_empty_line(&String::from_utf8_lossy(&output.stderr)).unwrap_or_else(
+                    || "FFprobe did not return a successful version response".to_string(),
+                ),
+            ),
+        ),
+        Err(err) => (
+            false,
+            None,
+            Some(path.display().to_string()),
+            Some(err.to_string()),
+        ),
+    }
+}
+
+fn with_ffprobe_status(
+    mut status: FfmpegStatus,
+    ffprobe: (bool, Option<String>, Option<String>, Option<String>),
+) -> FfmpegStatus {
+    status.ffprobe_available = ffprobe.0;
+    status.ffprobe_version = ffprobe.1;
+    status.ffprobe_path = ffprobe.2;
+    status.ffprobe_error = ffprobe.3;
+    status.available = status.ffmpeg_available && status.ffprobe_available;
+    if status.ffmpeg_available && !status.ffprobe_available {
+        status.error = status.ffprobe_error.clone();
+    }
+    status
 }
 
 pub fn discover_recording_devices() -> RecordingDeviceDiscovery {
@@ -224,7 +320,7 @@ pub fn discover_recording_devices() -> RecordingDeviceDiscovery {
     }
 
     let mut ffmpeg = check_ffmpeg_status();
-    if !ffmpeg.available {
+    if !ffmpeg.ffmpeg_available {
         return RecordingDeviceDiscovery {
             ffmpeg,
             devices: Vec::new(),
@@ -317,16 +413,11 @@ struct FfmpegCommandOutput {
 }
 
 fn run_ffmpeg<const N: usize>(args: [&str; N]) -> anyhow::Result<FfmpegCommandOutput> {
-    let mut command = Command::new("ffmpeg");
+    let mut command = ffmpeg::command_for_ffmpeg()?;
     command
         .args(args)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
-    #[cfg(target_os = "windows")]
-    {
-        use std::os::windows::process::CommandExt;
-        command.creation_flags(0x08000000);
-    }
 
     let mut child = command.spawn()?;
     let started = Instant::now();
@@ -635,7 +726,8 @@ fn parse_avfoundation_devices(stderr: &str) -> Vec<RecordingDeviceInfo> {
 /// "Capture screen {display_index}".
 #[cfg(target_os = "macos")]
 fn find_avfoundation_screen_index(display_index: usize) -> Option<u32> {
-    let output = std::process::Command::new("ffmpeg")
+    let mut command = ffmpeg::command_for_ffmpeg().ok()?;
+    let output = command
         .args([
             "-hide_banner",
             "-f",
@@ -1476,17 +1568,12 @@ fn spawn_ffmpeg_capture(args: Vec<String>, log_path: &Path) -> anyhow::Result<Ch
         .create(true)
         .append(true)
         .open(log_path)?;
-    let mut command = Command::new("ffmpeg");
+    let mut command = ffmpeg::command_for_ffmpeg()?;
     command
         .args(args)
         .stdin(Stdio::piped())
         .stdout(Stdio::null())
         .stderr(Stdio::from(stderr));
-    #[cfg(target_os = "windows")]
-    {
-        use std::os::windows::process::CommandExt;
-        command.creation_flags(0x08000000);
-    }
     Ok(command.spawn()?)
 }
 
@@ -1715,27 +1802,16 @@ fn is_recording_output_ready(path: &Path, output_quality: OutputQuality) -> bool
         return true;
     }
 
-    let mut command = Command::new("ffprobe");
-    command
-        .args([
-            "-hide_banner",
-            "-v",
-            "error",
-            "-show_format",
-            "-show_streams",
-        ])
-        .arg(path)
-        .stdout(Stdio::null())
-        .stderr(Stdio::null());
-    #[cfg(target_os = "windows")]
-    {
-        use std::os::windows::process::CommandExt;
-        command.creation_flags(0x08000000);
-    }
-    command
-        .status()
-        .map(|status| status.success())
-        .unwrap_or(false)
+    ffmpeg::run_ffprobe([
+        OsStr::new("-hide_banner"),
+        OsStr::new("-v"),
+        OsStr::new("error"),
+        OsStr::new("-show_format"),
+        OsStr::new("-show_streams"),
+        path.as_os_str(),
+    ])
+    .map(|output| output.status.success())
+    .unwrap_or(false)
 }
 
 fn recording_asset_ready(path: &Path) -> bool {
@@ -1763,17 +1839,7 @@ fn generate_review_proxy(
 }
 
 fn run_ffmpeg_vec(args: Vec<String>) -> anyhow::Result<FfmpegCommandOutput> {
-    let mut command = Command::new("ffmpeg");
-    command
-        .args(args)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    #[cfg(target_os = "windows")]
-    {
-        use std::os::windows::process::CommandExt;
-        command.creation_flags(0x08000000);
-    }
-    let output = command.output()?;
+    let output = ffmpeg::run_ffmpeg(args)?;
     Ok(FfmpegCommandOutput {
         success: output.status.success(),
         stdout: String::from_utf8_lossy(&output.stdout).to_string(),

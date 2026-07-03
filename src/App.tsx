@@ -3,6 +3,7 @@ import { useTheme } from "./hooks/useTheme";
 import { useGlobalHotkeys } from "./hooks/useGlobalHotkeys";
 import { useDiagnostics } from "./hooks/useDiagnostics";
 import { getCurrentDeepLinkUrl, useDeepLink } from "./hooks/useDeepLink";
+import { warmFfmpegStatus } from "./hooks/useFfmpegStatus";
 import { StatusBar } from "./components/StatusBar";
 import { AppLayout } from "./components/AppLayout";
 import { ToastContainer } from "./components/ToastContainer";
@@ -48,6 +49,7 @@ function App() {
       }
     }
     openStartupProject();
+    warmFfmpegStatus();
     // Silent update check on startup
     useUpdateStore.getState().checkForUpdate();
     return () => {
