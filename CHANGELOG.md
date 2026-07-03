@@ -15,7 +15,6 @@ Release Please manages this changelog. Do not edit manually.
 
 ### Bug Fixes
 
-* harden project switching state transitions ([34d40c9](https://github.com/sethjuarez/cutready/commit/34d40c9a670936062e3c7489b2b1b19da8be5e03))
 * harden project switching state transitions ([aa9f463](https://github.com/sethjuarez/cutready/commit/aa9f463c9dc8ef216b2546eac762658c66b0ca62))
 * **recording:** resolve FFmpeg tool discovery ([3dca7d6](https://github.com/sethjuarez/cutready/commit/3dca7d6c3da96e9851531d56ca3b10e36839e07c))
 * **versioning:** expose Draftline compaction candidates ([dfb123e](https://github.com/sethjuarez/cutready/commit/dfb123ee7ad1759a0b4a3ac897580737699d84b1))
