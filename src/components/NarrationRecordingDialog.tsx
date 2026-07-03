@@ -591,14 +591,12 @@ export function NarrationRecordingDialog({
         </div>
 
         <div className="grid h-[calc(100%-73px)] min-h-0 gap-5 p-5 lg:grid-cols-[minmax(280px,0.68fr)_minmax(520px,1.32fr)]">
-          <section className="flex min-h-0 flex-col gap-4 rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]/45 p-5">
-            <div className="min-h-0">
-              <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-[rgb(var(--color-text-secondary))]">
-                Read this
-              </div>
-              <div className="narration-read-scroll max-h-[calc(100%-28px)] overflow-y-auto text-[1.65rem] font-medium leading-snug text-[rgb(var(--color-text))] [scrollbar-gutter:stable]">
-                {sourceText || "No narrative text for this row yet."}
-              </div>
+          <section className="flex min-h-0 flex-col rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]/45 p-5">
+            <div className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.2em] text-[rgb(var(--color-text-secondary))]">
+              Read this
+            </div>
+            <div className="narration-read-scroll mt-3 min-h-0 flex-1 overflow-y-auto pr-1 text-[1.65rem] font-medium leading-snug text-[rgb(var(--color-text))]">
+              {sourceText || "No narrative text for this row yet."}
             </div>
           </section>
 
