@@ -405,6 +405,17 @@ pub async fn get_full_history(
 }
 
 #[auditaur_command(skip_all)]
+pub async fn get_history_compaction_candidates(
+    request: contract::HistoryCompactionCandidatesCommandRequest,
+    app: AppHandle,
+) -> contract::TauriCommandResult<draftline::HistoryCompactionCandidates> {
+    let context = context_for_workspace(&request.workspace_path, app)?;
+    contract::into_tauri_result(contract::get_history_compaction_candidates_with_context(
+        &context, request,
+    ))
+}
+
+#[auditaur_command(skip_all)]
 pub async fn preview_history_cleanup(
     request: contract::PreviewHistoryCleanupRequest,
     app: AppHandle,
