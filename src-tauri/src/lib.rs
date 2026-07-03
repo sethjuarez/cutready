@@ -421,6 +421,7 @@ pub fn run() {
             commands::draftline::get_changes,
             commands::draftline::get_history,
             commands::draftline::get_full_history,
+            commands::draftline::get_history_compaction_candidates,
             commands::draftline::preview_history_cleanup,
             commands::draftline::apply_history_cleanup,
             commands::draftline::preflight_history_cleanup_remote_impact,
