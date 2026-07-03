@@ -942,6 +942,33 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
       };
     case "create_github_issue":
       return { url: "https://github.com/sethjuarez/cutready/issues/999", diagnostics_comments_posted: 0, diagnostics_comment_error: null };
+    case "github_auth_status":
+      return {
+        clientConfigured: true,
+        connected: false,
+        account: null,
+        credentialSource: null,
+        ghCli: { installed: false, authenticated: false, path: null },
+      };
+    case "github_device_code_start":
+      return {
+        deviceCode: "mock-device-code",
+        userCode: "ABCD-1234",
+        verificationUri: "https://github.com/login/device",
+        expiresIn: 900,
+        interval: 1,
+      };
+    case "github_device_code_poll":
+      return {
+        account: {
+          login: "demo-user",
+          name: "Demo User",
+          avatarUrl: null,
+          htmlUrl: "https://github.com/demo-user",
+        },
+      };
+    case "github_sign_out":
+      return null;
     case "list_monitors":
       return [{
         id: 0,

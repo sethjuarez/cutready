@@ -10,6 +10,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:e2e": "node scripts/auditaur-drill.mjs",
+    "test:e2e:github": "node scripts/auditaur-github-drill.mjs",
+    "test:e2e:github:manual": "node scripts/auditaur-github-human-drill.mjs",
     "test:watch": "vitest",
     "tauri": "tauri",
     "visual:score": "node scripts/visual-eval/score-visuals.mjs",

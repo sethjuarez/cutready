@@ -168,6 +168,7 @@ export async function listDraftlineGraphNodes(): Promise<GraphNode[]> {
   return graph.nodes.map((node) => {
     const refs = refsByVersion.get(node.version.id) ?? [];
     const timeline = graphNodeTimeline(node, refs, graph.current_variation ?? variations[0]?.variation.id ?? "main");
+    const remoteLabels = remoteRefLabels(refs);
     return {
       id: node.version.id,
       message: node.version.label,
@@ -177,7 +178,8 @@ export async function listDraftlineGraphNodes(): Promise<GraphNode[]> {
       lane: laneByVariation.get(timeline) ?? node.layout.lane,
       is_head: node.is_current || node.is_head,
       is_branch_tip: node.is_tip || refs.some((ref) => ref.kind === "local_variation" && ref.is_user_facing),
-      is_remote_tip: refs.some((ref) => ref.kind === "remote_variation"),
+      is_remote_tip: remoteLabels.length > 0,
+      remote_labels: remoteLabels,
       author: node.version.author.name,
     };
   });
@@ -615,6 +617,23 @@ function refsByTargetVersion(refs: WorkspaceGraphRef[]): Map<string, WorkspaceGr
 function graphNodeTimeline(node: WorkspaceGraphNode, refs: WorkspaceGraphRef[], fallback: string): string {
   const localRef = refs.find((ref) => ref.kind === "local_variation" && ref.variation);
   return localRef?.variation ?? node.variation_tips[0] ?? fallback;
+}
+
+function remoteRefLabels(refs: WorkspaceGraphRef[]): string[] {
+  const labels = new Set<string>();
+  for (const ref of refs) {
+    if (ref.kind !== "remote_variation") continue;
+    labels.add(remoteRefLabel(ref));
+  }
+  return [...labels].sort((a, b) => a.localeCompare(b));
+}
+
+function remoteRefLabel(ref: WorkspaceGraphRef): string {
+  const label = ref.display_label || ref.name || ref.id;
+  return label
+    .replace(/^refs\/remotes\//, "")
+    .replace(/^refs\/heads\//, "")
+    .replace(/^remotes\//, "");
 }
 
 function versionToEntry(version: Version): VersionEntry {

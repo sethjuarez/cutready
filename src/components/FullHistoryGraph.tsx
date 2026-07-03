@@ -23,6 +23,14 @@ function laneColor(index: number) {
   return LANE_COLORS[index % LANE_COLORS.length];
 }
 
+function remoteBadges(node: GraphNode): string[] {
+  return node.remote_labels?.length ? node.remote_labels : node.is_remote_tip ? ["remote"] : [];
+}
+
+function remoteBadgeWidth(label: string) {
+  return Math.max(48, label.length * 6 + 14);
+}
+
 interface FullHistoryGraphProps {
   nodes: GraphNode[];
   timelineMap: Map<string, TimelineMeta>;
@@ -74,8 +82,15 @@ export function FullHistoryGraph({
   const currentTransformRef = useRef<ZoomTransform>(zoomIdentity);
   const [transform, setTransform] = useState<ZoomTransform>(zoomIdentity);
 
-  const layout = useMemo(() => buildLayout(nodes, timelineMap), [nodes, timelineMap]);
-  const width = Math.max(900, LEFT_PAD + Math.max(1, layout.laneCount) * LANE_W + LABEL_W);
+  const remoteLabelPad = useMemo(() => {
+    if (!showRemoteBadges) return LEFT_PAD;
+    const widest = nodes
+      .flatMap(remoteBadges)
+      .reduce((max, label) => Math.max(max, remoteBadgeWidth(label)), 0);
+    return Math.max(LEFT_PAD, widest + 24);
+  }, [nodes, showRemoteBadges]);
+  const layout = useMemo(() => buildLayout(nodes, timelineMap, remoteLabelPad), [nodes, timelineMap, remoteLabelPad]);
+  const width = Math.max(900, remoteLabelPad + Math.max(1, layout.laneCount) * LANE_W + LABEL_W);
   const height = Math.max(360, TOP_PAD * 2 + Math.max(1, layout.nodes.length) * ROW_H);
 
   useEffect(() => {
@@ -126,7 +141,7 @@ export function FullHistoryGraph({
         </filter>
       </defs>
       <g transform={transform.toString()}>
-        <GraphGrid height={height} lanes={layout.laneCount} />
+        <GraphGrid height={height} lanes={layout.laneCount} leftPad={remoteLabelPad} />
         <g>
           {layout.edges.map((edge) => (
             <path
@@ -170,6 +185,9 @@ export function FullHistoryGraph({
                   onNodeClick(node.id, node.is_head);
                 }}
               >
+                {node.parents.length > 1 && (
+                  <title>{`Merge snapshot with ${node.parents.length} parent snapshots`}</title>
+                )}
                 <line
                   x1={item.x}
                   x2={item.x + 26}
@@ -242,12 +260,27 @@ export function FullHistoryGraph({
                   strokeWidth={selected ? 3.2 : 2.2}
                   filter={node.is_head ? "url(#history-node-shadow)" : undefined}
                 />
-                {showRemoteBadges && node.is_remote_tip && (
-                  <g transform={`translate(${item.x - 74} -10)`}>
-                    <rect width={48} height={20} rx={10} fill="#10b981" fillOpacity={0.13} />
-                    <text x={24} y={13.5} textAnchor="middle" fontSize={9} fontWeight={700} fill="#10b981">remote</text>
-                  </g>
-                )}
+                {showRemoteBadges && remoteBadges(node).length > 0 && (() => {
+                  const labels = remoteBadges(node);
+                  const visibleLabels = labels.slice(0, 3);
+                  const overflowCount = labels.length - visibleLabels.length;
+                  const top = -((visibleLabels.length - 1) * 11 + 10);
+                  const badgeLeft = item.x - Math.max(...visibleLabels.map(remoteBadgeWidth)) - 10;
+                  return (
+                    <g transform={`translate(${badgeLeft} ${top})`}>
+                      {visibleLabels.map((label, index) => (
+                        <g key={label} transform={`translate(0 ${index * 22})`}>
+                          <RemoteSvgBadge label={label} />
+                        </g>
+                      ))}
+                      {overflowCount > 0 && (
+                        <text x={74} y={visibleLabels.length * 22 - 8.5} textAnchor="middle" fontSize={9} fontWeight={700} fill="#10b981">
+                          +{overflowCount}
+                        </text>
+                      )}
+                    </g>
+                  );
+                })()}
                 <g transform={`translate(${item.x + 28} -20)`}>
                   <text
                     x={0}
@@ -261,7 +294,7 @@ export function FullHistoryGraph({
                   <text x={0} y={31} fontSize={10.5} fill="rgb(var(--color-text-secondary))">
                     {formatDate(node.timestamp)} - {node.id.slice(0, 7)}
                     {node.author ? ` - ${node.author}` : ""}
-                    {node.parents.length > 1 ? ` - ${node.parents.length} parents` : ""}
+                    {node.parents.length > 1 ? " - merge" : ""}
                   </text>
                   <g transform="translate(0 38)">
                     {node.is_head && <SvgBadge x={0} label="HEAD" tone="accent" />}
@@ -293,7 +326,7 @@ export function FullHistoryGraph({
   );
 }
 
-function buildLayout(nodes: GraphNode[], timelineMap: Map<string, TimelineMeta>) {
+function buildLayout(nodes: GraphNode[], timelineMap: Map<string, TimelineMeta>, leftPad: number) {
   const seen = new Set<string>();
   const primary: GraphNode[] = [];
   const aliases = new Map<string, { timeline: string; label: string }[]>();
@@ -320,7 +353,7 @@ function buildLayout(nodes: GraphNode[], timelineMap: Map<string, TimelineMeta>)
     const item: LayoutNode = {
       node,
       lane,
-      x: LEFT_PAD + lane * LANE_W,
+      x: leftPad + lane * LANE_W,
       y: TOP_PAD + index * ROW_H,
       color: laneColor(timelineInfo?.colorIndex ?? lane),
       timelineLabel: timelineInfo?.label ?? node.timeline,
@@ -352,11 +385,11 @@ function edgePath(from: LayoutNode, to: LayoutNode) {
   return `M ${from.x} ${from.y + 8} C ${from.x} ${midY}, ${to.x} ${midY}, ${to.x} ${to.y - 8}`;
 }
 
-function GraphGrid({ height, lanes }: { height: number; lanes: number }) {
+function GraphGrid({ height, lanes, leftPad }: { height: number; lanes: number; leftPad: number }) {
   return (
     <g opacity={0.42}>
       {Array.from({ length: lanes }).map((_, index) => {
-        const x = LEFT_PAD + index * LANE_W;
+        const x = leftPad + index * LANE_W;
         return (
           <line
             key={index}
@@ -397,6 +430,18 @@ function SvgBadge({
       <rect width={width} height={18} rx={9} fill={fill} fillOpacity={tone === "neutral" ? 1 : 0.13} />
       <text x={width / 2} y={12.5} textAnchor="middle" fontSize={9.5} fontWeight={650} fill={textFill}>
         {displayLabel}
+      </text>
+    </g>
+  );
+}
+
+function RemoteSvgBadge({ label }: { label: string }) {
+  const width = remoteBadgeWidth(label);
+  return (
+    <g>
+      <rect width={width} height={20} rx={10} fill="#10b981" fillOpacity={0.13} />
+      <text x={width / 2} y={13.5} textAnchor="middle" fontSize={9} fontWeight={700} fill="#10b981">
+        {label}
       </text>
     </g>
   );

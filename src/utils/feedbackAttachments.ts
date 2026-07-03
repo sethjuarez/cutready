@@ -87,7 +87,7 @@ export function formatFeedbackAttachmentsMarkdown(attachments?: FeedbackAttachme
   return [
     "",
     "## Screenshots",
-    "GitHub CLI issue creation cannot upload local image files from this flow, so CutReady preserved sanitized local copies for manual upload.",
+    "CutReady cannot upload local image files from this flow, so sanitized local copies were preserved for manual upload.",
     ...attachments.map((attachment) =>
       `- ${attachment.file_name} (${attachment.content_type}, ${formatFeedbackAttachmentSize(attachment.size_bytes)}) stored as \`${attachment.stored_path}\``,
     ),

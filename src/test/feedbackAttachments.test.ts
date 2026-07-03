@@ -43,7 +43,7 @@ describe("feedback screenshot attachments", () => {
       sha256: "abc123",
     }]);
 
-    expect(body).toContain("GitHub CLI issue creation cannot upload local image files");
+    expect(body).toContain("CutReady cannot upload local image files from this flow");
     expect(body).toContain("feedback-attachments/attachment-id/screen.png");
     expect(body).not.toContain("C:\\");
     expect(body).not.toContain("/Users/");

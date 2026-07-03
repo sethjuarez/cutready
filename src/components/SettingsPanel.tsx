@@ -13,6 +13,7 @@ import { useUpdateStore } from "../stores/updateStore";
 import { ReleaseNotesMarkdown } from "./UpdateAvailableButton";
 import { Dialog } from "./Dialog";
 import { useConfirmDialog } from "./ConfirmDialog";
+import { GitHubConnectionCard } from "./GitHubConnectionCard";
 import { agentChat } from "../services/agentChat";
 import { addDraftlineRemote, listDraftlineRemotes } from "../services/draftlineVersioning";
 import {
@@ -86,8 +87,16 @@ export function SettingsPanel({ onClose }: { onClose?: () => void }) {
   const { settings, updateSetting, loaded } = useSettings();
   const currentProject = useAppStore((s) => s.currentProject);
   const setView = useAppStore((s) => s.setView);
-  const [scope, setScope] = useState<"app" | "workspace">("app");
-  const [activeTab, setActiveTab] = useState<SettingsTab>("display");
+  const [scope, setScope] = useState<"app" | "workspace">(
+    import.meta.env.DEV && import.meta.env.VITE_CUTREADY_STARTUP_SETTINGS_TAB === "repository"
+      ? "workspace"
+      : "app",
+  );
+  const [activeTab, setActiveTab] = useState<SettingsTab>(
+    import.meta.env.DEV && import.meta.env.VITE_CUTREADY_STARTUP_SETTINGS_TAB === "repository"
+      ? "repository"
+      : "display",
+  );
   const [settingsFilter, setSettingsFilter] = useState("");
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [loadingModels, setLoadingModels] = useState(false);
@@ -2295,8 +2304,8 @@ function FeedbackListTab() {
         setIssueReviewBody("");
         return;
       }
-    } catch (ghErr) {
-      console.warn("[feedback] gh issue create failed, falling back to browser:", ghErr);
+    } catch (issueErr) {
+      console.warn("[feedback] GitHub issue create failed, falling back to browser:", issueErr);
     } finally {
       setIssueSubmitting(false);
     }
@@ -2736,7 +2745,8 @@ function RepositoryTab({ settings, updateSetting }: {
   };
 
   const authOptions = [
-    { value: "gh_cli", label: "GitHub CLI (gh)", desc: "Uses your existing GitHub CLI login. Recommended." },
+    { value: "github", label: "GitHub account", desc: "Uses CutReady's built-in GitHub connection. Recommended." },
+    { value: "gh_cli", label: "GitHub CLI (gh)", desc: "Uses your existing GitHub CLI login as a fallback." },
     { value: "pat", label: "Personal Access Token", desc: "Enter a GitHub PAT manually." },
     { value: "ssh", label: "SSH Key", desc: "Uses SSH keys from ~/.ssh/." },
   ];
@@ -2746,6 +2756,8 @@ function RepositoryTab({ settings, updateSetting }: {
       <p className="text-xs text-[rgb(var(--color-text-secondary))]">
         Connect to a GitHub remote to collaborate with others. Your snapshots and timelines sync as git commits and branches.
       </p>
+
+      <GitHubConnectionCard />
 
       {detectedRemote && !settings.repoRemoteUrl && (
         <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[rgb(var(--color-accent))]/10 border border-[rgb(var(--color-accent))]/20 text-xs text-[rgb(var(--color-accent))]">

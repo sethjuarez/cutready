@@ -112,6 +112,7 @@ export interface GraphNode {
   is_head: boolean;
   is_branch_tip?: boolean;
   is_remote_tip?: boolean;
+  remote_labels?: string[];
   /** Author name (for collaborator info). */
   author?: string;
 }
