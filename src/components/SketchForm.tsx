@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { invoke, listen } from "../services/tauri";
+import { convertFileSrc, invoke, listen } from "../services/tauri";
 import { open } from "@tauri-apps/plugin-dialog";
 import { SafeMarkdown } from "./SafeMarkdown";
-import { ChevronLeft, Sparkles, Monitor, Plus, X, Folder, Check, Film, Image as ImageIcon } from "lucide-react";
+import { ChevronLeft, Sparkles, Monitor, Plus, X, Folder, Check, Film, Image as ImageIcon, Mic2 } from "lucide-react";
 import { shouldSuppressEditorFlush, useAppStore } from "../stores/appStore";
 import { useToastStore } from "../stores/toastStore";
 import { useSettings } from "../hooks/useSettings";
@@ -14,6 +14,7 @@ import { SketchPreview } from "./SketchPreview";
 import { DocumentHeader } from "./DocumentHeader";
 import { FieldAiButton } from "./FieldAiButton";
 import { LockedDocumentBanner } from "./LockedDocumentBanner";
+import { NarrationRecordingDialog, type NarrationRecordingTake } from "./NarrationRecordingDialog";
 import { DurationBadge, MetadataEditor } from "./MetadataEditor";
 import type { PresentationMode } from "./presentation/types";
 import VisualCell from "./VisualCell";
@@ -36,8 +37,110 @@ interface MonitorInfo {
 }
 
 const PREVIEW_DATA_KEY = "cutready:preview-data";
+const REQUESTED_SETTINGS_TAB_KEY = "cutready:requested-settings-tab";
 
 type ProjectAsset = { path: string; size: number; assetType: string };
+type ProjectAudioAsset = { path: string; size: number; mimeType: string; modifiedAt: number };
+
+function projectAssetSrc(projectRoot: string | undefined | null, relativePath: string | null | undefined): string {
+  if (!projectRoot || !relativePath) return "";
+  const separator = projectRoot.includes("\\") ? "\\" : "/";
+  const root = projectRoot.replace(/[\\/]+$/, "");
+  const relative = relativePath.replace(/[\\/]+/g, separator);
+  return convertFileSrc(`${root}${separator}${relative}`);
+}
+
+async function sha256Hex(value: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+function alignToDevicePixel(value: number, dpr: number): number {
+  return Math.round(value * dpr) / dpr;
+}
+
+function prepareWaveformCanvas(canvas: HTMLCanvasElement) {
+  const context = canvas.getContext("2d");
+  if (!context) return null;
+
+  const rect = canvas.getBoundingClientRect();
+  const width = Math.max(1, rect.width);
+  const height = Math.max(1, rect.height);
+  const dpr = Math.max(1, window.devicePixelRatio || 1);
+  const backingWidth = Math.round(width * dpr);
+  const backingHeight = Math.round(height * dpr);
+
+  if (canvas.width !== backingWidth) canvas.width = backingWidth;
+  if (canvas.height !== backingHeight) canvas.height = backingHeight;
+  context.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  return { context, width, height, dpr };
+}
+
+function drawEmptyWaveform(canvas: HTMLCanvasElement) {
+  const metrics = prepareWaveformCanvas(canvas);
+  if (!metrics) return;
+
+  const { context, width, height, dpr } = metrics;
+  const styles = getComputedStyle(document.documentElement);
+  const border = `rgb(${styles.getPropertyValue("--color-border").trim()})`;
+  const surface = `rgb(${styles.getPropertyValue("--color-surface-alt").trim()})`;
+  const midline = alignToDevicePixel(height / 2, dpr);
+
+  context.clearRect(0, 0, width, height);
+  context.fillStyle = surface;
+  context.fillRect(0, 0, width, height);
+  context.strokeStyle = border;
+  context.lineWidth = 1 / dpr;
+  context.beginPath();
+  context.moveTo(0, midline);
+  context.lineTo(width, midline);
+  context.stroke();
+}
+
+function drawDecodedWaveform(canvas: HTMLCanvasElement, audioBuffer: AudioBuffer) {
+  const metrics = prepareWaveformCanvas(canvas);
+  if (!metrics) return;
+
+  const { context, width, height, dpr } = metrics;
+  const styles = getComputedStyle(document.documentElement);
+  const accent = `rgb(${styles.getPropertyValue("--color-accent").trim()})`;
+  const border = `rgb(${styles.getPropertyValue("--color-border").trim()})`;
+  const surface = `rgb(${styles.getPropertyValue("--color-surface-alt").trim()})`;
+  const samples = audioBuffer.getChannelData(0);
+  const pixels = Math.max(1, Math.floor(width));
+  const samplesPerPixel = Math.max(1, Math.floor(samples.length / pixels));
+  const midline = alignToDevicePixel(height / 2, dpr);
+
+  context.clearRect(0, 0, width, height);
+  context.fillStyle = surface;
+  context.fillRect(0, 0, width, height);
+  context.strokeStyle = border;
+  context.lineWidth = 1 / dpr;
+  context.beginPath();
+  context.moveTo(0, midline);
+  context.lineTo(width, midline);
+  context.stroke();
+
+  context.strokeStyle = accent;
+  context.lineWidth = 1.5;
+  context.beginPath();
+  for (let x = 0; x < pixels; x += 1) {
+    const start = x * samplesPerPixel;
+    let min = 1;
+    let max = -1;
+    for (let i = 0; i < samplesPerPixel && start + i < samples.length; i += 1) {
+      const sample = samples[start + i];
+      min = Math.min(min, sample);
+      max = Math.max(max, sample);
+    }
+    context.moveTo(x, ((1 - max) * height) / 2);
+    context.lineTo(x, ((1 - min) * height) / 2);
+  }
+  context.stroke();
+}
 
 interface SketchRowAssetPickerProps {
   assets: ProjectAsset[];
@@ -67,6 +170,7 @@ export function SketchRowAssetPicker({
         event.preventDefault();
         onInsert(selectedAsset);
       }
+
     };
 
     window.addEventListener("keydown", handleKeyDown);
@@ -241,6 +345,247 @@ export function SketchRowAssetPicker({
   );
 }
 
+interface SketchRowNarrationPickerProps {
+  assets: ProjectAudioAsset[];
+  projectRoot: string | null;
+  selectedPath: string | null;
+  onSelectedPathChange: (path: string) => void;
+  onInsert: (asset: ProjectAudioAsset) => void;
+  onCancel: () => void;
+}
+
+function SketchRowNarrationPicker({
+  assets,
+  projectRoot,
+  selectedPath,
+  onSelectedPathChange,
+  onInsert,
+  onCancel,
+}: SketchRowNarrationPickerProps) {
+  const selectedAsset = assets.find((asset) => asset.path === selectedPath) ?? assets[0] ?? null;
+  const selectedSrc = projectAssetSrc(projectRoot, selectedAsset?.path);
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const waveformFrameRef = useRef<HTMLDivElement>(null);
+  const waveformCanvasRef = useRef<HTMLCanvasElement>(null);
+  const [playbackCurrentTime, setPlaybackCurrentTime] = useState(0);
+  const [playbackDuration, setPlaybackDuration] = useState(0);
+  const [waveformWidth, setWaveformWidth] = useState(0);
+  const [waveformLayoutVersion, setWaveformLayoutVersion] = useState(0);
+  const playheadLeft = playbackDuration > 0 && waveformWidth > 0
+    ? alignToDevicePixel(
+        Math.min(waveformWidth, Math.max(0, (playbackCurrentTime / playbackDuration) * waveformWidth)),
+        Math.max(1, window.devicePixelRatio || 1),
+      )
+    : 0;
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onCancel();
+      if ((event.metaKey || event.ctrlKey) && event.key === "Enter" && selectedAsset) {
+        event.preventDefault();
+        onInsert(selectedAsset);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onCancel, onInsert, selectedAsset]);
+
+  useEffect(() => {
+    setPlaybackCurrentTime(0);
+    setPlaybackDuration(0);
+  }, [selectedSrc]);
+
+  useEffect(() => {
+    const canvas = waveformCanvasRef.current;
+    if (!canvas) return;
+    if (!selectedSrc) {
+      drawEmptyWaveform(canvas);
+      return;
+    }
+
+    let cancelled = false;
+    const context = new AudioContext();
+    fetch(selectedSrc)
+      .then((response) => response.arrayBuffer())
+      .then((data) => context.decodeAudioData(data))
+      .then((buffer) => {
+        if (!cancelled) drawDecodedWaveform(canvas, buffer);
+      })
+      .catch((error: unknown) => {
+        console.warn("[SketchRowNarrationPicker] failed to render waveform", { error });
+        if (!cancelled) drawEmptyWaveform(canvas);
+      })
+      .finally(() => {
+        void context.close();
+      });
+
+    return () => {
+      cancelled = true;
+      void context.close();
+    };
+  }, [selectedSrc, waveformLayoutVersion]);
+
+  useEffect(() => {
+    const frame = waveformFrameRef.current;
+    if (!frame) return;
+
+    const updateWaveformMetrics = () => {
+      setWaveformWidth(frame.getBoundingClientRect().width);
+      setWaveformLayoutVersion((version) => version + 1);
+    };
+
+    updateWaveformMetrics();
+    const observer = new ResizeObserver(updateWaveformMetrics);
+    observer.observe(frame);
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <div
+      className="fixed inset-0 z-modal flex items-center justify-center bg-[rgb(var(--color-overlay-scrim)/0.55)] p-4"
+      onClick={onCancel}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="sketch-row-narration-picker-title"
+        className="flex max-h-[calc(100vh-32px)] w-full max-w-3xl flex-col overflow-hidden rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] shadow-2xl"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-4 border-b border-[rgb(var(--color-border))] px-5 py-4">
+          <div>
+            <h2 id="sketch-row-narration-picker-title" className="text-sm font-semibold text-[rgb(var(--color-text))]">
+              Pick narration audio
+            </h2>
+            <p className="mt-1 text-xs text-[rgb(var(--color-text-secondary))]">
+              Choose an existing workspace audio cut to attach to this row.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onCancel}
+            className="rounded-lg p-1.5 text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
+            aria-label="Cancel"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[minmax(0,1fr)_300px]">
+          <section className="min-h-0 border-b border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]/45 p-4 lg:border-b-0 lg:border-r">
+            {selectedAsset ? (
+              <div className="flex h-full min-h-[260px] flex-col justify-center gap-4 rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] p-5">
+                <div className="min-w-0">
+                  <div className="text-xs font-medium text-[rgb(var(--color-text-secondary))]">Previewing selected cut</div>
+                  <div className="mt-1 truncate text-sm font-medium text-[rgb(var(--color-text))]">{selectedAsset.path}</div>
+                </div>
+                <div
+                  ref={waveformFrameRef}
+                  className="relative h-28 overflow-hidden rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]/55"
+                >
+                  <canvas
+                    ref={waveformCanvasRef}
+                    className="block h-full w-full"
+                    aria-label="Selected narration waveform"
+                  />
+                  {playbackDuration > 0 && (
+                    <span
+                      className="pointer-events-none absolute bottom-0 top-0 z-10 w-px bg-[rgb(var(--color-accent))] shadow-[0_0_0_1px_rgb(var(--color-accent)/0.22),0_0_14px_rgb(var(--color-accent)/0.35)]"
+                      style={{ left: `${playheadLeft}px` }}
+                      aria-hidden="true"
+                    />
+                  )}
+                </div>
+                <audio
+                  ref={audioRef}
+                  controls
+                  src={selectedSrc}
+                  className="w-full"
+                  onLoadedMetadata={(event) => {
+                    const duration = event.currentTarget.duration;
+                    setPlaybackDuration(Number.isFinite(duration) ? duration : 0);
+                    setPlaybackCurrentTime(event.currentTarget.currentTime || 0);
+                  }}
+                  onTimeUpdate={(event) => setPlaybackCurrentTime(event.currentTarget.currentTime || 0)}
+                  onSeeked={(event) => setPlaybackCurrentTime(event.currentTarget.currentTime || 0)}
+                  onEnded={(event) => setPlaybackCurrentTime(event.currentTarget.duration || 0)}
+                />
+              </div>
+            ) : (
+              <div className="flex h-full min-h-[260px] items-center justify-center rounded-xl border border-dashed border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] p-8 text-center">
+                <div>
+                  <Mic2 className="mx-auto h-8 w-8 text-[rgb(var(--color-text-secondary))]" />
+                  <div className="mt-3 text-sm font-medium text-[rgb(var(--color-text))]">No narration cuts in workspace</div>
+                  <div className="mt-1 text-xs text-[rgb(var(--color-text-secondary))]">
+                    Record a narration take first, then reuse it from here.
+                  </div>
+                </div>
+              </div>
+            )}
+          </section>
+
+          <aside className="flex min-h-0 flex-col">
+            <div className="border-b border-[rgb(var(--color-border))] px-4 py-3">
+              <div className="text-xs font-medium text-[rgb(var(--color-text))]">Workspace cuts</div>
+              <div className="text-[11px] text-[rgb(var(--color-text-secondary))]">{assets.length} available</div>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto p-3">
+              {assets.length > 0 ? (
+                <div className="space-y-2">
+                  {assets.map((asset) => {
+                    const isSelected = asset.path === selectedAsset?.path;
+                    const assetName = asset.path.split("/").pop() ?? asset.path;
+                    return (
+                      <button
+                        type="button"
+                        key={asset.path}
+                        onClick={() => onSelectedPathChange(asset.path)}
+                        onDoubleClick={() => onInsert(asset)}
+                        className={`flex w-full items-center gap-2 rounded-xl border px-3 py-2 text-left transition-colors ${
+                          isSelected
+                            ? "border-[rgb(var(--color-accent))] bg-[rgb(var(--color-accent))]/10"
+                            : "border-[rgb(var(--color-border))] hover:border-[rgb(var(--color-accent))]/70 hover:bg-[rgb(var(--color-surface-alt))]"
+                        }`}
+                      >
+                        <Mic2 className="h-3.5 w-3.5 shrink-0 text-[rgb(var(--color-accent))]" />
+                        <span className="min-w-0 flex-1 truncate text-[11px] text-[rgb(var(--color-text))]">{assetName}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="rounded-xl border border-dashed border-[rgb(var(--color-border))] p-4 text-center text-xs text-[rgb(var(--color-text-secondary))]">
+                  No workspace cuts yet.
+                </div>
+              )}
+            </div>
+          </aside>
+        </div>
+
+        <div className="flex items-center justify-end gap-2 border-t border-[rgb(var(--color-border))] px-4 py-3">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="rounded-lg border border-[rgb(var(--color-border))] px-3 py-2 text-xs font-medium text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={() => selectedAsset && onInsert(selectedAsset)}
+            disabled={!selectedAsset}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-[rgb(var(--color-accent))] px-3 py-2 text-xs font-medium text-[rgb(var(--color-accent-fg))] transition-colors hover:bg-[rgb(var(--color-accent-hover))] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Check className="h-3.5 w-3.5" />
+            Insert
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /**
  * SketchForm — structured editor for a single sketch.
  * Title input + description textarea + planning table.
@@ -265,6 +610,9 @@ export function SketchForm() {
   const [aiUpdatedFlash, setAiUpdatedFlash] = useState(false);
   const [highlightedRows, setHighlightedRows] = useState<Set<number>>(new Set());
   const [rowDiffs, setRowDiffs] = useState<RowDiff[]>([]);
+  const [narrationRecordingRow, setNarrationRecordingRow] = useState<number | null>(null);
+  const [narrationSavingRows, setNarrationSavingRows] = useState<Set<number>>(new Set());
+  const [showNarrationSetupPrompt, setShowNarrationSetupPrompt] = useState(false);
   // Last AI diffs are preserved so the user can re-show them after auto-fade
   const lastAiDiffs = useRef<{ rows: Set<number>; diffs: RowDiff[] } | null>(null);
   // Snapshot of rows before an AI edit lands — used for diff computation
@@ -283,6 +631,8 @@ export function SketchForm() {
   }, [editingDesc]);
   const titleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const rowsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [narrationDialogRow, setNarrationDialogRow] = useState<number | null>(null);
+  const [returnToNarrationAfterCapture, setReturnToNarrationAfterCapture] = useState<number | null>(null);
 
   const currentProject = useAppStore((s) => s.currentProject);
   const runBackgroundAgentAction = useBackgroundAgentAction();
@@ -577,19 +927,30 @@ The Actions describe what happens on screen — use them as visual design hints.
       const updated = [...localRows];
       updated[captureRowIdx] = { ...updated[captureRowIdx], screenshot: screenshotPath };
       handleRowsChange(updated);
+      if (returnToNarrationAfterCapture !== null) {
+        setNarrationDialogRow(returnToNarrationAfterCapture);
+        setReturnToNarrationAfterCapture(null);
+      }
       setCaptureRowIdx(null);
     },
-    [captureRowIdx, localRows, handleRowsChange],
+    [captureRowIdx, localRows, handleRowsChange, returnToNarrationAfterCapture],
   );
 
   const handleCaptureCancel = useCallback(() => {
+    if (returnToNarrationAfterCapture !== null) {
+      setNarrationDialogRow(returnToNarrationAfterCapture);
+      setReturnToNarrationAfterCapture(null);
+    }
     setCaptureRowIdx(null);
-  }, []);
+  }, [returnToNarrationAfterCapture]);
 
   // Image/visual picker state
   const [imagePickerRowIdx, setImagePickerRowIdx] = useState<number | null>(null);
   const [projectAssets, setProjectAssets] = useState<ProjectAsset[]>([]);
   const [selectedAssetPath, setSelectedAssetPath] = useState<string | null>(null);
+  const [narrationPickerRowIdx, setNarrationPickerRowIdx] = useState<number | null>(null);
+  const [projectAudioAssets, setProjectAudioAssets] = useState<ProjectAudioAsset[]>([]);
+  const [selectedNarrationPath, setSelectedNarrationPath] = useState<string | null>(null);
 
   const handlePickImage = useCallback(async (rowIndex: number) => {
     setImagePickerRowIdx(rowIndex);
@@ -633,6 +994,123 @@ The Actions describe what happens on screen — use them as visual design hints.
       console.error("Failed to import image:", err);
     }
   }, [localRows, handleRowsChange]);
+
+  const handlePickNarration = useCallback(async (rowIndex: number) => {
+    setNarrationPickerRowIdx(rowIndex);
+    try {
+      const assets = await invoke<ProjectAudioAsset[]>("list_project_narration_assets");
+      setProjectAudioAssets(assets);
+      setSelectedNarrationPath(assets[0]?.path ?? null);
+    } catch (err) {
+      console.error("Failed to list narration audio:", err);
+      setProjectAudioAssets([]);
+      setSelectedNarrationPath(null);
+    }
+  }, []);
+
+  const handleNarrationPicked = useCallback(async (asset: ProjectAudioAsset) => {
+    if (narrationPickerRowIdx === null) return;
+    const sourceText = localRows[narrationPickerRowIdx]?.narrative ?? "";
+    const updated = [...localRows];
+    updated[narrationPickerRowIdx] = {
+      ...updated[narrationPickerRowIdx],
+      narration: {
+        path: asset.path,
+        source_text: sourceText,
+        source_text_hash: await sha256Hex(sourceText),
+        mime_type: asset.mimeType,
+        duration_ms: null,
+        leading_silence_ms: null,
+        trailing_silence_ms: null,
+        silence_threshold_db: null,
+        byte_size: asset.size,
+        recorded_at: new Date().toISOString(),
+      },
+    };
+    handleRowsChange(updated);
+    setNarrationPickerRowIdx(null);
+    setSelectedNarrationPath(null);
+  }, [handleRowsChange, localRows, narrationPickerRowIdx]);
+
+  const preferredNarrationMimeType = useCallback(() => {
+    const candidates = [
+      "audio/webm;codecs=opus",
+      "audio/webm",
+      "audio/mp4",
+      "audio/ogg;codecs=opus",
+      "audio/ogg",
+    ];
+    return candidates.find((candidate) => MediaRecorder.isTypeSupported(candidate)) ?? "";
+  }, []);
+
+  const handleStopNarrationRecording = useCallback(() => {
+    setNarrationDialogRow(null);
+    setNarrationRecordingRow(null);
+  }, []);
+
+  const handleStartNarrationRecording = useCallback(async (rowIndex: number) => {
+    if (!activeSketchPath || sketchLocked || narrationDialogRow !== null) return;
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+      useToastStore.getState().show("Microphone recording is not available in this WebView.", 5000, "error");
+      return;
+    }
+
+    try {
+      await saveSketchEditsForPath(activeSketchPath, null, localRows, "narration recording");
+      setNarrationDialogRow(rowIndex);
+    } catch (err) {
+      console.error("[SketchForm] Failed to prepare narration recording:", err);
+      useToastStore.getState().show(`Could not prepare narration recording: ${err}`, 5000, "error");
+    }
+  }, [
+    activeSketchPath,
+    localRows,
+    narrationDialogRow,
+    saveSketchEditsForPath,
+    sketchLocked,
+  ]);
+
+  const handleSaveNarrationTake = useCallback(async (rowIndex: number, take: NarrationRecordingTake) => {
+    if (!activeSketchPath) return;
+    setNarrationSavingRows((rows) => new Set(rows).add(rowIndex));
+    try {
+      const sketch = await invoke<Sketch>("save_narration_recording", {
+        sketchPath: activeSketchPath,
+        rowIndex,
+        audioData: take.audioData,
+        mimeType: take.mimeType,
+        durationMs: take.durationMs,
+        sourceText: take.sourceText,
+        leadingSilenceMs: take.leadingSilenceMs,
+        trailingSilenceMs: take.trailingSilenceMs,
+        silenceThresholdDb: take.silenceThresholdDb,
+      });
+      useAppStore.setState({ activeSketch: sketch });
+      setLocalRows(sketch.rows ?? []);
+      const { loadSketches, loadNarrationAssets, refreshChangedFiles, checkDirty, addActivityEntries } = useAppStore.getState();
+      await loadSketches();
+      await loadNarrationAssets();
+      await checkDirty();
+      await refreshChangedFiles();
+      addActivityEntries([{
+        id: crypto.randomUUID(),
+        timestamp: new Date(),
+        source: "recording",
+        content: `Saved narration for row ${rowIndex + 1}`,
+        level: "success",
+      }]);
+      setNarrationDialogRow(null);
+    } catch (err) {
+      console.error("[SketchForm] Failed to save narration recording:", err);
+      useToastStore.getState().show(`Could not save narration: ${err}`, 5000, "error");
+    } finally {
+      setNarrationSavingRows((rows) => {
+        const next = new Set(rows);
+        next.delete(rowIndex);
+        return next;
+      });
+    }
+  }, [activeSketchPath]);
 
   /** Launch fullscreen preview on a specific monitor */
   const launchPreviewOnMonitor = useCallback(async (monitor: MonitorInfo | null, mode: PresentationMode = "slides") => {
@@ -972,6 +1450,11 @@ The row already has a visual and design_plan. You may read the sketch for contex
             sketchPath={activeSketchPath ?? undefined}
             onRowLockChange={handleRowLockChange}
             onCellLockChange={handleCellLockChange}
+            onStartNarrationRecording={handleStartNarrationRecording}
+            onPickNarration={handlePickNarration}
+            onStopNarrationRecording={handleStopNarrationRecording}
+            narrationRecordingRow={narrationRecordingRow}
+            narrationSavingRows={narrationSavingRows}
             highlightedRows={highlightedRows}
             rowDiffs={rowDiffs}
             aiSnapshotRows={aiSnapshotRef.current?.rows ?? null}
@@ -1035,6 +1518,89 @@ The row already has a visual and design_plan. You may read the sketch for contex
             await handleBrowseImage(rowIndex);
           }}
         />
+      )}
+
+      {narrationPickerRowIdx !== null && (
+        <SketchRowNarrationPicker
+          assets={projectAudioAssets}
+          projectRoot={projectRoot}
+          selectedPath={selectedNarrationPath}
+          onSelectedPathChange={setSelectedNarrationPath}
+          onInsert={(asset) => void handleNarrationPicked(asset)}
+          onCancel={() => {
+            setNarrationPickerRowIdx(null);
+            setSelectedNarrationPath(null);
+          }}
+        />
+      )}
+
+      {narrationDialogRow !== null && (
+        <NarrationRecordingDialog
+          rowNumber={narrationDialogRow + 1}
+          sourceText={localRows[narrationDialogRow]?.narrative ?? ""}
+          projectRoot={projectRoot}
+          screenshotPath={localRows[narrationDialogRow]?.screenshot}
+          existingNarrationPath={localRows[narrationDialogRow]?.narration?.path}
+          existingNarrationDurationMs={localRows[narrationDialogRow]?.narration?.duration_ms}
+          audio={settings.narrationMicDeviceId ? { deviceId: { exact: settings.narrationMicDeviceId } } : true}
+          mimeType={preferredNarrationMimeType()}
+          onAddScreenshot={() => {
+            setReturnToNarrationAfterCapture(narrationDialogRow);
+            setNarrationDialogRow(null);
+            setCaptureRowIdx(narrationDialogRow);
+          }}
+          onCancel={() => setNarrationDialogRow(null)}
+          onSave={(take) => handleSaveNarrationTake(narrationDialogRow, take)}
+        />
+      )}
+
+      {showNarrationSetupPrompt && (
+        <div
+          className="fixed inset-0 z-modal flex items-center justify-center bg-[rgb(var(--color-overlay-scrim)/0.45)] p-4"
+          onClick={() => setShowNarrationSetupPrompt(false)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="narration-setup-title"
+            className="w-full max-w-sm rounded-2xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] p-5 shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start gap-3">
+              <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))]">
+                <Mic2 className="h-4 w-4" />
+              </div>
+              <div className="min-w-0">
+                <h2 id="narration-setup-title" className="text-sm font-semibold text-[rgb(var(--color-text))]">
+                  Set up narration microphone
+                </h2>
+                <p className="mt-1 text-xs leading-relaxed text-[rgb(var(--color-text-secondary))]">
+                  Pick a microphone in Narration settings before recording row audio. This keeps narration capture predictable.
+                </p>
+              </div>
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowNarrationSetupPrompt(false)}
+                className="rounded-lg border border-[rgb(var(--color-border))] px-3 py-2 text-xs font-medium text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  localStorage.setItem(REQUESTED_SETTINGS_TAB_KEY, "narration");
+                  setShowNarrationSetupPrompt(false);
+                  useAppStore.getState().setView("settings");
+                }}
+                className="rounded-lg bg-[rgb(var(--color-accent))] px-3 py-2 text-xs font-medium text-[rgb(var(--color-accent-fg))] transition-colors hover:bg-[rgb(var(--color-accent-hover))]"
+              >
+                Open settings
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Visual generation instructions popup */}

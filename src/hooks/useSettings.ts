@@ -127,6 +127,8 @@ export interface GlobalSettings {
   recorderCaptureSource: "full_screen" | "region" | "window";
   /** Default microphone device id; empty means system default. */
   recorderMicDeviceId: string;
+  /** WebView microphone device id for row-level narration recording; empty means system default. */
+  narrationMicDeviceId: string;
   /** Software gain for microphone recording, 0-200 where 100 is unity. */
   recorderMicVolume: number;
   /** Last selected recorder monitor preference. */
@@ -216,6 +218,7 @@ const defaultGlobalSettings: GlobalSettings = {
   aiAgentProviderOverrides: {},
   recorderCaptureSource: "full_screen",
   recorderMicDeviceId: "",
+  narrationMicDeviceId: "",
   recorderMicVolume: 100,
   recorderMonitorPreference: "",
   recorderCountdownSeconds: 3,

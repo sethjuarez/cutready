@@ -1,12 +1,13 @@
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
-import { invoke } from "../services/tauri";
-import { RefreshCw, Pencil, Check, X } from "lucide-react";
+import { convertFileSrc, invoke } from "../services/tauri";
+import { AudioLines, Check, Clock, Pencil, RefreshCw, X } from "lucide-react";
 import { normalizeDocument } from "@elucim/dsl";
 import type { CutReadyElucimDocument } from "../types/elucim";
 import VisualCell, { type VisualControlHandle } from "./VisualCell";
-import type { AssetInfo } from "../stores/appStore";
+import type { AssetInfo, NarrationAssetInfo } from "../stores/appStore";
 import { useAppStore } from "../stores/appStore";
 import { ProjectImage } from "./ProjectImage";
+import { NarrationPlayback } from "./NarrationPlayback";
 
 const EditorWrapper = lazy(() => import("./EditorWrapper"));
 
@@ -18,16 +19,40 @@ interface AssetViewerProps {
 /** Tab content for viewing a project asset (image or visual). */
 export function AssetViewer({ assetPath }: AssetViewerProps) {
   const assets = useAppStore((s) => s.assets);
+  const narrationAssets = useAppStore((s) => s.narrationAssets);
+  const loadNarrationAssets = useAppStore((s) => s.loadNarrationAssets);
   const projectRoot = useAppStore((s) => s.currentProject?.root ?? null);
 
   const asset = assets.find((a) => a.path === assetPath);
+  const narrationAsset = narrationAssets.find((a) => a.path === assetPath);
   const assetType = asset?.assetType ?? (assetPath.endsWith(".json") ? "visual" : "screenshot");
+
+  useEffect(() => {
+    if (!narrationAsset && isNarrationPath(assetPath)) void loadNarrationAssets();
+  }, [assetPath, loadNarrationAssets, narrationAsset]);
+
+  if (narrationAsset || isNarrationPath(assetPath)) {
+    return <NarrationAssetViewer assetPath={assetPath} asset={narrationAsset} projectRoot={projectRoot} />;
+  }
 
   if (assetType === "visual") {
     return <VisualAssetViewer assetPath={assetPath} asset={asset} />;
   }
 
   return <ImageAssetViewer assetPath={assetPath} asset={asset} projectRoot={projectRoot} />;
+}
+
+function projectAssetSrc(projectRoot: string | undefined | null, relativePath: string): string {
+  if (!projectRoot || !relativePath) return "";
+  const separator = projectRoot.includes("\\") ? "\\" : "/";
+  const root = projectRoot.replace(/[\\/]+$/, "");
+  const relative = relativePath.replace(/[\\/]+/g, separator);
+  return convertFileSrc(`${root}${separator}${relative}`);
+}
+
+function isNarrationPath(path: string): boolean {
+  const lower = path.toLowerCase();
+  return lower.includes(".cutready/narration/") || /\.(webm|ogg|oga|wav|mp3|m4a|flac)$/i.test(path);
 }
 
 /** View-only image with zoom. */
@@ -48,7 +73,7 @@ function ImageAssetViewer({
       <MetadataBar filename={filename} asset={asset} />
 
       {/* Image viewer */}
-      <div className="flex-1 flex items-center justify-center overflow-auto p-4 bg-[rgb(var(--color-surface-inset))]">
+      <div className="flex-1 flex items-center justify-center overflow-auto p-4 bg-[rgb(var(--color-surface))]">
         <ProjectImage
           relativePath={assetPath}
           projectRoot={projectRoot}
@@ -86,6 +111,7 @@ function VisualAssetViewer({
       setEditorDirty(false);
       return;
     }
+
     invoke<Record<string, unknown>>("get_visual", { relativePath: assetPath })
       .then((data) => setEditorDsl(normalizeDocument(data).document))
       .catch(console.error);
@@ -210,6 +236,56 @@ function VisualAssetViewer({
   );
 }
 
+function NarrationAssetViewer({
+  assetPath,
+  asset,
+  projectRoot,
+}: {
+  assetPath: string;
+  asset?: NarrationAssetInfo;
+  projectRoot: string | null;
+}) {
+  const filename = assetPath.split("/").pop() ?? assetPath;
+  const src = projectAssetSrc(projectRoot, assetPath);
+
+  return (
+    <div className="flex h-full flex-col bg-[rgb(var(--color-surface))]">
+      <div className="flex shrink-0 items-center gap-3 border-b border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-4 py-2 text-[12px]">
+        <div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))]">
+          <AudioLines className="h-4 w-4" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="truncate font-medium text-[rgb(var(--color-text))]" title={assetPath}>{filename}</div>
+          <div className="mt-0.5 flex min-w-0 items-center gap-2 text-[11px] text-[rgb(var(--color-text-secondary))]">
+            {asset && <span>{formatBytes(asset.size)}</span>}
+            {asset && <span className="opacity-50">|</span>}
+            <span className="truncate">{asset?.mimeType ?? "Audio"}</span>
+            {asset?.modifiedAt ? (
+              <>
+                <span className="opacity-50">|</span>
+                <Clock className="h-3 w-3" />
+                <span>{formatModified(asset.modifiedAt)}</span>
+              </>
+            ) : null}
+          </div>
+        </div>
+      </div>
+
+      <div className="flex flex-1 items-center justify-center overflow-auto bg-[rgb(var(--color-surface))] p-8">
+        <div className="w-full max-w-3xl rounded-2xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] p-5 shadow-sm">
+          {src ? (
+            <NarrationPlayback src={src} waveformHeight="h-40" />
+          ) : (
+            <div className="rounded-lg border border-[rgb(var(--color-border))] px-3 py-2 text-[12px] text-[rgb(var(--color-text-secondary))]">
+              Audio preview is unavailable because no project is open.
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /** Shared metadata display. */
 function MetadataBar({
   filename,
@@ -254,4 +330,13 @@ function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function formatModified(ms: number): string {
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(ms));
 }

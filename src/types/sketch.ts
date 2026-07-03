@@ -8,6 +8,25 @@ export type SketchState =
   | "final";
 
 /** A row in the sketch planning table. */
+export interface NarrationAsset {
+  /** Project-relative path to recorded or generated narration audio. */
+  path: string;
+  /** Narrative text used when this audio was recorded/generated. */
+  source_text: string;
+  /** SHA-256 of the source text. */
+  source_text_hash: string;
+  mime_type: string;
+  duration_ms?: number | null;
+  /** Detected silence before speech begins, stored non-destructively for future trim/alignment. */
+  leading_silence_ms?: number | null;
+  /** Detected silence after speech ends, stored non-destructively for future trim/alignment. */
+  trailing_silence_ms?: number | null;
+  /** Decibel threshold used for leading/trailing silence detection. */
+  silence_threshold_db?: number | null;
+  byte_size: number;
+  recorded_at: string;
+}
+
 export interface PlanningRow {
   /** Whether the entire row is protected from edits. */
   locked?: boolean;
@@ -23,6 +42,8 @@ export interface PlanningRow {
   visual?: string | null;
   /** English-language design brief for the visual (created by Designer agent Pass 1). */
   design_plan?: string | null;
+  /** Recorded or generated narration audio attached to this row. */
+  narration?: NarrationAsset | null;
 }
 
 export type PlanningCellField = "time" | "narrative" | "demo_actions" | "screenshot" | "visual" | "design_plan";

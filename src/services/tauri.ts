@@ -26,6 +26,7 @@ const SENSITIVE_INVOKE_COMMANDS = new Set([
   "azure_token_refresh",
   "github_device_code_poll",
   "save_feedback",
+  "save_narration_recording",
 ]);
 
 function isTauriRuntime() {

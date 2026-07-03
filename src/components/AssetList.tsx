@@ -7,6 +7,7 @@ import {
   ArrowUpAZ,
 } from "lucide-react";
 import { useAppStore, type AssetInfo } from "../stores/appStore";
+import { useConfirmDialog } from "./ConfirmDialog";
 import { ProjectImage } from "./ProjectImage";
 import VisualCell from "./VisualCell";
 
@@ -32,7 +33,7 @@ function sortAssets(assets: AssetInfo[], by: SortBy, dir: SortDir): AssetGroup[]
   }
   // recency — flat list sorted by modifiedAt
   sorted.sort((a, b) => flip * (a.modifiedAt - b.modifiedAt));
-  return [{ label: "All Assets", items: sorted }];
+  return [{ label: "All Visuals", items: sorted }];
 }
 
 function groupByType(items: AssetInfo[], flip: number): AssetGroup[] {
@@ -78,15 +79,17 @@ function groupByReference(items: AssetInfo[], flip: number): AssetGroup[] {
 
 // ── Components ───────────────────────────────────────────────
 
-/** Sidebar pane listing all project assets grouped by type, reference, or recency. */
+/** Sidebar pane listing all project visuals grouped by type, reference, or recency. */
 export function AssetList() {
   const assets = useAppStore((s) => s.assets);
   const loadAssets = useAppStore((s) => s.loadAssets);
   const openAsset = useAppStore((s) => s.openAsset);
   const importAsset = useAppStore((s) => s.importAsset);
   const deleteAsset = useAppStore((s) => s.deleteAsset);
+  const deleteUnlinkedAssets = useAppStore((s) => s.deleteUnlinkedAssets);
   const currentProject = useAppStore((s) => s.currentProject);
   const activeTabId = useAppStore((s) => s.activeTabId);
+  const { confirm, confirmationDialog } = useConfirmDialog();
 
   const [sortBy, setSortBy] = useState<SortBy>("type");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
@@ -104,15 +107,28 @@ export function AssetList() {
   const groups = useMemo(() => sortAssets(assets, sortBy, sortDir), [assets, sortBy, sortDir]);
 
   const toggleDir = useCallback(() => setSortDir((d) => (d === "asc" ? "desc" : "asc")), []);
+  const handleDeleteUnlinked = useCallback(
+    async (count: number) => {
+      const ok = await confirm({
+        title: "Delete unlinked visuals?",
+        message: `This will permanently delete ${count} unlinked visual ${count === 1 ? "asset" : "assets"} from the project folder. Referenced screenshots and visuals will be kept.`,
+        confirmLabel: "Delete",
+        variant: "error",
+      });
+      if (!ok) return;
+      await deleteUnlinkedAssets();
+    },
+    [confirm, deleteUnlinkedAssets],
+  );
 
   const SortDirIcon = sortDir === "asc" ? ArrowUpAZ : ArrowDownAZ;
 
   return (
     <div className="flex flex-col h-full bg-[rgb(var(--color-surface-inset))] text-[rgb(var(--color-text))]">
       {/* Header */}
-      <div className="flex h-8 shrink-0 items-center gap-2 border-b border-[rgb(var(--color-border))] px-3">
+      <div className="flex h-8 shrink-0 items-center gap-2 border-b border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-3">
         <span className="text-[11px] font-semibold text-[rgb(var(--color-text-secondary))] uppercase tracking-wider">
-          Assets
+          Visuals
         </span>
         <button
           onClick={importAsset}
@@ -148,7 +164,7 @@ export function AssetList() {
       <div className="flex-1 overflow-y-auto">
         {assets.length === 0 ? (
           <div className="px-3 py-8 text-center text-[12px] text-[rgb(var(--color-text-secondary))]">
-            No assets yet.
+            No visuals yet.
             <br />
             <button
               onClick={importAsset}
@@ -166,10 +182,12 @@ export function AssetList() {
               activeTabId={activeTabId}
               onOpen={openAsset}
               onDelete={deleteAsset}
+              onDeleteUnlinked={handleDeleteUnlinked}
             />
           ))
         )}
       </div>
+     {confirmationDialog}
     </div>
   );
 }
@@ -181,12 +199,14 @@ function AssetGroupSection({
   activeTabId,
   onOpen,
   onDelete,
+  onDeleteUnlinked,
 }: {
   group: AssetGroup;
   showGroupHeader: boolean;
   activeTabId: string | null;
   onOpen: (path: string, assetType: "screenshot" | "visual") => void;
   onDelete: (path: string) => Promise<void>;
+  onDeleteUnlinked: (count: number) => void;
 }) {
   const [collapsed, setCollapsed] = useState(false);
   const isUnlinked = group.label === "Unlinked";
@@ -194,20 +214,39 @@ function AssetGroupSection({
   return (
     <div>
       {showGroupHeader && (
-        <button
-          onClick={() => setCollapsed((c) => !c)}
+        <div
           className={`flex h-8 w-full items-center gap-1.5 border-b border-[rgb(var(--color-border))] px-3 text-[11px] font-semibold uppercase tracking-wider transition-colors ${
             isUnlinked
-              ? "text-[rgb(var(--color-warning))] hover:bg-[rgb(var(--color-warning))]/5"
-              : "text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-alt))]"
+              ? "text-[rgb(var(--color-warning))]"
+              : "text-[rgb(var(--color-text-secondary))]"
           }`}
         >
-          <ChevronRight
-            className={`w-2.5 h-2.5 shrink-0 transition-transform ${collapsed ? "" : "rotate-90"}`}
-          />
-          <span className="truncate">{group.label}</span>
-          <span className="ml-auto opacity-60">{group.items.length}</span>
-        </button>
+          <button
+            type="button"
+            onClick={() => setCollapsed((c) => !c)}
+            className={`flex min-w-0 flex-1 items-center gap-1.5 rounded-md py-1 text-left transition-colors ${
+              isUnlinked
+                ? "hover:bg-[rgb(var(--color-warning))]/5"
+                : "hover:bg-[rgb(var(--color-surface-alt))]"
+            }`}
+          >
+            <ChevronRight
+              className={`w-2.5 h-2.5 shrink-0 transition-transform ${collapsed ? "" : "rotate-90"}`}
+            />
+            <span className="truncate">{group.label}</span>
+            <span className="ml-auto opacity-60">{group.items.length}</span>
+          </button>
+          {isUnlinked && (
+            <button
+              type="button"
+              onClick={() => onDeleteUnlinked(group.items.length)}
+              className="rounded-md px-1.5 py-0.5 text-[10px] font-semibold text-[rgb(var(--color-error))] transition-colors hover:bg-[rgb(var(--color-error))]/10"
+              title="Delete all unlinked visuals"
+            >
+              Delete
+            </button>
+          )}
+        </div>
       )}
       {!collapsed && (
         <div className="py-0.5">

@@ -198,7 +198,7 @@ function scopedPathVariants(filePath: string, currentProject: ProjectView | null
 }
 
 /** The panels / views available in the app. */
-export type AppView = "home" | "project" | "sketch" | "assets" | "editor" | "recording" | "settings" | "chat" | "changes";
+export type AppView = "home" | "project" | "sketch" | "assets" | "narrations" | "editor" | "recording" | "settings" | "chat" | "changes";
 
 /** Sidebar position. */
 export type SidebarPosition = "left" | "right";
@@ -325,6 +325,15 @@ export interface AssetInfo {
   modifiedAt: number;
 }
 
+/** A project narration/audio cut available for reuse. */
+export interface NarrationAssetInfo {
+  path: string;
+  size: number;
+  mimeType: string;
+  modifiedAt: number;
+  referencedBy: string[];
+}
+
 interface AppStoreState {
   /** Current active view. */
   view: AppView;
@@ -406,6 +415,8 @@ interface AppStoreState {
   // ── Asset state ──────────────────────────────────────────
   /** All project assets (screenshots + visuals) with reference info. */
   assets: AssetInfo[];
+  /** All project narration/audio cuts available for reuse. */
+  narrationAssets: NarrationAssetInfo[];
 
   // ── Chat state ──────────────────────────────────────────────
   /** Messages in the current chat session. */
@@ -679,6 +690,8 @@ interface AppStoreState {
 
   /** Load assets (screenshots + visuals) for current project. */
   loadAssets: () => Promise<void>;
+  /** Load narration/audio cuts for current project. */
+  loadNarrationAssets: () => Promise<void>;
   /** Open an asset in a new tab. */
   openAsset: (path: string, assetType: "screenshot" | "visual") => void;
   /** Open a SQLite database in a read-only inspector tab. */
@@ -687,6 +700,10 @@ interface AppStoreState {
   importAsset: () => Promise<void>;
   /** Delete an asset file. */
   deleteAsset: (path: string) => Promise<void>;
+  /** Delete unreferenced screenshot and visual files. */
+  deleteUnlinkedAssets: () => Promise<number>;
+  /** Delete unreferenced narration/audio files. */
+  deleteUnlinkedNarrationAssets: () => Promise<number>;
 
   // ── Chat actions ────────────────────────────────────────────
 
@@ -1077,6 +1094,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   activeNoteLocked: false,
   notePreviewPaths: new Set(),
   assets: [],
+  narrationAssets: [],
   chatMessages: [],
   chatSessionPath: null,
   chatLoading: false,
@@ -1570,6 +1588,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       activeNoteContent: null,
       activeNoteLocked: false,
       assets: [],
+      narrationAssets: [],
       chatMessages: [],
       chatSessionPath: null,
       chatLoading: false,
@@ -2089,6 +2108,16 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     }
   },
 
+  loadNarrationAssets: async () => {
+    try {
+      const narrationAssets = await invoke<NarrationAssetInfo[]>("list_project_narration_assets");
+      set({ narrationAssets });
+    } catch (err) {
+      console.error("Failed to load narration assets:", err);
+      set({ narrationAssets: [] });
+    }
+  },
+
   openAsset: (path, _assetType) => {
     const filename = path.split("/").pop() ?? path;
     get().openTab({ type: "asset", path, title: filename });
@@ -2136,6 +2165,50 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await get().loadAssets();
     } catch (err) {
       console.error("Failed to delete asset:", err);
+    }
+  },
+
+  deleteUnlinkedAssets: async () => {
+    try {
+      const candidatePaths = get().assets
+        .filter((asset) => asset.referencedBy.length === 0)
+        .map((asset) => asset.path);
+      const deleted = await invoke<number>("delete_orphaned_images");
+      const { openTabs, activeTabId } = get();
+      const filtered = openTabs.filter((tab) => tab.type !== "asset" || !candidatePaths.includes(tab.path));
+      set({
+        openTabs: filtered,
+        activeTabId: filtered.some((tab) => tab.id === activeTabId)
+          ? activeTabId
+          : (filtered[filtered.length - 1]?.id ?? null),
+      });
+      await get().loadAssets();
+      return deleted;
+    } catch (err) {
+      console.error("Failed to delete unlinked assets:", err);
+      throw err;
+    }
+  },
+
+  deleteUnlinkedNarrationAssets: async () => {
+    try {
+      const candidatePaths = get().narrationAssets
+        .filter((asset) => asset.referencedBy.length === 0 && asset.path.startsWith(".cutready/narration/"))
+        .map((asset) => asset.path);
+      const deleted = await invoke<number>("delete_orphaned_narration_assets");
+      const { openTabs, activeTabId } = get();
+      const filtered = openTabs.filter((tab) => tab.type !== "asset" || !candidatePaths.includes(tab.path));
+      set({
+        openTabs: filtered,
+        activeTabId: filtered.some((tab) => tab.id === activeTabId)
+          ? activeTabId
+          : (filtered[filtered.length - 1]?.id ?? null),
+      });
+      await get().loadNarrationAssets();
+      return deleted;
+    } catch (err) {
+      console.error("Failed to delete unlinked narration assets:", err);
+      throw err;
     }
   },
 

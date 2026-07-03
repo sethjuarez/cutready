@@ -1,7 +1,7 @@
 import { useAppStore } from "../stores/appStore";
 import type { EditorTab } from "../stores/appStore";
 import { useToastStore } from "../stores/toastStore";
-import { AgentRunIcon, DatabaseIcon, SketchIcon, StoryboardIcon, NoteIcon, HistoryIcon, ImageIcon, VisualIcon, DiffIcon } from "./Icons";
+import { AgentRunIcon, DatabaseIcon, SketchIcon, StoryboardIcon, NoteIcon, HistoryIcon, ImageIcon, NarrationIcon, VisualIcon, DiffIcon } from "./Icons";
 import { usePopover } from "../hooks/usePopover";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -384,7 +384,8 @@ function Tab({
 }) {
   const tabRef = useRef<HTMLDivElement>(null);
   const isImage = tab.type === "asset" && tab.path.includes("/screenshots/");
-  const isVisual = tab.type === "asset" && !isImage;
+  const isNarration = tab.type === "asset" && (tab.path.includes("/narration/") || /\.(webm|ogg|oga|wav|mp3|m4a|flac)$/i.test(tab.path));
+  const isVisual = tab.type === "asset" && !isImage && !isNarration;
 
   useEffect(() => {
     if (!isActive) return;
@@ -400,6 +401,7 @@ function Tab({
     : tab.type === "agent-run" ? "Agent Run"
     : tab.type === "database" ? "Database"
     : isImage ? "Image"
+    : isNarration ? "Narration"
     : isVisual ? "Visual"
     : "Note";
 
@@ -413,7 +415,7 @@ function Tab({
   const typeClasses =
     documentTone
       ? { bar: documentTone.bg, icon: documentTone.text, tint: documentTone.bg }
-      : tab.type === "diff" || isVisual
+      : tab.type === "diff" || isVisual || isNarration
         ? { bar: "bg-warning", icon: "text-warning", tint: "bg-warning" }
         : accentTypeClasses;
 
@@ -426,6 +428,7 @@ function Tab({
     : tab.type === "agent-run" ? AgentRunIcon
     : tab.type === "database" ? DatabaseIcon
     : isImage ? ImageIcon
+    : isNarration ? NarrationIcon
     : isVisual ? VisualIcon
     : NoteIcon;
 

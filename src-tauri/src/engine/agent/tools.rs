@@ -2096,6 +2096,7 @@ fn exec_write_sketch(root: &Path, args: &Value) -> String {
                     .get("design_plan")
                     .and_then(|v| v.as_str())
                     .map(|s| s.to_string()),
+                narration: None,
             })
             .collect(),
         None => return "Error: 'rows' must be an array".into(),

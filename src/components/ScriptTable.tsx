@@ -16,7 +16,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { invoke } from "../services/tauri";
+import { convertFileSrc, invoke } from "../services/tauri";
 import {
   Eye,
   X,
@@ -30,6 +30,13 @@ import {
   Check,
   Lock,
   Unlock,
+  Loader2,
+  Mic,
+  Pause,
+  Play,
+  Square,
+  AlertTriangle,
+  type LucideIcon,
 } from "lucide-react";
 import type { PlanningCellField, PlanningRow } from "../types/sketch";
 import { normalizeDocument } from "@elucim/dsl";
@@ -37,6 +44,7 @@ import type { CutReadyElucimDocument } from "../types/elucim";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { useProjectImage } from "../hooks/useProjectImage";
 import { parseDurationSeconds } from "../utils/documentMetadata";
+import { useConfirmDialog } from "./ConfirmDialog";
 
 
 const VisualCell = lazy(() => import("./VisualCell"));
@@ -76,6 +84,14 @@ function hasAnyLock(row: PlanningRow): boolean {
   return row.locked === true || Object.values(row.locks ?? {}).some(Boolean);
 }
 
+function projectAssetSrc(projectRoot: string | undefined, relativePath: string | null | undefined): string | null {
+  if (!projectRoot || !relativePath) return null;
+  const separator = projectRoot.includes("\\") ? "\\" : "/";
+  const root = projectRoot.replace(/[\\/]+$/, "");
+  const relative = relativePath.replace(/[\\/]+/g, separator);
+  return convertFileSrc(`${root}${separator}${relative}`);
+}
+
 import type { RowDiff } from "../utils/textDiff";
 
 interface ScriptTableProps {
@@ -98,9 +114,14 @@ interface ScriptTableProps {
   onReShowHighlights?: () => void;
   onRowLockChange?: (rowIndex: number, locked: boolean) => void;
   onCellLockChange?: (rowIndex: number, field: PlanningCellField, locked: boolean) => void;
+  onStartNarrationRecording?: (rowIndex: number) => void;
+  onPickNarration?: (rowIndex: number) => void;
+  onStopNarrationRecording?: () => void;
+  narrationRecordingRow?: number | null;
+  narrationSavingRows?: Set<number>;
 }
 
-export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreenshot, onPickImage, onBrowseImage, onSparkle, onGenerateVisual, onNudgeVisual, projectRoot, sketchPath, highlightedRows, rowDiffs, aiSnapshotRows, onDismissHighlights, hasLastAiDiffs, onReShowHighlights, onRowLockChange, onCellLockChange }: ScriptTableProps) {
+export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreenshot, onPickImage, onBrowseImage, onSparkle, onGenerateVisual, onNudgeVisual, projectRoot, sketchPath, highlightedRows, rowDiffs, aiSnapshotRows, onDismissHighlights, hasLastAiDiffs, onReShowHighlights, onRowLockChange, onCellLockChange, onStartNarrationRecording, onPickNarration, onStopNarrationRecording, narrationRecordingRow, narrationSavingRows }: ScriptTableProps) {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
   const [visualLightbox, setVisualLightbox] = useState<{ visualPath: string; rowIndex: number } | null>(null);
@@ -300,6 +321,18 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
     [onChange, pushUndo],
   );
 
+  const removeNarration = useCallback(
+    (index: number) => {
+      if (isCellLocked(rowsRef.current[index], "screenshot") || isCellLocked(rowsRef.current[index], "visual")) return;
+      pushUndo();
+      const updated = rowsRef.current.map((r, i) =>
+        i === index ? { ...r, narration: null } : r,
+      );
+      onChange(updated);
+    },
+    [onChange, pushUndo],
+  );
+
   const handleDragEnd = useCallback(
     (event: DragEndEvent) => {
       const { active, over } = event;
@@ -362,7 +395,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
               <col style={{ width: 72 }} />
               <col />
               <col />
-              <col style={{ width: 168 }} />
+              <col style={{ width: 210 }} />
               {!readOnly && <col style={{ width: 36 }} />}
             </colgroup>
             <thead>
@@ -371,7 +404,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
                 <th className="script-table-th">Time</th>
                 <th className="script-table-th">Narrative</th>
                 <th className="script-table-th">Actions</th>
-                <th className="script-table-th">Screenshot</th>
+                <th className="script-table-th">Assets</th>
                 {!readOnly && <th className="script-table-th" />}
               </tr>
             </thead>
@@ -394,6 +427,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
                   onSparkle={onSparkle}
                   onGenerateVisual={onGenerateVisual}
                   onRemoveVisual={removeVisual}
+                  onRemoveNarration={removeNarration}
                   projectRoot={projectRoot}
                   sketchPath={sketchPath}
                   onImageClick={setLightboxSrc}
@@ -404,6 +438,11 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
                   visualVersion={visualVersion}
                   onRowLockChange={onRowLockChange}
                   onCellLockChange={onCellLockChange}
+                  onStartNarrationRecording={onStartNarrationRecording}
+                  onPickNarration={onPickNarration}
+                  onStopNarrationRecording={onStopNarrationRecording}
+                  narrationRecordingRow={narrationRecordingRow}
+                  narrationSavingRows={narrationSavingRows}
                 />
               ))}
             </tbody>
@@ -635,6 +674,7 @@ function SortableRow({
   onSparkle,
   onGenerateVisual,
   onRemoveVisual,
+  onRemoveNarration,
   projectRoot,
   sketchPath,
   onImageClick,
@@ -645,6 +685,11 @@ function SortableRow({
   visualVersion,
   onRowLockChange,
   onCellLockChange,
+  onStartNarrationRecording,
+  onPickNarration,
+  onStopNarrationRecording,
+  narrationRecordingRow,
+  narrationSavingRows,
 }: {
   id: string;
   row: PlanningRow;
@@ -661,6 +706,7 @@ function SortableRow({
   onSparkle?: (prompt: string) => void;
   onGenerateVisual?: (rowIndex: number) => void;
   onRemoveVisual?: (rowIndex: number) => void;
+  onRemoveNarration?: (rowIndex: number) => void;
   projectRoot?: string;
   sketchPath?: string;
   onImageClick: (src: string) => void;
@@ -671,6 +717,11 @@ function SortableRow({
   visualVersion: number;
   onRowLockChange?: (rowIndex: number, locked: boolean) => void;
   onCellLockChange?: (rowIndex: number, field: PlanningCellField, locked: boolean) => void;
+  onStartNarrationRecording?: (rowIndex: number) => void;
+  onPickNarration?: (rowIndex: number) => void;
+  onStopNarrationRecording?: () => void;
+  narrationRecordingRow?: number | null;
+  narrationSavingRows?: Set<number>;
 }){
   const [diffExpanded, setDiffExpanded] = useState(true);
   const rowLocked = row.locked === true;
@@ -680,6 +731,11 @@ function SortableRow({
   const mediaLocked = isCellLocked(row, "screenshot") || isCellLocked(row, "visual");
   const screenshotSrc = useProjectImage(projectRoot ?? null, row.screenshot);
   const displayScreenshotSrc = projectRoot ? screenshotSrc : row.screenshot;
+  const isRecordingNarration = narrationRecordingRow === idx;
+  const isSavingNarration = narrationSavingRows?.has(idx) ?? false;
+  const narrationStale = Boolean(row.narration && row.narration.source_text !== row.narrative);
+  const narrationSrc = projectAssetSrc(projectRoot, row.narration?.path);
+  const { confirm, confirmationDialog } = useConfirmDialog();
   const {
     attributes,
     listeners,
@@ -697,6 +753,26 @@ function SortableRow({
 
   const accentColor = getRowColor(idx);
   const rowBg = idx % 2 === 0 ? "rgb(var(--color-surface-alt))" : "rgb(var(--color-surface-inset))";
+
+  const confirmRemoveScreenshot = async () => {
+    const confirmed = await confirm({
+      title: "Remove screenshot?",
+      message: "Remove this screenshot from the row?\n\nThe image file stays in the workspace, but this row will no longer reference it.",
+      confirmLabel: "Remove screenshot",
+      variant: "error",
+    });
+    if (confirmed) updateRow(idx, "screenshot", "");
+  };
+
+  const confirmRemoveNarration = async () => {
+    const confirmed = await confirm({
+      title: "Remove narration?",
+      message: "Remove this narration take from the row?\n\nThe audio file stays in the workspace, but this row will no longer reference it.",
+      confirmLabel: "Remove narration",
+      variant: "error",
+    });
+    if (confirmed) onRemoveNarration?.(idx);
+  };
 
   return (
     <>
@@ -814,141 +890,200 @@ function SortableRow({
           )}
         </div>
       </td>
-      <td className="script-table-td align-top text-center">
-        {row.visual ? (
-          /* ── Elucim animated visual ── */
-          <div className="relative group/vis cursor-pointer" onClick={() => onVisualClick(row.visual!, idx)}>
-            {!readOnly && !rowLocked && onCellLockChange && (
-              <div className="absolute right-1 top-1 z-10">
-                <CellLockButton locked={mediaLocked} onClick={() => onCellLockChange(idx, "screenshot", !mediaLocked)} className="bg-[rgb(var(--color-media-control-bg)/0.2)] text-[rgb(var(--color-media-control-fg))] hover:bg-[rgb(var(--color-media-control-bg)/0.4)]" />
-              </div>
-            )}
-            <Suspense fallback={<div className="w-40 h-24 rounded-md bg-[rgb(var(--color-surface-alt))] border border-[rgb(var(--color-border))] animate-pulse" />}>
-              <VisualCell
-                visualPath={row.visual!}
-                mode="thumbnail"
-                key={`${row.visual}-v${visualVersion}`}
-              />
-            </Suspense>
-            {/* Hover overlay with action buttons */}
-            {!mediaLocked && <div className="absolute inset-0 bg-[rgb(var(--color-media-control-bg)/0.4)] opacity-0 group-hover/vis:opacity-100 transition-opacity flex items-center justify-center gap-1.5 rounded-md" onClick={(e) => e.stopPropagation()}>
-              {/* Expand / preview */}
-              <button
-                onClick={() => onVisualClick(row.visual!, idx)}
-                className="p-1 rounded-full bg-[rgb(var(--color-media-control-bg)/0.2)] text-[rgb(var(--color-media-control-fg))] hover:bg-[rgb(var(--color-media-control-bg)/0.4)]"
-                title="Preview visual (click to edit)"
-              >
-                <Maximize2 className="w-3.5 h-3.5" />
-              </button>
-              {/* Regenerate visual */}
-              {!readOnly && onGenerateVisual && (
-                <button
-                  onClick={() => onGenerateVisual(idx)}
-                  className="p-1 rounded-full bg-[rgb(var(--color-media-control-bg)/0.2)] text-[rgb(var(--color-media-control-fg))] hover:bg-[rgb(var(--color-accent)/0.8)]"
-                  title="Regenerate visual with AI"
-                >
-                  <Sparkles className="w-3.5 h-3.5" />
-                </button>
+      <td className="script-table-td align-top">
+        <div className="flex min-h-8 w-full flex-col items-stretch gap-2">
+          {row.screenshot ? (
+            <div className="relative group/ss h-24 w-full rounded-md bg-[rgb(var(--color-surface-alt))] border border-[rgb(var(--color-border))] overflow-hidden cursor-pointer"
+              onClick={() => {
+                if (displayScreenshotSrc) onImageClick(displayScreenshotSrc);
+              }}
+            >
+              {!readOnly && !rowLocked && onCellLockChange && (
+                <div className="absolute right-1 top-1 z-10">
+                  <CellLockButton locked={mediaLocked} onClick={() => onCellLockChange(idx, "screenshot", !mediaLocked)} className="bg-[rgb(var(--color-media-control-bg)/0.2)] text-[rgb(var(--color-media-control-fg))] hover:bg-[rgb(var(--color-media-control-bg)/0.4)]" />
+                </div>
               )}
-              {/* Remove visual */}
-              {!readOnly && (
-                <button
-                  onClick={() => onRemoveVisual?.(idx)}
-                  className="p-1 rounded-full bg-[rgb(var(--color-media-control-bg)/0.2)] text-[rgb(var(--color-media-control-fg))] hover:bg-[rgb(var(--color-error)/0.8)]"
-                  title="Remove visual"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
+              {displayScreenshotSrc && (
+                <img
+                  src={displayScreenshotSrc}
+                  alt=""
+                  className="w-full h-full object-cover"
+                />
               )}
-            </div>}
-          </div>
-        ) : row.screenshot ? (
-          <div className="relative group/ss w-40 h-24 rounded-md bg-[rgb(var(--color-surface-alt))] border border-[rgb(var(--color-border))] overflow-hidden cursor-pointer"
-            onClick={() => {
-              if (displayScreenshotSrc) onImageClick(displayScreenshotSrc);
-            }}
-          >
-            {!readOnly && !rowLocked && onCellLockChange && (
-              <div className="absolute right-1 top-1 z-10">
-                <CellLockButton locked={mediaLocked} onClick={() => onCellLockChange(idx, "screenshot", !mediaLocked)} className="bg-[rgb(var(--color-media-control-bg)/0.2)] text-[rgb(var(--color-media-control-fg))] hover:bg-[rgb(var(--color-media-control-bg)/0.4)]" />
-              </div>
-            )}
-            {displayScreenshotSrc && (
-              <img
-                src={displayScreenshotSrc}
-                alt=""
-                className="w-full h-full object-cover"
-              />
-            )}
-            {!readOnly && !mediaLocked && (
-              <div className="absolute inset-0 bg-[rgb(var(--color-media-control-bg)/0.5)] opacity-0 group-hover/ss:opacity-100 transition-opacity flex items-center justify-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-                {/* View */}
-                <button
-                  onClick={() => {
-                    if (displayScreenshotSrc) onImageClick(displayScreenshotSrc);
-                  }}
-                  className="p-1 rounded-full bg-[rgb(var(--color-media-control-bg)/0.2)] text-[rgb(var(--color-media-control-fg))] hover:bg-[rgb(var(--color-media-control-bg)/0.3)]"
-                  title="View image"
-                >
-                  <Search className="w-3.5 h-3.5" />
-                </button>
-                {/* Re-capture */}
-                <button
-                  onClick={() => onCaptureScreenshot?.(idx)}
-                  className="p-1 rounded-full bg-[rgb(var(--color-media-control-bg)/0.2)] text-[rgb(var(--color-media-control-fg))] hover:bg-[rgb(var(--color-media-control-bg)/0.3)]"
-                  title="Re-capture screenshot"
-                >
-                  <Camera className="w-3.5 h-3.5" />
-                </button>
-                {/* Pick from project */}
-                {onPickImage && (
+              {!readOnly && !mediaLocked && (
+                <div className="absolute inset-0 bg-[rgb(var(--color-media-control-bg)/0.5)] opacity-0 group-hover/ss:opacity-100 transition-opacity flex items-center justify-center gap-1.5" onClick={(e) => e.stopPropagation()}>
                   <button
-                    onClick={() => onPickImage(idx)}
+                    onClick={() => {
+                      if (displayScreenshotSrc) onImageClick(displayScreenshotSrc);
+                    }}
                     className="p-1 rounded-full bg-[rgb(var(--color-media-control-bg)/0.2)] text-[rgb(var(--color-media-control-fg))] hover:bg-[rgb(var(--color-media-control-bg)/0.3)]"
-                    title="Pick from workspace images"
+                    title="View image"
                   >
-                    <ImageIcon className="w-3.5 h-3.5" />
+                    <Search className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={() => onCaptureScreenshot?.(idx)}
+                    className="p-1 rounded-full bg-[rgb(var(--color-media-control-bg)/0.2)] text-[rgb(var(--color-media-control-fg))] hover:bg-[rgb(var(--color-media-control-bg)/0.3)]"
+                    title="Re-capture screenshot"
+                  >
+                    <Camera className="w-3.5 h-3.5" />
+                  </button>
+                  {onPickImage && (
+                    <button
+                      onClick={() => onPickImage(idx)}
+                      className="p-1 rounded-full bg-[rgb(var(--color-media-control-bg)/0.2)] text-[rgb(var(--color-media-control-fg))] hover:bg-[rgb(var(--color-media-control-bg)/0.3)]"
+                      title="Pick from workspace images"
+                    >
+                      <ImageIcon className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                  {onBrowseImage && (
+                    <button
+                      onClick={() => onBrowseImage(idx)}
+                      className="p-1 rounded-full bg-[rgb(var(--color-media-control-bg)/0.2)] text-[rgb(var(--color-media-control-fg))] hover:bg-[rgb(var(--color-media-control-bg)/0.3)]"
+                      title="Browse for image file"
+                    >
+                      <Folder className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                  <button
+                    onClick={() => void confirmRemoveScreenshot()}
+                    className="p-1 rounded-full bg-[rgb(var(--color-media-control-bg)/0.2)] text-[rgb(var(--color-media-control-fg))] hover:bg-[rgb(var(--color-error)/0.8)]"
+                    title="Remove screenshot"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : row.visual ? (
+            <div className="relative group/vis cursor-pointer" onClick={() => onVisualClick(row.visual!, idx)}>
+              {!readOnly && !rowLocked && onCellLockChange && (
+                <div className="absolute right-1 top-1 z-10">
+                  <CellLockButton locked={mediaLocked} onClick={() => onCellLockChange(idx, "screenshot", !mediaLocked)} className="bg-[rgb(var(--color-media-control-bg)/0.2)] text-[rgb(var(--color-media-control-fg))] hover:bg-[rgb(var(--color-media-control-bg)/0.4)]" />
+                </div>
+              )}
+              <Suspense fallback={<div className="h-24 w-full rounded-md bg-[rgb(var(--color-surface-alt))] border border-[rgb(var(--color-border))] animate-pulse" />}>
+                <VisualCell
+                  visualPath={row.visual!}
+                  mode="thumbnail"
+                  key={`${row.visual}-v${visualVersion}`}
+                />
+              </Suspense>
+              {!mediaLocked && <div className="absolute inset-0 bg-[rgb(var(--color-media-control-bg)/0.4)] opacity-0 group-hover/vis:opacity-100 transition-opacity flex items-center justify-center gap-1.5 rounded-md" onClick={(e) => e.stopPropagation()}>
+                <button
+                  onClick={() => onVisualClick(row.visual!, idx)}
+                  className="p-1 rounded-full bg-[rgb(var(--color-media-control-bg)/0.2)] text-[rgb(var(--color-media-control-fg))] hover:bg-[rgb(var(--color-media-control-bg)/0.4)]"
+                  title="Preview visual (click to edit)"
+                >
+                  <Maximize2 className="w-3.5 h-3.5" />
+                </button>
+                {!readOnly && onGenerateVisual && (
+                  <button
+                    onClick={() => onGenerateVisual(idx)}
+                    className="p-1 rounded-full bg-[rgb(var(--color-media-control-bg)/0.2)] text-[rgb(var(--color-media-control-fg))] hover:bg-[rgb(var(--color-accent)/0.8)]"
+                    title="Regenerate visual with AI"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
                   </button>
                 )}
-                {/* Browse filesystem */}
-                {onBrowseImage && (
+                {!readOnly && (
                   <button
-                    onClick={() => onBrowseImage(idx)}
-                    className="p-1 rounded-full bg-[rgb(var(--color-media-control-bg)/0.2)] text-[rgb(var(--color-media-control-fg))] hover:bg-[rgb(var(--color-media-control-bg)/0.3)]"
-                    title="Browse for image file"
+                    onClick={() => onRemoveVisual?.(idx)}
+                    className="p-1 rounded-full bg-[rgb(var(--color-media-control-bg)/0.2)] text-[rgb(var(--color-media-control-fg))] hover:bg-[rgb(var(--color-error)/0.8)]"
+                    title="Remove visual"
                   >
-                    <Folder className="w-3.5 h-3.5" />
+                    <X className="w-3.5 h-3.5" />
                   </button>
                 )}
-                {/* Remove */}
-                <button
-                  onClick={() => updateRow(idx, "screenshot", "")}
-                  className="p-1 rounded-full bg-[rgb(var(--color-media-control-bg)/0.2)] text-[rgb(var(--color-media-control-fg))] hover:bg-[rgb(var(--color-error)/0.8)]"
-                  title="Remove screenshot"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
+              </div>}
+            </div>
+          ) : (
+            <div className="relative flex h-24 w-full items-center justify-center rounded-md border border-dashed border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))]/45">
+              {!readOnly && !mediaLocked ? (
+                <div className="flex flex-col items-center gap-1 text-[10px] text-[rgb(var(--color-text-secondary))]">
+                  <MediaAddPopover
+                    idx={idx}
+                    variant="placeholder"
+                    hasNarration={Boolean(row.narration)}
+                    hasPrimaryAsset={Boolean(row.screenshot || row.visual)}
+                    assetKind="visual"
+                    onCaptureScreenshot={onCaptureScreenshot}
+                    onPickImage={onPickImage}
+                    onBrowseImage={onBrowseImage}
+                    onGenerateVisual={onGenerateVisual}
+                    onStartNarrationRecording={onStartNarrationRecording}
+                  />
+                  <span>Screenshot</span>
+                </div>
+              ) : (
+                <span className="flex flex-col items-center gap-1 text-[10px] text-[rgb(var(--color-text-secondary))]">
+                  <ImageIcon className="h-4 w-4 opacity-60" />
+                  {mediaLocked ? "Visual locked" : "Screenshot"}
+                </span>
+              )}
+              {!readOnly && !rowLocked && onCellLockChange && (
+                <CellActionRail persistent={mediaLocked}>
+                  <CellLockButton locked={mediaLocked} onClick={() => onCellLockChange(idx, "screenshot", !mediaLocked)} />
+                </CellActionRail>
+              )}
+            </div>
+          )}
+
+          <div className={`w-full rounded-lg border px-2 py-1.5 text-left ${
+            row.narration
+              ? narrationStale
+                ? "border-[rgb(var(--color-warning))]/30 bg-[rgb(var(--color-warning))]/8"
+                : "border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))]/60"
+              : "border-dashed border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))]/45"
+          }`}>
+            {row.narration ? (
+              <div className="flex items-center gap-1.5">
+                <div className="min-w-0 flex-1">
+                  {narrationSrc ? (
+                    <NarrationPlayer
+                      src={narrationSrc}
+                      onRecord={onStartNarrationRecording && !mediaLocked ? () => onStartNarrationRecording(idx) : undefined}
+                      onRemove={!readOnly && !mediaLocked ? () => void confirmRemoveNarration() : undefined}
+                      onStopRecording={onStopNarrationRecording}
+                      recording={isRecordingNarration}
+                      saving={isSavingNarration}
+                      recordDisabled={narrationRecordingRow !== null && !isRecordingNarration}
+                    />
+                  ) : (
+                    <div className="text-[11px] text-[rgb(var(--color-text-secondary))]">Narration file unavailable.</div>
+                  )}
+                </div>
+                {narrationStale && (
+                  <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wide text-[rgb(var(--color-warning))]" title="Narration is stale">
+                    <AlertTriangle className="h-3 w-3" />
+                    Stale
+                  </span>
+                )}
               </div>
+            ) : (
+              !readOnly && !mediaLocked ? (
+                <div className="flex min-h-12 flex-col items-center justify-center gap-1 text-[10px] text-[rgb(var(--color-text-secondary))]">
+                  <MediaAddPopover
+                    idx={idx}
+                    variant="placeholder"
+                    assetKind="narration"
+                    hasNarration={Boolean(row.narration)}
+                    hasPrimaryAsset={Boolean(row.screenshot || row.visual)}
+                    onStartNarrationRecording={narrationRecordingRow === null ? onStartNarrationRecording : undefined}
+                    onPickNarration={onPickNarration}
+                  />
+                  <span>Narration</span>
+                </div>
+              ) : (
+                <div className="flex h-8 items-center justify-center gap-1.5 text-[11px] text-[rgb(var(--color-text-secondary))]">
+                  <Mic className="h-3.5 w-3.5 opacity-60" />
+                  No narration
+                </div>
+              )
             )}
           </div>
-        ) : !readOnly && !mediaLocked ? (
-          <MediaAddPopover
-            idx={idx}
-            onCaptureScreenshot={onCaptureScreenshot}
-            onPickImage={onPickImage}
-            onBrowseImage={onBrowseImage}
-            onGenerateVisual={onGenerateVisual}
-          />
-        ) : (
-          <div className="relative min-h-8 flex items-center justify-center">
-            <span className="text-[10px] text-[rgb(var(--color-text-secondary))]">{mediaLocked ? "Locked" : "—"}</span>
-            {!readOnly && !rowLocked && onCellLockChange && (
-              <CellActionRail persistent={mediaLocked}>
-                <CellLockButton locked={mediaLocked} onClick={() => onCellLockChange(idx, "screenshot", !mediaLocked)} />
-              </CellActionRail>
-            )}
-          </div>
-        )}
+        </div>
       </td>
       {!readOnly && (
         <td className="p-1 align-top">
@@ -1016,6 +1151,7 @@ function SortableRow({
         </td>
       </tr>
     )}
+    {confirmationDialog}
     </>
   );
 }
@@ -1449,17 +1585,168 @@ function CellLockButton({ locked, onClick, className = "" }: { locked: boolean; 
   );
 }
 
+function formatPlaybackTime(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds <= 0) return "0:00";
+  const rounded = Math.floor(seconds);
+  const minutes = Math.floor(rounded / 60);
+  const remainder = rounded % 60;
+  return `${minutes}:${remainder.toString().padStart(2, "0")}`;
+}
+
+function NarrationPlayer({
+  src,
+  onRecord,
+  onRemove,
+  onStopRecording,
+  recording = false,
+  saving = false,
+  recordDisabled = false,
+}: {
+  src: string;
+  onRecord?: () => void;
+  onRemove?: () => void;
+  onStopRecording?: () => void;
+  recording?: boolean;
+  saving?: boolean;
+  recordDisabled?: boolean;
+}) {
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const [duration, setDuration] = useState(0);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [playing, setPlaying] = useState(false);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    setCurrentTime(0);
+    setDuration(0);
+    setPlaying(false);
+    audio.pause();
+    audio.load();
+  }, [src]);
+
+  const togglePlayback = () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (audio.paused) {
+      void audio.play();
+    } else {
+      audio.pause();
+    }
+  };
+
+  const seek = (value: string) => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    const nextTime = Number(value);
+    audio.currentTime = nextTime;
+    setCurrentTime(nextTime);
+  };
+
+  return (
+    <div className="flex w-full flex-col gap-1">
+      <audio
+        ref={audioRef}
+        src={src}
+        preload="metadata"
+        onLoadedMetadata={(event) => setDuration(event.currentTarget.duration || 0)}
+        onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)}
+        onPlay={() => setPlaying(true)}
+        onPause={() => setPlaying(false)}
+        onEnded={() => setPlaying(false)}
+      />
+      <input
+        type="range"
+        min={0}
+        max={duration || 0}
+        step={0.1}
+        value={Math.min(currentTime, duration || 0)}
+        onChange={(event) => seek(event.target.value)}
+        disabled={!duration}
+        className="w-full accent-[rgb(var(--color-accent))] disabled:opacity-50"
+        aria-label="Scrub narration"
+      />
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={togglePlayback}
+          className="grid h-7 w-7 shrink-0 place-items-center rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] text-[rgb(var(--color-accent))] transition-colors hover:border-[rgb(var(--color-accent))]/35 hover:bg-[rgb(var(--color-accent))]/8"
+          aria-label={playing ? "Pause narration" : "Play narration"}
+          title={playing ? "Pause narration" : "Play narration"}
+        >
+          {playing ? <Pause className="h-3 w-3" strokeWidth={2.4} /> : <Play className="h-3.5 w-3.5 fill-current" />}
+        </button>
+        <span className="min-w-0 flex-1 truncate text-[11px] text-[rgb(var(--color-text-secondary))]">
+          {formatPlaybackTime(currentTime)} / {formatPlaybackTime(duration)}
+        </span>
+        {onRemove && (
+          <button
+            type="button"
+            onClick={onRemove}
+            disabled={saving || recording}
+            className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[rgb(var(--color-surface-alt))] text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-error))]/10 hover:text-[rgb(var(--color-error))] disabled:cursor-not-allowed disabled:opacity-40"
+            aria-label="Remove narration"
+            title="Remove narration"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        )}
+        {onRecord && (
+          <button
+            type="button"
+            onClick={() => recording ? onStopRecording?.() : onRecord()}
+            disabled={saving || recordDisabled}
+            className={`grid h-7 w-7 shrink-0 place-items-center rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+              recording
+                ? "bg-[rgb(var(--color-error))]/10 text-[rgb(var(--color-error))]"
+                : "bg-[rgb(var(--color-surface-alt))] text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))]"
+            }`}
+            aria-label={recording ? "Stop narration recording" : "Rerecord narration"}
+            title={recording ? "Stop narration recording" : "Rerecord narration"}
+          >
+            {saving ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : recording ? (
+              <Square className="h-3.5 w-3.5 fill-current" />
+            ) : (
+              <Mic className="h-3.5 w-3.5" />
+            )}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* ── Media add popover — single "+" button expands to action list ── */
 
 interface MediaAddPopoverProps {
   idx: number;
+  assetKind: "visual" | "narration";
+  hasNarration: boolean;
+  hasPrimaryAsset: boolean;
+  variant?: "compact" | "placeholder";
   onCaptureScreenshot?: (idx: number) => void;
   onPickImage?: (idx: number) => void;
   onBrowseImage?: (idx: number) => void;
   onGenerateVisual?: (idx: number) => void;
+  onStartNarrationRecording?: (idx: number) => void;
+  onPickNarration?: (idx: number) => void;
 }
 
-function MediaAddPopover({ idx, onCaptureScreenshot, onPickImage, onBrowseImage, onGenerateVisual }: MediaAddPopoverProps) {
+function MediaAddPopover({
+  idx,
+  assetKind,
+  hasNarration,
+  hasPrimaryAsset,
+  variant = "compact",
+  onCaptureScreenshot,
+  onPickImage,
+  onBrowseImage,
+  onGenerateVisual,
+  onStartNarrationRecording,
+  onPickNarration,
+}: MediaAddPopoverProps) {
   const { state, ref, addRef, toggle, close } = usePopover();
   const itemsRef = useRef<(HTMLButtonElement | null)[]>([]);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -1470,14 +1757,23 @@ function MediaAddPopover({ idx, onCaptureScreenshot, onPickImage, onBrowseImage,
   useEffect(() => { addRef(portalRef); }, [addRef]);
 
   const items = useMemo(() => {
-    const list: { icon: typeof Camera; label: string; action: () => void }[] = [
-      { icon: Camera, label: "Capture screenshot", action: () => onCaptureScreenshot?.(idx) },
-    ];
-    if (onPickImage) list.push({ icon: ImageIcon, label: "Pick from workspace", action: () => onPickImage(idx) });
-    if (onBrowseImage) list.push({ icon: Folder, label: "Browse for file", action: () => onBrowseImage(idx) });
-    if (onGenerateVisual) list.push({ icon: Sparkles, label: "Generate visual", action: () => onGenerateVisual(idx) });
+    const list: { icon: LucideIcon; label: string; action: () => void }[] = [];
+    if (assetKind === "visual") {
+      const imageVerb = hasPrimaryAsset ? "Replace" : "Add";
+      list.push({ icon: Camera, label: `${imageVerb} screenshot`, action: () => onCaptureScreenshot?.(idx) });
+      if (onPickImage) list.push({ icon: ImageIcon, label: `${imageVerb} from workspace`, action: () => onPickImage(idx) });
+      if (onBrowseImage) list.push({ icon: Folder, label: `${imageVerb} from file`, action: () => onBrowseImage(idx) });
+      if (onGenerateVisual) list.push({ icon: Sparkles, label: hasPrimaryAsset ? "Replace with visual" : "Generate visual", action: () => onGenerateVisual(idx) });
+    } else if (onStartNarrationRecording) {
+      const narrationVerb = hasNarration ? "Replace" : "Add";
+      list.push({ icon: Mic, label: `${narrationVerb} narration`, action: () => onStartNarrationRecording(idx) });
+      if (onPickNarration) list.push({ icon: Folder, label: `${narrationVerb} from workspace`, action: () => onPickNarration(idx) });
+    } else if (assetKind === "narration" && onPickNarration) {
+      const narrationVerb = hasNarration ? "Replace" : "Add";
+      list.push({ icon: Folder, label: `${narrationVerb} from workspace`, action: () => onPickNarration(idx) });
+    }
     return list;
-  }, [idx, onCaptureScreenshot, onPickImage, onBrowseImage, onGenerateVisual]);
+  }, [assetKind, hasNarration, hasPrimaryAsset, idx, onCaptureScreenshot, onPickImage, onBrowseImage, onGenerateVisual, onStartNarrationRecording, onPickNarration]);
 
   const handleItemClick = (action: () => void) => {
     close();
@@ -1526,7 +1822,7 @@ function MediaAddPopover({ idx, onCaptureScreenshot, onPickImage, onBrowseImage,
       <button
         ref={buttonRef}
         onClick={toggle}
-        className="w-8 h-8 rounded-md border border-dashed border-[rgb(var(--color-border))] hover:border-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/5 transition-colors flex items-center justify-center"
+        className={`${variant === "placeholder" ? "h-7 w-7" : "h-8 w-8"} rounded-md border border-dashed border-[rgb(var(--color-border))] hover:border-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/5 transition-colors flex items-center justify-center`}
         title="Add media"
         aria-expanded={state !== null}
         aria-haspopup="true"
