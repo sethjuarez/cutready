@@ -15,11 +15,8 @@ Release Please manages this changelog. Do not edit manually.
 
 ### Features
 
-* add built-in GitHub collaboration auth ([5e58004](https://github.com/sethjuarez/cutready/commit/5e5800454b3027534e018670881b8f9014e8fbc5))
 * add built-in GitHub collaboration auth ([e13e372](https://github.com/sethjuarez/cutready/commit/e13e3723d37457d82a9185c9ae08f70d7e00e168))
-* **export:** render sketch videos ([c8df4b0](https://github.com/sethjuarez/cutready/commit/c8df4b0d31f46c8dfe47b9c71c4f2cad50d65ade))
 * **export:** render sketch videos ([055407d](https://github.com/sethjuarez/cutready/commit/055407df2c84188377e195a74f0a94974a325cd8))
-* **narration:** add narration asset workflow ([68eccb5](https://github.com/sethjuarez/cutready/commit/68eccb501d783dbd9550a72b78d5743919ac204c))
 * **narration:** add narration asset workflow ([c0a12fa](https://github.com/sethjuarez/cutready/commit/c0a12faac5d86adb5cf754cfa080fd72c436855e))
 
 
