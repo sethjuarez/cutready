@@ -66,6 +66,7 @@ export function AppLayout() {
   const terminalFocusMode = useAppStore((s) => s.terminalFocusMode);
   const setTerminalFocusMode = useAppStore((s) => s.setTerminalFocusMode);
   const isMerging = useAppStore((s) => s.isMerging);
+  const projectSwitching = useAppStore((s) => s.projectSwitching);
 
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
@@ -413,7 +414,7 @@ export function AppLayout() {
     [outputHeight, setOutputHeight],
   );
   const contentView = view === "settings" ? settingsBackgroundView : view;
-  const outputPanelAvailable = contentView !== "home" && contentView !== "chat";
+  const outputPanelAvailable = contentView !== "home" && contentView !== "chat" && !projectSwitching;
   const outputPanelVisible = terminalFocusMode || (outputPanelAvailable && outputVisible);
 
   return (
@@ -446,16 +447,17 @@ export function AppLayout() {
           {view !== "home" && sidebarPosition === "left" && <Sidebar onFeedback={() => setFeedbackOpen(true)} />}
 
           {/* Primary sidebar (hidden on home and chat) */}
-          {contentView !== "home" && contentView !== "chat" && sidebarVisible && sidebarPosition === "left" && <PrimarySidebar viewOverride={contentView} />}
+          {contentView !== "home" && contentView !== "chat" && !projectSwitching && sidebarVisible && sidebarPosition === "left" && <PrimarySidebar viewOverride={contentView} />}
 
           {/* Center column: content + output panel */}
           <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
             {/* Upper: main content */}
             <div className="relative flex-1 min-h-0">
               {contentView === "home" && <div className="h-full overflow-y-auto"><HomePanel /></div>}
-              {(contentView === "project" || contentView === "sketch" || contentView === "assets" || contentView === "narrations" || contentView === "changes") && (isMerging ? <MergeConflictPanel /> : <StoryboardPanel />)}
-              {contentView === "editor" && <div className="h-full overflow-y-auto"><ScriptEditorPanel /></div>}
-              {contentView === "recording" && displaySettings.featureRecording && <div className="h-full overflow-y-auto"><RecordingPanel /></div>}
+              {projectSwitching && <ProjectSwitchingState />}
+              {!projectSwitching && (contentView === "project" || contentView === "sketch" || contentView === "assets" || contentView === "narrations" || contentView === "changes") && (isMerging ? <MergeConflictPanel /> : <StoryboardPanel />)}
+              {!projectSwitching && contentView === "editor" && <div className="h-full overflow-y-auto"><ScriptEditorPanel /></div>}
+              {!projectSwitching && contentView === "recording" && displaySettings.featureRecording && <div className="h-full overflow-y-auto"><RecordingPanel /></div>}
               {contentView === "chat" && <div className="h-full overflow-hidden"><ChatPanel /></div>}
             </div>
 
@@ -475,7 +477,7 @@ export function AppLayout() {
           </div>
 
           {/* Primary sidebar on right (hidden on home and chat views) */}
-          {contentView !== "home" && contentView !== "chat" && sidebarVisible && sidebarPosition === "right" && <PrimarySidebar viewOverride={contentView} />}
+          {contentView !== "home" && contentView !== "chat" && !projectSwitching && sidebarVisible && sidebarPosition === "right" && <PrimarySidebar viewOverride={contentView} />}
 
           {/* Activity bar on right (hidden on home) */}
           {view !== "home" && sidebarPosition === "right" && <Sidebar onFeedback={() => setFeedbackOpen(true)} />}
@@ -515,6 +517,19 @@ export function AppLayout() {
       <AiApplyGateDialog />
       <KeyboardShortcutsDialog open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
       <FeedbackDialog isOpen={feedbackOpen} onClose={() => setFeedbackOpen(false)} />
+    </div>
+  );
+}
+
+function ProjectSwitchingState() {
+  return (
+    <div className="flex h-full items-center justify-center bg-[rgb(var(--color-surface))] px-6 text-center">
+      <div className="max-w-sm border-l border-[rgb(var(--color-border))] pl-4 text-left">
+        <p className="text-sm font-medium text-[rgb(var(--color-text))]">Switching project</p>
+        <p className="mt-1 text-xs leading-relaxed text-[rgb(var(--color-text-secondary))]">
+          Loading the selected project workspace...
+        </p>
+      </div>
     </div>
   );
 }

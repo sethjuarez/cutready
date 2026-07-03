@@ -22,6 +22,9 @@ function App() {
 
   const [resetKey, setResetKey] = useState(0);
   const handleReset = useCallback(() => setResetKey((k) => k + 1), []);
+  const projectRoot = useAppStore((s) => s.currentProject?.root ?? "none");
+  const projectSwitching = useAppStore((s) => s.projectSwitching);
+  const errorBoundaryResetKey = `${resetKey}:${projectRoot}:${projectSwitching ? "switching" : "ready"}`;
 
   // Auto-open last project on startup
   useEffect(() => {
@@ -105,7 +108,7 @@ function App() {
 
   return (
     <ErrorBoundary
-      resetKey={resetKey}
+      resetKey={errorBoundaryResetKey}
       fallback={
         <div className="h-full bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text))] flex items-center justify-center">
           <div className="text-center space-y-4">
