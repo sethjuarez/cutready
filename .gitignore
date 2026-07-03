@@ -39,3 +39,6 @@ scripts/visual-eval/runs/
 
 # Copilot CLI
 skills-lock.json
+
+# Auditaur local runtime session
+.auditaur/session.json

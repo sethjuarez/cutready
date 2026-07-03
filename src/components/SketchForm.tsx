@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { convertFileSrc, invoke, listen } from "../services/tauri";
-import { open } from "@tauri-apps/plugin-dialog";
+import { Channel, convertFileSrc, invoke, listen } from "../services/tauri";
+import { open, save } from "@tauri-apps/plugin-dialog";
+import { openPath } from "@tauri-apps/plugin-opener";
 import { SafeMarkdown } from "./SafeMarkdown";
 import { ChevronLeft, Sparkles, Monitor, Plus, X, Folder, Check, Film, Image as ImageIcon, Mic2 } from "lucide-react";
 import { shouldSuppressEditorFlush, useAppStore } from "../stores/appStore";
@@ -12,6 +13,7 @@ import { ProjectImage } from "./ProjectImage";
 import { ScreenCaptureOverlay } from "./ScreenCaptureOverlay";
 import { SketchPreview } from "./SketchPreview";
 import { DocumentHeader } from "./DocumentHeader";
+import { Dialog } from "./Dialog";
 import { FieldAiButton } from "./FieldAiButton";
 import { LockedDocumentBanner } from "./LockedDocumentBanner";
 import { NarrationRecordingDialog, type NarrationRecordingTake } from "./NarrationRecordingDialog";
@@ -41,6 +43,16 @@ const REQUESTED_SETTINGS_TAB_KEY = "cutready:requested-settings-tab";
 
 type ProjectAsset = { path: string; size: number; assetType: string };
 type ProjectAudioAsset = { path: string; size: number; mimeType: string; modifiedAt: number };
+type SketchVideoExport = { path: string; duration_seconds: number; row_count: number };
+type SketchVideoExportProgress = { phase: string; current: number; total: number; message: string };
+type SketchVideoExportSettings = {
+  titleCardDurationSeconds: number;
+  titleToFirstRowHoldSeconds: number;
+  rowTransitionHoldSeconds: number;
+  finalHoldSeconds: number;
+  normalizeNarrationAudio: boolean;
+};
+type VideoExportIssue = { rowNumber: number; missing: string[] };
 
 function projectAssetSrc(projectRoot: string | undefined | null, relativePath: string | null | undefined): string {
   if (!projectRoot || !relativePath) return "";
@@ -142,6 +154,188 @@ function drawDecodedWaveform(canvas: HTMLCanvasElement, audioBuffer: AudioBuffer
   context.stroke();
 }
 
+function getVideoExportIssues(rows: PlanningRow[]): VideoExportIssue[] {
+  if (rows.length === 0) {
+    return [{ rowNumber: 0, missing: ["at least one row"] }];
+  }
+
+  return rows.flatMap((row, index) => {
+    const missing: string[] = [];
+    if (!row.screenshot?.trim()) missing.push("screenshot");
+    if (!row.narration?.path?.trim()) missing.push("narration");
+    return missing.length > 0 ? [{ rowNumber: index + 1, missing }] : [];
+  });
+}
+
+function slugifyExportName(value: string): string {
+  const slug = value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return slug || "sketch";
+}
+
+function formatExportTimestamp(date = new Date()): string {
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return [
+    date.getFullYear(),
+    pad(date.getMonth() + 1),
+    pad(date.getDate()),
+    "-",
+    pad(date.getHours()),
+    pad(date.getMinutes()),
+    pad(date.getSeconds()),
+  ].join("");
+}
+
+function defaultVideoExportName(title: string): string {
+  const fileName = `${slugifyExportName(title)}-${formatExportTimestamp()}.mp4`;
+  return fileName;
+}
+
+function ensureMp4Extension(path: string): string {
+  return /\.mp4$/i.test(path) ? path : `${path}.mp4`;
+}
+
+function VideoExportReadinessDialog({
+  issues,
+  onClose,
+}: {
+  issues: VideoExportIssue[] | null;
+  onClose: () => void;
+}) {
+  if (!issues) return null;
+
+  const hasRows = !(issues.length === 1 && issues[0].rowNumber === 0);
+
+  return (
+    <Dialog
+      isOpen={issues !== null}
+      onClose={onClose}
+      align="top"
+      topOffset="18vh"
+      width="w-full max-w-lg mx-4"
+      labelledBy="video-export-readiness-title"
+    >
+      <div className="cr-modal-surface overflow-hidden rounded-2xl">
+        <div className="flex items-start gap-3 border-b border-[rgb(var(--color-border))] px-5 py-4">
+          <div className="mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))]">
+            <Film className="h-4 w-4" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <h2 id="video-export-readiness-title" className="text-sm font-semibold text-[rgb(var(--color-text))]">
+              Video export needs a complete sketch
+            </h2>
+            <p className="mt-1 text-xs leading-5 text-[rgb(var(--color-text-secondary))]">
+              CutReady can render a sketch video when every row has a screenshot and narration. Add the missing pieces below, then export again.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg p-1.5 text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
+            aria-label="Close video export requirements"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="max-h-[45vh] overflow-y-auto px-5 py-4">
+          {!hasRows ? (
+            <div className="rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]/60 px-3 py-2 text-xs text-[rgb(var(--color-text-secondary))]">
+              Add at least one planning row with a screenshot and narration.
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {issues.map((issue) => (
+                <div
+                  key={issue.rowNumber}
+                  className="flex items-center justify-between gap-3 rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]/60 px-3 py-2"
+                >
+                  <span className="text-xs font-medium text-[rgb(var(--color-text))]">Row {issue.rowNumber}</span>
+                  <span className="text-xs text-[rgb(var(--color-text-secondary))]">
+                    Missing {issue.missing.join(" and ")}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="flex justify-end border-t border-[rgb(var(--color-border))] px-5 py-4">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg bg-[rgb(var(--color-accent))] px-3 py-2 text-xs font-semibold text-[rgb(var(--color-accent-fg))] transition-colors hover:bg-[rgb(var(--color-accent-hover))]"
+          >
+            Got it
+          </button>
+        </div>
+      </div>
+    </Dialog>
+  );
+}
+
+function VideoExportProgressDialog({
+  progress,
+}: {
+  progress: SketchVideoExportProgress | null;
+}) {
+  if (!progress) return null;
+
+  const total = Math.max(1, progress.total);
+  const current = Math.min(Math.max(0, progress.current), total);
+  const percent = Math.round((current / total) * 100);
+  const isFinishing = progress.phase === "complete";
+
+  return (
+    <Dialog
+      isOpen={progress !== null}
+      onClose={() => {}}
+      align="top"
+      topOffset="18vh"
+      width="w-full max-w-md mx-4"
+      labelledBy="video-export-progress-title"
+    >
+      <div className="cr-modal-surface overflow-hidden rounded-2xl">
+        <div className="px-5 py-5">
+          <div className="flex items-start gap-3">
+            <div className="relative grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))]">
+              <Film className="h-4 w-4" />
+              <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 animate-pulse rounded-full bg-[rgb(var(--color-accent))]" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <h2 id="video-export-progress-title" className="text-sm font-semibold text-[rgb(var(--color-text))]">
+                Exporting video
+              </h2>
+              <p className="mt-1 text-xs leading-5 text-[rgb(var(--color-text-secondary))]">
+                {progress.message}
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-5">
+            <div className="mb-2 flex items-center justify-between text-[11px] font-medium uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))]">
+              <span>{isFinishing ? "Wrapping up" : `Step ${current} of ${total}`}</span>
+              <span>{percent}%</span>
+            </div>
+            <div className="h-2 overflow-hidden rounded-full bg-[rgb(var(--color-surface-alt))]">
+              <div
+                className="h-full rounded-full bg-[rgb(var(--color-accent))] transition-all duration-300 ease-out"
+                style={{ width: `${percent}%` }}
+              />
+            </div>
+          </div>
+
+          <div className="mt-4 rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]/60 px-3 py-2 text-xs text-[rgb(var(--color-text-secondary))]">
+            Keeping screenshots lossless in RGB, trimming narration silence, easing into the first row, holding adjacent rows for transitions, and ending on a 3-second hold.
+          </div>
+        </div>
+      </div>
+    </Dialog>
+  );
+}
+
 interface SketchRowAssetPickerProps {
   assets: ProjectAsset[];
   projectRoot: string | null;
@@ -179,14 +373,14 @@ export function SketchRowAssetPicker({
 
   return (
     <div
-      className="fixed inset-0 z-modal flex items-center justify-center p-4 bg-[rgb(var(--color-overlay-scrim)/0.55)]"
+      className="cr-modal-backdrop fixed inset-0 z-modal flex items-center justify-center p-4"
       onClick={onCancel}
     >
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="sketch-row-asset-picker-title"
-        className="bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-2xl shadow-2xl w-full max-h-[calc(100vh-32px)] flex flex-col overflow-hidden"
+        className="cr-modal-surface rounded-2xl w-full max-h-[calc(100vh-32px)] flex flex-col overflow-hidden"
         style={{ width: "min(1180px, calc(100vw - 32px))" }}
         onClick={(event) => event.stopPropagation()}
       >
@@ -443,14 +637,14 @@ function SketchRowNarrationPicker({
 
   return (
     <div
-      className="fixed inset-0 z-modal flex items-center justify-center bg-[rgb(var(--color-overlay-scrim)/0.55)] p-4"
+      className="cr-modal-backdrop fixed inset-0 z-modal flex items-center justify-center p-4"
       onClick={onCancel}
     >
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="sketch-row-narration-picker-title"
-        className="flex max-h-[calc(100vh-32px)] w-full max-w-3xl flex-col overflow-hidden rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] shadow-2xl"
+        className="cr-modal-surface flex max-h-[calc(100vh-32px)] w-full max-w-3xl flex-col overflow-hidden rounded-xl"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-4 border-b border-[rgb(var(--color-border))] px-5 py-4">
@@ -612,6 +806,9 @@ export function SketchForm() {
   const [rowDiffs, setRowDiffs] = useState<RowDiff[]>([]);
   const [narrationRecordingRow, setNarrationRecordingRow] = useState<number | null>(null);
   const [narrationSavingRows, setNarrationSavingRows] = useState<Set<number>>(new Set());
+  const [exportingVideo, setExportingVideo] = useState(false);
+  const [videoExportProgress, setVideoExportProgress] = useState<SketchVideoExportProgress | null>(null);
+  const [videoExportIssues, setVideoExportIssues] = useState<VideoExportIssue[] | null>(null);
   const [showNarrationSetupPrompt, setShowNarrationSetupPrompt] = useState(false);
   // Last AI diffs are preserved so the user can re-show them after auto-fade
   const lastAiDiffs = useRef<{ rows: Set<number>; diffs: RowDiff[] } | null>(null);
@@ -793,8 +990,9 @@ export function SketchForm() {
       rows: localRows,
       projectRoot,
       title: localTitle || "Untitled Sketch",
+      description: localDesc,
     }));
-  }, [localRows, projectRoot, localTitle]);
+  }, [localRows, projectRoot, localTitle, localDesc]);
 
   const handleTitleChange = useCallback(
     (value: string) => {
@@ -1070,7 +1268,11 @@ The Actions describe what happens on screen — use them as visual design hints.
     sketchLocked,
   ]);
 
-  const handleSaveNarrationTake = useCallback(async (rowIndex: number, take: NarrationRecordingTake) => {
+  const handleSaveNarrationTake = useCallback(async (
+    rowIndex: number,
+    take: NarrationRecordingTake,
+    options?: { navigateToRow?: number | null },
+  ) => {
     if (!activeSketchPath) return;
     setNarrationSavingRows((rows) => new Set(rows).add(rowIndex));
     try {
@@ -1099,7 +1301,12 @@ The Actions describe what happens on screen — use them as visual design hints.
         content: `Saved narration for row ${rowIndex + 1}`,
         level: "success",
       }]);
-      setNarrationDialogRow(null);
+      const navigateToRow = options?.navigateToRow;
+      setNarrationDialogRow(
+        typeof navigateToRow === "number" && navigateToRow >= 0 && navigateToRow < (sketch.rows?.length ?? 0)
+          ? navigateToRow
+          : rowIndex,
+      );
     } catch (err) {
       console.error("[SketchForm] Failed to save narration recording:", err);
       useToastStore.getState().show(`Could not save narration: ${err}`, 5000, "error");
@@ -1120,6 +1327,7 @@ The Actions describe what happens on screen — use them as visual design hints.
       rows: localRows,
       projectRoot,
       title: localTitle || "Untitled Sketch",
+      description: localDesc,
       initialMode: mode,
     }));
     try {
@@ -1134,7 +1342,7 @@ The Actions describe what happens on screen — use them as visual design hints.
       setPreviewMode(mode);
       setShowPreview(true);
     }
-  }, [localRows, projectRoot, localTitle]);
+  }, [localRows, projectRoot, localTitle, localDesc]);
 
   /** Launch presentation in fullscreen — single monitor launches directly, multi shows picker */
   const launchPresentation = useCallback(async (mode: PresentationMode = "slides") => {
@@ -1163,6 +1371,107 @@ The Actions describe what happens on screen — use them as visual design hints.
       useAppStore.getState().addActivityEntries([{ id: crypto.randomUUID(), timestamp: new Date(), source: "export", content: `Exported "${activeSketch.title}" to Word`, level: "success" }]);
     }).catch(err => console.error("Word export failed:", err));
   }, [activeSketch, projectRoot]);
+
+  const handleExportVideo = useCallback(async () => {
+    if (!activeSketchPath || !activeSketch || !projectRoot || exportingVideo) return;
+    const issues = getVideoExportIssues(localRows);
+    if (issues.length > 0) {
+      setVideoExportIssues(issues);
+      return;
+    }
+
+    const selectedPath = await save({
+      defaultPath: defaultVideoExportName(localTitle || activeSketch.title || "sketch"),
+      filters: [{ name: "MP4 Video", extensions: ["mp4"] }],
+    });
+    if (!selectedPath) return;
+
+    const outputPath = ensureMp4Extension(selectedPath);
+
+    setExportingVideo(true);
+    setVideoExportProgress({
+      phase: "preparing",
+      current: 0,
+      total: Math.max(1, localRows.length + Math.max(0, localRows.length - 1) + 4),
+      message: "Preparing sketch video export",
+    });
+    try {
+      await saveSketchEditsForPath(activeSketchPath, localTitle, localRows, "video export");
+      const progressChannel = new Channel<SketchVideoExportProgress>();
+      progressChannel.onmessage = (progress) => {
+        setVideoExportProgress(progress);
+      };
+      const videoExportSettings = {
+        titleCardDurationSeconds: settings.videoExportOverrideEnabled
+          ? settings.workspaceVideoExportTitleCardDurationSeconds
+          : settings.videoExportTitleCardDurationSeconds,
+        titleToFirstRowHoldSeconds: settings.videoExportOverrideEnabled
+          ? settings.workspaceVideoExportTitleToFirstRowHoldSeconds
+          : settings.videoExportTitleToFirstRowHoldSeconds,
+        rowTransitionHoldSeconds: settings.videoExportOverrideEnabled
+          ? settings.workspaceVideoExportRowTransitionHoldSeconds
+          : settings.videoExportRowTransitionHoldSeconds,
+        finalHoldSeconds: settings.videoExportOverrideEnabled
+          ? settings.workspaceVideoExportFinalHoldSeconds
+          : settings.videoExportFinalHoldSeconds,
+        normalizeNarrationAudio: settings.videoExportOverrideEnabled
+          ? settings.workspaceVideoExportNormalizeNarrationAudio
+          : settings.videoExportNormalizeNarrationAudio,
+      } satisfies SketchVideoExportSettings;
+
+      const result = await invoke<SketchVideoExport>("export_sketch_video", {
+        relativePath: activeSketchPath,
+        outputPath,
+        settings: videoExportSettings,
+        onProgress: progressChannel,
+      });
+      setVideoExportProgress({
+        phase: "complete",
+        current: 1,
+        total: 1,
+        message: "Video export complete",
+      });
+      useToastStore.getState().show(`Video exported to ${result.path}`, 5000, "success");
+      useAppStore.getState().addActivityEntries([{
+        id: crypto.randomUUID(),
+        timestamp: new Date(),
+        source: "export",
+        content: `Exported "${activeSketch.title}" to video`,
+        level: "success",
+      }]);
+      await useAppStore.getState().refreshChangedFiles();
+      try {
+        await openPath(result.path);
+      } catch (openErr) {
+        console.warn("[SketchForm] Video exported, but opening it failed:", openErr);
+      }
+    } catch (err) {
+      console.error("[SketchForm] Video export failed:", err);
+      useToastStore.getState().show(`Video export failed: ${err}`, 6000, "error");
+    } finally {
+      setExportingVideo(false);
+      setVideoExportProgress(null);
+    }
+  }, [
+    activeSketchPath,
+    activeSketch,
+    projectRoot,
+    exportingVideo,
+    saveSketchEditsForPath,
+    localTitle,
+    localRows,
+    settings.videoExportOverrideEnabled,
+    settings.videoExportTitleCardDurationSeconds,
+    settings.videoExportTitleToFirstRowHoldSeconds,
+    settings.videoExportRowTransitionHoldSeconds,
+    settings.videoExportFinalHoldSeconds,
+    settings.videoExportNormalizeNarrationAudio,
+    settings.workspaceVideoExportTitleCardDurationSeconds,
+    settings.workspaceVideoExportTitleToFirstRowHoldSeconds,
+    settings.workspaceVideoExportRowTransitionHoldSeconds,
+    settings.workspaceVideoExportFinalHoldSeconds,
+    settings.workspaceVideoExportNormalizeNarrationAudio,
+  ]);
 
   const handleRecord = useCallback(async () => {
     if (!activeSketchPath) return;
@@ -1247,6 +1556,13 @@ The Actions describe what happens on screen — use them as visual design hints.
       label: "Word - Portrait",
       icon: documentToolbarIcons.fileText,
       onSelect: () => handleExportWord("portrait"),
+    },
+    {
+      id: "video",
+      label: exportingVideo ? "Rendering video..." : "Video",
+      icon: documentToolbarIcons.video,
+      onSelect: handleExportVideo,
+      disabled: exportingVideo,
     },
   ] : [];
 
@@ -1542,6 +1858,8 @@ The row already has a visual and design_plan. You may read the sketch for contex
           screenshotPath={localRows[narrationDialogRow]?.screenshot}
           existingNarrationPath={localRows[narrationDialogRow]?.narration?.path}
           existingNarrationDurationMs={localRows[narrationDialogRow]?.narration?.duration_ms}
+          canNavigatePrevious={narrationDialogRow > 0}
+          canNavigateNext={narrationDialogRow < localRows.length - 1}
           audio={settings.narrationMicDeviceId ? { deviceId: { exact: settings.narrationMicDeviceId } } : true}
           mimeType={preferredNarrationMimeType()}
           onAddScreenshot={() => {
@@ -1550,20 +1868,28 @@ The row already has a visual and design_plan. You may read the sketch for contex
             setCaptureRowIdx(narrationDialogRow);
           }}
           onCancel={() => setNarrationDialogRow(null)}
-          onSave={(take) => handleSaveNarrationTake(narrationDialogRow, take)}
+          onNavigatePrevious={() => setNarrationDialogRow(Math.max(0, narrationDialogRow - 1))}
+          onNavigateNext={() => setNarrationDialogRow(Math.min(localRows.length - 1, narrationDialogRow + 1))}
+          onSave={(take, options) => handleSaveNarrationTake(narrationDialogRow, take, options)}
         />
       )}
 
+      <VideoExportReadinessDialog
+        issues={videoExportIssues}
+        onClose={() => setVideoExportIssues(null)}
+      />
+      <VideoExportProgressDialog progress={videoExportProgress} />
+
       {showNarrationSetupPrompt && (
         <div
-          className="fixed inset-0 z-modal flex items-center justify-center bg-[rgb(var(--color-overlay-scrim)/0.45)] p-4"
+          className="cr-modal-backdrop fixed inset-0 z-modal flex items-center justify-center p-4"
           onClick={() => setShowNarrationSetupPrompt(false)}
         >
           <div
             role="dialog"
             aria-modal="true"
             aria-labelledby="narration-setup-title"
-            className="w-full max-w-sm rounded-2xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] p-5 shadow-2xl"
+            className="cr-modal-surface w-full max-w-sm rounded-2xl p-5"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="flex items-start gap-3">
@@ -1605,8 +1931,8 @@ The row already has a visual and design_plan. You may read the sketch for contex
 
       {/* Visual generation instructions popup */}
       {visualPromptRow !== null && (
-        <div className="fixed inset-0 z-modal flex items-center justify-center bg-[rgb(var(--color-overlay-scrim)/0.4)]" onClick={() => setVisualPromptRow(null)}>
-          <div className="bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-xl shadow-2xl w-full max-w-md flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className="cr-modal-backdrop fixed inset-0 z-modal flex items-center justify-center" onClick={() => setVisualPromptRow(null)}>
+          <div className="cr-modal-surface rounded-xl w-full max-w-md flex flex-col" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-4 py-3 border-b border-[rgb(var(--color-border))]">
               <span className="text-sm font-medium text-[rgb(var(--color-text))]">
                 Generate Visual — Row {visualPromptRow + 1}
@@ -1661,6 +1987,7 @@ The row already has a visual and design_plan. You may read the sketch for contex
           rows={localRows}
           projectRoot={projectRoot}
           title={localTitle || "Untitled Sketch"}
+          description={localDesc}
           initialMode={previewMode}
           onClose={() => { setShowPreview(false); setPreviewMode("slides"); }}
         />

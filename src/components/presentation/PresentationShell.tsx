@@ -14,6 +14,7 @@
  */
 import { useCallback, useState, lazy, Suspense } from "react";
 import type { PlanningRow } from "../../types/sketch";
+import { plainTextFromRichValue } from "../../utils/richText";
 import type { PreviewSlide, PresentationMode } from "./types";
 
 const SlidesView = lazy(() =>
@@ -30,6 +31,7 @@ interface PresentationShellProps {
   rows: PlanningRow[];
   projectRoot: string;
   title: string;
+  description?: unknown;
   onClose: () => void;
   /** If provided, these typed slides are used instead of building from rows. */
   slides?: PreviewSlide[];
@@ -43,13 +45,22 @@ export function PresentationShell({
   rows,
   projectRoot,
   title,
+  description,
   onClose,
   slides: slidesProp,
   initialMode,
   startInTeleprompter,
 }: PresentationShellProps) {
   const slides: PreviewSlide[] =
-    slidesProp ?? rows.map((r) => ({ type: "row", row: r, context: title }));
+    slidesProp ?? [
+      {
+        type: "title",
+        heading: title || "Untitled Sketch",
+        subtitle: plainTextFromRichValue(description),
+        context: title || "Untitled Sketch",
+      },
+      ...rows.map((r) => ({ type: "row" as const, row: r, context: title || "Untitled Sketch" })),
+    ];
   const [currentIdx, setCurrentIdx] = useState(0);
 
   const resolvedInitialMode: PresentationMode =

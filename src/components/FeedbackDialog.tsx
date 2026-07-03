@@ -209,7 +209,7 @@ export function FeedbackDialog({ isOpen, onClose }: FeedbackDialogProps) {
 
   return (
     <Dialog isOpen={isOpen} onClose={onClose} align="top" topOffset="16vh" width="w-[460px] max-w-[92vw]">
-      <div className="bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-xl shadow-2xl p-4 space-y-3">
+      <div className="cr-modal-surface rounded-xl p-4 space-y-3">
         {/* Header */}
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-medium text-[rgb(var(--color-text))]">

@@ -43,8 +43,8 @@ export function ConfirmDialog({
   const colors = variantColors[variant];
 
   return (
-    <Dialog isOpen={open} onClose={onCancel} align="top" topOffset="20vh" width="w-full max-w-sm mx-4" backdropClass="bg-[rgb(var(--color-overlay-scrim)/0.4)]">
-      <div className="bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-xl shadow-2xl overflow-hidden">
+    <Dialog isOpen={open} onClose={onCancel} align="top" topOffset="20vh" width="w-full max-w-sm mx-4">
+      <div className="cr-modal-surface rounded-xl overflow-hidden">
         <div className="px-5 pt-5 pb-4">
           <h2 className="text-sm font-semibold text-[rgb(var(--color-text))] mb-2">{title}</h2>
           <p className="text-xs text-[rgb(var(--color-text-secondary))] leading-relaxed whitespace-pre-line">{message}</p>

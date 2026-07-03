@@ -90,8 +90,8 @@ export function SnapshotDialog() {
   const willFork = isRewound;
 
   return (
-    <Dialog isOpen={snapshotPromptOpen} onClose={close} align="top" topOffset="20vh" width="w-full max-w-md mx-4" backdropClass="bg-[rgb(var(--color-overlay-scrim)/0.4)]">
-      <div className="bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-xl shadow-2xl overflow-hidden">
+    <Dialog isOpen={snapshotPromptOpen} onClose={close} align="top" topOffset="20vh" width="w-full max-w-md mx-4">
+      <div className="cr-modal-surface rounded-xl overflow-hidden">
         {/* Header */}
         <div className="flex items-center gap-2.5 px-5 pt-5 pb-3">
           <div className="p-2 rounded-lg bg-[rgb(var(--color-accent))]/10">

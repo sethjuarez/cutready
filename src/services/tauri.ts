@@ -19,6 +19,7 @@ import {
 import { getAuditaurClient, initializeAuditaur } from "./auditaur";
 
 type AuditaurInvokeArgs = Record<string, unknown>;
+const TAURI_SERIALIZE_TO_IPC_KEY = "__TAURI_TO_IPC_KEY__";
 
 const SENSITIVE_INVOKE_COMMANDS = new Set([
   "azure_browser_auth_complete",
@@ -33,9 +34,17 @@ function isTauriRuntime() {
   return typeof window !== "undefined" && Boolean((window as any).__TAURI_INTERNALS__);
 }
 
+function hasChannelArg(value: unknown): boolean {
+  if (!value || typeof value !== "object") return false;
+  if (typeof (value as Record<string, unknown>)[TAURI_SERIALIZE_TO_IPC_KEY] === "function") return true;
+  if (Array.isArray(value)) return value.some(hasChannelArg);
+  return Object.values(value as Record<string, unknown>).some(hasChannelArg);
+}
+
 function canUseAuditaurInvoke(args?: InvokeArgs, options?: InvokeOptions): args is AuditaurInvokeArgs | undefined {
   if (options) return false;
   if (!args) return true;
+  if (hasChannelArg(args)) return false;
   return !Array.isArray(args) && !(args instanceof ArrayBuffer) && !(args instanceof Uint8Array);
 }
 

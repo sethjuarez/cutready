@@ -38,7 +38,7 @@ const result = spawnSync("auditaur", args, {
 
 if (result.error) {
   console.error(`Failed to run Auditaur drill: ${result.error.message}`);
-  console.error("Install auditaur-cli 0.4.0+ and ensure `auditaur` is on PATH.");
+  console.error("Install auditaur-cli 0.4.1+ and ensure `auditaur` is on PATH.");
   process.exit(1);
 }
 

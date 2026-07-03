@@ -1048,8 +1048,8 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
 
       {/* Delete confirmation overlay */}
       {pendingDelete && (
-        <div className="fixed inset-0 z-modal flex items-center justify-center bg-[rgb(var(--color-overlay-scrim)/0.4)]">
-          <div className="bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-xl shadow-xl p-5 max-w-sm mx-4">
+        <div className="cr-modal-backdrop fixed inset-0 z-modal flex items-center justify-center">
+          <div className="cr-modal-surface rounded-xl p-5 max-w-sm mx-4">
             <p className="text-sm text-[rgb(var(--color-text))] mb-1 font-medium">Delete {pendingDelete.type}?</p>
             <p className="text-xs text-[rgb(var(--color-text-secondary))] mb-2">
               "{pendingDelete.title}" will be permanently deleted.
@@ -1109,8 +1109,8 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
 
       {/* Transfer warning: moving a sketch used by storyboards */}
       {transferWarning && (
-        <div className="fixed inset-0 z-modal flex items-center justify-center bg-[rgb(var(--color-overlay-scrim)/0.4)]">
-          <div className="bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-xl shadow-xl p-5 max-w-sm mx-4">
+        <div className="cr-modal-backdrop fixed inset-0 z-modal flex items-center justify-center">
+          <div className="cr-modal-surface rounded-xl p-5 max-w-sm mx-4">
             <p className="text-sm text-[rgb(var(--color-text))] mb-2 font-medium">
               Move "{transferWarning.sourceTitle}"?
             </p>
@@ -1147,8 +1147,8 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
 
       {/* Transfer conflict: file already exists at destination */}
       {transferConflict && (
-        <div className="fixed inset-0 z-modal flex items-center justify-center bg-[rgb(var(--color-overlay-scrim)/0.4)]">
-          <div className="bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-xl shadow-xl p-5 max-w-sm mx-4">
+        <div className="cr-modal-backdrop fixed inset-0 z-modal flex items-center justify-center">
+          <div className="cr-modal-surface rounded-xl p-5 max-w-sm mx-4">
             <p className="text-sm text-[rgb(var(--color-text))] mb-1 font-medium">File already exists</p>
             <p className="text-xs text-[rgb(var(--color-text-secondary))] mb-3">
               A file with this name already exists in "{transferConflict.destProject.name}". Enter a new name:

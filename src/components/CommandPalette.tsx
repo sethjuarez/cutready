@@ -100,7 +100,7 @@ export function CommandPalette({
       onClick={onClose}
     >
       <div
-        className="w-[520px] max-w-[90vw] max-h-[60vh] bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-b-xl shadow-2xl flex flex-col overflow-hidden h-fit"
+        className="cr-modal-surface w-[520px] max-w-[90vw] max-h-[60vh] rounded-b-xl flex flex-col overflow-hidden h-fit"
         onClick={(e) => e.stopPropagation()}
         onKeyDown={handleKeyDown}
         tabIndex={-1}
