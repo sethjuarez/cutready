@@ -4,13 +4,15 @@ use std::{
     ffi::OsStr,
     fs,
     path::{Path, PathBuf},
-    process::{Command, Stdio},
 };
 
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 
-use crate::{engine::project, models::sketch::Sketch};
+use crate::{
+    engine::{ffmpeg, project},
+    models::sketch::Sketch,
+};
 
 const EXPORTS_DIR: &str = "exports";
 const TEMP_DIR: &str = ".cutready/exports/tmp";
@@ -798,7 +800,7 @@ fn ffmpeg_filter_escape(value: &str) -> String {
 }
 
 fn ensure_ffmpeg_available() -> anyhow::Result<()> {
-    let output = run_command("ffmpeg", ["-version"])?;
+    let output = ffmpeg::run_ffmpeg(["-version"])?;
     if output.status.success() {
         return Ok(());
     }
@@ -806,18 +808,15 @@ fn ensure_ffmpeg_available() -> anyhow::Result<()> {
 }
 
 fn probe_media_duration_seconds(path: &Path) -> anyhow::Result<f64> {
-    let output = run_command(
-        "ffprobe",
-        [
-            "-v",
-            "error",
-            "-show_entries",
-            "format=duration",
-            "-of",
-            "default=noprint_wrappers=1:nokey=1",
-            path.to_string_lossy().as_ref(),
-        ],
-    )?;
+    let output = ffmpeg::run_ffprobe([
+        "-v",
+        "error",
+        "-show_entries",
+        "format=duration",
+        "-of",
+        "default=noprint_wrappers=1:nokey=1",
+        path.to_string_lossy().as_ref(),
+    ])?;
     if !output.status.success() {
         anyhow::bail!("FFprobe could not read media duration");
     }
@@ -832,7 +831,7 @@ fn probe_media_duration_seconds(path: &Path) -> anyhow::Result<f64> {
 }
 
 fn run_ffmpeg(args: Vec<String>) -> anyhow::Result<()> {
-    let output = run_command("ffmpeg", args)?;
+    let output = ffmpeg::run_ffmpeg(args)?;
     if output.status.success() {
         return Ok(());
     }
@@ -846,24 +845,6 @@ fn run_ffmpeg(args: Vec<String>) -> anyhow::Result<()> {
         .find(|line| !line.is_empty())
         .unwrap_or("FFmpeg failed");
     anyhow::bail!("{message}");
-}
-
-fn run_command<I, S>(program: &str, args: I) -> anyhow::Result<std::process::Output>
-where
-    I: IntoIterator<Item = S>,
-    S: AsRef<OsStr>,
-{
-    let mut command = Command::new(program);
-    command
-        .args(args)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    #[cfg(target_os = "windows")]
-    {
-        use std::os::windows::process::CommandExt;
-        command.creation_flags(0x08000000);
-    }
-    Ok(command.output()?)
 }
 
 fn default_output_relative_path(title: &str) -> String {

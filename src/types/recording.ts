@@ -120,9 +120,14 @@ export interface RecorderSettings {
 
 export interface FfmpegStatus {
   available: boolean;
+  ffmpeg_available?: boolean;
   version: string | null;
   path: string | null;
   error: string | null;
+  ffprobe_available?: boolean;
+  ffprobe_version?: string | null;
+  ffprobe_path?: string | null;
+  ffprobe_error?: string | null;
 }
 
 export interface RecordingPlatformCapabilities {

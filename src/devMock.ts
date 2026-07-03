@@ -1165,17 +1165,27 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
     case "check_ffmpeg_status":
       return {
         available: true,
+        ffmpeg_available: true,
         version: "ffmpeg version dev-mock",
         path: "ffmpeg",
         error: null,
+        ffprobe_available: true,
+        ffprobe_version: "ffprobe version dev-mock",
+        ffprobe_path: "ffprobe",
+        ffprobe_error: null,
       };
     case "discover_recording_devices":
       return {
         ffmpeg: {
           available: true,
+          ffmpeg_available: true,
           version: "ffmpeg version dev-mock",
           path: "ffmpeg",
           error: null,
+          ffprobe_available: true,
+          ffprobe_version: "ffprobe version dev-mock",
+          ffprobe_path: "ffprobe",
+          ffprobe_error: null,
         },
         devices: [
           { id: "Studio Microphone", label: "Studio Microphone", kind: "microphone", is_default: false },
