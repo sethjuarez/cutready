@@ -1,0 +1,92 @@
+{
+  "app": "cutready",
+  "timeoutSeconds": 180,
+  "fixture": {
+    "prefix": "cutready-project-switch-drill-",
+    "projects": [
+      {
+        "path": "alpha",
+        "name": "Alpha Project",
+        "description": "First drill project",
+        "sketches": [
+          {
+            "path": "alpha.sk",
+            "title": "Alpha Sketch"
+          }
+        ]
+      },
+      {
+        "path": "beta",
+        "name": "Beta Project",
+        "description": "Second drill project",
+        "sketches": [
+          {
+            "path": "beta.sk",
+            "title": "Beta Sketch"
+          }
+        ]
+      }
+    ]
+  },
+  "steps": [
+    {
+      "id": "wait-for-switcher",
+      "drive": "wait",
+      "selector": "[data-testid=\"project-switcher-title-trigger\"]",
+      "timeoutMs": 30000
+    },
+    {
+      "id": "alpha-visible",
+      "expectText": "Alpha Project"
+    },
+    {
+      "id": "open-switcher-beta",
+      "drive": "click",
+      "selector": "[data-testid=\"project-switcher-title-trigger\"]"
+    },
+    {
+      "id": "click-beta",
+      "drive": "click",
+      "selector": "[data-testid=\"project-switcher-option-beta\"]"
+    },
+    {
+      "id": "beta-visible",
+      "expectText": "Beta Project"
+    },
+    {
+      "id": "open-switcher-alpha",
+      "drive": "click",
+      "selector": "[data-testid=\"project-switcher-title-trigger\"]"
+    },
+    {
+      "id": "click-alpha",
+      "drive": "click",
+      "selector": "[data-testid=\"project-switcher-option-alpha\"]"
+    },
+    {
+      "id": "alpha-visible-again",
+      "expectText": "Alpha Project"
+    },
+    {
+      "id": "no-reload-fallback",
+      "forbidText": [
+        "Something went wrong",
+        "Reload interface"
+      ]
+    },
+    {
+      "id": "errors",
+      "telemetry": "errors",
+      "maxCount": 0
+    },
+    {
+      "id": "failed-ipc",
+      "telemetry": "failed-ipc",
+      "maxCount": 0
+    },
+    {
+      "id": "explain",
+      "telemetry": "explain"
+    }
+  ]
+}

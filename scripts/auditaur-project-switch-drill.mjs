@@ -1,25 +1,28 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, resolve, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 
-const appName = "cutready";
-const timeoutSeconds = Number(process.env.CUTREADY_AUDITAUR_PROJECT_SWITCH_TIMEOUT ?? "180");
+const definitionPath = resolve(
+  process.env.CUTREADY_AUDITAUR_PROJECT_SWITCH_DEFINITION ?? "scripts/auditaur-project-switch-drill.json",
+);
+const definition = JSON.parse(readFileSync(definitionPath, "utf8"));
+const appName = definition.app ?? "cutready";
+const timeoutSeconds = Number(process.env.CUTREADY_AUDITAUR_PROJECT_SWITCH_TIMEOUT ?? definition.timeoutSeconds ?? "180");
 const reportPath = resolve(
   process.env.CUTREADY_AUDITAUR_PROJECT_SWITCH_REPORT ?? "target/auditaur-project-switch-drill-report.json",
 );
-const projectRoot = mkdtempSync(join(tmpdir(), "cutready-project-switch-drill-"));
+const projectRoot = mkdtempSync(join(tmpdir(), definition.fixture?.prefix ?? "cutready-project-switch-drill-"));
 const sessionFile = join(projectRoot, ".auditaur-session.json");
 const appCommand =
   process.platform === "win32" ? ["cmd", "/c", "npm run debug"] : ["npm", "run", "debug"];
-
 const env = {
   ...process.env,
   CUTREADY_PROJECT: projectRoot,
 };
-
 const report = {
   app: appName,
+  definition: definitionPath,
   startedAt: new Date().toISOString(),
   status: "running",
   phases: [],
@@ -27,6 +30,7 @@ const report = {
 
 let launcher;
 let appPid;
+let processPid;
 
 mkdirSync(dirname(reportPath), { recursive: true });
 writeProjectFixture();
@@ -34,6 +38,7 @@ writeProjectFixture();
 try {
   ensureNoActiveCutReady();
   console.log("Starting CutReady under Auditaur observation...");
+
   launcher = spawn("auditaur", [
     "debug",
     "--app",
@@ -56,43 +61,14 @@ try {
   });
 
   const readyStatus = await waitForLauncherReady();
-  appPid = readyStatus?.pid;
-  report.sessionId = readyStatus?.sessionId;
-  report.databasePath = readyStatus?.databasePath;
-  report.phases.push({ id: "readiness", status: "passed", result: readyStatus });
-  writeReport();
+  appPid = readyStatus.pid;
+  processPid = readyStatus.processPid;
+  report.sessionId = readyStatus.sessionId;
+  report.databasePath = readyStatus.databasePath;
+  recordPhase("readiness", "passed", readyStatus);
 
-  await runJsonPhase("wait-for-switcher", [
-    "drive",
-    "--app",
-    appName,
-    "--session-id",
-    report.sessionId,
-    "--target",
-    "auditaur-bridge",
-    "--json",
-    "wait",
-    "--selector",
-    "[data-testid=\"project-switcher-title-trigger\"]",
-    "--timeout-ms",
-    "30000",
-  ]);
-
-  await assertProjectVisible("Alpha Project");
-  await switchToProject("beta", "Beta Project");
-  await switchToProject("alpha", "Alpha Project");
-  await assertNoReloadFallback();
-
-  if (report.sessionId) {
-    await runJsonPhase("errors", ["errors", "--json", "--session", report.sessionId]);
-    await runJsonPhase("failed-ipc", ["ipc", "--json", "--session", report.sessionId, "--failed"]);
-    await runJsonPhase("explain", ["explain", "--json", "--session", report.sessionId]);
-  }
-
-  const errorsPhase = report.phases.find((phase) => phase.id === "errors");
-  const failedIpcPhase = report.phases.find((phase) => phase.id === "failed-ipc");
-  if (jsonCount(errorsPhase?.result) > 0 || jsonCount(failedIpcPhase?.result) > 0) {
-    throw new Error("Auditaur reported frontend errors or failed IPC during project switching.");
+  for (const step of definition.steps ?? []) {
+    await runStep(step);
   }
 
   report.status = "passed";
@@ -108,25 +84,33 @@ try {
   console.error(error);
   process.exitCode = 1;
 } finally {
+  clearDrillStartupState();
   stopSpawnedApp();
+  removeProjectFromRecents();
   rmSync(projectRoot, { recursive: true, force: true });
 }
 
 function writeProjectFixture() {
+  const projects = definition.fixture?.projects ?? [];
   mkdirSync(join(projectRoot, ".cutready"), { recursive: true });
-  mkdirSync(join(projectRoot, "alpha"), { recursive: true });
-  mkdirSync(join(projectRoot, "beta"), { recursive: true });
   writeFileSync(
     join(projectRoot, ".cutready", "projects.json"),
     `${JSON.stringify({
-      projects: [
-        { path: "alpha", name: "Alpha Project", description: "First drill project" },
-        { path: "beta", name: "Beta Project", description: "Second drill project" },
-      ],
+      projects: projects.map((project) => ({
+        path: project.path,
+        name: project.name,
+        description: project.description ?? "",
+      })),
     }, null, 2)}\n`,
   );
-  writeSketch(join(projectRoot, "alpha", "alpha.sk"), "Alpha Sketch");
-  writeSketch(join(projectRoot, "beta", "beta.sk"), "Beta Sketch");
+
+  for (const project of projects) {
+    const projectPath = join(projectRoot, project.path);
+    mkdirSync(projectPath, { recursive: true });
+    for (const sketch of project.sketches ?? []) {
+      writeSketch(join(projectPath, sketch.path), sketch.title);
+    }
+  }
 }
 
 function writeSketch(path, title) {
@@ -150,21 +134,127 @@ function writeSketch(path, title) {
   );
 }
 
-function ensureNoActiveCutReady() {
-  const activeStatus = runJson([
-    "debug",
-    "--app",
-    appName,
-    "--active",
-    "--json",
-    "status",
-  ]);
-  if (!activeStatus.ok || !activeStatus.json?.app) {
-    return;
+async function runStep(step) {
+  if (!step?.id) {
+    throw new Error(`Drill step is missing an id: ${JSON.stringify(step)}`);
   }
 
-  const app = activeStatus.json.app;
-  if (app.status === "active" && Number(app.heartbeatAgeSeconds ?? 999) < 30) {
+  if (step.drive) {
+    const result = await runDriveStep(step);
+    recordPhase(step.id, "passed", result);
+    return result;
+  }
+
+  if (step.expectText) {
+    const result = await waitForText(step.expectText, step.timeoutMs);
+    recordPhase(step.id, "passed", result);
+    return result;
+  }
+
+  if (step.forbidText) {
+    const result = runDriveText();
+    assertOk(step.id, result);
+    const text = JSON.stringify(result.json ?? "");
+    for (const forbidden of step.forbidText) {
+      if (text.includes(forbidden)) {
+        throw new Error(`${step.id} failed: found forbidden text "${forbidden}".`);
+      }
+    }
+    recordPhase(step.id, "passed", result.json);
+    return result.json;
+  }
+
+  if (step.telemetry) {
+    const result = runTelemetryStep(step);
+    assertOk(step.id, result);
+    const count = jsonCount(result.json);
+    if (Number.isFinite(step.maxCount) && count > step.maxCount) {
+      recordPhase(step.id, "failed", result.json);
+      throw new Error(`${step.id} failed: expected at most ${step.maxCount} item(s), found ${count}.`);
+    }
+    recordPhase(step.id, "passed", result.json);
+    return result.json;
+  }
+
+  throw new Error(`Unsupported drill step: ${JSON.stringify(step)}`);
+}
+
+async function runDriveStep(step) {
+  const args = [
+    "drive",
+    "--app",
+    appName,
+    "--session-id",
+    report.sessionId,
+    "--json",
+    step.drive,
+    "--target",
+    "auditaur-bridge",
+  ];
+  if (step.selector) {
+    args.push("--selector", expandValue(step.selector));
+  }
+  if (step.timeoutMs) {
+    args.push("--timeout-ms", String(step.timeoutMs));
+  }
+  if (step.expression) {
+    args.push("--expression", expandValue(step.expression));
+  }
+
+  const result = runJson(args);
+  assertOk(step.id, result);
+  return result.json;
+}
+
+async function waitForText(expectedText, timeoutMs = 30_000) {
+  const deadline = Date.now() + timeoutMs;
+  let lastText = "";
+  while (Date.now() < deadline) {
+    const result = runDriveText();
+    if (result.ok) {
+      lastText = JSON.stringify(result.json ?? "");
+      if (lastText.includes(expectedText)) {
+        return result.json;
+      }
+    }
+    await delay(1_000);
+  }
+  throw new Error(`Timed out waiting for ${expectedText}. Last body text: ${lastText}`);
+}
+
+function runDriveText() {
+  return runJson([
+    "drive",
+    "--app",
+    appName,
+    "--session-id",
+    report.sessionId,
+    "--json",
+    "text",
+    "--target",
+    "auditaur-bridge",
+    "--selector",
+    "body",
+  ]);
+}
+
+function runTelemetryStep(step) {
+  if (step.telemetry === "errors") {
+    return runJson(["errors", "--json", "--session", report.sessionId]);
+  }
+  if (step.telemetry === "failed-ipc") {
+    return runJson(["ipc", "--json", "--session", report.sessionId, "--failed"]);
+  }
+  if (step.telemetry === "explain") {
+    return runJson(["explain", "--json", "--session", report.sessionId]);
+  }
+  throw new Error(`Unsupported telemetry step kind: ${step.telemetry}`);
+}
+
+function ensureNoActiveCutReady() {
+  const activeStatus = runJson(["debug", "--app", appName, "--active", "--json", "status"]);
+  const app = activeStatus.json?.app;
+  if (activeStatus.ok && app?.status === "active" && Number(app.heartbeatAgeSeconds ?? 999) < 30 && pidIsRunning(app.pid)) {
     throw new Error(
       `An active CutReady Auditaur session is already running (pid ${app.pid}, session ${app.sessionId}). Close it before running the project switch drill so the drill can own a fresh app session.`,
     );
@@ -174,140 +264,130 @@ function ensureNoActiveCutReady() {
 async function waitForLauncherReady() {
   let stdout = "";
   let stderr = "";
-  launcher.stdout.on("data", (chunk) => {
-    const text = chunk.toString();
-    stdout += text;
-    process.stdout.write(text);
-  });
-  launcher.stderr.on("data", (chunk) => {
-    const text = chunk.toString();
-    stderr += text;
-    process.stdout.write(text);
-  });
+  let pendingStdout = "";
 
-  const status = await new Promise((resolveStatus, rejectStatus) => {
+  return new Promise((resolveReady, rejectReady) => {
+    let settled = false;
     const timer = setTimeout(() => {
-      rejectStatus(new Error(`CutReady did not become Auditaur-ready within ${timeoutSeconds}s.`));
+      settleFailure(new Error(`CutReady did not become Auditaur-ready within ${timeoutSeconds}s.`));
     }, timeoutSeconds * 1000 + 15_000);
-    launcher.on("error", (error) => {
+
+    const settleReady = (readyStatus) => {
+      if (settled) return;
+      settled = true;
       clearTimeout(timer);
-      rejectStatus(error);
-    });
-    launcher.on("close", (code) => {
+      resolveReady(readyStatus);
+    };
+    const settleFailure = (error) => {
+      if (settled) return;
+      settled = true;
       clearTimeout(timer);
-      resolveStatus(code);
-    });
-  });
+      rejectReady(error);
+    };
 
-  if (status !== 0) {
-    throw new Error([stderr, stdout].filter(Boolean).join("\n").trim() || `auditaur debug run exited ${status}`);
-  }
+    launcher.stdout.on("data", (chunk) => {
+      const text = chunk.toString();
+      stdout += text;
+      pendingStdout += text;
+      process.stdout.write(text);
 
-  const readyStatus = parseLastJson(stdout);
-  if (!readyStatus?.ready || !readyStatus?.sessionId) {
-    throw new Error(`Auditaur did not report a ready session: ${stdout}`);
-  }
-  return readyStatus;
-}
-
-async function switchToProject(projectPath, expectedText) {
-  await runJsonPhase(`open-switcher-${projectPath}`, [
-    "drive",
-    "--app",
-    appName,
-    "--session-id",
-    report.sessionId,
-    "--target",
-    "auditaur-bridge",
-    "--json",
-    "click",
-    "--selector",
-    "[data-testid=\"project-switcher-title-trigger\"]",
-  ]);
-  await runJsonPhase(`click-project-${projectPath}`, [
-    "drive",
-    "--app",
-    appName,
-    "--session-id",
-    report.sessionId,
-    "--target",
-    "auditaur-bridge",
-    "--json",
-    "click",
-    "--selector",
-    `[data-testid="project-switcher-option-${projectPath}"]`,
-  ]);
-  await assertProjectVisible(expectedText);
-  await assertNoReloadFallback();
-}
-
-async function assertProjectVisible(expectedText) {
-  await waitForText(expectedText, `project-visible-${expectedText.replace(/\W+/g, "-").toLowerCase()}`);
-}
-
-async function assertNoReloadFallback() {
-  const bodyText = await runJsonPhase("body-text", [
-    "drive",
-    "--app",
-    appName,
-    "--session-id",
-    report.sessionId,
-    "--target",
-    "auditaur-bridge",
-    "--json",
-    "text",
-    "--selector",
-    "body",
-  ]);
-  const text = JSON.stringify(bodyText ?? "");
-  if (text.includes("Something went wrong") || text.includes("Reload interface")) {
-    throw new Error("Project switching showed the reload/error fallback.");
-  }
-}
-
-async function waitForText(text, phaseId) {
-  const deadline = Date.now() + 30_000;
-  let lastText = "";
-  while (Date.now() < deadline) {
-    const result = runJson([
-      "drive",
-      "--app",
-      appName,
-      "--session-id",
-      report.sessionId,
-      "--target",
-      "auditaur-bridge",
-      "--json",
-      "text",
-      "--selector",
-      "body",
-    ]);
-    if (result.ok) {
-      lastText = JSON.stringify(result.json ?? "");
-      if (lastText.includes(text)) {
-        report.phases.push({ id: phaseId, status: "passed", result: result.json ?? null });
-        writeReport();
-        return;
+      const lines = pendingStdout.split(/\r?\n/);
+      pendingStdout = lines.pop() ?? "";
+      for (const line of lines) {
+        const readyStatus = normalizeReadyStatus(parseJsonLine(line));
+        if (readyStatus?.sessionId) {
+          settleReady(readyStatus);
+          return;
+        }
       }
-    }
-    await delay(1_000);
-  }
-  throw new Error(`Timed out waiting for ${text}. Last body text: ${lastText}`);
+    });
+    launcher.stderr.on("data", (chunk) => {
+      const text = chunk.toString();
+      stderr += text;
+      process.stdout.write(text);
+    });
+    launcher.on("error", settleFailure);
+    launcher.on("close", (code) => {
+      if (settled) return;
+      settleFailure(new Error(
+        code === 0
+          ? `Auditaur exited before reporting a ready session: ${stdout}`
+          : [stderr, stdout].filter(Boolean).join("\n").trim() || `auditaur debug run exited ${code}`,
+      ));
+    });
+  });
 }
 
-async function runJsonPhase(id, args) {
-  const result = runJson(args);
-  report.phases.push({
-    id,
-    status: result.ok ? "passed" : "failed",
-    result: result.json ?? null,
-    error: result.error || null,
+function clearDrillStartupState() {
+  if (!report.sessionId) return;
+
+  runJson([
+    "drive",
+    "--app",
+    appName,
+    "--session-id",
+    report.sessionId,
+    "--json",
+    "evaluate",
+    "--target",
+    "auditaur-bridge",
+    "--expression",
+    `(() => {
+      const value = localStorage.getItem("cutready:lastProject");
+      if (value && value.includes("cutready-project-switch-drill-")) {
+        localStorage.removeItem("cutready:lastProject");
+      }
+      return localStorage.getItem("cutready:lastProject") ?? null;
+    })()`,
+  ]);
+}
+
+function stopSpawnedApp() {
+  spawnSync("auditaur", ["stop", "--session-file", sessionFile, "--json"], {
+    stdio: "ignore",
+    shell: false,
   });
-  writeReport();
-  if (!result.ok) {
-    throw new Error(`${id} failed: ${result.error}`);
+
+  const fallbackPids = [processPid, appPid].filter((pid) => Number.isFinite(Number(pid)));
+  if (fallbackPids.length === 0) return;
+
+  if (process.platform === "win32") {
+    spawnSync("powershell", [
+      "-NoProfile",
+      "-Command",
+      `Stop-Process -Id ${fallbackPids.map((pid) => Number(pid)).join(",")} -Force -ErrorAction SilentlyContinue`,
+    ], { stdio: "ignore" });
+    return;
   }
-  return result.json;
+
+  for (const pid of fallbackPids) {
+    try {
+      process.kill(Number(pid), "SIGTERM");
+    } catch {
+      // The app may already be closed.
+    }
+  }
+}
+
+function removeProjectFromRecents() {
+  const storePath = recentProjectsStorePath();
+  if (!storePath || !existsSync(storePath)) return;
+
+  try {
+    const store = JSON.parse(readFileSync(storePath, "utf8"));
+    if (!Array.isArray(store.recent_projects)) return;
+
+    const before = store.recent_projects.length;
+    store.recent_projects = store.recent_projects.filter((project) => {
+      const path = String(project?.path ?? "");
+      return !path.includes("cutready-project-switch-drill-");
+    });
+    if (store.recent_projects.length !== before) {
+      writeFileSync(storePath, `${JSON.stringify(store, null, 2)}\n`);
+    }
+  } catch (error) {
+    console.warn(`Could not remove drill project from recent workspaces: ${error}`);
+  }
 }
 
 function runJson(args) {
@@ -332,6 +412,22 @@ function runJson(args) {
   }
 }
 
+function assertOk(id, result) {
+  if (!result.ok) {
+    recordPhase(id, "failed", result.json ?? null, result.error);
+    throw new Error(`${id} failed: ${result.error}`);
+  }
+}
+
+function recordPhase(id, status, result, error = null) {
+  report.phases.push({ id, status, result: result ?? null, error });
+  writeReport();
+}
+
+function writeReport() {
+  writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`);
+}
+
 function jsonCount(value) {
   if (Array.isArray(value)) return value.length;
   if (Array.isArray(value?.items)) return value.items.length;
@@ -340,49 +436,53 @@ function jsonCount(value) {
   return 0;
 }
 
-function writeReport() {
-  writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`);
+function normalizeReadyStatus(parsed) {
+  if (parsed?.status?.ready && parsed?.app?.sessionId) {
+    return {
+      ...parsed.status,
+      sessionId: parsed.app.sessionId,
+      databasePath: parsed.app.databasePath ?? parsed.status.databasePath,
+      instanceId: parsed.app.instanceId,
+      pid: parsed.app.pid,
+      processPid: parsed.process?.pid,
+    };
+  }
+  return null;
 }
 
-function stopSpawnedApp() {
-  const stopped = spawnSync("auditaur", ["stop", "--session-file", sessionFile, "--json"], {
-    stdio: "ignore",
-    shell: false,
-  });
-  if (stopped.status === 0) {
-    return;
+function parseJsonLine(line) {
+  try {
+    return JSON.parse(line.trim());
+  } catch {
+    return null;
   }
+}
 
-  if (appPid && process.platform === "win32") {
-    spawnSync("powershell", [
-      "-NoProfile",
-      "-Command",
-      `Stop-Process -Id ${Number(appPid)} -Force -ErrorAction SilentlyContinue`,
-    ], { stdio: "ignore" });
-  } else if (appPid) {
-    try {
-      process.kill(Number(appPid), "SIGTERM");
-    } catch {
-      // The app may already be closed.
-    }
+function expandValue(value) {
+  return String(value).replaceAll("${projectRoot}", projectRoot);
+}
+
+function recentProjectsStorePath() {
+  if (process.env.CUTREADY_RECENT_PROJECTS_STORE) {
+    return process.env.CUTREADY_RECENT_PROJECTS_STORE;
   }
-  if (launcher && !launcher.killed) {
-    launcher.kill();
+  if (process.platform === "win32" && process.env.APPDATA) {
+    return join(process.env.APPDATA, "com.cutready.app", "recent-projects.json");
+  }
+  return null;
+}
+
+function pidIsRunning(pid) {
+  if (!Number.isFinite(Number(pid))) return false;
+
+  try {
+    process.kill(Number(pid), 0);
+    return true;
+  } catch {
+    return false;
   }
 }
 
 function delay(ms) {
   return new Promise((resolveDelay) => setTimeout(resolveDelay, ms));
-}
-
-function parseLastJson(output) {
-  const lines = output.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-  for (let index = lines.length - 1; index >= 0; index -= 1) {
-    try {
-      return JSON.parse(lines[index]);
-    } catch {
-      // Keep scanning backward in case diagnostic text preceded the JSON line.
-    }
-  }
-  return null;
 }

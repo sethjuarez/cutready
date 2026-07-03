@@ -5,6 +5,9 @@ import { spawnSync } from "node:child_process";
 const reportPath = resolve(
   process.env.CUTREADY_AUDITAUR_DRILL_REPORT ?? "target/auditaur-drill-report.json",
 );
+const projectRoot = resolve(
+  process.env.CUTREADY_AUDITAUR_DRILL_PROJECT ?? "docs/examples/cutready-demo-project",
+);
 
 mkdirSync(dirname(reportPath), { recursive: true });
 
@@ -32,6 +35,10 @@ const args = [
 ];
 
 const result = spawnSync("auditaur", args, {
+  env: {
+    ...process.env,
+    CUTREADY_PROJECT: projectRoot,
+  },
   stdio: "inherit",
   shell: false,
 });
