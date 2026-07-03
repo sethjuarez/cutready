@@ -203,6 +203,18 @@ describe("draftlineVersioning", () => {
             is_current: true,
             is_user_facing: true,
           },
+          {
+            id: "refs/remotes/origin/main",
+            name: "refs/remotes/origin/main",
+            display_label: "origin/main",
+            kind: "remote_variation",
+            scope: "remote",
+            target: "origin/main",
+            target_version: "2222222222222222222222222222222222222222",
+            variation: "main",
+            is_current: false,
+            is_user_facing: true,
+          },
         ],
       })
       .mockResolvedValueOnce([
@@ -223,7 +235,8 @@ describe("draftlineVersioning", () => {
         lane: 0,
         is_head: true,
         is_branch_tip: true,
-        is_remote_tip: false,
+        is_remote_tip: true,
+        remote_labels: ["origin/main"],
         author: "Seth",
       },
       {
@@ -236,6 +249,7 @@ describe("draftlineVersioning", () => {
         is_head: false,
         is_branch_tip: false,
         is_remote_tip: false,
+        remote_labels: [],
         author: "Maria",
       },
     ]);

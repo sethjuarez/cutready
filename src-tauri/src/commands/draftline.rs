@@ -6,18 +6,20 @@ use draftline::tauri_contract as contract;
 #[cfg(test)]
 use draftline::VersionId;
 use draftline::{
-    ApplyIncomingReport, ChangeSet, Contributor, ContributorProfile, HistoryEntry, PreflightReport,
-    MergeIncomingReport, PreviewFile, RemoteCredential, RemoteCredentialRequest, RemoteEndpoint,
-    Shelf, Variation, VariationId, VariationRenamePreflight, VariationSummary, Version,
-    VersionDiff, VersionPreview,
+    ApplyIncomingReport, ChangeSet, Contributor, ContributorProfile, HistoryEntry,
+    MergeIncomingReport, PreflightReport, PreviewFile, RemoteCredential, RemoteCredentialRequest,
+    RemoteEndpoint, Shelf, Variation, VariationId, VariationRenamePreflight, VariationSummary,
+    Version, VersionDiff, VersionPreview,
 };
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, State};
 use tauri_plugin_auditaur::auditaur_command;
 
+use crate::commands::github::github_credential_token;
 use crate::engine::agent_state::{AgentStateStore, HistoryCleanupLedgerOperation};
 use crate::engine::draftline_adapter::{
-    cutready_content_policy, cutready_remote_options, CutReadyDraftlineAdapter,
+    cutready_content_policy, cutready_remote_options, is_github_remote_url,
+    CutReadyDraftlineAdapter,
 };
 use crate::{AppState, ProjectLock};
 
@@ -98,11 +100,15 @@ fn cutready_contributor_profile(_project_root: &Path) -> ContributorProfile {
 fn resolve_remote_credential(
     request: RemoteCredentialRequest<'_>,
 ) -> draftline::Result<RemoteCredential> {
-    if request.allows_username_password {
-        if let Some(token) = try_gh_token() {
+    if request.allows_username_password && is_github_remote_url(request.url) {
+        if let Some(credential) = github_credential_token() {
+            tracing::debug!(
+                source = credential.source,
+                "Using GitHub token credential for Draftline remote operation"
+            );
             return Ok(RemoteCredential::UsernamePassword {
                 username: "x-access-token".to_string(),
-                password: token,
+                password: credential.token,
             });
         }
     }
@@ -165,7 +171,7 @@ fn reject_remote_url_credentials(url: &str) -> Result<(), String> {
 
     if !parsed.username().is_empty() || parsed.password().is_some() {
         return Err(
-            "Remote URLs must not include credentials. Authenticate with GitHub CLI or your system credential helper."
+            "Remote URLs must not include credentials. Connect GitHub in CutReady settings or use your system credential helper."
                 .to_string(),
         );
     }
@@ -173,66 +179,20 @@ fn reject_remote_url_credentials(url: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn try_gh_token() -> Option<String> {
-    for candidate in gh_command_candidates() {
-        let mut cmd = std::process::Command::new(&candidate);
-        cmd.args(["auth", "token"]);
-        #[cfg(windows)]
-        {
-            use std::os::windows::process::CommandExt;
-            cmd.creation_flags(0x08000000);
-        }
-
-        match cmd.output() {
-            Ok(output) if output.status.success() => {
-                let token = String::from_utf8_lossy(&output.stdout).trim().to_string();
-                if !token.is_empty() {
-                    return Some(token);
-                }
-            }
-            Ok(output) => {
-                tracing::debug!(
-                    gh = %candidate.display(),
-                    status = ?output.status.code(),
-                    "GitHub CLI token lookup failed"
-                );
-            }
-            Err(error) => {
-                tracing::debug!(
-                    gh = %candidate.display(),
-                    error = %error,
-                    "GitHub CLI token lookup could not start"
-                );
-            }
-        }
-    }
-
-    None
-}
-
-fn gh_command_candidates() -> Vec<PathBuf> {
-    #[cfg(not(target_os = "macos"))]
-    {
-        vec![PathBuf::from("gh")]
-    }
-
-    #[cfg(target_os = "macos")]
-    {
-        vec![
-            PathBuf::from("gh"),
-            PathBuf::from("/opt/homebrew/bin/gh"),
-            PathBuf::from("/usr/local/bin/gh"),
-            PathBuf::from("/usr/bin/gh"),
-        ]
-    }
-}
-
 #[auditaur_command(skip_all, err)]
 pub async fn clone_from_url(url: String, dest: String) -> Result<(), String> {
     reject_remote_url_credentials(&url)?;
     let dest_path = PathBuf::from(&dest);
-    let token = try_gh_token();
-    let mut options = cutready_remote_options(token);
+    let credential = is_github_remote_url(&url)
+        .then(github_credential_token)
+        .flatten();
+    if let Some(credential) = credential.as_ref() {
+        tracing::debug!(
+            source = credential.source,
+            "Using GitHub token credential for Draftline clone"
+        );
+    }
+    let mut options = cutready_remote_options(credential.map(|credential| credential.token));
     CutReadyDraftlineAdapter::clone_project_with_options(&url, &dest_path, &mut options)
         .map(|_| ())
         .map_err(|error| error.to_string())
@@ -373,7 +333,10 @@ pub async fn switch_variation(
     let adapter = CutReadyDraftlineAdapter::open_project(&request.workspace_path)
         .map_err(|error| error.to_string())?;
     adapter
-        .switch_variation_with_policy(&request.variation_id, switch_policy_from_input(request.policy))
+        .switch_variation_with_policy(
+            &request.variation_id,
+            switch_policy_from_input(request.policy),
+        )
         .map_err(|error| error.to_string())
 }
 
@@ -488,9 +451,9 @@ pub async fn preflight_history_cleanup_remote_impact(
     app: AppHandle,
 ) -> contract::TauriCommandResult<draftline::HistoryCleanupRemoteImpact> {
     let context = context_for_workspace(&request.workspace_path, app)?;
-    contract::into_tauri_result(contract::preflight_history_cleanup_remote_impact_with_context(
-        &context, request,
-    ))
+    contract::into_tauri_result(
+        contract::preflight_history_cleanup_remote_impact_with_context(&context, request),
+    )
 }
 
 #[auditaur_command(skip_all)]

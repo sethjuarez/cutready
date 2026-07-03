@@ -1,4 +1,6 @@
 fn main() {
+    emit_github_oauth_client_id();
+
     // Swift runtime rpath needed by screencapturekit (swift-bridge) on macOS
     #[cfg(target_os = "macos")]
     {
@@ -20,4 +22,46 @@ fn main() {
     }
 
     tauri_build::build();
+}
+
+fn emit_github_oauth_client_id() {
+    const KEY: &str = "CUTREADY_GITHUB_OAUTH_CLIENT_ID";
+    println!("cargo:rerun-if-env-changed={KEY}");
+    println!("cargo:rerun-if-changed=../.env");
+    println!("cargo:rerun-if-changed=.env");
+
+    if let Ok(value) = std::env::var(KEY) {
+        let value = value.trim();
+        if !value.is_empty() {
+            println!("cargo:rustc-env={KEY}={value}");
+            return;
+        }
+    }
+
+    for path in ["../.env", ".env"] {
+        if let Some(value) = read_env_value(path, KEY) {
+            println!("cargo:rustc-env={KEY}={value}");
+            return;
+        }
+    }
+}
+
+fn read_env_value(path: &str, key: &str) -> Option<String> {
+    let content = std::fs::read_to_string(path).ok()?;
+    content.lines().find_map(|line| {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            return None;
+        }
+        let (candidate, value) = line.split_once('=')?;
+        if candidate.trim() != key {
+            return None;
+        }
+        let value = value
+            .trim()
+            .trim_matches('"')
+            .trim_matches('\'')
+            .to_string();
+        (!value.is_empty()).then_some(value)
+    })
 }

@@ -23,6 +23,14 @@ const LANE_COLORS = [
 ];
 function lc(i: number) { return LANE_COLORS[i % LANE_COLORS.length]; }
 
+function remoteBadges(node: GraphNode): string[] {
+  return node.remote_labels?.length ? node.remote_labels : node.is_remote_tip ? ["remote"] : [];
+}
+
+function remoteTitle(node: GraphNode): string {
+  return `Remote tracking refs: ${remoteBadges(node).join(", ")}`;
+}
+
 /* ── Types ────────────────────────────────────────────────────────── */
 interface TimelineInfo { label: string; colorIndex: number }
 
@@ -425,11 +433,35 @@ export function SnapshotGraph({
                 title={selectionMode ? `Select ${node.message}` : node.is_head ? "Current snapshot (HEAD)" : `Preview snapshot: ${node.message}`}
               />
               {/* Remote badge — left of the dot with connector line, mirroring branch labels */}
-              {showRemoteBadges && node.is_remote_tip && (() => {
+              {showRemoteBadges && remoteBadges(node).length > 0 && (() => {
+                const remoteLabels = remoteBadges(node);
+                const badges = remoteLabels.slice(0, 2);
+                const overflowCount = remoteLabels.length - badges.length;
                 const badgeLeft = 2;
-                const badgeW = 40;
+                const badgeW = expanded ? 72 : 46;
                 const lineLeft = badgeLeft + badgeW;
                 const lineRight = x - r - 2;
+                if (!expanded) {
+                  return (
+                    <>
+                      {lineRight > lineLeft && (
+                        <div className="absolute" style={{
+                          left: lineLeft, top: "50%",
+                          width: lineRight - lineLeft, height: 0,
+                          borderTop: "1px solid #10b981", opacity: 0.25,
+                          zIndex: 1,
+                        }} />
+                      )}
+                      <div
+                        className="absolute rounded-sm px-1.5 py-px font-mono text-[9px] font-semibold leading-tight"
+                        style={{ left: badgeLeft, top: "50%", transform: "translateY(-50%)", zIndex: 2, color: "#10b981", backgroundColor: "rgba(16,185,129,0.15)" }}
+                        title={remoteTitle(node)}
+                      >
+                        remote
+                      </div>
+                    </>
+                  );
+                }
                 return (
                   <>
                     {lineRight > lineLeft && (
@@ -440,9 +472,29 @@ export function SnapshotGraph({
                         zIndex: 1,
                       }} />
                     )}
-                    <div className="absolute text-[9px] px-1.5 py-px rounded-sm leading-tight whitespace-nowrap font-semibold font-mono"
-                      style={{ left: badgeLeft, top: "50%", transform: "translateY(-50%)", zIndex: 2, color: "#10b981", backgroundColor: "rgba(16,185,129,0.15)" }}
-                      title="Remote tracking branch points here">origin</div>
+                    <div
+                      className="absolute flex max-w-[5.25rem] flex-col gap-0.5"
+                      style={{ left: badgeLeft, top: "50%", transform: "translateY(-50%)", zIndex: 2 }}
+                      title={remoteTitle(node)}
+                    >
+                      {badges.map((label) => (
+                        <div
+                          key={label}
+                          className="truncate rounded-sm px-1.5 py-px font-mono text-[9px] font-semibold leading-tight"
+                          style={{ color: "#10b981", backgroundColor: "rgba(16,185,129,0.15)" }}
+                        >
+                          {label}
+                        </div>
+                      ))}
+                      {overflowCount > 0 && (
+                        <div
+                          className="rounded-sm px-1.5 py-px font-mono text-[9px] font-semibold leading-tight"
+                          style={{ color: "#10b981", backgroundColor: "rgba(16,185,129,0.15)" }}
+                        >
+                          +{overflowCount}
+                        </div>
+                      )}
+                    </div>
                   </>
                 );
               })()}
@@ -481,7 +533,7 @@ export function SnapshotGraph({
                        {node.parents.length > 1 && (
                          <>
                            <span className="text-[rgb(var(--color-text-secondary))]/35">-</span>
-                           <span>{node.parents.length} parents</span>
+                           <span title={`Merge snapshot with ${node.parents.length} parent snapshots`}>merge</span>
                          </>
                        )}
                     </div>
@@ -489,7 +541,7 @@ export function SnapshotGraph({
                    <div className="flex shrink-0 flex-wrap justify-end gap-1">
                     {node.is_head && <SnapshotBadge label="HEAD" tone="accent" />}
                     {node.is_branch_tip && <SnapshotBadge label="tip" tone="neutral" />}
-                    {node.is_remote_tip && <SnapshotBadge label="remote" tone="success" />}
+                    {remoteBadges(node).length > 0 && <SnapshotBadge label={remoteBadges(node)[0]} tone="success" />}
                     {hasMultipleTimelines && (
                        <span
                          className="max-w-[10rem] truncate rounded-full px-2 py-0.5 text-[10px] font-medium"
@@ -536,21 +588,21 @@ export function SnapshotGraph({
                    )}
                    {hasMultipleTimelines && (
                     <span
-                       className="min-w-0 max-w-[6.75rem] truncate rounded-sm px-1 py-px text-[9px] leading-tight"
-                       title={tlLabel}
-                       style={{ color, backgroundColor: `${color}15` }}>{tlLabel}</span>
+                       className="h-1.5 w-1.5 shrink-0 rounded-full"
+                       title={`Timeline: ${tlLabel}`}
+                       style={{ backgroundColor: color }}
+                     />
                    )}
-                   {nodeAliases && nodeAliases.map(a => {
-                    const aInfo = timelineMap.get(a.timeline);
-                    const aLabel = aInfo?.label ?? a.timeline;
-                    return (
-                       <span
-                         key={a.timeline}
-                         className="min-w-0 max-w-[6rem] truncate rounded-sm px-1 py-px text-[9px] leading-tight text-[rgb(var(--color-text-secondary))]/50"
-                         title={aLabel}
-                         style={{ backgroundColor: "rgb(var(--color-surface-alt))" }}>+{aLabel}</span>
-                    );
-                   })}
+                   {nodeAliases && (
+                     <span
+                       className="shrink-0 rounded-sm bg-[rgb(var(--color-surface-alt))] px-1 py-px text-[9px] leading-tight text-[rgb(var(--color-text-secondary))]/50"
+                       title={`Also on ${nodeAliases
+                         .map(a => timelineMap.get(a.timeline)?.label ?? a.timeline)
+                         .join(", ")}`}
+                     >
+                       +{nodeAliases.length}
+                     </span>
+                   )}
                  </div>
                </>
               )}

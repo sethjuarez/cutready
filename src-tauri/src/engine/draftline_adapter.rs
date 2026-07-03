@@ -299,7 +299,7 @@ pub fn cutready_variation_metadata(label: Option<&str>, slug: Option<&str>) -> V
 pub fn cutready_remote_options(github_token: Option<String>) -> RemoteOptions<'static> {
     RemoteOptions::new().with_credentials(move |request| {
         if let Some(token) = github_token.as_ref() {
-            if request.allows_username_password {
+            if request.allows_username_password && is_github_remote_url(request.url) {
                 return Ok(RemoteCredential::UsernamePassword {
                     username: "x-access-token".to_string(),
                     password: token.clone(),
@@ -315,6 +315,13 @@ pub fn cutready_remote_options(github_token: Option<String>) -> RemoteOptions<'s
 
         Ok(RemoteCredential::Default)
     })
+}
+
+pub fn is_github_remote_url(url: &str) -> bool {
+    let normalized = url.trim().to_ascii_lowercase();
+    normalized.starts_with("https://github.com/")
+        || normalized.starts_with("ssh://git@github.com/")
+        || normalized.starts_with("git@github.com:")
 }
 
 /// Remaining CutReady-owned integration gaps after Draftline owns versioning.
@@ -775,6 +782,25 @@ mod tests {
             .unwrap();
         let status = adapter.sync_status("origin").unwrap();
         assert!(matches!(status.state, draftline::SyncState::UpToDate));
+    }
+
+    #[test]
+    fn github_remote_url_detection_accepts_only_github_hosts() {
+        assert!(is_github_remote_url(
+            "https://github.com/sethjuarez/cutready.git"
+        ));
+        assert!(is_github_remote_url(
+            "git@github.com:sethjuarez/cutready.git"
+        ));
+        assert!(is_github_remote_url(
+            "ssh://git@github.com/sethjuarez/cutready.git"
+        ));
+        assert!(!is_github_remote_url(
+            "https://github.example.com/sethjuarez/cutready.git"
+        ));
+        assert!(!is_github_remote_url(
+            "https://example.com/github.com/sethjuarez/cutready.git"
+        ));
     }
 
     #[test]

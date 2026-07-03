@@ -29,6 +29,7 @@ reqwest = { version = "0.12", features = ["json", "stream"] }
 tokio-stream = "0.1"
 futures-util = "0.3"
 draftline = "0.2.11"
+keyring = "4.1.2"
 xcap = "0.8"
 image = "0.25"
 base64 = "0.22"
@@ -75,4 +76,5 @@ opt-level = 3
 
 [dev-dependencies]
 async-trait = "0.1"
+httpmock = "0.7"
 tempfile = "3"

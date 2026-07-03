@@ -162,7 +162,7 @@ export interface GlobalSettings {
 export interface WorkspaceSettings {
   /** Git remote URL (e.g. https://github.com/user/repo.git). */
   repoRemoteUrl: string;
-  /** Auth method: "gh_cli" | "pat" | "ssh" (default "gh_cli"). */
+  /** Auth method: "github" | "gh_cli" | "pat" | "ssh" (default "github"). */
   repoAuthMethod: string;
   /** Personal Access Token (when repoAuthMethod is "pat"). */
   repoToken: string;
@@ -244,7 +244,7 @@ function getInitialGlobalSettings(): GlobalSettings {
 
 export const defaultWorkspaceSettings: WorkspaceSettings = {
   repoRemoteUrl: "",
-  repoAuthMethod: "gh_cli",
+  repoAuthMethod: "github",
   repoToken: "",
   repoAuthorName: "",
   repoAuthorEmail: "",

@@ -3,6 +3,7 @@ import { useAppStore } from "../stores/appStore";
 import { open } from "@tauri-apps/plugin-dialog";
 import { invoke } from "../services/tauri";
 import { Plus, Download, Folder, X, XCircle } from "lucide-react";
+import { GitHubConnectionCard } from "./GitHubConnectionCard";
 
 /* ── Decorative icon components ───────────────────────────── */
 
@@ -333,12 +334,13 @@ export function HomePanel() {
                     <XCircle className="w-4 h-4 text-[rgb(var(--color-error))] shrink-0 mt-0.5" />
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-medium text-[rgb(var(--color-error))] mb-2">Authentication required</p>
-                      <ol className="text-[11px] text-[rgb(var(--color-text-secondary))] space-y-1 list-decimal list-inside">
-                        <li>Install the <a href="https://cli.github.com" className="text-[rgb(var(--color-accent))] underline" target="_blank" rel="noopener">GitHub CLI</a></li>
-                        <li>Run <code className="px-1 py-0.5 rounded bg-[rgb(var(--color-surface-inset))] text-[10px]">gh auth login</code> in your terminal</li>
-                        <li>Restart CutReady and try again</li>
-                      </ol>
+                      <p className="text-[11px] text-[rgb(var(--color-text-secondary))]">
+                        Connect GitHub in CutReady, then try cloning again.
+                      </p>
                     </div>
+                  </div>
+                  <div className="mt-3">
+                    <GitHubConnectionCard compact />
                   </div>
                 </div>
               )}

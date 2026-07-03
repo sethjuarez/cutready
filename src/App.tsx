@@ -36,9 +36,12 @@ function App() {
 
       const projectToOpen = startupProject || localStorage.getItem("cutready:lastProject");
       if (projectToOpen) {
-        useAppStore.getState().openProject(projectToOpen);
+        await useAppStore.getState().openProject(projectToOpen);
       } else {
         useAppStore.getState().loadRecentProjects();
+      }
+      if (import.meta.env.DEV && import.meta.env.VITE_CUTREADY_STARTUP_VIEW === "settings") {
+        useAppStore.getState().setView("settings");
       }
     }
     openStartupProject();

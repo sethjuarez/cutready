@@ -13,6 +13,7 @@ use tauri::Manager;
 use tauri_plugin_auditaur::auditaur_command;
 use uuid::Uuid;
 
+use crate::commands::github::github_credential_token;
 use crate::engine::diagnostics_sanitizer::{sanitize_diagnostic_text, sanitize_diagnostic_value};
 
 const GITHUB_COMMENT_CHUNK_BYTES: usize = 52_000;
@@ -758,8 +759,7 @@ pub fn get_feedback_system_info(app: tauri::AppHandle) -> Result<FeedbackSystemI
     })
 }
 
-/// Create a GitHub issue via the `gh` CLI. Returns the issue URL on success.
-/// Uses `--body-file -` to pipe the body via stdin (avoids shell escaping and length limits).
+/// Create a GitHub issue via the GitHub API. Returns the issue URL on success.
 #[derive(Debug, Serialize)]
 pub struct CreateGithubIssueResult {
     pub url: String,
@@ -775,12 +775,8 @@ pub async fn create_github_issue(
     labels: Option<Vec<String>>,
     diagnostics_attachment: Option<String>,
 ) -> Result<CreateGithubIssueResult, String> {
-    use std::process::Stdio;
-    use tokio::io::AsyncWriteExt;
-
-    if !is_safe_github_repo(&repo) {
-        return Err("Invalid GitHub repository. Expected owner/repo.".into());
-    }
+    let (owner, repo_name) =
+        split_safe_github_repo(&repo).ok_or("Invalid GitHub repository. Expected owner/repo.")?;
     let body = sanitize_diagnostic_text(&body);
     tracing::info!(
         body_bytes = body.len(),
@@ -788,77 +784,112 @@ pub async fn create_github_issue(
         "creating feedback issue with sanitized body"
     );
 
-    let mut cmd = tokio::process::Command::new("gh");
-    cmd.args([
-        "issue",
-        "create",
-        "--repo",
-        &repo,
-        "--title",
+    let credential = github_credential_token()
+        .ok_or_else(|| "Connect GitHub in Settings before creating an issue.".to_string())?;
+    tracing::info!(
+        credential_source = credential.source,
+        "creating feedback issue with GitHub API"
+    );
+    let issue = create_issue_with_api(
+        &credential.token,
+        &owner,
+        &repo_name,
         &title,
-        "--body-file",
-        "-",
-    ]);
+        &body,
+        labels.unwrap_or_default(),
+    )
+    .await?;
+    let (diagnostics_comments_posted, diagnostics_comment_error) = match post_diagnostics_comments(
+        &credential.token,
+        &owner,
+        &repo_name,
+        &issue,
+        diagnostics_attachment,
+    )
+    .await
+    {
+        Ok(count) => (count, None),
+        Err(error) => (0, Some(error)),
+    };
+    Ok(CreateGithubIssueResult {
+        url: issue.html_url,
+        diagnostics_comments_posted,
+        diagnostics_comment_error,
+    })
+}
 
-    if let Some(lbls) = &labels {
-        for label in lbls {
-            cmd.args(["--label", label]);
-        }
-    }
+#[derive(Debug, Serialize)]
+struct CreateIssueRequest<'a> {
+    title: &'a str,
+    body: &'a str,
+    labels: Vec<String>,
+}
 
-    cmd.stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    #[cfg(windows)]
-    cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+#[derive(Debug, Serialize)]
+struct CreateIssueCommentRequest<'a> {
+    body: &'a str,
+}
 
-    let mut child = cmd.spawn().map_err(|e| {
-        if e.kind() == std::io::ErrorKind::NotFound {
-            "GitHub CLI (gh) is not installed or not on PATH. Install it from https://cli.github.com and restart CutReady.".to_string()
-        } else {
-            format!("Failed to start gh CLI: {e}")
-        }
-    })?;
+#[derive(Debug, Deserialize)]
+struct GitHubIssueResponse {
+    number: u64,
+    html_url: String,
+}
 
-    // Write body to stdin
-    if let Some(mut stdin) = child.stdin.take() {
-        stdin
-            .write_all(body.as_bytes())
-            .await
-            .map_err(|e| format!("Failed to write issue body: {e}"))?;
-        // drop stdin to close the pipe
-    }
-
-    let output = child
-        .wait_with_output()
-        .await
-        .map_err(|e| format!("gh process error: {e}"))?;
-
-    if output.status.success() {
-        let url = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        let (diagnostics_comments_posted, diagnostics_comment_error) =
-            match post_diagnostics_comments(&repo, &url, diagnostics_attachment).await {
-                Ok(count) => (count, None),
-                Err(error) => (0, Some(error)),
-            };
-        Ok(CreateGithubIssueResult {
-            url,
-            diagnostics_comments_posted,
-            diagnostics_comment_error,
+async fn create_issue_with_api(
+    token: &str,
+    owner: &str,
+    repo: &str,
+    title: &str,
+    body: &str,
+    labels: Vec<String>,
+) -> Result<GitHubIssueResponse, String> {
+    let url = format!("https://api.github.com/repos/{owner}/{repo}/issues");
+    let response = github_api_client()
+        .post(url)
+        .bearer_auth(token)
+        .json(&CreateIssueRequest {
+            title,
+            body,
+            labels,
         })
+        .send()
+        .await
+        .map_err(|error| format!("Could not create GitHub issue: {error}"))?;
+    parse_github_response(response, "create GitHub issue").await
+}
+
+async fn create_issue_comment_with_api(
+    token: &str,
+    owner: &str,
+    repo: &str,
+    issue_number: u64,
+    body: &str,
+) -> Result<(), String> {
+    let url = format!("https://api.github.com/repos/{owner}/{repo}/issues/{issue_number}/comments");
+    let response = github_api_client()
+        .post(url)
+        .bearer_auth(token)
+        .json(&CreateIssueCommentRequest { body })
+        .send()
+        .await
+        .map_err(|error| format!("Could not post GitHub diagnostics comment: {error}"))?;
+    if response.status().is_success() {
+        Ok(())
     } else {
-        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-        if stderr.contains("401") || stderr.contains("authentication") {
-            Err(format!("GitHub authentication failed. Run `gh auth login` in a terminal and restart CutReady.\n\nDetails: {stderr}"))
-        } else {
-            Err(format!("gh issue create failed: {stderr}"))
-        }
+        let status = response.status();
+        let text = response.text().await.unwrap_or_default();
+        Err(format!(
+            "Issue was created, but posting diagnostics failed with HTTP {status}: {text}"
+        ))
     }
 }
 
 async fn post_diagnostics_comments(
+    token: &str,
+    owner: &str,
     repo: &str,
-    issue_url: &str,
+    issue: &GitHubIssueResponse,
     diagnostics_attachment: Option<String>,
 ) -> Result<usize, String> {
     let Some(diagnostics_attachment) = diagnostics_attachment else {
@@ -869,9 +900,6 @@ async fn post_diagnostics_comments(
     if redacted.is_empty() {
         return Ok(0);
     }
-    let issue_number = issue_number_from_url(issue_url).ok_or_else(|| {
-        format!("Issue created, but could not parse issue number from {issue_url}")
-    })?;
     let chunks = chunk_text_by_bytes(redacted, GITHUB_COMMENT_CHUNK_BYTES);
     let chunk_count = chunks.len();
     tracing::info!(
@@ -890,61 +918,39 @@ async fn post_diagnostics_comments(
                 chunk
             )
         };
-        post_issue_comment(repo, &issue_number, &body).await?;
+        create_issue_comment_with_api(token, owner, repo, issue.number, &body).await?;
     }
     Ok(chunk_count)
 }
 
-async fn post_issue_comment(repo: &str, issue_number: &str, body: &str) -> Result<(), String> {
-    use std::process::Stdio;
-    use tokio::io::AsyncWriteExt;
-
-    let mut cmd = tokio::process::Command::new("gh");
-    cmd.args([
-        "issue",
-        "comment",
-        issue_number,
-        "--repo",
-        repo,
-        "--body-file",
-        "-",
-    ]);
-    cmd.stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    #[cfg(windows)]
-    cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
-
-    let mut child = cmd
-        .spawn()
-        .map_err(|e| format!("Failed to start gh CLI for diagnostics comment: {e}"))?;
-    if let Some(mut stdin) = child.stdin.take() {
-        stdin
-            .write_all(body.as_bytes())
-            .await
-            .map_err(|e| format!("Failed to write diagnostics comment: {e}"))?;
-    }
-
-    let output = child
-        .wait_with_output()
-        .await
-        .map_err(|e| format!("gh issue comment process error: {e}"))?;
-    if output.status.success() {
-        Ok(())
-    } else {
-        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-        Err(format!(
-            "Issue was created, but posting diagnostics failed: {stderr}"
-        ))
-    }
+fn github_api_client() -> reqwest::Client {
+    reqwest::Client::builder()
+        .user_agent("CutReady")
+        .build()
+        .unwrap_or_else(|_| reqwest::Client::new())
 }
 
-fn issue_number_from_url(url: &str) -> Option<String> {
-    url.trim_end_matches('/')
-        .rsplit('/')
-        .next()
-        .filter(|value| value.chars().all(|ch| ch.is_ascii_digit()))
-        .map(ToString::to_string)
+async fn parse_github_response<T: for<'de> Deserialize<'de>>(
+    response: reqwest::Response,
+    action: &str,
+) -> Result<T, String> {
+    if response.status().is_success() {
+        return response
+            .json::<T>()
+            .await
+            .map_err(|error| format!("GitHub response for {action} was invalid: {error}"));
+    }
+    let status = response.status();
+    let text = response.text().await.unwrap_or_default();
+    if status == reqwest::StatusCode::UNAUTHORIZED || status == reqwest::StatusCode::FORBIDDEN {
+        Err(format!(
+            "GitHub authentication does not allow {action}. Connect GitHub again or check repository permissions.\n\nDetails: {text}"
+        ))
+    } else {
+        Err(format!(
+            "Could not {action}. GitHub returned HTTP {status}: {text}"
+        ))
+    }
 }
 
 fn chunk_text_by_bytes(text: &str, max_bytes: usize) -> Vec<String> {
@@ -966,17 +972,16 @@ fn chunk_text_by_bytes(text: &str, max_bytes: usize) -> Vec<String> {
     chunks
 }
 
-fn is_safe_github_repo(repo: &str) -> bool {
-    let Some((owner, name)) = repo.split_once('/') else {
-        return false;
-    };
-    !owner.is_empty()
+fn split_safe_github_repo(repo: &str) -> Option<(String, String)> {
+    let (owner, name) = repo.split_once('/')?;
+    let valid = !owner.is_empty()
         && !name.is_empty()
         && !name.contains('/')
         && [owner, name].iter().all(|part| {
             part.chars()
                 .all(|ch| ch.is_ascii_alphanumeric() || ch == '-' || ch == '_' || ch == '.')
-        })
+        });
+    valid.then(|| (owner.to_string(), name.to_string()))
 }
 
 /// Collect local diagnostic files into a zip archive at the given destination path.
@@ -1091,24 +1096,23 @@ fn redact_auditaur_summary(summary: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        chunk_text_by_bytes, is_safe_github_repo, issue_number_from_url,
-        persist_feedback_attachments, redact_auditaur_summary, safe_attachment_file_name,
-        validate_attachment_signature, FeedbackAttachmentPayload, FeedbackSystemInfo,
-        BASE64_STANDARD,
+        chunk_text_by_bytes, persist_feedback_attachments, redact_auditaur_summary,
+        safe_attachment_file_name, split_safe_github_repo, validate_attachment_signature,
+        FeedbackAttachmentPayload, FeedbackSystemInfo, BASE64_STANDARD,
     };
     use base64::Engine as _;
 
     #[test]
     fn github_repo_validation_accepts_owner_repo() {
-        assert!(is_safe_github_repo("sethjuarez/cutready"));
-        assert!(is_safe_github_repo("my-org/repo.name"));
+        assert!(split_safe_github_repo("sethjuarez/cutready").is_some());
+        assert!(split_safe_github_repo("my-org/repo.name").is_some());
     }
 
     #[test]
     fn github_repo_validation_rejects_unsafe_values() {
-        assert!(!is_safe_github_repo("sethjuarez"));
-        assert!(!is_safe_github_repo("sethjuarez/cutready/extra"));
-        assert!(!is_safe_github_repo("sethjuarez/$(bad)"));
+        assert!(split_safe_github_repo("sethjuarez").is_none());
+        assert!(split_safe_github_repo("sethjuarez/cutready/extra").is_none());
+        assert!(split_safe_github_repo("sethjuarez/$(bad)").is_none());
     }
 
     #[test]
@@ -1164,16 +1168,12 @@ mod tests {
     }
 
     #[test]
-    fn issue_number_from_url_accepts_issue_urls() {
+    fn split_safe_github_repo_accepts_owner_repo() {
         assert_eq!(
-            issue_number_from_url("https://github.com/sethjuarez/cutready/issues/125"),
-            Some("125".to_string())
+            split_safe_github_repo("sethjuarez/cutready"),
+            Some(("sethjuarez".to_string(), "cutready".to_string()))
         );
-        assert_eq!(
-            issue_number_from_url("https://github.com/sethjuarez/cutready/issues/125/"),
-            Some("125".to_string())
-        );
-        assert_eq!(issue_number_from_url("not-a-url"), None);
+        assert_eq!(split_safe_github_repo("sethjuarez"), None);
     }
 
     #[test]

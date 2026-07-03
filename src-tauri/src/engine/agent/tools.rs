@@ -5237,7 +5237,9 @@ mod tests {
 
         let output = execute_tool(&call, tmp.path(), tmp.path(), false, true, false);
 
-        assert!(output.text().contains("disabled by the current AI mutation guard"));
+        assert!(output
+            .text()
+            .contains("disabled by the current AI mutation guard"));
         assert!(!tmp.path().join("draft.md").exists());
     }
 
