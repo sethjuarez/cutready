@@ -10,6 +10,13 @@
 
 Release Please manages this changelog. Do not edit manually.
 
+## [1.23.1](https://github.com/sethjuarez/cutready/compare/v1.23.0...v1.23.1) (2026-07-03)
+
+
+### Bug Fixes
+
+* **narration:** clean up read text scrolling ([e17a6f9](https://github.com/sethjuarez/cutready/commit/e17a6f9a20dcdf7d3e2d78292967aa962c32a96c))
+
 ## [1.23.0](https://github.com/sethjuarez/cutready/compare/v1.22.0...v1.23.0) (2026-07-03)
 
 
