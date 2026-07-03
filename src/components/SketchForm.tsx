@@ -856,14 +856,16 @@ export function SketchForm() {
         if (rows !== null) {
           await invoke("update_sketch", { relativePath: path, rows });
         }
+        await useAppStore.getState().loadSketches();
         const store = useAppStore.getState();
-        await store.loadSketches();
         if (store.activeSketchPath === path) {
           const sketch = await invoke<Sketch>("get_sketch", { relativePath: path });
-          useAppStore.setState({ activeSketch: sketch });
+          if (useAppStore.getState().activeSketchPath === path) {
+            useAppStore.setState({ activeSketch: sketch });
+          }
         }
-        await store.checkDirty();
-        await store.refreshChangedFiles();
+        await useAppStore.getState().checkDirty();
+        await useAppStore.getState().refreshChangedFiles();
       } catch (err) {
         console.error(`[SketchForm] Failed to save pending sketch edits (${reason}):`, err);
         useToastStore.getState().show("Failed to save pending sketch changes", 5000, "error");

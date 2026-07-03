@@ -1,11 +1,22 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const mockInvoke = vi.hoisted(() => vi.fn());
+const mockPreflightDraftlineSwitchVariation = vi.hoisted(() => vi.fn());
+const mockSwitchDraftlineVariation = vi.hoisted(() => vi.fn());
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: (...args: unknown[]) => mockInvoke(...args),
   Channel: class {},
 }));
+
+vi.mock("../services/draftlineVersioning", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../services/draftlineVersioning")>();
+  return {
+    ...actual,
+    preflightDraftlineSwitchVariation: (...args: unknown[]) => mockPreflightDraftlineSwitchVariation(...args),
+    switchDraftlineVariation: (...args: unknown[]) => mockSwitchDraftlineVariation(...args),
+  };
+});
 
 import { useAppStore } from "../stores/appStore";
 import type { Sketch, SketchSummary } from "../types/sketch";
@@ -59,6 +70,8 @@ const originalState = {
 describe("project switch store side effects", () => {
   afterEach(() => {
     mockInvoke.mockReset();
+    mockPreflightDraftlineSwitchVariation.mockReset();
+    mockSwitchDraftlineVariation.mockReset();
     useAppStore.setState({
       ...originalState,
       currentProject: null,
@@ -72,6 +85,7 @@ describe("project switch store side effects", () => {
       chatSessionPath: null,
       isDirty: false,
       loading: false,
+      projectSwitching: false,
       startedBranchFromSnapshot: null,
       currentRemote: null,
       remoteBranches: [],
@@ -124,7 +138,11 @@ describe("project switch store side effects", () => {
       loadChatSession,
     });
 
-    await useAppStore.getState().switchProject("beta");
+    const switchPromise = useAppStore.getState().switchProject("beta");
+
+    expect(useAppStore.getState().projectSwitching).toBe(true);
+
+    await switchPromise;
 
     expect(mockInvoke).toHaveBeenCalledWith("set_workspace_state", {
       workspace: {
@@ -144,6 +162,7 @@ describe("project switch store side effects", () => {
       branchName: "from-old",
       snapshotId: "snapshot-1",
     });
+    expect(useAppStore.getState().projectSwitching).toBe(false);
     expect(loadChatSession).toHaveBeenCalledWith("cutready://legacy-chats/chat.chat");
   });
 
@@ -189,5 +208,103 @@ describe("project switch store side effects", () => {
       request: { workspace_path: "D:\\workspace", remote: "origin", variation_id: "teammate-option" },
     });
     expect(switchTimeline).toHaveBeenCalledWith("teammate-option");
+  });
+
+  it("reconciles active tabs and documents after switching timelines", async () => {
+    mockPreflightDraftlineSwitchVariation.mockResolvedValueOnce({ can_proceed: true, dirty_files: [] });
+    mockSwitchDraftlineVariation.mockResolvedValueOnce(null);
+    mockInvoke.mockImplementation((command: string) => {
+      switch (command) {
+        case "get_note":
+          return Promise.resolve("kept note content");
+        case "get_note_lock":
+          return Promise.resolve({ locked: false });
+        default:
+          return Promise.resolve(null);
+      }
+    });
+
+    useAppStore.setState({
+      openTabs: [
+        { id: "sketch-old.sk", type: "sketch", path: "old.sk", title: "Old sketch" },
+        { id: "note-keep.md", type: "note", path: "keep.md", title: "Keep" },
+        { id: "storyboard-old.sb", type: "storyboard", path: "old.sb", title: "Old storyboard" },
+      ],
+      activeTabId: "sketch-old.sk",
+      splitTabs: [
+        { id: "split-sketch-old.sk", type: "sketch", path: "old.sk", title: "Old sketch" },
+        { id: "split-note-keep.md", type: "note", path: "keep.md", title: "Keep" },
+      ],
+      splitActiveTabId: "split-sketch-old.sk",
+      activeEditorGroup: "split",
+      activeSketchPath: "old.sk",
+      activeSketch: { title: "Old sketch", description: "", rows: [], state: "draft", created_at: "", updated_at: "" },
+      loadSketches: async () => useAppStore.setState({ sketches: [] }),
+      loadStoryboards: async () => useAppStore.setState({ storyboards: [] }),
+      loadNotes: async () => useAppStore.setState({
+        notes: [{ path: "keep.md", title: "Keep", size: 17, updated_at: "2026-01-01T00:00:00Z" }],
+      }),
+      loadTimelines: vi.fn(() => Promise.resolve()),
+      loadVersions: vi.fn(() => Promise.resolve()),
+      loadGraphData: vi.fn(() => Promise.resolve()),
+      checkDirty: vi.fn(() => Promise.resolve()),
+    });
+
+    await useAppStore.getState().switchTimeline("next");
+
+    expect(mockPreflightDraftlineSwitchVariation).toHaveBeenCalledWith("next");
+    expect(mockSwitchDraftlineVariation).toHaveBeenCalledWith("next");
+    expect(useAppStore.getState().openTabs).toEqual([
+      { id: "note-keep.md", type: "note", path: "keep.md", title: "Keep" },
+    ]);
+    expect(useAppStore.getState().splitTabs).toEqual([
+      { id: "split-note-keep.md", type: "note", path: "keep.md", title: "Keep" },
+    ]);
+    expect(useAppStore.getState().activeTabId).toBe("note-keep.md");
+    expect(useAppStore.getState().splitActiveTabId).toBe("split-note-keep.md");
+    expect(useAppStore.getState().activeNotePath).toBe("keep.md");
+    expect(useAppStore.getState().activeNoteContent).toBe("kept note content");
+    expect(useAppStore.getState().activeSketchPath).toBeNull();
+    expect(useAppStore.getState().activeSketch).toBeNull();
+  });
+
+  it("ignores a late sketch open after another sketch becomes active", async () => {
+    let resolveOld!: (sketch: Sketch) => void;
+    let resolveNew!: (sketch: Sketch) => void;
+    const oldSketchRequest = new Promise<Sketch>((resolve) => {
+      resolveOld = resolve;
+    });
+    const newSketchRequest = new Promise<Sketch>((resolve) => {
+      resolveNew = resolve;
+    });
+
+    mockInvoke.mockImplementation((command: string, args: { relativePath?: string }) => {
+      if (command !== "get_sketch") return Promise.resolve(null);
+      if (args.relativePath === "old.sk") return oldSketchRequest;
+      return newSketchRequest;
+    });
+
+    const oldOpen = useAppStore.getState().openSketch("old.sk");
+    const newOpen = useAppStore.getState().openSketch("new.sk");
+
+    resolveNew({ title: "New sketch", description: "", rows: [], state: "draft", created_at: "", updated_at: "" });
+    await newOpen;
+    resolveOld({ title: "Old sketch", description: "", rows: [], state: "draft", created_at: "", updated_at: "" });
+    await oldOpen;
+
+    expect(useAppStore.getState().activeSketchPath).toBe("new.sk");
+    expect(useAppStore.getState().activeSketch?.title).toBe("New sketch");
+    expect(useAppStore.getState().openTabs).toContainEqual({
+      id: "sketch-new.sk",
+      type: "sketch",
+      path: "new.sk",
+      title: "New sketch",
+    });
+    expect(useAppStore.getState().openTabs).not.toContainEqual({
+      id: "sketch-old.sk",
+      type: "sketch",
+      path: "old.sk",
+      title: "Old sketch",
+    });
   });
 });

@@ -347,6 +347,8 @@ interface AppStoreState {
   isMultiProject: boolean;
   /** Whether an operation is in progress. */
   loading: boolean;
+  /** Whether a multi-project workspace is actively switching projects. */
+  projectSwitching: boolean;
   /** Last error message to display in the UI. */
   error: string | null;
   /** Width of the sidebar panel in pixels. */
@@ -1058,6 +1060,70 @@ function resetPersistenceState(): Pick<AppStoreState,
   };
 }
 
+function clearActiveDocumentState(): Pick<AppStoreState,
+  | "activeSketchPath"
+  | "activeSketch"
+  | "activeStoryboardPath"
+  | "activeStoryboard"
+  | "activeNotePath"
+  | "activeNoteContent"
+  | "activeNoteLocked"
+> {
+  return {
+    activeSketchPath: null,
+    activeSketch: null,
+    activeStoryboardPath: null,
+    activeStoryboard: null,
+    activeNotePath: null,
+    activeNoteContent: null,
+    activeNoteLocked: false,
+  };
+}
+
+function loadingDocumentStateForTab(tab: EditorTab): Partial<AppStoreState> {
+  if (tab.type === "sketch") {
+    return {
+      activeSketchPath: tab.path,
+      activeSketch: null,
+      activeStoryboardPath: null,
+      activeStoryboard: null,
+      activeNotePath: null,
+      activeNoteContent: null,
+      activeNoteLocked: false,
+    };
+  }
+  if (tab.type === "storyboard") {
+    return {
+      activeSketchPath: null,
+      activeSketch: null,
+      activeStoryboardPath: tab.path,
+      activeStoryboard: null,
+      activeNotePath: null,
+      activeNoteContent: null,
+      activeNoteLocked: false,
+    };
+  }
+  if (tab.type === "note") {
+    return {
+      activeSketchPath: null,
+      activeSketch: null,
+      activeStoryboardPath: null,
+      activeStoryboard: null,
+      activeNotePath: tab.path,
+      activeNoteContent: null,
+      activeNoteLocked: false,
+    };
+  }
+  return clearActiveDocumentState();
+}
+
+function tabExistsInLoadedProject(tab: EditorTab, state: AppStoreState): boolean {
+  if (tab.type === "sketch") return state.sketches.some((sketch) => sketch.path === tab.path);
+  if (tab.type === "storyboard") return state.storyboards.some((storyboard) => storyboard.path === tab.path);
+  if (tab.type === "note") return state.notes.some((note) => note.path === tab.path);
+  return true;
+}
+
 export const useAppStore = create<AppStoreState>((set, get) => ({
   view: "home",
   currentProject: null,
@@ -1065,6 +1131,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   projects: [],
   isMultiProject: false,
   loading: false,
+  projectSwitching: false,
   error: null,
   sidebarWidth: clampSidebarWidth(savedLayout.sidebarWidth ?? 240),
   sidebarVisible: savedLayout.sidebarVisible ?? true,
@@ -1236,22 +1303,22 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         nextActive = next[next.length - 1].id;
       }
     }
-    set({ openTabs: next, activeTabId: nextActive });
+    const nextTab = nextActive ? next.find((t) => t.id === nextActive) : undefined;
+    set({
+      openTabs: next,
+      activeTabId: nextActive,
+      ...(nextTab ? loadingDocumentStateForTab(nextTab) : clearActiveDocumentState()),
+    });
     // Split tabs are independent — closing a main tab does not close its split counterpart
     // Load the new active tab's content
-    if (nextActive) {
-      const nextTab = next.find((t) => t.id === nextActive);
+    if (nextTab) {
       if (nextTab?.type === "sketch") {
         get().openSketch(nextTab.path);
       } else if (nextTab?.type === "storyboard") {
         get().openStoryboard(nextTab.path);
       } else if (nextTab?.type === "note") {
         get().openNote(nextTab.path);
-      } else if (nextTab?.type === "database" || nextTab?.type === "diff" || nextTab?.type === "history" || nextTab?.type === "snapshot-preview" || nextTab?.type === "asset" || nextTab?.type === "agent-run") {
-        set({ activeSketchPath: null, activeSketch: null, activeStoryboardPath: null, activeStoryboard: null, activeNotePath: null, activeNoteContent: null, activeNoteLocked: false });
       }
-    } else {
-      set({ activeSketchPath: null, activeSketch: null, activeStoryboardPath: null, activeStoryboard: null, activeNotePath: null, activeNoteContent: null, activeNoteLocked: false });
     }
     get()._persistTabs();
   },
@@ -1259,7 +1326,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     const { openTabs } = get();
     const keep = openTabs.find((t) => t.id === tabId);
     if (!keep) return;
-    set({ openTabs: [keep], activeTabId: tabId });
+    set({ openTabs: [keep], activeTabId: tabId, ...loadingDocumentStateForTab(keep) });
     if (keep.type === "sketch") get().openSketch(keep.path);
     else if (keep.type === "storyboard") get().openStoryboard(keep.path);
     else if (keep.type === "note") get().openNote(keep.path);
@@ -1271,7 +1338,13 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     if (idx === -1) return;
     const next = openTabs.slice(0, idx + 1);
     const nextActive = next.find((t) => t.id === activeTabId) ? activeTabId : next[next.length - 1]?.id ?? null;
-    set({ openTabs: next, activeTabId: nextActive });
+    const nextTab = nextActive ? next.find((t) => t.id === nextActive) : undefined;
+    set({
+      openTabs: next,
+      activeTabId: nextActive,
+      ...(nextTab && nextActive !== activeTabId ? loadingDocumentStateForTab(nextTab) : {}),
+      ...(!nextTab ? clearActiveDocumentState() : {}),
+    });
     if (nextActive && nextActive !== activeTabId) get().setActiveTab(nextActive);
     get()._persistTabs();
   },
@@ -1281,16 +1354,20 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     if (idx === -1) return;
     const next = openTabs.slice(idx);
     const nextActive = next.find((t) => t.id === activeTabId) ? activeTabId : next[0]?.id ?? null;
-    set({ openTabs: next, activeTabId: nextActive });
+    const nextTab = nextActive ? next.find((t) => t.id === nextActive) : undefined;
+    set({
+      openTabs: next,
+      activeTabId: nextActive,
+      ...(nextTab && nextActive !== activeTabId ? loadingDocumentStateForTab(nextTab) : {}),
+      ...(!nextTab ? clearActiveDocumentState() : {}),
+    });
     if (nextActive && nextActive !== activeTabId) get().setActiveTab(nextActive);
     get()._persistTabs();
   },
   closeAllTabs: () => {
     set({
       openTabs: [], activeTabId: null, splitTabs: [], splitActiveTabId: null, activeEditorGroup: "main",
-      activeSketchPath: null, activeSketch: null,
-      activeStoryboardPath: null, activeStoryboard: null,
-      activeNotePath: null, activeNoteContent: null, activeNoteLocked: false,
+      ...clearActiveDocumentState(),
     });
     get()._persistTabs();
   },
@@ -1298,18 +1375,13 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     const { openTabs } = get();
     const tab = openTabs.find((t) => t.id === tabId);
     if (!tab) return;
-    set({ activeTabId: tabId });
+    set({ activeTabId: tabId, ...loadingDocumentStateForTab(tab) });
     if (tab.type === "sketch") {
-      set({ activeStoryboardPath: null, activeStoryboard: null, activeNotePath: null, activeNoteContent: null, activeNoteLocked: false });
       get().openSketch(tab.path);
     } else if (tab.type === "storyboard") {
-      set({ activeSketchPath: null, activeSketch: null, activeNotePath: null, activeNoteContent: null, activeNoteLocked: false });
       get().openStoryboard(tab.path);
     } else if (tab.type === "note") {
-      set({ activeSketchPath: null, activeSketch: null, activeStoryboardPath: null, activeStoryboard: null });
       get().openNote(tab.path);
-    } else if (tab.type === "history" || tab.type === "snapshot-preview" || tab.type === "agent-run" || tab.type === "diff" || tab.type === "asset" || tab.type === "database") {
-      set({ activeSketchPath: null, activeSketch: null, activeStoryboardPath: null, activeStoryboard: null, activeNotePath: null, activeNoteContent: null, activeNoteLocked: false });
     }
     get()._persistTabs();
   },
@@ -1382,16 +1454,31 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     // Add to split (focus existing if same doc already there)
     const existing = splitTabs.find((t) => t.path === tab.path && t.type === tab.type);
     if (existing) {
-      set({ openTabs: newOpenTabs, activeTabId: newActiveTabId, splitActiveTabId: existing.id, activeEditorGroup: "split" });
+      const nextMainTab = newActiveTabId ? newOpenTabs.find((t) => t.id === newActiveTabId) : undefined;
+      set({
+        openTabs: newOpenTabs,
+        activeTabId: newActiveTabId,
+        splitActiveTabId: existing.id,
+        activeEditorGroup: "split",
+        ...(nextMainTab ? loadingDocumentStateForTab(nextMainTab) : clearActiveDocumentState()),
+      });
     } else {
       const splitId = makeSplitTabId(tab.type, tab.path);
       const newSplitTab: EditorTab = { ...tab, id: splitId };
-      set({ openTabs: newOpenTabs, activeTabId: newActiveTabId, splitTabs: [...splitTabs, newSplitTab], splitActiveTabId: splitId, activeEditorGroup: "split" });
+      const nextMainTab = newActiveTabId ? newOpenTabs.find((t) => t.id === newActiveTabId) : undefined;
+      set({
+        openTabs: newOpenTabs,
+        activeTabId: newActiveTabId,
+        splitTabs: [...splitTabs, newSplitTab],
+        splitActiveTabId: splitId,
+        activeEditorGroup: "split",
+        ...(nextMainTab ? loadingDocumentStateForTab(nextMainTab) : clearActiveDocumentState()),
+      });
     }
 
     // Load content for the new active main tab (or clear)
     if (newActiveTabId) get().setActiveTab(newActiveTabId);
-    else set({ activeSketchPath: null, activeSketch: null, activeStoryboardPath: null, activeStoryboard: null, activeNotePath: null, activeNoteContent: null, activeNoteLocked: false });
+    else set(clearActiveDocumentState());
 
     get()._persistTabs();
   },
@@ -1620,7 +1707,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   },
 
   switchProject: async (projectPath) => {
-    set({ loading: true });
+    set({ loading: true, projectSwitching: true });
     try {
       // Save current workspace state before switching
       const { openTabs, activeTabId, chatSessionPath, currentProject, startedBranchFromSnapshot } = get();
@@ -1674,7 +1761,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       console.error("Failed to switch project:", err);
       set({ error: String(err) });
     } finally {
-      set({ loading: false });
+      set({ loading: false, projectSwitching: false });
     }
   },
 
@@ -1724,6 +1811,11 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       set({
         activeSketchPath: relativePath,
         activeSketch: sketch,
+        activeStoryboardPath: null,
+        activeStoryboard: null,
+        activeNotePath: null,
+        activeNoteContent: null,
+        activeNoteLocked: false,
       });
       get().openTab({ type: "sketch", path: relativePath, title });
       await get().loadSketches();
@@ -1733,8 +1825,18 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   },
 
   openSketch: async (sketchPath) => {
+    set({
+      activeSketchPath: sketchPath,
+      activeSketch: null,
+      activeStoryboardPath: null,
+      activeStoryboard: null,
+      activeNotePath: null,
+      activeNoteContent: null,
+      activeNoteLocked: false,
+    });
     try {
       const sketch = await invoke<Sketch>("get_sketch", { relativePath: sketchPath });
+      if (get().activeSketchPath !== sketchPath) return;
       set({
         activeSketchPath: sketchPath,
         activeSketch: sketch,
@@ -1751,8 +1853,8 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     if (shouldSuppressEditorFlush(activeSketchPath)) return;
     try {
       await invoke("update_sketch", { relativePath: activeSketchPath, ...update });
-      const { activeSketch } = get();
-      if (activeSketch) {
+      const { activeSketch, activeSketchPath: currentActiveSketchPath } = get();
+      if (activeSketch && currentActiveSketchPath === activeSketchPath) {
         set({ activeSketch: { ...activeSketch, ...update } });
       }
       set({ isDirty: true });
@@ -1783,7 +1885,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   deleteSketch: async (sketchPath) => {
     try {
       await invoke("delete_sketch", { relativePath: sketchPath });
-      const { activeSketchPath, activeStoryboardPath, openTabs } = get();
+      const { activeSketchPath, openTabs } = get();
       if (activeSketchPath === sketchPath) {
         set({ activeSketchPath: null, activeSketch: null });
       }
@@ -1793,9 +1895,12 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       get()._removeSplitTabByPath("sketch", sketchPath);
       await get().loadSketches();
       await get().loadStoryboards();
-      if (activeStoryboardPath) {
-        const storyboard = await invoke<Storyboard>("get_storyboard", { relativePath: activeStoryboardPath });
-        set({ activeStoryboard: storyboard });
+      const { activeStoryboardPath: currentActiveStoryboardPath } = get();
+      if (currentActiveStoryboardPath) {
+        const storyboard = await invoke<Storyboard>("get_storyboard", { relativePath: currentActiveStoryboardPath });
+        if (get().activeStoryboardPath === currentActiveStoryboardPath) {
+          set({ activeStoryboard: storyboard });
+        }
       }
       set({ isDirty: true });
       await get().refreshChangedFiles();
@@ -1828,6 +1933,11 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       set({
         activeStoryboardPath: relativePath,
         activeStoryboard: storyboard,
+        activeSketchPath: null,
+        activeSketch: null,
+        activeNotePath: null,
+        activeNoteContent: null,
+        activeNoteLocked: false,
       });
       get().openTab({ type: "storyboard", path: relativePath, title });
       await get().loadStoryboards();
@@ -1837,8 +1947,18 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   },
 
   openStoryboard: async (storyboardPath) => {
+    set({
+      activeStoryboardPath: storyboardPath,
+      activeStoryboard: null,
+      activeSketchPath: null,
+      activeSketch: null,
+      activeNotePath: null,
+      activeNoteContent: null,
+      activeNoteLocked: false,
+    });
     try {
       const storyboard = await invoke<Storyboard>("get_storyboard", { relativePath: storyboardPath });
+      if (get().activeStoryboardPath !== storyboardPath) return;
       set({
         activeStoryboardPath: storyboardPath,
         activeStoryboard: storyboard,
@@ -1858,7 +1978,9 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     try {
       await invoke("update_storyboard", { relativePath: activeStoryboardPath, ...update });
       const storyboard = await invoke<Storyboard>("get_storyboard", { relativePath: activeStoryboardPath });
-      set({ activeStoryboard: storyboard });
+      if (get().activeStoryboardPath === activeStoryboardPath) {
+        set({ activeStoryboard: storyboard });
+      }
       await get().loadStoryboards();
       set({ isDirty: true });
       await get().refreshChangedFiles();
@@ -1872,11 +1994,15 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     if (!activeStoryboardPath) return;
     try {
       const storyboard = await invoke<Storyboard>("set_storyboard_lock", { relativePath: activeStoryboardPath, locked });
-      set({ activeStoryboard: storyboard });
+      if (get().activeStoryboardPath === activeStoryboardPath) {
+        set({ activeStoryboard: storyboard });
+      }
       await get().loadStoryboards();
       await get().loadSketches();
-      const sketchPaths = getStoryboardSketchPaths(storyboard);
-      const { activeSketchPath } = get();
+      const { activeSketchPath, activeStoryboardPath: currentActiveStoryboardPath } = get();
+      const sketchPaths = currentActiveStoryboardPath === activeStoryboardPath
+        ? getStoryboardSketchPaths(storyboard)
+        : [];
       if (activeSketchPath && sketchPaths.includes(activeSketchPath)) {
         await get().openSketch(activeSketchPath);
       }
@@ -2016,11 +2142,21 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   },
 
   openNote: async (notePath) => {
+    set({
+      activeNotePath: notePath,
+      activeNoteContent: null,
+      activeNoteLocked: false,
+      activeSketchPath: null,
+      activeSketch: null,
+      activeStoryboardPath: null,
+      activeStoryboard: null,
+    });
     try {
       const [content, lock] = await Promise.all([
         invoke<string>("get_note", { relativePath: notePath }),
         invoke<{ locked: boolean }>("get_note_lock", { relativePath: notePath }),
       ]);
+      if (get().activeNotePath !== notePath) return;
       const title = notePath.replace(/\.md$/, "").split("/").pop() ?? notePath;
       set({
         activeNotePath: notePath,
@@ -2044,7 +2180,10 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     if (activeNoteLocked) return;
     try {
       await invoke("update_note", { relativePath: activeNotePath, content });
-      set({ activeNoteContent: content, isDirty: true });
+      set({
+        ...(get().activeNotePath === activeNotePath ? { activeNoteContent: content } : {}),
+        isDirty: true,
+      });
       await get().refreshChangedFiles();
     } catch (err) {
       console.error("Failed to update note:", err);
@@ -2684,6 +2823,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   },
 
   switchTimeline: async (name) => {
+    set({ loading: true });
     try {
       const preflight = await preflightDraftlineSwitchVariation(name);
       if (!preflight.can_proceed) {
@@ -2694,18 +2834,42 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         throw new Error(reason);
       }
       await switchDraftlineVariation(name);
+      set(clearActiveDocumentState());
       await get().loadSketches();
       await get().loadStoryboards();
       await get().loadNotes();
-      const { activeSketchPath, sketches } = get();
-      if (activeSketchPath) {
-        const stillExists = sketches.some((s) => s.path === activeSketchPath);
-        if (stillExists) {
-          await get().openSketch(activeSketchPath);
-        } else {
-          set({ activeSketch: null, activeSketchPath: null });
-        }
+
+      const state = get();
+      const openTabs = state.openTabs.filter((tab) => tabExistsInLoadedProject(tab, state));
+      const splitTabs = state.splitTabs.filter((tab) => tabExistsInLoadedProject(tab, state));
+      const activeTabId = openTabs.some((tab) => tab.id === state.activeTabId)
+        ? state.activeTabId
+        : openTabs[0]?.id ?? null;
+      const splitActiveTabId = splitTabs.some((tab) => tab.id === state.splitActiveTabId)
+        ? state.splitActiveTabId
+        : splitTabs[0]?.id ?? null;
+      const activeEditorGroup = splitTabs.length === 0 && state.activeEditorGroup === "split"
+        ? "main"
+        : state.activeEditorGroup;
+      const activeTab = activeTabId ? openTabs.find((tab) => tab.id === activeTabId) : undefined;
+
+      set({
+        openTabs,
+        activeTabId,
+        splitTabs,
+        splitActiveTabId,
+        activeEditorGroup,
+        ...(activeTab ? loadingDocumentStateForTab(activeTab) : clearActiveDocumentState()),
+      });
+
+      if (activeTab?.type === "sketch") {
+        await get().openSketch(activeTab.path);
+      } else if (activeTab?.type === "storyboard") {
+        await get().openStoryboard(activeTab.path);
+      } else if (activeTab?.type === "note") {
+        await get().openNote(activeTab.path);
       }
+      get()._persistTabs();
       await get().loadTimelines();
       await get().loadVersions();
       await get().loadGraphData();
@@ -2714,6 +2878,8 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       console.error("Failed to switch timeline:", err);
       useToastStore.getState().show(`Switch failed: ${err}`, 5000, "error");
       throw err;
+    } finally {
+      set({ loading: false });
     }
   },
 

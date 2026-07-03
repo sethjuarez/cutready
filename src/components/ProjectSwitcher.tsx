@@ -194,6 +194,7 @@ export function ProjectSwitcher({ variant = "sidebar" }: ProjectSwitcherProps) {
       {/* Trigger */}
       <button
         onClick={handleToggleOpen}
+        data-testid={isTitle ? "project-switcher-title-trigger" : "project-switcher-trigger"}
         className={
           isTitle
             ? "flex h-[22px] max-w-[320px] min-w-0 items-center gap-1.5 rounded px-1.5 text-left text-sm leading-none text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
@@ -348,6 +349,7 @@ export function ProjectSwitcher({ variant = "sidebar" }: ProjectSwitcherProps) {
               >
                 <button
                   onClick={() => handleSwitch(p.path)}
+                  data-testid={`project-switcher-option-${p.path.replace(/[^a-z0-9_-]+/gi, "-")}`}
                   className="truncate flex-1 text-left"
                 >
                   {p.name}
