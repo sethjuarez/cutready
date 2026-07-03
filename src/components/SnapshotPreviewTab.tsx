@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  AudioLines,
   Camera,
   ChevronDown,
   FileDiff,
@@ -29,7 +30,7 @@ interface SnapshotPreviewTabProps {
   snapshotId: string;
 }
 
-type ChangeKind = "sketch" | "storyboard" | "note" | "visual" | "asset" | "other";
+type ChangeKind = "sketch" | "storyboard" | "note" | "visual" | "narration" | "asset" | "other";
 type FileDetailState =
   | { status: "loading" }
   | { status: "ready"; bullets: string[]; context: string }
@@ -48,6 +49,7 @@ const KIND_LABELS: Record<ChangeKind, string> = {
   storyboard: "Storyboards",
   note: "Notes",
   visual: "Visuals",
+  narration: "Narrations",
   asset: "Assets",
   other: "Other files",
 };
@@ -57,6 +59,7 @@ const KIND_ICONS: Record<ChangeKind, typeof SquarePen> = {
   storyboard: Camera,
   note: NotebookPen,
   visual: Sparkles,
+  narration: AudioLines,
   asset: Image,
   other: FileText,
 };
@@ -706,6 +709,7 @@ const KIND_DETAIL_LABELS: Record<ChangeKind, string> = {
   storyboard: "storyboard",
   note: "note",
   visual: "visual",
+  narration: "narration",
   asset: "media reference",
   other: "file",
 };
@@ -965,7 +969,7 @@ function groupEntries(entries: DiffEntry[]): Record<ChangeKind, DiffEntry[]> {
       groups[classifyPath(entry.path)].push(entry);
       return groups;
     },
-    { sketch: [], storyboard: [], note: [], visual: [], asset: [], other: [] },
+    { sketch: [], storyboard: [], note: [], visual: [], narration: [], asset: [], other: [] },
   );
 }
 
@@ -975,7 +979,8 @@ function classifyPath(path: string): ChangeKind {
   if (lower.endsWith(".sb")) return "storyboard";
   if (lower.endsWith(".md")) return "note";
   if (lower.includes(".cutready/visuals/") || lower.endsWith(".elucim.json")) return "visual";
-  if (/\.(png|jpe?g|gif|webp|svg|mp4|mov|mkv|wav|mp3)$/i.test(path)) return "asset";
+  if (lower.includes(".cutready/narration/") || /\.(webm|ogg|oga|wav|mp3|m4a|flac)$/i.test(path)) return "narration";
+  if (/\.(png|jpe?g|gif|webp|svg|mp4|mov|mkv)$/i.test(path)) return "asset";
   return "other";
 }
 
@@ -1006,6 +1011,8 @@ function businessSummary(path: string, kind: ChangeKind): string {
       return "Note content changes: headings, planning text, or generated copy.";
     case "visual":
       return "Visual framing changes for generated graphics or Elucim assets.";
+    case "narration":
+      return "Narration audio changed for reusable row voiceover cuts.";
     case "asset":
       return "Referenced media asset changed in the project workspace.";
     default:

@@ -154,7 +154,7 @@ pub struct ImageInfo {
 }
 
 /// List all images and visuals in the project with reference info.
-#[tauri::command]
+#[auditaur_command(skip_all, err)]
 pub async fn list_project_images(state: State<'_, AppState>) -> Result<Vec<ImageInfo>, String> {
     let root = project_root(&state)?;
     let refs = project::list_images_with_refs(&root).map_err(|e| e.to_string())?;
@@ -171,7 +171,7 @@ pub async fn list_project_images(state: State<'_, AppState>) -> Result<Vec<Image
 }
 
 /// Delete a specific image or visual file from the project.
-#[tauri::command]
+#[auditaur_command(skip_all, err)]
 pub async fn delete_project_image(
     relative_path: String,
     state: State<'_, AppState>,
@@ -196,7 +196,7 @@ pub async fn delete_project_image(
 
 /// Delete all orphaned images and visuals (re-verified server-side).
 /// Returns the count of deleted assets.
-#[tauri::command]
+#[auditaur_command(skip_all, err)]
 pub async fn delete_orphaned_images(state: State<'_, AppState>) -> Result<u32, String> {
     let root = project_root(&state)?;
     let refs = project::list_images_with_refs(&root).map_err(|e| e.to_string())?;

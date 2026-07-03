@@ -9,6 +9,7 @@ import {
   AlertTriangle,
   GitBranch,
   Image,
+  AudioLines,
   Sparkles,
   FileDiff,
   Bot,
@@ -53,6 +54,11 @@ export function ImageIcon({ size = 14, className = "" }: IconProps) {
 /** Visual icon — sparkles, representing a generated visual/animation. */
 export function VisualIcon({ size = 14, className = "" }: IconProps) {
   return <Sparkles width={size} height={size} className={className} />;
+}
+
+/** Audio icon - waveform, representing a narration cut. */
+export function NarrationIcon({ size = 14, className = "" }: IconProps) {
+  return <AudioLines width={size} height={size} className={className} />;
 }
 
 /** Diff icon — file diff, representing a change comparison. */

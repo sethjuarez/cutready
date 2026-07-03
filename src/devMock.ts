@@ -849,6 +849,45 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
       return { path: (args as { existingName: string }).existingName.toLowerCase().replace(/\s+/g, "-"), name: (args as { existingName: string }).existingName, description: null };
     case "transfer_asset":
       return null; // no-op in dev mock
+    case "save_narration_recording": {
+      const { rowIndex, mimeType, durationMs, sourceText, leadingSilenceMs, trailingSilenceMs, silenceThresholdDb } = args as {
+        rowIndex: number;
+        mimeType?: string;
+        durationMs?: number;
+        sourceText?: string;
+        leadingSilenceMs?: number;
+        trailingSilenceMs?: number;
+        silenceThresholdDb?: number;
+      };
+      return {
+        ...MOCK_SKETCH,
+        rows: MOCK_SKETCH.rows.map((row, index) => index === rowIndex ? {
+          ...row,
+          narration: {
+            path: `.cutready/narration/mock-row-${rowIndex + 1}.webm`,
+            source_text: sourceText ?? row.narrative,
+            source_text_hash: "mock-source-text-hash",
+            mime_type: mimeType ?? "audio/webm",
+            duration_ms: durationMs ?? null,
+            leading_silence_ms: leadingSilenceMs ?? null,
+            trailing_silence_ms: trailingSilenceMs ?? null,
+            silence_threshold_db: silenceThresholdDb ?? null,
+            byte_size: 12345,
+            recorded_at: new Date().toISOString(),
+          },
+        } : row),
+      };
+    }
+    case "list_project_narration_assets":
+      return [
+        {
+          path: ".cutready/narration/mock-row-1.webm",
+          size: 12345,
+          mimeType: "audio/webm",
+          modifiedAt: Date.now(),
+          referencedBy: ["sketches/demo-introduction.sk"],
+        },
+      ];
     case "open_in_terminal":
       console.log("[devMock] open_in_terminal", args);
       return null;

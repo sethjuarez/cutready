@@ -25,8 +25,15 @@ const EXCLUDED_RUNTIME_PATHS: &[&str] = &[
     ".cutready/locks.json",
 ];
 
-const CUTREADY_CONTENT_EXTENSIONS: &[&str] = &["sk", "sb", "md", "png", "jpg", "jpeg", "webp"];
-const CUTREADY_ASSET_ROOTS: &[&str] = &[".cutready/visuals", ".cutready/screenshots"];
+const CUTREADY_CONTENT_EXTENSIONS: &[&str] = &[
+    "sk", "sb", "md", "png", "jpg", "jpeg", "webp", "webm", "ogg", "oga", "mp3", "wav", "m4a",
+    "flac",
+];
+const CUTREADY_ASSET_ROOTS: &[&str] = &[
+    ".cutready/visuals",
+    ".cutready/screenshots",
+    ".cutready/narration",
+];
 const CUTREADY_LARGE_FILE_THRESHOLD_BYTES: u64 = 50 * 1024 * 1024;
 
 /// CutReady-facing facade over a Draftline workspace.
@@ -500,8 +507,11 @@ mod tests {
         assert!(policy.tracks("storyboards/demo.sb").unwrap());
         assert!(policy.tracks("notes/planning.md").unwrap());
         assert!(policy.tracks("reference.png").unwrap());
+        assert!(policy.tracks("voiceover.webm").unwrap());
+        assert!(policy.tracks("workspace-audio/take.m4a").unwrap());
         assert!(policy.tracks(".cutready/visuals/frame.json").unwrap());
         assert!(policy.tracks(".cutready/screenshots/demo.webp").unwrap());
+        assert!(policy.tracks(".cutready/narration/row.webm").unwrap());
         assert!(!policy.tracks(".cutready/ui-state.json").unwrap());
         assert!(!policy.tracks(".cutready/locks.json").unwrap());
     }

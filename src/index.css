@@ -155,6 +155,23 @@ body.recording-prompter-root #root {
   background: rgb(var(--color-text-secondary));
 }
 
+.narration-read-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+.narration-read-scroll:hover {
+  scrollbar-color: rgb(var(--color-border)) transparent;
+}
+
+.narration-read-scroll::-webkit-scrollbar-thumb {
+  background: transparent;
+}
+
+.narration-read-scroll:hover::-webkit-scrollbar-thumb {
+  background: rgb(var(--color-border));
+}
+
 .terminal-xterm-host {
   display: flex;
   align-items: center;

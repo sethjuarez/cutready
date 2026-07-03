@@ -97,6 +97,30 @@ pub enum SketchState {
     Final,
 }
 
+/// Row-level narration audio captured or generated from the narrative text.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct NarrationAsset {
+    /// Path to the audio asset relative to the project root.
+    pub path: String,
+    /// The row narrative text at the moment this asset was recorded/generated.
+    pub source_text: String,
+    /// SHA-256 of `source_text` for future non-lossy staleness checks.
+    pub source_text_hash: String,
+    pub mime_type: String,
+    pub duration_ms: Option<u32>,
+    /// Detected silence before speech begins, stored non-destructively for future trim/alignment.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub leading_silence_ms: Option<u32>,
+    /// Detected silence after speech ends, stored non-destructively for future trim/alignment.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trailing_silence_ms: Option<u32>,
+    /// Decibel threshold used for leading/trailing silence detection.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub silence_threshold_db: Option<f32>,
+    pub byte_size: u64,
+    pub recorded_at: DateTime<Utc>,
+}
+
 /// A row in the sketch planning table (4 columns).
 ///
 /// Row identity is its array index — no UUID needed.
@@ -126,6 +150,9 @@ pub struct PlanningRow {
     /// Created by the Designer agent's conceptual pass before generating DSL JSON.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub design_plan: Option<String>,
+    /// Optional narration audio for this row.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub narration: Option<NarrationAsset>,
 }
 
 impl PlanningRow {
@@ -140,6 +167,7 @@ impl PlanningRow {
             screenshot: None,
             visual: None,
             design_plan: None,
+            narration: None,
         }
     }
 
@@ -506,6 +534,7 @@ mod tests {
             screenshot: Some("screenshots/step1.png".into()),
             visual: None,
             design_plan: None,
+            narration: None,
         });
         sketch
             .metadata
@@ -591,6 +620,7 @@ mod tests {
             screenshot: Some("screenshots/step1.png".into()),
             visual: None,
             design_plan: None,
+            narration: None,
         };
         let json = serde_json::to_string(&row).unwrap();
         let parsed: PlanningRow = serde_json::from_str(&json).unwrap();

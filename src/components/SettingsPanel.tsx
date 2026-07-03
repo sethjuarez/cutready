@@ -63,7 +63,15 @@ interface AuthCodeFlowInit {
   port: number;
 }
 
-type SettingsTab = "ai" | "agents" | "memory" | "display" | "themes" | "recording" | "feedback" | "repository" | "updates" | "experimental";
+type SettingsTab = "ai" | "agents" | "memory" | "display" | "themes" | "narration" | "recording" | "feedback" | "repository" | "updates" | "experimental";
+const REQUESTED_SETTINGS_TAB_KEY = "cutready:requested-settings-tab";
+const SETTINGS_TABS: SettingsTab[] = ["ai", "agents", "memory", "display", "themes", "narration", "recording", "feedback", "repository", "updates", "experimental"];
+
+function consumeRequestedSettingsTab(): SettingsTab | null {
+  const requested = localStorage.getItem(REQUESTED_SETTINGS_TAB_KEY);
+  localStorage.removeItem(REQUESTED_SETTINGS_TAB_KEY);
+  return SETTINGS_TABS.includes(requested as SettingsTab) ? requested as SettingsTab : null;
+}
 
 import { inputClass } from "../styles";
 import { FoundryResourcePicker } from "./FoundryResourcePicker";
@@ -87,15 +95,21 @@ export function SettingsPanel({ onClose }: { onClose?: () => void }) {
   const { settings, updateSetting, loaded } = useSettings();
   const currentProject = useAppStore((s) => s.currentProject);
   const setView = useAppStore((s) => s.setView);
+  const [requestedTab] = useState<SettingsTab | null>(() => consumeRequestedSettingsTab());
   const [scope, setScope] = useState<"app" | "workspace">(
-    import.meta.env.DEV && import.meta.env.VITE_CUTREADY_STARTUP_SETTINGS_TAB === "repository"
+    requestedTab && !["repository", "memory"].includes(requestedTab)
+      ? "app"
+      : requestedTab && ["repository", "memory"].includes(requestedTab)
+        ? "workspace"
+        : import.meta.env.DEV && import.meta.env.VITE_CUTREADY_STARTUP_SETTINGS_TAB === "repository"
       ? "workspace"
       : "app",
   );
   const [activeTab, setActiveTab] = useState<SettingsTab>(
-    import.meta.env.DEV && import.meta.env.VITE_CUTREADY_STARTUP_SETTINGS_TAB === "repository"
+    requestedTab
+      ?? (import.meta.env.DEV && import.meta.env.VITE_CUTREADY_STARTUP_SETTINGS_TAB === "repository"
       ? "repository"
-      : "display",
+      : "display"),
   );
   const [settingsFilter, setSettingsFilter] = useState("");
   const [models, setModels] = useState<ModelInfo[]>([]);
@@ -104,8 +118,8 @@ export function SettingsPanel({ onClose }: { onClose?: () => void }) {
   const [modelFilter, setModelFilter] = useState("");
 
   const globalTabs: SettingsTab[] = settings.featureRecording
-    ? ["display", "themes", "recording", "ai", "agents", "feedback", "updates", "experimental"]
-    : ["display", "themes", "ai", "agents", "feedback", "updates", "experimental"];
+    ? ["display", "themes", "narration", "recording", "ai", "agents", "feedback", "updates", "experimental"]
+    : ["display", "themes", "narration", "ai", "agents", "feedback", "updates", "experimental"];
   const workspaceTabs: SettingsTab[] = ["repository", "memory", "display", "themes", "ai", "agents"];
   const tabs: SettingsTab[] = scope === "workspace" ? workspaceTabs : globalTabs;
 
@@ -241,6 +255,13 @@ export function SettingsPanel({ onClose }: { onClose?: () => void }) {
       description: "Set default devices, tracks, countdowns, and output quality for new recording takes.",
       icon: <Mic2 className="h-4 w-4" />,
       keywords: "recording microphone camera audio capture ffmpeg",
+    },
+    narration: {
+      label: "Narration",
+      eyebrow: "Voice capture",
+      description: "Choose the microphone CutReady uses when recording narration directly into sketch rows.",
+      icon: <MessageSquare className="h-4 w-4" />,
+      keywords: "narration microphone mic voice audio row record permission",
     },
     ai: {
       label: "AI providers",
@@ -474,6 +495,9 @@ export function SettingsPanel({ onClose }: { onClose?: () => void }) {
               {activeTab === "recording" && (
                 <RecordingTab settings={settings} updateSetting={updateSetting} />
               )}
+              {activeTab === "narration" && (
+                <NarrationTab settings={settings} updateSetting={updateSetting} />
+              )}
               {activeTab === "ai" && (
                 <AIProviderTab
                   settings={settings}
@@ -559,6 +583,183 @@ const terminalCustomColorFields: Array<{
 
 function tokenRgb(value: string): string {
   return `rgb(${value})`;
+}
+
+// ── Narration Tab ─────────────────────────────────────────────────
+
+type BrowserMicrophone = {
+  deviceId: string;
+  label: string;
+};
+
+function NarrationTab({
+  settings,
+  updateSetting,
+}: {
+  settings: ReturnType<typeof useSettings>["settings"];
+  updateSetting: ReturnType<typeof useSettings>["updateSetting"];
+}) {
+  const [microphones, setMicrophones] = useState<BrowserMicrophone[]>([]);
+  const [permissionState, setPermissionState] = useState<PermissionState | "unsupported" | "unknown">("unknown");
+  const [loading, setLoading] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [error, setError] = useState("");
+
+  const refreshMicrophones = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      if (!navigator.mediaDevices?.enumerateDevices) {
+        setPermissionState("unsupported");
+        setMicrophones([]);
+        return;
+      }
+
+      if (navigator.permissions?.query) {
+        try {
+          const permission = await navigator.permissions.query({ name: "microphone" as PermissionName });
+          setPermissionState(permission.state);
+          permission.onchange = () => setPermissionState(permission.state);
+        } catch {
+          setPermissionState("unknown");
+        }
+      }
+
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const audioInputs = devices
+        .filter((device) => device.kind === "audioinput")
+        .map((device, index) => ({
+          deviceId: device.deviceId,
+          label: device.label || `Microphone ${index + 1}`,
+        }));
+      setMicrophones(audioInputs);
+      if (
+        settings.narrationMicDeviceId &&
+        audioInputs.length > 0 &&
+        !audioInputs.some((device) => device.deviceId === settings.narrationMicDeviceId)
+      ) {
+        await updateSetting("narrationMicDeviceId", "");
+      }
+    } catch (err) {
+      setError(String(err));
+      setMicrophones([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const requestMicrophoneAccess = async () => {
+    setTesting(true);
+    setError("");
+    try {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw new Error("Microphone access is not available in this WebView.");
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream.getTracks().forEach((track) => track.stop());
+      setPermissionState("granted");
+      await refreshMicrophones();
+      useToastStore.getState().show("Microphone access is ready.", 3000, "success");
+    } catch (err) {
+      setPermissionState("denied");
+      setError(String(err));
+      useToastStore.getState().show(`Microphone access failed: ${err}`, 5000, "error");
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  useEffect(() => {
+    void refreshMicrophones();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const permissionLabel = permissionState === "granted"
+    ? "Allowed"
+    : permissionState === "denied"
+      ? "Blocked"
+      : permissionState === "prompt"
+        ? "Ask on first use"
+        : permissionState === "unsupported"
+          ? "Unavailable"
+          : "Unknown";
+
+  return (
+    <div className="flex flex-col gap-6">
+      <p className="text-xs text-[rgb(var(--color-text-secondary))]">
+        Row narration records through the Tauri WebView microphone API, so it works independently of full-screen recording.
+      </p>
+
+      <div className="rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]/50 p-4">
+        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+          <div>
+            <div className="text-sm font-medium text-[rgb(var(--color-text))]">Microphone access</div>
+            <p className="mt-1 text-xs text-[rgb(var(--color-text-secondary))]">
+              Grant access once, then pick the input CutReady should use for sketch-row narration.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className={`rounded-full border px-2.5 py-1 text-[11px] font-medium ${
+              permissionState === "granted"
+                ? "border-[rgb(var(--color-success))]/30 bg-[rgb(var(--color-success))]/10 text-[rgb(var(--color-success))]"
+                : permissionState === "denied"
+                  ? "border-[rgb(var(--color-error))]/30 bg-[rgb(var(--color-error))]/10 text-[rgb(var(--color-error))]"
+                  : "border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text-secondary))]"
+            }`}>
+              {permissionLabel}
+            </span>
+            <button
+              type="button"
+              onClick={requestMicrophoneAccess}
+              disabled={testing}
+              className="inline-flex items-center gap-2 rounded-lg bg-[rgb(var(--color-accent))] px-3 py-2 text-xs font-medium text-[rgb(var(--color-accent-fg))] transition-colors hover:bg-[rgb(var(--color-accent-hover))] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {testing ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Mic2 className="h-3.5 w-3.5" />}
+              {testing ? "Checking..." : "Allow / test mic"}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <label className="block space-y-1.5">
+        <span className="text-xs font-medium text-[rgb(var(--color-text-secondary))]">Narration microphone</span>
+        <select
+          value={settings.narrationMicDeviceId || "default"}
+          onChange={(event) => updateSetting("narrationMicDeviceId", event.target.value === "default" ? "" : event.target.value)}
+          className={`${inputClass} w-full`}
+        >
+          <option value="default">System default microphone</option>
+          {microphones.map((device) => (
+            <option key={device.deviceId} value={device.deviceId}>
+              {device.label}
+            </option>
+          ))}
+        </select>
+        <div className="flex items-center justify-between gap-2 text-[10px] text-[rgb(var(--color-text-secondary))]">
+          <span>
+            {loading
+              ? "Looking for WebView microphones..."
+              : error
+                ? "Could not read microphone devices."
+                : microphones.length === 0
+                  ? "No microphones visible yet. Use Allow / test mic to unlock device names."
+                  : `${microphones.length} microphone${microphones.length === 1 ? "" : "s"} available`}
+          </span>
+          <button
+            type="button"
+            onClick={refreshMicrophones}
+            disabled={loading}
+            className="font-medium text-[rgb(var(--color-accent))] transition-colors hover:text-[rgb(var(--color-accent-hover))] disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            Refresh
+          </button>
+        </div>
+        {error && (
+          <p className="text-[10px] text-[rgb(var(--color-error))]">{error}</p>
+        )}
+      </label>
+    </div>
+  );
 }
 
 // ── Recording Tab ─────────────────────────────────────────────────

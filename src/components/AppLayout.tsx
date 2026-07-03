@@ -10,6 +10,7 @@ import { Sidebar } from "./Sidebar";
 import { StoryboardPanel } from "./StoryboardPanel";
 import { StoryboardList } from "./StoryboardList";
 import { AssetList } from "./AssetList";
+import { NarrationList } from "./NarrationList";
 import { ResizeHandle } from "./ResizeHandle";
 import { OutputPanel } from "./OutputPanel";
 import { CommandPalette } from "./CommandPalette";
@@ -31,6 +32,7 @@ import {
   House,
   Layers,
   Clapperboard,
+  Mic2,
   Settings,
   Search,
   Columns2,
@@ -167,10 +169,17 @@ export function AppLayout() {
       },
       {
         id: "nav.assets",
-        title: "Go to Assets",
+        title: "Go to Visuals",
         category: "Navigate",
         icon: <Clapperboard className="w-4 h-4" />,
         handler: () => setView("assets"),
+      },
+      {
+        id: "nav.narrations",
+        title: "Go to Narrations",
+        category: "Navigate",
+        icon: <Mic2 className="w-4 h-4" />,
+        handler: () => setView("narrations"),
       },
       {
         id: "nav.settings",
@@ -444,7 +453,7 @@ export function AppLayout() {
             {/* Upper: main content */}
             <div className="relative flex-1 min-h-0">
               {contentView === "home" && <div className="h-full overflow-y-auto"><HomePanel /></div>}
-              {(contentView === "project" || contentView === "sketch" || contentView === "assets" || contentView === "changes") && (isMerging ? <MergeConflictPanel /> : <StoryboardPanel />)}
+              {(contentView === "project" || contentView === "sketch" || contentView === "assets" || contentView === "narrations" || contentView === "changes") && (isMerging ? <MergeConflictPanel /> : <StoryboardPanel />)}
               {contentView === "editor" && <div className="h-full overflow-y-auto"><ScriptEditorPanel /></div>}
               {contentView === "recording" && displaySettings.featureRecording && <div className="h-full overflow-y-auto"><RecordingPanel /></div>}
               {contentView === "chat" && <div className="h-full overflow-hidden"><ChatPanel /></div>}
@@ -532,6 +541,8 @@ function PrimarySidebar({ viewOverride }: { viewOverride?: AppView }) {
       <div className="h-full shrink-0" style={{ width: sidebarWidth }}>
         {view === "assets" ? (
           <AssetList />
+        ) : view === "narrations" ? (
+          <NarrationList />
         ) : view === "changes" ? (
           <ChangesPanel />
         ) : (
