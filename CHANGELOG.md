@@ -10,6 +10,15 @@
 
 Release Please manages this changelog. Do not edit manually.
 
+## [1.23.3](https://github.com/sethjuarez/cutready/compare/v1.23.2...v1.23.3) (2026-07-04)
+
+
+### Bug Fixes
+
+* **export:** preserve recorded narration audio ([007be2b](https://github.com/sethjuarez/cutready/commit/007be2b0d2368ff3469a1a5d70f88dfa9a898820))
+* **sync:** guard GitHub remote sync without auth ([3978e93](https://github.com/sethjuarez/cutready/commit/3978e93abac6b3b3c55467d3d108ded8aefd0b5e))
+* **sync:** guard GitHub remote sync without auth ([98950a1](https://github.com/sethjuarez/cutready/commit/98950a1b93d239fc18e754f976cbbf730cd12db2))
+
 ## [1.23.2](https://github.com/sethjuarez/cutready/compare/v1.23.1...v1.23.2) (2026-07-03)
 
 
