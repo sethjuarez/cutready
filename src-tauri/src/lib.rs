@@ -1,7 +1,8 @@
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     fs,
-    sync::{Arc, Mutex},
+    sync::{Arc, LazyLock, Mutex},
+    time::{Duration, Instant},
 };
 
 use tauri::{Emitter, Manager};
@@ -153,6 +154,203 @@ pub struct AppState {
 /// Prevents concurrent git operations, snapshot + checkout races, and write-during-read corruption.
 pub struct ProjectLock(pub tokio::sync::Mutex<()>);
 
+/// Tracks configurable app-wide shortcuts used by presentation preview windows.
+#[derive(Debug, Clone)]
+pub struct RegisteredPresentationHotkey {
+    hotkey: String,
+    event_name: &'static str,
+}
+
+pub struct PresentationHotkeyState(pub Mutex<Vec<RegisteredPresentationHotkey>>);
+
+#[derive(Debug, serde::Deserialize)]
+struct PresentationHotkeyBinding {
+    action: String,
+    hotkey: String,
+}
+
+fn presentation_hotkey_event(action: &str) -> Option<&'static str> {
+    match action {
+        "next" => Some("presentation-hotkey-next"),
+        "previous" => Some("presentation-hotkey-previous"),
+        "play_pause" => Some("presentation-hotkey-play-pause"),
+        "speed_up" => Some("presentation-hotkey-speed-up"),
+        "slow_down" => Some("presentation-hotkey-slow-down"),
+        "toggle_mode" => Some("presentation-hotkey-toggle-mode"),
+        "exit" => Some("presentation-hotkey-exit"),
+        _ => None,
+    }
+}
+
+static LAST_PRESENTATION_HOTKEY_EMIT: LazyLock<Mutex<HashMap<&'static str, Instant>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
+fn emit_presentation_hotkey(
+    app: &tauri::AppHandle,
+    event_name: &'static str,
+    source: &'static str,
+) {
+    let now = Instant::now();
+    if let Ok(mut last_emit) = LAST_PRESENTATION_HOTKEY_EMIT.lock() {
+        if last_emit
+            .get(event_name)
+            .is_some_and(|last| now.duration_since(*last) < Duration::from_millis(80))
+        {
+            tracing::debug!(
+                target: "cutready::hotkeys",
+                event_name,
+                source,
+                "Suppressed duplicate presentation hotkey event",
+            );
+            return;
+        }
+        last_emit.insert(event_name, now);
+    }
+
+    tracing::info!(
+        target: "cutready::hotkeys",
+        event_name,
+        source,
+        "Presentation hotkey pressed",
+    );
+    let _ = app.emit(event_name, ());
+}
+
+fn register_presentation_hook(app: &tauri::AppHandle, binding: &RegisteredPresentationHotkey) {
+    let app = app.clone();
+    let hotkey = binding.hotkey.clone();
+    let event_name = binding.event_name;
+
+    if let Err(error) = util::keyboard_hook::register(
+        hotkey.as_str(),
+        Box::new(move || emit_presentation_hotkey(&app, event_name, "keyboard_hook")),
+    ) {
+        tracing::warn!(
+            target: "cutready::hotkeys",
+            hotkey = %hotkey,
+            error = %error,
+            "Failed to register Windows presentation keyboard hook fallback",
+        );
+    }
+}
+
+#[tauri_plugin_auditaur::auditaur_command(skip_all, err)]
+fn configure_presentation_hotkeys(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, PresentationHotkeyState>,
+    bindings: Vec<PresentationHotkeyBinding>,
+) -> Result<(), String> {
+    use std::collections::HashSet;
+    use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
+
+    let mut desired = Vec::new();
+    let mut seen_hotkeys = HashSet::new();
+    for binding in bindings {
+        let hotkey = binding.hotkey.trim();
+        if hotkey.is_empty() {
+            continue;
+        }
+
+        let Some(event_name) = presentation_hotkey_event(binding.action.as_str()) else {
+            tracing::warn!(
+                target: "cutready::hotkeys",
+                action = %binding.action,
+                "Ignoring unknown presentation hotkey action",
+            );
+            continue;
+        };
+
+        if !seen_hotkeys.insert(hotkey.to_string()) {
+            return Err(format!(
+                "Presentation hotkey '{hotkey}' is assigned more than once."
+            ));
+        }
+
+        desired.push((hotkey.to_string(), event_name));
+    }
+
+    let mut registered = state
+        .0
+        .lock()
+        .map_err(|error| format!("Presentation hotkey lock error: {error}"))?;
+    let global_shortcuts = app.global_shortcut();
+    let previous_registered = registered.clone();
+    util::keyboard_hook::clear();
+
+    for binding in registered.drain(..) {
+        if let Err(error) = global_shortcuts.unregister(binding.hotkey.as_str()) {
+            tracing::warn!(
+                target: "cutready::hotkeys",
+                hotkey = %binding.hotkey,
+                error = %error,
+                "Failed to unregister stale presentation hotkey",
+            );
+        }
+    }
+
+    let mut newly_registered: Vec<RegisteredPresentationHotkey> = Vec::new();
+    for (hotkey, event_name) in desired {
+        let registered_hotkey = RegisteredPresentationHotkey {
+            hotkey: hotkey.clone(),
+            event_name,
+        };
+        let result =
+            global_shortcuts.on_shortcut(hotkey.as_str(), move |app_handle, _shortcut, event| {
+                if event.state == ShortcutState::Pressed {
+                    emit_presentation_hotkey(app_handle, event_name, "global_shortcut");
+                }
+            });
+
+        if let Err(error) = result {
+            for registered_hotkey in &newly_registered {
+                let _ = global_shortcuts.unregister(registered_hotkey.hotkey.as_str());
+            }
+            util::keyboard_hook::clear();
+            for previous in &previous_registered {
+                let event_name = previous.event_name;
+                let restore_result = global_shortcuts.on_shortcut(
+                    previous.hotkey.as_str(),
+                    move |app_handle, _shortcut, event| {
+                        if event.state == ShortcutState::Pressed {
+                            emit_presentation_hotkey(app_handle, event_name, "global_shortcut");
+                        }
+                    },
+                );
+                if let Err(restore_error) = restore_result {
+                    tracing::warn!(
+                        target: "cutready::hotkeys",
+                        hotkey = %previous.hotkey,
+                        error = %restore_error,
+                        "Failed to restore previous presentation hotkey after registration failure",
+                    );
+                }
+                register_presentation_hook(&app, previous);
+            }
+            *registered = previous_registered;
+            tracing::warn!(
+                target: "cutready::hotkeys",
+                hotkey = %hotkey,
+                error = %error,
+                "Failed to register presentation hotkey",
+            );
+            return Err(format!(
+                "Could not register presentation hotkey '{hotkey}': {error}"
+            ));
+        }
+
+        register_presentation_hook(&app, &registered_hotkey);
+        newly_registered.push(registered_hotkey);
+    }
+
+    tracing::info!(
+        target: "cutready::hotkeys",
+        count = newly_registered.len(),
+        "Configured presentation hotkeys",
+    );
+    *registered = newly_registered;
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let auditaur_policy = configure_auditaur_startup();
@@ -188,6 +386,7 @@ pub fn run() {
         .manage(app_state)
         .manage(auditaur_policy)
         .manage(ProjectLock(tokio::sync::Mutex::new(())))
+        .manage(PresentationHotkeyState(Mutex::new(Vec::new())))
         .manage(commands::screenshot::CaptureState(Mutex::new(None)))
         .manage(commands::screenshot::RecordingCountdownState(Mutex::new(
             None,
@@ -380,6 +579,7 @@ pub fn run() {
             commands::diagnostics::get_diagnostics_policy,
             commands::diagnostics::get_auditaur_diagnostics,
             commands::diagnostics::clear_auditaur_logs,
+            configure_presentation_hotkeys,
             commands::sketch::create_sketch,
             commands::sketch::update_sketch,
             commands::sketch::update_sketch_title,

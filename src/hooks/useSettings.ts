@@ -105,6 +105,20 @@ export interface GlobalSettings {
   displayTerminalColorMode: TerminalColorMode;
   /** Custom terminal key colors used when displayTerminalColorMode is "custom". */
   displayTerminalCustomTheme: TerminalCustomTheme;
+  /** Global hotkey for advancing presentation preview or teleprompter. */
+  presentationNextHotkey: string;
+  /** Global hotkey for moving backward in presentation preview or teleprompter. */
+  presentationPreviousHotkey: string;
+  /** Global hotkey for starting/stopping teleprompter auto-scroll. */
+  presentationPlayPauseHotkey: string;
+  /** Global hotkey for increasing teleprompter auto-scroll speed. */
+  presentationSpeedUpHotkey: string;
+  /** Global hotkey for decreasing teleprompter auto-scroll speed. */
+  presentationSlowDownHotkey: string;
+  /** Global hotkey for switching between preview and teleprompter presentation modes. */
+  presentationToggleModeHotkey: string;
+  /** Global hotkey for exiting the active presentation preview. */
+  presentationExitHotkey: string;
   /** API-reported context window (tokens) for the selected model. */
   aiContextLength: number;
   /** Vision mode: "off", "notes", or "notes_and_sketches". */
@@ -229,6 +243,13 @@ const defaultGlobalSettings: GlobalSettings = {
   displayTerminalFontSize: 12,
   displayTerminalColorMode: "console",
   displayTerminalCustomTheme: DEFAULT_TERMINAL_CUSTOM_THEME,
+  presentationNextHotkey: "CmdOrControl+Alt+Shift+ArrowRight",
+  presentationPreviousHotkey: "CmdOrControl+Alt+Shift+ArrowLeft",
+  presentationPlayPauseHotkey: "CmdOrControl+Alt+Shift+Space",
+  presentationSpeedUpHotkey: "CmdOrControl+Alt+Shift+BracketRight",
+  presentationSlowDownHotkey: "CmdOrControl+Alt+Shift+BracketLeft",
+  presentationToggleModeHotkey: "CmdOrControl+Alt+Shift+T",
+  presentationExitHotkey: "CmdOrControl+Alt+Shift+Q",
   aiContextLength: 0,
   aiVisionMode: "notes_and_sketches",
   aiModelSupportsVision: "",

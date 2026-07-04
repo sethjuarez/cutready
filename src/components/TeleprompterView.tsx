@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { SafeMarkdown } from "./SafeMarkdown";
 import { useProjectImage } from "../hooks/useProjectImage";
+import { usePresentationHotkeyEvents } from "../hooks/usePresentationHotkeyEvents";
 import type { PreviewSlide } from "./presentation/types";
 
 const PREFS_KEY = "cutready:teleprompter:v2";
@@ -182,6 +183,16 @@ export function TeleprompterView({ slides, projectRoot, initialIndex, onExit }: 
   const adjustSpeed = useCallback((delta: number) => {
     setScrollSpeed((s) => clamp(s + delta, SPEED_MIN, SPEED_MAX));
   }, []);
+
+  usePresentationHotkeyEvents({
+    next: goNext,
+    previous: goPrev,
+    playPause: toggleAutoScroll,
+    speedUp: () => adjustSpeed(SPEED_STEP),
+    slowDown: () => adjustSpeed(-SPEED_STEP),
+    toggleMode: exit,
+    exit,
+  });
 
   // Mode-aware keyboard handler — capture phase + stopPropagation so the
   // outer SketchPreview handler (Esc=closePreview, Space=goNext, etc.) does

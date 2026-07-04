@@ -21,6 +21,7 @@ import {
 import { SafeMarkdown } from "../SafeMarkdown";
 import { ResizeHandle } from "../ResizeHandle";
 import { useProjectImage } from "../../hooks/useProjectImage";
+import { usePresentationHotkeyEvents } from "../../hooks/usePresentationHotkeyEvents";
 import type { VisualControlHandle } from "../VisualCell";
 import type { PreviewSlide, PresentationMode } from "./types";
 
@@ -103,6 +104,13 @@ export function SlidesView({
   const goNext = useCallback(() => {
     setCurrentIdx((i) => Math.min(total - 1, i + 1));
   }, [total, setCurrentIdx]);
+
+  usePresentationHotkeyEvents({
+    next: goNext,
+    previous: goPrev,
+    toggleMode: () => onSwitchMode("teleprompter"),
+    exit: onClose,
+  });
 
   const toggleSide = useCallback(() => {
     setPanelSide((s) => {
