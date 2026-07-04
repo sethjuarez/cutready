@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const mockInvoke = vi.hoisted(() => vi.fn());
+const mockGetGitHubAuthStatus = vi.hoisted(() => vi.fn());
 const mockPreflightDraftlineSwitchVariation = vi.hoisted(() => vi.fn());
 const mockSwitchDraftlineVariation = vi.hoisted(() => vi.fn());
 
@@ -17,6 +18,10 @@ vi.mock("../services/draftlineVersioning", async (importOriginal) => {
     switchDraftlineVariation: (...args: unknown[]) => mockSwitchDraftlineVariation(...args),
   };
 });
+
+vi.mock("../services/githubSetup", () => ({
+  getGitHubAuthStatus: (...args: unknown[]) => mockGetGitHubAuthStatus(...args),
+}));
 
 import { useAppStore } from "../stores/appStore";
 import type { Sketch, SketchSummary } from "../types/sketch";
@@ -70,6 +75,7 @@ const originalState = {
 describe("project switch store side effects", () => {
   afterEach(() => {
     mockInvoke.mockReset();
+    mockGetGitHubAuthStatus.mockReset();
     mockPreflightDraftlineSwitchVariation.mockReset();
     mockSwitchDraftlineVariation.mockReset();
     useAppStore.setState({
@@ -168,6 +174,7 @@ describe("project switch store side effects", () => {
 
   it("lists remote-only branches and adopts one before switching", async () => {
     const switchTimeline = vi.fn(() => Promise.resolve());
+    mockGetGitHubAuthStatus.mockResolvedValue({ connected: true });
     mockInvoke.mockImplementation((command: string) => {
       switch (command) {
         case "list_remote_variations":
