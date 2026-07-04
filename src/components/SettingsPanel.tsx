@@ -1080,10 +1080,6 @@ function ExportTab({
 
   const isWorkspace = scope === "workspace";
   const disabled = isWorkspace && !settings.videoExportOverrideEnabled;
-  const normalizeAudioKey = isWorkspace
-    ? "workspaceVideoExportNormalizeNarrationAudio"
-    : "videoExportNormalizeNarrationAudio";
-  const normalizeAudioValue = settings[normalizeAudioKey];
   const { status: ffmpegStatus, loading: ffmpegChecking, refresh: refreshFfmpegStatus } = useFfmpegStatus();
   const ffmpegVersion = ffmpegStatus?.version?.split(/\r?\n/)[0] ?? null;
   const ffprobeVersion = ffmpegStatus?.ffprobe_version?.split(/\r?\n/)[0] ?? null;
@@ -1193,27 +1189,6 @@ function ExportTab({
         </div>
       </fieldset>
 
-      <label className="flex items-start justify-between gap-4 rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]/40 p-4">
-        <span>
-          <span className="block text-sm font-medium text-[rgb(var(--color-text))]">Normalize narration audio</span>
-          <span className="mt-1 block text-xs leading-5 text-[rgb(var(--color-text-secondary))]">
-            Keep each row at a consistent spoken-word loudness during MP4 export. Original narration files are not changed.
-          </span>
-          {isWorkspace && !settings.videoExportOverrideEnabled && (
-            <span className="mt-2 block text-[10px] text-[rgb(var(--color-text-secondary))]">
-              App default: {settings.videoExportNormalizeNarrationAudio ? "on" : "off"}
-            </span>
-          )}
-        </span>
-        <input
-          type="checkbox"
-          checked={normalizeAudioValue}
-          onChange={(event) => updateSetting(normalizeAudioKey, event.target.checked)}
-          disabled={disabled}
-          className="mt-1 h-4 w-4 shrink-0 accent-[rgb(var(--color-accent))] disabled:cursor-not-allowed disabled:opacity-40"
-        />
-      </label>
-
       <div className="rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]/50 p-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
@@ -1292,7 +1267,7 @@ function ExportTab({
       <div className="rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]/50 p-4">
         <div className="text-sm font-medium text-[rgb(var(--color-text))]">Current output format</div>
         <p className="mt-1 text-xs leading-5 text-[rgb(var(--color-text-secondary))]">
-          Sketch video export currently writes 1920x1080 MP4 files with RGB lossless screenshot encoding, trimmed narration audio, optional loudness normalization, and AAC audio.
+          Sketch video export currently writes 1920x1080 MP4 files with RGB lossless screenshot encoding, trimmed recorded narration audio, and AAC audio.
         </p>
       </div>
     </div>

@@ -50,7 +50,6 @@ type SketchVideoExportSettings = {
   titleToFirstRowHoldSeconds: number;
   rowTransitionHoldSeconds: number;
   finalHoldSeconds: number;
-  normalizeNarrationAudio: boolean;
 };
 type VideoExportIssue = { rowNumber: number; missing: string[] };
 
@@ -1416,9 +1415,6 @@ The Actions describe what happens on screen — use them as visual design hints.
         finalHoldSeconds: settings.videoExportOverrideEnabled
           ? settings.workspaceVideoExportFinalHoldSeconds
           : settings.videoExportFinalHoldSeconds,
-        normalizeNarrationAudio: settings.videoExportOverrideEnabled
-          ? settings.workspaceVideoExportNormalizeNarrationAudio
-          : settings.videoExportNormalizeNarrationAudio,
       } satisfies SketchVideoExportSettings;
 
       const result = await invoke<SketchVideoExport>("export_sketch_video", {
@@ -1467,12 +1463,10 @@ The Actions describe what happens on screen — use them as visual design hints.
     settings.videoExportTitleToFirstRowHoldSeconds,
     settings.videoExportRowTransitionHoldSeconds,
     settings.videoExportFinalHoldSeconds,
-    settings.videoExportNormalizeNarrationAudio,
     settings.workspaceVideoExportTitleCardDurationSeconds,
     settings.workspaceVideoExportTitleToFirstRowHoldSeconds,
     settings.workspaceVideoExportRowTransitionHoldSeconds,
     settings.workspaceVideoExportFinalHoldSeconds,
-    settings.workspaceVideoExportNormalizeNarrationAudio,
   ]);
 
   const handleRecord = useCallback(async () => {
