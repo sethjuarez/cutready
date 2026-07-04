@@ -10,6 +10,13 @@
 
 Release Please manages this changelog. Do not edit manually.
 
+## [1.24.0](https://github.com/sethjuarez/cutready/compare/v1.23.3...v1.24.0) (2026-07-04)
+
+
+### Features
+
+* add presentation hotkeys ([#166](https://github.com/sethjuarez/cutready/issues/166)) ([49e9e55](https://github.com/sethjuarez/cutready/commit/49e9e555caffec0ac0d96edc6c1df43a38ab19cc))
+
 ## [1.23.3](https://github.com/sethjuarez/cutready/compare/v1.23.2...v1.23.3) (2026-07-04)
 
 
