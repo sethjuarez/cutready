@@ -37,7 +37,7 @@ export function SyncBar({ variant = "full" }: { variant?: "full" | "compact" }) 
 
     const start = () => {
       if (!intervalId) {
-        intervalId = setInterval(() => { fetchFromRemote(); }, 5 * 60 * 1000);
+        intervalId = setInterval(() => { fetchFromRemote({ notifyAuthRequired: false }); }, 5 * 60 * 1000);
       }
     };
     const stop = () => {
@@ -48,7 +48,7 @@ export function SyncBar({ variant = "full" }: { variant?: "full" | "compact" }) 
       if (document.hidden) {
         stop();
       } else {
-        fetchFromRemote(); // catch up immediately on return
+        fetchFromRemote({ notifyAuthRequired: false }); // catch up immediately on return
         start();
       }
     };

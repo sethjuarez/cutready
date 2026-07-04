@@ -51,6 +51,7 @@ import {
   type DraftlineTimelineCleanupResult,
 } from "../services/draftlineVersioning";
 import { recordActivityEntries } from "../services/telemetry";
+import { getGitHubAuthStatus } from "../services/githubSetup";
 import { useToastStore } from "./toastStore";
 import { cleanupRange } from "../utils/historyCleanupSelection";
 import { getStoryboardSketchPaths } from "../utils/storyboard";
@@ -246,6 +247,31 @@ function buildShareUrl(remoteUrl: string, branch: string): string | null {
   const repo = match[1];
   if (branch === "main" || branch === "master") return `https://github.com/${repo}`;
   return `https://github.com/${repo}/compare/${branch}?expand=1`;
+}
+
+const GITHUB_REMOTE_AUTH_MESSAGE =
+  "This project has a GitHub remote. Connect GitHub in Settings > Repository before syncing.";
+
+function isGitHubRemoteUrl(remoteUrl: string): boolean {
+  return /github\.com[/:][^/]+\/[^\s/]+(?:\.git)?$/i.test(remoteUrl.trim());
+}
+
+async function ensureGitHubRemoteCredential(remote: RemoteInfo | null, notify = false): Promise<boolean> {
+  if (!remote || !isGitHubRemoteUrl(remote.url)) return true;
+
+  try {
+    const status = await getGitHubAuthStatus();
+    if (status.connected) return true;
+
+    useAppStore.setState({ syncStatus: null, incomingCommits: [], syncError: GITHUB_REMOTE_AUTH_MESSAGE });
+    if (notify) {
+      useToastStore.getState().show(GITHUB_REMOTE_AUTH_MESSAGE, 6000, "warning");
+    }
+    return false;
+  } catch (error) {
+    console.warn("Could not confirm GitHub auth status before sync; continuing remote operation.", error);
+    return true;
+  }
 }
 
 function snapshotIdFromPreviewPath(path: string): string | null {
@@ -819,7 +845,7 @@ interface AppStoreState {
   /** Detect configured remote for the project. */
   detectRemote: () => Promise<void>;
   /** Fetch from the remote. */
-  fetchFromRemote: () => Promise<void>;
+  fetchFromRemote: (options?: { notifyAuthRequired?: boolean }) => Promise<void>;
   /** Push current timeline to the remote. */
   pushToRemote: () => Promise<void>;
   /** Pull from remote (fast-forward merge). */
@@ -1639,7 +1665,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       // Auto-detect remote and fetch in background (non-blocking)
       get().detectRemote().then(() => {
         if (get().currentRemote) {
-          get().fetchFromRemote().catch(() => {});
+          get().fetchFromRemote({ notifyAuthRequired: false }).catch(() => {});
         }
       });
     } catch (err) {
@@ -3084,6 +3110,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         shareUrl: null,
       });
       if (info) {
+        if (!await ensureGitHubRemoteCredential(info)) return;
         await get().refreshSyncStatus();
       }
     } catch {
@@ -3091,9 +3118,10 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     }
   },
 
-  fetchFromRemote: async () => {
+  fetchFromRemote: async (options = {}) => {
     const { currentRemote } = get();
     if (!currentRemote) return;
+    if (!await ensureGitHubRemoteCredential(currentRemote, options.notifyAuthRequired ?? true)) return;
     set({ isSyncing: true, syncError: null });
     try {
       await fetchDraftlineRemote(currentRemote.name);
@@ -3112,6 +3140,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   pushToRemote:async () => {
     const { currentRemote, timelines } = get();
     if (!currentRemote) return;
+    if (!await ensureGitHubRemoteCredential(currentRemote, true)) return;
     const active = timelines.find((t) => t.is_active);
     if (!active) return;
     set({ isSyncing: true, syncError: null });
@@ -3183,6 +3212,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   pullFromRemote: async () => {
     const { currentRemote } = get();
     if (!currentRemote) return;
+    if (!await ensureGitHubRemoteCredential(currentRemote, true)) return;
     set({ isSyncing: true, syncError: null });
     try {
       const preflight = await preflightDraftlineIncoming(currentRemote.name);
@@ -3255,6 +3285,10 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       set({ remoteBranches: [], remoteBranchesLoading: false });
       return [];
     }
+    if (!await ensureGitHubRemoteCredential(currentRemote, true)) {
+      set({ remoteBranches: [], remoteBranchesLoading: false });
+      return [];
+    }
     set({ remoteBranchesLoading: true, syncError: null });
     try {
       const localNames = new Set(timelines.map((timeline) => timeline.name));
@@ -3274,6 +3308,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   checkoutRemoteTimeline: async (branch: string) => {
     const { currentRemote, isDirty } = get();
     if (!currentRemote) return;
+    if (!await ensureGitHubRemoteCredential(currentRemote, true)) return;
     if (isDirty) {
       const reason = "Save or discard local changes before adopting a remote branch.";
       useToastStore.getState().show(reason, 5000, "error");
@@ -3299,6 +3334,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   publishTimeline: async () => {
     const { currentRemote, timelines } = get();
     if (!currentRemote) return;
+    if (!await ensureGitHubRemoteCredential(currentRemote, true)) return;
     const active = timelines.find((t) => t.is_active);
     if (!active) return;
     set({ isSyncing: true, syncError: null });
@@ -3315,6 +3351,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   refreshSyncStatus: async () => {
     const { currentRemote } = get();
     if (!currentRemote) return;
+    if (!await ensureGitHubRemoteCredential(currentRemote)) return;
     try {
       const status = await getDraftlineSyncStatus(currentRemote.name);
       set({ syncStatus: status, syncError: null });
@@ -3329,6 +3366,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       set({ incomingCommits: [] });
       return;
     }
+    if (!await ensureGitHubRemoteCredential(currentRemote)) return;
     try {
       const incoming = await listDraftlineIncomingCommits(currentRemote.name);
       set({ incomingCommits: incoming });
