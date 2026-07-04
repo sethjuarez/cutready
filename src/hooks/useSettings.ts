@@ -149,8 +149,6 @@ export interface GlobalSettings {
   videoExportRowTransitionHoldSeconds: number;
   /** Sketch video export final screenshot hold duration in seconds. */
   videoExportFinalHoldSeconds: number;
-  /** Normalize narration loudness during sketch video export. */
-  videoExportNormalizeNarrationAudio: boolean;
   /** Custom FFmpeg executable path. Empty means auto-detect. */
   ffmpegExecutablePath: string;
   /** Custom FFprobe executable path. Empty means auto-detect. */
@@ -196,8 +194,6 @@ export interface WorkspaceSettings {
   workspaceVideoExportRowTransitionHoldSeconds: number;
   /** Workspace override: final screenshot hold duration in seconds. */
   workspaceVideoExportFinalHoldSeconds: number;
-  /** Workspace override: normalize narration loudness during sketch video export. */
-  workspaceVideoExportNormalizeNarrationAudio: boolean;
 }
 
 /** Combined view for backward compatibility — consumers that need both. */
@@ -255,7 +251,6 @@ const defaultGlobalSettings: GlobalSettings = {
   videoExportTitleToFirstRowHoldSeconds: 0.5,
   videoExportRowTransitionHoldSeconds: 1,
   videoExportFinalHoldSeconds: 3,
-  videoExportNormalizeNarrationAudio: true,
   ffmpegExecutablePath: "",
   ffprobeExecutablePath: "",
   recorderCameraEnabled: false,
@@ -289,7 +284,6 @@ export const defaultWorkspaceSettings: WorkspaceSettings = {
   workspaceVideoExportTitleToFirstRowHoldSeconds: 0.5,
   workspaceVideoExportRowTransitionHoldSeconds: 1,
   workspaceVideoExportFinalHoldSeconds: 3,
-  workspaceVideoExportNormalizeNarrationAudio: true,
 };
 
 const defaultSettings: AppSettings = {
@@ -335,7 +329,6 @@ const WORKSPACE_KEYS: (keyof WorkspaceSettings)[] = [
   "workspaceVideoExportTitleToFirstRowHoldSeconds",
   "workspaceVideoExportRowTransitionHoldSeconds",
   "workspaceVideoExportFinalHoldSeconds",
-  "workspaceVideoExportNormalizeNarrationAudio",
 ];
 
 function providerLabel(provider: AiProviderKind): string {

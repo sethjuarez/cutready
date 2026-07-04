@@ -24,13 +24,9 @@ const DEFAULT_TITLE_CARD_DURATION_SECONDS: f64 = 3.0;
 const DEFAULT_TITLE_TO_FIRST_ROW_HOLD_DURATION_SECONDS: f64 = 0.5;
 const DEFAULT_ROW_TRANSITION_HOLD_SECONDS: f64 = 1.0;
 const DEFAULT_FINAL_HOLD_DURATION_SECONDS: f64 = 3.0;
-const DEFAULT_NORMALIZE_NARRATION_AUDIO: bool = true;
 const VIDEO_ENCODER: &str = "libx264rgb";
 const VIDEO_PIXEL_FORMAT: &str = "rgb24";
 const VIDEO_CRF: &str = "0";
-const NARRATION_LOUDNESS_TARGET_LUFS: &str = "-16";
-const NARRATION_LOUDNESS_TRUE_PEAK: &str = "-1.5";
-const NARRATION_LOUDNESS_RANGE: &str = "11";
 
 #[derive(Debug, Clone, Serialize)]
 pub struct SketchVideoExport {
@@ -58,8 +54,6 @@ pub struct SketchVideoExportSettings {
     pub row_transition_hold_seconds: f64,
     #[serde(default = "default_final_hold_seconds")]
     pub final_hold_seconds: f64,
-    #[serde(default = "default_normalize_narration_audio")]
-    pub normalize_narration_audio: bool,
 }
 
 impl Default for SketchVideoExportSettings {
@@ -69,7 +63,6 @@ impl Default for SketchVideoExportSettings {
             title_to_first_row_hold_seconds: DEFAULT_TITLE_TO_FIRST_ROW_HOLD_DURATION_SECONDS,
             row_transition_hold_seconds: DEFAULT_ROW_TRANSITION_HOLD_SECONDS,
             final_hold_seconds: DEFAULT_FINAL_HOLD_DURATION_SECONDS,
-            normalize_narration_audio: DEFAULT_NORMALIZE_NARRATION_AUDIO,
         }
     }
 }
@@ -93,7 +86,6 @@ impl SketchVideoExportSettings {
                 self.final_hold_seconds,
                 DEFAULT_FINAL_HOLD_DURATION_SECONDS,
             ),
-            normalize_narration_audio: self.normalize_narration_audio,
         }
     }
 }
@@ -205,7 +197,7 @@ where
                 format!("Rendering row {} of {}", segment.row_number, segments.len()),
             );
             let segment_output = work_dir.join(format!("row-{:03}.mp4", segment.row_number));
-            render_segment(segment, &segment_output, settings.normalize_narration_audio)?;
+            render_segment(segment, &segment_output)?;
             segment_files.push(segment_output);
             if index + 1 < segments.len() {
                 let next_segment = &segments[index + 1];
@@ -462,15 +454,11 @@ fn collect_row_segments(project_root: &Path, sketch: &Sketch) -> anyhow::Result<
         .collect()
 }
 
-fn render_segment(
-    segment: &RowSegment,
-    output_path: &Path,
-    normalize_narration_audio: bool,
-) -> anyhow::Result<()> {
+fn render_segment(segment: &RowSegment, output_path: &Path) -> anyhow::Result<()> {
     let duration = format_duration(segment.duration_seconds);
     let audio_start = format_seconds(segment.audio_start_seconds);
     let vf = still_image_video_filter();
-    let af = narration_audio_filter(&audio_start, &duration, normalize_narration_audio);
+    let af = narration_audio_filter(&audio_start, &duration);
     let mut args = vec![
         "-y".to_string(),
         "-hide_banner".to_string(),
@@ -529,17 +517,10 @@ fn still_image_video_filter() -> String {
     )
 }
 
-fn narration_audio_filter(audio_start: &str, duration: &str, normalize_audio: bool) -> String {
-    let base = format!(
+fn narration_audio_filter(audio_start: &str, duration: &str) -> String {
+    format!(
         "atrim=start={audio_start}:duration={duration},asetpts=PTS-STARTPTS,aresample=48000,aformat=channel_layouts=stereo"
-    );
-    if normalize_audio {
-        format!(
-            "{base},loudnorm=I={NARRATION_LOUDNESS_TARGET_LUFS}:TP={NARRATION_LOUDNESS_TRUE_PEAK}:LRA={NARRATION_LOUDNESS_RANGE},aresample=48000,aformat=channel_layouts=stereo"
-        )
-    } else {
-        base
-    }
+    )
 }
 
 fn render_image_hold_segment(
@@ -871,10 +852,6 @@ fn default_final_hold_seconds() -> f64 {
     DEFAULT_FINAL_HOLD_DURATION_SECONDS
 }
 
-fn default_normalize_narration_audio() -> bool {
-    DEFAULT_NORMALIZE_NARRATION_AUDIO
-}
-
 fn sanitize_duration(value: f64, fallback: f64) -> f64 {
     if value.is_finite() {
         value.max(MIN_ROW_DURATION_SECONDS)
@@ -958,22 +935,13 @@ mod tests {
     }
 
     #[test]
-    fn narration_audio_filter_normalizes_when_enabled() {
-        let normalized = narration_audio_filter("0.500", "3.000", true);
-        assert!(normalized.contains("loudnorm=I=-16:TP=-1.5:LRA=11"));
-        assert!(normalized.ends_with("aresample=48000,aformat=channel_layouts=stereo"));
-
-        let unchanged = narration_audio_filter("0.500", "3.000", false);
+    fn narration_audio_filter_uses_recorded_audio_without_loudness_treatment() {
+        let unchanged = narration_audio_filter("0.500", "3.000");
         assert!(!unchanged.contains("loudnorm"));
         assert_eq!(
             unchanged,
             "atrim=start=0.500:duration=3.000,asetpts=PTS-STARTPTS,aresample=48000,aformat=channel_layouts=stereo"
         );
-    }
-
-    #[test]
-    fn export_settings_default_to_audio_normalization() {
-        assert!(SketchVideoExportSettings::default().normalize_narration_audio);
     }
 
     #[test]
