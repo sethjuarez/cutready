@@ -1,0 +1,9 @@
+{
+  "app": "cutready",
+  "start": ["cmd", "/c", "npm", "run", "debug"],
+  "readiness": {
+    "frontend": true,
+    "driveBridge": true,
+    "timeoutSeconds": 180
+  }
+}

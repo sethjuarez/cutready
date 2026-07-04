@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useRef, useState, lazy, Suspense } from "react";
 import { X, MonitorPlay, Layout, Image as ImageIcon } from "lucide-react";
 import { useProjectImage } from "../../hooks/useProjectImage";
+import { usePresentationHotkeyEvents } from "../../hooks/usePresentationHotkeyEvents";
 import type { PreviewSlide, PresentationMode } from "./types";
 
 const VisualCell = lazy(() => import("../VisualCell"));
@@ -44,6 +45,13 @@ export function SlideOnlyView({
   const goNext = useCallback(() => {
     setCurrentIdx((i) => Math.min(total - 1, i + 1));
   }, [total, setCurrentIdx]);
+
+  usePresentationHotkeyEvents({
+    next: goNext,
+    previous: goPrev,
+    toggleMode: () => onSwitchMode("teleprompter"),
+    exit: onClose,
+  });
 
   const showChrome = useCallback(() => {
     setChromeVisible(true);
