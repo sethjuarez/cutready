@@ -10,6 +10,13 @@
 
 Release Please manages this changelog. Do not edit manually.
 
+## [1.24.1](https://github.com/sethjuarez/cutready/compare/v1.24.0...v1.24.1) (2026-07-07)
+
+
+### Bug Fixes
+
+* **versioning:** persist pending cleanup blockers ([0224025](https://github.com/sethjuarez/cutready/commit/0224025a3877530ba0e4eaa4ce672717cbfd4a2b))
+
 ## [1.24.0](https://github.com/sethjuarez/cutready/compare/v1.23.3...v1.24.0) (2026-07-04)
 
 
