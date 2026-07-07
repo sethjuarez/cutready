@@ -96,11 +96,211 @@ public enum GitHubMobileError: Error, LocalizedError, Equatable {
     }
 }
 
+public struct GitHubWorkspaceOpenProgress: Equatable, Sendable {
+    public enum Phase: Equatable, Sendable {
+        case checkingCache
+        case readingCache
+        case fetchingManifest
+        case downloadingFiles
+        case finalizing
+    }
+
+    public var phase: Phase
+    public var completed: Int?
+    public var total: Int?
+    public var currentPath: String?
+
+    public init(phase: Phase, completed: Int? = nil, total: Int? = nil, currentPath: String? = nil) {
+        self.phase = phase
+        self.completed = completed
+        self.total = total
+        self.currentPath = currentPath
+    }
+}
+
+public struct GitHubWorkspaceCache: Sendable {
+    public var rootDirectory: URL
+
+    public init(rootDirectory: URL = GitHubWorkspaceCache.defaultRootDirectory()) {
+        self.rootDirectory = rootDirectory
+    }
+
+    public static func defaultRootDirectory() -> URL {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? FileManager.default.temporaryDirectory
+        return base
+            .appendingPathComponent("CutReadyCompanion", isDirectory: true)
+            .appendingPathComponent("GitHubWorkspaces", isDirectory: true)
+    }
+
+    func snapshot(
+        repository: GitHubRepositorySummary,
+        titleProvider: (String, String) -> String
+    ) throws -> MobileWorkspaceSnapshot? {
+        let manifestURL = manifestURL(repository: repository)
+        guard FileManager.default.fileExists(atPath: manifestURL.path) else {
+            return nil
+        }
+
+        let manifest = try JSONDecoder().decode(
+            GitHubWorkspaceCacheManifest.self,
+            from: Data(contentsOf: manifestURL)
+        )
+        guard manifest.defaultBranch == repository.defaultBranch else {
+            return nil
+        }
+
+        let summaries = try manifest.editableFiles.map { path in
+            let contents = try String(contentsOf: fileURL(path: path, repository: repository), encoding: .utf8)
+            return FileSummary(
+                path: path,
+                title: titleProvider(path, contents),
+                contents: path.lowercased().hasSuffix(".sb") ? nil : contents,
+                updatedAt: manifest.hydratedAt
+            )
+        }
+
+        let descriptor = MobileWorkspaceDescriptor(
+            id: repository.fullName,
+            name: repository.name,
+            source: .github(repository.repositoryRef)
+        )
+
+        return MobileWorkspaceSnapshot(
+            descriptor: descriptor,
+            projects: manifest.projects.isEmpty ? [MobileProjectEntry(path: ".", name: repository.name)] : manifest.projects,
+            activeProjectPath: manifest.projects.first?.path ?? ".",
+            storyboards: summaries.filter { $0.path.lowercased().hasSuffix(".sb") },
+            sketches: summaries.filter { $0.path.lowercased().hasSuffix(".sk") },
+            notes: summaries.filter { $0.path.lowercased().hasSuffix(".md") }
+        )
+    }
+
+    func hydrate(
+        repository: GitHubRepositorySummary,
+        projects: [MobileProjectEntry],
+        editableFiles: [String],
+        assetFiles: [String],
+        progress: (@Sendable (GitHubWorkspaceOpenProgress) -> Void)? = nil,
+        fetchData: (String) async throws -> Data
+    ) async throws {
+        let workspaceURL = workspaceURL(repository: repository)
+        if FileManager.default.fileExists(atPath: workspaceURL.path) {
+            try FileManager.default.removeItem(at: workspaceURL)
+        }
+        try FileManager.default.createDirectory(at: filesURL(repository: repository), withIntermediateDirectories: true)
+
+        let paths = editableFiles + assetFiles
+        progress?(GitHubWorkspaceOpenProgress(phase: .downloadingFiles, completed: 0, total: paths.count))
+        for (index, path) in paths.enumerated() {
+            progress?(GitHubWorkspaceOpenProgress(phase: .downloadingFiles, completed: index, total: paths.count, currentPath: path))
+            let data = try await fetchData(path)
+            try storeData(data, path: path, repository: repository)
+            progress?(GitHubWorkspaceOpenProgress(phase: .downloadingFiles, completed: index + 1, total: paths.count, currentPath: path))
+        }
+
+        let manifest = GitHubWorkspaceCacheManifest(
+            defaultBranch: repository.defaultBranch,
+            hydratedAt: Date(),
+            projects: projects,
+            editableFiles: editableFiles,
+            assetFiles: assetFiles
+        )
+        let manifestData = try JSONEncoder().encode(manifest)
+        try manifestData.write(to: manifestURL(repository: repository), options: .atomic)
+    }
+
+    func data(path: String, source: MobileWorkspaceSource) throws -> Data? {
+        guard case .github(let repository) = source else {
+            return nil
+        }
+        let url = try fileURL(path: path, repository: repository)
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            return nil
+        }
+        return try Data(contentsOf: url)
+    }
+
+    func storeData(_ data: Data, path: String, source: MobileWorkspaceSource) throws {
+        guard case .github(let repository) = source else {
+            return
+        }
+        try storeData(data, path: path, repository: repository)
+    }
+
+    private func storeData(_ data: Data, path: String, repository: GitHubRepositorySummary) throws {
+        try storeData(data, path: path, repository: repository.repositoryRef)
+    }
+
+    private func storeData(_ data: Data, path: String, repository: GitHubRepositoryRef) throws {
+        let url = try fileURL(path: path, repository: repository)
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try data.write(to: url, options: .atomic)
+    }
+
+    private func manifestURL(repository: GitHubRepositorySummary) -> URL {
+        workspaceURL(repository: repository).appendingPathComponent("manifest.json")
+    }
+
+    private func workspaceURL(repository: GitHubRepositorySummary) -> URL {
+        workspaceURL(fullName: repository.fullName, defaultBranch: repository.defaultBranch)
+    }
+
+    private func workspaceURL(fullName: String, defaultBranch: String) -> URL {
+        rootDirectory
+            .appendingPathComponent(safeSegment(fullName), isDirectory: true)
+            .appendingPathComponent(safeSegment(defaultBranch), isDirectory: true)
+    }
+
+    private func filesURL(repository: GitHubRepositorySummary) -> URL {
+        workspaceURL(repository: repository).appendingPathComponent("files", isDirectory: true)
+    }
+
+    private func filesURL(repository: GitHubRepositoryRef) -> URL {
+        workspaceURL(fullName: repository.displayName, defaultBranch: repository.defaultBranch ?? "main")
+            .appendingPathComponent("files", isDirectory: true)
+    }
+
+    private func fileURL(path: String, repository: GitHubRepositorySummary) throws -> URL {
+        try fileURL(path: path, filesRoot: filesURL(repository: repository))
+    }
+
+    private func fileURL(path: String, repository: GitHubRepositoryRef) throws -> URL {
+        try fileURL(path: path, filesRoot: filesURL(repository: repository))
+    }
+
+    private func fileURL(path: String, filesRoot: URL) throws -> URL {
+        let normalized = path
+            .replacingOccurrences(of: "\\", with: "/")
+            .split(separator: "/", omittingEmptySubsequences: true)
+            .map(String.init)
+        guard !normalized.isEmpty, !normalized.contains("..") else {
+            throw GitHubMobileError.unsupportedResponse
+        }
+
+        return normalized.reduce(filesRoot) { url, component in
+            url.appendingPathComponent(component)
+        }
+    }
+
+    private func safeSegment(_ value: String) -> String {
+        value
+            .replacingOccurrences(of: "/", with: "__")
+            .replacingOccurrences(of: ":", with: "_")
+    }
+}
+
 public protocol GitHubMobileClientProtocol: Sendable {
     func requestDeviceAuthorization(scopes: [String]) async throws -> GitHubDeviceAuthorization
     func pollAccessToken(deviceCode: String) async throws -> GitHubAccessToken
     func listRepositories(accessToken: String) async throws -> [GitHubRepositorySummary]
-    func openWorkspace(repository: GitHubRepositorySummary, accessToken: String) async throws -> MobileWorkspaceSnapshot
+    func openWorkspace(
+        repository: GitHubRepositorySummary,
+        accessToken: String,
+        progress: (@Sendable (GitHubWorkspaceOpenProgress) -> Void)?
+    ) async throws -> MobileWorkspaceSnapshot
+    func assetData(path: String, source: MobileWorkspaceSource, accessToken: String) async throws -> Data?
+    func standardImageAsset(path: String, source: MobileWorkspaceSource, accessToken: String) async throws -> Data?
 }
 
 public struct MobileWorkspaceSnapshot: Equatable, Sendable {
@@ -132,11 +332,13 @@ public struct GitHubMobileClient: GitHubMobileClientProtocol {
     private let clientID: String
     private let session: URLSession
     private let decoder: JSONDecoder
+    private let cache: GitHubWorkspaceCache
 
-    public init(clientID: String = "", session: URLSession = .shared) {
+    public init(clientID: String = "", session: URLSession = .shared, cache: GitHubWorkspaceCache = GitHubWorkspaceCache()) {
         let trimmedClientID = clientID.trimmingCharacters(in: .whitespacesAndNewlines)
         self.clientID = trimmedClientID
         self.session = session
+        self.cache = cache
 
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
@@ -217,45 +419,79 @@ public struct GitHubMobileClient: GitHubMobileClientProtocol {
         }
     }
 
-    public func openWorkspace(repository: GitHubRepositorySummary, accessToken: String) async throws -> MobileWorkspaceSnapshot {
+    public func openWorkspace(
+        repository: GitHubRepositorySummary,
+        accessToken: String,
+        progress: (@Sendable (GitHubWorkspaceOpenProgress) -> Void)? = nil
+    ) async throws -> MobileWorkspaceSnapshot {
+        progress?(GitHubWorkspaceOpenProgress(phase: .checkingCache))
+        if let cached = try cache.snapshot(repository: repository, titleProvider: title(for:contents:)) {
+            progress?(GitHubWorkspaceOpenProgress(phase: .readingCache))
+            return cached
+        }
+
+        progress?(GitHubWorkspaceOpenProgress(phase: .fetchingManifest))
         let tree = try await repositoryTree(repository: repository, accessToken: accessToken)
         let projects = try await projectEntries(repository: repository, accessToken: accessToken)
         let files = tree.tree
             .filter { $0.type == "blob" && MobileWorkspacePolicy.canEdit(path: $0.path) }
             .sorted { $0.path < $1.path }
+        let assets = tree.tree
+            .filter { $0.type == "blob" && MobileWorkspacePolicy.canReadAsset(path: $0.path) }
+            .sorted { $0.path < $1.path }
 
-        let storyboards = try await summaries(
-            for: files.filter { $0.path.lowercased().hasSuffix(".sb") },
+        try await cache.hydrate(
             repository: repository,
-            accessToken: accessToken
-        )
-        let sketches = try await summaries(
-            for: files.filter { $0.path.lowercased().hasSuffix(".sk") },
-            repository: repository,
-            accessToken: accessToken,
-            includeContents: true
-        )
-        let notes = try await summaries(
-            for: files.filter { $0.path.lowercased().hasSuffix(".md") },
-            repository: repository,
-            accessToken: accessToken,
-            includeContents: true
-        )
-
-        let descriptor = MobileWorkspaceDescriptor(
-            id: repository.fullName,
-            name: repository.name,
-            source: .github(repository.repositoryRef)
-        )
-
-        return MobileWorkspaceSnapshot(
-            descriptor: descriptor,
             projects: projects,
-            activeProjectPath: projects.first?.path ?? ".",
-            storyboards: storyboards,
-            sketches: sketches,
-            notes: notes
+            editableFiles: files.map(\.path),
+            assetFiles: assets.map(\.path),
+            progress: progress,
+            fetchData: { path in
+                try await rawFileData(
+                    path: path,
+                    fullName: repository.fullName,
+                    defaultBranch: repository.defaultBranch,
+                    accessToken: accessToken
+                )
+            }
         )
+        progress?(GitHubWorkspaceOpenProgress(phase: .finalizing))
+        guard let cached = try cache.snapshot(repository: repository, titleProvider: title(for:contents:)) else {
+            throw GitHubMobileError.unsupportedResponse
+        }
+        return cached
+    }
+
+    public func assetData(path: String, source: MobileWorkspaceSource, accessToken: String) async throws -> Data? {
+        guard MobileWorkspacePolicy.canReadAsset(path: path) else {
+            return nil
+        }
+
+        switch source {
+        case .github(let repository):
+            if let cached = try cache.data(path: path, source: source) {
+                return cached
+            }
+
+            guard let data = try await optionalRawFileData(
+                path: path,
+                fullName: repository.displayName,
+                defaultBranch: repository.defaultBranch ?? "main",
+                accessToken: accessToken
+            ) else {
+                return nil
+            }
+            try cache.storeData(data, path: path, source: source)
+            return data
+        }
+    }
+
+    public func standardImageAsset(path: String, source: MobileWorkspaceSource, accessToken: String) async throws -> Data? {
+        guard MobileWorkspacePolicy.canReadStandardImage(path: path) else {
+            return nil
+        }
+
+        return try await assetData(path: path, source: source, accessToken: accessToken)
     }
 
     private func projectEntries(repository: GitHubRepositorySummary, accessToken: String) async throws -> [MobileProjectEntry] {
@@ -285,35 +521,14 @@ public struct GitHubMobileClient: GitHubMobileClientProtocol {
         return try decoder.decode(GitHubTreeResponse.self, from: data)
     }
 
-    private func summaries(
-        for files: [GitHubTreeItem],
-        repository: GitHubRepositorySummary,
-        accessToken: String,
-        includeContents: Bool = false
-    ) async throws -> [FileSummary] {
-        var summaries: [FileSummary] = []
-        for file in files {
-            let contents = try await fileContents(path: file.path, repository: repository, accessToken: accessToken)
-            summaries.append(
-                FileSummary(
-                    path: file.path,
-                    title: title(for: file, contents: contents),
-                    contents: includeContents ? contents : nil,
-                    updatedAt: nil
-                )
-            )
-        }
-        return summaries
-    }
-
-    private func title(for file: GitHubTreeItem, contents: String) -> String {
-        switch (file.path as NSString).pathExtension.lowercased() {
+    private func title(for path: String, contents: String) -> String {
+        switch (path as NSString).pathExtension.lowercased() {
         case "sb", "sk":
-            return jsonTitle(from: contents) ?? fallbackTitle(for: file.path)
+            return jsonTitle(from: contents) ?? fallbackTitle(for: path)
         case "md":
-            return markdownTitle(from: contents) ?? fallbackTitle(for: file.path)
+            return noteTitle(for: path)
         default:
-            return fallbackTitle(for: file.path)
+            return fallbackTitle(for: path)
         }
     }
 
@@ -341,6 +556,99 @@ public struct GitHubMobileClient: GitHubMobileClientProtocol {
             throw GitHubMobileError.unsupportedResponse
         }
         return contents
+    }
+
+    private func fileData(
+        path: String,
+        repository: GitHubRepositorySummary,
+        accessToken: String
+    ) async throws -> Data {
+        try await fileData(
+            path: path,
+            fullName: repository.fullName,
+            defaultBranch: repository.defaultBranch,
+            accessToken: accessToken
+        )
+    }
+
+    private func fileData(
+        path: String,
+        fullName: String,
+        defaultBranch: String,
+        accessToken: String
+    ) async throws -> Data {
+        let request = try apiRequest(
+            path: "/repos/\(fullName)/contents/\(path)",
+            accessToken: accessToken,
+            queryItems: [URLQueryItem(name: "ref", value: defaultBranch)]
+        )
+        let data = try await data(for: request)
+        let response = try decoder.decode(GitHubContentResponse.self, from: data)
+        guard response.encoding == "base64" else {
+            throw GitHubMobileError.unsupportedResponse
+        }
+
+        let stripped = response.content.replacingOccurrences(of: "\n", with: "")
+        guard let contentData = Data(base64Encoded: stripped) else {
+            throw GitHubMobileError.unsupportedResponse
+        }
+        return contentData
+    }
+
+    private func rawFileData(
+        path: String,
+        fullName: String,
+        defaultBranch: String,
+        accessToken: String
+    ) async throws -> Data {
+        let request = try apiRequest(
+            path: "/repos/\(fullName)/contents/\(path)",
+            accessToken: accessToken,
+            queryItems: [URLQueryItem(name: "ref", value: defaultBranch)],
+            accept: "application/vnd.github.raw"
+        )
+        return try await data(for: request)
+    }
+
+    private func optionalFileData(
+        path: String,
+        repository: GitHubRepositorySummary,
+        accessToken: String
+    ) async throws -> Data? {
+        try await optionalFileData(
+            path: path,
+            fullName: repository.fullName,
+            defaultBranch: repository.defaultBranch,
+            accessToken: accessToken
+        )
+    }
+
+    private func optionalFileData(
+        path: String,
+        fullName: String,
+        defaultBranch: String,
+        accessToken: String
+    ) async throws -> Data? {
+        do {
+            return try await fileData(path: path, fullName: fullName, defaultBranch: defaultBranch, accessToken: accessToken)
+        } catch GitHubMobileError.unsupportedResponse {
+            return nil
+        } catch GitHubMobileError.api(let message) where message.localizedCaseInsensitiveContains("not found") {
+            return nil
+        }
+    }
+
+    private func optionalRawFileData(
+        path: String,
+        fullName: String,
+        defaultBranch: String,
+        accessToken: String
+    ) async throws -> Data? {
+        do {
+            return try await rawFileData(path: path, fullName: fullName, defaultBranch: defaultBranch, accessToken: accessToken)
+        } catch GitHubMobileError.api(let message) where message.localizedCaseInsensitiveContains("not found") {
+            return nil
+        }
     }
 
     private func optionalFileContents(
@@ -381,7 +689,12 @@ public struct GitHubMobileClient: GitHubMobileClientProtocol {
         return request
     }
 
-    private func apiRequest(path: String, accessToken: String, queryItems: [URLQueryItem]) throws -> URLRequest {
+    private func apiRequest(
+        path: String,
+        accessToken: String,
+        queryItems: [URLQueryItem],
+        accept: String = "application/vnd.github+json"
+    ) throws -> URLRequest {
         var components = URLComponents()
         components.scheme = "https"
         components.host = "api.github.com"
@@ -393,7 +706,7 @@ public struct GitHubMobileClient: GitHubMobileClientProtocol {
 
         var request = URLRequest(url: url)
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
-        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        request.setValue(accept, forHTTPHeaderField: "Accept")
         request.setValue("2022-11-28", forHTTPHeaderField: "X-GitHub-Api-Version")
         return request
     }
@@ -414,16 +727,10 @@ public struct GitHubMobileClient: GitHubMobileClientProtocol {
         return title
     }
 
-    private func markdownTitle(from contents: String) -> String? {
-        contents
-            .split(separator: "\n", omittingEmptySubsequences: false)
-            .lazy
-            .compactMap { line -> String? in
-                let trimmed = line.trimmingCharacters(in: .whitespaces)
-                guard trimmed.hasPrefix("# ") else { return nil }
-                return String(trimmed.dropFirst(2)).trimmingCharacters(in: .whitespaces)
-            }
-            .first
+    private func noteTitle(for path: String) -> String {
+        URL(fileURLWithPath: path)
+            .deletingPathExtension()
+            .lastPathComponent
     }
 
     private func fallbackTitle(for path: String) -> String {
@@ -434,6 +741,7 @@ public struct GitHubMobileClient: GitHubMobileClientProtocol {
             .replacingOccurrences(of: "_", with: " ")
             .capitalized
     }
+
 }
 
 private struct GitHubOAuthError: Codable {
@@ -452,6 +760,14 @@ private struct GitHubAPIError: Codable {
 
 private struct GitHubProjectManifest: Codable {
     var projects: [MobileProjectEntry]
+}
+
+private struct GitHubWorkspaceCacheManifest: Codable {
+    var defaultBranch: String
+    var hydratedAt: Date
+    var projects: [MobileProjectEntry]
+    var editableFiles: [String]
+    var assetFiles: [String]
 }
 
 private struct GitHubTreeResponse: Codable {

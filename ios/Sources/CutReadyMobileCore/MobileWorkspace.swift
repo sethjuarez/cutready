@@ -48,6 +48,7 @@ public struct MobileProjectEntry: Codable, Equatable, Identifiable, Sendable {
 
 public enum MobileWorkspacePolicy {
     public static let editableExtensions: Set<String> = ["sb", "sk", "md"]
+    public static let standardImageExtensions: Set<String> = ["png", "jpg", "jpeg", "gif", "webp"]
     public static let readableAssetDirectories: Set<String> = [
         ".cutready/screenshots",
         ".cutready/visuals",
@@ -70,8 +71,16 @@ public enum MobileWorkspacePolicy {
         }
 
         return readableAssetDirectories.contains { directory in
-            normalized == directory || normalized.hasPrefix("\(directory)/")
+            normalized == directory || normalized.hasPrefix("\(directory)/") || normalized.contains("/\(directory)/")
         }
+    }
+
+    public static func canReadStandardImage(path: String) -> Bool {
+        canReadAsset(path: path) && standardImageExtensions.contains((normalize(path) as NSString).pathExtension.lowercased())
+    }
+
+    public static func canReadNarration(path: String) -> Bool {
+        canReadAsset(path: path) && normalize(path).contains(".cutready/narration/")
     }
 
     private static func normalize(_ path: String) -> String {

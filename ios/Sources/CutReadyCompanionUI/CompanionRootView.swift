@@ -1,6 +1,12 @@
 import CutReadyMobileCore
 import MarkdownUI
 import SwiftUI
+import WebKit
+#if canImport(UIKit)
+import UIKit
+#elseif canImport(AppKit)
+import AppKit
+#endif
 
 public struct CompanionRootView: View {
     @State private var project: CompanionProject?
@@ -16,6 +22,7 @@ public struct CompanionRootView: View {
     @State private var isShowingRepositories = false
     @State private var workspaceNavigationPath = NavigationPath()
     @State private var authError: String?
+    @State private var workspaceOpenProgress: GitHubWorkspaceOpenProgress?
     private let tokenStore = KeychainTokenStore()
     private let recentWorkspaceStore = RecentWorkspaceStore()
 
@@ -59,6 +66,7 @@ public struct CompanionRootView: View {
                 WorkspaceLandingView(
                     isSigningIn: isSigningIn,
                     isOpeningWorkspace: isOpeningWorkspace,
+                    workspaceOpenProgress: workspaceOpenProgress,
                     canAddWorkspace: githubAccessToken != nil,
                     recentWorkspaces: recentWorkspaces,
                     onSignIn: { beginGitHubSignIn() },
@@ -83,6 +91,7 @@ public struct CompanionRootView: View {
                 repositories: githubRepositories,
                 isLoadingRepositories: isLoadingRepositories,
                 isOpeningWorkspace: isOpeningWorkspace,
+                workspaceOpenProgress: workspaceOpenProgress,
                 onOpen: { repository in
                     openGitHubWorkspace(repository)
                 }
@@ -193,7 +202,12 @@ public struct CompanionRootView: View {
                 let client = GitHubMobileClient()
                 let snapshot = try await client.openWorkspace(
                     repository: repository,
-                    accessToken: githubAccessToken
+                    accessToken: githubAccessToken,
+                    progress: { progress in
+                        Task { @MainActor in
+                            workspaceOpenProgress = progress
+                        }
+                    }
                 )
                 project = CompanionProject(snapshot: snapshot)
                 workspaceNavigationPath = NavigationPath()
@@ -203,6 +217,7 @@ public struct CompanionRootView: View {
             } catch {
                 authError = error.localizedDescription
             }
+            workspaceOpenProgress = nil
             isOpeningWorkspace = false
         }
     }
@@ -215,7 +230,13 @@ public struct CompanionRootView: View {
         case .note(let path):
             NoteDetailView(note: note(for: path, in: workspace), fallbackTitle: title(for: path, in: workspace.allNotes))
         case .sketch(let path):
-            SketchDetailView(sketch: sketch(for: path, in: workspace), fallbackTitle: title(for: path, in: workspace.allSketches))
+            SketchDetailView(
+                path: path,
+                sketch: sketch(for: path, in: workspace),
+                fallbackTitle: title(for: path, in: workspace.allSketches),
+                project: workspace,
+                githubAccessToken: githubAccessToken
+            )
         case .storyboard:
             SelectionDetailView(selection: selection, project: workspace)
         case .rehearse:
@@ -622,6 +643,7 @@ private struct RecentWorkspaceMenuRow: View {
 private struct WorkspaceLandingView: View {
     let isSigningIn: Bool
     let isOpeningWorkspace: Bool
+    let workspaceOpenProgress: GitHubWorkspaceOpenProgress?
     let canAddWorkspace: Bool
     let recentWorkspaces: [RecentWorkspace]
     let onSignIn: () -> Void
@@ -765,9 +787,7 @@ private struct WorkspaceLandingView: View {
             .background(CutReadyTheme.surface)
             .overlay {
                 if isOpeningWorkspace {
-                    ProgressView("Opening workspace")
-                        .padding()
-                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    WorkspaceOpenProgressView(progress: workspaceOpenProgress)
                 }
             }
         }
@@ -831,6 +851,7 @@ private struct GitHubRepositoryPicker: View {
     let repositories: [GitHubRepositorySummary]
     let isLoadingRepositories: Bool
     let isOpeningWorkspace: Bool
+    let workspaceOpenProgress: GitHubWorkspaceOpenProgress?
     let onOpen: (GitHubRepositorySummary) -> Void
     @State private var searchText = ""
 
@@ -859,9 +880,7 @@ private struct GitHubRepositoryPicker: View {
                         .padding()
                         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 } else if isOpeningWorkspace {
-                    ProgressView("Opening workspace")
-                        .padding()
-                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    WorkspaceOpenProgressView(progress: workspaceOpenProgress)
                 } else if repositories.isEmpty {
                     ContentUnavailableView(
                         "No repositories found",
@@ -909,6 +928,94 @@ private struct GitHubRepositoryPicker: View {
             repository.fullName.localizedCaseInsensitiveContains(query)
                 || repository.name.localizedCaseInsensitiveContains(query)
         }
+    }
+}
+
+private struct WorkspaceOpenProgressView: View {
+    let progress: GitHubWorkspaceOpenProgress?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                ProgressView(value: progressValue)
+                    .progressViewStyle(.circular)
+                    .controlSize(.small)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(CutReadyTheme.text)
+                    Text(detail)
+                        .font(.caption)
+                        .foregroundStyle(CutReadyTheme.textSecondary)
+                        .lineLimit(2)
+                }
+            }
+
+            if let completed = progress?.completed, let total = progress?.total, total > 0 {
+                ProgressView(value: Double(completed), total: Double(total))
+                    .tint(CutReadyTheme.accent)
+            }
+        }
+        .frame(maxWidth: 320, alignment: .leading)
+        .padding(16)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(CutReadyTheme.border.opacity(0.45), lineWidth: 1)
+        )
+        .padding()
+    }
+
+    private var title: String {
+        switch progress?.phase {
+        case .checkingCache:
+            return "Checking local cache"
+        case .readingCache:
+            return "Opening local workspace"
+        case .fetchingManifest:
+            return "Preparing workspace cache"
+        case .downloadingFiles:
+            return "Downloading workspace files"
+        case .finalizing:
+            return "Finalizing workspace"
+        case nil:
+            return "Opening workspace"
+        }
+    }
+
+    private var detail: String {
+        switch progress?.phase {
+        case .checkingCache:
+            return "Looking for an on-device copy first."
+        case .readingCache:
+            return "Loading sketches, notes, and assets from this device."
+        case .fetchingManifest:
+            return "Reading the GitHub file list before hydrating the on-device cache."
+        case .downloadingFiles:
+            if let completed = progress?.completed, let total = progress?.total, total > 0 {
+                if let currentPath = progress?.currentPath {
+                    return "\(completed) of \(total) cached - \(currentPath.assetDisplayName)"
+                }
+                return "\(completed) of \(total) files cached."
+            }
+            return "Saving supported CutReady documents and assets on this device."
+        case .finalizing:
+            return "Building the project list from the local cache."
+        case nil:
+            return "This can take longer the first time because CutReady is creating an on-device cache."
+        }
+    }
+
+    private var progressValue: Double? {
+        guard
+            let completed = progress?.completed,
+            let total = progress?.total,
+            total > 0
+        else {
+            return nil
+        }
+        return Double(completed) / Double(total)
     }
 }
 
@@ -1063,8 +1170,11 @@ private struct SelectionDetailView: View {
 }
 
 private struct SketchDetailView: View {
+    let path: String
     let sketch: FileSummary?
     let fallbackTitle: String
+    let project: CompanionProject
+    let githubAccessToken: String?
     @State private var layout = SketchReaderLayoutStore.load()
     @State private var isShowingLayout = false
 
@@ -1072,13 +1182,23 @@ private struct SketchDetailView: View {
         try? decodeSketch()
     }
 
-    private var unavailableMessage: String {
+    private var unavailableDetails: [String] {
+        var details = ["Path: \(path)"]
+        if let contents = sketch?.contents {
+            details.append("Content: \(contents.utf8.count) bytes fetched")
+        } else if sketch == nil {
+            details.append("Content: no sketch summary found in the current workspace snapshot")
+        } else {
+            details.append("Content: missing from the current workspace snapshot")
+        }
+
         do {
             _ = try decodeSketch()
-            return "Reopen the workspace to fetch sketch contents for mobile preview."
+            details.append("Decode: succeeded; reopen this sketch from the list")
         } catch {
-            return error.localizedDescription
+            details.append("Decode: \(SketchPreviewError.describe(error))")
         }
+        return details
     }
 
     private func decodeSketch() throws -> Sketch {
@@ -1098,7 +1218,7 @@ private struct SketchDetailView: View {
                         sketchHeader(decodedSketch)
 
                         ForEach(Array(decodedSketch.rows.enumerated()), id: \.offset) { index, row in
-                            SketchRowCard(row: row, index: index, layout: layout)
+                            SketchRowCard(row: row, index: index, layout: layout, sketchPath: path, project: project, githubAccessToken: githubAccessToken)
                         }
 
                         if decodedSketch.rows.isEmpty {
@@ -1114,11 +1234,31 @@ private struct SketchDetailView: View {
                 }
                 .background(CutReadyTheme.surface)
             } else {
-                ContentUnavailableView(
-                    "Sketch preview unavailable",
-                    systemImage: "square.and.pencil",
-                    description: Text(unavailableMessage)
-                )
+                VStack(spacing: 14) {
+                    ContentUnavailableView(
+                        "Sketch preview unavailable",
+                        systemImage: "square.and.pencil",
+                        description: Text("CutReady could not render this sketch from the current mobile workspace snapshot.")
+                    )
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        ForEach(unavailableDetails, id: \.self) { detail in
+                            Text(detail)
+                                .font(.caption.monospaced())
+                                .foregroundStyle(CutReadyTheme.textSecondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+                    .padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(CutReadyTheme.surfaceAlt.opacity(0.45), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .stroke(CutReadyTheme.border.opacity(0.55), lineWidth: 1)
+                    )
+                    .padding(.horizontal, 16)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(CutReadyTheme.surface)
             }
         }
@@ -1148,7 +1288,7 @@ private struct SketchDetailView: View {
         CompanionCard {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    Label(sketch.state.rawValue.replacingOccurrences(of: "_", with: " ").capitalized, systemImage: "square.and.pencil")
+                    Label("Sketch", systemImage: "square.and.pencil")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(CutReadyTheme.sketch)
                     Spacer()
@@ -1158,10 +1298,7 @@ private struct SketchDetailView: View {
                 }
 
                 if let description = sketch.description.mobileDisplayText, !description.isEmpty {
-                    Text(description)
-                        .font(.subheadline)
-                        .foregroundStyle(CutReadyTheme.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
+                    SketchMarkdownContent(markdown: description, emptyLabel: "")
                 }
             }
         }
@@ -1177,25 +1314,59 @@ private enum SketchPreviewError: LocalizedError {
             return "Reopen the workspace to fetch sketch contents for mobile preview."
         }
     }
+
+    static func describe(_ error: Error) -> String {
+        if let error = error as? SketchPreviewError {
+            return error.localizedDescription
+        }
+        if let error = error as? DecodingError {
+            return error.mobileDescription
+        }
+        return error.localizedDescription
+    }
+}
+
+private extension DecodingError {
+    var mobileDescription: String {
+        switch self {
+        case .typeMismatch(let type, let context):
+            return "type mismatch for \(type) at \(context.codingPath.mobilePath): \(context.debugDescription)"
+        case .valueNotFound(let type, let context):
+            return "missing value for \(type) at \(context.codingPath.mobilePath): \(context.debugDescription)"
+        case .keyNotFound(let key, let context):
+            return "missing key \(key.stringValue) at \(context.codingPath.mobilePath): \(context.debugDescription)"
+        case .dataCorrupted(let context):
+            return "data corrupted at \(context.codingPath.mobilePath): \(context.debugDescription)"
+        @unknown default:
+            return localizedDescription
+        }
+    }
+}
+
+private extension Array where Element == CodingKey {
+    var mobilePath: String {
+        let path = map(\.stringValue).joined(separator: ".")
+        return path.isEmpty ? "<root>" : path
+    }
 }
 
 private struct SketchRowCard: View {
     let row: PlanningRow
     let index: Int
     let layout: SketchReaderLayout
+    let sketchPath: String
+    let project: CompanionProject
+    let githubAccessToken: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 10) {
-                Text("\(index + 1)")
-                    .font(.caption.monospacedDigit().weight(.bold))
-                    .foregroundStyle(CutReadyTheme.sketch)
-                    .frame(width: 26, height: 26)
-                    .background(CutReadyTheme.sketch.opacity(0.11), in: Circle())
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .center, spacing: 8) {
+                RowMetaPill(label: "\(index + 1)", systemImage: nil, tint: CutReadyTheme.sketch)
+                RowMetaPill(label: row.time.isEmpty ? "Untimed" : row.time, systemImage: "clock", tint: CutReadyTheme.textSecondary)
 
-                Text(row.time.isEmpty ? "Untimed" : row.time)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(CutReadyTheme.textSecondary)
+                if let durationSeconds = row.durationSeconds {
+                    RowMetaPill(label: "\(durationSeconds)s", systemImage: "timer", tint: CutReadyTheme.textSecondary)
+                }
 
                 Spacer()
 
@@ -1207,10 +1378,10 @@ private struct SketchRowCard: View {
             }
 
             ForEach(layout.visibleSections) { section in
-                SketchSectionView(section: section, row: row)
+                SketchSectionView(section: section, row: row, sketchPath: sketchPath, project: project, githubAccessToken: githubAccessToken)
             }
         }
-        .padding(13)
+        .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(CutReadyTheme.surfaceAlt.opacity(0.48), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
         .overlay(
@@ -1220,55 +1391,115 @@ private struct SketchRowCard: View {
     }
 }
 
+private struct RowMetaPill: View {
+    let label: String
+    let systemImage: String?
+    let tint: Color
+
+    var body: some View {
+        HStack(spacing: 4) {
+            if let systemImage {
+                Image(systemName: systemImage)
+                    .font(.caption2.weight(.semibold))
+            }
+            Text(label)
+                .font(.caption.monospacedDigit().weight(.semibold))
+        }
+        .foregroundStyle(tint)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(tint.opacity(0.10), in: Capsule())
+    }
+}
+
 private struct SketchSectionView: View {
     let section: SketchReaderSection
     let row: PlanningRow
+    let sketchPath: String
+    let project: CompanionProject
+    let githubAccessToken: String?
 
     var body: some View {
         switch section {
         case .assets:
             assets
+        case .narration:
+            narration
         case .narrative:
-            textSection(title: "Narrative", icon: "text.quote", text: row.narrative, tint: CutReadyTheme.sketch)
+            textSection(title: "Narrative", icon: "text.quote", text: row.narrative, emptyLabel: "No narrative yet.", tint: CutReadyTheme.sketch)
         case .actions:
-            textSection(title: "Actions", icon: "cursorarrow.click.2", text: row.demoActions, tint: CutReadyTheme.storyboard)
+            textSection(title: "Actions", icon: "cursorarrow.click.2", text: row.demoActions, emptyLabel: "No actions yet.", tint: CutReadyTheme.storyboard)
         }
     }
 
     private var assets: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 7) {
             sectionTitle("Assets", icon: "photo.on.rectangle.angled", tint: CutReadyTheme.note)
 
-            if row.screenshot == nil && row.visual == nil {
-                Text("No screenshot or visual attached.")
-                    .font(.caption)
-                    .foregroundStyle(CutReadyTheme.textSecondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(10)
-                    .background(CutReadyTheme.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            if screenshotPath == nil && row.visual == nil {
+                AssetEmptyState()
             } else {
-                VStack(alignment: .leading, spacing: 8) {
-                    if let screenshot = row.screenshot, !screenshot.isEmpty {
-                        AssetReferenceRow(icon: "photo", title: "Screenshot", value: screenshot)
+                VStack(alignment: .leading, spacing: 7) {
+                    if let screenshot = screenshotPath {
+                        ScreenshotAssetView(
+                            path: screenshot,
+                            candidatePaths: project.assetPathCandidates(for: screenshot, referencedFrom: sketchPath),
+                            source: project.source,
+                            githubAccessToken: githubAccessToken
+                        )
                     }
 
-                    if row.visual != nil {
-                        AssetReferenceRow(icon: "sparkles", title: "Elucim visual", value: "Visual DSL attached - native rendering next")
+                    if let visual = row.visual {
+                        let summary = visual.visualSummary
+                        AssetReferenceRow(
+                            icon: "sparkles",
+                            title: summary.title,
+                            value: summary.subtitle,
+                            detail: "Native Elucim rendering is not enabled yet."
+                        )
                     }
                 }
             }
         }
     }
 
-    private func textSection(title: String, icon: String, text: String, tint: Color) -> some View {
+    private var narration: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            sectionTitle("Narration", icon: "waveform", tint: CutReadyTheme.accent)
+
+            if let narration = row.narration {
+                NarrationAssetView(
+                    narration: narration,
+                    candidatePaths: project.assetPathCandidates(for: narration.path, referencedFrom: sketchPath),
+                    source: project.source,
+                    githubAccessToken: githubAccessToken
+                )
+            } else {
+                Text("No narration recorded.")
+                    .font(.caption)
+                    .foregroundStyle(CutReadyTheme.textSecondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(10)
+                    .background(CutReadyTheme.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .stroke(CutReadyTheme.border.opacity(0.7), style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                    )
+            }
+        }
+    }
+
+    private var screenshotPath: String? {
+        guard let screenshot = row.screenshot?.trimmingCharacters(in: .whitespacesAndNewlines), !screenshot.isEmpty else {
+            return nil
+        }
+        return screenshot
+    }
+
+    private func textSection(title: String, icon: String, text: String, emptyLabel: String, tint: Color) -> some View {
         VStack(alignment: .leading, spacing: 7) {
             sectionTitle(title, icon: icon, tint: tint)
-            Text(text.isEmpty ? "Empty" : text)
-                .font(.subheadline)
-                .foregroundStyle(text.isEmpty ? CutReadyTheme.textSecondary : CutReadyTheme.text)
-                .lineSpacing(3)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            SketchMarkdownCard(markdown: text, emptyLabel: emptyLabel)
         }
     }
 
@@ -1279,10 +1510,742 @@ private struct SketchSectionView: View {
     }
 }
 
+private struct NarrationAssetView: View {
+    let narration: RowNarration
+    let candidatePaths: [String]
+    let source: MobileWorkspaceSource
+    let githubAccessToken: String?
+    @State private var audioData: Data?
+    @State private var loadState: LoadState = .idle
+
+    private enum LoadState: Equatable {
+        case idle
+        case loading
+        case loaded(String)
+        case failed(String)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            switch loadState {
+            case .idle:
+                Button {
+                    loadAudio()
+                } label: {
+                    Label("Load narration", systemImage: "play.circle")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            case .loading:
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("Loading narration from the on-device cache")
+                        .font(.caption)
+                        .foregroundStyle(CutReadyTheme.textSecondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            case .loaded:
+                if let audioData {
+                    NarrationAudioPlayer(data: audioData, mimeType: narration.mimeType ?? narration.inferredMimeType)
+                        .frame(height: 128)
+                }
+            case .failed(let message):
+                Text(message)
+                    .font(.caption2)
+                    .foregroundStyle(CutReadyTheme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private func loadAudio() {
+        guard let githubAccessToken else {
+            loadState = .failed("Sign in with GitHub and reopen the workspace so narration can be read from the local cache.")
+            return
+        }
+
+        let paths = candidatePaths.isEmpty ? [narration.path] : candidatePaths
+        loadState = .loading
+        Task {
+            do {
+                let client = GitHubMobileClient()
+                for path in paths where MobileWorkspacePolicy.canReadNarration(path: path) {
+                    if let data = try await client.assetData(path: path, source: source, accessToken: githubAccessToken) {
+                        await MainActor.run {
+                            audioData = data
+                            loadState = .loaded(path)
+                        }
+                        return
+                    }
+                }
+                await MainActor.run {
+                    loadState = .failed("Narration file is referenced, but it is not in the workspace cache yet. Reopen the workspace to hydrate narration assets.")
+                }
+            } catch {
+                await MainActor.run {
+                    loadState = .failed("Could not load narration: \(error.localizedDescription)")
+                }
+            }
+        }
+    }
+}
+
+private struct NarrationAudioPlayer: View {
+    let data: Data
+    let mimeType: String
+
+    var body: some View {
+        WebAudioPlayer(data: data, mimeType: mimeType)
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(CutReadyTheme.border.opacity(0.6), lineWidth: 1)
+            )
+    }
+}
+
+#if os(iOS)
+private struct WebAudioPlayer: UIViewRepresentable {
+    let data: Data
+    let mimeType: String
+
+    func makeUIView(context: Context) -> WKWebView {
+        let configuration = WKWebViewConfiguration()
+        configuration.allowsInlineMediaPlayback = true
+        let webView = WKWebView(frame: .zero, configuration: configuration)
+        webView.isOpaque = false
+        webView.backgroundColor = .clear
+        webView.scrollView.isScrollEnabled = false
+        return webView
+    }
+
+    func updateUIView(_ webView: WKWebView, context: Context) {
+        webView.loadHTMLString(audioHTML(data: data, mimeType: mimeType), baseURL: nil)
+    }
+}
+#else
+private struct WebAudioPlayer: NSViewRepresentable {
+    let data: Data
+    let mimeType: String
+
+    func makeNSView(context: Context) -> WKWebView {
+        let webView = WKWebView(frame: .zero)
+        webView.setValue(false, forKey: "drawsBackground")
+        return webView
+    }
+
+    func updateNSView(_ webView: WKWebView, context: Context) {
+        webView.loadHTMLString(audioHTML(data: data, mimeType: mimeType), baseURL: nil)
+    }
+}
+#endif
+
+private func audioHTML(data: Data, mimeType: String) -> String {
+    let encoded = data.base64EncodedString()
+    let normalizedMimeType = normalizedAudioMimeType(mimeType)
+    return """
+    <!doctype html>
+    <html>
+      <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <style>
+          :root { color-scheme: light dark; }
+          html, body {
+            margin: 0;
+            padding: 0;
+            background: transparent;
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+            color: #6f6962;
+            -webkit-user-select: none;
+            user-select: none;
+          }
+          .player {
+            display: grid;
+            gap: 10px;
+            min-height: 118px;
+            box-sizing: border-box;
+            padding: 10px;
+            border-radius: 12px;
+            background: rgba(250, 249, 247, 0.58);
+          }
+          .status {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+          }
+          .waveform {
+            position: relative;
+            width: 100%;
+            height: 58px;
+            overflow: hidden;
+            box-sizing: border-box;
+            border: 1px solid rgba(224, 220, 214, 0.9);
+            border-radius: 10px;
+            background: rgba(244, 241, 237, 0.66);
+            touch-action: none;
+          }
+          canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+          }
+          .playhead {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            left: 0;
+            width: 1px;
+            background: #6b5ce7;
+            box-shadow: 0 0 0 1px rgba(107, 92, 231, 0.22), 0 0 14px rgba(107, 92, 231, 0.35);
+            pointer-events: none;
+            transform: translateX(0);
+          }
+          .duration {
+            position: absolute;
+            right: 7px;
+            top: 7px;
+            border-radius: 999px;
+            background: rgba(250, 249, 247, 0.88);
+            padding: 2px 7px;
+            font-size: 10px;
+            font-weight: 650;
+            font-variant-numeric: tabular-nums;
+            color: rgba(111, 105, 98, 0.72);
+            pointer-events: none;
+          }
+          .controls {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+          }
+          button {
+            display: grid;
+            place-items: center;
+            width: 26px;
+            height: 26px;
+            flex: 0 0 26px;
+            border: 1px solid rgba(107, 92, 231, 0.28);
+            border-radius: 999px;
+            color: white;
+            background: linear-gradient(180deg, #7b6df0, #6252dc);
+            box-shadow: 0 5px 12px rgba(107, 92, 231, 0.18);
+            font-size: 10px;
+            line-height: 1;
+            padding: 0;
+          }
+          .meta {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            min-width: 0;
+          }
+          .label {
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+            font-size: 10px;
+            font-weight: 600;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            color: rgba(111, 105, 98, 0.78);
+          }
+          .dot {
+            width: 8px;
+            height: 8px;
+            flex: 0 0 8px;
+            border-radius: 999px;
+            background: rgba(111, 105, 98, 0.35);
+          }
+          .dot.active {
+            background: #6b5ce7;
+            box-shadow: 0 0 0 3px rgba(107, 92, 231, 0.12);
+          }
+          .time {
+            flex: 0 0 auto;
+            text-align: right;
+            font-size: 10px;
+            font-weight: 650;
+            font-variant-numeric: tabular-nums;
+            letter-spacing: 0.01em;
+            color: rgba(111, 105, 98, 0.70);
+          }
+          @media (prefers-color-scheme: dark) {
+            html, body { color: #c9c1b8; }
+            .player { background: rgba(43, 41, 38, 0.48); }
+            .waveform {
+              border-color: rgba(79, 75, 69, 0.92);
+              background: rgba(55, 52, 48, 0.62);
+            }
+            .playhead {
+              background: #a49afa;
+              box-shadow: 0 0 0 1px rgba(164, 154, 250, 0.24), 0 0 14px rgba(164, 154, 250, 0.38);
+            }
+            .duration {
+              background: rgba(43, 41, 38, 0.86);
+              color: rgba(201, 193, 184, 0.72);
+            }
+            .label { color: rgba(201, 193, 184, 0.80); }
+            .dot { background: rgba(201, 193, 184, 0.35); }
+            .dot.active { background: #a49afa; box-shadow: 0 0 0 3px rgba(164, 154, 250, 0.14); }
+            .time { color: rgba(201, 193, 184, 0.70); }
+          }
+        </style>
+      </head>
+      <body>
+        <audio id="audio" preload="metadata"></audio>
+        <div class="player">
+          <div class="status">
+            <span id="label" class="label">Narration ready</span>
+            <span id="dot" class="dot" aria-hidden="true"></span>
+          </div>
+          <div id="waveform" class="waveform" role="slider" aria-label="Narration waveform. Drag to scrub." aria-valuemin="0" aria-valuemax="1000" aria-valuenow="0" tabindex="0">
+            <canvas id="waveCanvas" aria-hidden="true"></canvas>
+            <span id="playhead" class="playhead" aria-hidden="true"></span>
+            <span id="duration" class="duration">0:00</span>
+          </div>
+          <div class="controls">
+            <button id="toggle" type="button" aria-label="Play narration">▶</button>
+            <div class="meta">
+              <span id="time" class="time">0:00</span>
+            </div>
+          </div>
+        </div>
+        <script>
+          const binary = atob('\(encoded)');
+          const bytes = new Uint8Array(binary.length);
+          for (let i = 0; i < binary.length; i++) {
+            bytes[i] = binary.charCodeAt(i);
+          }
+          const blob = new Blob([bytes], { type: '\(normalizedMimeType)' });
+          const audio = document.getElementById('audio');
+          const toggle = document.getElementById('toggle');
+          const waveform = document.getElementById('waveform');
+          const canvas = document.getElementById('waveCanvas');
+          const playhead = document.getElementById('playhead');
+          const durationPill = document.getElementById('duration');
+          const label = document.getElementById('label');
+          const dot = document.getElementById('dot');
+          const time = document.getElementById('time');
+          audio.src = URL.createObjectURL(blob);
+          let isScrubbing = false;
+          let pendingRatio = 0;
+          let peaks = null;
+          const colors = {
+            accent: '#6b5ce7',
+            surface: 'rgba(244, 241, 237, 0.66)',
+            border: 'rgba(224, 220, 214, 0.92)',
+            unplayed: 'rgba(107, 92, 231, 0.26)'
+          };
+
+          function syncColors() {
+            if (!window.matchMedia('(prefers-color-scheme: dark)').matches) return;
+            colors.accent = '#a49afa';
+            colors.surface = 'rgba(55, 52, 48, 0.62)';
+            colors.border = 'rgba(79, 75, 69, 0.92)';
+            colors.unplayed = 'rgba(164, 154, 250, 0.24)';
+          }
+
+          function format(seconds) {
+            if (!Number.isFinite(seconds) || seconds < 0) return '0:00';
+            const rounded = Math.floor(seconds);
+            return Math.floor(rounded / 60) + ':' + String(rounded % 60).padStart(2, '0');
+          }
+
+          function align(value, dpr) {
+            return Math.round(value * dpr) / dpr;
+          }
+
+          function prepareCanvas() {
+            const rect = waveform.getBoundingClientRect();
+            const dpr = Math.max(1, window.devicePixelRatio || 1);
+            const width = Math.max(1, rect.width);
+            const height = Math.max(1, rect.height);
+            const backingWidth = Math.round(width * dpr);
+            const backingHeight = Math.round(height * dpr);
+            if (canvas.width !== backingWidth) canvas.width = backingWidth;
+            if (canvas.height !== backingHeight) canvas.height = backingHeight;
+            const context = canvas.getContext('2d');
+            context.setTransform(dpr, 0, 0, dpr, 0, 0);
+            return { context, width, height, dpr };
+          }
+
+          function drawEmptyWaveform() {
+            const { context, width, height, dpr } = prepareCanvas();
+            const midline = align(height / 2, dpr);
+            context.clearRect(0, 0, width, height);
+            context.fillStyle = colors.surface;
+            context.fillRect(0, 0, width, height);
+            context.strokeStyle = colors.border;
+            context.lineWidth = 1 / dpr;
+            context.beginPath();
+            context.moveTo(0, midline);
+            context.lineTo(width, midline);
+            context.stroke();
+          }
+
+          function drawWaveform(ratio = 0) {
+            if (!peaks || peaks.length === 0) {
+              drawEmptyWaveform();
+              updatePlayhead(ratio);
+              return;
+            }
+
+            const { context, width, height, dpr } = prepareCanvas();
+            const midline = align(height / 2, dpr);
+            const pixels = Math.min(peaks.length, Math.max(1, Math.floor(width)));
+            const playedX = Math.max(0, Math.min(width, ratio * width));
+            context.clearRect(0, 0, width, height);
+            context.fillStyle = colors.surface;
+            context.fillRect(0, 0, width, height);
+            context.strokeStyle = colors.border;
+            context.lineWidth = 1 / dpr;
+            context.beginPath();
+            context.moveTo(0, midline);
+            context.lineTo(width, midline);
+            context.stroke();
+
+            function strokePeaks(style, clipLeft, clipWidth) {
+              context.save();
+              context.beginPath();
+              context.rect(clipLeft, 0, clipWidth, height);
+              context.clip();
+              context.strokeStyle = style;
+              context.lineWidth = 1.5;
+              context.beginPath();
+              for (let x = 0; x < pixels; x += 1) {
+                const peak = peaks[Math.floor((x / pixels) * peaks.length)] || { min: -0.04, max: 0.04 };
+                const drawX = align(x + 0.5, dpr);
+                context.moveTo(drawX, ((1 - peak.max) * height) / 2);
+                context.lineTo(drawX, ((1 - peak.min) * height) / 2);
+              }
+              context.stroke();
+              context.restore();
+            }
+
+            strokePeaks(colors.unplayed, 0, width);
+            strokePeaks(colors.accent, 0, playedX);
+            updatePlayhead(ratio);
+          }
+
+          function peaksFromDecoded(buffer) {
+            const samples = buffer.getChannelData(0);
+            const width = Math.max(1, Math.floor(waveform.getBoundingClientRect().width));
+            const samplesPerPixel = Math.max(1, Math.floor(samples.length / width));
+            const next = [];
+            for (let x = 0; x < width; x += 1) {
+              const start = x * samplesPerPixel;
+              let min = 1;
+              let max = -1;
+              for (let i = 0; i < samplesPerPixel && start + i < samples.length; i += 1) {
+                const sample = samples[start + i];
+                min = Math.min(min, sample);
+                max = Math.max(max, sample);
+              }
+              next.push({ min, max });
+            }
+            return next;
+          }
+
+          function peaksFromBytes() {
+            const width = Math.max(1, Math.floor(waveform.getBoundingClientRect().width));
+            const step = Math.max(1, Math.floor(bytes.length / width));
+            const next = [];
+            for (let x = 0; x < width; x += 1) {
+              const start = x * step;
+              let high = 0;
+              for (let i = 0; i < step && start + i < bytes.length; i += 1) {
+                high = Math.max(high, Math.abs(bytes[start + i] - 128) / 128);
+              }
+              const shaped = Math.max(0.04, Math.min(0.88, Math.pow(high, 0.72)));
+              next.push({ min: -shaped, max: shaped });
+            }
+            return next;
+          }
+
+          async function renderWaveform() {
+            syncColors();
+            drawEmptyWaveform();
+            try {
+              const context = new (window.AudioContext || window.webkitAudioContext)();
+              const decoded = await context.decodeAudioData(bytes.buffer.slice(0));
+              peaks = peaksFromDecoded(decoded);
+              await context.close();
+            } catch (_) {
+              peaks = peaksFromBytes();
+            }
+            update();
+          }
+
+          function updatePlayhead(ratio) {
+            const rect = waveform.getBoundingClientRect();
+            const x = Math.max(0, Math.min(rect.width, ratio * rect.width));
+            playhead.style.transform = 'translateX(' + x + 'px)';
+          }
+
+          function update() {
+            const duration = Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : 0;
+            const ratio = duration > 0 ? audio.currentTime / duration : 0;
+            const displayRatio = isScrubbing ? pendingRatio : ratio;
+            drawWaveform(displayRatio);
+            time.textContent = duration > 0 ? format(audio.currentTime) + ' / ' + format(duration) : format(audio.currentTime);
+            durationPill.textContent = duration > 0 ? format(duration) : '0:00';
+          }
+
+          function updateWaveform(ratio) {
+            const clamped = Math.max(0, Math.min(1, ratio));
+            waveform.setAttribute('aria-valuenow', String(Math.round(clamped * 1000)));
+            drawWaveform(clamped);
+          }
+
+          function ratioFromEvent(event) {
+            const rect = waveform.getBoundingClientRect();
+            if (rect.width <= 0) return 0;
+            return Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
+          }
+
+          function seekToRatio(ratio) {
+            const duration = Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : 0;
+            if (duration <= 0) return;
+            audio.currentTime = Math.max(0, Math.min(duration, ratio * duration));
+            update();
+          }
+
+          toggle.addEventListener('click', async () => {
+            try {
+              if (audio.paused) {
+                await audio.play();
+              } else {
+                audio.pause();
+              }
+            } catch (_) {
+              // WebKit can report a non-fatal media error while still allowing WebM playback.
+            }
+          });
+          audio.addEventListener('play', () => {
+            toggle.textContent = '❚❚';
+            label.textContent = 'Narration playing';
+            dot.classList.add('active');
+          });
+          audio.addEventListener('pause', () => {
+            toggle.textContent = '▶';
+            label.textContent = 'Narration paused';
+            dot.classList.remove('active');
+          });
+          audio.addEventListener('ended', () => {
+            toggle.textContent = '▶';
+            label.textContent = 'Narration ready';
+            dot.classList.remove('active');
+          });
+          audio.addEventListener('timeupdate', update);
+          audio.addEventListener('loadedmetadata', update);
+          audio.addEventListener('error', update);
+          window.addEventListener('resize', () => {
+            peaks = null;
+            renderWaveform();
+          });
+          waveform.addEventListener('pointerdown', (event) => {
+            event.preventDefault();
+            isScrubbing = true;
+            pendingRatio = ratioFromEvent(event);
+            updateWaveform(pendingRatio);
+            waveform.setPointerCapture(event.pointerId);
+          });
+          waveform.addEventListener('pointermove', (event) => {
+            if (!isScrubbing) return;
+            pendingRatio = ratioFromEvent(event);
+            updateWaveform(pendingRatio);
+          });
+          waveform.addEventListener('pointerup', (event) => {
+            pendingRatio = ratioFromEvent(event);
+            seekToRatio(pendingRatio);
+            isScrubbing = false;
+            waveform.releasePointerCapture(event.pointerId);
+          });
+          waveform.addEventListener('pointercancel', () => {
+            isScrubbing = false;
+            update();
+          });
+          waveform.addEventListener('keydown', (event) => {
+            const duration = Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : 0;
+            if (duration <= 0) return;
+            const step = event.shiftKey ? 5 : 1;
+            if (event.key === 'ArrowLeft') {
+              event.preventDefault();
+              audio.currentTime = Math.max(0, audio.currentTime - step);
+              update();
+            } else if (event.key === 'ArrowRight') {
+              event.preventDefault();
+              audio.currentTime = Math.min(duration, audio.currentTime + step);
+              update();
+            } else if (event.key === 'Home') {
+              event.preventDefault();
+              audio.currentTime = 0;
+              update();
+            } else if (event.key === 'End') {
+              event.preventDefault();
+              audio.currentTime = duration;
+              update();
+            }
+          });
+          renderWaveform();
+        </script>
+      </body>
+    </html>
+    """
+}
+
+private func normalizedAudioMimeType(_ mimeType: String) -> String {
+    let value = mimeType.lowercased()
+    if value.contains("webm") {
+        return "audio/webm"
+    }
+    if value.contains("mp4") || value.contains("m4a") {
+        return "audio/mp4"
+    }
+    if value.contains("mpeg") || value.contains("mp3") {
+        return "audio/mpeg"
+    }
+    if value.contains("wav") {
+        return "audio/wav"
+    }
+    return "application/octet-stream"
+}
+
+private struct ScreenshotAssetView: View {
+    let path: String
+    let candidatePaths: [String]
+    let source: MobileWorkspaceSource
+    let githubAccessToken: String?
+    @State private var data: Data?
+    @State private var attemptedLoad = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if let data, let image = PlatformImage(data: data) {
+                image
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxWidth: .infinity)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .stroke(CutReadyTheme.border.opacity(0.65), lineWidth: 1)
+                    )
+            } else {
+                AssetReferenceRow(
+                    icon: "photo",
+                    title: "Screenshot",
+                    value: path.assetDisplayName,
+                    detail: attemptedLoad ? "\(path) - image not available in mobile snapshot" : path
+                )
+            }
+        }
+        .task(id: candidatePaths.joined(separator: "|")) {
+            guard data == nil, !candidatePaths.isEmpty, let githubAccessToken else {
+                return
+            }
+            attemptedLoad = true
+            let client = GitHubMobileClient()
+            for candidate in candidatePaths {
+                if let fetchedData = try? await client.standardImageAsset(path: candidate, source: source, accessToken: githubAccessToken) {
+                    data = fetchedData
+                    return
+                }
+            }
+        }
+    }
+}
+
+private struct PlatformImage: View {
+    let image: Image
+
+    init?(data: Data) {
+        #if canImport(UIKit)
+        guard let uiImage = UIImage(data: data) else {
+            return nil
+        }
+        image = Image(uiImage: uiImage)
+        #elseif canImport(AppKit)
+        guard let nsImage = NSImage(data: data) else {
+            return nil
+        }
+        image = Image(nsImage: nsImage)
+        #else
+        return nil
+        #endif
+    }
+
+    var body: some View {
+        image
+    }
+
+    func resizable() -> Image {
+        image.resizable()
+    }
+}
+
+private struct SketchMarkdownCard: View {
+    let markdown: String
+    let emptyLabel: String
+
+    var body: some View {
+        SketchMarkdownContent(markdown: markdown, emptyLabel: emptyLabel)
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(CutReadyTheme.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+}
+
+private struct SketchMarkdownContent: View {
+    let markdown: String
+    let emptyLabel: String
+
+    private var trimmedMarkdown: String {
+        markdown.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var body: some View {
+        if trimmedMarkdown.isEmpty {
+            Text(emptyLabel)
+                .font(.subheadline)
+                .foregroundStyle(CutReadyTheme.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            Markdown(trimmedMarkdown)
+                .markdownTheme(.cutReadyMobile)
+                .tint(CutReadyTheme.accent)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+}
+
+private struct AssetEmptyState: View {
+    var body: some View {
+        Text("No screenshot or visual attached.")
+            .font(.caption)
+            .foregroundStyle(CutReadyTheme.textSecondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(10)
+            .background(CutReadyTheme.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(CutReadyTheme.border.opacity(0.7), style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
+            )
+    }
+}
+
 private struct AssetReferenceRow: View {
     let icon: String
     let title: String
     let value: String
+    var detail: String?
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
@@ -1297,6 +2260,13 @@ private struct AssetReferenceRow: View {
                     .font(.caption)
                     .foregroundStyle(CutReadyTheme.textSecondary)
                     .lineLimit(3)
+
+                if let detail, !detail.isEmpty, detail != value {
+                    Text(detail)
+                        .font(.caption2)
+                        .foregroundStyle(CutReadyTheme.textSecondary.opacity(0.82))
+                        .lineLimit(2)
+                }
             }
         }
         .padding(10)
@@ -1334,6 +2304,8 @@ private struct SketchLayoutSheet: View {
                                 Image(systemName: "chevron.up")
                             }
                             .disabled(layout.order.first == section)
+                            .buttonStyle(.borderless)
+                            .accessibilityLabel("Move \(section.label) up")
 
                             Button {
                                 layout.move(section, direction: 1)
@@ -1341,6 +2313,8 @@ private struct SketchLayoutSheet: View {
                                 Image(systemName: "chevron.down")
                             }
                             .disabled(layout.order.last == section)
+                            .buttonStyle(.borderless)
+                            .accessibilityLabel("Move \(section.label) down")
                         }
                     }
                 }
@@ -1359,6 +2333,7 @@ private struct SketchLayoutSheet: View {
 
 private enum SketchReaderSection: String, CaseIterable, Codable, Identifiable, Sendable {
     case assets
+    case narration
     case narrative
     case actions
 
@@ -1368,6 +2343,8 @@ private enum SketchReaderSection: String, CaseIterable, Codable, Identifiable, S
         switch self {
         case .assets:
             return "Assets"
+        case .narration:
+            return "Narration"
         case .narrative:
             return "Narrative"
         case .actions:
@@ -1379,6 +2356,8 @@ private enum SketchReaderSection: String, CaseIterable, Codable, Identifiable, S
         switch self {
         case .assets:
             return "photo.on.rectangle.angled"
+        case .narration:
+            return "waveform"
         case .narrative:
             return "text.quote"
         case .actions:
@@ -1388,22 +2367,52 @@ private enum SketchReaderSection: String, CaseIterable, Codable, Identifiable, S
 }
 
 private struct SketchReaderLayout: Codable, Equatable {
-    var order: [SketchReaderSection] = [.assets, .narrative, .actions]
+    var order: [SketchReaderSection] = [.assets, .narration, .narrative, .actions]
     var visible: Set<SketchReaderSection> = Set(SketchReaderSection.allCases)
 
     var visibleSections: [SketchReaderSection] {
-        order.filter { visible.contains($0) }
+        normalized.order.filter { normalized.visible.contains($0) }
+    }
+
+    var normalized: SketchReaderLayout {
+        let originalOrder = Set(order)
+        var copy = self
+
+        var seen = Set<SketchReaderSection>()
+        copy.order = copy.order.filter { section in
+            guard SketchReaderSection.allCases.contains(section), !seen.contains(section) else {
+                return false
+            }
+            seen.insert(section)
+            return true
+        }
+        copy.visible.formIntersection(Set(SketchReaderSection.allCases))
+
+        for section in SketchReaderSection.allCases where !copy.order.contains(section) {
+            if section == .narration, let assetsIndex = copy.order.firstIndex(of: .assets) {
+                copy.order.insert(section, at: min(copy.order.endIndex, assetsIndex + 1))
+            } else {
+                copy.order.append(section)
+            }
+            if !originalOrder.contains(section) {
+                copy.visible.insert(section)
+            }
+        }
+        return copy
     }
 
     mutating func set(_ section: SketchReaderSection, visible isVisible: Bool) {
+        self = normalized
         if isVisible {
             visible.insert(section)
         } else {
             visible.remove(section)
         }
+        self = normalized
     }
 
     mutating func move(_ section: SketchReaderSection, direction: Int) {
+        self = normalized
         guard
             let index = order.firstIndex(of: section),
             order.indices.contains(index + direction)
@@ -1411,6 +2420,7 @@ private struct SketchReaderLayout: Codable, Equatable {
             return
         }
         order.swapAt(index, index + direction)
+        self = normalized
     }
 }
 
@@ -1421,15 +2431,64 @@ private enum SketchReaderLayoutStore {
         guard let data = defaults.data(forKey: key) else {
             return SketchReaderLayout()
         }
-        return (try? JSONDecoder().decode(SketchReaderLayout.self, from: data)) ?? SketchReaderLayout()
+        return ((try? JSONDecoder().decode(SketchReaderLayout.self, from: data)) ?? SketchReaderLayout()).normalized
     }
 
     static func save(_ layout: SketchReaderLayout, defaults: UserDefaults = .standard) {
-        guard let data = try? JSONEncoder().encode(layout) else {
+        guard let data = try? JSONEncoder().encode(layout.normalized) else {
             return
         }
         defaults.set(data, forKey: key)
     }
+}
+
+private extension RowNarration {
+    var isWebM: Bool {
+        let path = path.lowercased()
+        return path.hasSuffix(".webm") || (mimeType?.localizedCaseInsensitiveContains("webm") ?? false)
+    }
+
+    var formattedDuration: String? {
+        guard let durationMs else {
+            return nil
+        }
+        let totalSeconds = Int((Double(durationMs) / 1000.0).rounded())
+        let minutes = totalSeconds / 60
+        let seconds = totalSeconds % 60
+        return "\(minutes):\(String(format: "%02d", seconds))"
+    }
+
+    var formattedByteSize: String? {
+        guard let byteSize else {
+            return nil
+        }
+        if byteSize >= 1_000_000 {
+            return String(format: "%.1f MB", Double(byteSize) / 1_000_000.0)
+        }
+        return "\(Int((Double(byteSize) / 1000.0).rounded())) KB"
+    }
+
+    var inferredMimeType: String {
+        let lowercasedPath = path.lowercased()
+        if lowercasedPath.hasSuffix(".webm") {
+            return "audio/webm"
+        }
+        if lowercasedPath.hasSuffix(".m4a") {
+            return "audio/mp4"
+        }
+        if lowercasedPath.hasSuffix(".mp3") {
+            return "audio/mpeg"
+        }
+        if lowercasedPath.hasSuffix(".wav") {
+            return "audio/wav"
+        }
+        return "application/octet-stream"
+    }
+}
+
+private struct VisualAssetSummary {
+    var title: String
+    var subtitle: String
 }
 
 private extension JSONValue {
@@ -1447,6 +2506,38 @@ private extension JSONValue {
             return nil
         }
     }
+
+    var visualSummary: VisualAssetSummary {
+        guard case .object(let object) = self else {
+            return VisualAssetSummary(title: "Elucim visual", subtitle: "Visual DSL attached")
+        }
+
+        let title = object.stringValue(for: ["title", "name", "label"]) ?? "Elucim visual"
+        if let kind = object.stringValue(for: ["kind", "type"]) {
+            return VisualAssetSummary(title: title, subtitle: kind.replacingOccurrences(of: "_", with: " ").capitalized)
+        }
+        return VisualAssetSummary(title: title, subtitle: "Visual DSL attached")
+    }
+}
+
+private extension Dictionary where Key == String, Value == JSONValue {
+    func stringValue(for keys: [String]) -> String? {
+        for key in keys {
+            if case .string(let value) = self[key] {
+                let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty {
+                    return trimmed
+                }
+            }
+        }
+        return nil
+    }
+}
+
+private extension String {
+    var assetDisplayName: String {
+        URL(fileURLWithPath: self).lastPathComponent
+    }
 }
 
 private struct NoteDetailView: View {
@@ -1462,6 +2553,8 @@ private struct NoteDetailView: View {
     }
 
     var body: some View {
+        let parsedNote = parseNoteDocument(draft)
+
         VStack(spacing: 0) {
             if isEditing {
                 TextEditor(text: $draft)
@@ -1472,7 +2565,7 @@ private struct NoteDetailView: View {
                     .padding(.vertical, 8)
                     .background(CutReadyTheme.surface)
             } else {
-                MarkdownPreview(markdown: draft)
+                MarkdownPreview(document: parsedNote)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(CutReadyTheme.surface)
             }
@@ -1492,10 +2585,10 @@ private struct NoteDetailView: View {
 }
 
 private struct MarkdownPreview: View {
-    let markdown: String
+    let document: ParsedNoteDocument
 
     var body: some View {
-        if markdown.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        if document.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && document.metadata.fields.isEmpty {
             ContentUnavailableView(
                 "Empty note",
                 systemImage: "note.text",
@@ -1503,14 +2596,74 @@ private struct MarkdownPreview: View {
             )
         } else {
             ScrollView {
-                Markdown(markdown)
-                    .markdownTheme(.cutReadyMobile)
-                    .tint(CutReadyTheme.accent)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                VStack(alignment: .leading, spacing: 16) {
+                    NoteMetadataPreview(metadata: document.metadata)
+
+                    if document.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        Text("Nothing to preview")
+                            .font(.callout)
+                            .foregroundStyle(CutReadyTheme.textSecondary)
+                            .italic()
+                    } else {
+                        Markdown(document.body)
+                            .markdownTheme(.cutReadyMobile)
+                            .tint(CutReadyTheme.accent)
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
             .background(CutReadyTheme.surface)
+        }
+    }
+}
+
+private struct NoteMetadataPreview: View {
+    let metadata: NoteDocumentMetadata
+
+    private var fields: [(key: String, value: String)] {
+        metadata.fields
+            .map { (key: $0.key, value: $0.value) }
+            .sorted { $0.key.localizedCaseInsensitiveCompare($1.key) == .orderedAscending }
+    }
+
+    var body: some View {
+        if !fields.isEmpty {
+            VStack(alignment: .leading, spacing: 7) {
+                Text("Properties")
+                    .font(.caption2.weight(.semibold))
+                    .textCase(.uppercase)
+                    .tracking(1.6)
+                    .foregroundStyle(CutReadyTheme.textSecondary.opacity(0.72))
+
+                VStack(spacing: 0) {
+                    ForEach(fields, id: \.key) { field in
+                        HStack(alignment: .firstTextBaseline, spacing: 12) {
+                            Text(field.key)
+                                .font(.caption.weight(.medium))
+                                .foregroundStyle(CutReadyTheme.textSecondary.opacity(0.72))
+                                .frame(width: 92, alignment: .leading)
+
+                            Text(field.value)
+                                .font(.caption)
+                                .foregroundStyle(CutReadyTheme.textSecondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .padding(.vertical, 6)
+
+                        if field.key != fields.last?.key {
+                            Divider().overlay(CutReadyTheme.border.opacity(0.55))
+                        }
+                    }
+                }
+            }
+            .padding(12)
+            .background(CutReadyTheme.surfaceAlt.opacity(0.35), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(CutReadyTheme.border.opacity(0.55), lineWidth: 1)
+            )
         }
     }
 }

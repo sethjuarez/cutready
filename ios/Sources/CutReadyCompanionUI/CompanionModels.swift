@@ -84,6 +84,42 @@ public struct CompanionProject: Identifiable, Equatable, Sendable {
             summary.path == projectPath || summary.path.hasPrefix("\(projectPath)/")
         }
     }
+
+    public func assetPathCandidates(for assetPath: String, referencedFrom documentPath: String) -> [String] {
+        let normalizedAssetPath = assetPath.normalizedProjectPath
+        guard !normalizedAssetPath.isEmpty else {
+            return []
+        }
+
+        var candidates = [normalizedAssetPath]
+        let projectPath = activeProjectPath.normalizedProjectPath
+        if !projectPath.isEmpty && projectPath != "." {
+            candidates.append("\(projectPath)/\(normalizedAssetPath)")
+        }
+
+        let documentDirectory = documentPath.normalizedProjectPath.deletingLastPathComponent
+        if !documentDirectory.isEmpty && documentDirectory != "." {
+            candidates.append("\(documentDirectory)/\(normalizedAssetPath)")
+        }
+
+        return Array(NSOrderedSet(array: candidates).compactMap { $0 as? String })
+    }
+}
+
+private extension String {
+    var normalizedProjectPath: String {
+        replacingOccurrences(of: "\\", with: "/")
+            .split(separator: "/", omittingEmptySubsequences: true)
+            .joined(separator: "/")
+    }
+
+    var deletingLastPathComponent: String {
+        let path = normalizedProjectPath
+        guard let slash = path.lastIndex(of: "/") else {
+            return ""
+        }
+        return String(path[..<slash])
+    }
 }
 
 public enum CompanionSelection: Hashable, Sendable {
@@ -130,7 +166,15 @@ public enum CompanionSamples {
             FileSummary(path: "export.sk", title: "Export handoff")
         ],
         notes: [
-            FileSummary(path: "planning-notes.md", title: "Planning Notes")
+            FileSummary(path: "planning-notes.md", title: "planning-notes", contents: """
+            ---
+            Audience: Product team
+            Status: Draft
+            ---
+            # Planning notes
+
+            Use this note to capture rehearsal context and follow-up edits.
+            """)
         ]
     )
 }
