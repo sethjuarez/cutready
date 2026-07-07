@@ -27,6 +27,7 @@ let package = Package(
             name: "CutReadyMobileCore",
             dependencies: [
                 .product(name: "AuditaurAppleCore", package: "sethjuarez-solid-train"),
+                .target(name: "DraftlineMobileC", condition: .when(platforms: [.iOS])),
                 .target(name: "DraftlineMobile", condition: .when(platforms: [.iOS]))
             ]
         ),
@@ -43,6 +44,10 @@ let package = Package(
         .testTarget(
             name: "CutReadyMobileCoreTests",
             dependencies: ["CutReadyMobileCore"]
+        ),
+        .target(
+            name: "DraftlineMobileC",
+            publicHeadersPath: "include"
         ),
         .binaryTarget(
             name: "DraftlineMobile",

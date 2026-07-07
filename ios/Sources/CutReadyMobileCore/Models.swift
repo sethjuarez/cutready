@@ -273,6 +273,7 @@ public enum StoryboardItem: Codable, Equatable, Sendable {
     }
 
     private enum ItemType: String, Codable {
+        case sketch
         case sketchRef = "sketch_ref"
         case section
     }
@@ -280,13 +281,15 @@ public enum StoryboardItem: Codable, Equatable, Sendable {
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         switch try container.decode(ItemType.self, forKey: .type) {
+        case .sketch:
+            self = .sketchRef(path: try container.decode(String.self, forKey: .path))
         case .sketchRef:
             self = .sketchRef(path: try container.decode(String.self, forKey: .path))
         case .section:
             self = .section(
-                title: try container.decode(String.self, forKey: .title),
+                title: try container.decodeIfPresent(String.self, forKey: .title) ?? "Section",
                 description: try container.decodeIfPresent(String.self, forKey: .description),
-                sketches: try container.decode([String].self, forKey: .sketches)
+                sketches: try container.decodeIfPresent([String].self, forKey: .sketches) ?? []
             )
         }
     }
@@ -339,9 +342,61 @@ public struct Storyboard: Codable, Equatable, Sendable {
         case locked
         case metadata
         case items
+        case sketches
         case createdAt = "created_at"
         case updatedAt = "updated_at"
     }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        title = try container.decodeIfPresent(String.self, forKey: .title) ?? "Untitled Storyboard"
+        description = try container.decodeIfPresent(String.self, forKey: .description) ?? ""
+        locked = try container.decodeIfPresent(Bool.self, forKey: .locked)
+        metadata = try container.decodeIfPresent(DocumentMetadata.self, forKey: .metadata)
+        if let decodedItems = try container.decodeIfPresent([StoryboardItem].self, forKey: .items) {
+            items = decodedItems
+        } else {
+            let sketchPaths = try container.decodeIfPresent([String].self, forKey: .sketches) ?? []
+            items = sketchPaths.map { .sketchRef(path: $0) }
+        }
+        createdAt = try Self.decodeDate(from: container, key: .createdAt) ?? Date(timeIntervalSince1970: 0)
+        updatedAt = try Self.decodeDate(from: container, key: .updatedAt) ?? createdAt
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(title, forKey: .title)
+        try container.encode(description, forKey: .description)
+        try container.encodeIfPresent(locked, forKey: .locked)
+        try container.encodeIfPresent(metadata, forKey: .metadata)
+        try container.encode(items, forKey: .items)
+        try container.encode(Self.iso8601WithFractions.string(from: createdAt), forKey: .createdAt)
+        try container.encode(Self.iso8601WithFractions.string(from: updatedAt), forKey: .updatedAt)
+    }
+
+    private static func decodeDate(from container: KeyedDecodingContainer<CodingKeys>, key: CodingKeys) throws -> Date? {
+        guard let value = try container.decodeIfPresent(String.self, forKey: key) else {
+            return nil
+        }
+
+        if let date = iso8601WithFractions.date(from: value) ?? iso8601.date(from: value) {
+            return date
+        }
+
+        throw DecodingError.dataCorruptedError(forKey: key, in: container, debugDescription: "Invalid ISO 8601 date: \(value)")
+    }
+
+    private static let iso8601: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter
+    }()
+
+    private static let iso8601WithFractions: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
 }
 
 public struct FileSummary: Codable, Equatable, Identifiable, Sendable {

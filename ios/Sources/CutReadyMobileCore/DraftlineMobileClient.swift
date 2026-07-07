@@ -1,6 +1,7 @@
 import Foundation
-#if canImport(DraftlineMobile)
-import DraftlineMobile
+
+#if os(iOS)
+import DraftlineMobileC
 #endif
 
 public enum MobileSyncState: String, Codable, Sendable {
@@ -161,7 +162,7 @@ public protocol DraftlineMobileWorkspaceClient: DraftlineMobileClient {
 }
 
 public final class DraftlineNativeMobileClient: DraftlineMobileWorkspaceClient, @unchecked Sendable {
-#if canImport(DraftlineMobile)
+#if os(iOS)
     private var workspaceHandle: OpaquePointer?
 #endif
     private let nativeQueue = DispatchQueue(label: "CutReady.DraftlineMobile.native")
@@ -171,7 +172,7 @@ public final class DraftlineNativeMobileClient: DraftlineMobileWorkspaceClient, 
     public init() {}
 
     deinit {
-#if canImport(DraftlineMobile)
+#if os(iOS)
         if let workspaceHandle {
             draftline_mobile_workspace_free(workspaceHandle)
         }
@@ -194,21 +195,21 @@ public final class DraftlineNativeMobileClient: DraftlineMobileWorkspaceClient, 
     }
 
     public func openWorkspace(_ configuration: DraftlineMobileWorkspaceConfiguration) async throws {
-#if canImport(DraftlineMobile)
+#if os(iOS)
         try await onNativeQueue {
             try FileManager.default.createDirectory(at: configuration.localDirectory, withIntermediateDirectories: true)
-            if let workspaceHandle {
+            if let workspaceHandle = self.workspaceHandle {
                 draftline_mobile_workspace_free(workspaceHandle)
                 self.workspaceHandle = nil
             }
-            workspaceRoot = nil
-            credential = nil
+            self.workspaceRoot = nil
+            self.credential = nil
 
-            let result = try configuration.localDirectory.path.withCString { pathPointer in
-                try withNativeContentPolicy(configuration.contentPolicy) { policyPointer in
+            let result = configuration.localDirectory.path.withCString { pathPointer in
+                self.withNativeContentPolicy(configuration.contentPolicy) { policyPointer in
                     if let remoteURL = configuration.remoteURL?.absoluteString,
                        !FileManager.default.fileExists(atPath: configuration.localDirectory.appendingPathComponent(".git", isDirectory: true).path) {
-                        return try withCredentialCallback(configuration.credential) { callback, userData in
+                        return self.withCredentialCallback(configuration.credential) { callback, userData in
                             remoteURL.withCString { remotePointer in
                                 draftline_mobile_workspace_clone(remotePointer, pathPointer, policyPointer, callback, userData)
                             }
@@ -223,9 +224,9 @@ public final class DraftlineNativeMobileClient: DraftlineMobileWorkspaceClient, 
             guard let workspace = result.workspace else {
                 throw DraftlineMobileBridgeError.invalidNativeResponse("Draftline did not return a workspace handle.")
             }
-            workspaceHandle = workspace
-            workspaceRoot = configuration.localDirectory
-            credential = configuration.credential
+            self.workspaceHandle = workspace
+            self.workspaceRoot = configuration.localDirectory
+            self.credential = configuration.credential
         }
 #else
         _ = configuration
@@ -234,14 +235,14 @@ public final class DraftlineNativeMobileClient: DraftlineMobileWorkspaceClient, 
     }
 
     public func closeWorkspace() async throws {
-#if canImport(DraftlineMobile)
+#if os(iOS)
         try await onNativeQueue {
-            if let workspaceHandle {
+            if let workspaceHandle = self.workspaceHandle {
                 draftline_mobile_workspace_free(workspaceHandle)
                 self.workspaceHandle = nil
             }
-            workspaceRoot = nil
-            credential = nil
+            self.workspaceRoot = nil
+            self.credential = nil
         }
 #else
         workspaceRoot = nil
@@ -315,7 +316,7 @@ public final class DraftlineNativeMobileClient: DraftlineMobileWorkspaceClient, 
     }
 
     public func saveSnapshot(label: String) async throws {
-#if canImport(DraftlineMobile)
+#if os(iOS)
         _ = try await nativeString { workspace in
             label.withCString { labelPointer in
                 draftline_mobile_workspace_save_version_json(workspace, labelPointer)
@@ -328,22 +329,22 @@ public final class DraftlineNativeMobileClient: DraftlineMobileWorkspaceClient, 
     }
 
     public func syncStatus() async throws -> MobileSyncStatus {
-#if canImport(DraftlineMobile)
+#if os(iOS)
         let json = try await nativeString { workspace in
             "origin".withCString { remotePointer in
                 draftline_mobile_workspace_sync_status_json(workspace, remotePointer)
             }
         }
-        return Self.mobileSyncStatus(fromJSON: json)
+        return try Self.mobileSyncStatus(fromJSON: json)
 #else
         throw DraftlineMobileBridgeError.nativeBridgeUnavailable
 #endif
     }
 
     public func pull() async throws -> MobileSyncStatus {
-#if canImport(DraftlineMobile)
+#if os(iOS)
         try await nativeStatus { workspace in
-            try withCredentialCallback(credential) { callback, userData in
+            self.withCredentialCallback(self.credential) { callback, userData in
                 "origin".withCString { remotePointer in
                     draftline_mobile_workspace_fetch_remote(workspace, remotePointer, callback, userData)
                 }
@@ -357,11 +358,11 @@ public final class DraftlineNativeMobileClient: DraftlineMobileWorkspaceClient, 
         }
         let preflight = try Self.applyIncomingReport(fromJSON: preflightJSON)
         guard preflight.canProceed else {
-            return Self.mobileSyncStatus(fromApplyPreflightJSON: preflightJSON)
+            return try Self.mobileSyncStatus(fromApplyPreflightJSON: preflightJSON)
         }
 
         let json = try await nativeString { workspace in
-            try withCredentialCallback(credential) { callback, userData in
+            self.withCredentialCallback(self.credential) { callback, userData in
                 "origin".withCString { remotePointer in
                     draftline_mobile_workspace_apply_incoming_json(workspace, remotePointer, callback, userData)
                 }
@@ -382,9 +383,9 @@ public final class DraftlineNativeMobileClient: DraftlineMobileWorkspaceClient, 
     }
 
     public func push() async throws -> MobileSyncStatus {
-#if canImport(DraftlineMobile)
+#if os(iOS)
         let preflightJSON = try await nativeString { workspace in
-            try withCredentialCallback(credential) { callback, userData in
+            self.withCredentialCallback(self.credential) { callback, userData in
                 "origin".withCString { remotePointer in
                     draftline_mobile_workspace_preflight_publish_json(workspace, remotePointer, callback, userData)
                 }
@@ -399,7 +400,7 @@ public final class DraftlineNativeMobileClient: DraftlineMobileWorkspaceClient, 
         }
         let publishToken = try Self.publishTokenJSON(from: preflight.token)
         let json = try await nativeString { workspace in
-            try withCredentialCallback(credential) { callback, userData in
+            self.withCredentialCallback(self.credential) { callback, userData in
                 publishToken.withCString { tokenPointer in
                     draftline_mobile_workspace_publish_json(workspace, tokenPointer, callback, userData)
                 }
@@ -412,7 +413,7 @@ public final class DraftlineNativeMobileClient: DraftlineMobileWorkspaceClient, 
     }
 
     public func listConflicts() async throws -> [MobileConflict] {
-#if canImport(DraftlineMobile)
+#if os(iOS)
         let json = try await nativeString { workspace in
             "origin".withCString { remotePointer in
                 draftline_mobile_workspace_preflight_apply_incoming_json(workspace, remotePointer)
@@ -440,7 +441,7 @@ public final class DraftlineNativeMobileClient: DraftlineMobileWorkspaceClient, 
     }
 
     private func readUTF8File(path: String) async throws -> String {
-#if canImport(DraftlineMobile)
+#if os(iOS)
         try await nativeString { workspace in
             path.withCString { pathPointer in
                 draftline_mobile_workspace_read_file(workspace, pathPointer)
@@ -453,12 +454,12 @@ public final class DraftlineNativeMobileClient: DraftlineMobileWorkspaceClient, 
     }
 
     private func writeFile(_ data: Data, path: String) async throws {
-#if canImport(DraftlineMobile)
+#if os(iOS)
         try await nativeStatus { workspace in
             path.withCString { pathPointer in
                 data.withUnsafeBytes { bytes in
                     let contentPointer = bytes.bindMemory(to: UInt8.self).baseAddress
-                    return draftline_mobile_workspace_write_file(workspace, pathPointer, contentPointer, data.count)
+                    return draftline_mobile_workspace_write_file(workspace, pathPointer, contentPointer, UInt(data.count))
                 }
             }
         }
@@ -500,7 +501,7 @@ public final class DraftlineNativeMobileClient: DraftlineMobileWorkspaceClient, 
                 FileSummary(
                     path: path,
                     title: Self.title(for: path, contents: contents),
-                    contents: fileExtension == "sb" ? nil : contents,
+                    contents: contents,
                     updatedAt: values.contentModificationDate
                 )
             )
@@ -521,12 +522,12 @@ public final class DraftlineNativeMobileClient: DraftlineMobileWorkspaceClient, 
         return try Data(contentsOf: url)
     }
 
-#if canImport(DraftlineMobile)
+#if os(iOS)
     private func nativeString(
-        _ operation: (OpaquePointer) throws -> DraftlineMobileStringResult
+        _ operation: @escaping (OpaquePointer) throws -> DraftlineMobileStringResult
     ) async throws -> String {
         try await onNativeQueue {
-            guard let workspaceHandle else {
+            guard let workspaceHandle = self.workspaceHandle else {
                 throw DraftlineMobileBridgeError.workspaceNotOpen
             }
             let result = try operation(workspaceHandle)
@@ -542,10 +543,10 @@ public final class DraftlineNativeMobileClient: DraftlineMobileWorkspaceClient, 
     }
 
     private func nativeStatus(
-        _ operation: (OpaquePointer) throws -> DraftlineMobileStatus
+        _ operation: @escaping (OpaquePointer) throws -> DraftlineMobileStatus
     ) async throws {
         try await onNativeQueue {
-            guard let workspaceHandle else {
+            guard let workspaceHandle = self.workspaceHandle else {
                 throw DraftlineMobileBridgeError.workspaceNotOpen
             }
             try Self.check(try operation(workspaceHandle))
@@ -705,7 +706,7 @@ public final class DraftlineNativeMobileClient: DraftlineMobileWorkspaceClient, 
         URL(fileURLWithPath: path).deletingPathExtension().lastPathComponent
     }
 
-#if canImport(DraftlineMobile)
+#if os(iOS)
     private static func check(_ status: DraftlineMobileStatus) throws {
         guard status.code.rawValue == 0 else {
             let message: String
@@ -732,20 +733,20 @@ public final class DraftlineNativeMobileClient: DraftlineMobileWorkspaceClient, 
             includeExtensionStrings.forEach { free($0) }
         }
 
-        var includePathPointers = includePathStrings.map { $0.map { UnsafePointer($0) } }
-        var excludePathPointers = excludePathStrings.map { $0.map { UnsafePointer($0) } }
-        var includeExtensionPointers = includeExtensionStrings.map { $0.map { UnsafePointer($0) } }
+        let includePathPointers = includePathStrings.map { $0.map { UnsafePointer($0) } }
+        let excludePathPointers = excludePathStrings.map { $0.map { UnsafePointer($0) } }
+        let includeExtensionPointers = includeExtensionStrings.map { $0.map { UnsafePointer($0) } }
 
         return try includePathPointers.withUnsafeBufferPointer { includePathBuffer in
             try excludePathPointers.withUnsafeBufferPointer { excludePathBuffer in
                 try includeExtensionPointers.withUnsafeBufferPointer { includeExtensionBuffer in
                     var policy = DraftlineMobileContentPolicy(
                         include_paths: includePathBuffer.baseAddress,
-                        include_path_count: includePathBuffer.count,
+                        include_path_count: UInt(includePathBuffer.count),
                         exclude_paths: excludePathBuffer.baseAddress,
-                        exclude_path_count: excludePathBuffer.count,
+                        exclude_path_count: UInt(excludePathBuffer.count),
                         include_extensions: includeExtensionBuffer.baseAddress,
-                        include_extension_count: includeExtensionBuffer.count,
+                        include_extension_count: UInt(includeExtensionBuffer.count),
                         large_file_threshold_bytes: descriptor.largeFileThresholdBytes ?? 0
                     )
                     return try body(&policy)
@@ -968,7 +969,7 @@ enum DraftlineFileHazardKind: String, Codable, Equatable, Sendable {
     }
 }
 
-#if canImport(DraftlineMobile)
+#if os(iOS)
 private final class DraftlineCredentialCallbackBox {
     private let username: UnsafeMutablePointer<CChar>?
     private let password: UnsafeMutablePointer<CChar>?

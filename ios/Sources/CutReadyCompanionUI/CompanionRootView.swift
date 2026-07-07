@@ -136,7 +136,7 @@ public struct CompanionRootView: View {
         do {
             githubAccessToken = try tokenStore.readToken()
         } catch {
-            authError = error.localizedDescription
+            authError = describeGitHubError(error)
         }
     }
 
@@ -156,7 +156,7 @@ public struct CompanionRootView: View {
                 isShowingRepositories = true
             } catch {
                 githubDeviceAuthorization = nil
-                authError = error.localizedDescription
+                authError = describeGitHubError(error)
             }
             isSigningIn = false
         }
@@ -179,7 +179,7 @@ public struct CompanionRootView: View {
                 let client = GitHubMobileClient()
                 githubRepositories = try await client.listRepositories(accessToken: githubAccessToken)
             } catch {
-                authError = error.localizedDescription
+                authError = describeGitHubError(error)
             }
             isLoadingRepositories = false
         }
@@ -231,7 +231,7 @@ public struct CompanionRootView: View {
                 recentWorkspaces = recentWorkspaceStore.load()
                 isShowingRepositories = false
             } catch {
-                authError = error.localizedDescription
+                authError = describeGitHubError(error)
             }
             workspaceOpenProgress = nil
             isOpeningWorkspace = false
@@ -266,11 +266,20 @@ public struct CompanionRootView: View {
                     try await saveSketch(sketch, path: path)
                 }
             )
-        case .storyboard:
-            SelectionDetailView(selection: selection, project: workspace)
+        case .storyboard(let path):
+            StoryboardDetailView(
+                path: path,
+                storyboard: storyboard(for: path, in: workspace),
+                fallbackTitle: title(for: path, in: workspace.allStoryboards),
+                project: workspace
+            )
         case .rehearse:
             RehearsalPreview(project: workspace)
         }
+    }
+
+    private func storyboard(for path: String, in workspace: CompanionProject) -> FileSummary? {
+        workspace.allStoryboards.first { $0.path == path }
     }
 
     private func sketch(for path: String, in workspace: CompanionProject) -> FileSummary? {
@@ -401,6 +410,13 @@ public struct CompanionRootView: View {
             return []
         }
         return (try? await draftlineStore.listConflicts()) ?? []
+    }
+
+    private func describeGitHubError(_ error: Error) -> String {
+        if let error = error as? DecodingError {
+            return "GitHub returned an unexpected response: \(error.mobileDescription)"
+        }
+        return error.localizedDescription
     }
 }
 
@@ -1517,6 +1533,311 @@ private struct SelectionDetailView: View {
         case .rehearse:
             return "Rehearsal"
         }
+    }
+}
+
+private struct StoryboardDetailView: View {
+    let path: String
+    let storyboard: FileSummary?
+    let fallbackTitle: String
+    let project: CompanionProject
+
+    private var decodedStoryboard: Storyboard? {
+        try? decodeStoryboard()
+    }
+
+    private var unavailableDetails: [String] {
+        var details = ["Path: \(path)"]
+        if let contents = storyboard?.contents {
+            details.append("Content: \(contents.utf8.count) bytes fetched")
+        } else if storyboard == nil {
+            details.append("Content: no storyboard summary found in the current workspace snapshot")
+        } else {
+            details.append("Content: missing from the current workspace snapshot")
+        }
+
+        do {
+            _ = try decodeStoryboard()
+            details.append("Decode: succeeded; reopen this storyboard from the list")
+        } catch {
+            details.append("Decode: \(SketchPreviewError.describe(error))")
+        }
+        return details
+    }
+
+    var body: some View {
+        Group {
+            if let decodedStoryboard {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 14) {
+                        storyboardHeader(decodedStoryboard)
+                        storyboardSequence(decodedStoryboard)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                }
+                .background(CutReadyTheme.surface)
+            } else {
+                unavailableView
+            }
+        }
+        .navigationTitle(decodedStoryboard?.title ?? storyboard?.title ?? fallbackTitle)
+        #if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
+        #endif
+    }
+
+    private func decodeStoryboard() throws -> Storyboard {
+        guard let contents = storyboard?.contents, let data = contents.data(using: .utf8) else {
+            throw SketchPreviewError.missingContents
+        }
+
+        return try JSONDecoder().decode(Storyboard.self, from: data)
+    }
+
+    private func storyboardHeader(_ storyboard: Storyboard) -> some View {
+        CompanionCard {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .top, spacing: 12) {
+                    CutReadyDocumentIcon(CutReadyIconAsset.storyboard, tint: CutReadyTheme.storyboard, size: 30)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(storyboard.title)
+                            .font(.title3.weight(.semibold))
+                            .foregroundStyle(CutReadyTheme.text)
+                        Text(path)
+                            .font(.caption)
+                            .foregroundStyle(CutReadyTheme.textSecondary)
+                            .lineLimit(2)
+                    }
+                    Spacer()
+                    if storyboard.locked == true {
+                        Image(systemName: "lock.fill")
+                            .font(.caption)
+                            .foregroundStyle(CutReadyTheme.textSecondary)
+                    }
+                }
+
+                if !storyboard.description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    SketchMarkdownContent(markdown: storyboard.description, emptyLabel: "")
+                }
+
+                HStack(spacing: 10) {
+                    WorkspaceStatPill(value: "\(storyboard.items.mobileSketchCount)", label: "Sketches", tint: CutReadyTheme.sketch)
+                    WorkspaceStatPill(value: "\(storyboard.items.mobileSectionCount)", label: "Sections", tint: CutReadyTheme.storyboard)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func storyboardSequence(_ storyboard: Storyboard) -> some View {
+        if storyboard.items.isEmpty {
+            ContentUnavailableView(
+                "No storyboard items",
+                systemImage: "rectangle.stack.badge.plus",
+                description: Text("This storyboard does not sequence any sketches yet.")
+            )
+            .padding(.top, 20)
+        } else {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Sequence")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(CutReadyTheme.textSecondary)
+                    .tracking(0.8)
+                    .padding(.horizontal, 4)
+
+                ForEach(Array(storyboard.items.enumerated()), id: \.offset) { index, item in
+                    switch item {
+                    case .sketchRef(let sketchPath):
+                        StoryboardSketchReferenceCard(
+                            path: sketchPath,
+                            indexLabel: "\(index + 1)",
+                            resolvedSketch: resolvedSketch(for: sketchPath),
+                            sectionTitle: nil
+                        )
+                    case .section(let title, let description, let sketches):
+                        StoryboardSectionCard(
+                            title: title,
+                            description: description,
+                            indexLabel: "\(index + 1)",
+                            sketches: sketches,
+                            resolveSketch: resolvedSketch(for:)
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    private var unavailableView: some View {
+        VStack(spacing: 14) {
+            ContentUnavailableView(
+                "Storyboard preview unavailable",
+                systemImage: "rectangle.stack",
+                description: Text("CutReady could not render this storyboard from the current mobile workspace snapshot.")
+            )
+
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(unavailableDetails, id: \.self) { detail in
+                    Text(detail)
+                        .font(.caption.monospaced())
+                        .foregroundStyle(CutReadyTheme.textSecondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(CutReadyTheme.surfaceAlt.opacity(0.45), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(CutReadyTheme.border.opacity(0.55), lineWidth: 1)
+            )
+            .padding(.horizontal, 16)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(CutReadyTheme.surface)
+    }
+
+    private func resolvedSketch(for sketchPath: String) -> FileSummary? {
+        for candidate in sketchPathCandidates(for: sketchPath) {
+            if let sketch = project.allSketches.first(where: { $0.path == candidate }) {
+                return sketch
+            }
+        }
+        return nil
+    }
+
+    private func sketchPathCandidates(for sketchPath: String) -> [String] {
+        let normalized = sketchPath.mobileNormalizedPath
+        guard !normalized.isEmpty else {
+            return []
+        }
+
+        var candidates = [normalized]
+        let storyboardDirectory = path.mobileNormalizedPath.mobileDeletingLastPathComponent
+        if !storyboardDirectory.isEmpty {
+            candidates.append("\(storyboardDirectory)/\(normalized)")
+        }
+        let projectPath = project.activeProjectPath.mobileNormalizedPath
+        if !projectPath.isEmpty && projectPath != "." {
+            candidates.append("\(projectPath)/\(normalized)")
+        }
+        return Array(NSOrderedSet(array: candidates).compactMap { $0 as? String })
+    }
+}
+
+private struct StoryboardSectionCard: View {
+    let title: String
+    let description: String?
+    let indexLabel: String
+    let sketches: [String]
+    let resolveSketch: (String) -> FileSummary?
+
+    var body: some View {
+        CompanionCard {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .top, spacing: 10) {
+                    RowMetaPill(label: indexLabel, systemImage: nil, tint: CutReadyTheme.storyboard)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(title.isEmpty ? "Untitled section" : title)
+                            .font(.headline)
+                            .foregroundStyle(CutReadyTheme.text)
+                        if let description, !description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            Text(description)
+                                .font(.subheadline)
+                                .foregroundStyle(CutReadyTheme.textSecondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                }
+
+                if sketches.isEmpty {
+                    Text("No sketches in this section yet.")
+                        .font(.caption)
+                        .foregroundStyle(CutReadyTheme.textSecondary)
+                        .padding(10)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(CutReadyTheme.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                } else {
+                    VStack(spacing: 8) {
+                        ForEach(Array(sketches.enumerated()), id: \.offset) { index, sketchPath in
+                            StoryboardSketchReferenceCard(
+                                path: sketchPath,
+                                indexLabel: "\(index + 1)",
+                                resolvedSketch: resolveSketch(sketchPath),
+                                sectionTitle: title
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private struct StoryboardSketchReferenceCard: View {
+    let path: String
+    let indexLabel: String
+    let resolvedSketch: FileSummary?
+    let sectionTitle: String?
+
+    var body: some View {
+        Group {
+            if let resolvedSketch {
+                NavigationLink(value: CompanionSelection.sketch(resolvedSketch.path)) {
+                    rowContent(title: resolvedSketch.title, subtitle: sketchDescription(for: resolvedSketch), isMissing: false)
+                }
+                .buttonStyle(.plain)
+            } else {
+                rowContent(title: path.assetDisplayName, subtitle: "Sketch reference is missing from this mobile workspace.", isMissing: true)
+            }
+        }
+    }
+
+    private func rowContent(title: String, subtitle: String, isMissing: Bool) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            RowMetaPill(label: indexLabel, systemImage: nil, tint: isMissing ? CutReadyTheme.textSecondary : CutReadyTheme.sketch)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(isMissing ? CutReadyTheme.textSecondary : CutReadyTheme.text)
+                    .lineLimit(2)
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(CutReadyTheme.textSecondary)
+                if let sectionTitle, !sectionTitle.isEmpty {
+                    Text(sectionTitle)
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(CutReadyTheme.storyboard)
+                }
+            }
+
+            Spacer()
+
+            Image(systemName: isMissing ? "exclamationmark.triangle" : "chevron.right")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(isMissing ? .orange : CutReadyTheme.textSecondary.opacity(0.55))
+                .padding(.top, 3)
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(CutReadyTheme.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(CutReadyTheme.border.opacity(0.55), lineWidth: 1)
+        )
+    }
+
+    private func sketchDescription(for sketchSummary: FileSummary) -> String {
+        guard let contents = sketchSummary.contents,
+              let data = contents.data(using: .utf8),
+              let sketch = try? JSONDecoder().decode(Sketch.self, from: data),
+              let description = sketch.description.mobileDisplayText?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !description.isEmpty else {
+            return "No sketch description yet."
+        }
+        return description
     }
 }
 
@@ -3071,6 +3392,42 @@ private extension Dictionary where Key == String, Value == JSONValue {
 private extension String {
     var assetDisplayName: String {
         URL(fileURLWithPath: self).lastPathComponent
+    }
+
+    var mobileNormalizedPath: String {
+        replacingOccurrences(of: "\\", with: "/")
+            .split(separator: "/", omittingEmptySubsequences: true)
+            .joined(separator: "/")
+    }
+
+    var mobileDeletingLastPathComponent: String {
+        let normalized = mobileNormalizedPath
+        guard let slash = normalized.lastIndex(of: "/") else {
+            return ""
+        }
+        return String(normalized[..<slash])
+    }
+}
+
+private extension Array where Element == StoryboardItem {
+    var mobileSketchCount: Int {
+        reduce(0) { count, item in
+            switch item {
+            case .sketchRef:
+                return count + 1
+            case .section(_, _, let sketches):
+                return count + sketches.count
+            }
+        }
+    }
+
+    var mobileSectionCount: Int {
+        filter { item in
+            if case .section = item {
+                return true
+            }
+            return false
+        }.count
     }
 }
 

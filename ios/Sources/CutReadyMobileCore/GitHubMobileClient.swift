@@ -63,11 +63,54 @@ public struct GitHubRepositorySummary: Codable, Equatable, Identifiable, Sendabl
         case updatedAt = "updated_at"
     }
 
+    public init(id: Int64, name: String, fullName: String, isPrivate: Bool, defaultBranch: String, updatedAt: Date?) {
+        self.id = id
+        self.name = name
+        self.fullName = fullName
+        self.isPrivate = isPrivate
+        self.defaultBranch = defaultBranch
+        self.updatedAt = updatedAt
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(Int64.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        fullName = try container.decode(String.self, forKey: .fullName)
+        isPrivate = try container.decode(Bool.self, forKey: .isPrivate)
+        defaultBranch = try container.decodeIfPresent(String.self, forKey: .defaultBranch) ?? "main"
+        updatedAt = try Self.decodeGitHubDate(from: container, key: .updatedAt)
+    }
+
     public var repositoryRef: GitHubRepositoryRef {
         let parts = fullName.split(separator: "/", maxSplits: 1).map(String.init)
         let owner = parts.first ?? ""
         return GitHubRepositoryRef(owner: owner, name: name, defaultBranch: defaultBranch)
     }
+
+    private static func decodeGitHubDate(from container: KeyedDecodingContainer<CodingKeys>, key: CodingKeys) throws -> Date? {
+        guard let value = try container.decodeIfPresent(String.self, forKey: key) else {
+            return nil
+        }
+
+        if let date = iso8601.date(from: value) ?? iso8601WithFractions.date(from: value) {
+            return date
+        }
+
+        throw DecodingError.dataCorruptedError(forKey: key, in: container, debugDescription: "Invalid GitHub date: \(value)")
+    }
+
+    private static let iso8601: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter
+    }()
+
+    private static let iso8601WithFractions: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
 }
 
 public enum GitHubMobileError: Error, LocalizedError, Equatable {
@@ -155,7 +198,7 @@ public struct GitHubWorkspaceCache: Sendable {
             return FileSummary(
                 path: path,
                 title: titleProvider(path, contents),
-                contents: path.lowercased().hasSuffix(".sb") ? nil : contents,
+                contents: contents,
                 updatedAt: manifest.hydratedAt
             )
         }

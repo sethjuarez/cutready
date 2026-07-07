@@ -63,7 +63,7 @@ final class GitHubWorkspaceCacheTests: XCTestCase {
         XCTAssertEqual(fetchedPaths.count, 5)
         XCTAssertEqual(snapshot.projects, [MobileProjectEntry(path: "loop-demo", name: "Loop Demo")])
         XCTAssertEqual(snapshot.activeProjectPath, "loop-demo")
-        XCTAssertEqual(snapshot.storyboards.first?.contents, nil)
+        XCTAssertEqual(snapshot.storyboards.first?.contents?.contains(#""title":"Storyboard""#), true)
         XCTAssertEqual(snapshot.sketches.first?.contents?.contains(#""title":"Sketch""#), true)
         XCTAssertEqual(snapshot.notes.first?.title, "notes")
     }

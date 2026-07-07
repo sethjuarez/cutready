@@ -148,6 +148,11 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 0.1.0;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-lz",
+					"-liconv",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.cutready.companion;
 				PRODUCT_NAME = "CutReady Companion";
 				SDKROOT = iphoneos;
@@ -291,6 +296,11 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 0.1.0;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-lz",
+					"-liconv",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.cutready.companion;
 				PRODUCT_NAME = "CutReady Companion";
 				SDKROOT = iphoneos;
