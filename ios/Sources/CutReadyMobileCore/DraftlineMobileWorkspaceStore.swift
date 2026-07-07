@@ -93,6 +93,10 @@ public final class DraftlineMobileWorkspaceStore: @unchecked Sendable {
         return (status, try await snapshot())
     }
 
+    public func listConflicts() async throws -> [MobileConflict] {
+        try await client.listConflicts()
+    }
+
     private static func projectEntries(
         notes: [FileSummary],
         sketches: [FileSummary],

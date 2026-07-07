@@ -23,6 +23,7 @@ public struct CompanionRootView: View {
     @State private var isShowingSync = false
     @State private var isSyncingWorkspace = false
     @State private var syncError: String?
+    @State private var syncConflicts: [MobileConflict] = []
     @State private var workspaceNavigationPath = NavigationPath()
     @State private var authError: String?
     @State private var workspaceOpenProgress: GitHubWorkspaceOpenProgress?
@@ -72,6 +73,7 @@ public struct CompanionRootView: View {
                         project: project,
                         isSyncing: isSyncingWorkspace,
                         errorMessage: syncError,
+                        conflicts: syncConflicts,
                         onRefresh: { refreshSyncStatus() },
                         onPull: { pullWorkspace() },
                         onPush: { pushWorkspace() }
@@ -287,6 +289,7 @@ public struct CompanionRootView: View {
         let snapshot = try await draftlineStore.saveNote(markdown, path: path)
         await MainActor.run {
             let dirtyStatus = MobileSyncStatus(state: .dirty, ahead: max((project?.syncStatus.ahead ?? 0), 1), message: "Mobile snapshot ready to push")
+            syncConflicts = []
             if let project {
                 var updated = project.updating(from: snapshot)
                 updated.syncStatus = dirtyStatus
@@ -303,6 +306,7 @@ public struct CompanionRootView: View {
         let snapshot = try await draftlineStore.saveSketch(sketch, path: path)
         await MainActor.run {
             let dirtyStatus = MobileSyncStatus(state: .dirty, ahead: max((project?.syncStatus.ahead ?? 0), 1), message: "Mobile snapshot ready to push")
+            syncConflicts = []
             if let project {
                 var updated = project.updating(from: snapshot)
                 updated.syncStatus = dirtyStatus
@@ -321,7 +325,8 @@ public struct CompanionRootView: View {
             defer { Task { @MainActor in isSyncingWorkspace = false } }
             do {
                 let status = try await draftlineStore.syncStatus()
-                await MainActor.run { updateSyncStatus(status) }
+                let conflicts = await conflicts(for: status)
+                await MainActor.run { updateSyncStatus(status, conflicts: conflicts) }
             } catch {
                 await MainActor.run { syncError = error.localizedDescription }
             }
@@ -334,6 +339,7 @@ public struct CompanionRootView: View {
             defer { Task { @MainActor in isSyncingWorkspace = false } }
             do {
                 let (status, snapshot) = try await draftlineStore.pull()
+                let conflicts = await conflicts(for: status)
                 await MainActor.run {
                     if let project {
                         var updated = project.updating(from: snapshot)
@@ -344,6 +350,7 @@ public struct CompanionRootView: View {
                         updated.syncStatus = status
                         self.project = updated
                     }
+                    syncConflicts = conflicts
                     syncError = nil
                 }
             } catch {
@@ -358,6 +365,7 @@ public struct CompanionRootView: View {
             defer { Task { @MainActor in isSyncingWorkspace = false } }
             do {
                 let (status, snapshot) = try await draftlineStore.push()
+                let conflicts = await conflicts(for: status)
                 await MainActor.run {
                     if let project {
                         var updated = project.updating(from: snapshot)
@@ -368,6 +376,7 @@ public struct CompanionRootView: View {
                         updated.syncStatus = status
                         self.project = updated
                     }
+                    syncConflicts = conflicts
                     syncError = nil
                 }
             } catch {
@@ -377,13 +386,21 @@ public struct CompanionRootView: View {
     }
 
     @MainActor
-    private func updateSyncStatus(_ status: MobileSyncStatus) {
+    private func updateSyncStatus(_ status: MobileSyncStatus, conflicts: [MobileConflict]) {
         guard var project else {
             return
         }
         project.syncStatus = status
         self.project = project
+        syncConflicts = conflicts
         syncError = nil
+    }
+
+    private func conflicts(for status: MobileSyncStatus) async -> [MobileConflict] {
+        guard status.state == .conflict else {
+            return []
+        }
+        return (try? await draftlineStore.listConflicts()) ?? []
     }
 }
 
@@ -539,6 +556,7 @@ private struct WorkspaceSyncSheet: View {
     let project: CompanionProject
     let isSyncing: Bool
     let errorMessage: String?
+    let conflicts: [MobileConflict]
     let onRefresh: () -> Void
     let onPull: () -> Void
     let onPush: () -> Void
@@ -546,54 +564,10 @@ private struct WorkspaceSyncSheet: View {
     var body: some View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 16) {
-                CompanionCard {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Label(statusTitle, systemImage: statusIcon)
-                            .font(.headline)
-                            .foregroundStyle(statusTint)
-
-                        HStack(spacing: 10) {
-                            WorkspaceStatPill(value: "\(project.syncStatus.ahead)", label: "Ahead", tint: CutReadyTheme.accent)
-                            WorkspaceStatPill(value: "\(project.syncStatus.behind)", label: "Behind", tint: CutReadyTheme.storyboard)
-                        }
-
-                        if let message = project.syncStatus.message, !message.isEmpty {
-                            Text(message)
-                                .font(.caption)
-                                .foregroundStyle(CutReadyTheme.textSecondary)
-                                .lineLimit(5)
-                        }
-                    }
-                }
-
-                if let errorMessage {
-                    Text(errorMessage)
-                        .font(.caption)
-                        .foregroundStyle(.red)
-                        .padding(12)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color.red.opacity(0.08), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                }
-
-                VStack(spacing: 10) {
-                    Button(action: onRefresh) {
-                        syncLabel("Refresh status", systemImage: "arrow.clockwise")
-                    }
-                    .buttonStyle(.bordered)
-
-                    Button(action: onPull) {
-                        syncLabel("Pull latest", systemImage: "arrow.down.circle")
-                    }
-                    .buttonStyle(.bordered)
-
-                    Button(action: onPush) {
-                        syncLabel("Push mobile snapshot", systemImage: "arrow.up.circle")
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(project.syncStatus.state == .conflict)
-                }
-                .controlSize(.large)
-                .disabled(isSyncing)
+                statusCard
+                errorSection
+                conflictSection
+                actionButtons
 
                 Spacer()
             }
@@ -611,6 +585,107 @@ private struct WorkspaceSyncSheet: View {
                 }
             }
         }
+    }
+
+    private var statusCard: some View {
+        CompanionCard {
+            VStack(alignment: .leading, spacing: 10) {
+                Label(statusTitle, systemImage: statusIcon)
+                    .font(.headline)
+                    .foregroundStyle(statusTint)
+
+                HStack(spacing: 10) {
+                    WorkspaceStatPill(value: "\(project.syncStatus.ahead)", label: "Ahead", tint: CutReadyTheme.accent)
+                    WorkspaceStatPill(value: "\(project.syncStatus.behind)", label: "Behind", tint: CutReadyTheme.storyboard)
+                }
+
+                if let message = project.syncStatus.message, !message.isEmpty {
+                    Text(message)
+                        .font(.caption)
+                        .foregroundStyle(CutReadyTheme.textSecondary)
+                        .lineLimit(5)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var errorSection: some View {
+        if let errorMessage {
+            Text(errorMessage)
+                .font(.caption)
+                .foregroundStyle(.red)
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.red.opacity(0.08), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        }
+    }
+
+    @ViewBuilder
+    private var conflictSection: some View {
+        if !conflicts.isEmpty {
+            CompanionCard {
+                VStack(alignment: .leading, spacing: 10) {
+                    Label("Resolve on desktop", systemImage: "desktopcomputer.trianglebadge.exclamationmark")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.red)
+
+                    Text("Mobile can keep rehearsing and making safe edits, but these Draftline conflicts need the desktop app's merge tools.")
+                        .font(.caption)
+                        .foregroundStyle(CutReadyTheme.textSecondary)
+
+                    ForEach(conflicts) { conflict in
+                        conflictRow(conflict)
+                    }
+                }
+            }
+        } else if project.syncStatus.state == .conflict {
+            Text("Refresh status to load conflict details. Mobile will defer merge resolution to the desktop app.")
+                .font(.caption)
+                .foregroundStyle(CutReadyTheme.textSecondary)
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(CutReadyTheme.surfaceAlt.opacity(0.55), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        }
+    }
+
+    private func conflictRow(_ conflict: MobileConflict) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(conflict.path)
+                .font(.caption.monospaced())
+                .foregroundStyle(CutReadyTheme.text)
+                .lineLimit(2)
+
+            Text(conflict.summary)
+                .font(.caption2)
+                .foregroundStyle(CutReadyTheme.textSecondary)
+                .lineLimit(3)
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.red.opacity(0.06), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private var actionButtons: some View {
+        VStack(spacing: 10) {
+            Button(action: onRefresh) {
+                syncLabel("Refresh status", systemImage: "arrow.clockwise")
+            }
+            .buttonStyle(.bordered)
+
+            Button(action: onPull) {
+                syncLabel("Pull latest", systemImage: "arrow.down.circle")
+            }
+            .buttonStyle(.bordered)
+
+            Button(action: onPush) {
+                syncLabel("Push mobile snapshot", systemImage: "arrow.up.circle")
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(project.syncStatus.state == .conflict)
+        }
+        .controlSize(.large)
+        .disabled(isSyncing)
     }
 
     private var statusTitle: String {

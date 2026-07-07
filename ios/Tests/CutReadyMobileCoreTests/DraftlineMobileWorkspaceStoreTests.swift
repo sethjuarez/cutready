@@ -139,6 +139,18 @@ final class DraftlineMobileWorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(result.1.sketches.first?.path, "intro.sk")
     }
 
+    func testListConflictsUsesDraftlineWorkspaceClient() async throws {
+        let client = MockDraftlineWorkspaceClient()
+        client.conflicts = [
+            MobileConflict(path: "intro.sk", summary: "Resolve on desktop.", canResolveOnMobile: false)
+        ]
+        let store = DraftlineMobileWorkspaceStore(client: client)
+
+        let conflicts = try await store.listConflicts()
+
+        XCTAssertEqual(conflicts, client.conflicts)
+    }
+
     func testReadAssetUsesDraftlineWorkspaceClient() async throws {
         let client = MockDraftlineWorkspaceClient()
         client.assetData[".cutready/screenshots/intro.png"] = Data([1, 2, 3])
@@ -196,6 +208,7 @@ private final class MockDraftlineWorkspaceClient: DraftlineMobileWorkspaceClient
     var notes: [FileSummary] = []
     var writtenNotes: [String: String] = [:]
     var assetData: [String: Data] = [:]
+    var conflicts: [MobileConflict] = []
     var savedLabels: [String] = []
     var pushStatus = MobileSyncStatus(state: .clean)
 
@@ -261,7 +274,7 @@ private final class MockDraftlineWorkspaceClient: DraftlineMobileWorkspaceClient
     }
 
     func listConflicts() async throws -> [MobileConflict] {
-        []
+        conflicts
     }
 
     func resolveConflict(path: String, resolution: SimpleConflictResolution) async throws {}
