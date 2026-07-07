@@ -74,6 +74,15 @@ public struct CompanionProject: Identifiable, Equatable, Sendable {
         return copy
     }
 
+    public func updating(from snapshot: MobileWorkspaceSnapshot) -> CompanionProject {
+        var updated = CompanionProject(snapshot: snapshot)
+        if snapshot.projects.contains(where: { $0.path == activeProjectPath }) {
+            updated.activeProjectPath = activeProjectPath
+        }
+        updated.syncStatus = syncStatus
+        return updated
+    }
+
     private func documents(in summaries: [FileSummary]) -> [FileSummary] {
         let projectPath = activeProjectPath.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         guard projectPath != "." && !projectPath.isEmpty else {

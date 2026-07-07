@@ -83,6 +83,21 @@ public enum MobileWorkspacePolicy {
         canReadAsset(path: path) && normalize(path).contains(".cutready/narration/")
     }
 
+    public static var draftlineContentPolicy: DraftlineMobileContentPolicyDescriptor {
+        DraftlineMobileContentPolicyDescriptor(
+            includePaths: (Array(readableAssetDirectories) + [".cutready/projects.json"]).sorted(),
+            excludePaths: [
+                ".git",
+                ".chats",
+                ".cutready/agent-state.db",
+                ".cutready/memory.json",
+                ".cutready/locks.json",
+                ".cutready/recordings"
+            ],
+            includeExtensions: Array(editableExtensions).sorted()
+        )
+    }
+
     private static func normalize(_ path: String) -> String {
         path
             .replacingOccurrences(of: "\\", with: "/")

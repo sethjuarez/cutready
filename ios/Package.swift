@@ -26,7 +26,8 @@ let package = Package(
         .target(
             name: "CutReadyMobileCore",
             dependencies: [
-                .product(name: "AuditaurAppleCore", package: "sethjuarez-solid-train")
+                .product(name: "AuditaurAppleCore", package: "sethjuarez-solid-train"),
+                .target(name: "DraftlineMobile", condition: .when(platforms: [.iOS]))
             ]
         ),
         .target(
@@ -42,6 +43,11 @@ let package = Package(
         .testTarget(
             name: "CutReadyMobileCoreTests",
             dependencies: ["CutReadyMobileCore"]
+        ),
+        .binaryTarget(
+            name: "DraftlineMobile",
+            url: "https://github.com/sethjuarez/draftline/releases/download/draftline-mobile-ios-v0.2.12-1/DraftlineMobile.xcframework.zip",
+            checksum: "ba47b5f5a765e4302b9576efcb185d02c0510fbeed525a6dcceacefd1c95a7f3"
         )
     ]
 )

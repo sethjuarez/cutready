@@ -38,4 +38,27 @@ final class MobileWorkspacePolicyTests: XCTestCase {
         XCTAssertFalse(MobileWorkspacePolicy.canReadNarration(path: ".cutready/screenshots/row-1.webm"))
         XCTAssertFalse(MobileWorkspacePolicy.canReadNarration(path: ".cutready/narration/../../secret.webm"))
     }
+
+    func testDraftlineContentPolicyKeepsCutReadyRulesAppSpecific() {
+        let policy = MobileWorkspacePolicy.draftlineContentPolicy
+
+        XCTAssertEqual(policy.includePaths, [".cutready/narration", ".cutready/projects.json", ".cutready/screenshots", ".cutready/visuals"])
+        XCTAssertEqual(policy.includeExtensions, ["md", "sb", "sk"])
+        XCTAssertTrue(policy.excludePaths.contains(".cutready/recordings"))
+        XCTAssertTrue(policy.excludePaths.contains(".cutready/agent-state.db"))
+        XCTAssertNil(policy.largeFileThresholdBytes)
+    }
+
+    func testDraftlineNativeClientRejectsDisallowedPathsBeforeNativeBridge() async {
+        let client = DraftlineNativeMobileClient()
+
+        do {
+            try await client.writeNote("secret", path: "../secret.md")
+            XCTFail("Expected invalid path to be rejected")
+        } catch DraftlineMobileBridgeError.invalidPath("../secret.md") {
+            // Expected.
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
 }

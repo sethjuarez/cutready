@@ -20,9 +20,13 @@ public struct CompanionRootView: View {
     @State private var isOpeningWorkspace = false
     @State private var isShowingWorkspaceMenu = false
     @State private var isShowingRepositories = false
+    @State private var isShowingSync = false
+    @State private var isSyncingWorkspace = false
+    @State private var syncError: String?
     @State private var workspaceNavigationPath = NavigationPath()
     @State private var authError: String?
     @State private var workspaceOpenProgress: GitHubWorkspaceOpenProgress?
+    @State private var draftlineStore = DraftlineMobileWorkspaceStore()
     private let tokenStore = KeychainTokenStore()
     private let recentWorkspaceStore = RecentWorkspaceStore()
 
@@ -37,7 +41,8 @@ public struct CompanionRootView: View {
                 NavigationStack(path: $workspaceNavigationPath) {
                     WorkspaceProjectsView(
                         project: project,
-                        onOpenMenu: { isShowingWorkspaceMenu = true }
+                        onOpenMenu: { isShowingWorkspaceMenu = true },
+                        onOpenSync: { isShowingSync = true }
                     )
                     .navigationDestination(for: CompanionSelection.self) { selection in
                         workspaceDestination(selection, workspace: project)
@@ -60,6 +65,16 @@ public struct CompanionRootView: View {
                             isShowingWorkspaceMenu = false
                             showGitHubWorkspacePicker()
                         }
+                    )
+                }
+                .sheet(isPresented: $isShowingSync) {
+                    WorkspaceSyncSheet(
+                        project: project,
+                        isSyncing: isSyncingWorkspace,
+                        errorMessage: syncError,
+                        onRefresh: { refreshSyncStatus() },
+                        onPull: { pullWorkspace() },
+                        onPush: { pushWorkspace() }
                     )
                 }
             } else {
@@ -199,8 +214,7 @@ public struct CompanionRootView: View {
         Task {
             do {
                 isOpeningWorkspace = true
-                let client = GitHubMobileClient()
-                let snapshot = try await client.openWorkspace(
+                let snapshot = try await draftlineStore.openWorkspace(
                     repository: repository,
                     accessToken: githubAccessToken,
                     progress: { progress in
@@ -228,14 +242,27 @@ public struct CompanionRootView: View {
         case .project(let projectPath):
             ProjectContentsView(project: workspace.switchingProject(to: projectPath))
         case .note(let path):
-            NoteDetailView(note: note(for: path, in: workspace), fallbackTitle: title(for: path, in: workspace.allNotes))
+            NoteDetailView(
+                path: path,
+                note: note(for: path, in: workspace),
+                fallbackTitle: title(for: path, in: workspace.allNotes),
+                onSave: { markdown in
+                    try await saveNote(markdown, path: path)
+                }
+            )
         case .sketch(let path):
             SketchDetailView(
                 path: path,
                 sketch: sketch(for: path, in: workspace),
                 fallbackTitle: title(for: path, in: workspace.allSketches),
                 project: workspace,
-                githubAccessToken: githubAccessToken
+                githubAccessToken: githubAccessToken,
+                loadAsset: { path in
+                    try await draftlineStore.readAsset(path: path)
+                },
+                onSave: { sketch in
+                    try await saveSketch(sketch, path: path)
+                }
             )
         case .storyboard:
             SelectionDetailView(selection: selection, project: workspace)
@@ -255,11 +282,115 @@ public struct CompanionRootView: View {
     private func title(for path: String, in summaries: [FileSummary]) -> String {
         summaries.first { $0.path == path }?.title ?? path
     }
+
+    private func saveNote(_ markdown: String, path: String) async throws {
+        let snapshot = try await draftlineStore.saveNote(markdown, path: path)
+        await MainActor.run {
+            let dirtyStatus = MobileSyncStatus(state: .dirty, ahead: max((project?.syncStatus.ahead ?? 0), 1), message: "Mobile snapshot ready to push")
+            if let project {
+                var updated = project.updating(from: snapshot)
+                updated.syncStatus = dirtyStatus
+                self.project = updated
+            } else {
+                var updated = CompanionProject(snapshot: snapshot)
+                updated.syncStatus = dirtyStatus
+                self.project = updated
+            }
+        }
+    }
+
+    private func saveSketch(_ sketch: Sketch, path: String) async throws {
+        let snapshot = try await draftlineStore.saveSketch(sketch, path: path)
+        await MainActor.run {
+            let dirtyStatus = MobileSyncStatus(state: .dirty, ahead: max((project?.syncStatus.ahead ?? 0), 1), message: "Mobile snapshot ready to push")
+            if let project {
+                var updated = project.updating(from: snapshot)
+                updated.syncStatus = dirtyStatus
+                self.project = updated
+            } else {
+                var updated = CompanionProject(snapshot: snapshot)
+                updated.syncStatus = dirtyStatus
+                self.project = updated
+            }
+        }
+    }
+
+    private func refreshSyncStatus() {
+        Task {
+            await MainActor.run { isSyncingWorkspace = true }
+            defer { Task { @MainActor in isSyncingWorkspace = false } }
+            do {
+                let status = try await draftlineStore.syncStatus()
+                await MainActor.run { updateSyncStatus(status) }
+            } catch {
+                await MainActor.run { syncError = error.localizedDescription }
+            }
+        }
+    }
+
+    private func pullWorkspace() {
+        Task {
+            await MainActor.run { isSyncingWorkspace = true }
+            defer { Task { @MainActor in isSyncingWorkspace = false } }
+            do {
+                let (status, snapshot) = try await draftlineStore.pull()
+                await MainActor.run {
+                    if let project {
+                        var updated = project.updating(from: snapshot)
+                        updated.syncStatus = status
+                        self.project = updated
+                    } else {
+                        var updated = CompanionProject(snapshot: snapshot)
+                        updated.syncStatus = status
+                        self.project = updated
+                    }
+                    syncError = nil
+                }
+            } catch {
+                await MainActor.run { syncError = error.localizedDescription }
+            }
+        }
+    }
+
+    private func pushWorkspace() {
+        Task {
+            await MainActor.run { isSyncingWorkspace = true }
+            defer { Task { @MainActor in isSyncingWorkspace = false } }
+            do {
+                let (status, snapshot) = try await draftlineStore.push()
+                await MainActor.run {
+                    if let project {
+                        var updated = project.updating(from: snapshot)
+                        updated.syncStatus = status
+                        self.project = updated
+                    } else {
+                        var updated = CompanionProject(snapshot: snapshot)
+                        updated.syncStatus = status
+                        self.project = updated
+                    }
+                    syncError = nil
+                }
+            } catch {
+                await MainActor.run { syncError = error.localizedDescription }
+            }
+        }
+    }
+
+    @MainActor
+    private func updateSyncStatus(_ status: MobileSyncStatus) {
+        guard var project else {
+            return
+        }
+        project.syncStatus = status
+        self.project = project
+        syncError = nil
+    }
 }
 
 private struct WorkspaceProjectsView: View {
     let project: CompanionProject
     let onOpenMenu: () -> Void
+    let onOpenSync: () -> Void
 
     var body: some View {
         ScrollView {
@@ -335,11 +466,23 @@ private struct WorkspaceProjectsView: View {
     }
 
     private var syncButton: some View {
-        Button {
-        } label: {
-            Image(systemName: "arrow.triangle.2.circlepath")
+        Button(action: onOpenSync) {
+            Image(systemName: syncSystemImage)
         }
         .accessibilityLabel("Sync workspace")
+    }
+
+    private var syncSystemImage: String {
+        switch project.syncStatus.state {
+        case .clean:
+            return "checkmark.icloud"
+        case .dirty, .pushing, .pulling:
+            return "arrow.triangle.2.circlepath"
+        case .conflict:
+            return "exclamationmark.triangle"
+        case .offline:
+            return "icloud.slash"
+        }
     }
 
     private var sourceLabel: String {
@@ -389,6 +532,135 @@ private struct ProjectNavigationRow: View {
         }
 
         return project.path == "." ? "Workspace root project" : project.path
+    }
+}
+
+private struct WorkspaceSyncSheet: View {
+    let project: CompanionProject
+    let isSyncing: Bool
+    let errorMessage: String?
+    let onRefresh: () -> Void
+    let onPull: () -> Void
+    let onPush: () -> Void
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 16) {
+                CompanionCard {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Label(statusTitle, systemImage: statusIcon)
+                            .font(.headline)
+                            .foregroundStyle(statusTint)
+
+                        HStack(spacing: 10) {
+                            WorkspaceStatPill(value: "\(project.syncStatus.ahead)", label: "Ahead", tint: CutReadyTheme.accent)
+                            WorkspaceStatPill(value: "\(project.syncStatus.behind)", label: "Behind", tint: CutReadyTheme.storyboard)
+                        }
+
+                        if let message = project.syncStatus.message, !message.isEmpty {
+                            Text(message)
+                                .font(.caption)
+                                .foregroundStyle(CutReadyTheme.textSecondary)
+                                .lineLimit(5)
+                        }
+                    }
+                }
+
+                if let errorMessage {
+                    Text(errorMessage)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .padding(12)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color.red.opacity(0.08), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                }
+
+                VStack(spacing: 10) {
+                    Button(action: onRefresh) {
+                        syncLabel("Refresh status", systemImage: "arrow.clockwise")
+                    }
+                    .buttonStyle(.bordered)
+
+                    Button(action: onPull) {
+                        syncLabel("Pull latest", systemImage: "arrow.down.circle")
+                    }
+                    .buttonStyle(.bordered)
+
+                    Button(action: onPush) {
+                        syncLabel("Push mobile snapshot", systemImage: "arrow.up.circle")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(project.syncStatus.state == .conflict)
+                }
+                .controlSize(.large)
+                .disabled(isSyncing)
+
+                Spacer()
+            }
+            .padding(18)
+            .background(CutReadyTheme.surface)
+            .navigationTitle("Sync")
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .overlay {
+                if isSyncing {
+                    ProgressView("Syncing")
+                        .padding()
+                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                }
+            }
+        }
+    }
+
+    private var statusTitle: String {
+        switch project.syncStatus.state {
+        case .clean:
+            return "Workspace is clean"
+        case .dirty:
+            return "Mobile edits are ready"
+        case .pulling:
+            return "Pulling latest"
+        case .pushing:
+            return "Publishing mobile edits"
+        case .conflict:
+            return "Conflict needs desktop"
+        case .offline:
+            return "Offline"
+        }
+    }
+
+    private var statusIcon: String {
+        switch project.syncStatus.state {
+        case .clean:
+            return "checkmark.circle"
+        case .dirty:
+            return "pencil.circle"
+        case .pulling:
+            return "arrow.down.circle"
+        case .pushing:
+            return "arrow.up.circle"
+        case .conflict:
+            return "exclamationmark.triangle"
+        case .offline:
+            return "icloud.slash"
+        }
+    }
+
+    private var statusTint: Color {
+        switch project.syncStatus.state {
+        case .clean:
+            return CutReadyTheme.accent
+        case .dirty, .pulling, .pushing:
+            return CutReadyTheme.storyboard
+        case .conflict, .offline:
+            return .red
+        }
+    }
+
+    private func syncLabel(_ title: String, systemImage: String) -> some View {
+        Label(title, systemImage: systemImage)
+            .frame(maxWidth: .infinity)
     }
 }
 
@@ -1175,8 +1447,12 @@ private struct SketchDetailView: View {
     let fallbackTitle: String
     let project: CompanionProject
     let githubAccessToken: String?
+    let loadAsset: (String) async throws -> Data?
+    let onSave: (Sketch) async throws -> Void
     @State private var layout = SketchReaderLayoutStore.load()
     @State private var isShowingLayout = false
+    @State private var rowEdit: SketchRowEditDraft?
+    @State private var saveError: String?
 
     private var decodedSketch: Sketch? {
         try? decodeSketch()
@@ -1218,7 +1494,18 @@ private struct SketchDetailView: View {
                         sketchHeader(decodedSketch)
 
                         ForEach(Array(decodedSketch.rows.enumerated()), id: \.offset) { index, row in
-                            SketchRowCard(row: row, index: index, layout: layout, sketchPath: path, project: project, githubAccessToken: githubAccessToken)
+                            SketchRowCard(
+                                row: row,
+                                index: index,
+                                layout: layout,
+                                sketchPath: path,
+                                project: project,
+                                githubAccessToken: githubAccessToken,
+                                loadAsset: loadAsset,
+                                onEdit: {
+                                    rowEdit = SketchRowEditDraft(index: index, row: row)
+                                }
+                            )
                         }
 
                         if decodedSketch.rows.isEmpty {
@@ -1279,6 +1566,23 @@ private struct SketchDetailView: View {
         .sheet(isPresented: $isShowingLayout) {
             SketchLayoutSheet(layout: $layout)
         }
+        .sheet(item: $rowEdit) { draft in
+            SketchRowEditSheet(
+                draft: draft,
+                onCancel: { rowEdit = nil },
+                onSave: { updatedDraft in
+                    try await saveRow(updatedDraft)
+                }
+            )
+        }
+        .alert("Could not save sketch", isPresented: Binding(
+            get: { saveError != nil },
+            set: { if !$0 { saveError = nil } }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(saveError ?? "")
+        }
         .onChange(of: layout) { _, newValue in
             SketchReaderLayoutStore.save(newValue)
         }
@@ -1301,6 +1605,34 @@ private struct SketchDetailView: View {
                     SketchMarkdownContent(markdown: description, emptyLabel: "")
                 }
             }
+        }
+    }
+
+    private func saveRow(_ draft: SketchRowEditDraft) async throws {
+        var updated = try decodeSketch()
+        let update = RowTextUpdate(
+            time: draft.time == draft.originalTime ? nil : draft.time,
+            narrative: draft.narrative == draft.originalNarrative ? nil : draft.narrative,
+            demoActions: draft.demoActions == draft.originalDemoActions ? nil : draft.demoActions
+        )
+        try MobileEdits.apply(
+            .updateRowText(
+                index: draft.index,
+                update
+            ),
+            to: &updated
+        )
+        do {
+            try await onSave(updated)
+            await MainActor.run {
+                rowEdit = nil
+                saveError = nil
+            }
+        } catch {
+            await MainActor.run {
+                saveError = error.localizedDescription
+            }
+            throw error
         }
     }
 }
@@ -1357,6 +1689,8 @@ private struct SketchRowCard: View {
     let sketchPath: String
     let project: CompanionProject
     let githubAccessToken: String?
+    let loadAsset: (String) async throws -> Data?
+    let onEdit: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -1374,11 +1708,17 @@ private struct SketchRowCard: View {
                     Image(systemName: "lock.fill")
                         .font(.caption)
                         .foregroundStyle(CutReadyTheme.textSecondary)
+                } else {
+                    Button(action: onEdit) {
+                        Image(systemName: "pencil")
+                    }
+                    .buttonStyle(.borderless)
+                    .accessibilityLabel("Edit row \(index + 1)")
                 }
             }
 
             ForEach(layout.visibleSections) { section in
-                SketchSectionView(section: section, row: row, sketchPath: sketchPath, project: project, githubAccessToken: githubAccessToken)
+                SketchSectionView(section: section, row: row, sketchPath: sketchPath, project: project, githubAccessToken: githubAccessToken, loadAsset: loadAsset)
             }
         }
         .padding(12)
@@ -1412,12 +1752,100 @@ private struct RowMetaPill: View {
     }
 }
 
+private struct SketchRowEditDraft: Identifiable, Equatable {
+    let id: Int
+    let index: Int
+    let originalTime: String
+    let originalNarrative: String
+    let originalDemoActions: String
+    var time: String
+    var narrative: String
+    var demoActions: String
+
+    init(index: Int, row: PlanningRow) {
+        self.id = index
+        self.index = index
+        self.originalTime = row.time
+        self.originalNarrative = row.narrative
+        self.originalDemoActions = row.demoActions
+        self.time = row.time
+        self.narrative = row.narrative
+        self.demoActions = row.demoActions
+    }
+}
+
+private struct SketchRowEditSheet: View {
+    @State var draft: SketchRowEditDraft
+    let onCancel: () -> Void
+    let onSave: (SketchRowEditDraft) async throws -> Void
+    @State private var isSaving = false
+    @State private var errorMessage: String?
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Timing") {
+                    TextField("Time", text: $draft.time)
+                }
+
+                Section("Narrative") {
+                    TextEditor(text: $draft.narrative)
+                        .frame(minHeight: 120)
+                }
+
+                Section("Actions") {
+                    TextEditor(text: $draft.demoActions)
+                        .frame(minHeight: 120)
+                }
+
+                if let errorMessage {
+                    Section {
+                        Text(errorMessage)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                    }
+                }
+            }
+            .navigationTitle("Edit Row \(draft.index + 1)")
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel", action: onCancel)
+                        .disabled(isSaving)
+                }
+
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(isSaving ? "Saving" : "Save") {
+                        save()
+                    }
+                    .disabled(isSaving)
+                }
+            }
+        }
+    }
+
+    private func save() {
+        Task {
+            do {
+                isSaving = true
+                try await onSave(draft)
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+            isSaving = false
+        }
+    }
+}
+
 private struct SketchSectionView: View {
     let section: SketchReaderSection
     let row: PlanningRow
     let sketchPath: String
     let project: CompanionProject
     let githubAccessToken: String?
+    let loadAsset: (String) async throws -> Data?
 
     var body: some View {
         switch section {
@@ -1445,7 +1873,8 @@ private struct SketchSectionView: View {
                             path: screenshot,
                             candidatePaths: project.assetPathCandidates(for: screenshot, referencedFrom: sketchPath),
                             source: project.source,
-                            githubAccessToken: githubAccessToken
+                            githubAccessToken: githubAccessToken,
+                            loadAsset: loadAsset
                         )
                     }
 
@@ -1472,7 +1901,8 @@ private struct SketchSectionView: View {
                     narration: narration,
                     candidatePaths: project.assetPathCandidates(for: narration.path, referencedFrom: sketchPath),
                     source: project.source,
-                    githubAccessToken: githubAccessToken
+                    githubAccessToken: githubAccessToken,
+                    loadAsset: loadAsset
                 )
             } else {
                 Text("No narration recorded.")
@@ -1515,6 +1945,7 @@ private struct NarrationAssetView: View {
     let candidatePaths: [String]
     let source: MobileWorkspaceSource
     let githubAccessToken: String?
+    let loadAsset: (String) async throws -> Data?
     @State private var audioData: Data?
     @State private var loadState: LoadState = .idle
 
@@ -1561,15 +1992,27 @@ private struct NarrationAssetView: View {
     }
 
     private func loadAudio() {
-        guard let githubAccessToken else {
-            loadState = .failed("Sign in with GitHub and reopen the workspace so narration can be read from the local cache.")
-            return
-        }
-
         let paths = candidatePaths.isEmpty ? [narration.path] : candidatePaths
         loadState = .loading
         Task {
             do {
+                for path in paths where MobileWorkspacePolicy.canReadNarration(path: path) {
+                    if let data = try await loadAsset(path) {
+                        await MainActor.run {
+                            audioData = data
+                            loadState = .loaded(path)
+                        }
+                        return
+                    }
+                }
+
+                guard let githubAccessToken else {
+                    await MainActor.run {
+                        loadState = .failed("Narration file is referenced, but it is not in the local Draftline workspace.")
+                    }
+                    return
+                }
+
                 let client = GitHubMobileClient()
                 for path in paths where MobileWorkspacePolicy.canReadNarration(path: path) {
                     if let data = try await client.assetData(path: path, source: source, accessToken: githubAccessToken) {
@@ -2121,6 +2564,7 @@ private struct ScreenshotAssetView: View {
     let candidatePaths: [String]
     let source: MobileWorkspaceSource
     let githubAccessToken: String?
+    let loadAsset: (String) async throws -> Data?
     @State private var data: Data?
     @State private var attemptedLoad = false
 
@@ -2146,10 +2590,21 @@ private struct ScreenshotAssetView: View {
             }
         }
         .task(id: candidatePaths.joined(separator: "|")) {
-            guard data == nil, !candidatePaths.isEmpty, let githubAccessToken else {
+            guard data == nil, !candidatePaths.isEmpty else {
                 return
             }
             attemptedLoad = true
+            for candidate in candidatePaths {
+                if let fetchedData = try? await loadAsset(candidate) {
+                    data = fetchedData
+                    return
+                }
+            }
+
+            guard let githubAccessToken else {
+                return
+            }
+
             let client = GitHubMobileClient()
             for candidate in candidatePaths {
                 if let fetchedData = try? await client.standardImageAsset(path: candidate, source: source, accessToken: githubAccessToken) {
@@ -2541,14 +2996,20 @@ private extension String {
 }
 
 private struct NoteDetailView: View {
+    let path: String
     let note: FileSummary?
     let fallbackTitle: String
+    let onSave: (String) async throws -> Void
     @State private var isEditing = false
     @State private var draft: String
+    @State private var isSaving = false
+    @State private var saveError: String?
 
-    init(note: FileSummary?, fallbackTitle: String) {
+    init(path: String, note: FileSummary?, fallbackTitle: String, onSave: @escaping (String) async throws -> Void) {
+        self.path = path
         self.note = note
         self.fallbackTitle = fallbackTitle
+        self.onSave = onSave
         _draft = State(initialValue: note?.contents ?? "")
     }
 
@@ -2579,6 +3040,43 @@ private struct NoteDetailView: View {
                 Button(isEditing ? "Preview" : "Edit") {
                     isEditing.toggle()
                 }
+            }
+
+            if isEditing {
+                ToolbarItem {
+                    Button(isSaving ? "Saving" : "Save") {
+                        save()
+                    }
+                    .disabled(isSaving || draft == (note?.contents ?? ""))
+                }
+            }
+        }
+        .alert("Could not save note", isPresented: Binding(
+            get: { saveError != nil },
+            set: { if !$0 { saveError = nil } }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(saveError ?? "")
+        }
+    }
+
+    private func save() {
+        Task {
+            do {
+                isSaving = true
+                try await onSave(draft)
+                await MainActor.run {
+                    isEditing = false
+                    saveError = nil
+                }
+            } catch {
+                await MainActor.run {
+                    saveError = error.localizedDescription
+                }
+            }
+            await MainActor.run {
+                isSaving = false
             }
         }
     }

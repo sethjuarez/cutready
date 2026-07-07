@@ -26,7 +26,8 @@ iOS work must stay separate from the desktop release-please train unless the use
 - Use native drill-down navigation on iPhone: workspace -> projects -> project contents -> item detail.
 - Treat the workspace menu as workspace-level chrome. It should show current/recent workspaces and open/home actions, not project navigation.
 - Use durable platform storage for app state: Keychain for tokens and `UserDefaults` for recent workspaces or reader layout preferences.
-- GitHub-backed workspaces should use the app-managed on-disk cache as the read path. Do not refetch `.sb`, `.sk`, `.md`, screenshots, visuals, or narration from GitHub on every open; network should hydrate/refresh/sync the cache, then readers load from disk.
+- GitHub-backed workspaces should load from local app-managed storage, not refetch `.sb`, `.sk`, `.md`, screenshots, visuals, or narration from GitHub on every open.
+- Draftline owns mobile workspace versioning/sync semantics through its native mobile bridge. CutReady owns the Swift wrapper, Keychain token plumbing, app-specific content policy, structured edit UI, and file-format models.
 
 ## Data and Editing
 
@@ -34,6 +35,7 @@ iOS work must stay separate from the desktop release-please train unless the use
 - Prefer structured edits over arbitrary file mutation for mobile writes.
 - Keep decoders tolerant of real project history. Mobile readers should handle legacy or partially populated files where desktop models allow optional fields.
 - Scope GitHub-backed workspace reads/writes through mobile policy helpers instead of allowing arbitrary repository paths.
+- Do not hand-roll Git/GitHub commit, push, pull, or merge semantics in Swift. Route those through Draftline's mobile bridge; Swift should pass CutReady's content policy and credentials into Draftline.
 
 ## Rendering
 
@@ -41,7 +43,7 @@ iOS work must stay separate from the desktop release-please train unless the use
 - Match desktop note behavior: note titles come from the `.md` file stem, while `---` frontmatter key/value pairs are parsed as note properties and rendered separately from the markdown body.
 - Keep iPhone reader layouts compact and full-width. Avoid desktop-style multi-pane density on small screens.
 - Sketch rows should default to Assets -> Narration -> Narrative -> Actions and use durable settings for section visibility/order.
-- Narration playback should read approved `.cutready/narration` assets from the on-device workspace cache. Use native/WebKit audio controls for mobile playback rather than refetching narration on every row render.
+- Narration playback should read approved `.cutready/narration` assets from the local Draftline-backed workspace. Use native/WebKit audio controls for mobile playback rather than refetching narration on every row render.
 - Elucim visuals are not natively rendered yet. Surface attached visuals clearly until a native renderer, SVG bridge, or shared rendering path is selected.
 
 ## Validation
