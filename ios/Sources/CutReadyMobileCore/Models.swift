@@ -5,6 +5,17 @@ public enum SketchState: String, Codable, CaseIterable, Sendable {
     case recordingEnriched = "recording_enriched"
     case refined
     case final
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let rawValue = try container.decode(String.self)
+        self = rawValue == "sketch" ? .draft : SketchState(rawValue: rawValue) ?? .draft
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(rawValue)
+    }
 }
 
 public enum PlanningCellField: String, Codable, CaseIterable, Hashable, Sendable {
@@ -68,6 +79,19 @@ public struct PlanningRow: Codable, Equatable, Sendable {
         case visual
         case designPlan = "design_plan"
     }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        locked = try container.decodeIfPresent(Bool.self, forKey: .locked)
+        locks = try container.decodeIfPresent([PlanningCellField: Bool].self, forKey: .locks)
+        time = try container.decodeIfPresent(String.self, forKey: .time) ?? ""
+        durationSeconds = try container.decodeIfPresent(UInt.self, forKey: .durationSeconds)
+        narrative = try container.decodeIfPresent(String.self, forKey: .narrative) ?? ""
+        demoActions = try container.decodeIfPresent(String.self, forKey: .demoActions) ?? ""
+        screenshot = try container.decodeIfPresent(String.self, forKey: .screenshot)
+        visual = try container.decodeIfPresent(JSONValue.self, forKey: .visual)
+        designPlan = try container.decodeIfPresent(String.self, forKey: .designPlan)
+    }
 }
 
 public struct Sketch: Codable, Equatable, Sendable {
@@ -110,6 +134,42 @@ public struct Sketch: Codable, Equatable, Sendable {
         case createdAt = "created_at"
         case updatedAt = "updated_at"
     }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        title = try container.decodeIfPresent(String.self, forKey: .title) ?? "Untitled Sketch"
+        locked = try container.decodeIfPresent(Bool.self, forKey: .locked)
+        description = try container.decodeIfPresent(JSONValue.self, forKey: .description) ?? .null
+        rows = try container.decodeIfPresent([PlanningRow].self, forKey: .rows) ?? []
+        metadata = try container.decodeIfPresent(DocumentMetadata.self, forKey: .metadata)
+        state = try container.decodeIfPresent(SketchState.self, forKey: .state) ?? .draft
+        createdAt = try Self.decodeDate(from: container, key: .createdAt) ?? Date(timeIntervalSince1970: 0)
+        updatedAt = try Self.decodeDate(from: container, key: .updatedAt) ?? createdAt
+    }
+
+    private static func decodeDate(from container: KeyedDecodingContainer<CodingKeys>, key: CodingKeys) throws -> Date? {
+        guard let value = try container.decodeIfPresent(String.self, forKey: key) else {
+            return nil
+        }
+
+        if let date = iso8601WithFractions.date(from: value) ?? iso8601.date(from: value) {
+            return date
+        }
+
+        throw DecodingError.dataCorruptedError(forKey: key, in: container, debugDescription: "Invalid ISO 8601 date: \(value)")
+    }
+
+    private static let iso8601: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter
+    }()
+
+    private static let iso8601WithFractions: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
 }
 
 public enum StoryboardItem: Codable, Equatable, Sendable {

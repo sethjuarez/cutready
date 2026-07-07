@@ -108,7 +108,24 @@ public enum CompanionSamples {
             FileSummary(path: "launch-storyboard.sb", title: "Launch Storyboard")
         ],
         sketches: [
-            FileSummary(path: "intro.sk", title: "Intro"),
+            FileSummary(path: "intro.sk", title: "Intro", contents: """
+            {
+              "title": "Intro",
+              "description": "Set context for the demo.",
+              "rows": [
+                {
+                  "time": "0:20",
+                  "narrative": "Welcome the audience and name the customer pain.",
+                  "demo_actions": "Open the product and show the landing state.",
+                  "screenshot": "screenshots/intro.png",
+                  "visual": { "kind": "callout", "title": "Opening frame" }
+                }
+              ],
+              "state": "draft",
+              "created_at": "2026-01-01T00:00:00Z",
+              "updated_at": "2026-01-01T00:00:00Z"
+            }
+            """),
             FileSummary(path: "settings.sk", title: "Settings walkthrough"),
             FileSummary(path: "export.sk", title: "Export handoff")
         ],

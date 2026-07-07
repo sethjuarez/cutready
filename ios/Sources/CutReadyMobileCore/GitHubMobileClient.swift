@@ -232,7 +232,8 @@ public struct GitHubMobileClient: GitHubMobileClientProtocol {
         let sketches = try await summaries(
             for: files.filter { $0.path.lowercased().hasSuffix(".sk") },
             repository: repository,
-            accessToken: accessToken
+            accessToken: accessToken,
+            includeContents: true
         )
         let notes = try await summaries(
             for: files.filter { $0.path.lowercased().hasSuffix(".md") },

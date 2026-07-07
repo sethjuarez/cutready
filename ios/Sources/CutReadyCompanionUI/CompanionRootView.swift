@@ -214,11 +214,17 @@ public struct CompanionRootView: View {
             ProjectContentsView(project: workspace.switchingProject(to: projectPath))
         case .note(let path):
             NoteDetailView(note: note(for: path, in: workspace), fallbackTitle: title(for: path, in: workspace.allNotes))
-        case .storyboard, .sketch:
+        case .sketch(let path):
+            SketchDetailView(sketch: sketch(for: path, in: workspace), fallbackTitle: title(for: path, in: workspace.allSketches))
+        case .storyboard:
             SelectionDetailView(selection: selection, project: workspace)
         case .rehearse:
             RehearsalPreview(project: workspace)
         }
+    }
+
+    private func sketch(for path: String, in workspace: CompanionProject) -> FileSummary? {
+        workspace.allSketches.first { $0.path == path }
     }
 
     private func note(for path: String, in workspace: CompanionProject) -> FileSummary? {
@@ -1052,6 +1058,393 @@ private struct SelectionDetailView: View {
             return project.name
         case .rehearse:
             return "Rehearsal"
+        }
+    }
+}
+
+private struct SketchDetailView: View {
+    let sketch: FileSummary?
+    let fallbackTitle: String
+    @State private var layout = SketchReaderLayoutStore.load()
+    @State private var isShowingLayout = false
+
+    private var decodedSketch: Sketch? {
+        try? decodeSketch()
+    }
+
+    private var unavailableMessage: String {
+        do {
+            _ = try decodeSketch()
+            return "Reopen the workspace to fetch sketch contents for mobile preview."
+        } catch {
+            return error.localizedDescription
+        }
+    }
+
+    private func decodeSketch() throws -> Sketch {
+        guard let contents = sketch?.contents, let data = contents.data(using: .utf8) else {
+            throw SketchPreviewError.missingContents
+        }
+
+        let decoder = JSONDecoder()
+        return try decoder.decode(Sketch.self, from: data)
+    }
+
+    var body: some View {
+        Group {
+            if let decodedSketch {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 14) {
+                        sketchHeader(decodedSketch)
+
+                        ForEach(Array(decodedSketch.rows.enumerated()), id: \.offset) { index, row in
+                            SketchRowCard(row: row, index: index, layout: layout)
+                        }
+
+                        if decodedSketch.rows.isEmpty {
+                            ContentUnavailableView(
+                                "No sketch rows",
+                                systemImage: "rectangle.stack",
+                                description: Text("This sketch does not have planning rows yet.")
+                            )
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                }
+                .background(CutReadyTheme.surface)
+            } else {
+                ContentUnavailableView(
+                    "Sketch preview unavailable",
+                    systemImage: "square.and.pencil",
+                    description: Text(unavailableMessage)
+                )
+                .background(CutReadyTheme.surface)
+            }
+        }
+        .navigationTitle(decodedSketch?.title ?? sketch?.title ?? fallbackTitle)
+        #if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
+        #endif
+        .toolbar {
+            ToolbarItem {
+                Button {
+                    isShowingLayout = true
+                } label: {
+                    Image(systemName: "slider.horizontal.3")
+                }
+                .accessibilityLabel("Sketch layout")
+            }
+        }
+        .sheet(isPresented: $isShowingLayout) {
+            SketchLayoutSheet(layout: $layout)
+        }
+        .onChange(of: layout) { _, newValue in
+            SketchReaderLayoutStore.save(newValue)
+        }
+    }
+
+    private func sketchHeader(_ sketch: Sketch) -> some View {
+        CompanionCard {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Label(sketch.state.rawValue.replacingOccurrences(of: "_", with: " ").capitalized, systemImage: "square.and.pencil")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(CutReadyTheme.sketch)
+                    Spacer()
+                    Text("\(sketch.rows.count) rows")
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(CutReadyTheme.textSecondary)
+                }
+
+                if let description = sketch.description.mobileDisplayText, !description.isEmpty {
+                    Text(description)
+                        .font(.subheadline)
+                        .foregroundStyle(CutReadyTheme.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+    }
+}
+
+private enum SketchPreviewError: LocalizedError {
+    case missingContents
+
+    var errorDescription: String? {
+        switch self {
+        case .missingContents:
+            return "Reopen the workspace to fetch sketch contents for mobile preview."
+        }
+    }
+}
+
+private struct SketchRowCard: View {
+    let row: PlanningRow
+    let index: Int
+    let layout: SketchReaderLayout
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                Text("\(index + 1)")
+                    .font(.caption.monospacedDigit().weight(.bold))
+                    .foregroundStyle(CutReadyTheme.sketch)
+                    .frame(width: 26, height: 26)
+                    .background(CutReadyTheme.sketch.opacity(0.11), in: Circle())
+
+                Text(row.time.isEmpty ? "Untimed" : row.time)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(CutReadyTheme.textSecondary)
+
+                Spacer()
+
+                if row.locked == true {
+                    Image(systemName: "lock.fill")
+                        .font(.caption)
+                        .foregroundStyle(CutReadyTheme.textSecondary)
+                }
+            }
+
+            ForEach(layout.visibleSections) { section in
+                SketchSectionView(section: section, row: row)
+            }
+        }
+        .padding(13)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(CutReadyTheme.surfaceAlt.opacity(0.48), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(CutReadyTheme.border.opacity(0.58), lineWidth: 1)
+        )
+    }
+}
+
+private struct SketchSectionView: View {
+    let section: SketchReaderSection
+    let row: PlanningRow
+
+    var body: some View {
+        switch section {
+        case .assets:
+            assets
+        case .narrative:
+            textSection(title: "Narrative", icon: "text.quote", text: row.narrative, tint: CutReadyTheme.sketch)
+        case .actions:
+            textSection(title: "Actions", icon: "cursorarrow.click.2", text: row.demoActions, tint: CutReadyTheme.storyboard)
+        }
+    }
+
+    private var assets: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            sectionTitle("Assets", icon: "photo.on.rectangle.angled", tint: CutReadyTheme.note)
+
+            if row.screenshot == nil && row.visual == nil {
+                Text("No screenshot or visual attached.")
+                    .font(.caption)
+                    .foregroundStyle(CutReadyTheme.textSecondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(10)
+                    .background(CutReadyTheme.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            } else {
+                VStack(alignment: .leading, spacing: 8) {
+                    if let screenshot = row.screenshot, !screenshot.isEmpty {
+                        AssetReferenceRow(icon: "photo", title: "Screenshot", value: screenshot)
+                    }
+
+                    if row.visual != nil {
+                        AssetReferenceRow(icon: "sparkles", title: "Elucim visual", value: "Visual DSL attached - native rendering next")
+                    }
+                }
+            }
+        }
+    }
+
+    private func textSection(title: String, icon: String, text: String, tint: Color) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            sectionTitle(title, icon: icon, tint: tint)
+            Text(text.isEmpty ? "Empty" : text)
+                .font(.subheadline)
+                .foregroundStyle(text.isEmpty ? CutReadyTheme.textSecondary : CutReadyTheme.text)
+                .lineSpacing(3)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private func sectionTitle(_ title: String, icon: String, tint: Color) -> some View {
+        Label(title, systemImage: icon)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(tint)
+    }
+}
+
+private struct AssetReferenceRow: View {
+    let icon: String
+    let title: String
+    let value: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: icon)
+                .foregroundStyle(CutReadyTheme.note)
+                .frame(width: 20)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(CutReadyTheme.text)
+                Text(value)
+                    .font(.caption)
+                    .foregroundStyle(CutReadyTheme.textSecondary)
+                    .lineLimit(3)
+            }
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(CutReadyTheme.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+}
+
+private struct SketchLayoutSheet: View {
+    @Binding var layout: SketchReaderLayout
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section("Show sections") {
+                    ForEach(SketchReaderSection.allCases) { section in
+                        Toggle(section.label, isOn: Binding(
+                            get: { layout.visible.contains(section) },
+                            set: { isVisible in
+                                layout.set(section, visible: isVisible)
+                            }
+                        ))
+                    }
+                }
+
+                Section("Order") {
+                    ForEach(layout.order) { section in
+                        HStack {
+                            Label(section.label, systemImage: section.icon)
+                            Spacer()
+                            Button {
+                                layout.move(section, direction: -1)
+                            } label: {
+                                Image(systemName: "chevron.up")
+                            }
+                            .disabled(layout.order.first == section)
+
+                            Button {
+                                layout.move(section, direction: 1)
+                            } label: {
+                                Image(systemName: "chevron.down")
+                            }
+                            .disabled(layout.order.last == section)
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Sketch layout")
+            .toolbar {
+                ToolbarItem {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+}
+
+private enum SketchReaderSection: String, CaseIterable, Codable, Identifiable, Sendable {
+    case assets
+    case narrative
+    case actions
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .assets:
+            return "Assets"
+        case .narrative:
+            return "Narrative"
+        case .actions:
+            return "Actions"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .assets:
+            return "photo.on.rectangle.angled"
+        case .narrative:
+            return "text.quote"
+        case .actions:
+            return "cursorarrow.click.2"
+        }
+    }
+}
+
+private struct SketchReaderLayout: Codable, Equatable {
+    var order: [SketchReaderSection] = [.assets, .narrative, .actions]
+    var visible: Set<SketchReaderSection> = Set(SketchReaderSection.allCases)
+
+    var visibleSections: [SketchReaderSection] {
+        order.filter { visible.contains($0) }
+    }
+
+    mutating func set(_ section: SketchReaderSection, visible isVisible: Bool) {
+        if isVisible {
+            visible.insert(section)
+        } else {
+            visible.remove(section)
+        }
+    }
+
+    mutating func move(_ section: SketchReaderSection, direction: Int) {
+        guard
+            let index = order.firstIndex(of: section),
+            order.indices.contains(index + direction)
+        else {
+            return
+        }
+        order.swapAt(index, index + direction)
+    }
+}
+
+private enum SketchReaderLayoutStore {
+    private static let key = "com.cutready.companion.sketchReaderLayout"
+
+    static func load(defaults: UserDefaults = .standard) -> SketchReaderLayout {
+        guard let data = defaults.data(forKey: key) else {
+            return SketchReaderLayout()
+        }
+        return (try? JSONDecoder().decode(SketchReaderLayout.self, from: data)) ?? SketchReaderLayout()
+    }
+
+    static func save(_ layout: SketchReaderLayout, defaults: UserDefaults = .standard) {
+        guard let data = try? JSONEncoder().encode(layout) else {
+            return
+        }
+        defaults.set(data, forKey: key)
+    }
+}
+
+private extension JSONValue {
+    var mobileDisplayText: String? {
+        switch self {
+        case .string(let value):
+            return value
+        case .number(let value):
+            return String(value)
+        case .bool(let value):
+            return value ? "true" : "false"
+        case .array, .object:
+            return nil
+        case .null:
+            return nil
         }
     }
 }
