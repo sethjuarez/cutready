@@ -13,6 +13,13 @@ docs/node_modules/
 target/
 src-tauri/target/
 
+# Swift / Xcode
+.build/
+ios/.build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+
 # Tauri generated
 src-tauri/gen/
 
