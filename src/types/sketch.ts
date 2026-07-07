@@ -134,6 +134,9 @@ export interface GraphNode {
   is_branch_tip?: boolean;
   is_remote_tip?: boolean;
   remote_labels?: string[];
+  reachable_from_local_variation?: boolean;
+  reachable_from_remote_variation?: boolean;
+  reachable_from_support_ref?: boolean;
   /** Author name (for collaborator info). */
   author?: string;
 }

@@ -19,6 +19,7 @@ export function SyncBar({ variant = "full" }: { variant?: "full" | "compact" }) 
   const pushToRemote = useAppStore((s) => s.pushToRemote);
   const pullFromRemote = useAppStore((s) => s.pullFromRemote);
   const syncWithRemote = useAppStore((s) => s.syncWithRemote);
+  const pendingHistoryCleanup = useAppStore((s) => s.pendingHistoryCleanup);
   const { settings } = useSettings();
   const [showIncoming, setShowIncoming] = useState(false);
   const timelines = useAppStore((s) => s.timelines);
@@ -80,7 +81,12 @@ export function SyncBar({ variant = "full" }: { variant?: "full" | "compact" }) 
   let compactActionLabel = "Sync";
   let compactButtonLabel = "Sync";
   let actionFn = syncWithRemote;
-  if (ahead > 0 && behind === 0) {
+  if (pendingHistoryCleanup) {
+    actionLabel = "Push";
+    compactActionLabel = behind > 0 ? "Publish compacted history" : "Share compacted history";
+    compactButtonLabel = "Send";
+    actionFn = pushToRemote;
+  } else if (ahead > 0 && behind === 0) {
     actionLabel = "Push";
     compactActionLabel = "Share changes";
     compactButtonLabel = "Send";
@@ -265,6 +271,11 @@ export function SyncBar({ variant = "full" }: { variant?: "full" | "compact" }) 
             <>
               <AlertTriangle className="shrink-0 w-2.5 h-2.5" />
               <span className="truncate">Remote is ahead — pull first, then push</span>
+            </>
+          ) : /github|sign-in|auth|unauthorized|401/i.test(syncError) ? (
+            <>
+              <AlertTriangle className="shrink-0 w-2.5 h-2.5" />
+              <span className="truncate">GitHub sign-in required — reconnect in Settings</span>
             </>
           ) : syncError && syncError.includes("404") ? (
             <>

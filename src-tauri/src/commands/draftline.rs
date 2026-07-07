@@ -545,6 +545,75 @@ pub async fn undo_history_cleanup(
 }
 
 #[auditaur_command(skip_all)]
+pub async fn list_pending_history_cleanups(
+    request: contract::ListPendingHistoryCleanupsRequest,
+    app: AppHandle,
+) -> contract::TauriCommandResult<Vec<draftline::PendingHistoryCleanup>> {
+    let context = context_for_workspace(&request.workspace_path, app)?;
+    contract::into_tauri_result(contract::list_pending_history_cleanups_with_context(
+        &context, request,
+    ))
+}
+
+#[auditaur_command(skip_all)]
+pub async fn publish_pending_history_cleanup(
+    request: contract::PublishPendingHistoryCleanupRequest,
+    app: AppHandle,
+    lock: State<'_, ProjectLock>,
+) -> contract::TauriCommandResult<draftline::HistoryCleanupPublishResult> {
+    let _guard = lock.0.lock().await;
+    let mut context = context_for_workspace(&request.workspace_path, app)?;
+    contract::into_tauri_result(contract::publish_pending_history_cleanup_with_context(
+        &mut context,
+        request,
+    ))
+}
+
+#[auditaur_command(skip_all)]
+pub async fn undo_pending_history_cleanup(
+    request: contract::UndoPendingHistoryCleanupRequest,
+    app: AppHandle,
+    lock: State<'_, ProjectLock>,
+    state: State<'_, AppState>,
+) -> contract::TauriCommandResult<draftline::TimelineCleanupResult> {
+    let _guard = lock.0.lock().await;
+    let workspace_path = request.workspace_path.clone();
+    let mut context = context_for_workspace(&request.workspace_path, app)?;
+    let result = contract::into_tauri_result(contract::undo_pending_history_cleanup_with_context(
+        &mut context,
+        request,
+    ))?;
+    let (repo_root, project_root) =
+        current_project_roots(&state).unwrap_or_else(|| (workspace_path.clone(), workspace_path));
+    if let Err(error) = AgentStateStore::record_history_cleanup_result(
+        &repo_root,
+        &project_root,
+        HistoryCleanupLedgerOperation::Undo,
+        &result,
+    ) {
+        tracing::warn!(
+            error = %error,
+            "Undid pending Draftline history cleanup but could not record the CutReady agent-state ledger"
+        );
+    }
+    Ok(result)
+}
+
+#[auditaur_command(skip_all)]
+pub async fn abandon_pending_history_cleanup(
+    request: contract::AbandonPendingHistoryCleanupRequest,
+    app: AppHandle,
+    lock: State<'_, ProjectLock>,
+) -> contract::TauriCommandResult<draftline::PendingHistoryCleanup> {
+    let _guard = lock.0.lock().await;
+    let mut context = context_for_workspace(&request.workspace_path, app)?;
+    contract::into_tauri_result(contract::abandon_pending_history_cleanup_with_context(
+        &mut context,
+        request,
+    ))
+}
+
+#[auditaur_command(skip_all)]
 pub async fn get_workspace_graph(
     request: contract::WorkspaceGraphRequest,
     app: AppHandle,

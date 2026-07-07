@@ -16,7 +16,7 @@ import {
 import type { GraphNode } from "../types/sketch";
 import { useAppStore } from "../stores/appStore";
 import { useConfirmDialog } from "./ConfirmDialog";
-import { FullHistoryGraph } from "./FullHistoryGraph";
+import { FullHistoryGraph, type HistoryGraphNodeType } from "./FullHistoryGraph";
 import { TimelineSelector } from "./TimelineSelector";
 import { UnsavedWorkspaceDialog } from "./UnsavedWorkspaceDialog";
 import type {
@@ -25,7 +25,12 @@ import type {
   DraftlineHistoryCompactionCandidates,
 } from "../services/draftlineVersioning";
 import { errorMessage } from "../stores/appStore";
-import { isExactCleanupSelection, twoPointCleanupSelection } from "../utils/historyCleanupSelection";
+import {
+  firstParentTimelineIds,
+  firstParentTimelineNodes,
+  isExactCleanupSelection,
+  twoPointCleanupSelection,
+} from "../utils/historyCleanupSelection";
 
 export function HistoryGraphTab() {
   const graphNodes = useAppStore((s) => s.graphNodes);
@@ -45,6 +50,7 @@ export function HistoryGraphTab() {
   const applySnapshotCleanup = useAppStore((s) => s.applySnapshotCleanup);
   const undoSnapshotCleanup = useAppStore((s) => s.undoSnapshotCleanup);
   const lastHistoryCleanup = useAppStore((s) => s.lastHistoryCleanup);
+  const pendingHistoryCleanup = useAppStore((s) => s.pendingHistoryCleanup);
   const currentRemote = useAppStore((s) => s.currentRemote);
   const syncStatus = useAppStore((s) => s.syncStatus);
   const currentProject = useAppStore((s) => s.currentProject);
@@ -66,6 +72,10 @@ export function HistoryGraphTab() {
   const [applyingCleanup, setApplyingCleanup] = useState(false);
   const [undoingCleanup, setUndoingCleanup] = useState(false);
   const [graphZoom, setGraphZoom] = useState(1);
+  const [graphFiltersOpen, setGraphFiltersOpen] = useState(false);
+  const [showSideAncestry, setShowSideAncestry] = useState(false);
+  const [showRemoteOnly, setShowRemoteOnly] = useState(false);
+  const [showRecoveryRefs, setShowRecoveryRefs] = useState(false);
   const cleanupCandidateRequestRef = useRef(0);
   const { confirm, confirmationDialog } = useConfirmDialog();
 
@@ -85,7 +95,7 @@ export function HistoryGraphTab() {
     ? startedBranchFromSnapshot
     : null;
 
-  const activeNodes = useMemo(() => {
+  const fullAncestryNodes = useMemo(() => {
     if (!activeTimeline) return graphNodes;
     const branchNodes = graphNodes.filter((node) => node.timeline === activeTimeline.name);
     const nodeMap = new Map(graphNodes.map((node) => [node.id, node]));
@@ -113,12 +123,44 @@ export function HistoryGraphTab() {
     const ancestors = graphNodes.filter((node) => ancestorIds.has(node.id));
     return [...branchNodes, ...ancestors];
   }, [activeTimeline, graphNodes]);
-  const activeCleanupNodes = useMemo(() => uniqueGraphNodes(activeNodes), [activeNodes]);
+  const firstParentNodes = useMemo(() => firstParentTimelineNodes(graphNodes), [graphNodes]);
+  const allGraphNodeTypes = useMemo(
+    () => classifyGraphNodes(uniqueGraphNodes(fullAncestryNodes), firstParentNodes),
+    [firstParentNodes, fullAncestryNodes],
+  );
+  const visibleGraphNodes = useMemo(() => uniqueGraphNodes(fullAncestryNodes).filter((node) => {
+    const nodeType = allGraphNodeTypes.get(node.id) ?? "first-parent";
+    return nodeType === "first-parent"
+      || (nodeType === "side-ancestry" && showSideAncestry)
+      || (nodeType === "remote-only" && showRemoteOnly)
+      || (nodeType === "support-ref" && showRecoveryRefs);
+  }), [allGraphNodeTypes, fullAncestryNodes, showRecoveryRefs, showRemoteOnly, showSideAncestry]);
+  const activeCleanupNodes = firstParentNodes;
 
   const snapshotCount = useMemo(
-    () => new Set(graphNodes.map((node) => node.id)).size,
-    [graphNodes],
+    () => new Set(visibleGraphNodes.map((node) => node.id)).size,
+    [visibleGraphNodes],
   );
+  const graphNodeTypes = useMemo(
+    () => new Map(visibleGraphNodes.map((node) => [node.id, allGraphNodeTypes.get(node.id) ?? "first-parent"])),
+    [allGraphNodeTypes, visibleGraphNodes],
+  );
+  const graphNodeTypeCounts = useMemo(() => {
+    const counts: Record<HistoryGraphNodeType, number> = {
+      "first-parent": 0,
+      "side-ancestry": 0,
+      "remote-only": 0,
+      "support-ref": 0,
+    };
+    for (const nodeType of allGraphNodeTypes.values()) {
+      counts[nodeType] += 1;
+    }
+    return counts;
+  }, [allGraphNodeTypes]);
+  const hiddenGraphLayerCount =
+    (showSideAncestry ? 0 : graphNodeTypeCounts["side-ancestry"])
+    + (showRemoteOnly ? 0 : graphNodeTypeCounts["remote-only"])
+    + (showRecoveryRefs ? 0 : graphNodeTypeCounts["support-ref"]);
   const remoteTipCount = graphNodes.filter((node) => node.is_remote_tip).length;
 
   const timelineMap = useMemo(
@@ -151,6 +193,7 @@ export function HistoryGraphTab() {
   const selectedNewest = selectedNodes[0];
   const selectedOldest = selectedNodes[selectedNodes.length - 1];
   const hasContiguousCleanupSelection = isExactCleanupSelection(activeCleanupNodes, selectedForCleanup);
+  const firstParentCleanupIds = useMemo(() => firstParentTimelineIds(activeCleanupNodes), [activeCleanupNodes]);
   const cleanupCandidateByEndpoint = useMemo(() => {
     if (!cleanupCandidates || cleanupPointIds.length !== 1) return new Map<string, DraftlineHistoryCompactionCandidate>();
     return new Map(cleanupCandidates.candidates.map((candidate) => [cleanupCandidateEndpointId(candidate), candidate]));
@@ -167,11 +210,11 @@ export function HistoryGraphTab() {
   );
   const cleanupSelectableIds = useMemo(() => {
     if (!cleanupMode) return new Set<string>();
-    if (cleanupPointIds.length !== 1) return new Set(activeCleanupNodes.map((node) => node.id));
+    if (cleanupPointIds.length !== 1) return firstParentCleanupIds;
     return new Set(Array.from(cleanupCandidateByEndpoint.entries())
       .filter(([, candidate]) => candidate.can_compact)
       .map(([endpointId]) => endpointId));
-  }, [activeCleanupNodes, cleanupCandidateByEndpoint, cleanupMode, cleanupPointIds.length]);
+  }, [cleanupCandidateByEndpoint, cleanupMode, cleanupPointIds.length, firstParentCleanupIds]);
   const effectiveCleanupLabel = useMemo(() => {
     const explicit = cleanupLabel.trim();
     if (explicit) return explicit;
@@ -189,13 +232,13 @@ export function HistoryGraphTab() {
 
   const filteredGraphNodes = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
-    if (!query) return graphNodes;
-    return graphNodes.filter((node) =>
+    if (!query) return visibleGraphNodes;
+    return visibleGraphNodes.filter((node) =>
       node.message.toLowerCase().includes(query)
       || node.timeline.toLowerCase().includes(query)
       || (node.author?.toLowerCase().includes(query) ?? false)
     );
-  }, [graphNodes, searchQuery]);
+  }, [searchQuery, visibleGraphNodes]);
 
   const focusCurrentSnapshot = useCallback(() => {
     const current = scrollRef.current?.querySelector<HTMLElement>('[data-snapshot-head="true"]');
@@ -348,7 +391,8 @@ export function HistoryGraphTab() {
   }, [applySnapshotCleanup, cancelCleanup, cleanupPreview, confirm, currentRemote]);
 
   const handleUndoCleanup = useCallback(async () => {
-    if (!lastHistoryCleanup || undoingCleanup) return;
+    const cleanupPlanId = pendingHistoryCleanup?.plan_id ?? lastHistoryCleanup?.plan_id;
+    if (!cleanupPlanId || undoingCleanup) return;
     const confirmed = await confirm({
       title: "Undo compacted history?",
       message: "Draftline will restore the branch head from the backup ref created before the last history cleanup.",
@@ -360,7 +404,7 @@ export function HistoryGraphTab() {
 
     setUndoingCleanup(true);
     try {
-      await undoSnapshotCleanup(lastHistoryCleanup.plan_id);
+      await undoSnapshotCleanup(cleanupPlanId);
       await loadGraphData();
       await loadTimelines();
       await checkDirty();
@@ -371,7 +415,7 @@ export function HistoryGraphTab() {
     } finally {
       setUndoingCleanup(false);
     }
-  }, [checkDirty, checkRewound, confirm, lastHistoryCleanup, loadGraphData, loadTimelines, undoingCleanup, undoSnapshotCleanup]);
+  }, [checkDirty, checkRewound, confirm, lastHistoryCleanup, loadGraphData, loadTimelines, pendingHistoryCleanup, undoingCleanup, undoSnapshotCleanup]);
 
   if (graphNodes.length === 0) {
     return (
@@ -393,7 +437,8 @@ export function HistoryGraphTab() {
           <div className="min-w-0">
             <div className="truncate text-sm font-semibold text-[rgb(var(--color-text))]">{workspaceName} workspace history graph</div>
             <div className="truncate text-[10px] text-[rgb(var(--color-text-secondary))]">
-              {snapshotCount} snapshot{snapshotCount !== 1 ? "s" : ""} across {timelines.length} branch{timelines.length !== 1 ? "es" : ""}
+              {snapshotCount} visible snapshot{snapshotCount !== 1 ? "s" : ""} across {timelines.length} branch{timelines.length !== 1 ? "es" : ""}
+              {hiddenGraphLayerCount > 0 ? ` - ${hiddenGraphLayerCount} hidden` : ""}
               {remoteTipCount > 0 ? ` - ${remoteTipCount} remote tip${remoteTipCount !== 1 ? "s" : ""}` : ""}
             </div>
           </div>
@@ -402,6 +447,53 @@ export function HistoryGraphTab() {
         <div className="flex min-w-0 flex-1 items-center justify-end">
           <div className="flex max-w-full items-center gap-1 rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))]/80 p-1">
             <TimelineSelector />
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setGraphFiltersOpen((open) => !open)}
+                aria-expanded={graphFiltersOpen}
+                className="inline-flex h-6 items-center gap-1.5 rounded-md px-1.5 text-[10px] font-medium text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
+                title="Choose which graph layers are visible"
+              >
+                <GitBranch className="h-3 w-3" />
+                View
+                <ChevronDown className="h-2.5 w-2.5 opacity-60" />
+              </button>
+              {graphFiltersOpen && (
+                <div className="absolute right-0 top-8 z-40 w-64 rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] p-2 text-xs shadow-xl shadow-black/10">
+                  <div className="mb-1 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-[rgb(var(--color-text-secondary))]">
+                    Graph layers
+                  </div>
+                  <GraphLayerCheckbox
+                    label="First-parent timeline"
+                    description={`${graphNodeTypeCounts["first-parent"]} main snapshot${graphNodeTypeCounts["first-parent"] === 1 ? "" : "s"}`}
+                    checked
+                    disabled
+                  />
+                  <GraphLayerCheckbox
+                    label="Merged history"
+                    description={`${graphNodeTypeCounts["side-ancestry"]} snapshot${graphNodeTypeCounts["side-ancestry"] === 1 ? "" : "s"} brought in through merges`}
+                    checked={showSideAncestry}
+                    disabled={graphNodeTypeCounts["side-ancestry"] === 0}
+                    onChange={setShowSideAncestry}
+                  />
+                  <GraphLayerCheckbox
+                    label="Remote history"
+                    description={`${graphNodeTypeCounts["remote-only"]} snapshot${graphNodeTypeCounts["remote-only"] === 1 ? "" : "s"} only known from the remote`}
+                    checked={showRemoteOnly}
+                    disabled={graphNodeTypeCounts["remote-only"] === 0}
+                    onChange={setShowRemoteOnly}
+                  />
+                  <GraphLayerCheckbox
+                    label="Recovery history"
+                    description={`${graphNodeTypeCounts["support-ref"]} snapshot${graphNodeTypeCounts["support-ref"] === 1 ? "" : "s"} preserved for undo or audit`}
+                    checked={showRecoveryRefs}
+                    disabled={graphNodeTypeCounts["support-ref"] === 0}
+                    onChange={setShowRecoveryRefs}
+                  />
+                </div>
+              )}
+            </div>
             {authorOptions.length > 0 && (
               <label className="relative flex h-6 min-w-0 max-w-[180px] items-center gap-1.5 rounded-md px-1.5 text-[10px] text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]">
                 <Users className="h-3 w-3 shrink-0" />
@@ -471,7 +563,7 @@ export function HistoryGraphTab() {
               <GitPullRequestArrow className="h-3.5 w-3.5" />
               Compact
             </button>
-            {lastHistoryCleanup && (
+            {(pendingHistoryCleanup || lastHistoryCleanup) && (
               <button
                 type="button"
                 onClick={handleUndoCleanup}
@@ -567,6 +659,7 @@ export function HistoryGraphTab() {
             nodes={filteredGraphNodes}
             timelineMap={timelineMap}
             hasMultipleTimelines={timelines.length > 1}
+            nodeTypes={graphNodeTypes}
             zoomLevel={graphZoom}
             onZoomChange={setGraphZoom}
             showRemoteBadges
@@ -579,7 +672,7 @@ export function HistoryGraphTab() {
             onNodeClick={handleNodeClick}
           />
           <p className="mt-3 text-[11px] text-[rgb(var(--color-text-secondary))]">
-            Branches live in the toolbar dropdown. Colored rails show timelines, and remote badges mark tracking tips.
+            The graph starts on the first-parent timeline. Use View to reveal merged, remote, and recovery history; compaction selection stays on the first-parent path.
           </p>
         </div>
       </div>
@@ -706,7 +799,7 @@ function FloatingCleanupPanel({
   return (
     <div
       ref={panelRef}
-      className="fixed z-[100] w-[min(560px,calc(100vw-2rem))] rounded-2xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))]/95 p-3 shadow-xl shadow-black/10 backdrop-blur"
+      className="fixed z-overlay w-[min(560px,calc(100vw-2rem))] rounded-2xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))]/95 p-3 shadow-xl shadow-black/10 backdrop-blur"
       style={{ left: position.x, top: position.y }}
     >
       <div
@@ -778,6 +871,38 @@ function getInitialCleanupPanelPosition() {
     x: Math.max(16, window.innerWidth - width - 280),
     y: 112,
   };
+}
+
+function GraphLayerCheckbox({
+  label,
+  description,
+  checked,
+  disabled = false,
+  onChange,
+}: {
+  label: string;
+  description: string;
+  checked: boolean;
+  disabled?: boolean;
+  onChange?: (checked: boolean) => void;
+}) {
+  return (
+    <label className={`flex items-start gap-2 rounded-lg px-2 py-1.5 transition-colors ${
+      disabled ? "opacity-45" : "cursor-pointer hover:bg-[rgb(var(--color-surface-alt))]"
+    }`}>
+      <input
+        type="checkbox"
+        checked={checked}
+        disabled={disabled}
+        onChange={(event) => onChange?.(event.target.checked)}
+        className="mt-0.5 h-3.5 w-3.5 accent-[rgb(var(--color-accent))]"
+      />
+      <span className="min-w-0">
+        <span className="block text-[11px] font-medium text-[rgb(var(--color-text))]">{label}</span>
+        <span className="block text-[10px] leading-snug text-[rgb(var(--color-text-secondary))]">{description}</span>
+      </span>
+    </label>
+  );
 }
 
 function CleanupStatus({
@@ -930,6 +1055,25 @@ function uniqueGraphNodes(nodes: GraphNode[]): GraphNode[] {
     unique.push(node);
   }
   return unique;
+}
+
+function classifyGraphNodes(nodes: GraphNode[], firstParentNodes: GraphNode[]): Map<string, HistoryGraphNodeType> {
+  const firstParentIds = new Set(firstParentNodes.map((node) => node.id));
+  const types = new Map<string, HistoryGraphNodeType>();
+
+  for (const node of nodes) {
+    if (node.reachable_from_support_ref && !node.reachable_from_local_variation) {
+      types.set(node.id, "support-ref");
+    } else if (node.reachable_from_remote_variation && !node.reachable_from_local_variation) {
+      types.set(node.id, "remote-only");
+    } else if (!firstParentIds.has(node.id)) {
+      types.set(node.id, "side-ancestry");
+    } else {
+      types.set(node.id, "first-parent");
+    }
+  }
+
+  return types;
 }
 
 function cleanupCandidateEndpointId(candidate: DraftlineHistoryCompactionCandidate): string {

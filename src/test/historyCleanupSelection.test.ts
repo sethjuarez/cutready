@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   cleanupRange,
+  firstParentTimelineIds,
+  firstParentTimelineNodes,
   headAnchoredCleanupSelection,
   isExactCleanupSelection,
   isExactHeadCleanupSelection,
@@ -8,13 +10,13 @@ import {
 } from "../utils/historyCleanupSelection";
 import type { GraphNode } from "../types/sketch";
 
-function node(id: string, index: number, isHead = false): GraphNode {
+function node(id: string, index: number, isHead = false, parents: string[] = []): GraphNode {
   return {
     id,
     message: id,
     timestamp: new Date(1_700_000_000_000 - index * 1_000).toISOString(),
     timeline: "main",
-    parents: [],
+    parents,
     lane: 0,
     is_head: isHead,
   };
@@ -53,5 +55,22 @@ describe("history cleanup selection", () => {
 
   it("rejects non-HEAD selections with holes", () => {
     expect(isExactCleanupSelection(nodes, new Set(["second", "fourth"]))).toBe(false);
+  });
+
+  it("follows only first-parent ancestry from the head", () => {
+    const graph = [
+      node("head", 0, true, ["milestone", "side-tip"]),
+      node("milestone", 1, false, ["base"]),
+      node("base", 4),
+      node("side-tip", 2, false, ["side-old"]),
+      node("side-old", 3, false, ["base"]),
+    ];
+
+    expect(firstParentTimelineNodes(graph).map((rangeNode) => rangeNode.id)).toEqual([
+      "head",
+      "milestone",
+      "base",
+    ]);
+    expect(firstParentTimelineIds(graph).has("side-tip")).toBe(false);
   });
 });

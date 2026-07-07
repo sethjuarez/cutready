@@ -31,10 +31,13 @@ function remoteBadgeWidth(label: string) {
   return Math.max(48, label.length * 6 + 14);
 }
 
+export type HistoryGraphNodeType = "first-parent" | "side-ancestry" | "remote-only" | "support-ref";
+
 interface FullHistoryGraphProps {
   nodes: GraphNode[];
   timelineMap: Map<string, TimelineMeta>;
   hasMultipleTimelines: boolean;
+  nodeTypes?: Map<string, HistoryGraphNodeType>;
   showRemoteBadges?: boolean;
   selectionMode?: boolean;
   selectedIds?: Set<string>;
@@ -53,6 +56,7 @@ interface LayoutNode {
   y: number;
   lane: number;
   color: string;
+  nodeType: HistoryGraphNodeType;
   timelineLabel: string;
   aliases: { timeline: string; label: string }[];
 }
@@ -66,6 +70,7 @@ export function FullHistoryGraph({
   nodes,
   timelineMap,
   hasMultipleTimelines,
+  nodeTypes = new Map(),
   showRemoteBadges = false,
   selectionMode = false,
   selectedIds = new Set(),
@@ -89,7 +94,7 @@ export function FullHistoryGraph({
       .reduce((max, label) => Math.max(max, remoteBadgeWidth(label)), 0);
     return Math.max(LEFT_PAD, widest + 24);
   }, [nodes, showRemoteBadges]);
-  const layout = useMemo(() => buildLayout(nodes, timelineMap, remoteLabelPad), [nodes, timelineMap, remoteLabelPad]);
+  const layout = useMemo(() => buildLayout(nodes, timelineMap, remoteLabelPad, nodeTypes), [nodes, timelineMap, remoteLabelPad, nodeTypes]);
   const width = Math.max(900, remoteLabelPad + Math.max(1, layout.laneCount) * LANE_W + LABEL_W);
   const height = Math.max(360, TOP_PAD * 2 + Math.max(1, layout.nodes.length) * ROW_H);
 
@@ -151,7 +156,8 @@ export function FullHistoryGraph({
               stroke={edge.from.color}
               strokeLinecap="round"
               strokeWidth={2.35}
-              strokeOpacity={0.58}
+              strokeOpacity={edgeOpacity(edge.from.nodeType, edge.to.nodeType)}
+              strokeDasharray={edgeDash(edge.from.nodeType, edge.to.nodeType)}
             />
           ))}
         </g>
@@ -162,23 +168,29 @@ export function FullHistoryGraph({
             const endpoint = endpointIds.has(node.id);
             const highlighted = highlightedIds.has(node.id);
             const selectable = !selectionMode || selectableIds.has(node.id);
-            const interactive = selectionMode || !node.is_head;
+            const interactive = selectionMode ? selectable : !node.is_head;
             const radius = node.is_head ? 8 : 6;
+            const isSideAncestry = item.nodeType === "side-ancestry";
+            const isAuxiliaryNode = item.nodeType === "remote-only" || item.nodeType === "support-ref";
+            const isMutedNode = isSideAncestry || isAuxiliaryNode;
+            const nodeOpacity = selectionMode && !selected && !selectable ? 0.38 : isSideAncestry ? 0.74 : isAuxiliaryNode ? 0.66 : 1;
             const selectTitle = selected
               ? "Selected compact range point"
               : selectable
                 ? "Select this snapshot for the compact range"
-                : "This snapshot is not valid for the current compact range";
+                : "This snapshot is not on the active timeline compact path";
             return (
               <g
                 key={node.id}
                 data-snapshot-id={node.id}
                 data-snapshot-head={node.is_head ? "true" : "false"}
+                data-snapshot-type={item.nodeType}
                 transform={`translate(0 ${item.y})`}
                 className={interactive ? "cursor-pointer" : undefined}
                 aria-label={selectionMode ? selectTitle : node.message}
                 onClick={() => {
                   if (selectionMode) {
+                    if (!selectable) return;
                     onToggleSelect?.(node.id);
                     return;
                   }
@@ -194,8 +206,9 @@ export function FullHistoryGraph({
                   y1={0}
                   y2={0}
                   stroke={item.color}
-                  strokeOpacity={0.22}
+                  strokeOpacity={isMutedNode ? 0.12 : 0.22}
                   strokeWidth={1.25}
+                  strokeDasharray={isMutedNode ? "3 4" : undefined}
                 />
                 {node.is_head && (
                   <circle
@@ -254,10 +267,11 @@ export function FullHistoryGraph({
                   cx={item.x}
                   cy={0}
                   r={radius}
-                  fill={selected ? "rgb(var(--color-warning))" : node.is_head || highlighted || selectionMode ? item.color : "rgb(var(--color-surface))"}
+                  fill={selected ? "rgb(var(--color-warning))" : node.is_head || highlighted || selectionMode ? item.color : isMutedNode ? "rgb(var(--color-surface-alt))" : "rgb(var(--color-surface))"}
                   stroke={selected ? "rgb(var(--color-warning))" : item.color}
-                  opacity={selectionMode && !selected && !selectable ? 0.38 : 1}
-                  strokeWidth={selected ? 3.2 : 2.2}
+                  opacity={nodeOpacity}
+                  strokeWidth={selected ? 3.2 : isMutedNode ? 1.6 : 2.2}
+                  strokeDasharray={isMutedNode ? "2 3" : undefined}
                   filter={node.is_head ? "url(#history-node-shadow)" : undefined}
                 />
                 {showRemoteBadges && remoteBadges(node).length > 0 && (() => {
@@ -287,7 +301,7 @@ export function FullHistoryGraph({
                     y={13}
                     fontSize={13}
                     fontWeight={node.is_head ? 700 : 560}
-                    fill="rgb(var(--color-text))"
+                    fill={isMutedNode ? "rgb(var(--color-text-secondary))" : "rgb(var(--color-text))"}
                   >
                     {truncate(node.message, 58)}
                   </text>
@@ -299,9 +313,16 @@ export function FullHistoryGraph({
                   <g transform="translate(0 38)">
                     {node.is_head && <SvgBadge x={0} label="HEAD" tone="accent" />}
                     {node.is_branch_tip && <SvgBadge x={node.is_head ? 48 : 0} label="tip" tone="neutral" />}
-                    {hasMultipleTimelines && (
+                    {item.nodeType !== "first-parent" && (
                       <SvgBadge
                         x={(node.is_head ? 48 : 0) + (node.is_branch_tip ? 36 : 0)}
+                        label={nodeTypeLabel(item.nodeType)}
+                        tone={item.nodeType === "side-ancestry" ? "side" : "neutral"}
+                      />
+                    )}
+                    {hasMultipleTimelines && (
+                      <SvgBadge
+                        x={(node.is_head ? 48 : 0) + (node.is_branch_tip ? 36 : 0) + (item.nodeType !== "first-parent" ? 86 : 0)}
                         label={item.timelineLabel}
                         tone="timeline"
                         color={item.color}
@@ -310,7 +331,7 @@ export function FullHistoryGraph({
                     {item.aliases.slice(0, 2).map((alias, index) => (
                       <SvgBadge
                         key={alias.timeline}
-                        x={(node.is_head ? 48 : 0) + (node.is_branch_tip ? 36 : 0) + (hasMultipleTimelines ? 98 : 0) + index * 96}
+                        x={(node.is_head ? 48 : 0) + (node.is_branch_tip ? 36 : 0) + (item.nodeType !== "first-parent" ? 86 : 0) + (hasMultipleTimelines ? 98 : 0) + index * 96}
                         label={`also ${alias.label}`}
                         tone="neutral"
                       />
@@ -326,7 +347,12 @@ export function FullHistoryGraph({
   );
 }
 
-function buildLayout(nodes: GraphNode[], timelineMap: Map<string, TimelineMeta>, leftPad: number) {
+function buildLayout(
+  nodes: GraphNode[],
+  timelineMap: Map<string, TimelineMeta>,
+  leftPad: number,
+  nodeTypes: Map<string, HistoryGraphNodeType>,
+) {
   const seen = new Set<string>();
   const primary: GraphNode[] = [];
   const aliases = new Map<string, { timeline: string; label: string }[]>();
@@ -343,19 +369,21 @@ function buildLayout(nodes: GraphNode[], timelineMap: Map<string, TimelineMeta>,
     }
   }
 
-  const lanes = Array.from(new Set(primary.map((node) => node.lane))).sort((a, b) => a - b);
+  const lanes = Array.from(new Set(primary.map((node) => renderLane(node, nodeTypes.get(node.id) ?? "first-parent")))).sort((a, b) => a - b);
   const laneMap = new Map(lanes.map((lane, index) => [lane, index]));
   const ordered = [...primary].sort((a, b) => +new Date(b.timestamp) - +new Date(a.timestamp));
   const byId = new Map<string, LayoutNode>();
   const layoutNodes = ordered.map((node, index) => {
     const timelineInfo = timelineMap.get(node.timeline);
-    const lane = laneMap.get(node.lane) ?? 0;
+    const nodeType = nodeTypes.get(node.id) ?? "first-parent";
+    const lane = laneMap.get(renderLane(node, nodeType)) ?? 0;
     const item: LayoutNode = {
       node,
       lane,
       x: leftPad + lane * LANE_W,
       y: TOP_PAD + index * ROW_H,
       color: laneColor(timelineInfo?.colorIndex ?? lane),
+      nodeType,
       timelineLabel: timelineInfo?.label ?? node.timeline,
       aliases: aliases.get(node.id) ?? [],
     };
@@ -377,12 +405,30 @@ function buildLayout(nodes: GraphNode[], timelineMap: Map<string, TimelineMeta>,
   };
 }
 
+function renderLane(node: GraphNode, nodeType: HistoryGraphNodeType) {
+  if (nodeType === "first-parent") return 0;
+  if (nodeType === "side-ancestry") return Math.max(1, node.lane);
+  if (nodeType === "remote-only") return Math.max(2, node.lane);
+  return Math.max(3, node.lane);
+}
+
 function edgePath(from: LayoutNode, to: LayoutNode) {
   if (from.x === to.x) {
     return `M ${from.x} ${from.y + 8} L ${to.x} ${to.y - 8}`;
   }
   const midY = (from.y + to.y) / 2;
   return `M ${from.x} ${from.y + 8} C ${from.x} ${midY}, ${to.x} ${midY}, ${to.x} ${to.y - 8}`;
+}
+
+function edgeOpacity(fromType: HistoryGraphNodeType, toType: HistoryGraphNodeType) {
+  if (fromType === "first-parent" && toType === "first-parent") return 0.58;
+  if (fromType === "side-ancestry" || toType === "side-ancestry") return 0.34;
+  return 0.26;
+}
+
+function edgeDash(fromType: HistoryGraphNodeType, toType: HistoryGraphNodeType) {
+  if (fromType === "first-parent" && toType === "first-parent") return undefined;
+  return fromType === "side-ancestry" || toType === "side-ancestry" ? "5 5" : "2 6";
 }
 
 function GraphGrid({ height, lanes, leftPad }: { height: number; lanes: number; leftPad: number }) {
@@ -415,14 +461,20 @@ function SvgBadge({
 }: {
   x: number;
   label: string;
-  tone: "accent" | "neutral" | "timeline";
+  tone: "accent" | "neutral" | "timeline" | "side";
   color?: string;
 }) {
   const displayLabel = tone === "timeline" ? label : truncate(label, 14);
   const width = tone === "timeline"
     ? Math.max(28, displayLabel.length * 5.8 + 10)
     : Math.min(78, Math.max(34, displayLabel.length * 6.5 + 16));
-  const fill = tone === "accent" ? "rgb(var(--color-accent))" : tone === "timeline" ? color ?? "rgb(var(--color-accent))" : "rgb(var(--color-surface-alt))";
+  const fill = tone === "accent"
+    ? "rgb(var(--color-accent))"
+    : tone === "timeline"
+      ? color ?? "rgb(var(--color-accent))"
+      : tone === "side"
+        ? "rgb(var(--color-text-secondary))"
+        : "rgb(var(--color-surface-alt))";
   const textFill = tone === "neutral" ? "rgb(var(--color-text-secondary))" : fill;
 
   return (
@@ -433,6 +485,19 @@ function SvgBadge({
       </text>
     </g>
   );
+}
+
+function nodeTypeLabel(nodeType: HistoryGraphNodeType) {
+  switch (nodeType) {
+    case "side-ancestry":
+      return "merged history";
+    case "remote-only":
+      return "remote history";
+    case "support-ref":
+      return "recovery history";
+    case "first-parent":
+      return "timeline";
+  }
 }
 
 function RemoteSvgBadge({ label }: { label: string }) {

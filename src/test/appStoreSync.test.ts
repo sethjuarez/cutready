@@ -1,8 +1,9 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockGetDraftlineSyncStatus = vi.hoisted(() => vi.fn());
 const mockListDraftlineRemotes = vi.hoisted(() => vi.fn());
 const mockFetchDraftlineRemote = vi.hoisted(() => vi.fn());
+const mockListDraftlinePendingSnapshotCleanups = vi.hoisted(() => vi.fn());
 const mockGetGitHubAuthStatus = vi.hoisted(() => vi.fn());
 
 vi.mock("../services/draftlineVersioning", async (importOriginal) => {
@@ -12,6 +13,7 @@ vi.mock("../services/draftlineVersioning", async (importOriginal) => {
     fetchDraftlineRemote: (...args: unknown[]) => mockFetchDraftlineRemote(...args),
     getDraftlineSyncStatus: (...args: unknown[]) => mockGetDraftlineSyncStatus(...args),
     listDraftlineRemotes: (...args: unknown[]) => mockListDraftlineRemotes(...args),
+    listDraftlinePendingSnapshotCleanups: (...args: unknown[]) => mockListDraftlinePendingSnapshotCleanups(...args),
   };
 });
 
@@ -19,21 +21,28 @@ vi.mock("../services/githubSetup", () => ({
   getGitHubAuthStatus: (...args: unknown[]) => mockGetGitHubAuthStatus(...args),
 }));
 
-import { useAppStore } from "../stores/appStore";
+import { remoteSyncErrorMessage, useAppStore } from "../stores/appStore";
 import { useToastStore } from "../stores/toastStore";
 
 describe("appStore remote sync status", () => {
+  beforeEach(() => {
+    mockListDraftlinePendingSnapshotCleanups.mockResolvedValue([]);
+  });
+
   afterEach(() => {
     mockFetchDraftlineRemote.mockReset();
     mockGetGitHubAuthStatus.mockReset();
     mockGetDraftlineSyncStatus.mockReset();
     mockListDraftlineRemotes.mockReset();
+    mockListDraftlinePendingSnapshotCleanups.mockReset();
     useAppStore.setState({
       currentRemote: null,
+      timelines: [],
       syncStatus: null,
       syncError: null,
       incomingCommits: [],
       isSyncing: false,
+      pendingHistoryCleanup: null,
     });
     useToastStore.setState({ toasts: [] });
   });
@@ -147,5 +156,42 @@ describe("appStore remote sync status", () => {
     } finally {
       warn.mockRestore();
     }
+  });
+
+  it("normalizes Git HTTP 401 sync failures into a GitHub reconnect message", () => {
+    const message = remoteSyncErrorMessage(
+      "{\"code\":\"git\",\"message\":\"git operation failed: request failed with status code: 401; class=Http (34)\"}",
+    );
+
+    expect(message).toBe("GitHub rejected the remote operation. Reconnect GitHub in Settings, then try again.");
+  });
+
+  it("loads durable pending cleanup state when Draftline blocks normal sync", async () => {
+    const pendingCleanup = {
+      plan_id: "cleanup-1",
+      target_variation: "main",
+      expected_local_head: "before",
+      replacement_head: "after",
+      backup_refs: [],
+      ref_updates: [],
+      publish_status: "shared_history_rewrite_required",
+    };
+    mockGetGitHubAuthStatus.mockResolvedValueOnce({ connected: true });
+    mockFetchDraftlineRemote.mockRejectedValueOnce({
+      code: "history_cleanup_blocked",
+      message: "Pending history cleanup must be resolved first.",
+      details: { operation: "fetch", diagnostics: [], can_proceed: false },
+    });
+    mockListDraftlinePendingSnapshotCleanups.mockResolvedValueOnce([pendingCleanup]);
+    useAppStore.setState({
+      currentRemote: { name: "origin", url: "https://github.com/sethjuarez/cutready.git" },
+      timelines: [{ name: "main", label: "main", is_active: true, snapshot_count: 1, color_index: 0 }],
+    });
+
+    await useAppStore.getState().fetchFromRemote();
+
+    expect(mockListDraftlinePendingSnapshotCleanups).toHaveBeenCalledWith("main");
+    expect(useAppStore.getState().pendingHistoryCleanup).toEqual(pendingCleanup);
+    expect(useAppStore.getState().syncError).toContain("Publish or undo compacted history");
   });
 });

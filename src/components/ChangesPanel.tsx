@@ -24,6 +24,7 @@ import { IncomingPreview, SyncBar } from "./SyncBar";
 import { TimelineSelector } from "./TimelineSelector";
 import { useConfirmDialog } from "./ConfirmDialog";
 import type { DiffEntry } from "../types/sketch";
+import { firstParentTimelineNodes } from "../utils/historyCleanupSelection";
 
 export function ChangesPanel() {
   const changedFiles = useAppStore((s) => s.changedFiles);
@@ -125,34 +126,7 @@ export function ChangesPanel() {
     : null;
   const hasLegacyMasterTimeline = timelines.some((timeline) => timeline.name === "master")
     && !timelines.some((timeline) => timeline.name === "main");
-  const activeNodes = (() => {
-    if (!activeTimeline) return graphNodes;
-    const branchNodes = graphNodes.filter((n) => n.timeline === activeTimeline.name);
-    const nodeMap = new Map(graphNodes.map((n) => [n.id, n]));
-    const branchIds = new Set(branchNodes.map((n) => n.id));
-    const ancestorIds = new Set<string>();
-    const frontier: string[] = [];
-
-    for (const node of branchNodes) {
-      for (const parentId of node.parents) {
-        if (!branchIds.has(parentId) && nodeMap.has(parentId)) frontier.push(parentId);
-      }
-    }
-
-    while (frontier.length > 0) {
-      const id = frontier.pop()!;
-      if (ancestorIds.has(id)) continue;
-      ancestorIds.add(id);
-      const node = nodeMap.get(id);
-      if (!node) continue;
-      for (const parentId of node.parents) {
-        if (!ancestorIds.has(parentId) && nodeMap.has(parentId)) frontier.push(parentId);
-      }
-    }
-
-    const ancestors = graphNodes.filter((n) => ancestorIds.has(n.id));
-    return [...branchNodes, ...ancestors];
-  })();
+  const activeNodes = firstParentTimelineNodes(graphNodes);
 
   const timelineMap = new Map(
     timelines.map((t) => [t.name, { label: t.label, colorIndex: t.color_index }]),
@@ -600,7 +574,11 @@ function useAnchoredPopover(
 
 function WorkspaceModeBadge({ remote, syncError }: { remote: boolean; syncError: string | null }) {
   const degraded = remote && !!syncError;
-  const label = remote ? (degraded ? "Remote issue" : "Remote") : "Local";
+  const hasAuthBlocker = !!syncError && /github|sign-in|auth|unauthorized|401/i.test(syncError);
+  const hasIncomingBlocker = !!syncError && /incoming|pull|remote is ahead/i.test(syncError);
+  const label = remote
+    ? (degraded ? (hasAuthBlocker ? "GitHub sign-in" : hasIncomingBlocker ? "Incoming changes" : "Remote issue") : "Remote")
+    : "Local";
   const toneClass = degraded
     ? "border-warning/20 bg-warning/10 text-warning"
     : remote
