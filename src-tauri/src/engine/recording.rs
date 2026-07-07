@@ -206,10 +206,7 @@ pub fn check_ffmpeg_status() -> FfmpegStatus {
 
     match ffmpeg::resolve_ffprobe() {
         Ok(path) => with_ffprobe_status(ffmpeg_status, probe_ffprobe_executable(path)),
-        Err(err) => with_ffprobe_status(
-            ffmpeg_status,
-            (false, None, None, Some(err.to_string())),
-        ),
+        Err(err) => with_ffprobe_status(ffmpeg_status, (false, None, None, Some(err.to_string()))),
     }
 }
 
@@ -253,7 +250,9 @@ fn probe_ffmpeg_executable(path: PathBuf) -> FfmpegStatus {
     }
 }
 
-fn probe_ffprobe_executable(path: PathBuf) -> (bool, Option<String>, Option<String>, Option<String>) {
+fn probe_ffprobe_executable(
+    path: PathBuf,
+) -> (bool, Option<String>, Option<String>, Option<String>) {
     match ffmpeg::run_ffprobe(["-version"]) {
         Ok(output) if output.status.success() => (
             true,

@@ -3,6 +3,7 @@ import {
   createDraftlineHostFacade,
   createMergeConflictViewModel,
   createWholeFileUseContentResolutions,
+  isHistoryCleanupBlockedError,
   type ApplyIncomingReport,
   type ChangedFile,
   type ConflictContentSource,
@@ -31,8 +32,10 @@ import {
   type HistoryCleanupRemoteImpact,
   type HistoryCleanupUndoPreflight,
   type HistoryCleanupUndoToken,
+  type HistoryCleanupBlockedError,
   type StaleVersionResolution,
   type TimelineCleanupResult,
+  type PendingHistoryCleanup,
   type VariationSummary,
   type Version,
   type VersionDiff,
@@ -61,6 +64,8 @@ export type DraftlineHistoryCleanupUndoPreflight = HistoryCleanupUndoPreflight;
 export type DraftlineHistoryCleanupUndoToken = HistoryCleanupUndoToken;
 export type DraftlineStaleVersionResolution = StaleVersionResolution;
 export type DraftlineTimelineCleanupResult = TimelineCleanupResult;
+export type DraftlinePendingHistoryCleanup = PendingHistoryCleanup;
+export type DraftlineHistoryCleanupBlockedError = HistoryCleanupBlockedError;
 export type DraftlineHistoryCompactionCandidate = HistoryCompactionCandidate;
 export type DraftlineHistoryCompactionCandidates = HistoryCompactionCandidates;
 
@@ -78,6 +83,12 @@ export function isDraftlineVariationCreateConflictError(
   error: unknown,
 ): error is DraftlineVariationCreateConflictError {
   return error instanceof DraftlineVariationCreateConflictError;
+}
+
+export function isDraftlineHistoryCleanupBlockedError(
+  error: unknown,
+): error is HistoryCleanupBlockedError {
+  return isHistoryCleanupBlockedError(error);
 }
 
 export interface DraftlineMergeIncomingReport {
@@ -153,15 +164,15 @@ export async function listDraftlineVersions(): Promise<VersionEntry[]> {
 }
 
 export async function listDraftlineGraphNodes(): Promise<GraphNode[]> {
-  const [graph, variations] = await Promise.all([
-    facade().workspaceGraphOverview({
-      include_remotes: true,
-      include_support_refs: true,
-      max_nodes: 250,
-      recent_nodes: 80,
-    }),
-    facade().variations(),
-  ]);
+  const variations = await facade().variations();
+  const activeVariation = variations.find((entry) => entry.variation.is_current)?.variation.id
+    ?? variations[0]?.variation.id
+    ?? "main";
+  const graph = await facade().workspaceGraphForVariation(activeVariation, {
+    include_remotes: true,
+    include_support_refs: true,
+    limit: 250,
+  });
   const laneByVariation = new Map(variations.map((entry, index) => [entry.variation.id, index]));
   const refsByVersion = refsByTargetVersion(graph.refs);
 
@@ -180,6 +191,15 @@ export async function listDraftlineGraphNodes(): Promise<GraphNode[]> {
       is_branch_tip: node.is_tip || refs.some((ref) => ref.kind === "local_variation" && ref.is_user_facing),
       is_remote_tip: remoteLabels.length > 0,
       remote_labels: remoteLabels,
+      ...(typeof node.reachable_from_local_variation === "boolean"
+        ? { reachable_from_local_variation: node.reachable_from_local_variation }
+        : {}),
+      ...(typeof node.reachable_from_remote_variation === "boolean"
+        ? { reachable_from_remote_variation: node.reachable_from_remote_variation }
+        : {}),
+      ...(typeof node.reachable_from_support_ref === "boolean"
+        ? { reachable_from_support_ref: node.reachable_from_support_ref }
+        : {}),
       author: node.version.author.name,
     };
   });
@@ -542,7 +562,11 @@ export async function previewDraftlineSnapshotCleanup(
   newestVersion: string,
   label: string,
   targetVariation?: string | null,
+  remote?: string | null,
 ): Promise<HistoryCleanupPreview> {
+  const remotePolicy = remote && targetVariation
+    ? { kind: "push_with_lease" as const, remote, branch: targetVariation }
+    : { kind: "local_only" as const };
   return facade().previewHistoryCleanup({
     target_variation: targetVariation ?? null,
     base: { kind: "auto" },
@@ -561,7 +585,7 @@ export async function previewDraftlineSnapshotCleanup(
       backup_ref_name: null,
       require_clean_worktree: true,
     },
-    remote_policy: { kind: "local_only" },
+    remote_policy: remotePolicy,
   });
 }
 
@@ -587,6 +611,27 @@ export async function publishDraftlineSnapshotCleanup(
   token: HistoryCleanupPublishToken,
 ): Promise<HistoryCleanupPublishResult> {
   return facade().publishHistoryCleanup(token);
+}
+
+export async function listDraftlinePendingSnapshotCleanups(
+  targetVariation?: string | null,
+): Promise<PendingHistoryCleanup[]> {
+  return facade().pendingHistoryCleanups(targetVariation ?? undefined);
+}
+
+export async function publishDraftlinePendingSnapshotCleanup(
+  planId: string,
+  remote?: string | null,
+): Promise<HistoryCleanupPublishResult> {
+  return facade().publishPendingHistoryCleanup(planId, remote ?? undefined);
+}
+
+export async function undoDraftlinePendingSnapshotCleanup(planId: string): Promise<TimelineCleanupResult> {
+  return facade().undoPendingHistoryCleanup(planId);
+}
+
+export async function abandonDraftlinePendingSnapshotCleanup(planId: string): Promise<PendingHistoryCleanup> {
+  return facade().abandonPendingHistoryCleanup(planId);
 }
 
 export async function resolveDraftlineRewrittenVersion(versionId: string): Promise<StaleVersionResolution> {

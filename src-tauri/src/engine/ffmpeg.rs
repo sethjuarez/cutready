@@ -164,7 +164,11 @@ fn platform_search_dirs() -> Vec<PathBuf> {
     #[cfg(target_os = "windows")]
     {
         if let Some(local_app_data) = env::var_os("LOCALAPPDATA") {
-            dirs.push(PathBuf::from(local_app_data).join("Microsoft\\WinGet\\Links"));
+            let local_app_data = PathBuf::from(local_app_data);
+            dirs.push(local_app_data.join("Microsoft\\WinGet\\Links"));
+            dirs.extend(winget_ffmpeg_package_dirs(
+                &local_app_data.join("Microsoft\\WinGet\\Packages"),
+            ));
         }
         if let Some(program_data) = env::var_os("ProgramData") {
             dirs.push(PathBuf::from(program_data).join("chocolatey\\bin"));
@@ -187,6 +191,39 @@ fn platform_search_dirs() -> Vec<PathBuf> {
             PathBuf::from("/bin"),
             PathBuf::from("/snap/bin"),
         ]);
+    }
+
+    dirs
+}
+
+#[cfg(target_os = "windows")]
+fn winget_ffmpeg_package_dirs(packages_root: &Path) -> Vec<PathBuf> {
+    let Ok(packages) = std::fs::read_dir(packages_root) else {
+        return Vec::new();
+    };
+
+    let mut dirs = Vec::new();
+    for package in packages.flatten() {
+        let package_path = package.path();
+        let Some(package_name) = package_path.file_name().and_then(|name| name.to_str()) else {
+            continue;
+        };
+        if !package_name.starts_with("Gyan.FFmpeg_") {
+            continue;
+        }
+
+        let Ok(builds) = std::fs::read_dir(&package_path) else {
+            continue;
+        };
+        for build in builds.flatten() {
+            let build_path = build.path();
+            let Some(build_name) = build_path.file_name().and_then(|name| name.to_str()) else {
+                continue;
+            };
+            if build_name.starts_with("ffmpeg-") {
+                dirs.push(build_path.join("bin"));
+            }
+        }
     }
 
     dirs
@@ -271,5 +308,24 @@ mod tests {
             dedupe_paths(vec![first.clone(), second.clone(), first.clone()]),
             vec![first, second]
         );
+    }
+
+    #[test]
+    fn windows_winget_ffmpeg_package_dirs_include_gyan_bin() {
+        #[cfg(target_os = "windows")]
+        {
+            let root = env::temp_dir().join(format!(
+                "cutready-winget-ffmpeg-test-{}",
+                std::process::id()
+            ));
+            let package = root.join("Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe");
+            let bin = package.join("ffmpeg-8.1.2-full_build").join("bin");
+            std::fs::create_dir_all(&bin).expect("create winget ffmpeg fixture");
+
+            let dirs = winget_ffmpeg_package_dirs(&root);
+
+            assert!(dirs.contains(&bin));
+            let _ = std::fs::remove_dir_all(root);
+        }
     }
 }

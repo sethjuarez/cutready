@@ -154,8 +154,15 @@ describe("draftlineVersioning", () => {
     expect(mockInvoke).toHaveBeenCalledTimes(1);
   });
 
-  it("maps Draftline workspace graph overview onto graph nodes", async () => {
+  it("maps the active Draftline variation graph onto graph nodes", async () => {
     mockInvoke
+      .mockResolvedValueOnce([
+        {
+          variation: variation("main", "Main"),
+          head_version: version("2222222222222222222222222222222222222222", "Second", 1_700_000_100),
+          reachable_version_count: 2,
+        },
+      ])
       .mockResolvedValueOnce({
         workspace_id: { root: WORKSPACE },
         current_variation: "main",
@@ -176,6 +183,9 @@ describe("draftlineVersioning", () => {
             is_head: true,
             is_current: true,
             is_tip: true,
+            reachable_from_local_variation: true,
+            reachable_from_remote_variation: true,
+            reachable_from_support_ref: false,
             layout: { lane: 0, row: 0, display_label: "main" },
           },
           {
@@ -216,14 +226,7 @@ describe("draftlineVersioning", () => {
             is_user_facing: true,
           },
         ],
-      })
-      .mockResolvedValueOnce([
-        {
-          variation: variation("main", "Main"),
-          head_version: version("2222222222222222222222222222222222222222", "Second", 1_700_000_100),
-          reachable_version_count: 2,
-        },
-      ]);
+      });
 
     await expect(listDraftlineGraphNodes()).resolves.toEqual([
       {
@@ -237,6 +240,9 @@ describe("draftlineVersioning", () => {
         is_branch_tip: true,
         is_remote_tip: true,
         remote_labels: ["origin/main"],
+        reachable_from_local_variation: true,
+        reachable_from_remote_variation: true,
+        reachable_from_support_ref: false,
         author: "Seth",
       },
       {
@@ -253,19 +259,19 @@ describe("draftlineVersioning", () => {
         author: "Maria",
       },
     ]);
-    expect(mockInvoke).toHaveBeenNthCalledWith(1, "get_workspace_graph_overview", {
+    expect(mockInvoke).toHaveBeenNthCalledWith(1, "list_variations", {
+      request: { workspace_path: WORKSPACE },
+    });
+    expect(mockInvoke).toHaveBeenNthCalledWith(2, "get_workspace_graph_for_variation", {
       request: {
         workspace_path: WORKSPACE,
+        variation_id: "main",
         options: {
           include_remotes: true,
           include_support_refs: true,
-          max_nodes: 250,
-          recent_nodes: 80,
+          limit: 250,
         },
       },
-    });
-    expect(mockInvoke).toHaveBeenNthCalledWith(2, "list_variations", {
-      request: { workspace_path: WORKSPACE },
     });
   });
 
@@ -468,6 +474,7 @@ describe("draftlineVersioning", () => {
       "2222222222222222222222222222222222222222",
       "Demo milestone",
       "main",
+      "origin",
     )).resolves.toEqual(preview);
     await expect(applyDraftlineSnapshotCleanup("cleanup-plan-1")).resolves.toEqual(result);
 
@@ -495,7 +502,7 @@ describe("draftlineVersioning", () => {
             backup_ref_name: null,
             require_clean_worktree: true,
           },
-          remote_policy: { kind: "local_only" },
+          remote_policy: { kind: "push_with_lease", remote: "origin", branch: "main" },
         },
       },
     });

@@ -6,7 +6,7 @@ import { SyncBar } from "./SyncBar";
 import { TimelineSelector } from "./TimelineSelector";
 import { RefreshCw, Search, Clock, Download, GitPullRequestArrow, X } from "lucide-react";
 import { useConfirmDialog } from "./ConfirmDialog";
-import { headAnchoredCleanupSelection, isExactHeadCleanupSelection } from "../utils/historyCleanupSelection";
+import { firstParentTimelineNodes, headAnchoredCleanupSelection, isExactHeadCleanupSelection } from "../utils/historyCleanupSelection";
 
 export function VersionHistory() {
   const graphNodes = useAppStore((s) => s.graphNodes);
@@ -40,7 +40,7 @@ export function VersionHistory() {
   const [squashError, setSquashError] = useState<string | null>(null);
   const [squashing, setSquashing] = useState(false);
 
-  // Show active branch + its ancestor history from the originating branch
+  // Show the product-facing first-parent story, not merged side ancestry.
   const activeTimeline = timelines.find((t) => t.is_active);
   const head = graphNodes.find((node) => node.is_head);
   const emptyStartedBranch = startedBranchFromSnapshot
@@ -48,35 +48,7 @@ export function VersionHistory() {
     && head?.id === startedBranchFromSnapshot.snapshotId
     ? startedBranchFromSnapshot
     : null;
-  const activeNodes = (() => {
-    if (!activeTimeline) return graphNodes;
-    const branchNodes = graphNodes.filter((n) => n.timeline === activeTimeline.name);
-    const nodeMap = new Map(graphNodes.map((n) => [n.id, n]));
-    const branchIds = new Set(branchNodes.map((n) => n.id));
-
-    // Walk parent chain from fork points to collect ancestor commits
-    const ancestorIds = new Set<string>();
-    const frontier: string[] = [];
-    for (const n of branchNodes) {
-      for (const pid of n.parents) {
-        if (!branchIds.has(pid) && nodeMap.has(pid)) frontier.push(pid);
-      }
-    }
-    while (frontier.length > 0) {
-      const id = frontier.pop()!;
-      if (ancestorIds.has(id)) continue;
-      ancestorIds.add(id);
-      const node = nodeMap.get(id);
-      if (node) {
-        for (const pid of node.parents) {
-          if (!ancestorIds.has(pid) && nodeMap.has(pid)) frontier.push(pid);
-        }
-      }
-    }
-
-    const ancestors = graphNodes.filter((n) => ancestorIds.has(n.id));
-    return [...branchNodes, ...ancestors];
-  })();
+  const activeNodes = firstParentTimelineNodes(graphNodes);
 
   // Build a label map: timeline name → { label, color_index }
   const timelineMap = new Map(

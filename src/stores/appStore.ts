@@ -12,10 +12,12 @@ import {
   getDraftlineSyncStatus,
   hasDraftlineShelf,
   hasDraftlineChanges,
+  isDraftlineHistoryCleanupBlockedError,
   isDraftlineVariationCreateConflictError,
   listDraftlineIncomingCommits,
   listDraftlineChangedFiles,
   listDraftlineGraphNodes,
+  listDraftlinePendingSnapshotCleanups,
   listDraftlineLargeChangedFiles,
   listDraftlineRemoteBranches,
   listDraftlineRemotes,
@@ -29,6 +31,7 @@ import {
   mergeDraftlineIncoming,
   mergeDraftlineIncomingWithResolutions,
   publishDraftlineChanges,
+  publishDraftlinePendingSnapshotCleanup,
   publishDraftlineSnapshotCleanup,
   popDraftlineShelf,
   preflightDraftlineRenameVariation,
@@ -43,12 +46,14 @@ import {
   shelveDraftlineChanges,
   switchDraftlineVariation,
   undoDraftlineSnapshotCleanup,
+  undoDraftlinePendingSnapshotCleanup,
   type DraftlineRestoreVersionTarget,
   type DraftlineMergeIncomingToken,
   type DraftlineHistoryCleanupPreview,
   type DraftlineHistoryCleanupPublishResult,
   type DraftlineHistoryCompactionCandidates,
   type DraftlineTimelineCleanupResult,
+  type DraftlinePendingHistoryCleanup,
 } from "../services/draftlineVersioning";
 import { recordActivityEntries } from "../services/telemetry";
 import { getGitHubAuthStatus } from "../services/githubSetup";
@@ -117,6 +122,26 @@ export function errorMessage(error: unknown): string {
   }
   return String(error);
 }
+
+export function remoteSyncErrorMessage(error: unknown): string {
+  if (isDraftlineHistoryCleanupBlockedError(error)) {
+    return PENDING_CLEANUP_INCOMING_MESSAGE;
+  }
+  const message = errorMessage(error);
+  const lower = message.toLowerCase();
+  if (
+    lower.includes("status code: 401")
+    || lower.includes("\"code\":\"unauthorized\"")
+    || lower.includes("authentication required")
+    || lower.includes("unauthorized")
+  ) {
+    return GITHUB_REMOTE_AUTH_FAILED_MESSAGE;
+  }
+  return message;
+}
+
+const PENDING_CLEANUP_INCOMING_MESSAGE =
+  "Publish or undo compacted history before getting incoming remote saves. Pulling first would change the local timeline and invalidate the compacted-history publish.";
 
 function chatMessagePreviewContent(message: ChatMessage): string {
   if (typeof message.content === "string") return message.content;
@@ -251,6 +276,8 @@ function buildShareUrl(remoteUrl: string, branch: string): string | null {
 
 const GITHUB_REMOTE_AUTH_MESSAGE =
   "This project has a GitHub remote. Connect GitHub in Settings > Repository before syncing.";
+const GITHUB_REMOTE_AUTH_FAILED_MESSAGE =
+  "GitHub rejected the remote operation. Reconnect GitHub in Settings, then try again.";
 
 function isGitHubRemoteUrl(remoteUrl: string): boolean {
   return /github\.com[/:][^/]+\/[^\s/]+(?:\.git)?$/i.test(remoteUrl.trim());
@@ -494,6 +521,8 @@ interface AppStoreState {
   startedBranchFromSnapshot: { branchName: string; snapshotId: string } | null;
   /** Most recent Draftline history cleanup result, used for guarded undo. */
   lastHistoryCleanup: DraftlineTimelineCleanupResult | null;
+  /** Durable Draftline pending cleanup that blocks normal remote operations until resolved. */
+  pendingHistoryCleanup: DraftlinePendingHistoryCleanup | null;
   /** Whether there are unsaved changes since the last snapshot. */
   isDirty: boolean;
   /** List of changed files since last snapshot (for Changes panel). */
@@ -836,6 +865,8 @@ interface AppStoreState {
   previewSnapshotCleanup: (oldestCommitId: string, newestCommitId: string, label: string, selectedRangeCommitIds?: string[]) => Promise<DraftlineHistoryCleanupPreview>;
   /** Apply a previously previewed Draftline cleanup plan. */
   applySnapshotCleanup: (planId: string) => Promise<DraftlineTimelineCleanupResult>;
+  /** Refresh Draftline's durable pending history-cleanup state for the active timeline. */
+  loadPendingHistoryCleanup: () => Promise<DraftlinePendingHistoryCleanup | null>;
   /** Publish an applied Draftline cleanup plan to the remote with Draftline's lease-protected token. */
   publishSnapshotCleanup: (planId: string, remote: string) => Promise<DraftlineHistoryCleanupPublishResult | null>;
   /** Undo a previously applied Draftline cleanup plan using Draftline's guarded backup token. */
@@ -1033,6 +1064,7 @@ function resetPersistenceState(): Pick<AppStoreState,
   | "pendingTimelineAfterSave"
   | "startedBranchFromSnapshot"
   | "lastHistoryCleanup"
+  | "pendingHistoryCleanup"
   | "isDirty"
   | "changedFiles"
   | "hasStash"
@@ -1063,6 +1095,7 @@ function resetPersistenceState(): Pick<AppStoreState,
     pendingTimelineAfterSave: null,
     startedBranchFromSnapshot: null,
     lastHistoryCleanup: null,
+    pendingHistoryCleanup: null,
     isDirty: false,
     changedFiles: [],
     hasStash: false,
@@ -1211,6 +1244,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   pendingTimelineAfterSave: null,
   startedBranchFromSnapshot: null,
   lastHistoryCleanup: null,
+  pendingHistoryCleanup: null,
   isDirty: false,
   changedFiles: [],
   saving: false,
@@ -2843,6 +2877,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     try {
       const timelines = await listDraftlineTimelines();
       set({ timelines });
+      await get().loadPendingHistoryCleanup();
     } catch (err) {
       console.error("Failed to load timelines:", err);
     }
@@ -2996,7 +3031,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   },
 
   previewSnapshotCleanup: async (oldestCommitId, newestCommitId, label, selectedRangeCommitIds) => {
-    const { graphNodes, timelines } = get();
+    const { currentRemote, graphNodes, timelines } = get();
     if (selectedRangeCommitIds) {
       const selected = new Set(selectedRangeCommitIds);
       const allKnown = selectedRangeCommitIds.every((id) => graphNodes.some((node) => node.id === id));
@@ -3013,7 +3048,13 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       throw new Error("Select a contiguous range of snapshots to compact.");
     }
     const targetVariation = timelines.find((timeline) => timeline.is_active)?.name ?? null;
-    return previewDraftlineSnapshotCleanup(oldestCommitId, newestCommitId, label, targetVariation);
+    return previewDraftlineSnapshotCleanup(
+      oldestCommitId,
+      newestCommitId,
+      label,
+      targetVariation,
+      currentRemote?.name ?? null,
+    );
   },
 
   applySnapshotCleanup: async (planId) => {
@@ -3022,6 +3063,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     await get().loadVersions();
     await get().loadGraphData();
     await get().loadTimelines();
+    await get().loadPendingHistoryCleanup();
     await get().checkDirty();
     const mainTabs = rewriteSnapshotPreviewTabs(get().openTabs, result, makeMainTabId);
     const splitTabs = rewriteSnapshotPreviewTabs(get().splitTabs, result, makeSplitTabId);
@@ -3044,7 +3086,36 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     return result;
   },
 
+  loadPendingHistoryCleanup: async () => {
+    const targetVariation = get().timelines.find((timeline) => timeline.is_active)?.name ?? null;
+    try {
+      const pending = await listDraftlinePendingSnapshotCleanups(targetVariation);
+      const activePending = pending[0] ?? null;
+      set({ pendingHistoryCleanup: activePending });
+      return activePending;
+    } catch (err) {
+      if (!errorMessage(err).toLowerCase().includes("no draftline workspace")) {
+        console.error("Failed to load pending history cleanup:", err);
+      }
+      set({ pendingHistoryCleanup: null });
+      return null;
+    }
+  },
+
   publishSnapshotCleanup: async (planId, remote) => {
+    const pendingCleanup = get().pendingHistoryCleanup;
+    if (pendingCleanup?.plan_id === planId) {
+      const result = await publishDraftlinePendingSnapshotCleanup(planId, remote);
+      set({ lastHistoryCleanup: null, pendingHistoryCleanup: null });
+      await get().refreshSyncStatus();
+      await get().refreshIncomingCommits();
+      await get().loadGraphData();
+      await get().loadTimelines();
+      await get().loadVersions();
+      useToastStore.getState().show("Compacted remote history published safely.", 5000, "success");
+      return result;
+    }
+
     const preflight = await preflightDraftlinePublishSnapshotCleanup(planId, remote);
     if (preflight.remote_impact.publish_status === "remote_has_incoming") {
       throw new Error("Remote has new incoming snapshots. Sync before publishing compacted history.");
@@ -3053,7 +3124,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       return null;
     }
     const result = await publishDraftlineSnapshotCleanup(preflight.token);
-    set({ lastHistoryCleanup: null });
+    set({ lastHistoryCleanup: null, pendingHistoryCleanup: null });
     await get().refreshSyncStatus();
     await get().refreshIncomingCommits();
     await get().loadGraphData();
@@ -3064,16 +3135,21 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   },
 
   undoSnapshotCleanup: async (planId) => {
-    const targetPlanId = planId ?? get().lastHistoryCleanup?.plan_id;
+    const pendingCleanup = get().pendingHistoryCleanup;
+    const targetPlanId = planId ?? pendingCleanup?.plan_id ?? get().lastHistoryCleanup?.plan_id;
     if (!targetPlanId) {
       throw new Error("No compacted history cleanup is available to undo.");
     }
-    const preflight = await preflightDraftlineUndoSnapshotCleanup(targetPlanId);
-    if (!preflight.can_undo) {
-      throw new Error("Draftline cannot undo this cleanup because the current timeline no longer matches the cleanup backup.");
-    }
-    const result = await undoDraftlineSnapshotCleanup(preflight.token);
-    set({ diffResult: null, diffSelection: null, isDirty: false, changedFiles: [], lastHistoryCleanup: null });
+    const result = pendingCleanup?.plan_id === targetPlanId
+      ? await undoDraftlinePendingSnapshotCleanup(targetPlanId)
+      : await (async () => {
+        const preflight = await preflightDraftlineUndoSnapshotCleanup(targetPlanId);
+        if (!preflight.can_undo) {
+          throw new Error("Draftline cannot undo this cleanup because the current timeline no longer matches the cleanup backup.");
+        }
+        return undoDraftlineSnapshotCleanup(preflight.token);
+      })();
+    set({ diffResult: null, diffSelection: null, isDirty: false, changedFiles: [], lastHistoryCleanup: null, pendingHistoryCleanup: null });
     await get().loadVersions();
     await get().loadGraphData();
     await get().loadTimelines();
@@ -3131,7 +3207,10 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await get().loadTimelines();
       await get().loadVersions();
     } catch (err) {
-      set({ syncError: errorMessage(err) });
+      if (isDraftlineHistoryCleanupBlockedError(err)) {
+        await get().loadPendingHistoryCleanup();
+      }
+      set({ syncError: remoteSyncErrorMessage(err) });
     } finally {
       set({ isSyncing: false });
     }
@@ -3154,7 +3233,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         set({ syncError: `Large files detected: ${names}. Remove or add to .gitignore before pushing.`, isSyncing: false });
         return;
       }
-      const pendingCleanup = get().lastHistoryCleanup;
+      const pendingCleanup = get().pendingHistoryCleanup;
       if (pendingCleanup) {
         const published = await get().publishSnapshotCleanup(pendingCleanup.plan_id, currentRemote.name);
         if (published) {
@@ -3169,7 +3248,10 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await get().loadTimelines();
       await get().loadVersions();
     } catch (err) {
-      set({ syncError: errorMessage(err) });
+      if (isDraftlineHistoryCleanupBlockedError(err)) {
+        await get().loadPendingHistoryCleanup();
+      }
+      set({ syncError: remoteSyncErrorMessage(err) });
     } finally {
       set({ isSyncing: false });
     }
@@ -3180,6 +3262,10 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     await get().fetchFromRemote();
     const updated = get().syncStatus;
     if (!updated) return;
+    if (get().pendingHistoryCleanup && updated.behind > 0) {
+      set({ syncError: PENDING_CLEANUP_INCOMING_MESSAGE });
+      return;
+    }
     // If behind, pull first
     if (updated.behind > 0) {
       await get().pullFromRemote();
@@ -3213,6 +3299,10 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     const { currentRemote } = get();
     if (!currentRemote) return;
     if (!await ensureGitHubRemoteCredential(currentRemote, true)) return;
+    if (get().pendingHistoryCleanup) {
+      set({ syncError: PENDING_CLEANUP_INCOMING_MESSAGE });
+      return;
+    }
     set({ isSyncing: true, syncError: null });
     try {
       const preflight = await preflightDraftlineIncoming(currentRemote.name);
@@ -3273,7 +3363,10 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await get().checkDirty();
       useToastStore.getState().show("Incoming saves applied.", 4000, "success");
     } catch (err) {
-      set({ syncError: errorMessage(err) });
+      if (isDraftlineHistoryCleanupBlockedError(err)) {
+        await get().loadPendingHistoryCleanup();
+      }
+      set({ syncError: remoteSyncErrorMessage(err) });
     } finally {
       set({ isSyncing: false });
     }
@@ -3355,6 +3448,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     try {
       const status = await getDraftlineSyncStatus(currentRemote.name);
       set({ syncStatus: status, syncError: null });
+      await get().loadPendingHistoryCleanup();
     } catch {
       set({ syncStatus: null });
     }
