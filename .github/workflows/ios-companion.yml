@@ -1,0 +1,25 @@
+name: iOS Companion
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "ios/**"
+      - ".github/workflows/ios-companion.yml"
+  pull_request:
+    paths:
+      - "ios/**"
+      - ".github/workflows/ios-companion.yml"
+
+jobs:
+  swift-package:
+    name: Swift package tests
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Test companion package
+        run: swift test
+        working-directory: ios

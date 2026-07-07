@@ -6,6 +6,11 @@
       "changelog-path": "CHANGELOG.md",
       "include-component-in-tag": false,
       "include-v-in-tag": true,
+      "exclude-paths": [
+        "ios",
+        ".github/workflows",
+        ".github/instructions"
+      ],
       "extra-files": [
         {
           "type": "toml",
