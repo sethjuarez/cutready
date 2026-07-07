@@ -17,7 +17,7 @@ iOS work must stay separate from the desktop release-please train unless the use
 - Keep iOS CI/CD in iOS-specific workflows such as `.github/workflows/ios-companion.yml`.
 - Keep iOS-only commits scoped as `chore(ios): ...` unless they intentionally belong in the desktop changelog.
 - Do not add iOS files to the root release-please package or desktop version extra-files.
-- `release-please-config.json` excludes `ios/**`, `.github/workflows/ios-companion.yml`, and this instruction file from desktop release parsing.
+- `release-please-config.json` excludes `ios`, `.github/workflows`, and `.github/instructions` from desktop release parsing. Release-please exclude paths are directory prefixes, not glob patterns.
 
 ## Architecture
 

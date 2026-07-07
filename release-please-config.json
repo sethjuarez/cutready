@@ -7,9 +7,9 @@
       "include-component-in-tag": false,
       "include-v-in-tag": true,
       "exclude-paths": [
-        "ios/**",
-        ".github/workflows/ios-companion.yml",
-        ".github/instructions/ios-companion.instructions.md"
+        "ios",
+        ".github/workflows",
+        ".github/instructions"
       ],
       "extra-files": [
         {
