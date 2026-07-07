@@ -13,20 +13,32 @@ targets:
     deploymentTarget: "17.0"
     sources:
       - path: App
+      - path: App/Assets.xcassets
     dependencies:
       - package: CutReadyCompanion
         product: CutReadyCompanionUI
       - package: CutReadyCompanion
         product: CutReadyMobileCore
+    postCompileScripts:
+      - name: Embed Local Config
+        script: '"${SRCROOT}/scripts/embed-local-config.sh"'
+        inputFiles:
+          - ${SRCROOT}/../.env
+          - ${SRCROOT}/scripts/embed-local-config.sh
+        outputFiles:
+          - ${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/CutReadyConfig.plist
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.cutready.companion
         PRODUCT_NAME: CutReady Companion
-        MARKETING_VERSION: 0.1.0
+        MARKETING_VERSION: 1.0
         CURRENT_PROJECT_VERSION: 1
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_CFBundleDisplayName: CutReady
+        INFOPLIST_KEY_CUTREADY_GITHUB_OAUTH_CLIENT_ID: $(CUTREADY_GITHUB_OAUTH_CLIENT_ID)
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.productivity
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
         SUPPORTS_MACCATALYST: NO
         TARGETED_DEVICE_FAMILY: "1,2"

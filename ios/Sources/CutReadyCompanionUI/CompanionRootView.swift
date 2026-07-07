@@ -125,7 +125,28 @@ public struct CompanionRootView: View {
     }
 
     private static func githubClientIDFromEnvironment() -> String {
-        ProcessInfo.processInfo.environment["CUTREADY_GITHUB_OAUTH_CLIENT_ID"] ?? ""
+        let environmentClientID = ProcessInfo.processInfo.environment["CUTREADY_GITHUB_OAUTH_CLIENT_ID"]?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if let environmentClientID, !environmentClientID.isEmpty {
+            return environmentClientID
+        }
+
+        let bundledClientID = (Bundle.main.object(forInfoDictionaryKey: "CUTREADY_GITHUB_OAUTH_CLIENT_ID") as? String)
+            ?? (Bundle.main.object(forInfoDictionaryKey: "CutReadyGitHubOAuthClientID") as? String)
+        if let bundledClientID {
+            let trimmedBundledClientID = bundledClientID.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmedBundledClientID.isEmpty {
+                return trimmedBundledClientID
+            }
+        }
+
+        guard let configURL = Bundle.main.url(forResource: "CutReadyConfig", withExtension: "plist"),
+              let config = NSDictionary(contentsOf: configURL),
+              let configClientID = config["CUTREADY_GITHUB_OAUTH_CLIENT_ID"] as? String else {
+            return ""
+        }
+
+        return configClientID.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private func restoreGitHubToken() {
@@ -1176,6 +1197,7 @@ private struct WorkspaceLandingView: View {
 
 private struct GitHubDeviceAuthorizationView: View {
     @Environment(\.openURL) private var openURL
+    @State private var didCopyCode = false
     let authorization: GitHubDeviceAuthorization
 
     var body: some View {
@@ -1193,6 +1215,18 @@ private struct GitHubDeviceAuthorizationView: View {
                     .frame(maxWidth: .infinity)
                     .padding()
                     .background(CutReadyTheme.surfaceAlt, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    .onTapGesture {
+                        copyCode()
+                    }
+
+                Button {
+                    copyCode()
+                } label: {
+                    Label(didCopyCode ? "Copied" : "Copy Code", systemImage: didCopyCode ? "checkmark" : "doc.on.doc")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
 
                 Button {
                     openURL(authorization.verificationURI)
@@ -1209,6 +1243,17 @@ private struct GitHubDeviceAuthorizationView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .background(CutReadyTheme.surface)
             .navigationTitle("GitHub Sign In")
+        }
+    }
+
+    private func copyCode() {
+        #if canImport(UIKit)
+        UIPasteboard.general.string = authorization.userCode
+        #endif
+        didCopyCode = true
+        Task {
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            didCopyCode = false
         }
     }
 }

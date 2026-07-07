@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		6F4C8E56D92A4C3B9C070911 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 3A1E7B824BD34B0BB81E19C3 /* Assets.xcassets */; };
 		B046A9EA8D2EF38719B19648 /* CutReadyCompanionApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D18E44321D7D931110BFE5F /* CutReadyCompanionApp.swift */; };
 		D35D1DC890320A75CBF7257C /* CutReadyMobileCore in Frameworks */ = {isa = PBXBuildFile; productRef = 8EA7D067CB2BB9133CE5A4BE /* CutReadyMobileCore */; };
 		F1B3E265212B0A4C3A089B57 /* CutReadyCompanionUI in Frameworks */ = {isa = PBXBuildFile; productRef = 1E9CF4AF05F3580DB32E83A3 /* CutReadyCompanionUI */; };
@@ -14,6 +15,7 @@
 
 /* Begin PBXFileReference section */
 		1D18E44321D7D931110BFE5F /* CutReadyCompanionApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CutReadyCompanionApp.swift; sourceTree = "<group>"; };
+		3A1E7B824BD34B0BB81E19C3 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		E093415EDC359E0118B356ED /* ios */ = {isa = PBXFileReference; lastKnownFileType = folder; name = ios; path = .; sourceTree = SOURCE_ROOT; };
 		EF1975B649292F912DAAC584 /* CutReadyCompanionApp.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = CutReadyCompanionApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -51,6 +53,7 @@
 			isa = PBXGroup;
 			children = (
 				1D18E44321D7D931110BFE5F /* CutReadyCompanionApp.swift */,
+				3A1E7B824BD34B0BB81E19C3 /* Assets.xcassets */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -72,6 +75,8 @@
 			buildConfigurationList = 6063EB03D209943B59459742 /* Build configuration list for PBXNativeTarget "CutReadyCompanionApp" */;
 			buildPhases = (
 				F030E12B73BBCD786DC4DD6A /* Sources */,
+				A8A7CC46965E49CC98152DB1 /* Resources */,
+				7D245B3B76E64F3BA85E5B20 /* Embed Local Config */,
 				11872C0DEA7E40971A109B16 /* Frameworks */,
 			);
 			buildRules = (
@@ -120,6 +125,41 @@
 		};
 /* End PBXProject section */
 
+/* Begin PBXResourcesBuildPhase section */
+		A8A7CC46965E49CC98152DB1 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				6F4C8E56D92A4C3B9C070911 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		7D245B3B76E64F3BA85E5B20 /* Embed Local Config */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/../.env",
+				"$(SRCROOT)/scripts/embed-local-config.sh",
+			);
+			name = "Embed Local Config";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/CutReadyConfig.plist",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${SRCROOT}/scripts/embed-local-config.sh\"";
+		};
+/* End PBXShellScriptBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		F030E12B73BBCD786DC4DD6A /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -140,14 +180,17 @@
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = CutReady;
+				INFOPLIST_KEY_CUTREADY_GITHUB_OAUTH_CLIENT_ID = "$(CUTREADY_GITHUB_OAUTH_CLIENT_ID)";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.1.0;
+				MARKETING_VERSION = 1.0;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-lz",
@@ -288,14 +331,17 @@
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = CutReady;
+				INFOPLIST_KEY_CUTREADY_GITHUB_OAUTH_CLIENT_ID = "$(CUTREADY_GITHUB_OAUTH_CLIENT_ID)";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.1.0;
+				MARKETING_VERSION = 1.0;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-lz",
