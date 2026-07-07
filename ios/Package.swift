@@ -19,14 +19,12 @@ let package = Package(
         )
     ],
     dependencies: [
-        .package(url: "https://github.com/gonzalezreal/swift-markdown-ui", from: "2.4.1"),
-        .package(path: "/Users/sethjuarez/projects/copilot-worktrees/auditaur/sethjuarez-solid-train")
+        .package(url: "https://github.com/gonzalezreal/swift-markdown-ui", from: "2.4.1")
     ],
     targets: [
         .target(
             name: "CutReadyMobileCore",
             dependencies: [
-                .product(name: "AuditaurAppleCore", package: "sethjuarez-solid-train"),
                 .target(name: "DraftlineMobileC", condition: .when(platforms: [.iOS])),
                 .target(name: "DraftlineMobile", condition: .when(platforms: [.iOS]))
             ]

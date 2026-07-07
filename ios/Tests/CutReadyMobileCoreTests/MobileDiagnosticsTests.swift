@@ -1,4 +1,3 @@
-import AuditaurAppleCore
 import XCTest
 @testable import CutReadyMobileCore
 
