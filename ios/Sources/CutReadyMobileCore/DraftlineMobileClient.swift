@@ -6,6 +6,7 @@ import DraftlineMobile
 public enum MobileSyncState: String, Codable, Sendable {
     case clean
     case dirty
+    case incoming
     case pulling
     case pushing
     case conflict
@@ -348,6 +349,17 @@ public final class DraftlineNativeMobileClient: DraftlineMobileWorkspaceClient, 
                 }
             }
         }
+
+        let preflightJSON = try await nativeString { workspace in
+            "origin".withCString { remotePointer in
+                draftline_mobile_workspace_preflight_apply_incoming_json(workspace, remotePointer)
+            }
+        }
+        let preflight = try Self.applyIncomingReport(fromJSON: preflightJSON)
+        guard preflight.canProceed else {
+            return Self.mobileSyncStatus(fromApplyPreflightJSON: preflightJSON)
+        }
+
         let json = try await nativeString { workspace in
             try withCredentialCallback(credential) { callback, userData in
                 "origin".withCString { remotePointer in
@@ -355,7 +367,15 @@ public final class DraftlineNativeMobileClient: DraftlineMobileWorkspaceClient, 
                 }
             }
         }
-        return Self.mobileSyncStatus(fromJSON: json)
+        let applyStatus = try Self.mobileSyncStatus(fromApplyResultJSON: json)
+        let statusJSON = try await nativeString { workspace in
+            "origin".withCString { remotePointer in
+                draftline_mobile_workspace_sync_status_json(workspace, remotePointer)
+            }
+        }
+        var status = try Self.mobileSyncStatus(fromJSON: statusJSON)
+        status.message = applyStatus.message
+        return status
 #else
         throw DraftlineMobileBridgeError.nativeBridgeUnavailable
 #endif
@@ -363,13 +383,21 @@ public final class DraftlineNativeMobileClient: DraftlineMobileWorkspaceClient, 
 
     public func push() async throws -> MobileSyncStatus {
 #if canImport(DraftlineMobile)
-        let publishToken = try await nativeString { workspace in
+        let preflightJSON = try await nativeString { workspace in
             try withCredentialCallback(credential) { callback, userData in
                 "origin".withCString { remotePointer in
                     draftline_mobile_workspace_preflight_publish_json(workspace, remotePointer, callback, userData)
                 }
             }
         }
+        let preflight = try Self.publishPreflight(fromJSON: preflightJSON)
+        guard preflight.canPublish else {
+            return Self.mobileSyncStatus(
+                from: preflight.syncStatus,
+                fallbackMessage: "Pull latest changes before publishing mobile edits."
+            )
+        }
+        let publishToken = try Self.publishTokenJSON(from: preflight.token)
         let json = try await nativeString { workspace in
             try withCredentialCallback(credential) { callback, userData in
                 publishToken.withCString { tokenPointer in
@@ -377,7 +405,7 @@ public final class DraftlineNativeMobileClient: DraftlineMobileWorkspaceClient, 
                 }
             }
         }
-        return Self.mobileSyncStatus(fromJSON: json)
+        return try Self.mobileSyncStatus(fromPublishResultJSON: json)
 #else
         throw DraftlineMobileBridgeError.nativeBridgeUnavailable
 #endif
@@ -390,13 +418,15 @@ public final class DraftlineNativeMobileClient: DraftlineMobileWorkspaceClient, 
                 draftline_mobile_workspace_preflight_apply_incoming_json(workspace, remotePointer)
             }
         }
-        return Self.mobileConflicts(fromJSON: json)
+        return try Self.mobileConflicts(fromJSON: json)
 #else
         throw DraftlineMobileBridgeError.nativeBridgeUnavailable
 #endif
     }
 
     public func resolveConflict(path: String, resolution: SimpleConflictResolution) async throws {
+        _ = path
+        _ = resolution
         throw DraftlineMobileBridgeError.nativeBridgeUnavailable
     }
 
@@ -535,42 +565,119 @@ public final class DraftlineNativeMobileClient: DraftlineMobileWorkspaceClient, 
         }
     }
 
-    private static func mobileSyncStatus(fromJSON json: String) -> MobileSyncStatus {
-        guard let data = json.data(using: .utf8),
-              let status = try? JSONDecoder().decode(DraftlineSyncStatusEnvelope.self, from: data) else {
-            return MobileSyncStatus(state: .clean, message: json)
-        }
+    static func mobileSyncStatus(fromJSON json: String) throws -> MobileSyncStatus {
+        try mobileSyncStatus(from: draftlineSyncStatus(fromJSON: json))
+    }
 
-        let state: MobileSyncState
-        let label = (status.state ?? status.status ?? "").lowercased()
-        if label.contains("conflict") || status.hasConflicts == true {
-            state = .conflict
-        } else if status.isDirty == true {
-            state = .dirty
-        } else {
-            state = .clean
-        }
-
+    static func mobileSyncStatus(fromApplyResultJSON json: String) throws -> MobileSyncStatus {
+        let result = try decode(DraftlineApplyIncomingResult.self, fromJSON: json)
         return MobileSyncStatus(
-            state: state,
-            ahead: status.ahead ?? 0,
-            behind: status.behind ?? 0,
-            message: json
+            state: .clean,
+            message: result.appliedCount > 0 ? "Pulled \(result.appliedCount) incoming snapshot(s)." : "Workspace is already up to date."
         )
     }
 
-    private static func mobileConflicts(fromJSON json: String) -> [MobileConflict] {
+    static func mobileSyncStatus(fromApplyPreflightJSON json: String) throws -> MobileSyncStatus {
+        try mobileSyncStatus(from: applyIncomingReport(fromJSON: json))
+    }
+
+    static func mobileSyncStatus(fromPublishResultJSON json: String) throws -> MobileSyncStatus {
+        let result = try decode(DraftlinePublishResult.self, fromJSON: json)
+        return MobileSyncStatus(
+            state: .clean,
+            message: result.publishedVersions > 0 ? "Published \(result.publishedVersions) mobile snapshot(s)." : "No mobile snapshots needed publishing."
+        )
+    }
+
+    static func mobileConflicts(fromJSON json: String) throws -> [MobileConflict] {
+        let report = try applyIncomingReport(fromJSON: json)
+        var conflicts = report.dirtyFiles.map { file in
+            MobileConflict(
+                path: file.path,
+                summary: "Local \(file.kind.mobileLabel) blocks pulling incoming changes. Resolve this on desktop.",
+                canResolveOnMobile: false
+            )
+        }
+        conflicts.append(contentsOf: report.fileHazards.map { hazard in
+            MobileConflict(
+                path: hazard.path,
+                summary: "Incoming changes would overwrite a \(hazard.kind.mobileLabel) file. Resolve this on desktop.",
+                canResolveOnMobile: false
+            )
+        })
+
+        if conflicts.isEmpty, report.syncStatus.state == .needsMerge {
+            conflicts.append(
+                MobileConflict(
+                    path: report.syncStatus.variation,
+                    summary: "This workspace needs a Draftline merge. Open it on desktop to resolve the history.",
+                    canResolveOnMobile: false
+                )
+            )
+        }
+        return conflicts
+    }
+
+    static func applyIncomingReport(fromJSON json: String) throws -> DraftlineApplyIncomingReport {
+        try decode(DraftlineApplyIncomingReport.self, fromJSON: json)
+    }
+
+    static func publishPreflight(fromJSON json: String) throws -> DraftlinePublishPreflight {
+        try decode(DraftlinePublishPreflight.self, fromJSON: json)
+    }
+
+    private static func draftlineSyncStatus(fromJSON json: String) throws -> DraftlineSyncStatus {
+        try decode(DraftlineSyncStatus.self, fromJSON: json)
+    }
+
+    private static func mobileSyncStatus(
+        from report: DraftlineApplyIncomingReport
+    ) -> MobileSyncStatus {
+        let blockingCount = report.dirtyFiles.count + report.fileHazards.count
+        let message: String
+        if report.syncStatus.state == .needsMerge {
+            message = "Incoming changes need a Draftline merge on desktop."
+        } else if blockingCount > 0 {
+            message = "\(blockingCount) local file issue(s) block pulling latest changes."
+        } else {
+            message = "Incoming changes are not safe to apply on mobile."
+        }
+        var status = mobileSyncStatus(from: report.syncStatus, fallbackMessage: message)
+        if blockingCount > 0 || report.syncStatus.state == .needsMerge {
+            status.state = .conflict
+        }
+        return status
+    }
+
+    private static func mobileSyncStatus(
+        from status: DraftlineSyncStatus,
+        fallbackMessage: String? = nil
+    ) -> MobileSyncStatus {
+        MobileSyncStatus(
+            state: status.state.mobileState,
+            ahead: status.ahead,
+            behind: status.behind,
+            message: fallbackMessage ?? status.state.mobileMessage(ahead: status.ahead, behind: status.behind)
+        )
+    }
+
+    private static func publishTokenJSON(from token: DraftlinePublishToken) throws -> String {
+        let data = try JSONEncoder().encode(token)
+        guard let json = String(data: data, encoding: .utf8) else {
+            throw DraftlineMobileBridgeError.invalidNativeResponse("Draftline publish token was not valid UTF-8 JSON.")
+        }
+        return json
+    }
+
+    private static func decode<T: Decodable>(_ type: T.Type, fromJSON json: String) throws -> T {
         guard let data = json.data(using: .utf8) else {
-            return []
+            throw DraftlineMobileBridgeError.invalidNativeResponse("Draftline returned non-UTF-8 JSON.")
         }
-
-        if let envelope = try? JSONDecoder().decode(DraftlineConflictEnvelope.self, from: data) {
-            return envelope.conflicts.map {
-                MobileConflict(path: $0.path, summary: $0.summary ?? "Conflict requires desktop resolution.", canResolveOnMobile: false)
-            }
+        do {
+            return try JSONDecoder().decode(type, from: data)
+        } catch {
+            throw DraftlineMobileBridgeError.invalidNativeResponse("Draftline returned unexpected JSON: \(error.localizedDescription)")
         }
-
-        return []
     }
 
     private static func title(for path: String, contents: String) -> String {
@@ -665,22 +772,200 @@ public final class DraftlineNativeMobileClient: DraftlineMobileWorkspaceClient, 
 #endif
 }
 
-private struct DraftlineSyncStatusEnvelope: Decodable {
-    var state: String?
-    var status: String?
-    var ahead: Int?
-    var behind: Int?
-    var isDirty: Bool?
-    var hasConflicts: Bool?
+struct DraftlineSyncStatus: Codable, Equatable, Sendable {
+    var remote: String
+    var variation: String
+    var ahead: Int
+    var behind: Int
+    var state: DraftlineSyncState
+    var incoming: [DraftlineRemoteVersionSummary]
 }
 
-private struct DraftlineConflictEnvelope: Decodable {
-    var conflicts: [DraftlineConflictItem]
+enum DraftlineSyncState: String, Codable, Equatable, Sendable {
+    case upToDate = "UpToDate"
+    case localAhead = "LocalAhead"
+    case incomingAvailable = "IncomingAvailable"
+    case needsMerge = "NeedsMerge"
+    case noRemoteVersion = "NoRemoteVersion"
+
+    var mobileState: MobileSyncState {
+        switch self {
+        case .upToDate:
+            return .clean
+        case .localAhead, .noRemoteVersion:
+            return .dirty
+        case .incomingAvailable:
+            return .incoming
+        case .needsMerge:
+            return .conflict
+        }
+    }
+
+    func mobileMessage(ahead: Int, behind: Int) -> String {
+        switch self {
+        case .upToDate:
+            return "Workspace is up to date."
+        case .localAhead:
+            return "\(ahead) mobile snapshot(s) ready to push."
+        case .incomingAvailable:
+            return "\(behind) incoming snapshot(s) ready to pull."
+        case .needsMerge:
+            return "Local and remote histories diverged. Resolve this on desktop."
+        case .noRemoteVersion:
+            return "No remote Draftline version exists yet; publish this workspace from mobile."
+        }
+    }
 }
 
-private struct DraftlineConflictItem: Decodable {
+struct DraftlineRemoteVersionSummary: Codable, Equatable, Sendable {
+    var id: String
+    var label: String
+    var author: DraftlineContributor
+    var timeSeconds: Int64
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case label
+        case author
+        case timeSeconds = "time_seconds"
+    }
+}
+
+struct DraftlineContributor: Codable, Equatable, Sendable {
+    var name: String
+    var email: String?
+}
+
+struct DraftlineApplyIncomingReport: Codable, Equatable, Sendable {
+    var syncStatus: DraftlineSyncStatus
+    var dirtyFiles: [DraftlineChangedFile]
+    var fileHazards: [DraftlineFileHazard]
+    var isFastForward: Bool
+    var canProceed: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case syncStatus = "sync_status"
+        case dirtyFiles = "dirty_files"
+        case fileHazards = "file_hazards"
+        case isFastForward = "is_fast_forward"
+        case canProceed = "can_proceed"
+    }
+}
+
+struct DraftlineApplyIncomingResult: Codable, Equatable, Sendable {
+    var appliedCount: Int
+
+    enum CodingKeys: String, CodingKey {
+        case appliedCount = "applied_count"
+    }
+}
+
+struct DraftlinePublishPreflight: Codable, Equatable, Sendable {
+    var remote: String
+    var variation: String
+    var expectedRemoteOID: String?
+    var localOID: String
+    var syncStatus: DraftlineSyncStatus
+    var token: DraftlinePublishToken
+    var canPublish: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case remote
+        case variation
+        case expectedRemoteOID = "expected_remote_oid"
+        case localOID = "local_oid"
+        case syncStatus = "sync_status"
+        case token
+        case canPublish = "can_publish"
+    }
+}
+
+struct DraftlinePublishToken: Codable, Equatable, Sendable {
+    var remote: String
+    var variation: String
+    var expectedRemoteOID: String?
+    var localOID: String
+
+    enum CodingKeys: String, CodingKey {
+        case remote
+        case variation
+        case expectedRemoteOID = "expected_remote_oid"
+        case localOID = "local_oid"
+    }
+}
+
+struct DraftlinePublishResult: Codable, Equatable, Sendable {
+    var remote: String
+    var variation: String
+    var publishedVersions: Int
+
+    enum CodingKeys: String, CodingKey {
+        case remote
+        case variation
+        case publishedVersions = "published_versions"
+    }
+}
+
+struct DraftlineChangedFile: Codable, Equatable, Sendable {
     var path: String
-    var summary: String?
+    var kind: DraftlineChangeKind
+    var isBinary: Bool
+    var isLarge: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case path
+        case kind
+        case isBinary = "is_binary"
+        case isLarge = "is_large"
+    }
+}
+
+enum DraftlineChangeKind: String, Codable, Equatable, Sendable {
+    case added = "Added"
+    case modified = "Modified"
+    case deleted = "Deleted"
+    case renamed = "Renamed"
+    case conflicted = "Conflicted"
+    case typeChanged = "TypeChanged"
+
+    var mobileLabel: String {
+        switch self {
+        case .added:
+            return "added"
+        case .modified:
+            return "modified"
+        case .deleted:
+            return "deleted"
+        case .renamed:
+            return "renamed"
+        case .conflicted:
+            return "conflicted"
+        case .typeChanged:
+            return "type-changed"
+        }
+    }
+}
+
+struct DraftlineFileHazard: Codable, Equatable, Sendable {
+    var path: String
+    var kind: DraftlineFileHazardKind
+}
+
+enum DraftlineFileHazardKind: String, Codable, Equatable, Sendable {
+    case ignored
+    case untracked
+    case policyExcluded = "policy_excluded"
+
+    var mobileLabel: String {
+        switch self {
+        case .ignored:
+            return "ignored"
+        case .untracked:
+            return "untracked"
+        case .policyExcluded:
+            return "policy-excluded"
+        }
+    }
 }
 
 #if canImport(DraftlineMobile)

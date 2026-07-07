@@ -2,6 +2,93 @@ import XCTest
 @testable import CutReadyMobileCore
 
 final class DraftlineMobileWorkspaceStoreTests: XCTestCase {
+    func testDraftlineSyncStatusMapsIncomingAvailable() throws {
+        let status = try DraftlineNativeMobileClient.mobileSyncStatus(fromJSON: """
+        {
+          "remote": "origin",
+          "variation": "main",
+          "ahead": 0,
+          "behind": 2,
+          "state": "IncomingAvailable",
+          "incoming": [
+            {
+              "id": "abc",
+              "label": "Desktop edit",
+              "author": {"name": "Desktop", "email": null},
+              "time_seconds": 1710000000
+            }
+          ]
+        }
+        """)
+
+        XCTAssertEqual(status.state, .incoming)
+        XCTAssertEqual(status.ahead, 0)
+        XCTAssertEqual(status.behind, 2)
+        XCTAssertEqual(status.message, "2 incoming snapshot(s) ready to pull.")
+    }
+
+    func testDraftlineApplyPreflightMapsBlockedPullToDesktopConflict() throws {
+        let json = """
+        {
+          "sync_status": {
+            "remote": "origin",
+            "variation": "main",
+            "ahead": 1,
+            "behind": 1,
+            "state": "IncomingAvailable",
+            "incoming": []
+          },
+          "dirty_files": [
+            {"path": "intro.sk", "kind": "Modified", "is_binary": false, "is_large": false}
+          ],
+          "file_hazards": [
+            {"path": ".cutready/screenshots/hero.png", "kind": "untracked"}
+          ],
+          "is_fast_forward": false,
+          "can_proceed": false
+        }
+        """
+
+        let status = try DraftlineNativeMobileClient.mobileSyncStatus(fromApplyPreflightJSON: json)
+        let conflicts = try DraftlineNativeMobileClient.mobileConflicts(fromJSON: json)
+
+        XCTAssertEqual(status.state, .conflict)
+        XCTAssertEqual(status.message, "2 local file issue(s) block pulling latest changes.")
+        XCTAssertEqual(conflicts.count, 2)
+        XCTAssertEqual(conflicts.first?.path, "intro.sk")
+        XCTAssertEqual(conflicts.first?.canResolveOnMobile, false)
+        XCTAssertTrue(conflicts.first?.summary.contains("desktop") == true)
+    }
+
+    func testDraftlinePublishPreflightMapsCannotPublishToConflictStatus() throws {
+        let preflight = try DraftlineNativeMobileClient.publishPreflight(fromJSON: """
+        {
+          "remote": "origin",
+          "variation": "main",
+          "expected_remote_oid": "abc",
+          "local_oid": "def",
+          "sync_status": {
+            "remote": "origin",
+            "variation": "main",
+            "ahead": 1,
+            "behind": 1,
+            "state": "NeedsMerge",
+            "incoming": []
+          },
+          "token": {
+            "remote": "origin",
+            "variation": "main",
+            "expected_remote_oid": "abc",
+            "local_oid": "def"
+          },
+          "can_publish": false
+        }
+        """)
+
+        XCTAssertFalse(preflight.canPublish)
+        XCTAssertEqual(preflight.syncStatus.state, .needsMerge)
+    }
+
     func testSaveNoteWritesThroughDraftlineAndRefreshesSnapshot() async throws {
         let client = MockDraftlineWorkspaceClient()
         client.notes = [

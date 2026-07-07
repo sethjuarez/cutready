@@ -476,7 +476,7 @@ private struct WorkspaceProjectsView: View {
         switch project.syncStatus.state {
         case .clean:
             return "checkmark.icloud"
-        case .dirty, .pushing, .pulling:
+        case .dirty, .incoming, .pushing, .pulling:
             return "arrow.triangle.2.circlepath"
         case .conflict:
             return "exclamationmark.triangle"
@@ -619,6 +619,8 @@ private struct WorkspaceSyncSheet: View {
             return "Workspace is clean"
         case .dirty:
             return "Mobile edits are ready"
+        case .incoming:
+            return "Incoming changes are ready"
         case .pulling:
             return "Pulling latest"
         case .pushing:
@@ -636,6 +638,8 @@ private struct WorkspaceSyncSheet: View {
             return "checkmark.circle"
         case .dirty:
             return "pencil.circle"
+        case .incoming:
+            return "arrow.down.circle"
         case .pulling:
             return "arrow.down.circle"
         case .pushing:
@@ -651,7 +655,7 @@ private struct WorkspaceSyncSheet: View {
         switch project.syncStatus.state {
         case .clean:
             return CutReadyTheme.accent
-        case .dirty, .pulling, .pushing:
+        case .dirty, .incoming, .pulling, .pushing:
             return CutReadyTheme.storyboard
         case .conflict, .offline:
             return .red
