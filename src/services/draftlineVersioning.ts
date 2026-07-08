@@ -165,9 +165,12 @@ export async function listDraftlineVersions(): Promise<VersionEntry[]> {
 
 export async function listDraftlineGraphNodes(): Promise<GraphNode[]> {
   const variations = await facade().variations();
+  if (variations.length === 0) {
+    return [];
+  }
   const activeVariation = variations.find((entry) => entry.variation.is_current)?.variation.id
     ?? variations[0]?.variation.id
-    ?? "main";
+    ?? "";
   const graph = await facade().workspaceGraphForVariation(activeVariation, {
     include_remotes: true,
     include_support_refs: true,

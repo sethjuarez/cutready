@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 // Mock elucim packages before importing components
@@ -167,5 +167,59 @@ describe("ScriptTable tab order", () => {
     const lastCall = onChange.mock.calls[onChange.mock.calls.length - 1][0];
     expect(lastCall).toHaveLength(1);
     expect(lastCall[0].time).toBe("10s");
+  });
+
+  it("renders planning cell text with the same full markdown preview", () => {
+    const rows = [
+      filledRow(
+        "10s",
+        "### Scene\nFirst line\nSecond **bold** line\n\n| Key | Value |\n| --- | --- |\n| A | B |",
+        "- Click **Run**",
+      ),
+    ];
+    const { container } = render(<ScriptTable rows={rows} onChange={() => {}} />);
+
+    const narrativeCell = getTabCells()[1];
+    expect(narrativeCell.querySelector("h3")?.textContent).toBe("Scene");
+    expect(narrativeCell.querySelector("br")).toBeInTheDocument();
+    expect(narrativeCell.querySelector("strong")?.textContent).toBe("bold");
+    expect(narrativeCell.querySelector("table")).toBeInTheDocument();
+    expect(container.querySelectorAll("li")).toHaveLength(1);
+  });
+
+  it("continues markdown lists in planning cells", async () => {
+    const rows = [filledRow("10s", "- first", "")];
+    const onChange = vi.fn();
+    render(<ScriptTable rows={rows} onChange={onChange} />);
+
+    const narrativeCell = getTabCells()[1];
+    fireEvent.click(screen.getByText("first"));
+    const editor = await waitFor(() => narrativeCell.querySelector("textarea"));
+    expect(editor).toBeTruthy();
+
+    editor!.selectionStart = editor!.selectionEnd = editor!.value.length;
+    fireEvent.keyDown(editor!, { key: "Enter" });
+
+    expect(onChange).toHaveBeenLastCalledWith([
+      { time: "10s", narrative: "- first\n- ", demo_actions: "", screenshot: null },
+    ]);
+  });
+
+  it("commits planning cell edits with Ctrl+Enter instead of adding a row", async () => {
+    const rows = [filledRow("10s", "Draft", "")];
+    const onChange = vi.fn();
+    render(<ScriptTable rows={rows} onChange={onChange} />);
+
+    const narrativeCell = getTabCells()[1];
+    fireEvent.click(screen.getByText("Draft"));
+    const editor = await waitFor(() => narrativeCell.querySelector("textarea"));
+    expect(editor).toBeTruthy();
+
+    fireEvent.keyDown(editor!, { key: "Enter", ctrlKey: true });
+
+    await waitFor(() => {
+      expect(narrativeCell.querySelector("textarea")).toBeNull();
+    });
+    expect(onChange).not.toHaveBeenCalled();
   });
 });
