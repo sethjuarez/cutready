@@ -212,6 +212,7 @@ pub async fn remove_recent_project(path: String, app: tauri::AppHandle) -> Resul
         "recent_projects",
         serde_json::to_value(&recent).unwrap_or_default(),
     );
+    store.save().map_err(|e| e.to_string())?;
 
     Ok(())
 }

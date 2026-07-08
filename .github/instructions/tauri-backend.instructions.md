@@ -112,7 +112,8 @@ All models derive `Serialize` + `Deserialize` for JSON IPC and file storage. Use
 
 - CutReady persistence routes through `engine::draftline_adapter::CutReadyDraftlineAdapter`; do not add app-level `gix`, `git2`, or raw `git` save/restore/diff paths.
 - Draftline owns snapshots, branch/variation graph helpers, sync, merge, restore-as-new-save, shelves, and collaboration semantics.
-- CutReady owns the content policy: sketches (`.sk`), storyboards (`.sb`), notes (`.md`), `.cutready/visuals`, and `.cutready/screenshots` are versioned content.
+- CutReady owns the content policy: sketches (`.sk`), storyboards (`.sb`), notes (`.md`), `.cutready/projects.json`, `.cutready/visuals`, and `.cutready/screenshots` are versioned content.
+- Keep `.cutready/projects.json` durable and cross-client only: project `path`, `name`, and optional `description`. Do not add local UI state, recent-project timestamps, last-active project, locks, chat/run state, or device-specific settings to it.
 - Runtime state such as `.chats`, `.cutready/recordings`, `.cutready/agent-state.db`, `.cutready/memory.json`, and `.cutready/locks.json` is excluded from Draftline snapshots.
 
 ## Visuals Storage
