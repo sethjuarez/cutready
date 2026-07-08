@@ -226,6 +226,48 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
         duration_seconds: 12,
         row_count: 3,
       };
+    case "import_video":
+    case "import_video_with_progress":
+      sendMockProgress(args, {
+        phase: "transcript",
+        current: 1,
+        total: 7,
+        message: "Parsing timestamped transcript",
+      });
+      sendMockProgress(args, {
+        phase: "llm",
+        current: 4,
+        total: 7,
+        message: "Asking the Video Import Scene Analyst to refine scenes",
+      });
+      sendMockProgress(args, {
+        phase: "llm",
+        current: 4,
+        total: 7,
+        message: "Scene analyst is checking boundaries against the heuristic cut list",
+      });
+      sendMockProgress(args, {
+        phase: "llm",
+        current: 4,
+        total: 7,
+        message: "Scene analyst is choosing screenshot-friendly representative moments",
+      });
+      sendMockProgress(args, {
+        phase: "screenshots",
+        current: 5,
+        total: 7,
+        message: "Extracting 3 representative screenshots",
+      });
+      return {
+        sketch_path: "sketches/imported-demo-video.sk",
+        title: "Imported Demo Video",
+        row_count: 3,
+        screenshot_count: 3,
+        manifest_path: ".cutready/recordings/imports/video-mock/manifest.json",
+        transcript_path: "mock-video.srt",
+        llm_refined: true,
+        llm_refinement_status: "Scene analyst refined transcript boundaries.",
+      };
     case "create_sketch":
       return "sketches/new-sketch.sk";
     case "delete_sketch":

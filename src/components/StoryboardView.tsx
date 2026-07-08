@@ -38,6 +38,7 @@ import { DocumentToolbar, documentToolbarIcons, type DocumentToolbarAction } fro
 import { FieldAiButton } from "./FieldAiButton";
 import { LockedDocumentBanner } from "./LockedDocumentBanner";
 import { DurationBadge, MetadataEditor } from "./MetadataEditor";
+import { InlineDescriptionEditor } from "./InlineDescriptionEditor";
 import { StoryboardIcon } from "./Icons";
 import { plainTextFromRichValue } from "../utils/richText";
 import type { Sketch, SketchSummary, StoryboardItem } from "../types/sketch";
@@ -116,9 +117,6 @@ export function StoryboardView() {
   const [durationDisplayMode, setDurationDisplayMode] = useState<DurationDisplayMode>("minutes");
   const [editingDesc, setEditingDesc] = useState(false);
   const [localDesc, setLocalDesc] = useState(activeStoryboard?.description ?? "");
-  const descRef = useRef<HTMLTextAreaElement>(null);
-  const descSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pendingDescRef = useRef<string | null>(null);
   const [availableMonitors, setAvailableMonitors] = useState<MonitorInfo[]>([]);
   const [previewSlides, setPreviewSlides] = useState<PreviewSlide[]>([]);
   const [showPreview, setShowPreview] = useState(false);
@@ -131,51 +129,14 @@ export function StoryboardView() {
   useEffect(() => {
     setLocalDesc(activeStoryboard?.description ?? "");
     setEditingDesc(false);
-    pendingDescRef.current = null;
-    if (descSaveTimerRef.current) {
-      clearTimeout(descSaveTimerRef.current);
-      descSaveTimerRef.current = null;
-    }
   }, [activeStoryboardPath]);
 
   // External updates can refresh the preview, but must not overwrite active typing.
   useEffect(() => {
-    if (!editingDesc && pendingDescRef.current === null) {
+    if (!editingDesc) {
       setLocalDesc(activeStoryboard?.description ?? "");
     }
   }, [activeStoryboard?.description, editingDesc]);
-
-  useEffect(() => {
-    if (editingDesc && descRef.current) {
-      descRef.current.focus();
-      descRef.current.selectionStart = descRef.current.value.length;
-    }
-  }, [editingDesc]);
-
-  const flushDescription = useCallback(() => {
-    if (descSaveTimerRef.current) {
-      clearTimeout(descSaveTimerRef.current);
-      descSaveTimerRef.current = null;
-    }
-    const pending = pendingDescRef.current;
-    if (pending === null) return;
-    pendingDescRef.current = null;
-    if (shouldSuppressEditorFlush(activeStoryboardPath)) return;
-    if (storyboardLocked) return;
-    updateStoryboard({ description: pending });
-  }, [activeStoryboardPath, storyboardLocked, updateStoryboard]);
-
-  const handleDescriptionChange = useCallback((value: string) => {
-    if (storyboardLocked) return;
-    setLocalDesc(value);
-    pendingDescRef.current = value;
-    if (descSaveTimerRef.current) clearTimeout(descSaveTimerRef.current);
-    descSaveTimerRef.current = setTimeout(flushDescription, 800);
-  }, [flushDescription, storyboardLocked]);
-
-  useEffect(() => {
-    return () => flushDescription();
-  }, [flushDescription]);
 
   // Eagerly load all referenced sketches
   useEffect(() => {
@@ -648,43 +609,21 @@ export function StoryboardView() {
         {storyboardLocked && (
           <LockedDocumentBanner message="Storyboard is locked. Unlock it to edit sections, reorder sketches, or use AI suggestions." />
         )}
-        {/* Description — markdown preview, click to edit */}
-        <div className="relative group/desc my-2">
-          {editingDesc ? (
-            <textarea
-              ref={descRef}
-              value={localDesc}
-              onChange={(e) => handleDescriptionChange(e.target.value)}
-              onBlur={() => {
-                flushDescription();
-                setEditingDesc(false);
-              }}
-              placeholder="Describe this storyboard..."
-              rows={4}
-              readOnly={storyboardLocked}
-              className="w-full text-sm bg-transparent text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/40 outline-none border border-[rgb(var(--color-border))] rounded-lg px-3 py-2 resize-none focus:ring-1 focus:ring-[rgb(var(--color-accent))]/40 transition-colors"
-              autoFocus
-            />
-          ) : (
-            <div
-               tabIndex={0}
-              onClick={() => { if (!storyboardLocked) setEditingDesc(true); }}
-              onFocus={() => { if (!storyboardLocked) setEditingDesc(true); }}
-              className={`min-h-[2rem] rounded-lg px-3 py-2 text-sm border border-transparent hover:border-[rgb(var(--color-border))] transition-colors ${!storyboardLocked ? "pr-10 cursor-text" : "cursor-default"}`}
-            >
-              {localDesc ? (
-                <div className="prose-desc text-[rgb(var(--color-text))] leading-relaxed">
-                  <SafeMarkdown>{localDesc}</SafeMarkdown>
-                </div>
-              ) : (
-                <span className="text-[rgb(var(--color-text-secondary))]/40">
-                  Describe this storyboard...
-                </span>
-              )}
-            </div>
-          )}
-          {/* Description sparkle */}
-          {!editingDesc && !storyboardLocked && (
+        <InlineDescriptionEditor
+          value={localDesc}
+          placeholder="Describe this storyboard..."
+          disabled={storyboardLocked}
+          rows={4}
+          className="my-2"
+          previewClassName={`prose-desc min-h-[2rem] rounded-lg border border-transparent px-3 py-2 pr-10 text-sm leading-relaxed text-[rgb(var(--color-text))] transition-colors hover:border-[rgb(var(--color-border))] ${storyboardLocked ? "cursor-default" : "cursor-text"}`}
+          textareaClassName="w-full resize-none text-sm bg-transparent text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/40 outline-none border border-[rgb(var(--color-border))] rounded-lg px-3 py-2 focus:ring-1 focus:ring-[rgb(var(--color-accent))]/40 transition-colors"
+          onDraftChange={setLocalDesc}
+          onSave={(description) => {
+            if (shouldSuppressEditorFlush(activeStoryboardPath)) return;
+            updateStoryboard({ description });
+          }}
+          onEditingChange={setEditingDesc}
+          action={
             <FieldAiButton
               onClick={() => void runBackgroundAgentAction(
                 localDesc
@@ -697,8 +636,8 @@ export function StoryboardView() {
               title={localDesc ? "Improve description with AI" : "Generate description with AI"}
               iconClassName="h-3 w-3"
             />
-          )}
-        </div>
+          }
+        />
 
         <div className="mb-8">
           <MetadataEditor
@@ -1090,11 +1029,10 @@ function StoryboardSectionBlock({
   const [editingTitle, setEditingTitle] = useState(false);
   const [editingDescription, setEditingDescription] = useState(false);
   const titleInputRef = useRef<HTMLInputElement>(null);
-  const descriptionInputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     const activeElement = document.activeElement;
-    if (editingDescription || activeElement === titleInputRef.current || activeElement === descriptionInputRef.current) {
+    if (editingDescription || activeElement === titleInputRef.current) {
       return;
     }
     setDraftTitle(item.title);
@@ -1102,21 +1040,9 @@ function StoryboardSectionBlock({
   }, [editingDescription, item.title, item.description]);
 
   useEffect(() => {
-    const textarea = descriptionInputRef.current;
-    if (!textarea) return;
-    textarea.style.height = "auto";
-    textarea.style.height = `${textarea.scrollHeight}px`;
-  }, [draftDescription, editingDescription]);
-
-  useEffect(() => {
     if (!editingTitle) return;
     requestAnimationFrame(() => titleInputRef.current?.select());
   }, [editingTitle]);
-
-  useEffect(() => {
-    if (!editingDescription) return;
-    requestAnimationFrame(() => descriptionInputRef.current?.focus());
-  }, [editingDescription]);
 
   const flushSectionTitleDraft = useCallback(() => {
     if (locked) return;
@@ -1129,13 +1055,12 @@ function StoryboardSectionBlock({
     }
   }, [draftTitle, index, item.title, locked, onUpdateSection]);
 
-  const flushSectionDescriptionDraft = useCallback(() => {
+  const saveSectionDescriptionDraft = useCallback((description: string) => {
     if (locked) return;
-    const description = descriptionInputRef.current?.value ?? draftDescription;
     if (description !== (item.description ?? "")) {
       onUpdateSection(index, { description });
     }
-  }, [draftDescription, index, item.description, locked, onUpdateSection]);
+  }, [index, item.description, locked, onUpdateSection]);
 
   const sketchCount = item.sketches.length;
   const sectionDuration = summarizeSketchPathsDuration(item.sketches, sketchCache);
@@ -1242,40 +1167,18 @@ function StoryboardSectionBlock({
               </button>
             )}
           </div>
-          <div className="group/section-desc relative mt-2">
-            {editingDescription ? (
-              <textarea
-                ref={descriptionInputRef}
-                value={draftDescription}
-                readOnly={locked}
-                onChange={(event) => setDraftDescription(event.target.value)}
-                onBlur={() => {
-                  flushSectionDescriptionDraft();
-                  setEditingDescription(false);
-                }}
-                rows={1}
-                className="w-full resize-none overflow-hidden rounded-lg border border-[rgb(var(--color-accent))]/30 bg-[rgb(var(--color-surface))]/60 px-2 py-1 text-sm leading-relaxed text-[rgb(var(--color-text-secondary))] placeholder:text-[rgb(var(--color-text-secondary))]/40 outline-none focus:ring-1 focus:ring-[rgb(var(--color-accent))]/35"
-                placeholder="Add section framing..."
-              />
-            ) : (
-              <div
-                tabIndex={0}
-                onClick={() => { if (!locked) setEditingDescription(true); }}
-                onFocus={() => { if (!locked) setEditingDescription(true); }}
-                className={`min-h-[1.75rem] rounded-lg border border-transparent px-2 py-1 text-sm leading-relaxed transition-colors hover:border-[rgb(var(--color-border))] ${locked ? "cursor-default" : "cursor-text pr-10"}`}
-              >
-                {draftDescription.trim() ? (
-                  <div className="prose-desc text-[rgb(var(--color-text-secondary))]">
-                    <SafeMarkdown>{draftDescription}</SafeMarkdown>
-                  </div>
-                ) : (
-                  <span className="text-[rgb(var(--color-text-secondary))]/40">
-                    Add section framing...
-                  </span>
-                )}
-              </div>
-            )}
-            {!editingDescription && !locked && (
+          <InlineDescriptionEditor
+            value={draftDescription}
+            placeholder="Add section framing..."
+            disabled={locked}
+            rows={1}
+            className="mt-2"
+            previewClassName={`prose-desc min-h-[1.75rem] rounded-lg border border-transparent px-2 py-1 pr-10 text-sm leading-relaxed text-[rgb(var(--color-text-secondary))] transition-colors hover:border-[rgb(var(--color-border))] ${locked ? "cursor-default" : "cursor-text"}`}
+            textareaClassName="w-full resize-none overflow-hidden rounded-lg border border-[rgb(var(--color-accent))]/30 bg-[rgb(var(--color-surface))]/60 px-2 py-1 text-sm leading-relaxed text-[rgb(var(--color-text-secondary))] placeholder:text-[rgb(var(--color-text-secondary))]/40 outline-none focus:ring-1 focus:ring-[rgb(var(--color-accent))]/35"
+            onDraftChange={setDraftDescription}
+            onSave={saveSectionDescriptionDraft}
+            onEditingChange={setEditingDescription}
+            action={
               <FieldAiButton
                 onClick={(event) => {
                   event.stopPropagation();
@@ -1286,8 +1189,8 @@ function StoryboardSectionBlock({
                 title={draftDescription.trim() ? "Improve section description with AI" : "Generate section description with AI"}
                 iconClassName="h-3 w-3"
               />
-            )}
-          </div>
+            }
+          />
         </div>
         </div>
       </div>

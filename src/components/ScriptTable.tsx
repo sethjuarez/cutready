@@ -45,6 +45,7 @@ import { ErrorBoundary } from "./ErrorBoundary";
 import { useProjectImage } from "../hooks/useProjectImage";
 import { parseDurationSeconds } from "../utils/documentMetadata";
 import { useConfirmDialog } from "./ConfirmDialog";
+import { MarkdownPreview, continueMarkdownList } from "./MarkdownText";
 
 
 const VisualCell = lazy(() => import("./VisualCell"));
@@ -1234,142 +1235,6 @@ function focusAdjacentCell(from: HTMLElement, reverse = false): boolean {
   return false;
 }
 
-/* ── Inline formatting: **bold** and *italic* ──────────────── */
-
-function formatInline(text: string): ReactNode {
-  const parts: ReactNode[] = [];
-  const regex = /(\*\*(.+?)\*\*|\*(.+?)\*)/g;
-  let lastIndex = 0;
-  let match;
-  let key = 0;
-
-  while ((match = regex.exec(text)) !== null) {
-    if (match.index > lastIndex) {
-      parts.push(text.slice(lastIndex, match.index));
-    }
-    if (match[2]) {
-      parts.push(<strong key={key++}>{match[2]}</strong>);
-    } else if (match[3]) {
-      parts.push(<em key={key++}>{match[3]}</em>);
-    }
-    lastIndex = regex.lastIndex;
-  }
-
-  if (lastIndex === 0) return text;
-  if (lastIndex < text.length) parts.push(text.slice(lastIndex));
-  return <>{parts}</>;
-}
-
-/* ── Markdown block renderer ───────────────────────────────── */
-
-function renderMarkdown(text: string): ReactNode {
-  if (!text.trim()) return null;
-
-  const lines = text.split("\n");
-  const blocks: ReactNode[] = [];
-  let i = 0;
-  let bk = 0;
-
-  // Build a nested list structure from indented bullet/number lines
-  function parseList(startIdx: number, baseIndent: number, ordered: boolean): { node: ReactNode; nextIdx: number } {
-    const items: { text: string; children: ReactNode | null }[] = [];
-    let idx = startIdx;
-
-    while (idx < lines.length) {
-      const line = lines[idx];
-      const indentMatch = line.match(/^(\s*)/);
-      const indent = indentMatch ? indentMatch[1].length : 0;
-
-      // Check if this is a list item at our level
-      const bulletMatch = line.match(/^(\s*)[-*]\s(.*)/);
-      const numberMatch = line.match(/^(\s*)\d+\.\s(.*)/);
-      const match = ordered ? numberMatch : bulletMatch;
-
-      if (match && indent === baseIndent) {
-        items.push({ text: match[2], children: null });
-        idx++;
-
-        // Check for sub-list (indented further)
-        if (idx < lines.length) {
-          const nextIndentMatch = lines[idx].match(/^(\s*)/);
-          const nextIndent = nextIndentMatch ? nextIndentMatch[1].length : 0;
-          const nextIsBullet = /^\s*[-*]\s/.test(lines[idx]);
-          const nextIsNumber = /^\s*\d+\.\s/.test(lines[idx]);
-          if (nextIndent > baseIndent && (nextIsBullet || nextIsNumber)) {
-            const sub = parseList(idx, nextIndent, nextIsNumber);
-            items[items.length - 1].children = sub.node;
-            idx = sub.nextIdx;
-          }
-        }
-      } else if (indent > baseIndent && (bulletMatch || numberMatch)) {
-        // Deeper indent than expected — sub-list of the last item
-        const isSubOrdered = !!numberMatch;
-        const sub = parseList(idx, indent, isSubOrdered);
-        if (items.length > 0) {
-          items[items.length - 1].children = sub.node;
-        }
-        idx = sub.nextIdx;
-      } else {
-        break;
-      }
-    }
-
-    const ListTag = ordered ? "ol" : "ul";
-    const className = ordered ? "md-cell-ol" : "md-cell-ul";
-    const node = (
-      <ListTag key={bk++} className={className}>
-        {items.map((item, j) => (
-          <li key={j}>
-            {formatInline(item.text)}
-            {item.children}
-          </li>
-        ))}
-      </ListTag>
-    );
-    return { node, nextIdx: idx };
-  }
-
-  while (i < lines.length) {
-    const line = lines[i];
-
-    // Bullet list (- or *) at any indent level
-    if (/^\s*[-*]\s/.test(line)) {
-      const indentMatch = line.match(/^(\s*)/);
-      const indent = indentMatch ? indentMatch[1].length : 0;
-      const result = parseList(i, indent, false);
-      blocks.push(result.node);
-      i = result.nextIdx;
-      continue;
-    }
-
-    // Numbered list
-    if (/^\s*\d+\.\s/.test(line)) {
-      const indentMatch = line.match(/^(\s*)/);
-      const indent = indentMatch ? indentMatch[1].length : 0;
-      const result = parseList(i, indent, true);
-      blocks.push(result.node);
-      i = result.nextIdx;
-      continue;
-    }
-
-    // Empty line
-    if (!line.trim()) {
-      i++;
-      continue;
-    }
-
-    // Paragraph
-    blocks.push(
-      <p key={bk++} className="md-cell-p">
-        {formatInline(line)}
-      </p>,
-    );
-    i++;
-  }
-
-  return <>{blocks}</>;
-}
-
 /* ── Markdown Cell: edit raw markdown, preview formatted ───── */
 
 function MarkdownCell({
@@ -1433,7 +1298,6 @@ function MarkdownCell({
 
   // Preview mode — use localValue to preserve edits before debounce saves
   if (readOnly || !isEditing) {
-    const rendered = renderMarkdown(localValue);
     return (
       <div
         data-cell
@@ -1462,11 +1326,11 @@ function MarkdownCell({
           }
         }}
       >
-        {rendered || (
-          <span className="text-[rgb(var(--color-text-secondary))] opacity-40">
-            {placeholder}
-          </span>
-        )}
+        <MarkdownPreview
+          value={localValue}
+          placeholder={placeholder}
+          placeholderClassName="text-[rgb(var(--color-text-secondary))] opacity-40"
+        />
       </div>
     );
   }
@@ -1502,44 +1366,21 @@ function MarkdownCell({
           setIsEditing(false);
           return;
         }
-        if (e.key !== "Enter") return;
-        const pos = e.currentTarget.selectionStart;
-        const before = localValue.slice(0, pos);
-        const after = localValue.slice(pos);
-        const lastLine = before.split("\n").pop() || "";
-
-        // Auto-continue bullet lists
-        const bulletMatch = lastLine.match(/^([-*])\s(.*)/);
-        if (bulletMatch) {
+        if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
           e.preventDefault();
-          if (!bulletMatch[2].trim()) {
-            // Empty bullet → end the list
-            const lineStart = before.lastIndexOf("\n") + 1;
-            handleChange(localValue.slice(0, lineStart) + after);
-            cursorRef.current = lineStart;
-            return;
-          }
-          const prefix = bulletMatch[1] + " ";
-          handleChange(before + "\n" + prefix + after);
-          cursorRef.current = pos + 1 + prefix.length;
+          e.stopPropagation();
+          setIsEditing(false);
           return;
         }
-
-        // Auto-continue numbered lists
-        const numMatch = lastLine.match(/^(\d+)\.\s(.*)/);
-        if (numMatch) {
+        if (e.key !== "Enter") return;
+        if (continueMarkdownList({
+          value: localValue,
+          selectionStart: e.currentTarget.selectionStart,
+          selectionEnd: e.currentTarget.selectionEnd,
+          onChange: handleChange,
+          setCursor: (position) => { cursorRef.current = position; },
+        })) {
           e.preventDefault();
-          if (!numMatch[2].trim()) {
-            // Empty numbered item → end the list
-            const lineStart = before.lastIndexOf("\n") + 1;
-            handleChange(localValue.slice(0, lineStart) + after);
-            cursorRef.current = lineStart;
-            return;
-          }
-          const prefix = parseInt(numMatch[1]) + 1 + ". ";
-          handleChange(before + "\n" + prefix + after);
-          cursorRef.current = pos + 1 + prefix.length;
-          return;
         }
       }}
     />

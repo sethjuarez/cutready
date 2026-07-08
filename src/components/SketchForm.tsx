@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Channel, convertFileSrc, invoke, listen } from "../services/tauri";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { openPath } from "@tauri-apps/plugin-opener";
-import { SafeMarkdown } from "./SafeMarkdown";
 import { ChevronLeft, Sparkles, Monitor, Plus, X, Folder, Check, Film, Image as ImageIcon, Mic2 } from "lucide-react";
 import { shouldSuppressEditorFlush, useAppStore } from "../stores/appStore";
 import { useToastStore } from "../stores/toastStore";
@@ -18,6 +17,7 @@ import { FieldAiButton } from "./FieldAiButton";
 import { LockedDocumentBanner } from "./LockedDocumentBanner";
 import { NarrationRecordingDialog, type NarrationRecordingTake } from "./NarrationRecordingDialog";
 import { DurationBadge, MetadataEditor } from "./MetadataEditor";
+import { InlineDescriptionEditor } from "./InlineDescriptionEditor";
 import type { PresentationMode } from "./presentation/types";
 import VisualCell from "./VisualCell";
 import { exportSketchToWord, type WordOrientation } from "../utils/exportToWord";
@@ -799,7 +799,6 @@ export function SketchForm() {
   const [showMonitorPicker, setShowMonitorPicker] = useState(false);
   const [durationDisplayMode, setDurationDisplayMode] = useState<DurationDisplayMode>("minutes");
   const [availableMonitors, setAvailableMonitors] = useState<MonitorInfo[]>([]);
-  const [editingDesc, setEditingDesc] = useState(false);
   const [aiUpdatedFlash, setAiUpdatedFlash] = useState(false);
   const [highlightedRows, setHighlightedRows] = useState<Set<number>>(new Set());
   const [rowDiffs, setRowDiffs] = useState<RowDiff[]>([]);
@@ -818,13 +817,6 @@ export function SketchForm() {
   const [localDesc, setLocalDesc] = useState(
     typeof activeSketch?.description === "string" ? activeSketch.description : ""
   );
-  const descRef = useRef<HTMLTextAreaElement>(null);
-  useEffect(() => {
-    if (editingDesc && descRef.current) {
-      descRef.current.focus();
-      descRef.current.selectionStart = descRef.current.value.length;
-    }
-  }, [editingDesc]);
   const titleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const rowsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [narrationDialogRow, setNarrationDialogRow] = useState<number | null>(null);
@@ -902,7 +894,6 @@ export function SketchForm() {
     setLocalTitle(activeSketch?.title ?? "");
     setLocalRows(activeSketch?.rows ?? []);
     setLocalDesc(typeof activeSketch?.description === "string" ? activeSketch.description : "");
-    setEditingDesc(false);
   }, [activeSketchPath, activeSketch, flushPendingSketchEdits]);
 
   // Listen for AI sketch updates — snapshot current rows for diffing
@@ -1670,42 +1661,17 @@ The Actions describe what happens on screen — use them as visual design hints.
           <LockedDocumentBanner message="Sketch is locked. Unlock it to edit fields, rows, media, or AI suggestions." />
         )}
 
-        {/* Description — markdown preview, click to edit */}
-        <div className="relative group/desc my-8">
-          {editingDesc ? (
-            <textarea
-              ref={descRef}
-              value={localDesc}
-              onChange={(e) => {
-                if (sketchLocked) return;
-                setLocalDesc(e.target.value);
-                updateSketch({ description: e.target.value });
-              }}
-              onBlur={() => setEditingDesc(false)}
-              placeholder="Describe what this sketch covers..."
-              rows={4}
-              className="w-full text-sm bg-transparent text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/40 outline-none border border-[rgb(var(--color-border))] rounded-lg px-3 py-2 resize-none focus:ring-1 focus:ring-[rgb(var(--color-accent))]/40 transition-colors"
-              autoFocus
-            />
-          ) : (
-            <div
-              tabIndex={0}
-              onClick={() => { if (!sketchLocked) setEditingDesc(true); }}
-              onFocus={() => { if (!sketchLocked) setEditingDesc(true); }}
-              className={`min-h-[2rem] rounded-lg px-3 py-2 text-sm border border-transparent hover:border-[rgb(var(--color-border))] transition-colors ${!sketchLocked ? "pr-10" : ""} ${sketchLocked ? "cursor-default" : "cursor-text"}`}
-            >
-              {localDesc ? (
-                <div className="prose-desc text-[rgb(var(--color-text))] leading-relaxed">
-                  <SafeMarkdown>{localDesc}</SafeMarkdown>
-                </div>
-              ) : (
-                <span className="text-[rgb(var(--color-text-secondary))]/40">
-                  Describe what this sketch covers...
-                </span>
-              )}
-            </div>
-          )}
-          {!editingDesc && !sketchLocked && (
+        <InlineDescriptionEditor
+          value={localDesc}
+          placeholder="Describe what this sketch covers..."
+          disabled={sketchLocked}
+          rows={4}
+          className="my-8"
+          previewClassName={`prose-desc min-h-[2rem] rounded-lg border border-transparent px-3 py-2 pr-10 text-sm leading-relaxed text-[rgb(var(--color-text))] transition-colors hover:border-[rgb(var(--color-border))] ${sketchLocked ? "cursor-default" : "cursor-text"}`}
+          textareaClassName="w-full resize-none text-sm bg-transparent text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/40 outline-none border border-[rgb(var(--color-border))] rounded-lg px-3 py-2 focus:ring-1 focus:ring-[rgb(var(--color-accent))]/40 transition-colors"
+          onDraftChange={setLocalDesc}
+          onSave={(description) => updateSketch({ description })}
+          action={
             <FieldAiButton
               onClick={() => void runBackgroundAgentAction(
                 localDesc
@@ -1718,8 +1684,8 @@ The Actions describe what happens on screen — use them as visual design hints.
               title={localDesc ? "Improve description with AI" : "Generate description with AI"}
               iconClassName="h-3 w-3"
             />
-          )}
-        </div>
+          }
+        />
 
         <div className="mb-6">
           <MetadataEditor

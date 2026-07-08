@@ -16,6 +16,7 @@ import { DocumentHeader } from "./DocumentHeader";
 import { FieldAiButton } from "./FieldAiButton";
 import { LockedDocumentBanner } from "./LockedDocumentBanner";
 import { useBackgroundAgentAction } from "../hooks/useBackgroundAgentAction";
+import { InlineDescriptionEditor } from "./InlineDescriptionEditor";
 
 /**
  * SplitTabBar — compact tab bar for the split pane, rendered beside the main TabBar.
@@ -328,7 +329,6 @@ function SketchSplitEditor({ path }: { path: string }) {
   const [localRows, setLocalRows] = useState<PlanningRow[]>([]);
   const [localTitle, setLocalTitle] = useState("");
   const [localDesc, setLocalDesc] = useState("");
-  const [editingDesc, setEditingDesc] = useState(false);
   const [error, setError] = useState(false);
   const projectRoot = useAppStore((s) => s.currentProject?.root ?? "");
   const runBackgroundAgentAction = useBackgroundAgentAction();
@@ -338,14 +338,6 @@ function SketchSplitEditor({ path }: { path: string }) {
   const pendingRowsRef = useRef<PlanningRow[] | null>(null);
   const pendingTitleRef = useRef<string | null>(null);
   const pendingDescRef = useRef<string | null>(null);
-  const descRef = useRef<HTMLTextAreaElement>(null);
-
-  useEffect(() => {
-    if (editingDesc && descRef.current) {
-      descRef.current.focus();
-      descRef.current.selectionStart = descRef.current.value.length;
-    }
-  }, [editingDesc]);
 
   useEffect(() => {
     let cancelled = false;
@@ -427,6 +419,19 @@ function SketchSplitEditor({ path }: { path: string }) {
     }, 500);
   };
 
+  const handleDescSave = async (desc: string) => {
+    if (sketch?.locked) return;
+    setLocalDesc(desc);
+    pendingDescRef.current = null;
+    if (descTimerRef.current) {
+      clearTimeout(descTimerRef.current);
+      descTimerRef.current = null;
+    }
+    if (shouldSuppressEditorFlush(path)) return;
+    await invoke("update_sketch", { relativePath: path, description: desc });
+    window.dispatchEvent(new CustomEvent("cutready:sketch-saved"));
+  };
+
   const handleRowsChange = (rows: PlanningRow[]) => {
     if (sketch?.locked) return;
     setLocalRows(rows);
@@ -478,35 +483,18 @@ function SketchSplitEditor({ path }: { path: string }) {
           <LockedDocumentBanner message="Sketch is locked. Unlock it to edit fields, rows, media, or AI suggestions." />
         )}
 
-        {/* Description — click to edit */}
         <div className="relative group/desc mb-8">
-          {editingDesc ? (
-            <textarea
-              ref={descRef}
-              value={localDesc}
-              onChange={(e) => handleDescChange(e.target.value)}
-              onBlur={() => setEditingDesc(false)}
-              placeholder="Describe what this sketch covers..."
-              rows={4}
-              className="w-full text-sm bg-transparent text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/40 outline-none border border-[rgb(var(--color-border))] rounded-lg px-3 py-2 resize-none focus:ring-1 focus:ring-[rgb(var(--color-accent))]/40 transition-colors"
-            />
-          ) : (
-            <div
-              tabIndex={0}
-              className={`min-h-[2rem] rounded-lg border border-transparent px-3 py-2 text-sm transition-colors hover:border-[rgb(var(--color-border))] ${!sketch.locked ? "cursor-text pr-10" : "cursor-default"}`}
-              onClick={() => { if (!sketch.locked) setEditingDesc(true); }}
-              onFocus={() => { if (!sketch.locked) setEditingDesc(true); }}
-            >
-              {localDesc ? (
-                <div className="prose-desc leading-relaxed text-[rgb(var(--color-text))]">
-                  <SafeMarkdown>{localDesc}</SafeMarkdown>
-                </div>
-              ) : (
-                <span className="text-[rgb(var(--color-text-secondary))]/40">Describe what this sketch covers...</span>
-              )}
-            </div>
-          )}
-          {!editingDesc && !sketch.locked && (
+          <InlineDescriptionEditor
+            value={localDesc}
+            placeholder="Describe what this sketch covers..."
+            disabled={sketch.locked}
+            rows={4}
+            className="mb-8"
+            previewClassName={`min-h-[2rem] rounded-lg border border-transparent px-3 py-2 text-sm transition-colors hover:border-[rgb(var(--color-border))] ${!sketch.locked ? "cursor-text pr-10" : "cursor-default"} prose-desc leading-relaxed text-[rgb(var(--color-text))]`}
+            textareaClassName="w-full text-sm bg-transparent text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/40 outline-none border border-[rgb(var(--color-border))] rounded-lg px-3 py-2 resize-none focus:ring-1 focus:ring-[rgb(var(--color-accent))]/40 transition-colors"
+            onDraftChange={handleDescChange}
+            onSave={handleDescSave}
+            action={!sketch.locked ? (
             <FieldAiButton
               onClick={() => void runBackgroundAgentAction(
                 localDesc
@@ -519,7 +507,8 @@ function SketchSplitEditor({ path }: { path: string }) {
               title={localDesc ? "Improve description with AI" : "Generate description with AI"}
               iconClassName="h-3 w-3"
             />
-          )}
+            ) : null}
+          />
         </div>
 
         <ScriptTable

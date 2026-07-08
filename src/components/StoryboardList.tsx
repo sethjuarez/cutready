@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react";
 import {
   DndContext,
   closestCenter,
@@ -13,8 +13,8 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { invoke } from "../services/tauri";
-import { ArrowRight, ChevronDown, ChevronRight, Copy, FileInput, FolderOpen, Plus, SquareTerminal, Trash2 } from "lucide-react";
+import { Channel, invoke } from "../services/tauri";
+import { ArrowRight, ChevronDown, ChevronRight, Copy, FileInput, FileText, Film, FolderOpen, Plus, SquareTerminal, Trash2 } from "lucide-react";
 import { useAppStore, type SidebarOrder } from "../stores/appStore";
 import type { ProjectEntry } from "../types/project";
 import { SketchIcon, StoryboardIcon, NoteIcon } from "./Icons";
@@ -22,6 +22,71 @@ import { ConfirmDialog } from "./ConfirmDialog";
 import { ContextMenu, type ContextMenuItem } from "./ContextMenu";
 import { useToastStore } from "../stores/toastStore";
 import { contentTypeTones, type ContentTypeTone } from "../utils/contentTypeTheme";
+import { useSettings } from "../hooks/useSettings";
+import { loadProviderSecrets } from "../hooks/useSecretStore";
+import {
+  activeProviderInput,
+  buildProviderConfig,
+  defaultProvider,
+  isProviderInputConfigured,
+  providerToConfigInput,
+} from "../utils/providerConfig";
+import { Dialog } from "./Dialog";
+
+interface VideoImportProgress {
+  phase: string;
+  current: number;
+  total: number;
+  message: string;
+}
+
+type ImportKind = "all" | "video" | "sketch" | "storyboard" | "markdown" | "document";
+
+const importDialogFilters: Record<ImportKind, { name: string; extensions: string[] }[]> = {
+  all: [
+    { name: "All supported", extensions: ["sk", "sb", "md", "docx", "doc", "pdf", "pptx", "mp4", "mov", "mkv", "webm", "avi", "m4v"] },
+    { name: "Videos (.mp4, .mov, .mkv, .webm)", extensions: ["mp4", "mov", "mkv", "webm", "avi", "m4v"] },
+    { name: "Sketches (.sk)", extensions: ["sk"] },
+    { name: "Storyboards (.sb)", extensions: ["sb"] },
+    { name: "Markdown (.md)", extensions: ["md"] },
+    { name: "Documents (.docx, .pdf, .pptx)", extensions: ["docx", "doc", "pdf", "pptx"] },
+  ],
+  video: [{ name: "Videos (.mp4, .mov, .mkv, .webm)", extensions: ["mp4", "mov", "mkv", "webm", "avi", "m4v"] }],
+  sketch: [{ name: "Sketches (.sk)", extensions: ["sk"] }],
+  storyboard: [{ name: "Storyboards (.sb)", extensions: ["sb"] }],
+  markdown: [{ name: "Markdown (.md)", extensions: ["md"] }],
+  document: [{ name: "Documents (.docx, .pdf, .pptx)", extensions: ["docx", "doc", "pdf", "pptx"] }],
+};
+
+const importDialogTitles: Record<ImportKind, string> = {
+  all: "Import Files",
+  video: "Import Video as Sketch",
+  sketch: "Import Sketch",
+  storyboard: "Import Storyboard",
+  markdown: "Import Markdown Note",
+  document: "Import Document as Note",
+};
+const VIDEO_IMPORT_MISSING_TRANSCRIPT_PREFIX = "VIDEO_IMPORT_MISSING_TRANSCRIPT:";
+
+const videoImportPhaseDetails: Record<string, string> = {
+  preparing: "Getting the importer ready and checking project settings.",
+  validating: "Checking the video file and looking for a matching transcript sidecar.",
+  transcript: "Reading timestamps so every sketch row can stay tied to the original recording.",
+  audio: "Extracting a local audio reference for review and future editing.",
+  grouping: "Building a first-pass scene map from pauses, timing, and transcript length.",
+  llm: "The Video Import Scene Analyst is reviewing transcript boundaries before screenshots are extracted. Larger transcripts and reasoning models can take a few minutes.",
+  screenshots: "Pulling representative frames from the final scene boundaries.",
+  saving: "Writing the imported sketch and manifest back into the project.",
+  complete: "Sketch import is done. Opening the new editable sketch next.",
+  failed: "Import stopped before a sketch could be created.",
+};
+
+const videoImportAnalystActivity = [
+  "Finding the cuts a demo producer would keep",
+  "Matching narration beats to screenshot-worthy moments",
+  "Keeping every transcript segment in order",
+  "Sharpening the scene boundaries before frames are pulled",
+];
 
 /** Sort items by manifest order. Items not in the manifest go at the end. */
 function applySidebarOrder<T extends { path: string }>(items: T[], order: string[]): T[] {
@@ -65,6 +130,116 @@ function documentItemMetaClass(active: boolean, tone: ContentTypeTone) {
 function ActiveDocumentMarker({ active, tone }: { active: boolean; tone: ContentTypeTone }) {
   if (!active) return null;
   return <span className={`absolute left-0 top-1 bottom-1 w-0.5 rounded-r ${tone.bg}`} />;
+}
+
+function VideoImportProgressDialog({
+  progress,
+  onClose,
+}: {
+  progress: VideoImportProgress | null;
+  onClose: () => void;
+}) {
+  if (!progress) return null;
+
+  const total = Math.max(1, progress.total);
+  const current = Math.min(Math.max(0, progress.current), total);
+  const percent = Math.round((current / total) * 100);
+  const isLlmPhase = progress.phase === "llm";
+  const isComplete = progress.phase === "complete";
+  const isFailed = progress.phase === "failed";
+  const phaseDetail = videoImportPhaseDetails[progress.phase]
+    ?? "CutReady is parsing the transcript, aligning scene ranges, extracting frames, and saving an editable sketch.";
+
+  return (
+    <Dialog
+      isOpen={progress !== null}
+      onClose={isFailed ? onClose : () => {}}
+      align="top"
+      topOffset="18vh"
+      width={`w-full ${isFailed ? "max-w-lg" : "max-w-md"} mx-4`}
+      labelledBy="video-import-progress-title"
+    >
+      <div className="cr-modal-surface overflow-hidden rounded-2xl">
+        <div className="px-5 py-5">
+          <div className="flex items-start gap-3">
+            <div className="relative grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))]">
+              <FileInput className="h-4 w-4" />
+              <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 animate-pulse rounded-full bg-[rgb(var(--color-accent))]" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <h2 id="video-import-progress-title" className="text-sm font-semibold text-[rgb(var(--color-text))]">
+                {isFailed ? "Video import needs attention" : "Importing demo video"}
+              </h2>
+              <p className={`mt-1 text-xs leading-5 text-[rgb(var(--color-text-secondary))] ${isFailed ? "whitespace-pre-wrap" : ""}`}>
+                {progress.message}
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-5">
+            <div className="mb-2 flex items-center justify-between text-[11px] font-medium uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))]">
+              <span>{isComplete ? "Wrapping up" : `Step ${current} of ${total}`}</span>
+              <span>{percent}%</span>
+            </div>
+            <div className="h-2 overflow-hidden rounded-full bg-[rgb(var(--color-surface-alt))]">
+              <div
+                className="h-full rounded-full bg-[rgb(var(--color-accent))] transition-all duration-300 ease-out"
+                style={{ width: `${percent}%` }}
+              />
+            </div>
+          </div>
+
+          <div className="mt-4 rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]/60 px-3 py-2 text-xs leading-5 text-[rgb(var(--color-text-secondary))]">
+            {phaseDetail}
+          </div>
+
+          {isLlmPhase && (
+            <div
+              className="mt-3 rounded-xl border border-[rgb(var(--color-accent))]/20 bg-[rgb(var(--color-accent))]/[0.06] px-3 py-3"
+              aria-live="polite"
+            >
+              <div className="mb-2 flex items-center justify-between text-[10px] font-semibold uppercase tracking-[0.16em] text-[rgb(var(--color-accent))]">
+                <span>Analyst scratchpad</span>
+                <span className="flex items-center gap-1 text-[rgb(var(--color-text-secondary))]">
+                  thinking
+                  <span className="h-1 w-1 animate-pulse rounded-full bg-[rgb(var(--color-accent))]" />
+                  <span className="h-1 w-1 animate-pulse rounded-full bg-[rgb(var(--color-accent))]" style={{ animationDelay: "180ms" }} />
+                  <span className="h-1 w-1 animate-pulse rounded-full bg-[rgb(var(--color-accent))]" style={{ animationDelay: "360ms" }} />
+                </span>
+              </div>
+              <div className="space-y-1.5">
+                {videoImportAnalystActivity.map((line, index) => (
+                  <div
+                    key={line}
+                    className="flex items-center gap-2 text-[11px] leading-4 text-[rgb(var(--color-text-secondary))]"
+                    style={{ opacity: 0.72 + (index * 0.07) }}
+                  >
+                    <span
+                      className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-[rgb(var(--color-accent))]/70"
+                      style={{ animationDelay: `${index * 220}ms` }}
+                    />
+                    <span>{line}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {isFailed && (
+            <div className="mt-5 flex justify-end">
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-lg bg-[rgb(var(--color-accent))] px-4 py-2 text-xs font-medium text-accent-fg transition-colors hover:bg-[rgb(var(--color-accent-hover))]"
+              >
+                Got it
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </Dialog>
+  );
 }
 
 function DocumentItemText({ title, meta, active, tone }: { title: string; meta?: string; active: boolean; tone: ContentTypeTone }) {
@@ -170,6 +345,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
   const loadStoryboards = useAppStore((s) => s.loadStoryboards);
   const loadSketches = useAppStore((s) => s.loadSketches);
   const loadNotes = useAppStore((s) => s.loadNotes);
+  const loadAssets = useAppStore((s) => s.loadAssets);
   const createStoryboard = useAppStore((s) => s.createStoryboard);
   const openStoryboard = useAppStore((s) => s.openStoryboard);
   const deleteStoryboard = useAppStore((s) => s.deleteStoryboard);
@@ -207,6 +383,9 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
   const [pendingDelete, setPendingDelete] = useState<{ type: "storyboard" | "sketch" | "note"; path: string; title: string; usedBy?: string[] } | null>(null);
   const [drmConfirm, setDrmConfirm] = useState<{ resolve: (ok: boolean) => void } | null>(null);
   const [importing, setImporting] = useState(false);
+  const [importMenu, setImportMenu] = useState<{ x: number; y: number } | null>(null);
+  const [videoImportProgress, setVideoImportProgress] = useState<VideoImportProgress | null>(null);
+  const keepVideoImportProgressRef = useRef(false);
   const showToast = useToastStore((s) => s.show);
 
   // ── Transfer (move/copy to project) state ───────────────────────
@@ -237,6 +416,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
   } | null>(null);
   const [conflictName, setConflictName] = useState("");
   const conflictInputRef = useRef<HTMLInputElement>(null);
+  const { settings, updateSetting, loaded: settingsLoaded } = useSettings();
 
   useEffect(() => {
     if (transferConflict) requestAnimationFrame(() => conflictInputRef.current?.select());
@@ -249,6 +429,51 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
 
   /** Derive a safe filename from user-entered text. */
   const slugify = (text: string) => text.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+
+  const buildVideoImportLlmConfig = useCallback(async () => {
+    if (!settingsLoaded) return null;
+    const selectedProvider = defaultProvider(settings);
+    const providerInput = selectedProvider
+      ? providerToConfigInput(
+          selectedProvider,
+          settings,
+          selectedProvider.id === settings.aiActiveProviderId
+            ? { apiKey: settings.aiApiKey, accessToken: settings.aiAccessToken }
+            : await loadProviderSecrets(selectedProvider.id),
+        )
+      : activeProviderInput(settings);
+
+    if (!isProviderInputConfigured(providerInput)) return null;
+
+    let freshBearerToken = settings.aiAuthMode === "azure_oauth" ? settings.aiAccessToken : null;
+    if (settings.aiAuthMode === "azure_oauth" && settings.aiRefreshToken) {
+      try {
+        const tokenResult = await invoke<{ access_token: string; refresh_token?: string }>(
+          "azure_token_refresh",
+          {
+            tenantId: settings.aiTenantId || "",
+            refreshToken: settings.aiRefreshToken,
+            clientId: settings.aiClientId || null,
+          },
+        );
+        if (tokenResult.access_token) {
+          freshBearerToken = tokenResult.access_token;
+          await updateSetting("aiAccessToken", tokenResult.access_token);
+          if (tokenResult.refresh_token) {
+            await updateSetting("aiRefreshToken", tokenResult.refresh_token);
+          }
+        }
+      } catch {
+        // The import request below will surface any auth failure with the current token.
+      }
+    }
+
+    const config = buildProviderConfig(providerInput);
+    if (freshBearerToken && selectedProvider?.id === settings.aiActiveProviderId) {
+      config.bearer_token = freshBearerToken;
+    }
+    return config;
+  }, [settings, settingsLoaded, updateSetting]);
 
   /** Enter rename mode for a sidebar item. */
   const startRename = useCallback((type: "storyboard" | "sketch" | "note", path: string) => {
@@ -510,30 +735,33 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
     setIsCreatingNote(false);
   }, [newNoteTitle, createNote]);
 
-  const handleImport = useCallback(async () => {
+  const handleOpenImportMenu = useCallback((event: ReactMouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    if (importing) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    setContextMenu(null);
+    setImportMenu({ x: rect.left, y: rect.bottom + 6 });
+  }, [importing]);
+
+  const handleImport = useCallback(async (kind: ImportKind = "all") => {
     try {
       const { open: openDialog, message: showMessage } = await import("@tauri-apps/plugin-dialog");
       const selected = await openDialog({
-        title: "Import Files",
+        title: importDialogTitles[kind],
         multiple: true,
-        filters: [
-          { name: "All supported", extensions: ["sk", "sb", "md", "docx", "doc", "pdf", "pptx"] },
-          { name: "Sketches (.sk)", extensions: ["sk"] },
-          { name: "Storyboards (.sb)", extensions: ["sb"] },
-          { name: "Markdown (.md)", extensions: ["md"] },
-          { name: "Documents (.docx, .pdf, .pptx)", extensions: ["docx", "doc", "pdf", "pptx"] },
-        ],
+        filters: importDialogFilters[kind],
       });
       if (!selected) return;
       setImporting(true);
 
       // Helper: invoke an import command, handling file-exists conflicts.
-      async function importWithConflict(
+      async function importWithConflict<T = string>(
         command: string,
         filePath: string,
-      ): Promise<string> {
+        extraArgs: Record<string, unknown> = {},
+      ): Promise<T | ""> {
         try {
-          return await invoke<string>(command, { filePath });
+          return await invoke<T>(command, { filePath, ...extraArgs });
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           if (msg.startsWith("FILE_EXISTS:")) {
@@ -546,18 +774,30 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
               },
             );
             if (result === "Yes") {
-              return await invoke<string>(command, { filePath, conflict: "overwrite" });
+              return await invoke<T>(command, { filePath, conflict: "overwrite", ...extraArgs });
             } else if (result === "No") {
-              return await invoke<string>(command, { filePath, conflict: "rename" });
+              return await invoke<T>(command, { filePath, conflict: "rename", ...extraArgs });
             }
             return ""; // Cancel
+          }
+          if (msg.startsWith(VIDEO_IMPORT_MISSING_TRANSCRIPT_PREFIX)) {
+            keepVideoImportProgressRef.current = true;
+            setVideoImportProgress({
+              phase: "failed",
+              current: 0,
+              total: 1,
+              message: msg.slice(VIDEO_IMPORT_MISSING_TRANSCRIPT_PREFIX.length),
+            });
+            return "";
           }
           throw err;
         }
       }
 
       const paths = Array.isArray(selected) ? selected : [selected];
+      const videoImportLlmConfig = await buildVideoImportLlmConfig();
       let importedNote = "";
+      let importedSketch = "";
       for (const raw of paths) {
         const filePath = typeof raw === "string" ? raw : String(raw);
         const ext = filePath.split(".").pop()?.toLowerCase();
@@ -577,12 +817,56 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
         } else if (ext === "pptx") {
           const result = await importWithConflict("import_pptx", filePath);
           if (result) importedNote = result;
+        } else if (ext && ["mp4", "mov", "mkv", "webm", "avi", "m4v"].includes(ext)) {
+          const progressChannel = new Channel<VideoImportProgress>();
+          progressChannel.onmessage = (progress) => {
+            setVideoImportProgress(progress);
+          };
+          setVideoImportProgress({
+            phase: "preparing",
+            current: 0,
+            total: 7,
+            message: "Preparing demo video import",
+          });
+          const result = await importWithConflict<{
+            sketch_path: string;
+            row_count: number;
+            llm_refined: boolean;
+            llm_refinement_status?: string | null;
+          }>(
+            "import_video_with_progress",
+            filePath,
+            {
+              ...(videoImportLlmConfig ? { llmConfig: videoImportLlmConfig } : {}),
+              onProgress: progressChannel,
+            },
+          );
+          if (result && typeof result !== "string") {
+            importedSketch = result.sketch_path;
+            setVideoImportProgress({
+              phase: "complete",
+              current: 7,
+              total: 7,
+              message: result.llm_refined
+                ? "AI-refined video import complete"
+                : "Heuristic video import complete",
+            });
+            showToast(
+              result.llm_refined
+                ? `Imported AI-refined video sketch with ${result.row_count} scenes`
+                : `Imported video sketch with ${result.row_count} heuristic scenes`,
+              4000,
+              "success",
+            );
+          }
         }
       }
       await loadSketches();
       await loadStoryboards();
       await loadNotes();
-      if (importedNote) openNote(importedNote);
+      await loadAssets();
+      if (importedSketch) await openSketch(importedSketch);
+      else if (importedNote) openNote(importedNote);
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
       console.error("[import] Import failed:", errMsg);
@@ -609,8 +893,71 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
       }
     } finally {
       setImporting(false);
+      if (keepVideoImportProgressRef.current) {
+        keepVideoImportProgressRef.current = false;
+      } else {
+        window.setTimeout(() => setVideoImportProgress(null), 700);
+      }
     }
-  }, [loadSketches, loadStoryboards, loadNotes, openNote, showDrmConfirm, showToast]);
+  }, [buildVideoImportLlmConfig, loadSketches, loadStoryboards, loadNotes, loadAssets, openSketch, openNote, showDrmConfirm, showToast]);
+
+  const buildImportMenuItems = useCallback((): ContextMenuItem[] => [
+    {
+      label: "Video to sketch...",
+      icon: <Film className="w-3.5 h-3.5" />,
+      action: () => handleImport("video"),
+    },
+    {
+      label: "Sketch...",
+      icon: <SketchIcon className="w-3.5 h-3.5" />,
+      action: () => handleImport("sketch"),
+    },
+    {
+      label: "Storyboard...",
+      icon: <StoryboardIcon className="w-3.5 h-3.5" />,
+      action: () => handleImport("storyboard"),
+    },
+    {
+      label: "Markdown note...",
+      icon: <NoteIcon className="w-3.5 h-3.5" />,
+      action: () => handleImport("markdown"),
+    },
+    {
+      label: "Document to note...",
+      icon: <FileText className="w-3.5 h-3.5" />,
+      action: () => handleImport("document"),
+    },
+    { separator: true },
+    {
+      label: "Auto-detect file type...",
+      icon: <FileInput className="w-3.5 h-3.5" />,
+      action: () => handleImport("all"),
+    },
+  ], [handleImport]);
+
+  const importButton = (
+    <button
+      onClick={handleOpenImportMenu}
+      className="inline-flex items-center gap-1 rounded-md border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))]/80 px-2 py-1 text-[11px] font-medium text-[rgb(var(--color-text-secondary))] shadow-sm transition-colors hover:border-[rgb(var(--color-accent))]/50 hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))] disabled:pointer-events-none disabled:opacity-50"
+      title="Import..."
+      disabled={importing}
+      aria-haspopup="menu"
+      aria-expanded={importMenu !== null}
+    >
+      {importing ? (
+        <svg className="w-3 h-3 animate-spin text-[rgb(var(--color-text-secondary))]" viewBox="0 0 24 24" fill="none">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+        </svg>
+      ) : (
+        <>
+          <FileInput className="w-3 h-3" />
+          <span>Import</span>
+          <ChevronDown className="w-3 h-3 opacity-70" />
+        </>
+      )}
+    </button>
+  );
 
   return (
     <div
@@ -623,21 +970,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
             Documents
           </span>
           <div className="flex items-center gap-1">
-            <button
-              onClick={handleImport}
-              className="p-1 rounded-md text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10 transition-colors disabled:opacity-50 disabled:pointer-events-none"
-              title="Import .sk, .sb, or document"
-              disabled={importing}
-            >
-              {importing ? (
-                <svg className="w-3 h-3 animate-spin text-[rgb(var(--color-text-secondary))]" viewBox="0 0 24 24" fill="none">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                </svg>
-              ) : (
-                <FileInput className="w-3 h-3" />
-              )}
-            </button>
+            {importButton}
           </div>
         </div>
       )}
@@ -654,21 +987,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
             actions={
               <>
               {resolvedMode === "storyboards" && (
-                <button
-                  onClick={handleImport}
-                  className="p-1 rounded-md text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10 transition-colors disabled:opacity-50 disabled:pointer-events-none"
-                  title="Import"
-                  disabled={importing}
-                >
-                  {importing ? (
-                    <svg className="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                    </svg>
-                  ) : (
-                    <FileInput className="w-3 h-3" />
-                  )}
-                </button>
+                importButton
               )}
               <button
                 onClick={() => { setStoryboardsExpanded(true); setIsCreatingSb(true); }}
@@ -786,21 +1105,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
             actions={
               <>
               {resolvedMode === "sketches" && (
-                <button
-                  onClick={handleImport}
-                  className="p-1 rounded-md text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10 transition-colors disabled:opacity-50 disabled:pointer-events-none"
-                  title="Import"
-                  disabled={importing}
-                >
-                  {importing ? (
-                    <svg className="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                    </svg>
-                  ) : (
-                    <FileInput className="w-3 h-3" />
-                  )}
-                </button>
+                importButton
               )}
               <button
                 onClick={() => { setSketchesExpanded(true); setIsCreatingSk(true); }}
@@ -918,21 +1223,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
             actions={
               <>
               {resolvedMode === "notes" && (
-                <button
-                  onClick={handleImport}
-                  className="p-1 rounded-md text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10 transition-colors disabled:opacity-50 disabled:pointer-events-none"
-                  title="Import"
-                  disabled={importing}
-                >
-                  {importing ? (
-                    <svg className="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                    </svg>
-                  ) : (
-                    <FileInput className="w-3 h-3" />
-                  )}
-                </button>
+                importButton
               )}
               <button
                 onClick={() => { setNotesExpanded(true); setIsCreatingNote(true); }}
@@ -976,10 +1267,14 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                     + New note
                   </button>
                   <button
-                    onClick={handleImport}
-                    className="px-3 py-1.5 text-[11px] rounded-lg border border-[rgb(var(--color-border))] text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:border-[rgb(var(--color-accent))] transition-colors"
+                    onClick={handleOpenImportMenu}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-[rgb(var(--color-border))] px-3 py-1.5 text-[11px] text-[rgb(var(--color-text-secondary))] transition-colors hover:border-[rgb(var(--color-accent))] hover:text-[rgb(var(--color-text))]"
+                    aria-haspopup="menu"
+                    aria-expanded={importMenu !== null}
                   >
-                    Import
+                    <FileInput className="w-3 h-3" />
+                    <span>Import</span>
+                    <ChevronDown className="w-3 h-3 opacity-70" />
                   </button>
                 </div>
               </div>
@@ -1097,6 +1392,17 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
         onConfirm={() => { drmConfirm?.resolve(true); setDrmConfirm(null); }}
         onCancel={() => { drmConfirm?.resolve(false); setDrmConfirm(null); }}
       />
+      <VideoImportProgressDialog
+        progress={videoImportProgress}
+        onClose={() => setVideoImportProgress(null)}
+      />
+      {importMenu && (
+        <ContextMenu
+          position={{ x: importMenu.x, y: importMenu.y }}
+          items={buildImportMenuItems()}
+          onClose={() => setImportMenu(null)}
+        />
+      )}
 
       {/* Context menu (portal — rendered above DnD layer) */}
       {contextMenu && (

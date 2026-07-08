@@ -60,9 +60,9 @@ dependencies = [
 
 [[package]]
 name = "agentive"
-version = "0.5.0"
+version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bc999bacdf51e10b5b960bc9192514e07536dc34f8d811b4d9ae9380847ebb9f"
+checksum = "60697dd6cae98ae51ad6da0337433a7c88cf049c968da55fc5f74f33e63c7c22"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -1403,7 +1403,7 @@ dependencies = [
 
 [[package]]
 name = "cutready"
-version = "1.24.0"
+version = "1.24.1"
 dependencies = [
  "agentive",
  "anyhow",

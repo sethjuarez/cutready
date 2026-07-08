@@ -738,6 +738,8 @@ pub fn run() {
             commands::import::import_markdown,
             commands::import::import_sketch,
             commands::import::import_storyboard,
+            commands::video_import::import_video,
+            commands::video_import::import_video_with_progress,
             commands::agent::list_models,
             commands::agent::agent_chat,
             commands::agent::agent_chat_with_tools,
