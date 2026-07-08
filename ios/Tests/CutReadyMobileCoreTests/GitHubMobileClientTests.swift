@@ -75,6 +75,107 @@ final class GitHubMobileClientTests: XCTestCase {
         XCTAssertNotNil(repositories[0].updatedAt)
     }
 
+    func testSearchRepositoriesUsesSearchEndpointWithSmallPage() async throws {
+        let session = URLSession(configuration: mockSessionConfiguration())
+        let client = GitHubMobileClient(session: session)
+
+        MockURLProtocol.requestHandler = { request in
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Accept"), "application/vnd.github+json")
+            XCTAssertEqual(request.url?.path, "/search/repositories")
+            let queryItems = URLComponents(url: try XCTUnwrap(request.url), resolvingAgainstBaseURL: false)?.queryItems ?? []
+            XCTAssertEqual(queryItems.first { $0.name == "q" }?.value, "demo in:name fork:true")
+            XCTAssertEqual(queryItems.first { $0.name == "sort" }?.value, "updated")
+            XCTAssertEqual(queryItems.first { $0.name == "order" }?.value, "desc")
+            XCTAssertEqual(queryItems.first { $0.name == "per_page" }?.value, "20")
+
+            let response = try XCTUnwrap(HTTPURLResponse(
+                url: try XCTUnwrap(request.url),
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: nil
+            ))
+            let data = Data("""
+            {
+              "total_count": 1,
+              "items": [
+                {
+                  "id": 42,
+                  "name": "cutready-demo",
+                  "full_name": "sethjuarez/cutready-demo",
+                  "private": true,
+                  "default_branch": "main",
+                  "updated_at": "2026-07-07T17:00:00Z"
+                }
+              ]
+            }
+            """.utf8)
+            return (response, data)
+        }
+
+        let repositories = try await client.searchRepositories(accessToken: "gh_test_token", query: " demo ", limit: 20)
+
+        XCTAssertEqual(repositories.count, 1)
+        XCTAssertEqual(repositories[0].fullName, "sethjuarez/cutready-demo")
+    }
+
+    func testSearchRepositoriesSkipsShortQueries() async throws {
+        let session = URLSession(configuration: mockSessionConfiguration())
+        let client = GitHubMobileClient(session: session)
+
+        MockURLProtocol.requestHandler = { _ in
+            XCTFail("Short searches should not call GitHub.")
+            throw GitHubMobileClientTestError.unexpectedRequest
+        }
+
+        let repositories = try await client.searchRepositories(accessToken: "gh_test_token", query: "d", limit: 20)
+
+        XCTAssertTrue(repositories.isEmpty)
+    }
+
+    func testRepositoryLookupUsesOwnerRepoEndpoint() async throws {
+        let session = URLSession(configuration: mockSessionConfiguration())
+        let client = GitHubMobileClient(session: session)
+        let specifier = try XCTUnwrap(GitHubRepositorySpecifier(input: "https://github.com/sethjuarez/cutready-demo.git"))
+
+        MockURLProtocol.requestHandler = { request in
+            XCTAssertEqual(request.url?.path, "/repos/sethjuarez/cutready-demo")
+
+            let response = try XCTUnwrap(HTTPURLResponse(
+                url: try XCTUnwrap(request.url),
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: nil
+            ))
+            let data = Data("""
+            {
+              "id": 42,
+              "name": "cutready-demo",
+              "full_name": "sethjuarez/cutready-demo",
+              "private": true,
+              "default_branch": "main",
+              "updated_at": "2026-07-07T17:00:00Z"
+            }
+            """.utf8)
+            return (response, data)
+        }
+
+        let repository = try await client.repository(accessToken: "gh_test_token", specifier: specifier)
+
+        XCTAssertEqual(repository.fullName, "sethjuarez/cutready-demo")
+        XCTAssertEqual(repository.repositoryRef.owner, "sethjuarez")
+    }
+
+    func testRepositorySpecifierParsesSupportedInputs() throws {
+        XCTAssertEqual(GitHubRepositorySpecifier(input: "sethjuarez/cutready")?.fullName, "sethjuarez/cutready")
+        XCTAssertEqual(GitHubRepositorySpecifier(input: "https://github.com/sethjuarez/cutready.git")?.fullName, "sethjuarez/cutready")
+        XCTAssertEqual(GitHubRepositorySpecifier(input: "git@github.com:sethjuarez/cutready.git")?.fullName, "sethjuarez/cutready")
+        XCTAssertNil(GitHubRepositorySpecifier(input: "https://example.com/sethjuarez/cutready"))
+        XCTAssertNil(GitHubRepositorySpecifier(input: "sethjuarez/cutready/extra"))
+        XCTAssertNil(GitHubRepositorySpecifier(input: "../cutready"))
+        XCTAssertNil(GitHubRepositorySpecifier(input: "sethjuarez/.."))
+        XCTAssertNil(GitHubRepositorySpecifier(input: "sethjuarez/$(bad)"))
+    }
+
     private func mockSessionConfiguration() -> URLSessionConfiguration {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [MockURLProtocol.self]
@@ -114,4 +215,5 @@ private final class MockURLProtocol: URLProtocol {
 
 private enum GitHubMobileClientTestError: Error {
     case missingHandler
+    case unexpectedRequest
 }

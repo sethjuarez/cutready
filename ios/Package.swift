@@ -49,8 +49,8 @@ let package = Package(
         ),
         .binaryTarget(
             name: "DraftlineMobile",
-            url: "https://github.com/sethjuarez/draftline/releases/download/draftline-mobile-ios-v0.2.12-1/DraftlineMobile.xcframework.zip",
-            checksum: "ba47b5f5a765e4302b9576efcb185d02c0510fbeed525a6dcceacefd1c95a7f3"
+            url: "https://github.com/sethjuarez/draftline/releases/download/v0.2.14/DraftlineMobile.xcframework.zip",
+            checksum: "b185eb45b1b065ad536505a87aaa4cffac6b896154f32e75fe14f8af14a47154"
         )
     ]
 )

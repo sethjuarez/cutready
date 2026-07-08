@@ -92,6 +92,7 @@ public struct DraftlineMobileVersionResult: Codable, Equatable, Sendable {
 public enum DraftlineMobileBridgeError: Error, Equatable, LocalizedError, Sendable {
     case nativeBridgeUnavailable
     case workspaceNotOpen
+    case operationInProgress
     case invalidPath(String)
     case nativeFailure(String)
     case invalidNativeResponse(String)
@@ -102,6 +103,8 @@ public enum DraftlineMobileBridgeError: Error, Equatable, LocalizedError, Sendab
             return "Draftline's native mobile bridge is not linked into this app build yet."
         case .workspaceNotOpen:
             return "Open a Draftline workspace before reading or writing files."
+        case .operationInProgress:
+            return "A workspace operation is already in progress."
         case .invalidPath(let path):
             return "The path is not allowed in this mobile workspace: \(path)"
         case .nativeFailure(let message):
@@ -114,15 +117,50 @@ public enum DraftlineMobileBridgeError: Error, Equatable, LocalizedError, Sendab
 
 public struct MobileConflict: Codable, Equatable, Identifiable, Sendable {
     public var path: String
+    public var fieldPath: String?
+    public var label: String
     public var summary: String
     public var canResolveOnMobile: Bool
+    public var mine: String?
+    public var latestShared: String?
 
-    public var id: String { path }
+    public var id: String {
+        if let fieldPath {
+            return "\(path)#\(fieldPath)"
+        }
+        return path
+    }
 
-    public init(path: String, summary: String, canResolveOnMobile: Bool) {
+    public var needsUserChoice: Bool {
+        canResolveOnMobile && MobileWorkspacePolicy.canEdit(path: path)
+    }
+
+    public init(
+        path: String,
+        fieldPath: String? = nil,
+        label: String? = nil,
+        summary: String,
+        canResolveOnMobile: Bool,
+        mine: String? = nil,
+        latestShared: String? = nil
+    ) {
         self.path = path
+        self.fieldPath = fieldPath
+        self.label = label ?? fieldPath ?? path
         self.summary = summary
         self.canResolveOnMobile = canResolveOnMobile
+        self.mine = mine
+        self.latestShared = latestShared
+    }
+}
+
+public struct MobileShelf: Codable, Equatable, Identifiable, Sendable {
+    public var id: String
+    public var name: String?
+
+    public init(id: String, name: String? = nil) {
+        self.id = id
+        self.name = name
     }
 }
 
@@ -131,10 +169,48 @@ public enum SimpleConflictResolution: String, Codable, Sendable {
     case useRemote
 }
 
+public enum MobileConflictResolutionChoice: String, Codable, Equatable, Sendable {
+    case myVersion
+    case latestShared
+    case custom
+}
+
+public struct MobileConflictResolutionRequest: Codable, Equatable, Sendable {
+    public var path: String
+    public var fieldPath: String?
+    public var choice: MobileConflictResolutionChoice
+    public var customContent: String?
+
+    public init(
+        path: String,
+        fieldPath: String? = nil,
+        choice: MobileConflictResolutionChoice,
+        customContent: String? = nil
+    ) {
+        self.path = path
+        self.fieldPath = fieldPath
+        self.choice = choice
+        self.customContent = customContent
+    }
+}
+
+public struct WorkspaceDocumentSummaries: Equatable, Sendable {
+    public var storyboards: [FileSummary]
+    public var sketches: [FileSummary]
+    public var notes: [FileSummary]
+
+    public init(storyboards: [FileSummary] = [], sketches: [FileSummary] = [], notes: [FileSummary] = []) {
+        self.storyboards = storyboards
+        self.sketches = sketches
+        self.notes = notes
+    }
+}
+
 public protocol DraftlineMobileClient: Sendable {
     func openWorkspace(_ workspace: MobileWorkspaceDescriptor) async throws
     func closeWorkspace() async throws
 
+    func listDocuments() async throws -> WorkspaceDocumentSummaries
     func listStoryboards() async throws -> [FileSummary]
     func listSketches() async throws -> [FileSummary]
     func listNotes() async throws -> [FileSummary]
@@ -148,12 +224,16 @@ public protocol DraftlineMobileClient: Sendable {
     func writeNote(_ markdown: String, path: String) async throws
 
     func saveSnapshot(label: String) async throws
+    func refreshRemote() async throws
     func syncStatus() async throws -> MobileSyncStatus
     func pull() async throws -> MobileSyncStatus
     func push() async throws -> MobileSyncStatus
 
+    func shelveAllDirty(name: String) async throws -> MobileShelf
+    func listShelves() async throws -> [MobileShelf]
+
     func listConflicts() async throws -> [MobileConflict]
-    func resolveConflict(path: String, resolution: SimpleConflictResolution) async throws
+    func resolveConflicts(_ resolutions: [MobileConflictResolutionRequest]) async throws -> MobileSyncStatus
 }
 
 public protocol DraftlineMobileWorkspaceClient: DraftlineMobileClient {
@@ -250,16 +330,20 @@ public final class DraftlineNativeMobileClient: DraftlineMobileWorkspaceClient, 
 #endif
     }
 
+    public func listDocuments() async throws -> WorkspaceDocumentSummaries {
+        try await onNativeQueue { try self.documentSummaries(matching: ["sb", "sk", "md"]) }
+    }
+
     public func listStoryboards() async throws -> [FileSummary] {
-        try await onNativeQueue { try self.fileSummaries(extension: "sb") }
+        try await onNativeQueue { try self.documentSummaries(matching: ["sb"]).storyboards }
     }
 
     public func listSketches() async throws -> [FileSummary] {
-        try await onNativeQueue { try self.fileSummaries(extension: "sk") }
+        try await onNativeQueue { try self.documentSummaries(matching: ["sk"]).sketches }
     }
 
     public func listNotes() async throws -> [FileSummary] {
-        try await onNativeQueue { try self.fileSummaries(extension: "md") }
+        try await onNativeQueue { try self.documentSummaries(matching: ["md"]).notes }
     }
 
     public func readStoryboard(path: String) async throws -> Storyboard {
@@ -341,6 +425,14 @@ public final class DraftlineNativeMobileClient: DraftlineMobileWorkspaceClient, 
 #endif
     }
 
+    public func refreshRemote() async throws {
+#if os(iOS)
+        try await fetchRemote()
+#else
+        throw DraftlineMobileBridgeError.nativeBridgeUnavailable
+#endif
+    }
+
     public func pull() async throws -> MobileSyncStatus {
 #if os(iOS)
         try await nativeStatus { workspace in
@@ -412,11 +504,37 @@ public final class DraftlineNativeMobileClient: DraftlineMobileWorkspaceClient, 
 #endif
     }
 
-    public func listConflicts() async throws -> [MobileConflict] {
+    public func shelveAllDirty(name: String) async throws -> MobileShelf {
 #if os(iOS)
         let json = try await nativeString { workspace in
+            name.withCString { namePointer in
+                draftline_mobile_workspace_shelve_json(workspace, namePointer, nil)
+            }
+        }
+        return try Self.mobileShelf(fromJSON: json)
+#else
+        _ = name
+        throw DraftlineMobileBridgeError.nativeBridgeUnavailable
+#endif
+    }
+
+    public func listShelves() async throws -> [MobileShelf] {
+#if os(iOS)
+        let json = try await nativeString { workspace in
+            draftline_mobile_workspace_list_shelves_json(workspace)
+        }
+        return try Self.mobileShelves(fromJSON: json)
+#else
+        throw DraftlineMobileBridgeError.nativeBridgeUnavailable
+#endif
+    }
+
+    public func listConflicts() async throws -> [MobileConflict] {
+#if os(iOS)
+        try await fetchRemote()
+        let json = try await nativeString { workspace in
             "origin".withCString { remotePointer in
-                draftline_mobile_workspace_preflight_apply_incoming_json(workspace, remotePointer)
+                draftline_mobile_workspace_preflight_merge_incoming_json(workspace, remotePointer)
             }
         }
         return try Self.mobileConflicts(fromJSON: json)
@@ -425,11 +543,86 @@ public final class DraftlineNativeMobileClient: DraftlineMobileWorkspaceClient, 
 #endif
     }
 
-    public func resolveConflict(path: String, resolution: SimpleConflictResolution) async throws {
-        _ = path
-        _ = resolution
+    public func resolveConflicts(_ resolutions: [MobileConflictResolutionRequest]) async throws -> MobileSyncStatus {
+#if os(iOS)
+        try await fetchRemote()
+        let preflightJSON = try await nativeString { workspace in
+            "origin".withCString { remotePointer in
+                draftline_mobile_workspace_preflight_merge_incoming_json(workspace, remotePointer)
+            }
+        }
+        let preflight = try Self.mergeIncomingReport(fromJSON: preflightJSON)
+        guard let token = preflight.token else {
+            throw DraftlineMobileBridgeError.invalidNativeResponse("Draftline did not return a merge token.")
+        }
+        guard preflight.dirtyFiles.isEmpty, preflight.fileHazards.isEmpty else {
+            throw DraftlineMobileBridgeError.nativeFailure(
+                "Some local file changes need review before sync can continue. Park mobile edits and reload latest, then try again."
+            )
+        }
+
+        if preflight.conflicts.isEmpty, preflight.canMergeCleanly {
+            let tokenJSON = try Self.mergeTokenJSON(from: token)
+            _ = try await nativeString { workspace in
+                self.withCredentialCallback(self.credential) { callback, userData in
+                    tokenJSON.withCString { tokenPointer in
+                        "Merge latest shared changes".withCString { labelPointer in
+                            draftline_mobile_workspace_merge_incoming_json(
+                                workspace,
+                                tokenPointer,
+                                labelPointer,
+                                callback,
+                                userData
+                            )
+                        }
+                    }
+                }
+            }
+            return try await push()
+        }
+
+        let draftlineResolutions = try Self.draftlineMergeResolutions(
+            conflicts: preflight.conflicts,
+            mobileResolutions: resolutions
+        )
+        let tokenJSON = try Self.mergeTokenJSON(from: token)
+        let resolutionsJSON = try Self.mergeResolutionsJSON(from: draftlineResolutions)
+        _ = try await nativeString { workspace in
+            self.withCredentialCallback(self.credential) { callback, userData in
+                tokenJSON.withCString { tokenPointer in
+                    resolutionsJSON.withCString { resolutionsPointer in
+                        "Merge mobile and shared changes".withCString { labelPointer in
+                            draftline_mobile_workspace_merge_incoming_with_resolutions_json(
+                                workspace,
+                                tokenPointer,
+                                labelPointer,
+                                resolutionsPointer,
+                                callback,
+                                userData
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        return try await push()
+#else
+        _ = resolutions
         throw DraftlineMobileBridgeError.nativeBridgeUnavailable
+#endif
     }
+
+#if os(iOS)
+    private func fetchRemote() async throws {
+        try await nativeStatus { workspace in
+            self.withCredentialCallback(self.credential) { callback, userData in
+                "origin".withCString { remotePointer in
+                    draftline_mobile_workspace_fetch_remote(workspace, remotePointer, callback, userData)
+                }
+            }
+        }
+    }
+#endif
 
     public static func defaultWorkspaceDirectory(for workspace: MobileWorkspaceDescriptor) -> URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
@@ -470,44 +663,75 @@ public final class DraftlineNativeMobileClient: DraftlineMobileWorkspaceClient, 
 #endif
     }
 
-    private func fileSummaries(extension fileExtension: String) throws -> [FileSummary] {
+    private func documentSummaries(matching allowedExtensions: Set<String>) throws -> WorkspaceDocumentSummaries {
         guard let workspaceRoot else {
             throw DraftlineMobileBridgeError.workspaceNotOpen
         }
 
         guard let enumerator = FileManager.default.enumerator(
             at: workspaceRoot,
-            includingPropertiesForKeys: [.isRegularFileKey, .contentModificationDateKey],
+            includingPropertiesForKeys: [.isDirectoryKey, .isRegularFileKey, .contentModificationDateKey],
             options: [.skipsHiddenFiles]
         ) else {
-            return []
+            return WorkspaceDocumentSummaries()
         }
 
-        var summaries: [FileSummary] = []
+        var storyboards: [FileSummary] = []
+        var sketches: [FileSummary] = []
+        var notes: [FileSummary] = []
         for case let fileURL as URL in enumerator {
-            let values = try fileURL.resourceValues(forKeys: [.isRegularFileKey, .contentModificationDateKey])
+            let values = try fileURL.resourceValues(forKeys: [.isDirectoryKey, .isRegularFileKey, .contentModificationDateKey])
+            if values.isDirectory == true {
+                if Self.shouldSkipDirectory(fileURL) {
+                    enumerator.skipDescendants()
+                }
+                continue
+            }
+
             guard values.isRegularFile == true else {
                 continue
             }
 
             let path = fileURL.pathRelative(to: workspaceRoot)
+            let fileExtension = (path as NSString).pathExtension.lowercased()
             guard MobileWorkspacePolicy.canEdit(path: path),
-                  (path as NSString).pathExtension.lowercased() == fileExtension,
+                  allowedExtensions.contains(fileExtension),
                   let contents = try? String(contentsOf: fileURL, encoding: .utf8) else {
                 continue
             }
 
-            summaries.append(
-                FileSummary(
-                    path: path,
-                    title: Self.title(for: path, contents: contents),
-                    contents: contents,
-                    updatedAt: values.contentModificationDate
-                )
+            let summary = FileSummary(
+                path: path,
+                title: Self.title(for: path, contents: contents),
+                contents: contents,
+                updatedAt: values.contentModificationDate
             )
+            switch fileExtension {
+            case "sb":
+                storyboards.append(summary)
+            case "sk":
+                sketches.append(summary)
+            case "md":
+                notes.append(summary)
+            default:
+                break
+            }
         }
 
-        return summaries.sorted { $0.path < $1.path }
+        return WorkspaceDocumentSummaries(
+            storyboards: storyboards.sorted { $0.path < $1.path },
+            sketches: sketches.sorted { $0.path < $1.path },
+            notes: notes.sorted { $0.path < $1.path }
+        )
+    }
+
+    private static func shouldSkipDirectory(_ url: URL) -> Bool {
+        switch url.lastPathComponent.lowercased() {
+        case "node_modules", "target", ".build", "deriveddata", "__pycache__":
+            return true
+        default:
+            return false
+        }
     }
 
     private func assetData(path: String) throws -> Data? {
@@ -591,36 +815,54 @@ public final class DraftlineNativeMobileClient: DraftlineMobileWorkspaceClient, 
     }
 
     static func mobileConflicts(fromJSON json: String) throws -> [MobileConflict] {
-        let report = try applyIncomingReport(fromJSON: json)
+        let report = try mergeIncomingReport(fromJSON: json)
         var conflicts = report.dirtyFiles.map { file in
             MobileConflict(
                 path: file.path,
-                summary: "Local \(file.kind.mobileLabel) blocks pulling incoming changes. Resolve this on desktop.",
+                summary: "Local \(file.kind.mobileLabel) change needs review before sync can continue.",
                 canResolveOnMobile: false
             )
         }
+
         conflicts.append(contentsOf: report.fileHazards.map { hazard in
             MobileConflict(
                 path: hazard.path,
-                summary: "Incoming changes would overwrite a \(hazard.kind.mobileLabel) file. Resolve this on desktop.",
+                summary: "A shared workspace file issue needs review before sync can continue.",
                 canResolveOnMobile: false
             )
         })
 
-        if conflicts.isEmpty, report.syncStatus.state == .needsMerge {
-            conflicts.append(
-                MobileConflict(
-                    path: report.syncStatus.variation,
-                    summary: "This workspace needs a Draftline merge. Open it on desktop to resolve the history.",
-                    canResolveOnMobile: false
-                )
+        conflicts.append(contentsOf: report.conflicts.map { conflict in
+            let canResolve = MobileWorkspacePolicy.canEdit(path: conflict.path)
+            return MobileConflict(
+                path: conflict.path,
+                fieldPath: conflict.fieldPath,
+                label: conflict.label,
+                summary: canResolve
+                    ? "This item changed on your device and in the shared workspace."
+                    : "This shared workspace file changed outside mobile's editing surface.",
+                canResolveOnMobile: true,
+                mine: conflict.ours,
+                latestShared: conflict.theirs
             )
-        }
+        })
         return conflicts
+    }
+
+    static func mobileShelf(fromJSON json: String) throws -> MobileShelf {
+        try decode(MobileShelf.self, fromJSON: json)
+    }
+
+    static func mobileShelves(fromJSON json: String) throws -> [MobileShelf] {
+        try decode([MobileShelf].self, fromJSON: json)
     }
 
     static func applyIncomingReport(fromJSON json: String) throws -> DraftlineApplyIncomingReport {
         try decode(DraftlineApplyIncomingReport.self, fromJSON: json)
+    }
+
+    static func mergeIncomingReport(fromJSON json: String) throws -> DraftlineMergeIncomingReport {
+        try decode(DraftlineMergeIncomingReport.self, fromJSON: json)
     }
 
     static func publishPreflight(fromJSON json: String) throws -> DraftlinePublishPreflight {
@@ -637,7 +879,7 @@ public final class DraftlineNativeMobileClient: DraftlineMobileWorkspaceClient, 
         let blockingCount = report.dirtyFiles.count + report.fileHazards.count
         let message: String
         if report.syncStatus.state == .needsMerge {
-            message = "Incoming changes need a Draftline merge on desktop."
+            message = "Some items changed on this device and in the shared workspace."
         } else if blockingCount > 0 {
             message = "\(blockingCount) local file issue(s) block pulling latest changes."
         } else {
@@ -668,6 +910,63 @@ public final class DraftlineNativeMobileClient: DraftlineMobileWorkspaceClient, 
             throw DraftlineMobileBridgeError.invalidNativeResponse("Draftline publish token was not valid UTF-8 JSON.")
         }
         return json
+    }
+
+    private static func mergeTokenJSON(from token: DraftlineMergeIncomingToken) throws -> String {
+        let data = try JSONEncoder().encode(token)
+        guard let json = String(data: data, encoding: .utf8) else {
+            throw DraftlineMobileBridgeError.invalidNativeResponse("Draftline merge token was not valid UTF-8 JSON.")
+        }
+        return json
+    }
+
+    private static func mergeResolutionsJSON(from resolutions: [DraftlineMergeConflictResolution]) throws -> String {
+        let data = try JSONEncoder().encode(resolutions)
+        guard let json = String(data: data, encoding: .utf8) else {
+            throw DraftlineMobileBridgeError.invalidNativeResponse("Draftline merge resolutions were not valid UTF-8 JSON.")
+        }
+        return json
+    }
+
+    private static func draftlineMergeResolutions(
+        conflicts: [DraftlineMergeConflict],
+        mobileResolutions: [MobileConflictResolutionRequest]
+    ) throws -> [DraftlineMergeConflictResolution] {
+        let requested = Dictionary(uniqueKeysWithValues: mobileResolutions.map {
+            (conflictKey(path: $0.path, fieldPath: $0.fieldPath), $0)
+        })
+        return try conflicts.map { conflict in
+            let key = conflictKey(path: conflict.path, fieldPath: conflict.fieldPath)
+            let mobileResolution = requested[key]
+            let choice: DraftlineMergeResolutionChoice
+            if MobileWorkspacePolicy.canEdit(path: conflict.path) {
+                guard let mobileResolution else {
+                    throw DraftlineMobileBridgeError.invalidNativeResponse("Missing mobile resolution for \(conflict.path).")
+                }
+                switch mobileResolution.choice {
+                case .myVersion:
+                    choice = .useOurs
+                case .latestShared:
+                    choice = .useTheirs
+                case .custom:
+                    choice = .useContent(mobileResolution.customContent ?? conflict.ours ?? conflict.theirs ?? "")
+                }
+            } else {
+                choice = .useTheirs
+            }
+            return DraftlineMergeConflictResolution(
+                path: conflict.path,
+                fieldPath: conflict.fieldPath,
+                choice: choice
+            )
+        }
+    }
+
+    private static func conflictKey(path: String, fieldPath: String?) -> String {
+        if let fieldPath {
+            return "\(path)#\(fieldPath)"
+        }
+        return path
     }
 
     private static func decode<T: Decodable>(_ type: T.Type, fromJSON json: String) throws -> T {
@@ -811,7 +1110,7 @@ enum DraftlineSyncState: String, Codable, Equatable, Sendable {
         case .incomingAvailable:
             return "\(behind) incoming snapshot(s) ready to pull."
         case .needsMerge:
-            return "Local and remote histories diverged. Resolve this on desktop."
+            return "Some items changed on this device and in the shared workspace."
         case .noRemoteVersion:
             return "No remote Draftline version exists yet; publish this workspace from mobile."
         }
@@ -858,6 +1157,100 @@ struct DraftlineApplyIncomingResult: Codable, Equatable, Sendable {
 
     enum CodingKeys: String, CodingKey {
         case appliedCount = "applied_count"
+    }
+}
+
+struct DraftlineMergeIncomingReport: Codable, Equatable, Sendable {
+    var syncStatus: DraftlineSyncStatus
+    var dirtyFiles: [DraftlineChangedFile]
+    var fileHazards: [DraftlineFileHazard]
+    var conflicts: [DraftlineMergeConflict]
+    var token: DraftlineMergeIncomingToken?
+    var canMergeCleanly: Bool
+    var changedWorkspace: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case syncStatus = "sync_status"
+        case dirtyFiles = "dirty_files"
+        case fileHazards = "file_hazards"
+        case conflicts
+        case token
+        case canMergeCleanly = "can_merge_cleanly"
+        case changedWorkspace = "changed_workspace"
+    }
+}
+
+struct DraftlineMergeConflict: Codable, Equatable, Sendable {
+    var path: String
+    var fieldPath: String?
+    var label: String
+    var base: String?
+    var ours: String?
+    var theirs: String?
+    var resolution: String
+
+    enum CodingKeys: String, CodingKey {
+        case path
+        case fieldPath = "field_path"
+        case label
+        case base
+        case ours
+        case theirs
+        case resolution
+    }
+}
+
+struct DraftlineMergeIncomingToken: Codable, Equatable, Sendable {
+    var remote: String
+    var variation: String
+    var localOID: String
+    var remoteOID: String
+    var mergeBaseOID: String
+
+    enum CodingKeys: String, CodingKey {
+        case remote
+        case variation
+        case localOID = "local_oid"
+        case remoteOID = "remote_oid"
+        case mergeBaseOID = "merge_base_oid"
+    }
+}
+
+struct DraftlineMergeConflictResolution: Encodable, Equatable, Sendable {
+    var path: String
+    var fieldPath: String?
+    var choice: DraftlineMergeResolutionChoice
+
+    enum CodingKeys: String, CodingKey {
+        case path
+        case fieldPath = "field_path"
+        case choice
+    }
+}
+
+enum DraftlineMergeResolutionChoice: Equatable, Sendable {
+    case useOurs
+    case useTheirs
+    case useContent(String)
+}
+
+extension DraftlineMergeResolutionChoice: Encodable {
+    enum CodingKeys: String, CodingKey {
+        case kind
+        case content
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        switch self {
+        case .useOurs:
+            try container.encode("use_ours", forKey: .kind)
+        case .useTheirs:
+            try container.encode("use_theirs", forKey: .kind)
+        case .useContent(let content):
+            try container.encode("use_content", forKey: .kind)
+            try container.encode(content, forKey: .content)
+        }
     }
 }
 

@@ -113,6 +113,50 @@ public struct GitHubRepositorySummary: Codable, Equatable, Identifiable, Sendabl
     }()
 }
 
+public struct GitHubRepositorySpecifier: Equatable, Sendable {
+    public var owner: String
+    public var name: String
+
+    public var fullName: String {
+        "\(owner)/\(name)"
+    }
+
+    public init?(input: String) {
+        var value = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        if value.hasSuffix(".git") {
+            value.removeLast(4)
+        }
+
+        if let url = URL(string: value), let host = url.host?.lowercased(), host == "github.com" {
+            value = url.path
+        } else if value.lowercased().hasPrefix("git@github.com:") {
+            value = String(value.dropFirst("git@github.com:".count))
+        }
+
+        let parts = value
+            .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            .split(separator: "/", omittingEmptySubsequences: true)
+            .map(String.init)
+        guard parts.count == 2, Self.isSafeSegment(parts[0]), Self.isSafeSegment(parts[1]) else {
+            return nil
+        }
+
+        owner = parts[0]
+        name = parts[1]
+    }
+
+    public init(owner: String, name: String) {
+        self.owner = owner
+        self.name = name
+    }
+
+    private static func isSafeSegment(_ value: String) -> Bool {
+        !value.isEmpty && value != "." && value != ".." && value.allSatisfy { character in
+            character.isLetter || character.isNumber || character == "-" || character == "_" || character == "."
+        }
+    }
+}
+
 public enum GitHubMobileError: Error, LocalizedError, Equatable {
     case missingClientID
     case authorizationPending
@@ -337,6 +381,8 @@ public protocol GitHubMobileClientProtocol: Sendable {
     func requestDeviceAuthorization(scopes: [String]) async throws -> GitHubDeviceAuthorization
     func pollAccessToken(deviceCode: String) async throws -> GitHubAccessToken
     func listRepositories(accessToken: String) async throws -> [GitHubRepositorySummary]
+    func searchRepositories(accessToken: String, query: String, limit: Int) async throws -> [GitHubRepositorySummary]
+    func repository(accessToken: String, specifier: GitHubRepositorySpecifier) async throws -> GitHubRepositorySummary
     func openWorkspace(
         repository: GitHubRepositorySummary,
         accessToken: String,
@@ -460,6 +506,37 @@ public struct GitHubMobileClient: GitHubMobileClientProtocol {
             }
             page += 1
         }
+    }
+
+    public func searchRepositories(accessToken: String, query: String, limit: Int = 20) async throws -> [GitHubRepositorySummary] {
+        let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmedQuery.count >= 2 else {
+            return []
+        }
+
+        let request = try apiRequest(
+            path: "/search/repositories",
+            accessToken: accessToken,
+            queryItems: [
+                URLQueryItem(name: "q", value: "\(trimmedQuery) in:name fork:true"),
+                URLQueryItem(name: "sort", value: "updated"),
+                URLQueryItem(name: "order", value: "desc"),
+                URLQueryItem(name: "per_page", value: "\(min(max(limit, 1), 50))")
+            ]
+        )
+        let data = try await data(for: request)
+        let response = try decoder.decode(GitHubRepositorySearchResponse.self, from: data)
+        return response.items
+    }
+
+    public func repository(accessToken: String, specifier: GitHubRepositorySpecifier) async throws -> GitHubRepositorySummary {
+        let request = try apiRequest(
+            path: "/repos/\(specifier.fullName)",
+            accessToken: accessToken,
+            queryItems: []
+        )
+        let data = try await data(for: request)
+        return try decoder.decode(GitHubRepositorySummary.self, from: data)
     }
 
     public func openWorkspace(
@@ -799,6 +876,10 @@ private struct GitHubOAuthError: Codable {
 
 private struct GitHubAPIError: Codable {
     var message: String
+}
+
+private struct GitHubRepositorySearchResponse: Codable {
+    var items: [GitHubRepositorySummary]
 }
 
 private struct GitHubProjectManifest: Codable {
