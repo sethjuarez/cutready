@@ -619,6 +619,26 @@ fn safe_project_manifest_path(project_path: &str) -> Result<&Path, String> {
     Ok(path)
 }
 
+/// Inspect the current repo's workspace manifest and propose safe recovery actions.
+#[auditaur_command(skip_all, err)]
+pub async fn inspect_workspace_manifest(
+    state: State<'_, AppState>,
+) -> Result<project::WorkspaceManifestInspection, String> {
+    let root = repo_root(&state)?;
+    project::inspect_workspace_manifest(&root).map_err(|e| e.to_string())
+}
+
+/// Explicitly repair the current repo's workspace manifest from inspection output.
+#[auditaur_command(skip_all, err)]
+pub async fn repair_workspace_manifest(
+    state: State<'_, AppState>,
+) -> Result<project::WorkspaceManifestRepair, String> {
+    let root = repo_root(&state)?;
+    let repair = project::repair_workspace_manifest(&root).map_err(|e| e.to_string())?;
+    snapshot_workspace_structure(&root, "Repair workspace manifest")?;
+    Ok(repair)
+}
+
 /// List all projects in the current repo.
 #[auditaur_command(skip_all, err)]
 pub async fn list_projects(state: State<'_, AppState>) -> Result<Vec<ProjectEntry>, String> {
