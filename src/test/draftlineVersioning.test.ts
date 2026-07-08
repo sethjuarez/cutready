@@ -557,7 +557,7 @@ describe("draftlineVersioning", () => {
     });
   });
 
-  it("preflights and publishes compacted history through Draftline guarded remote cleanup APIs", async () => {
+  it("preflights and publishes milestone history through Draftline guarded remote cleanup APIs", async () => {
     const remoteImpact = {
       remote: "origin",
       variation: "main",

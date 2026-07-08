@@ -74,10 +74,10 @@ describe("remote sync with pending history cleanup", () => {
 
     expect(pullFromRemote).not.toHaveBeenCalled();
     expect(pushToRemote).not.toHaveBeenCalled();
-    expect(useAppStore.getState().syncError).toContain("Publish or undo compacted history");
+    expect(useAppStore.getState().syncError).toContain("Publish or undo milestone history");
   });
 
-  it("does not directly pull incoming saves while compacted history is pending", async () => {
+  it("does not directly pull incoming saves while milestone history is pending", async () => {
     useAppStore.setState({
       currentRemote: { name: "origin", url: "file:///tmp/cutready.git" },
       pendingHistoryCleanup: pendingCleanup,
@@ -86,6 +86,6 @@ describe("remote sync with pending history cleanup", () => {
     await useAppStore.getState().pullFromRemote();
 
     expect(mockPreflightDraftlineIncoming).not.toHaveBeenCalled();
-    expect(useAppStore.getState().syncError).toContain("Publish or undo compacted history");
+    expect(useAppStore.getState().syncError).toContain("Publish or undo milestone history");
   });
 });

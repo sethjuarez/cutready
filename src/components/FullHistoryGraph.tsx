@@ -175,10 +175,10 @@ export function FullHistoryGraph({
             const isMutedNode = isSideAncestry || isAuxiliaryNode;
             const nodeOpacity = selectionMode && !selected && !selectable ? 0.38 : isSideAncestry ? 0.74 : isAuxiliaryNode ? 0.66 : 1;
             const selectTitle = selected
-              ? "Selected compact range point"
+              ? "Selected milestone range point"
               : selectable
-                ? "Select this snapshot for the compact range"
-                : "This snapshot is not on the active timeline compact path";
+                ? "Select this snapshot for the milestone range"
+                : "This snapshot is not on the active timeline milestone path";
             return (
               <g
                 key={node.id}
@@ -260,7 +260,7 @@ export function FullHistoryGraph({
                     fontWeight={700}
                     fill="rgb(var(--color-warning))"
                   >
-                    {endpoint ? "picked" : "compact"}
+                    {endpoint ? "picked" : "milestone"}
                   </text>
                 )}
                 <circle

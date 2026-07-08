@@ -58,7 +58,7 @@ import {
 import { recordActivityEntries } from "../services/telemetry";
 import { getGitHubAuthStatus } from "../services/githubSetup";
 import { useToastStore } from "./toastStore";
-import { cleanupRange } from "../utils/historyCleanupSelection";
+import { cleanupRange, firstParentTimelineNodes } from "../utils/historyCleanupSelection";
 import { getStoryboardSketchPaths } from "../utils/storyboard";
 import type { ProjectView, ProjectEntry, RecentProject } from "../types/project";
 import type {
@@ -123,6 +123,46 @@ export function errorMessage(error: unknown): string {
   return String(error);
 }
 
+export interface PrePushMilestonePrompt {
+  snapshotCount: number;
+  newestCommitId: string;
+  oldestCommitId: string;
+  latestSnapshotLabel: string;
+  suggestedLabel: string;
+  remoteName: string;
+}
+
+export type PrePushMilestoneDecision =
+  | { type: "milestone"; label: string }
+  | { type: "pushAsIs" }
+  | { type: "cancel" };
+
+let prePushMilestoneResolve: ((decision: PrePushMilestoneDecision) => void) | null = null;
+
+function isGeneratedSnapshotLabel(label: string): boolean {
+  return /^(Sun|Mon|Tue|Wed|Thu|Fri|Sat) (morning|afternoon|evening) \d{1,2}:\d{2}$/.test(label.trim());
+}
+
+function localPrePushMilestoneRange(nodes: GraphNode[], ahead: number | null | undefined): GraphNode[] | null {
+  if (!ahead || ahead < 2) return null;
+  const activeNodes = firstParentTimelineNodes(nodes);
+  if (activeNodes.length < ahead) return null;
+  const range = activeNodes.slice(0, ahead);
+  return range[0]?.is_head ? range : null;
+}
+
+function suggestedMilestoneLabel(nodes: GraphNode[]): string {
+  const meaningful = nodes
+    .map((node) => node.message.trim())
+    .find((label) => label && !isGeneratedSnapshotLabel(label));
+  return meaningful ?? "Shared milestone";
+}
+
+function cancelPendingPrePushMilestonePrompt() {
+  prePushMilestoneResolve?.({ type: "cancel" });
+  prePushMilestoneResolve = null;
+}
+
 export function remoteSyncErrorMessage(error: unknown): string {
   if (isDraftlineHistoryCleanupBlockedError(error)) {
     return PENDING_CLEANUP_INCOMING_MESSAGE;
@@ -141,7 +181,7 @@ export function remoteSyncErrorMessage(error: unknown): string {
 }
 
 const PENDING_CLEANUP_INCOMING_MESSAGE =
-  "Publish or undo compacted history before getting incoming remote saves. Pulling first would change the local timeline and invalidate the compacted-history publish.";
+  "Publish or undo milestone history before getting incoming remote saves. Pulling first would change the local timeline and invalidate the milestone publish.";
 
 function chatMessagePreviewContent(message: ChatMessage): string {
   if (typeof message.content === "string") return message.content;
@@ -523,6 +563,8 @@ interface AppStoreState {
   lastHistoryCleanup: DraftlineTimelineCleanupResult | null;
   /** Durable Draftline pending cleanup that blocks normal remote operations until resolved. */
   pendingHistoryCleanup: DraftlinePendingHistoryCleanup | null;
+  /** Pre-push prompt for compressing unpublished local snapshots into one milestone. */
+  prePushMilestonePrompt: PrePushMilestonePrompt | null;
   /** Whether there are unsaved changes since the last snapshot. */
   isDirty: boolean;
   /** List of changed files since last snapshot (for Changes panel). */
@@ -895,6 +937,10 @@ interface AppStoreState {
   checkoutRemoteTimeline: (branch: string) => Promise<void>;
   /** Publish (push) the current local-only timeline to the remote. */
   publishTimeline: () => Promise<void>;
+  /** Ask the user whether to compact unpublished local snapshots before push. */
+  requestPrePushMilestone: (prompt: PrePushMilestonePrompt) => Promise<PrePushMilestoneDecision>;
+  /** Resolve the active pre-push milestone prompt. */
+  resolvePrePushMilestone: (decision: PrePushMilestoneDecision) => void;
 
   // ── Diff ──────────────────────────────────────────────────
   /** Compare two snapshots and return file-level diffs. */
@@ -1065,6 +1111,7 @@ function resetPersistenceState(): Pick<AppStoreState,
   | "startedBranchFromSnapshot"
   | "lastHistoryCleanup"
   | "pendingHistoryCleanup"
+  | "prePushMilestonePrompt"
   | "isDirty"
   | "changedFiles"
   | "hasStash"
@@ -1086,6 +1133,7 @@ function resetPersistenceState(): Pick<AppStoreState,
   | "diffResult"
   | "diffSelection"
 > {
+  cancelPendingPrePushMilestonePrompt();
   return {
     versions: [],
     timelines: [],
@@ -1096,6 +1144,7 @@ function resetPersistenceState(): Pick<AppStoreState,
     startedBranchFromSnapshot: null,
     lastHistoryCleanup: null,
     pendingHistoryCleanup: null,
+    prePushMilestonePrompt: null,
     isDirty: false,
     changedFiles: [],
     hasStash: false,
@@ -1245,6 +1294,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   startedBranchFromSnapshot: null,
   lastHistoryCleanup: null,
   pendingHistoryCleanup: null,
+  prePushMilestonePrompt: null,
   isDirty: false,
   changedFiles: [],
   saving: false,
@@ -3020,7 +3070,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await get().applySnapshotCleanup(preview.plan_id);
     } catch (err) {
       console.error("Failed to compact snapshots:", err);
-      useToastStore.getState().show(`Cleanup failed: ${err}`, 5000, "error");
+      useToastStore.getState().show(`Milestone failed: ${err}`, 5000, "error");
     }
   },
 
@@ -3079,7 +3129,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     }
     const squashed = result.commit_map.filter((entry) => entry.disposition.kind === "squashed_into").length;
     useToastStore.getState().show(
-      squashed > 0 ? `Timeline compacted. ${squashed} old snapshots are mapped to the new milestone.` : "Timeline compacted.",
+      squashed > 0 ? `Milestone created. ${squashed} old snapshots are mapped to the new milestone.` : "Milestone created.",
       5000,
       "success",
     );
@@ -3112,13 +3162,13 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await get().loadGraphData();
       await get().loadTimelines();
       await get().loadVersions();
-      useToastStore.getState().show("Compacted remote history published safely.", 5000, "success");
+      useToastStore.getState().show("Milestone history published safely.", 5000, "success");
       return result;
     }
 
     const preflight = await preflightDraftlinePublishSnapshotCleanup(planId, remote);
     if (preflight.remote_impact.publish_status === "remote_has_incoming") {
-      throw new Error("Remote has new incoming snapshots. Sync before publishing compacted history.");
+      throw new Error("Remote has new incoming snapshots. Sync before publishing milestone history.");
     }
     if (!preflight.can_publish || !preflight.token) {
       return null;
@@ -3130,7 +3180,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     await get().loadGraphData();
     await get().loadTimelines();
     await get().loadVersions();
-    useToastStore.getState().show("Compacted remote history published safely.", 5000, "success");
+    useToastStore.getState().show("Milestone history published safely.", 5000, "success");
     return result;
   },
 
@@ -3138,7 +3188,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     const pendingCleanup = get().pendingHistoryCleanup;
     const targetPlanId = planId ?? pendingCleanup?.plan_id ?? get().lastHistoryCleanup?.plan_id;
     if (!targetPlanId) {
-      throw new Error("No compacted history cleanup is available to undo.");
+      throw new Error("No milestone history backup is available to undo.");
     }
     const result = pendingCleanup?.plan_id === targetPlanId
       ? await undoDraftlinePendingSnapshotCleanup(targetPlanId)
@@ -3166,8 +3216,23 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       }));
       get()._persistTabs();
     }
-    useToastStore.getState().show("Compacted history restored from Draftline backup.", 5000, "success");
+    useToastStore.getState().show("Milestone history restored from Draftline backup.", 5000, "success");
     return result;
+  },
+
+  requestPrePushMilestone: (prompt) => {
+    cancelPendingPrePushMilestonePrompt();
+    return new Promise<PrePushMilestoneDecision>((resolve) => {
+      prePushMilestoneResolve = resolve;
+      set({ prePushMilestonePrompt: prompt });
+    });
+  },
+
+  resolvePrePushMilestone: (decision) => {
+    const resolve = prePushMilestoneResolve;
+    prePushMilestoneResolve = null;
+    set({ prePushMilestonePrompt: null });
+    resolve?.(decision);
   },
 
   // ── Remote sync actions ────────────────────────────────────
@@ -3237,6 +3302,41 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       if (pendingCleanup) {
         const published = await get().publishSnapshotCleanup(pendingCleanup.plan_id, currentRemote.name);
         if (published) {
+          return;
+        }
+      }
+      const milestoneRange = localPrePushMilestoneRange(get().graphNodes, get().syncStatus?.ahead);
+      if (milestoneRange && get().syncStatus?.behind === 0) {
+        const newest = milestoneRange[0];
+        const oldest = milestoneRange[milestoneRange.length - 1];
+        const decision = await get().requestPrePushMilestone({
+          snapshotCount: milestoneRange.length,
+          newestCommitId: newest.id,
+          oldestCommitId: oldest.id,
+          latestSnapshotLabel: newest.message,
+          suggestedLabel: suggestedMilestoneLabel(milestoneRange),
+          remoteName: currentRemote.name,
+        });
+        if (decision.type === "cancel") {
+          return;
+        }
+        if (decision.type === "milestone") {
+          const label = decision.label.trim();
+          if (!label) {
+            throw new Error("Milestone label is required before compacting local snapshots.");
+          }
+          const preview = await get().previewSnapshotCleanup(
+            oldest.id,
+            newest.id,
+            label,
+            milestoneRange.map((node) => node.id),
+          );
+          await get().applySnapshotCleanup(preview.plan_id);
+          const published = await get().publishSnapshotCleanup(preview.plan_id, currentRemote.name);
+          if (published) {
+            return;
+          }
+          await get().loadPendingHistoryCleanup();
           return;
         }
       }

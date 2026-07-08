@@ -83,7 +83,7 @@ export function SyncBar({ variant = "full" }: { variant?: "full" | "compact" }) 
   let actionFn = syncWithRemote;
   if (pendingHistoryCleanup) {
     actionLabel = "Push";
-    compactActionLabel = behind > 0 ? "Publish compacted history" : "Share compacted history";
+    compactActionLabel = behind > 0 ? "Publish milestone history" : "Share milestone history";
     compactButtonLabel = "Send";
     actionFn = pushToRemote;
   } else if (ahead > 0 && behind === 0) {

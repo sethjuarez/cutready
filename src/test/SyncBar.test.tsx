@@ -57,7 +57,7 @@ describe("SyncBar", () => {
     });
   });
 
-  it("publishes pending compacted history instead of normal syncing when local and remote histories diverge", async () => {
+  it("publishes pending milestone history instead of normal syncing when local and remote histories diverge", async () => {
     const pushToRemote = vi.fn(() => Promise.resolve());
     const pullFromRemote = vi.fn(() => Promise.resolve());
     const syncWithRemote = vi.fn(() => Promise.resolve());
@@ -78,7 +78,7 @@ describe("SyncBar", () => {
 
     render(<SyncBar variant="compact" />);
 
-    const sendButton = screen.getByRole("button", { name: /publish compacted history/i });
+    const sendButton = screen.getByRole("button", { name: /publish milestone history/i });
     expect(sendButton).toHaveTextContent("Send");
 
     await act(async () => {
