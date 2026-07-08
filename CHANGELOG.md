@@ -15,7 +15,6 @@ Release Please manages this changelog. Do not edit manually.
 
 ### Features
 
-* add video import to sketch ([b5df291](https://github.com/sethjuarez/cutready/commit/b5df2918806007f7e940bc59a627cf217b27db06))
 * add video import to sketch ([f0a8edf](https://github.com/sethjuarez/cutready/commit/f0a8edf16bf9afaa635bfc7d993d4b10f7e58b8a))
 
 ## [1.24.1](https://github.com/sethjuarez/cutready/compare/v1.24.0...v1.24.1) (2026-07-07)
