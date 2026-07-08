@@ -135,9 +135,9 @@ export function VersionHistory() {
         ? `\n\nWarnings:\n${preview.warnings.map((warning) => `- ${warning.message}`).join("\n")}`
         : "";
       const confirmed = await confirm({
-        title: "Compact timeline history?",
-        message: `Draftline will replace ${preview.graph_diff.old_commit_count} selected snapshots with ${preview.graph_diff.new_commit_count} milestone snapshot and create a backup ref before moving the timeline.${warningText}`,
-        confirmLabel: "Compact timeline",
+        title: "Create milestone snapshot?",
+        message: `Draftline will replace ${preview.graph_diff.old_commit_count} selected snapshots with ${preview.graph_diff.new_commit_count} named milestone and create a local backup before moving the timeline.${warningText}`,
+        confirmLabel: "Create milestone",
         cancelLabel: "Cancel",
         variant: "warning",
       });
@@ -202,11 +202,11 @@ export function VersionHistory() {
                 ? "text-[rgb(var(--color-accent))] bg-[rgb(var(--color-accent))]/10"
                 : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))]"
             }`}
-            title="Compact recent snapshots"
+            title="Create a milestone from recent snapshots"
           >
             <GitPullRequestArrow className="shrink-0 w-3.5 h-3.5" />
             <span className="max-w-0 overflow-hidden group-hover/btn:max-w-[10rem] transition-all duration-200 whitespace-nowrap text-[10px]">
-              Cleanup
+              Milestone
             </span>
           </button>
           <button
@@ -272,13 +272,13 @@ export function VersionHistory() {
                 Select recent snapshots ending at HEAD
               </div>
               <div className="text-[10px] text-[rgb(var(--color-text-secondary))] leading-relaxed">
-                Draftline previews a cleanup plan, creates a backup ref, then compacts selected clean snapshots into one milestone.
+                Draftline previews a milestone plan, creates a local backup, then replaces selected clean snapshots with one named milestone.
               </div>
             </div>
             <button
               onClick={cancelSquash}
               className="p-0.5 rounded text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] transition-colors"
-              title="Cancel cleanup"
+              title="Cancel milestone mode"
             >
               <X className="w-3.5 h-3.5" />
             </button>
@@ -291,12 +291,12 @@ export function VersionHistory() {
           />
           {isDirty && (
             <div className="text-[10px] text-warning">
-              Save or discard unsaved workspace changes before compacting history.
+              Save or discard unsaved workspace changes before creating a milestone.
             </div>
           )}
           {(hasRemote || isRewound) && (
             <div className="text-[10px] text-warning">
-              Cleanup is available only on local timeline tips that are not rewound.
+              Milestones are available only on local timeline tips that are not rewound.
             </div>
           )}
           {squashError && <div className="text-[10px] text-error">{squashError}</div>}
@@ -306,7 +306,7 @@ export function VersionHistory() {
               disabled={!canSquash || !squashLabel.trim() || squashing}
               className="flex-1 px-2 py-1 rounded-md text-[10px] font-medium bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))] hover:bg-[rgb(var(--color-accent-hover))] disabled:opacity-40 disabled:pointer-events-none transition-colors"
             >
-              {squashing ? "Previewing..." : `Compact ${selectedNodes.length || ""} snapshots`}
+              {squashing ? "Previewing..." : `Create milestone from ${selectedNodes.length || ""} snapshots`}
             </button>
           </div>
         </div>

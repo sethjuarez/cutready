@@ -221,7 +221,7 @@ export function HistoryGraphTab() {
     if (selectedOldest && selectedNewest) {
       return `Compact ${selectedOldest.message} to ${selectedNewest.message}`;
     }
-    return "Compacted history";
+    return "Milestone history";
   }, [cleanupLabel, selectedNewest, selectedOldest]);
   const canPreviewCleanup = cleanupMode
     && hasContiguousCleanupSelection
@@ -269,11 +269,11 @@ export function HistoryGraphTab() {
       setCleanupCandidates(candidates);
       const validCount = candidates.candidates.filter((candidate) => candidate.can_compact).length;
       if (validCount === 0) {
-        setCleanupError("Draftline could not find a valid compact range endpoint for that snapshot.");
+        setCleanupError("Draftline could not find a valid milestone range endpoint for that snapshot.");
       }
     } catch (err) {
       if (cleanupCandidateRequestRef.current !== requestId) return;
-      setCleanupError(`Could not load compact range targets: ${errorMessage(err)}`);
+      setCleanupError(`Could not load milestone range targets: ${errorMessage(err)}`);
     } finally {
       if (cleanupCandidateRequestRef.current === requestId) setLoadingCleanupCandidates(false);
     }
@@ -301,18 +301,18 @@ export function HistoryGraphTab() {
     }
 
     if (loadingCleanupCandidates) {
-      setCleanupError("Still finding valid compact range targets. Try again in a moment.");
+      setCleanupError("Still finding valid milestone range targets. Try again in a moment.");
       return;
     }
 
     if (!cleanupCandidates) {
-      setCleanupError("Draftline compact range targets are not ready. Pick the first point again to retry.");
+      setCleanupError("Draftline milestone range targets are not ready. Pick the first point again to retry.");
       return;
     }
 
     const candidate = cleanupCandidateByEndpoint.get(commitId);
     if (!candidate) {
-      setCleanupError("Choose one of the Draftline-approved compact range targets.");
+      setCleanupError("Choose one of the Draftline-approved milestone range targets.");
       return;
     }
 
@@ -326,7 +326,7 @@ export function HistoryGraphTab() {
     setCleanupPointIds([anchorId, commitId]);
     setSelectedForCleanup(selection);
     setCleanupPreview(null);
-    setCleanupError(selection.size > 1 ? null : "Choose two snapshots on the active timeline to compact.");
+    setCleanupError(selection.size > 1 ? null : "Choose two snapshots on the active timeline to turn into a milestone.");
   }, [activeCleanupNodes, cleanupCandidateByEndpoint, cleanupCandidates, cleanupPointIds, loadCleanupCandidates, loadingCleanupCandidates]);
 
   const cancelCleanup = useCallback(() => {
@@ -368,12 +368,12 @@ export function HistoryGraphTab() {
       ? `\n\nWarnings:\n${cleanupPreview.warnings.map((warning) => `- ${warning.message}`).join("\n")}`
       : "";
     const remoteText = currentRemote
-      ? "\n\nThis compacts local history first. Use Sync/Push afterward to publish the compacted history through Draftline's guarded remote update."
+      ? "\n\nThis creates a local milestone first. Use Sync/Push afterward to publish milestone history through Draftline's guarded remote update."
       : "";
     const confirmed = await confirm({
-      title: "Apply compacted history?",
+      title: "Create milestone history?",
       message: `Draftline will replace ${cleanupPreview.graph_diff.old_commit_count} selected snapshots with ${cleanupPreview.graph_diff.new_commit_count} milestone snapshot and create a backup ref before moving the timeline.${warningText}${remoteText}`,
-      confirmLabel: "Apply compacted history",
+      confirmLabel: "Create milestone history",
       cancelLabel: "Cancel",
       variant: "warning",
     });
@@ -394,9 +394,9 @@ export function HistoryGraphTab() {
     const cleanupPlanId = pendingHistoryCleanup?.plan_id ?? lastHistoryCleanup?.plan_id;
     if (!cleanupPlanId || undoingCleanup) return;
     const confirmed = await confirm({
-      title: "Undo compacted history?",
-      message: "Draftline will restore the branch head from the backup ref created before the last history cleanup.",
-      confirmLabel: "Undo compact",
+      title: "Undo milestone history?",
+      message: "Draftline will restore the branch head from the backup ref created before the last milestone rewrite.",
+      confirmLabel: "Undo milestone",
       cancelLabel: "Cancel",
       variant: "warning",
     });
@@ -558,10 +558,10 @@ export function HistoryGraphTab() {
                   ? "bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))]"
                   : "text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
               }`}
-              title="Compact selected timeline history"
+              title="Create a milestone from selected timeline history"
             >
               <GitPullRequestArrow className="h-3.5 w-3.5" />
-              Compact
+              Milestone
             </button>
             {(pendingHistoryCleanup || lastHistoryCleanup) && (
               <button
@@ -569,10 +569,10 @@ export function HistoryGraphTab() {
                 onClick={handleUndoCleanup}
                 disabled={undoingCleanup}
                 className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))] disabled:pointer-events-none disabled:opacity-40"
-                title="Undo the last compacted history cleanup"
+                title="Undo the last milestone rewrite"
               >
                 <RotateCcw className="h-3.5 w-3.5" />
-                {undoingCleanup ? "Undoing" : "Undo compact"}
+                {undoingCleanup ? "Undoing" : "Undo milestone"}
               </button>
             )}
             <button
@@ -808,10 +808,10 @@ function FloatingCleanupPanel({
         onPointerMove={moveDrag}
         onPointerUp={stopDrag}
         onPointerCancel={stopDrag}
-        title="Drag to move compact history panel"
+        title="Drag to move milestone history panel"
       >
         <div>
-          <div className="text-xs font-semibold text-[rgb(var(--color-accent))]">Compact history</div>
+          <div className="text-xs font-semibold text-[rgb(var(--color-accent))]">Milestone history</div>
           <p className="mt-0.5 text-[11px] leading-relaxed text-[rgb(var(--color-text-secondary))]">
             Pick two snapshots to compact the contiguous range between them. Draftline will preview the rewrite before anything is applied.
           </p>
@@ -820,7 +820,7 @@ function FloatingCleanupPanel({
           type="button"
           onClick={onCancel}
           className="rounded p-1 text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
-          title="Cancel compact mode"
+          title="Cancel milestone mode"
         >
           <X className="h-3.5 w-3.5" />
         </button>
@@ -926,14 +926,14 @@ function CleanupStatus({
   isDirty: boolean;
   isRewound: boolean;
 }) {
-  let message = "Pick two graph nodes to compact the contiguous range between them.";
+  let message = "Pick two graph nodes to turn the contiguous range between them into a milestone.";
   let className = "text-[rgb(var(--color-text-secondary))]";
 
   if (isDirty) {
-    message = "Save or discard unsaved workspace changes before compacting.";
+    message = "Save or discard unsaved workspace changes before creating a milestone.";
     className = "text-warning";
   } else if (isRewound) {
-    message = "Return to the current timeline tip before compacting.";
+    message = "Return to the current timeline tip before creating a milestone.";
     className = "text-warning";
   } else if (cleanupPointCount === 1 && loadingCandidates) {
     message = "First point selected. Finding valid Draftline range targets...";
@@ -942,13 +942,13 @@ function CleanupStatus({
   } else if (cleanupPointCount === 1 && validCandidateCount > 0) {
     message = `First point selected. Choose one of ${validCandidateCount} valid Draftline range target${validCandidateCount === 1 ? "" : "s"}.`;
   } else if (cleanupPointCount === 1) {
-    message = "First point selected, but Draftline did not find a valid compact range target.";
+    message = "First point selected, but Draftline did not find a valid milestone range target.";
     className = "text-warning";
   } else if (cleanupPointCount === 2 && !hasContiguousSelection) {
     message = "Choose two points that form a contiguous active-timeline range.";
     className = "text-warning";
   } else if (currentRemote) {
-    message = "Compaction is local-first. Sync/Push will publish rewritten history with Draftline's guarded remote update.";
+    message = "Milestone creation is local-first. Sync/Push will publish rewritten history with Draftline's guarded remote update.";
   }
 
   if (cleanupError) {
@@ -985,7 +985,7 @@ function CleanupPreviewPanel({
             disabled={applying}
             className="rounded-md bg-[rgb(var(--color-accent))] px-2.5 py-1.5 text-[10px] font-semibold text-[rgb(var(--color-accent-fg))] transition-colors hover:bg-[rgb(var(--color-accent-hover))] disabled:opacity-40"
           >
-            {applying ? "Applying..." : "Accept compact"}
+            {applying ? "Applying..." : "Accept milestone"}
           </button>
         )}
       </div>
@@ -993,7 +993,7 @@ function CleanupPreviewPanel({
         <div className="min-w-0 rounded-lg bg-[rgb(var(--color-surface-alt))] p-2">
           <div className="mb-1 text-[10px] font-medium text-[rgb(var(--color-text-secondary))]">Before</div>
           {selectedNodes.length < 2 ? (
-            <p className="text-[11px] text-[rgb(var(--color-text-secondary))]">Pick two points to define a compact range.</p>
+            <p className="text-[11px] text-[rgb(var(--color-text-secondary))]">Pick two points to define a milestone range.</p>
           ) : (
             <div className="space-y-1">
               <div className="mb-1 rounded border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))] px-2 py-1 text-[10px] font-medium text-[rgb(var(--color-text))]">
@@ -1084,5 +1084,5 @@ function cleanupCandidateEndpointId(candidate: DraftlineHistoryCompactionCandida
 
 function cleanupCandidateBlockerMessage(candidate: DraftlineHistoryCompactionCandidate): string {
   const blocker = candidate.blockers[0] ?? candidate.warnings[0];
-  return blocker?.message ?? "Draftline marked that compact range target as unavailable.";
+  return blocker?.message ?? "Draftline marked that milestone range target as unavailable.";
 }
