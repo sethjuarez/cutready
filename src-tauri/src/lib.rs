@@ -562,6 +562,8 @@ pub fn run() {
             commands::project::list_all_files,
             commands::project::get_database_preview,
             commands::project::get_agent_state_database_preview,
+            commands::project::inspect_workspace_manifest,
+            commands::project::repair_workspace_manifest,
             commands::project::list_projects,
             commands::project::is_multi_project,
             commands::project::switch_project,
