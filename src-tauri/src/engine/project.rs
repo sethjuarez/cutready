@@ -119,9 +119,19 @@ const MANIFEST_PATH: &str = ".cutready/projects.json";
 /// Read the project manifest from a repo root. Returns None if no manifest
 /// exists (single-project / legacy mode).
 pub fn read_manifest(repo_root: &Path) -> Option<ProjectManifest> {
+    read_manifest_result(repo_root).ok().flatten()
+}
+
+/// Read the project manifest while preserving I/O and parse errors.
+pub fn read_manifest_result(repo_root: &Path) -> Result<Option<ProjectManifest>, ProjectError> {
     let path = repo_root.join(MANIFEST_PATH);
-    let data = std::fs::read_to_string(&path).ok()?;
-    serde_json::from_str(&data).ok()
+    if !path.exists() {
+        return Ok(None);
+    }
+    let data = std::fs::read_to_string(&path).map_err(|e| ProjectError::Io(e.to_string()))?;
+    serde_json::from_str(&data)
+        .map(Some)
+        .map_err(|e| ProjectError::Deserialize(e.to_string()))
 }
 
 /// Write the project manifest to a repo root.
@@ -280,6 +290,10 @@ pub fn create_project_in_repo(
         )));
     }
 
+    let mut manifest = read_manifest_result(repo_root)?.unwrap_or(ProjectManifest {
+        projects: Vec::new(),
+    });
+
     // Create the project subdirectory structure
     std::fs::create_dir_all(project_dir.join("sketches"))
         .map_err(|e| ProjectError::Io(e.to_string()))?;
@@ -293,9 +307,6 @@ pub fn create_project_in_repo(
     };
 
     // Update manifest
-    let mut manifest = read_manifest(repo_root).unwrap_or(ProjectManifest {
-        projects: Vec::new(),
-    });
     manifest.projects.push(entry.clone());
     write_manifest(repo_root, &manifest)?;
 
@@ -1768,6 +1779,19 @@ mod tests {
 
         write_sketch(&sketch, &path, root).unwrap();
         assert!(path.exists());
+    }
+
+    #[test]
+    fn create_project_rejects_malformed_manifest() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        std::fs::create_dir_all(root.join(".cutready")).unwrap();
+        std::fs::write(root.join(".cutready/projects.json"), "{not valid json").unwrap();
+
+        let err = create_project_in_repo(root, "Broken", None).unwrap_err();
+
+        assert!(matches!(err, ProjectError::Deserialize(_)));
+        assert!(!root.join("broken").exists());
     }
 
     #[test]

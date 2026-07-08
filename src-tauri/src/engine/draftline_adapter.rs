@@ -29,7 +29,8 @@ const CUTREADY_CONTENT_EXTENSIONS: &[&str] = &[
     "sk", "sb", "md", "png", "jpg", "jpeg", "webp", "webm", "ogg", "oga", "mp3", "wav", "m4a",
     "flac",
 ];
-const CUTREADY_ASSET_ROOTS: &[&str] = &[
+const CUTREADY_INCLUDED_PATHS: &[&str] = &[
+    ".cutready/projects.json",
     ".cutready/visuals",
     ".cutready/screenshots",
     ".cutready/narration",
@@ -286,7 +287,7 @@ impl CutReadyDraftlineAdapter {
 /// Build the content policy needed for a safe CutReady Draftline spike.
 pub fn cutready_content_policy() -> DraftlineResult<ContentPolicy> {
     ContentPolicy::new()
-        .include_paths(CUTREADY_ASSET_ROOTS)?
+        .include_paths(CUTREADY_INCLUDED_PATHS)?
         .include_extensions(CUTREADY_CONTENT_EXTENSIONS)?
         .exclude_paths(EXCLUDED_RUNTIME_PATHS)
         .map(|policy| policy.with_large_file_threshold(CUTREADY_LARGE_FILE_THRESHOLD_BYTES))
@@ -409,6 +410,10 @@ mod tests {
             root.join(".cutready/visuals/frame.json"),
             r#"{"kind":"frame"}"#,
         );
+        write(
+            root.join(".cutready/projects.json"),
+            r#"{"projects":[{"path":"demo","name":"Demo"}]}"#,
+        );
         write(root.join(".cutready/locks.json"), r#"{"notes":{}}"#);
         write(root.join(".cutready/ui-state.json"), r#"{"panel":"runs"}"#);
 
@@ -423,6 +428,7 @@ mod tests {
         assert!(changed_paths.contains(&Path::new("intro.sk")));
         assert!(changed_paths.contains(&Path::new("demo.sb")));
         assert!(changed_paths.contains(&Path::new("planning.md")));
+        assert!(changed_paths.contains(&Path::new(".cutready/projects.json")));
         assert!(changed_paths.contains(&Path::new(".cutready/visuals/frame.json")));
         assert!(!changed_paths.contains(&Path::new(".cutready/locks.json")));
         assert!(!changed_paths.contains(&Path::new(".cutready/ui-state.json")));
@@ -443,6 +449,7 @@ mod tests {
             .map(|file| file.path.as_path())
             .collect();
         assert!(preview_paths.contains(&Path::new("intro.sk")));
+        assert!(preview_paths.contains(&Path::new(".cutready/projects.json")));
         assert!(!preview_paths.contains(&Path::new(".cutready/locks.json")));
         assert!(!preview_paths.contains(&Path::new(".cutready/ui-state.json")));
 
@@ -510,10 +517,35 @@ mod tests {
         assert!(policy.tracks("voiceover.webm").unwrap());
         assert!(policy.tracks("workspace-audio/take.m4a").unwrap());
         assert!(policy.tracks(".cutready/visuals/frame.json").unwrap());
+        assert!(policy.tracks(".cutready/projects.json").unwrap());
         assert!(policy.tracks(".cutready/screenshots/demo.webp").unwrap());
         assert!(policy.tracks(".cutready/narration/row.webm").unwrap());
         assert!(!policy.tracks(".cutready/ui-state.json").unwrap());
         assert!(!policy.tracks(".cutready/locks.json").unwrap());
+    }
+
+    #[test]
+    fn project_manifest_edits_are_tracked_content() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        write(
+            root.join(".cutready/projects.json"),
+            r#"{"projects":[{"path":"demo-a","name":"Demo A"},{"path":"demo-b","name":"Demo B"}]}"#,
+        );
+
+        let adapter = CutReadyDraftlineAdapter::open_project(root).unwrap();
+        adapter.save_version("Initial workspace manifest").unwrap();
+
+        write(
+            root.join(".cutready/projects.json"),
+            r#"{"projects":[{"path":"demo-a","name":"Demo A"}]}"#,
+        );
+
+        let changes = adapter.inspect_changes().unwrap();
+        assert!(changes
+            .files
+            .iter()
+            .any(|file| file.path.as_path() == Path::new(".cutready/projects.json")));
     }
 
     #[test]

@@ -11,6 +11,7 @@ use std::process::{Command, Stdio};
 use serde_json::{json, Value};
 
 use crate::engine::agent::llm::{ContentPart, ImageUrl, Tool, ToolCall};
+use crate::engine::draftline_adapter::CutReadyDraftlineAdapter;
 use crate::engine::project;
 use crate::models::sketch::{PlanningRow, Sketch};
 
@@ -1192,6 +1193,12 @@ fn exec_create_project(current_project_root: &Path, args: &Value) -> String {
 
     match project::create_project_in_repo(&repo_root, name, description) {
         Ok(entry) => {
+            if let Err(e) = snapshot_workspace_structure(
+                &repo_root,
+                &format!("Add {} to workspace", entry.name),
+            ) {
+                return format!("Error creating project: project was created but not saved: {e}");
+            }
             let root = repo_root.join(&entry.path);
             json!({
                 "project_path": entry.path,
@@ -1204,6 +1211,21 @@ fn exec_create_project(current_project_root: &Path, args: &Value) -> String {
         }
         Err(e) => format!("Error creating project: {e}"),
     }
+}
+
+fn snapshot_workspace_structure(repo_root: &Path, message: &str) -> Result<(), String> {
+    let adapter = CutReadyDraftlineAdapter::open_project(repo_root).map_err(|e| e.to_string())?;
+    if !adapter
+        .inspect_changes()
+        .map_err(|e| e.to_string())?
+        .is_empty()
+    {
+        adapter
+            .save_version(message)
+            .map(|_| ())
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(())
 }
 
 fn exec_add_items_to_project(current_project_root: &Path, args: &Value) -> String {
@@ -1319,15 +1341,18 @@ fn exec_add_items_to_project(current_project_root: &Path, args: &Value) -> Strin
 
 fn find_multi_project_repo_root(current_project_root: &Path) -> Result<PathBuf, String> {
     for candidate in current_project_root.ancestors() {
-        if project::read_manifest(candidate).is_some() {
-            return Ok(candidate.to_path_buf());
+        match project::read_manifest_result(candidate) {
+            Ok(Some(_)) => return Ok(candidate.to_path_buf()),
+            Ok(None) => {}
+            Err(e) => return Err(format!("workspace manifest is invalid: {e}")),
         }
     }
     Err("the current workspace is not multi-project yet. Create another project from the UI first so the existing project can be safely migrated before agents copy across projects.".into())
 }
 
 fn resolve_manifest_project_root(repo_root: &Path, project_path: &str) -> Result<PathBuf, String> {
-    let manifest = project::read_manifest(repo_root)
+    let manifest = project::read_manifest_result(repo_root)
+        .map_err(|e| e.to_string())?
         .ok_or_else(|| "workspace manifest is missing".to_string())?;
     let entry = manifest
         .projects
@@ -5276,6 +5301,11 @@ mod tests {
             .projects
             .iter()
             .any(|entry| entry.path == "derived-project" && entry.name == "Derived Project"));
+        let adapter = CutReadyDraftlineAdapter::open_project(repo_root).unwrap();
+        assert!(
+            adapter.inspect_changes().unwrap().is_empty(),
+            "agent-created project manifest change should be saved immediately"
+        );
     }
 
     #[test]

@@ -367,7 +367,7 @@ my-demo-project/
 ```
 
 Draftline snapshots capture versioned content (sketches, storyboards, notes,
-screenshots, visuals, and settings) while local runtime state remains outside
+the `.cutready/projects.json` workspace manifest, screenshots, visuals, and settings) while local runtime state remains outside
 normal project snapshots. Users can browse the timeline, preview any version,
 diff between versions, restore previous states as new saves, branch into
 variations, merge, and sync with remotes.
@@ -770,9 +770,10 @@ fn graph_overview(adapter: &CutReadyDraftlineAdapter) -> DraftlineResult<Workspa
 Draftline tracks the user-authored project surface:
 
 1. **Documents**: `.sk`, `.sb`, and `.md`
-2. **Visual assets**: `.cutready/visuals/*.json`
-3. **Screenshot assets**: `.cutready/screenshots/*.{png,jpg,jpeg,webp}`
-4. **Project settings/metadata** that should travel with the project
+2. **Workspace manifest**: `.cutready/projects.json` with durable project `path`, `name`, and optional `description` only
+3. **Visual assets**: `.cutready/visuals/*.json`
+4. **Screenshot assets**: `.cutready/screenshots/*.{png,jpg,jpeg,webp}`
+5. **Project settings/metadata** that should travel with the project
 
 Runtime state such as chat/run trajectories, locks, recordings, and local UI
 layout lives under `.git/cutready/` or other local-only folders, or is excluded

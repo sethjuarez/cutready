@@ -212,6 +212,7 @@ pub async fn remove_recent_project(path: String, app: tauri::AppHandle) -> Resul
         "recent_projects",
         serde_json::to_value(&recent).unwrap_or_default(),
     );
+    store.save().map_err(|e| e.to_string())?;
 
     Ok(())
 }
@@ -725,11 +726,16 @@ pub async fn delete_project(
     let root = repo_root(&state)?;
     let safe_path = safe_project_manifest_path(&project_path)?;
 
-    let mut manifest = project::read_manifest(&root);
-    if let Some(manifest) = manifest.as_ref() {
-        if !manifest.projects.iter().any(|p| p.path == project_path) {
-            return Err(format!("Project '{}' not found in repo", project_path));
-        }
+    let mut manifest = project::read_manifest_result(&root).map_err(|e| e.to_string())?;
+    let Some(existing_manifest) = manifest.as_ref() else {
+        return Err(format!("Project '{}' not found in repo", project_path));
+    };
+    if !existing_manifest
+        .projects
+        .iter()
+        .any(|p| p.path == project_path)
+    {
+        return Err(format!("Project '{}' not found in repo", project_path));
     }
 
     // Delete files before mutating the manifest so a filesystem failure does not
@@ -790,6 +796,8 @@ pub async fn rename_project(
         return Ok(entry.path);
     }
 
+    let mut manifest = project::read_manifest_result(&root).map_err(|e| e.to_string())?;
+
     // Derive new folder-safe path from the new name
     let new_path = new_name
         .to_lowercase()
@@ -799,6 +807,17 @@ pub async fn rename_project(
 
     if new_path.is_empty() {
         return Err("Invalid project name".into());
+    }
+
+    let existing_manifest = manifest
+        .as_ref()
+        .ok_or_else(|| format!("Project '{}' not found in repo", project_path))?;
+    if !existing_manifest
+        .projects
+        .iter()
+        .any(|p| p.path == project_path)
+    {
+        return Err(format!("Project '{}' not found in repo", project_path));
     }
 
     // Rename the folder on disk if the path changed
@@ -814,7 +833,7 @@ pub async fn rename_project(
     }
 
     // Update manifest: both name and path
-    if let Some(mut manifest) = project::read_manifest(&root) {
+    if let Some(mut manifest) = manifest.take() {
         if let Some(entry) = manifest
             .projects
             .iter_mut()
