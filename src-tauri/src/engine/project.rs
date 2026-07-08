@@ -116,6 +116,47 @@ pub fn init_project_folder(root: &Path) -> Result<ProjectView, ProjectError> {
 
 const MANIFEST_PATH: &str = ".cutready/projects.json";
 
+/// Workspace manifest health state.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkspaceManifestStatus {
+    Valid,
+    Missing,
+    Malformed,
+}
+
+/// A manifest entry that points at an unsafe, missing, or non-project folder.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct WorkspaceManifestIssue {
+    pub entry: ProjectEntry,
+    pub reason: String,
+}
+
+/// Inspection result for `.cutready/projects.json` recovery UI and tooling.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct WorkspaceManifestInspection {
+    pub status: WorkspaceManifestStatus,
+    pub manifest_path: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub manifest: Option<ProjectManifest>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parse_error: Option<String>,
+    pub legacy_single_project_fallback: bool,
+    pub stale_entries: Vec<WorkspaceManifestIssue>,
+    pub unlisted_projects: Vec<ProjectEntry>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub proposed_manifest: Option<ProjectManifest>,
+}
+
+/// Result from an explicit manifest repair.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct WorkspaceManifestRepair {
+    pub inspection: WorkspaceManifestInspection,
+    pub manifest: ProjectManifest,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub backup_path: Option<String>,
+}
+
 /// Read the project manifest from a repo root. Returns None if no manifest
 /// exists (single-project / legacy mode).
 pub fn read_manifest(repo_root: &Path) -> Option<ProjectManifest> {
@@ -143,6 +184,303 @@ pub fn write_manifest(repo_root: &Path, manifest: &ProjectManifest) -> Result<()
     let json =
         serde_json::to_string_pretty(manifest).map_err(|e| ProjectError::Io(e.to_string()))?;
     std::fs::write(&path, json).map_err(|e| ProjectError::Io(e.to_string()))
+}
+
+/// Inspect workspace manifest health without mutating the workspace.
+pub fn inspect_workspace_manifest(
+    repo_root: &Path,
+) -> Result<WorkspaceManifestInspection, ProjectError> {
+    let legacy_single_project_fallback = looks_like_project_folder(repo_root);
+    let discovered_projects = discover_child_projects(repo_root)?;
+
+    match read_manifest_result(repo_root) {
+        Ok(Some(manifest)) => {
+            let stale_entries = stale_manifest_entries(repo_root, &manifest.projects);
+            let unlisted_projects =
+                unlisted_child_projects(&manifest.projects, &discovered_projects);
+            let proposed_manifest = repaired_manifest(
+                manifest.projects.clone(),
+                &stale_entries,
+                &unlisted_projects,
+                None,
+            );
+            Ok(WorkspaceManifestInspection {
+                status: WorkspaceManifestStatus::Valid,
+                manifest_path: display_repo_relative(MANIFEST_PATH),
+                manifest: Some(manifest),
+                parse_error: None,
+                legacy_single_project_fallback,
+                stale_entries,
+                unlisted_projects,
+                proposed_manifest: Some(proposed_manifest),
+            })
+        }
+        Ok(None) => {
+            let fallback_entry = legacy_single_project_fallback.then(|| ProjectEntry {
+                path: ".".into(),
+                name: repo_root
+                    .file_name()
+                    .map(|name| name.to_string_lossy().into_owned())
+                    .unwrap_or_else(|| "Project".into()),
+                description: None,
+            });
+            let proposed_manifest = if discovered_projects.is_empty() {
+                None
+            } else {
+                Some(repaired_manifest(
+                    Vec::new(),
+                    &[],
+                    &discovered_projects,
+                    fallback_entry,
+                ))
+            };
+            Ok(WorkspaceManifestInspection {
+                status: WorkspaceManifestStatus::Missing,
+                manifest_path: display_repo_relative(MANIFEST_PATH),
+                manifest: None,
+                parse_error: None,
+                legacy_single_project_fallback,
+                stale_entries: Vec::new(),
+                unlisted_projects: discovered_projects,
+                proposed_manifest,
+            })
+        }
+        Err(err @ ProjectError::Deserialize(_)) => {
+            let fallback_entry = legacy_single_project_fallback.then(|| ProjectEntry {
+                path: ".".into(),
+                name: repo_root
+                    .file_name()
+                    .map(|name| name.to_string_lossy().into_owned())
+                    .unwrap_or_else(|| "Project".into()),
+                description: None,
+            });
+            let proposed_manifest =
+                repaired_manifest(Vec::new(), &[], &discovered_projects, fallback_entry);
+            Ok(WorkspaceManifestInspection {
+                status: WorkspaceManifestStatus::Malformed,
+                manifest_path: display_repo_relative(MANIFEST_PATH),
+                manifest: None,
+                parse_error: Some(err.to_string()),
+                legacy_single_project_fallback,
+                stale_entries: Vec::new(),
+                unlisted_projects: discovered_projects,
+                proposed_manifest: Some(proposed_manifest),
+            })
+        }
+        Err(err) => Err(err),
+    }
+}
+
+/// Explicitly repair `.cutready/projects.json` from the current inspection.
+///
+/// Missing manifests are only written when child project folders were discovered.
+/// Malformed manifests are backed up before replacement.
+pub fn repair_workspace_manifest(
+    repo_root: &Path,
+) -> Result<WorkspaceManifestRepair, ProjectError> {
+    let inspection = inspect_workspace_manifest(repo_root)?;
+    let manifest = inspection
+        .proposed_manifest
+        .clone()
+        .ok_or_else(|| ProjectError::Io("No workspace manifest repair is available".into()))?;
+
+    validate_manifest_entries(&manifest)?;
+    let backup_path = if inspection.status == WorkspaceManifestStatus::Malformed {
+        Some(backup_malformed_manifest(repo_root)?)
+    } else {
+        None
+    };
+    write_manifest(repo_root, &manifest)?;
+
+    Ok(WorkspaceManifestRepair {
+        inspection,
+        manifest,
+        backup_path,
+    })
+}
+
+fn repaired_manifest(
+    current_entries: Vec<ProjectEntry>,
+    stale_entries: &[WorkspaceManifestIssue],
+    unlisted_projects: &[ProjectEntry],
+    fallback_entry: Option<ProjectEntry>,
+) -> ProjectManifest {
+    let stale_paths = stale_entries
+        .iter()
+        .map(|issue| issue.entry.path.as_str())
+        .collect::<std::collections::BTreeSet<_>>();
+    let mut projects = current_entries
+        .into_iter()
+        .filter(|entry| !stale_paths.contains(entry.path.as_str()))
+        .collect::<Vec<_>>();
+
+    if projects.is_empty() {
+        if let Some(entry) = fallback_entry {
+            projects.push(entry);
+        }
+    }
+
+    for project in unlisted_projects {
+        if !projects.iter().any(|entry| entry.path == project.path) {
+            projects.push(project.clone());
+        }
+    }
+
+    ProjectManifest { projects }
+}
+
+fn stale_manifest_entries(
+    repo_root: &Path,
+    entries: &[ProjectEntry],
+) -> Vec<WorkspaceManifestIssue> {
+    entries
+        .iter()
+        .filter_map(|entry| match validate_manifest_entry_path(&entry.path) {
+            Ok(()) => {
+                let project_root = if entry.path == "." {
+                    repo_root.to_path_buf()
+                } else {
+                    repo_root.join(&entry.path)
+                };
+                if !project_root.exists() {
+                    Some(WorkspaceManifestIssue {
+                        entry: entry.clone(),
+                        reason: "missing_folder".into(),
+                    })
+                } else if !project_root.is_dir() {
+                    Some(WorkspaceManifestIssue {
+                        entry: entry.clone(),
+                        reason: "not_a_folder".into(),
+                    })
+                } else if !looks_like_project_folder(&project_root) {
+                    Some(WorkspaceManifestIssue {
+                        entry: entry.clone(),
+                        reason: "not_project_like".into(),
+                    })
+                } else {
+                    None
+                }
+            }
+            Err(reason) => Some(WorkspaceManifestIssue {
+                entry: entry.clone(),
+                reason,
+            }),
+        })
+        .collect()
+}
+
+fn unlisted_child_projects(
+    manifest_projects: &[ProjectEntry],
+    discovered_projects: &[ProjectEntry],
+) -> Vec<ProjectEntry> {
+    discovered_projects
+        .iter()
+        .filter(|project| {
+            !manifest_projects
+                .iter()
+                .any(|entry| entry.path == project.path)
+        })
+        .cloned()
+        .collect()
+}
+
+fn discover_child_projects(repo_root: &Path) -> Result<Vec<ProjectEntry>, ProjectError> {
+    let mut projects = Vec::new();
+    for entry in std::fs::read_dir(repo_root).map_err(|e| ProjectError::Io(e.to_string()))? {
+        let entry = entry.map_err(|e| ProjectError::Io(e.to_string()))?;
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if name.starts_with('.') || validate_manifest_entry_path(&name).is_err() {
+            continue;
+        }
+        if looks_like_project_folder(&path) {
+            projects.push(ProjectEntry {
+                path: name.clone(),
+                name,
+                description: None,
+            });
+        }
+    }
+    projects.sort_by(|a, b| a.path.cmp(&b.path));
+    Ok(projects)
+}
+
+fn looks_like_project_folder(project_root: &Path) -> bool {
+    if !project_root.is_dir() {
+        return false;
+    }
+
+    for marker in ["sketches", "storyboards", "notes"] {
+        if project_root.join(marker).is_dir() {
+            return true;
+        }
+    }
+    for marker in [
+        ".cutready/settings.json",
+        ".cutready/screenshots",
+        ".cutready/visuals",
+    ] {
+        if project_root.join(marker).exists() {
+            return true;
+        }
+    }
+
+    let Ok(entries) = std::fs::read_dir(project_root) else {
+        return false;
+    };
+    entries.filter_map(Result::ok).any(|entry| {
+        entry.path().is_file()
+            && entry
+                .path()
+                .extension()
+                .and_then(|ext| ext.to_str())
+                .is_some_and(|ext| matches!(ext, "sk" | "sb" | "md"))
+    })
+}
+
+fn backup_malformed_manifest(repo_root: &Path) -> Result<String, ProjectError> {
+    let manifest_path = repo_root.join(MANIFEST_PATH);
+    let timestamp = chrono::Utc::now().format("%Y%m%d%H%M%S%.3f");
+    let backup_relative = format!(".cutready/projects.recovery-{timestamp}.json");
+    let backup_path = repo_root.join(&backup_relative);
+    std::fs::copy(&manifest_path, &backup_path).map_err(|e| ProjectError::Io(e.to_string()))?;
+    Ok(display_repo_relative(&backup_relative))
+}
+
+fn validate_manifest_entries(manifest: &ProjectManifest) -> Result<(), ProjectError> {
+    for entry in &manifest.projects {
+        validate_manifest_entry_path(&entry.path).map_err(ProjectError::PathTraversal)?;
+    }
+    Ok(())
+}
+
+fn validate_manifest_entry_path(path: &str) -> Result<(), String> {
+    if path == "." {
+        return Ok(());
+    }
+    let path_ref = Path::new(path);
+    if path_ref.as_os_str().is_empty() || path_ref.is_absolute() {
+        return Err("invalid_path".into());
+    }
+    if path_ref.components().any(|component| {
+        matches!(
+            component,
+            std::path::Component::ParentDir
+                | std::path::Component::RootDir
+                | std::path::Component::Prefix(_)
+                | std::path::Component::CurDir
+        )
+    }) {
+        return Err("invalid_path".into());
+    }
+    Ok(())
+}
+
+fn display_repo_relative(path: &str) -> String {
+    path.replace('\\', "/")
 }
 
 /// Whether this repo has a multi-project manifest.
@@ -1792,6 +2130,189 @@ mod tests {
 
         assert!(matches!(err, ProjectError::Deserialize(_)));
         assert!(!root.join("broken").exists());
+    }
+
+    #[test]
+    fn inspect_missing_manifest_preserves_legacy_root_fallback() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        std::fs::write(root.join("intro.sk"), "{}").unwrap();
+
+        let inspection = inspect_workspace_manifest(root).unwrap();
+
+        assert_eq!(inspection.status, WorkspaceManifestStatus::Missing);
+        assert!(inspection.legacy_single_project_fallback);
+        assert!(inspection.unlisted_projects.is_empty());
+        assert!(inspection.proposed_manifest.is_none());
+    }
+
+    #[test]
+    fn inspect_missing_manifest_proposes_child_projects() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        std::fs::create_dir_all(root.join("login-demo/notes")).unwrap();
+        std::fs::create_dir_all(root.join("onboarding/sketches")).unwrap();
+
+        let inspection = inspect_workspace_manifest(root).unwrap();
+
+        assert_eq!(inspection.status, WorkspaceManifestStatus::Missing);
+        assert!(!inspection.legacy_single_project_fallback);
+        assert_eq!(
+            inspection
+                .unlisted_projects
+                .iter()
+                .map(|entry| entry.path.as_str())
+                .collect::<Vec<_>>(),
+            vec!["login-demo", "onboarding"]
+        );
+        assert_eq!(
+            inspection
+                .proposed_manifest
+                .as_ref()
+                .unwrap()
+                .projects
+                .len(),
+            2
+        );
+    }
+
+    #[test]
+    fn inspect_missing_manifest_proposes_root_and_child_projects() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        std::fs::write(root.join("intro.sk"), "{}").unwrap();
+        std::fs::create_dir_all(root.join("child-demo/notes")).unwrap();
+
+        let inspection = inspect_workspace_manifest(root).unwrap();
+
+        assert_eq!(inspection.status, WorkspaceManifestStatus::Missing);
+        assert!(inspection.legacy_single_project_fallback);
+        assert_eq!(
+            inspection
+                .proposed_manifest
+                .as_ref()
+                .unwrap()
+                .projects
+                .iter()
+                .map(|entry| entry.path.as_str())
+                .collect::<Vec<_>>(),
+            vec![".", "child-demo"]
+        );
+    }
+
+    #[test]
+    fn repair_malformed_manifest_preserves_backup_before_replacement() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        std::fs::create_dir_all(root.join(".cutready")).unwrap();
+        std::fs::create_dir_all(root.join("recovered/notes")).unwrap();
+        std::fs::write(root.join(".cutready/projects.json"), "{not valid json").unwrap();
+
+        let inspection = inspect_workspace_manifest(root).unwrap();
+        assert_eq!(inspection.status, WorkspaceManifestStatus::Malformed);
+        assert!(inspection.parse_error.is_some());
+
+        let repair = repair_workspace_manifest(root).unwrap();
+        let backup_path = repair.backup_path.as_deref().unwrap();
+
+        assert!(backup_path.starts_with(".cutready/projects.recovery-"));
+        assert_eq!(
+            std::fs::read_to_string(root.join(backup_path)).unwrap(),
+            "{not valid json"
+        );
+        let manifest = read_manifest_result(root).unwrap().unwrap();
+        assert_eq!(manifest.projects.len(), 1);
+        assert_eq!(manifest.projects[0].path, "recovered");
+    }
+
+    #[test]
+    fn inspect_valid_manifest_reports_stale_entries() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        std::fs::create_dir_all(root.join("valid/notes")).unwrap();
+        std::fs::create_dir_all(root.join("empty")).unwrap();
+        write_manifest(
+            root,
+            &ProjectManifest {
+                projects: vec![
+                    ProjectEntry {
+                        path: "valid".into(),
+                        name: "Valid".into(),
+                        description: None,
+                    },
+                    ProjectEntry {
+                        path: "missing".into(),
+                        name: "Missing".into(),
+                        description: None,
+                    },
+                    ProjectEntry {
+                        path: "empty".into(),
+                        name: "Empty".into(),
+                        description: None,
+                    },
+                ],
+            },
+        )
+        .unwrap();
+
+        let inspection = inspect_workspace_manifest(root).unwrap();
+
+        assert_eq!(inspection.status, WorkspaceManifestStatus::Valid);
+        assert_eq!(
+            inspection
+                .stale_entries
+                .iter()
+                .map(|issue| (issue.entry.path.as_str(), issue.reason.as_str()))
+                .collect::<Vec<_>>(),
+            vec![("missing", "missing_folder"), ("empty", "not_project_like")]
+        );
+        assert_eq!(
+            inspection
+                .proposed_manifest
+                .as_ref()
+                .unwrap()
+                .projects
+                .iter()
+                .map(|entry| entry.path.as_str())
+                .collect::<Vec<_>>(),
+            vec!["valid"]
+        );
+    }
+
+    #[test]
+    fn inspect_valid_manifest_reports_unlisted_child_projects() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        std::fs::create_dir_all(root.join("listed/notes")).unwrap();
+        std::fs::create_dir_all(root.join("unlisted/storyboards")).unwrap();
+        write_manifest(
+            root,
+            &ProjectManifest {
+                projects: vec![ProjectEntry {
+                    path: "listed".into(),
+                    name: "Listed".into(),
+                    description: None,
+                }],
+            },
+        )
+        .unwrap();
+
+        let inspection = inspect_workspace_manifest(root).unwrap();
+
+        assert_eq!(inspection.status, WorkspaceManifestStatus::Valid);
+        assert_eq!(inspection.unlisted_projects.len(), 1);
+        assert_eq!(inspection.unlisted_projects[0].path, "unlisted");
+        assert_eq!(
+            inspection
+                .proposed_manifest
+                .as_ref()
+                .unwrap()
+                .projects
+                .iter()
+                .map(|entry| entry.path.as_str())
+                .collect::<Vec<_>>(),
+            vec!["listed", "unlisted"]
+        );
     }
 
     #[test]
