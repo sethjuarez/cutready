@@ -1,19 +1,80 @@
 import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#elseif canImport(AppKit)
+import AppKit
+#endif
 
 public enum CutReadyTheme {
-    public static let accent = Color(red: 111 / 255, green: 99 / 255, blue: 232 / 255)
+    public static let accent = adaptiveColor(
+        light: RGB(111, 99, 232),
+        dark: RGB(164, 154, 250)
+    )
     public static let accentDark = Color(red: 170 / 255, green: 160 / 255, blue: 255 / 255)
 
-    public static let storyboard = Color(red: 15 / 255, green: 118 / 255, blue: 110 / 255)
+    public static let storyboard = adaptiveColor(
+        light: RGB(15, 118, 110),
+        dark: RGB(95, 209, 199)
+    )
     public static let sketch = accent
-    public static let note = Color(red: 194 / 255, green: 105 / 255, blue: 17 / 255)
+    public static let note = adaptiveColor(
+        light: RGB(194, 105, 17),
+        dark: RGB(242, 173, 92)
+    )
 
-    public static let surface = Color(red: 251 / 255, green: 250 / 255, blue: 248 / 255)
-    public static let surfaceAlt = Color(red: 243 / 255, green: 240 / 255, blue: 236 / 255)
-    public static let surfaceInset = Color(red: 236 / 255, green: 231 / 255, blue: 225 / 255)
-    public static let border = Color(red: 222 / 255, green: 216 / 255, blue: 207 / 255)
-    public static let text = Color(red: 44 / 255, green: 41 / 255, blue: 37 / 255)
-    public static let textSecondary = Color(red: 112 / 255, green: 106 / 255, blue: 98 / 255)
+    public static let surface = adaptiveColor(
+        light: RGB(251, 250, 248),
+        dark: RGB(31, 29, 26)
+    )
+    public static let surfaceAlt = adaptiveColor(
+        light: RGB(243, 240, 236),
+        dark: RGB(42, 38, 34)
+    )
+    public static let surfaceInset = adaptiveColor(
+        light: RGB(236, 231, 225),
+        dark: RGB(52, 47, 42)
+    )
+    public static let border = adaptiveColor(
+        light: RGB(222, 216, 207),
+        dark: RGB(76, 68, 60)
+    )
+    public static let text = adaptiveColor(
+        light: RGB(44, 41, 37),
+        dark: RGB(246, 241, 234)
+    )
+    public static let textSecondary = adaptiveColor(
+        light: RGB(112, 106, 98),
+        dark: RGB(188, 178, 166)
+    )
+}
+
+private struct RGB {
+    let red: CGFloat
+    let green: CGFloat
+    let blue: CGFloat
+
+    init(_ red: CGFloat, _ green: CGFloat, _ blue: CGFloat) {
+        self.red = red / 255
+        self.green = green / 255
+        self.blue = blue / 255
+    }
+}
+
+private func adaptiveColor(light: RGB, dark: RGB) -> Color {
+    #if canImport(UIKit)
+    Color(uiColor: UIColor { traits in
+        let color = traits.userInterfaceStyle == .dark ? dark : light
+        return UIColor(red: color.red, green: color.green, blue: color.blue, alpha: 1)
+    })
+    #elseif canImport(AppKit)
+    Color(nsColor: NSColor(name: nil) { appearance in
+        let isDark = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        let color = isDark ? dark : light
+        return NSColor(red: color.red, green: color.green, blue: color.blue, alpha: 1)
+    })
+    #else
+    Color(red: light.red, green: light.green, blue: light.blue)
+    #endif
 }
 
 public enum CutReadyIconAsset {
