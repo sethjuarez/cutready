@@ -62,8 +62,27 @@ final class StoryboardDocumentTests: XCTestCase {
         let object = try JSONSerialization.jsonObject(with: data) as? [String: Any]
         let decoded = try JSONDecoder().decode(Storyboard.self, from: data)
 
-        XCTAssertTrue(object?["created_at"] is String)
+        XCTAssertEqual(object?["created_at"] as? String, "2026-01-01T00:00:00.000Z")
+        XCTAssertEqual(object?["updated_at"] as? String, "2026-01-01T01:00:00.000Z")
         XCTAssertEqual(decoded.title, storyboard.title)
         XCTAssertEqual(decoded.items, storyboard.items)
+    }
+
+    func testDecodesLegacyNumericStoryboardDates() throws {
+        let data = Data("""
+        {
+          "title": "Numeric Storyboard",
+          "description": "Legacy mobile date encoding.",
+          "items": [],
+          "created_at": 789004800,
+          "updated_at": 1783530000
+        }
+        """.utf8)
+
+        let storyboard = try JSONDecoder().decode(Storyboard.self, from: data)
+
+        XCTAssertEqual(storyboard.title, "Numeric Storyboard")
+        XCTAssertGreaterThan(storyboard.createdAt.timeIntervalSince1970, 1_500_000_000)
+        XCTAssertEqual(storyboard.updatedAt.timeIntervalSince1970, 1_783_530_000, accuracy: 0.001)
     }
 }

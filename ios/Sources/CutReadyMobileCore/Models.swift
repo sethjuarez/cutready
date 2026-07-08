@@ -1,5 +1,70 @@
 import Foundation
 
+enum CutReadyDocumentDateCodec {
+    static func string(from date: Date) -> String {
+        iso8601WithFractions.string(from: date)
+    }
+
+    static func decode<Key: CodingKey>(
+        from container: KeyedDecodingContainer<Key>,
+        forKey key: Key
+    ) throws -> Date? {
+        if let value = try? container.decodeIfPresent(String.self, forKey: key) {
+            return try date(from: value, key: key, container: container)
+        }
+
+        if let value = try? container.decodeIfPresent(Double.self, forKey: key) {
+            return date(fromLegacyNumericValue: value)
+        }
+
+        if (try? container.decodeNil(forKey: key)) == true {
+            return nil
+        }
+
+        guard container.contains(key) else {
+            return nil
+        }
+
+        _ = try container.decode(String.self, forKey: key)
+        return nil
+    }
+
+    private static func date<Key: CodingKey>(
+        from value: String,
+        key: Key,
+        container: KeyedDecodingContainer<Key>
+    ) throws -> Date {
+        if let date = iso8601WithFractions.date(from: value) ?? iso8601.date(from: value) {
+            return date
+        }
+
+        throw DecodingError.dataCorruptedError(
+            forKey: key,
+            in: container,
+            debugDescription: "Invalid ISO 8601 date: \(value)"
+        )
+    }
+
+    private static func date(fromLegacyNumericValue value: Double) -> Date {
+        // Swift JSONEncoder's default Date format is seconds since 2001; Unix timestamps are much larger for current documents.
+        value > 1_000_000_000
+            ? Date(timeIntervalSince1970: value)
+            : Date(timeIntervalSinceReferenceDate: value)
+    }
+
+    private static let iso8601: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter
+    }()
+
+    private static let iso8601WithFractions: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
+}
+
 public enum SketchState: String, Codable, CaseIterable, Sendable {
     case draft
     case recordingEnriched = "recording_enriched"
@@ -231,33 +296,21 @@ public struct Sketch: Codable, Equatable, Sendable {
         rows = try container.decodeIfPresent([PlanningRow].self, forKey: .rows) ?? []
         metadata = try container.decodeIfPresent(DocumentMetadata.self, forKey: .metadata)
         state = try container.decodeIfPresent(SketchState.self, forKey: .state) ?? .draft
-        createdAt = try Self.decodeDate(from: container, key: .createdAt) ?? Date(timeIntervalSince1970: 0)
-        updatedAt = try Self.decodeDate(from: container, key: .updatedAt) ?? createdAt
+        createdAt = try CutReadyDocumentDateCodec.decode(from: container, forKey: .createdAt) ?? Date(timeIntervalSince1970: 0)
+        updatedAt = try CutReadyDocumentDateCodec.decode(from: container, forKey: .updatedAt) ?? createdAt
     }
 
-    private static func decodeDate(from container: KeyedDecodingContainer<CodingKeys>, key: CodingKeys) throws -> Date? {
-        guard let value = try container.decodeIfPresent(String.self, forKey: key) else {
-            return nil
-        }
-
-        if let date = iso8601WithFractions.date(from: value) ?? iso8601.date(from: value) {
-            return date
-        }
-
-        throw DecodingError.dataCorruptedError(forKey: key, in: container, debugDescription: "Invalid ISO 8601 date: \(value)")
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(title, forKey: .title)
+        try container.encodeIfPresent(locked, forKey: .locked)
+        try container.encode(description, forKey: .description)
+        try container.encode(rows, forKey: .rows)
+        try container.encodeIfPresent(metadata, forKey: .metadata)
+        try container.encode(state, forKey: .state)
+        try container.encode(CutReadyDocumentDateCodec.string(from: createdAt), forKey: .createdAt)
+        try container.encode(CutReadyDocumentDateCodec.string(from: updatedAt), forKey: .updatedAt)
     }
-
-    private static let iso8601: ISO8601DateFormatter = {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime]
-        return formatter
-    }()
-
-    private static let iso8601WithFractions: ISO8601DateFormatter = {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return formatter
-    }()
 }
 
 public enum StoryboardItem: Codable, Equatable, Sendable {
@@ -359,8 +412,8 @@ public struct Storyboard: Codable, Equatable, Sendable {
             let sketchPaths = try container.decodeIfPresent([String].self, forKey: .sketches) ?? []
             items = sketchPaths.map { .sketchRef(path: $0) }
         }
-        createdAt = try Self.decodeDate(from: container, key: .createdAt) ?? Date(timeIntervalSince1970: 0)
-        updatedAt = try Self.decodeDate(from: container, key: .updatedAt) ?? createdAt
+        createdAt = try CutReadyDocumentDateCodec.decode(from: container, forKey: .createdAt) ?? Date(timeIntervalSince1970: 0)
+        updatedAt = try CutReadyDocumentDateCodec.decode(from: container, forKey: .updatedAt) ?? createdAt
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -370,33 +423,9 @@ public struct Storyboard: Codable, Equatable, Sendable {
         try container.encodeIfPresent(locked, forKey: .locked)
         try container.encodeIfPresent(metadata, forKey: .metadata)
         try container.encode(items, forKey: .items)
-        try container.encode(Self.iso8601WithFractions.string(from: createdAt), forKey: .createdAt)
-        try container.encode(Self.iso8601WithFractions.string(from: updatedAt), forKey: .updatedAt)
+        try container.encode(CutReadyDocumentDateCodec.string(from: createdAt), forKey: .createdAt)
+        try container.encode(CutReadyDocumentDateCodec.string(from: updatedAt), forKey: .updatedAt)
     }
-
-    private static func decodeDate(from container: KeyedDecodingContainer<CodingKeys>, key: CodingKeys) throws -> Date? {
-        guard let value = try container.decodeIfPresent(String.self, forKey: key) else {
-            return nil
-        }
-
-        if let date = iso8601WithFractions.date(from: value) ?? iso8601.date(from: value) {
-            return date
-        }
-
-        throw DecodingError.dataCorruptedError(forKey: key, in: container, debugDescription: "Invalid ISO 8601 date: \(value)")
-    }
-
-    private static let iso8601: ISO8601DateFormatter = {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime]
-        return formatter
-    }()
-
-    private static let iso8601WithFractions: ISO8601DateFormatter = {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return formatter
-    }()
 }
 
 public struct FileSummary: Codable, Equatable, Identifiable, Sendable {

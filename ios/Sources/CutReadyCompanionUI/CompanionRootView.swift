@@ -14,6 +14,7 @@ public struct CompanionRootView: View {
     @State private var githubAccessToken: String?
     @State private var githubDeviceAuthorization: GitHubDeviceAuthorization?
     @State private var githubRepositories: [GitHubRepositorySummary] = []
+    @State private var githubRepositorySearchText = ""
     @State private var recentWorkspaces: [RecentWorkspace] = []
     @State private var isSigningIn = false
     @State private var isLoadingRepositories = false
@@ -22,8 +23,10 @@ public struct CompanionRootView: View {
     @State private var isShowingRepositories = false
     @State private var isShowingSync = false
     @State private var isSyncingWorkspace = false
+    @State private var isConfirmingParkAndReload = false
     @State private var syncError: String?
     @State private var syncConflicts: [MobileConflict] = []
+    @State private var syncStatusGeneration = 0
     @State private var workspaceNavigationPath = NavigationPath()
     @State private var authError: String?
     @State private var workspaceOpenProgress: GitHubWorkspaceOpenProgress?
@@ -74,10 +77,23 @@ public struct CompanionRootView: View {
                         isSyncing: isSyncingWorkspace,
                         errorMessage: syncError,
                         conflicts: syncConflicts,
+                        onSyncNow: { syncWorkspace() },
                         onRefresh: { refreshSyncStatus() },
                         onPull: { pullWorkspace() },
-                        onPush: { pushWorkspace() }
+                        onPush: { pushWorkspace() },
+                        onResolveConflicts: { resolutions in
+                            resolveWorkspaceConflicts(resolutions)
+                        },
+                        onParkAndReload: { isConfirmingParkAndReload = true }
                     )
+                }
+                .alert("Park mobile edits?", isPresented: $isConfirmingParkAndReload) {
+                    Button("Cancel", role: .cancel) {}
+                    Button("Park and reload latest", role: .destructive) {
+                        parkMobileEditsAndReloadLatest()
+                    }
+                } message: {
+                    Text("CutReady will first verify a fresh GitHub copy can open, then move this local mobile workspace aside and reload the latest remote work. Parked edits stay in this app's local storage on this device until CutReady adds a recovery/export view.")
                 }
             } else {
                 WorkspaceLandingView(
@@ -104,17 +120,23 @@ public struct CompanionRootView: View {
         }
         .sheet(isPresented: $isShowingRepositories) {
             GitHubRepositoryPicker(
-                recentWorkspaces: recentWorkspaces,
+                searchText: $githubRepositorySearchText,
                 repositories: githubRepositories,
                 isLoadingRepositories: isLoadingRepositories,
                 isOpeningWorkspace: isOpeningWorkspace,
                 workspaceOpenProgress: workspaceOpenProgress,
+                onSearch: { query in
+                    await searchGitHubRepositories(query: query)
+                },
+                onOpenInput: { input in
+                    await openGitHubWorkspace(input: input)
+                },
                 onOpen: { repository in
                     openGitHubWorkspace(repository)
                 }
             )
         }
-        .alert("GitHub sign-in failed", isPresented: Binding(
+        .alert("GitHub workspace issue", isPresented: Binding(
             get: { authError != nil },
             set: { if !$0 { authError = nil } }
         )) {
@@ -173,7 +195,8 @@ public struct CompanionRootView: View {
                 githubAccessToken = token.accessToken
                 try tokenStore.saveToken(token.accessToken)
                 githubDeviceAuthorization = nil
-                githubRepositories = try await client.listRepositories(accessToken: token.accessToken)
+                githubRepositories = []
+                githubRepositorySearchText = ""
                 isShowingRepositories = true
             } catch {
                 githubDeviceAuthorization = nil
@@ -184,25 +207,65 @@ public struct CompanionRootView: View {
     }
 
     private func showGitHubWorkspacePicker() {
-        guard let githubAccessToken else {
+        guard githubAccessToken != nil else {
             authError = "Sign in with GitHub before switching workspaces."
             return
         }
 
         isShowingRepositories = true
-        guard githubRepositories.isEmpty else {
+        githubRepositorySearchText = ""
+        githubRepositories = []
+    }
+
+    @MainActor
+    private func searchGitHubRepositories(query: String) async {
+        guard let githubAccessToken else {
             return
         }
 
-        Task {
-            do {
-                isLoadingRepositories = true
-                let client = GitHubMobileClient()
-                githubRepositories = try await client.listRepositories(accessToken: githubAccessToken)
-            } catch {
-                authError = describeGitHubError(error)
-            }
+        let normalizedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard normalizedQuery.count >= 2 else {
+            githubRepositories = []
             isLoadingRepositories = false
+            return
+        }
+
+        do {
+            isLoadingRepositories = true
+            defer { isLoadingRepositories = false }
+            let client = GitHubMobileClient()
+            let repositories = try await client.searchRepositories(accessToken: githubAccessToken, query: normalizedQuery, limit: 20)
+            guard !Task.isCancelled, normalizedQuery == githubRepositorySearchText.trimmingCharacters(in: .whitespacesAndNewlines) else {
+                return
+            }
+            githubRepositories = repositories
+        } catch {
+            guard !isCancellationError(error) else {
+                return
+            }
+            authError = describeGitHubError(error)
+        }
+    }
+
+    @MainActor
+    private func openGitHubWorkspace(input: String) async {
+        guard let githubAccessToken else {
+            authError = "Sign in with GitHub before opening a workspace."
+            return
+        }
+        guard let specifier = GitHubRepositorySpecifier(input: input) else {
+            authError = "Enter a GitHub repository as owner/name or paste a github.com repository URL."
+            return
+        }
+
+        do {
+            isOpeningWorkspace = true
+            let client = GitHubMobileClient()
+            let repository = try await client.repository(accessToken: githubAccessToken, specifier: specifier)
+            openGitHubWorkspace(repository)
+        } catch {
+            isOpeningWorkspace = false
+            authError = describeGitHubError(error)
         }
     }
 
@@ -251,6 +314,7 @@ public struct CompanionRootView: View {
                 recentWorkspaceStore.record(repository: repository)
                 recentWorkspaces = recentWorkspaceStore.load()
                 isShowingRepositories = false
+                refreshSyncStatus()
             } catch {
                 authError = describeGitHubError(error)
             }
@@ -269,6 +333,8 @@ public struct CompanionRootView: View {
                 path: path,
                 note: note(for: path, in: workspace),
                 fallbackTitle: title(for: path, in: workspace.allNotes),
+                syncStatus: workspace.syncStatus,
+                onOpenSync: { isShowingSync = true },
                 onSave: { markdown in
                     try await saveNote(markdown, path: path)
                 }
@@ -280,9 +346,11 @@ public struct CompanionRootView: View {
                 fallbackTitle: title(for: path, in: workspace.allSketches),
                 project: workspace,
                 githubAccessToken: githubAccessToken,
+                syncStatus: workspace.syncStatus,
                 loadAsset: { path in
                     try await draftlineStore.readAsset(path: path)
                 },
+                onOpenSync: { isShowingSync = true },
                 onSave: { sketch in
                     try await saveSketch(sketch, path: path)
                 }
@@ -318,6 +386,7 @@ public struct CompanionRootView: View {
     private func saveNote(_ markdown: String, path: String) async throws {
         let snapshot = try await draftlineStore.saveNote(markdown, path: path)
         await MainActor.run {
+            syncStatusGeneration += 1
             let dirtyStatus = MobileSyncStatus(state: .dirty, ahead: max((project?.syncStatus.ahead ?? 0), 1), message: "Mobile snapshot ready to push")
             syncConflicts = []
             if let project {
@@ -335,6 +404,7 @@ public struct CompanionRootView: View {
     private func saveSketch(_ sketch: Sketch, path: String) async throws {
         let snapshot = try await draftlineStore.saveSketch(sketch, path: path)
         await MainActor.run {
+            syncStatusGeneration += 1
             let dirtyStatus = MobileSyncStatus(state: .dirty, ahead: max((project?.syncStatus.ahead ?? 0), 1), message: "Mobile snapshot ready to push")
             syncConflicts = []
             if let project {
@@ -351,12 +421,52 @@ public struct CompanionRootView: View {
 
     private func refreshSyncStatus() {
         Task {
-            await MainActor.run { isSyncingWorkspace = true }
-            defer { Task { @MainActor in isSyncingWorkspace = false } }
+            let generation = await MainActor.run { () -> Int? in
+                guard beginWorkspaceOperation() else {
+                    return nil
+                }
+                return syncStatusGeneration
+            }
+            guard let generation else {
+                return
+            }
+            defer { Task { @MainActor in finishWorkspaceOperation() } }
             do {
                 let status = try await draftlineStore.syncStatus()
                 let conflicts = await conflicts(for: status)
-                await MainActor.run { updateSyncStatus(status, conflicts: conflicts) }
+                await MainActor.run {
+                    guard generation == syncStatusGeneration else {
+                        return
+                    }
+                    updateSyncStatus(status, conflicts: conflicts)
+                }
+            } catch {
+                await MainActor.run {
+                    guard generation == syncStatusGeneration else {
+                        return
+                    }
+                    syncError = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    private func syncWorkspace() {
+        Task {
+            let didStart = await MainActor.run { beginWorkspaceOperation() }
+            guard didStart else {
+                return
+            }
+            defer { Task { @MainActor in finishWorkspaceOperation() } }
+            do {
+                let (status, snapshot) = try await draftlineStore.syncNow()
+                let conflicts = await conflicts(for: status)
+                await MainActor.run {
+                    applyWorkspaceSync(status: status, snapshot: snapshot, conflicts: conflicts)
+                    if status.state == .clean {
+                        isShowingSync = false
+                    }
+                }
             } catch {
                 await MainActor.run { syncError = error.localizedDescription }
             }
@@ -365,24 +475,15 @@ public struct CompanionRootView: View {
 
     private func pullWorkspace() {
         Task {
-            await MainActor.run { isSyncingWorkspace = true }
-            defer { Task { @MainActor in isSyncingWorkspace = false } }
+            let didStart = await MainActor.run { beginWorkspaceOperation() }
+            guard didStart else {
+                return
+            }
+            defer { Task { @MainActor in finishWorkspaceOperation() } }
             do {
                 let (status, snapshot) = try await draftlineStore.pull()
                 let conflicts = await conflicts(for: status)
-                await MainActor.run {
-                    if let project {
-                        var updated = project.updating(from: snapshot)
-                        updated.syncStatus = status
-                        self.project = updated
-                    } else {
-                        var updated = CompanionProject(snapshot: snapshot)
-                        updated.syncStatus = status
-                        self.project = updated
-                    }
-                    syncConflicts = conflicts
-                    syncError = nil
-                }
+                await MainActor.run { applyWorkspaceSync(status: status, snapshot: snapshot, conflicts: conflicts) }
             } catch {
                 await MainActor.run { syncError = error.localizedDescription }
             }
@@ -391,28 +492,107 @@ public struct CompanionRootView: View {
 
     private func pushWorkspace() {
         Task {
-            await MainActor.run { isSyncingWorkspace = true }
-            defer { Task { @MainActor in isSyncingWorkspace = false } }
+            let didStart = await MainActor.run { beginWorkspaceOperation() }
+            guard didStart else {
+                return
+            }
+            defer { Task { @MainActor in finishWorkspaceOperation() } }
             do {
                 let (status, snapshot) = try await draftlineStore.push()
                 let conflicts = await conflicts(for: status)
+                await MainActor.run { applyWorkspaceSync(status: status, snapshot: snapshot, conflicts: conflicts) }
+            } catch {
+                await MainActor.run { syncError = error.localizedDescription }
+            }
+        }
+    }
+
+    private func parkMobileEditsAndReloadLatest() {
+        Task {
+            guard let project, let githubAccessToken else {
+                await MainActor.run { syncError = "Sign in with GitHub before reloading this workspace." }
+                return
+            }
+            guard case .github(let repositoryRef) = project.source else {
+                await MainActor.run { syncError = "Only GitHub-backed workspaces can be reloaded from mobile." }
+                return
+            }
+
+            let repository = GitHubRepositorySummary(
+                id: 0,
+                name: repositoryRef.name,
+                fullName: repositoryRef.displayName,
+                isPrivate: false,
+                defaultBranch: repositoryRef.defaultBranch ?? "main",
+                updatedAt: nil
+            )
+
+            let didStart = await MainActor.run { beginWorkspaceOperation() }
+            guard didStart else {
+                return
+            }
+            var shouldFinishOperation = true
+            defer {
+                if shouldFinishOperation {
+                    Task { @MainActor in finishWorkspaceOperation() }
+                }
+            }
+            do {
+                let snapshot = try await draftlineStore.parkLocalEditsAndReloadLatest(
+                    repository: repository,
+                    accessToken: githubAccessToken
+                )
                 await MainActor.run {
-                    if let project {
-                        var updated = project.updating(from: snapshot)
-                        updated.syncStatus = status
-                        self.project = updated
-                    } else {
-                        var updated = CompanionProject(snapshot: snapshot)
-                        updated.syncStatus = status
-                        self.project = updated
-                    }
-                    syncConflicts = conflicts
+                    syncStatusGeneration += 1
+                    self.project = CompanionProject(snapshot: snapshot)
+                    workspaceNavigationPath = NavigationPath()
+                    syncConflicts = []
                     syncError = nil
+                    isShowingSync = false
+                }
+                await MainActor.run { finishWorkspaceOperation() }
+                shouldFinishOperation = false
+                refreshSyncStatus()
+            } catch {
+                await MainActor.run { syncError = error.localizedDescription }
+            }
+        }
+    }
+
+    private func resolveWorkspaceConflicts(_ resolutions: [MobileConflictResolutionRequest]) {
+        Task {
+            let didStart = await MainActor.run { beginWorkspaceOperation() }
+            guard didStart else {
+                return
+            }
+            defer { Task { @MainActor in finishWorkspaceOperation() } }
+            do {
+                let (status, snapshot) = try await draftlineStore.resolveConflicts(resolutions)
+                let conflicts = await conflicts(for: status)
+                await MainActor.run {
+                    applyWorkspaceSync(status: status, snapshot: snapshot, conflicts: conflicts)
+                    if status.state == .clean {
+                        isShowingSync = false
+                    }
                 }
             } catch {
                 await MainActor.run { syncError = error.localizedDescription }
             }
         }
+    }
+
+    @MainActor
+    private func beginWorkspaceOperation() -> Bool {
+        guard !isSyncingWorkspace else {
+            return false
+        }
+        isSyncingWorkspace = true
+        return true
+    }
+
+    @MainActor
+    private func finishWorkspaceOperation() {
+        isSyncingWorkspace = false
     }
 
     @MainActor
@@ -422,6 +602,22 @@ public struct CompanionRootView: View {
         }
         project.syncStatus = status
         self.project = project
+        syncConflicts = conflicts
+        syncError = nil
+    }
+
+    @MainActor
+    private func applyWorkspaceSync(status: MobileSyncStatus, snapshot: MobileWorkspaceSnapshot, conflicts: [MobileConflict]) {
+        syncStatusGeneration += 1
+        if let project {
+            var updated = project.updating(from: snapshot)
+            updated.syncStatus = status
+            self.project = updated
+        } else {
+            var updated = CompanionProject(snapshot: snapshot)
+            updated.syncStatus = status
+            self.project = updated
+        }
         syncConflicts = conflicts
         syncError = nil
     }
@@ -438,6 +634,17 @@ public struct CompanionRootView: View {
             return "GitHub returned an unexpected response: \(error.mobileDescription)"
         }
         return error.localizedDescription
+    }
+
+    private func isCancellationError(_ error: Error) -> Bool {
+        if error is CancellationError {
+            return true
+        }
+        if let error = error as? URLError, error.code == .cancelled {
+            return true
+        }
+        let error = error as NSError
+        return error.domain == NSURLErrorDomain && error.code == NSURLErrorCancelled
     }
 }
 
@@ -474,10 +681,7 @@ private struct WorkspaceProjectsView: View {
                     VStack(spacing: 0) {
                         ForEach(project.projects) { workspaceProject in
                             NavigationLink(value: CompanionSelection.project(workspaceProject.path)) {
-                                ProjectNavigationRow(
-                                    project: workspaceProject,
-                                    isActive: project.activeProjectPath == workspaceProject.path
-                                )
+                                ProjectNavigationRow(project: workspaceProject)
                             }
                             .buttonStyle(.plain)
                         }
@@ -547,13 +751,90 @@ private struct WorkspaceProjectsView: View {
     }
 }
 
+private struct WorkspaceSyncToolbarButton: View {
+    let status: MobileSyncStatus
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            ZStack(alignment: .topTrailing) {
+                Image(systemName: systemImage)
+                    .font(.body.weight(.semibold))
+
+                if showsPushBadge {
+                    Circle()
+                        .fill(CutReadyTheme.storyboard)
+                        .frame(width: 8, height: 8)
+                        .overlay(Circle().stroke(CutReadyTheme.surface, lineWidth: 1))
+                        .offset(x: 4, y: -4)
+                }
+            }
+            .frame(width: 28, height: 28)
+        }
+        .foregroundStyle(tint)
+        .accessibilityLabel(accessibilityLabel)
+    }
+
+    private var showsPushBadge: Bool {
+        status.state == .dirty && status.ahead > 0
+    }
+
+    private var systemImage: String {
+        switch status.state {
+        case .dirty:
+            return "square.and.arrow.up"
+        case .incoming, .pulling:
+            return "arrow.down.circle"
+        case .pushing:
+            return "arrow.up.circle"
+        case .conflict:
+            return "exclamationmark.triangle"
+        case .offline:
+            return "icloud.slash"
+        case .clean:
+            return "checkmark.icloud"
+        }
+    }
+
+    private var tint: Color {
+        switch status.state {
+        case .dirty:
+            return CutReadyTheme.storyboard
+        case .incoming, .pulling, .pushing:
+            return CutReadyTheme.accent
+        case .conflict, .offline:
+            return .red
+        case .clean:
+            return CutReadyTheme.textSecondary
+        }
+    }
+
+    private var accessibilityLabel: String {
+        switch status.state {
+        case .dirty:
+            return status.ahead > 0 ? "\(status.ahead) mobile snapshot(s) ready to push" : "Mobile edits are ready to push"
+        case .incoming:
+            return "Incoming workspace changes are ready to pull"
+        case .pulling:
+            return "Pulling workspace changes"
+        case .pushing:
+            return "Pushing mobile edits"
+        case .conflict:
+            return "Workspace sync conflict"
+        case .offline:
+            return "Workspace sync is offline"
+        case .clean:
+            return "Workspace is clean"
+        }
+    }
+}
+
 private struct ProjectNavigationRow: View {
     let project: MobileProjectEntry
-    let isActive: Bool
 
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: isActive ? "folder.fill" : "folder")
+            Image(systemName: "folder")
                 .font(.body)
                 .foregroundStyle(CutReadyTheme.accent)
                 .frame(width: 26)
@@ -594,9 +875,12 @@ private struct WorkspaceSyncSheet: View {
     let isSyncing: Bool
     let errorMessage: String?
     let conflicts: [MobileConflict]
+    let onSyncNow: () -> Void
     let onRefresh: () -> Void
     let onPull: () -> Void
     let onPush: () -> Void
+    let onResolveConflicts: ([MobileConflictResolutionRequest]) -> Void
+    let onParkAndReload: () -> Void
 
     var body: some View {
         NavigationStack {
@@ -663,13 +947,36 @@ private struct WorkspaceSyncSheet: View {
         if !conflicts.isEmpty {
             CompanionCard {
                 VStack(alignment: .leading, spacing: 10) {
-                    Label("Resolve on desktop", systemImage: "desktopcomputer.trianglebadge.exclamationmark")
+                    Label("Review shared changes", systemImage: "rectangle.2.swap")
                         .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.red)
+                        .foregroundStyle(CutReadyTheme.accent)
 
-                    Text("Mobile can keep rehearsing and making safe edits, but these Draftline conflicts need the desktop app's merge tools.")
+                    Text("Some items changed on this device and in the shared workspace. Choose the version to keep for each item, or create a custom version.")
                         .font(.caption)
                         .foregroundStyle(CutReadyTheme.textSecondary)
+
+                    if canResolveConflictsOnMobile, conflicts.contains(where: \.needsUserChoice) {
+                        NavigationLink {
+                            MobileConflictResolutionWizard(
+                                conflicts: conflicts.filter(\.needsUserChoice),
+                                onApply: onResolveConflicts
+                            )
+                        } label: {
+                            syncLabel("Review changes", systemImage: "checklist")
+                        }
+                        .buttonStyle(.borderedProminent)
+                    } else if canResolveConflictsOnMobile {
+                        Button {
+                            onResolveConflicts([])
+                        } label: {
+                            syncLabel("Keep latest shared version", systemImage: "arrow.down.doc")
+                        }
+                        .buttonStyle(.borderedProminent)
+                    } else {
+                        Text("Some local file changes need the fallback recovery path before sync can continue.")
+                            .font(.caption)
+                            .foregroundStyle(CutReadyTheme.textSecondary)
+                    }
 
                     ForEach(conflicts) { conflict in
                         conflictRow(conflict)
@@ -677,13 +984,25 @@ private struct WorkspaceSyncSheet: View {
                 }
             }
         } else if project.syncStatus.state == .conflict {
-            Text("Refresh status to load conflict details. Mobile will defer merge resolution to the desktop app.")
-                .font(.caption)
-                .foregroundStyle(CutReadyTheme.textSecondary)
-                .padding(12)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(CutReadyTheme.surfaceAlt.opacity(0.55), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            CompanionCard {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Shared changes can be merged automatically.")
+                        .font(.caption)
+                        .foregroundStyle(CutReadyTheme.textSecondary)
+
+                    Button {
+                        onResolveConflicts([])
+                    } label: {
+                        syncLabel("Merge shared changes", systemImage: "arrow.triangle.merge")
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+            }
         }
+    }
+
+    private var canResolveConflictsOnMobile: Bool {
+        !conflicts.isEmpty && conflicts.allSatisfy(\.canResolveOnMobile)
     }
 
     private func conflictRow(_ conflict: MobileConflict) -> some View {
@@ -700,11 +1019,17 @@ private struct WorkspaceSyncSheet: View {
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.red.opacity(0.06), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .background(CutReadyTheme.surfaceAlt.opacity(0.65), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
     private var actionButtons: some View {
         VStack(spacing: 10) {
+            Button(action: onSyncNow) {
+                syncLabel(primarySyncTitle, systemImage: primarySyncIcon)
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(project.syncStatus.state == .conflict)
+
             Button(action: onRefresh) {
                 syncLabel("Refresh status", systemImage: "arrow.clockwise")
             }
@@ -718,11 +1043,62 @@ private struct WorkspaceSyncSheet: View {
             Button(action: onPush) {
                 syncLabel("Push mobile snapshot", systemImage: "arrow.up.circle")
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.bordered)
             .disabled(project.syncStatus.state == .conflict)
+
+            if canParkAndReload {
+                Button(action: onParkAndReload) {
+                    syncLabel("Park mobile edits and reload latest", systemImage: "tray.and.arrow.down")
+                }
+                .buttonStyle(.bordered)
+                .tint(CutReadyTheme.storyboard)
+            }
         }
         .controlSize(.large)
         .disabled(isSyncing)
+    }
+
+    private var canParkAndReload: Bool {
+        project.syncStatus.state == .conflict
+            && (project.syncStatus.ahead > 0 || conflicts.contains { !$0.canResolveOnMobile })
+    }
+
+    private var primarySyncTitle: String {
+        switch project.syncStatus.state {
+        case .dirty:
+            return "Sync now - push mobile edits"
+        case .incoming:
+            return "Sync now - pull latest"
+        case .conflict:
+            return "Review changes first"
+        case .offline:
+            return "Sync unavailable offline"
+        case .pulling:
+            return "Pulling latest"
+        case .pushing:
+            return "Pushing mobile edits"
+        case .clean:
+            return "Sync now"
+        }
+    }
+
+    private var primarySyncIcon: String {
+        switch project.syncStatus.state {
+        case .dirty:
+            return "square.and.arrow.up"
+        case .incoming:
+            return "arrow.down.circle"
+        case .conflict:
+            return "exclamationmark.triangle"
+        case .offline:
+            return "icloud.slash"
+        case .pulling:
+            return "arrow.down.circle"
+        case .pushing:
+            return "arrow.up.circle"
+        case .clean:
+            return "arrow.triangle.2.circlepath"
+        }
     }
 
     private var statusTitle: String {
@@ -738,7 +1114,7 @@ private struct WorkspaceSyncSheet: View {
         case .pushing:
             return "Publishing mobile edits"
         case .conflict:
-            return "Conflict needs desktop"
+            return "Review changes"
         case .offline:
             return "Offline"
         }
@@ -777,6 +1153,214 @@ private struct WorkspaceSyncSheet: View {
     private func syncLabel(_ title: String, systemImage: String) -> some View {
         Label(title, systemImage: systemImage)
             .frame(maxWidth: .infinity)
+    }
+}
+
+private struct MobileConflictResolutionWizard: View {
+    let conflicts: [MobileConflict]
+    let onApply: ([MobileConflictResolutionRequest]) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var choices: [String: MobileConflictResolutionChoice] = [:]
+    @State private var customContents: [String: String] = [:]
+
+    private var groups: [MobileConflictGroup] {
+        Dictionary(grouping: conflicts, by: \.path)
+            .map { path, conflicts in
+                MobileConflictGroup(path: path, conflicts: conflicts.sorted { $0.label < $1.label })
+            }
+            .sorted { $0.title < $1.title }
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                CompanionCard {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Label("Choose what to keep", systemImage: "rectangle.2.swap")
+                            .font(.headline)
+                            .foregroundStyle(CutReadyTheme.accent)
+                        Text("These items changed on this device and in the shared workspace. Pick my version, the latest shared version, or create a custom version for each item.")
+                            .font(.caption)
+                            .foregroundStyle(CutReadyTheme.textSecondary)
+                    }
+                }
+
+                ForEach(groups) { group in
+                    conflictGroupCard(group)
+                }
+            }
+            .padding(18)
+        }
+        .background(CutReadyTheme.surface)
+        .navigationTitle("Review changes")
+        #if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
+        #endif
+        .toolbar {
+            ToolbarItem(placement: .confirmationAction) {
+                Button("Apply choices") {
+                    onApply(resolutions)
+                    dismiss()
+                }
+                .disabled(!canApply)
+            }
+        }
+    }
+
+    private func conflictGroupCard(_ group: MobileConflictGroup) -> some View {
+        CompanionCard {
+            VStack(alignment: .leading, spacing: 12) {
+                Label(group.title, systemImage: group.icon)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(group.tint)
+
+                Picker("Version", selection: choiceBinding(for: group)) {
+                    Text("My version").tag(MobileConflictResolutionChoice.myVersion)
+                    Text("Latest shared").tag(MobileConflictResolutionChoice.latestShared)
+                    Text("Custom").tag(MobileConflictResolutionChoice.custom)
+                }
+                .pickerStyle(.segmented)
+
+                selectedVersionPreview(for: group)
+
+                if choices[group.path] == .custom {
+                    ForEach(group.conflicts) { conflict in
+                        VStack(alignment: .leading, spacing: 6) {
+                            if group.conflicts.count > 1 {
+                                Text(conflict.label)
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(CutReadyTheme.textSecondary)
+                            }
+                            TextEditor(text: customContentBinding(for: conflict))
+                                .font(.body)
+                                .frame(minHeight: 120)
+                                .padding(8)
+                                .background(CutReadyTheme.surfaceAlt.opacity(0.7), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func selectedVersionPreview(for group: MobileConflictGroup) -> some View {
+        switch choices[group.path] ?? .myVersion {
+        case .myVersion:
+            versionPreview(title: "My version", conflicts: group.conflicts, keyPath: \.mine)
+        case .latestShared:
+            versionPreview(title: "Latest shared version", conflicts: group.conflicts, keyPath: \.latestShared)
+        case .custom:
+            Text("Edit the custom version below. This is what CutReady will keep for this item.")
+                .font(.caption)
+                .foregroundStyle(CutReadyTheme.textSecondary)
+        }
+    }
+
+    private func versionPreview(
+        title: String,
+        conflicts: [MobileConflict],
+        keyPath: KeyPath<MobileConflict, String?>
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(CutReadyTheme.textSecondary)
+            ForEach(conflicts) { conflict in
+                Text(conflict[keyPath: keyPath] ?? "No content in this version.")
+                    .font(.caption)
+                    .foregroundStyle(CutReadyTheme.text)
+                    .lineLimit(6)
+                    .padding(10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(CutReadyTheme.surfaceAlt.opacity(0.55), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            }
+        }
+    }
+
+    private var canApply: Bool {
+        groups.allSatisfy { group in
+            let choice = choices[group.path] ?? .myVersion
+            guard choice == .custom else {
+                return true
+            }
+            return group.conflicts.allSatisfy { conflict in
+                !(customContents[conflict.id] ?? defaultCustomContent(for: conflict)).isEmpty
+            }
+        }
+    }
+
+    private var resolutions: [MobileConflictResolutionRequest] {
+        groups.flatMap { group in
+            let choice = choices[group.path] ?? .myVersion
+            return group.conflicts.map { conflict in
+                MobileConflictResolutionRequest(
+                    path: conflict.path,
+                    fieldPath: conflict.fieldPath,
+                    choice: choice,
+                    customContent: choice == .custom ? customContent(for: conflict) : nil
+                )
+            }
+        }
+    }
+
+    private func choiceBinding(for group: MobileConflictGroup) -> Binding<MobileConflictResolutionChoice> {
+        Binding(
+            get: { choices[group.path] ?? .myVersion },
+            set: { choices[group.path] = $0 }
+        )
+    }
+
+    private func customContentBinding(for conflict: MobileConflict) -> Binding<String> {
+        Binding(
+            get: { customContent(for: conflict) },
+            set: { customContents[conflict.id] = $0 }
+        )
+    }
+
+    private func customContent(for conflict: MobileConflict) -> String {
+        customContents[conflict.id] ?? defaultCustomContent(for: conflict)
+    }
+
+    private func defaultCustomContent(for conflict: MobileConflict) -> String {
+        conflict.mine ?? conflict.latestShared ?? ""
+    }
+}
+
+private struct MobileConflictGroup: Identifiable {
+    var path: String
+    var conflicts: [MobileConflict]
+
+    var id: String { path }
+
+    var title: String {
+        (path as NSString).lastPathComponent
+    }
+
+    var icon: String {
+        switch (path as NSString).pathExtension.lowercased() {
+        case "md":
+            return "doc.text"
+        case "sk":
+            return "list.bullet.rectangle"
+        case "sb":
+            return "rectangle.stack"
+        default:
+            return "doc"
+        }
+    }
+
+    var tint: Color {
+        switch (path as NSString).pathExtension.lowercased() {
+        case "md":
+            return CutReadyTheme.note
+        case "sk":
+            return CutReadyTheme.sketch
+        case "sb":
+            return CutReadyTheme.storyboard
+        default:
+            return CutReadyTheme.accent
+        }
     }
 }
 
@@ -1088,15 +1672,6 @@ private struct WorkspaceLandingView: View {
                         .controlSize(.large)
                         .disabled(true)
                     }
-
-                    Button {
-                    } label: {
-                        Label("Connect to desktop", systemImage: "desktopcomputer")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.large)
-                    .disabled(true)
                 }
 
                 if canAddWorkspace {
@@ -1259,47 +1834,91 @@ private struct GitHubDeviceAuthorizationView: View {
 }
 
 private struct GitHubRepositoryPicker: View {
-    let recentWorkspaces: [RecentWorkspace]
+    @Binding var searchText: String
     let repositories: [GitHubRepositorySummary]
     let isLoadingRepositories: Bool
     let isOpeningWorkspace: Bool
     let workspaceOpenProgress: GitHubWorkspaceOpenProgress?
+    let onSearch: (String) async -> Void
+    let onOpenInput: (String) async -> Void
     let onOpen: (GitHubRepositorySummary) -> Void
-    @State private var searchText = ""
 
     var body: some View {
         NavigationStack {
             List {
-                if searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, !recentWorkspaces.isEmpty {
-                    Section("Recently opened") {
-                        ForEach(recentWorkspaces) { workspace in
-                            repositoryButton(workspace.repository, subtitle: "Recently opened")
+                Section {
+                    Button {
+                        Task {
+                            await onOpenInput(trimmedSearchText)
+                        }
+                    } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: "link")
+                                .foregroundStyle(CutReadyTheme.accent)
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(directOpenTitle)
+                                    .font(.headline)
+                                    .foregroundStyle(CutReadyTheme.text)
+                                Text("Paste owner/repo or a GitHub repository URL.")
+                                    .font(.caption)
+                                    .foregroundStyle(CutReadyTheme.textSecondary)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(CutReadyTheme.textSecondary.opacity(0.55))
                         }
                     }
+                    .disabled(!canOpenDirectly || isOpeningWorkspace)
                 }
 
-                Section("Repositories") {
-                    ForEach(filteredRepositories) { repository in
-                        repositoryButton(repository, subtitle: repository.isPrivate ? "Private GitHub workspace" : "GitHub workspace")
+                if trimmedSearchText.count >= 2 {
+                    Section("Search results") {
+                        ForEach(repositories) { repository in
+                            repositoryButton(repository, subtitle: repository.isPrivate ? "Private GitHub workspace" : "GitHub workspace")
+                        }
                     }
                 }
             }
             .navigationTitle("GitHub Workspaces")
-            .searchable(text: $searchText, prompt: "Search repositories")
+            .searchable(text: $searchText, prompt: "Search or paste owner/repo")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    if canClearSearch {
+                        Button("Clear") {
+                            searchText = ""
+                            Task {
+                                await onSearch("")
+                            }
+                        }
+                    }
+                }
+            }
+            .task(id: trimmedSearchText) {
+                guard trimmedSearchText.count >= 2 else {
+                    await onSearch("")
+                    return
+                }
+                try? await Task.sleep(nanoseconds: 350_000_000)
+                guard !Task.isCancelled else {
+                    return
+                }
+                await onSearch(trimmedSearchText)
+            }
             .overlay {
                 if isLoadingRepositories {
-                    ProgressView("Loading repositories")
+                    ProgressView("Searching repositories")
                         .padding()
                         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 } else if isOpeningWorkspace {
                     WorkspaceOpenProgressView(progress: workspaceOpenProgress)
-                } else if repositories.isEmpty {
+                } else if trimmedSearchText.isEmpty {
                     ContentUnavailableView(
-                        "No repositories found",
-                        systemImage: "folder.badge.questionmark",
-                        description: Text("CutReady will show GitHub repositories your account can access.")
+                        "Search GitHub live",
+                        systemImage: "magnifyingglass",
+                        description: Text("Type a repository name, paste owner/repo, or paste a GitHub URL. CutReady will query GitHub only for what you ask for.")
                     )
-                } else if filteredRepositories.isEmpty {
+                } else if trimmedSearchText.count >= 2 && repositories.isEmpty {
                     ContentUnavailableView.search(text: searchText)
                 }
             }
@@ -1330,16 +1949,23 @@ private struct GitHubRepositoryPicker: View {
         .disabled(isOpeningWorkspace)
     }
 
-    private var filteredRepositories: [GitHubRepositorySummary] {
-        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else {
-            return repositories
-        }
+    private var trimmedSearchText: String {
+        searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 
-        return repositories.filter { repository in
-            repository.fullName.localizedCaseInsensitiveContains(query)
-                || repository.name.localizedCaseInsensitiveContains(query)
+    private var canOpenDirectly: Bool {
+        GitHubRepositorySpecifier(input: trimmedSearchText) != nil
+    }
+
+    private var canClearSearch: Bool {
+        !trimmedSearchText.isEmpty || !repositories.isEmpty
+    }
+
+    private var directOpenTitle: String {
+        if let specifier = GitHubRepositorySpecifier(input: trimmedSearchText) {
+            return "Open \(specifier.fullName)"
         }
+        return "Open by repository URL"
     }
 }
 
@@ -1892,7 +2518,9 @@ private struct SketchDetailView: View {
     let fallbackTitle: String
     let project: CompanionProject
     let githubAccessToken: String?
+    let syncStatus: MobileSyncStatus
     let loadAsset: (String) async throws -> Data?
+    let onOpenSync: () -> Void
     let onSave: (Sketch) async throws -> Void
     @State private var layout = SketchReaderLayoutStore.load()
     @State private var isShowingLayout = false
@@ -1999,6 +2627,10 @@ private struct SketchDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .toolbar {
+            ToolbarItem {
+                WorkspaceSyncToolbarButton(status: syncStatus, action: onOpenSync)
+            }
+
             ToolbarItem {
                 Button {
                     isShowingLayout = true
@@ -3480,16 +4112,27 @@ private struct NoteDetailView: View {
     let path: String
     let note: FileSummary?
     let fallbackTitle: String
+    let syncStatus: MobileSyncStatus
+    let onOpenSync: () -> Void
     let onSave: (String) async throws -> Void
     @State private var isEditing = false
     @State private var draft: String
     @State private var isSaving = false
     @State private var saveError: String?
 
-    init(path: String, note: FileSummary?, fallbackTitle: String, onSave: @escaping (String) async throws -> Void) {
+    init(
+        path: String,
+        note: FileSummary?,
+        fallbackTitle: String,
+        syncStatus: MobileSyncStatus,
+        onOpenSync: @escaping () -> Void,
+        onSave: @escaping (String) async throws -> Void
+    ) {
         self.path = path
         self.note = note
         self.fallbackTitle = fallbackTitle
+        self.syncStatus = syncStatus
+        self.onOpenSync = onOpenSync
         self.onSave = onSave
         _draft = State(initialValue: note?.contents ?? "")
     }
@@ -3518,6 +4161,10 @@ private struct NoteDetailView: View {
         #endif
         .toolbar {
             ToolbarItem {
+                WorkspaceSyncToolbarButton(status: syncStatus, action: onOpenSync)
+            }
+
+            ToolbarItem {
                 Button(isEditing ? "Preview" : "Edit") {
                     isEditing.toggle()
                 }
@@ -3539,6 +4186,12 @@ private struct NoteDetailView: View {
             Button("OK", role: .cancel) {}
         } message: {
             Text(saveError ?? "")
+        }
+        .onChange(of: note?.contents) { oldContents, newContents in
+            guard !isEditing, draft == (oldContents ?? "") else {
+                return
+            }
+            draft = newContents ?? ""
         }
     }
 
