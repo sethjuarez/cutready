@@ -15,7 +15,6 @@ Release Please manages this changelog. Do not edit manually.
 
 ### Features
 
-* **projects:** add workspace manifest recovery ([d6278f7](https://github.com/sethjuarez/cutready/commit/d6278f745463a6befdae4d6112ead73173dba355))
 * **projects:** add workspace manifest recovery ([ae5808c](https://github.com/sethjuarez/cutready/commit/ae5808cb14caf0489bf2d3671df55f2eedc05d9e))
 * **versioning:** add pre-push milestone flow ([cbcbb6e](https://github.com/sethjuarez/cutready/commit/cbcbb6eacf51b5fe051c3e311ebf257ccc7667fb))
 
